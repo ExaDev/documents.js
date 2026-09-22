@@ -6,10 +6,10 @@ import { ensureAutomaticStyles, nextStyleName } from "./automatic-styles";
 import type { ParagraphInit } from "./paragraph";
 import { buildParagraph, OdtParagraph } from "./paragraph";
 
-// A genuinely new class shape with no docx analogue: ODF nests lists STRUCTURALLY -- a text:list contains text:list-item elements, each of which can itself contain either member text:p/text:h paragraphs or a further nested text:list -- unlike WordprocessingML's flat model, where every paragraph independently carries its own numId/level membership (see docx's paragraph.ts, DocxParagraph.list). OdtList/OdtListItem exist to build and navigate that real tree structure directly: list.addItem() returns an OdtListItem a caller appends paragraphs to; item.addNestedList() starts a further-nested text:list inside that same item, one level deeper. odf.js's own readOdtContent (src/typed/odt/read.ts) reads this back by walking the identical structure -- each top-level text:list gets a synthetic numId, and each level of text:list nesting inside a text:list-item increments ContentParagraph.list.level -- so a list built through this class round-trips to the level depths a caller actually built.
+// A genuinely new class shape with no docx analogue: ODF nests lists STRUCTURALLY — a text:list contains text:list-item elements, each of which can itself contain either member text:p/text:h paragraphs or a further nested text:list — unlike WordprocessingML's flat model, where every paragraph independently carries its own numId/level membership (see docx's paragraph.ts, DocxParagraph.list). OdtList/OdtListItem exist to build and navigate that real tree structure directly: list.addItem() returns an OdtListItem a caller appends paragraphs to; item.addNestedList() starts a further-nested text:list inside that same item, one level deeper. odf.js's own readOdtContent (src/typed/odt/read.ts) reads this back by walking the identical structure — each top-level text:list gets a synthetic numId, and each level of text:list nesting inside a text:list-item increments ContentParagraph.list.level — so a list built through this class round-trips to the level depths a caller actually built.
 
 const LIST_STYLE_PREFIX = "OdtList";
-const MAX_LIST_LEVELS = 10; // ODF's own conventional ceiling (every real ODF producer emits exactly this many text:list-level-style-* children per text:list-style, regardless of how deep a given document's lists actually nest) -- matched here rather than guessing a smaller number that would leave a level 11 nesting silently unstyled.
+const MAX_LIST_LEVELS = 10; // ODF's own conventional ceiling (every real ODF producer emits exactly this many text:list-level-style-* children per text:list-style, regardless of how deep a given document's lists actually nest) — matched here rather than guessing a smaller number that would leave a level 11 nesting silently unstyled.
 const LIST_LEVEL_INDENT_PT = 18; // 0.25in per level, a conventional bullet-list indent step.
 const LIST_LEVEL_LABEL_WIDTH_PT = 18;
 
@@ -38,7 +38,7 @@ function buildBulletListStyle(name: string): XmlElement {
   return el("text:list-style", { "style:name": name }, levels);
 }
 
-// Mints a brand-new, uniquely-named bullet list-style and appends it to office:automatic-styles -- every new top-level OdtList gets its own, even though the bullet definition itself is always the same shape, keeping this free of any dedup bookkeeping (unlike StyleRegistry.intern's fingerprint cache, there is exactly one property set a list style here would ever need, so a second, identical entry costs a little extra XML but nothing else).
+// Mints a brand-new, uniquely-named bullet list-style and appends it to office:automatic-styles — every new top-level OdtList gets its own, even though the bullet definition itself is always the same shape, keeping this free of any dedup bookkeeping (unlike StyleRegistry.intern's fingerprint cache, there is exactly one property set a list style here would ever need, so a second, identical entry costs a little extra XML but nothing else).
 function internBulletListStyle(pkg: Package): string {
   const automaticStyles = ensureAutomaticStyles(pkg);
   const name = nextStyleName(
@@ -50,7 +50,7 @@ function internBulletListStyle(pkg: Package): string {
   return name;
 }
 
-// A live view over a text:list-item element. Not independently removable through this editor (mirrors DocxTableCell/DocxTableRow, src/edit/docx/table.ts, neither of which carry a remove() of their own) -- an item's lifetime is tied to its owning OdtList.
+// A live view over a text:list-item element. Not independently removable through this editor (mirrors DocxTableCell/DocxTableRow, src/edit/docx/table.ts, neither of which carry a remove() of their own) — an item's lifetime is tied to its owning OdtList.
 export class OdtListItem {
   private readonly node: XmlElement;
   private readonly pkg: Package;
@@ -60,7 +60,7 @@ export class OdtListItem {
     this.pkg = pkg;
   }
 
-  // Direct paragraph-level children of this item, as live views -- text:p and text:h both, exactly the two tags odf.js's own list walker reads (typed/shared/list.ts), so a heading promoted inside a list item is visible here. The read counterpart to appendParagraph, mirroring OdtBody.paragraphs (editor.ts); OdtTableCell.paragraphs (table.ts) stays text:p-only, matching odf.js's own cell reading scope. A paragraph belonging to a FURTHER-nested list is deliberately not reached here -- ODF nests lists structurally, so it belongs to that nested list's own item, reached through nestedLists() below.
+  // Direct paragraph-level children of this item, as live views — text:p and text:h both, exactly the two tags odf.js's own list walker reads (typed/shared/list.ts), so a heading promoted inside a list item is visible here. The read counterpart to appendParagraph, mirroring OdtBody.paragraphs (editor.ts); OdtTableCell.paragraphs (table.ts) stays text:p-only, matching odf.js's own cell reading scope. A paragraph belonging to a FURTHER-nested list is deliberately not reached here — ODF nests lists structurally, so it belongs to that nested list's own item, reached through nestedLists() below.
   paragraphs(): OdtParagraph[] {
     const out: OdtParagraph[] = [];
     for (const child of this.node.children) {
@@ -74,14 +74,14 @@ export class OdtListItem {
     return out;
   }
 
-  // This item's own paragraph text, newline-joined between paragraphs -- the same convention OdtTableCell.text (table.ts) and OdpShape.text (../odp/shape.ts) already use, and reading through OdtParagraph.text means it inherits that getter's decodeOdfText handling of text:s/text:tab/text:line-break rather than restating it. Excludes nested-list text for the same structural reason paragraphs() does.
+  // This item's own paragraph text, newline-joined between paragraphs — the same convention OdtTableCell.text (table.ts) and OdpShape.text (../odp/shape.ts) already use, and reading through OdtParagraph.text means it inherits that getter's decodeOdfText handling of text:s/text:tab/text:line-break rather than restating it. Excludes nested-list text for the same structural reason paragraphs() does.
   get text(): string {
     return this.paragraphs()
       .map((p) => p.text)
       .join("\n");
   }
 
-  // Live views on the text:list elements nested directly inside this item -- the read counterpart to addNestedList. Returns every one in document order rather than only the first: a text:list-item's own content model is a sequence, so two sibling nested lists inside one item is valid ODF, and odf.js's own readListItems walks each of them.
+  // Live views on the text:list elements nested directly inside this item — the read counterpart to addNestedList. Returns every one in document order rather than only the first: a text:list-item's own content model is a sequence, so two sibling nested lists inside one item is valid ODF, and odf.js's own readListItems walks each of them.
   nestedLists(): OdtList[] {
     const out: OdtList[] = [];
     for (const child of this.node.children) {
@@ -98,7 +98,7 @@ export class OdtListItem {
     return new OdtParagraph(this.node.children, paragraphElement, this.pkg);
   }
 
-  // Starts a further-nested text:list one level deeper, directly inside this item -- odf.js's own readOdtContent increments ContentParagraph.list.level by exactly one per text:list nested this way (src/typed/odt/read.ts's readListItems).
+  // Starts a further-nested text:list one level deeper, directly inside this item — odf.js's own readOdtContent increments ContentParagraph.list.level by exactly one per text:list nested this way (src/typed/odt/read.ts's readListItems).
   addNestedList(): OdtList {
     const listElement = el("text:list", {
       "text:style-name": internBulletListStyle(this.pkg),
@@ -108,7 +108,7 @@ export class OdtListItem {
   }
 }
 
-// A live view over a text:list element -- see docx's table.ts (DocxTable) for the same container/node/removed live-view shape.
+// A live view over a text:list element — see docx's table.ts (DocxTable) for the same container/node/removed live-view shape.
 export class OdtList {
   private readonly container: XmlNode[];
   private readonly node: XmlElement;
@@ -151,7 +151,7 @@ export class OdtList {
     this.removed = true;
   }
 
-  // Nests the item at `index` one level deeper, moving its text:list-item element into the immediately preceding sibling's own nested list -- appending to that sibling's LAST existing nested list if it has one, or minting a fresh one via addNestedList() otherwise. Matches every real editor's own Tab-to-indent convention: a run of consecutive indents on adjacent items collects under the one nested list rather than each indent minting its own empty text:list. Throws for index 0 (or any other item without a preceding sibling), since there is nothing to nest under -- callers report this as a normal "can't do that" status rather than letting it escape as an unhandled exception (see document-cli's reducer.ts, INDENT_LIST_ITEM).
+  // Nests the item at `index` one level deeper, moving its text:list-item element into the immediately preceding sibling's own nested list — appending to that sibling's LAST existing nested list if it has one, or minting a fresh one via addNestedList() otherwise. Matches every real editor's own Tab-to-indent convention: a run of consecutive indents on adjacent items collects under the one nested list rather than each indent minting its own empty text:list. Throws for index 0 (or any other item without a preceding sibling), since there is nothing to nest under — callers report this as a normal "can't do that" status rather than letting it escape as an unhandled exception (see document-cli's reducer.ts, INDENT_LIST_ITEM).
   indentItem(index: number): void {
     const itemNodes = this.live().children.filter(
       (child): child is XmlElement =>

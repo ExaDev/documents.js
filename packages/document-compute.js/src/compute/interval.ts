@@ -6,7 +6,7 @@ import {
 } from "./dimensions";
 import { DivisionByZeroError, IncompatibleDimensionsError } from "./errors";
 
-// Interval arithmetic over document-schema.js's Interval (the bounded-value counterpart to that package's Quantity, over the identical dimension model -- schema and type live in its src/math.ts, beside MathExpression and Quantity themselves) for exactly the case the source issue names: a formula whose stated fact is a compliance region rather than a point, e.g. `0.87 <= cos(phi) <= 1`. The evaluator (evaluate.ts) is the same tree-walker for both -- a binding can hold a Quantity or an Interval, arithmetic dispatches to the interval rules below the moment either operand is one, and a bare Quantity mixed into interval arithmetic promotes to a degenerate point interval via pointInterval() -- so this is "the same evaluator, run over intervals rather than points," not a second parallel implementation.
+// Interval arithmetic over document-schema.js's Interval (the bounded-value counterpart to that package's Quantity, over the identical dimension model — schema and type live in its src/math.ts, beside MathExpression and Quantity themselves) for exactly the case the source issue names: a formula whose stated fact is a compliance region rather than a point, e.g. `0.87 <= cos(phi) <= 1`. The evaluator (evaluate.ts) is the same tree-walker for both — a binding can hold a Quantity or an Interval, arithmetic dispatches to the interval rules below the moment either operand is one, and a bare Quantity mixed into interval arithmetic promotes to a degenerate point interval via pointInterval() — so this is "the same evaluator, run over intervals rather than points," not a second parallel implementation.
 //
 // min/max are both inclusive; IntervalSchema's refine is the schema-level half of that invariant, interval() (the constructor below) is the code-path half for values assembled outside z.parse.
 
@@ -21,7 +21,7 @@ export function interval(
   return { kind: "interval", min, max, dimension };
 }
 
-// Lifts a plain point value into a degenerate (min === max) interval -- how evaluate.ts lets a Quantity operand mix into interval arithmetic.
+// Lifts a plain point value into a degenerate (min === max) interval — how evaluate.ts lets a Quantity operand mix into interval arithmetic.
 export function pointInterval(
   magnitude: number,
   dimension: DimensionVector = {},
@@ -36,7 +36,7 @@ export function addIntervals(a: Interval, b: Interval): Interval {
   return interval(a.min + b.min, a.max + b.max, a.dimension);
 }
 
-// a - b's extremes are the smallest possible left-hand value minus the largest possible right-hand value (the new minimum) and the largest left-hand value minus the smallest right-hand value (the new maximum) -- equivalently a + (-b), with -b's bounds negated and swapped.
+// a - b's extremes are the smallest possible left-hand value minus the largest possible right-hand value (the new minimum) and the largest left-hand value minus the smallest right-hand value (the new maximum) — equivalently a + (-b), with -b's bounds negated and swapped.
 export function subtractIntervals(a: Interval, b: Interval): Interval {
   if (!dimensionsEqual(a.dimension, b.dimension)) {
     throw new IncompatibleDimensionsError(
@@ -48,7 +48,7 @@ export function subtractIntervals(a: Interval, b: Interval): Interval {
   return interval(a.min - b.max, a.max - b.min, a.dimension);
 }
 
-// Standard interval multiplication: for any two reals x in [a.min, a.max] and y in [b.min, b.max], x*y is jointly monotonic in each orthant of sign, so its extremes over the whole rectangle are always attained at one of the four corners (a.min*b.min, a.min*b.max, a.max*b.min, a.max*b.max) -- true regardless of which interval is positive, negative, or straddles zero. Taking the overall min/max of those four corner products is therefore the general rule (the textbook sign-case table -- positive*positive, negative*negative, straddling*straddling, and the mixed cases -- is exactly this formula specialised per sign combination; see interval.test.ts for a case exercising each).
+// Standard interval multiplication: for any two reals x in [a.min, a.max] and y in [b.min, b.max], x*y is jointly monotonic in each orthant of sign, so its extremes over the whole rectangle are always attained at one of the four corners (a.min*b.min, a.min*b.max, a.max*b.min, a.max*b.max) — true regardless of which interval is positive, negative, or straddles zero. Taking the overall min/max of those four corner products is therefore the general rule (the textbook sign-case table — positive*positive, negative*negative, straddling*straddling, and the mixed cases — is exactly this formula specialised per sign combination; see interval.test.ts for a case exercising each).
 export function multiplyIntervals(a: Interval, b: Interval): Interval {
   const corners = [a.min * b.min, a.min * b.max, a.max * b.min, a.max * b.max];
   return interval(
@@ -58,7 +58,7 @@ export function multiplyIntervals(a: Interval, b: Interval): Interval {
   );
 }
 
-// Division is defined only when the divisor interval does not touch zero -- otherwise 1/[b.min, b.max] would pass through +-Infinity, which this package treats as a real failure (DivisionByZeroError) rather than letting Infinity/NaN flow silently into the rest of a computation. When it is defined, a / b is a * (1/b): the reciprocal of an interval that is entirely positive or entirely negative is [1/b.max, 1/b.min] in both cases (1/x is monotonically decreasing away from zero on either side, so the corner that was the largest magnitude denominator gives the reciprocal's smallest value), and the four-corner rule above then combines it with a correctly for every sign combination.
+// Division is defined only when the divisor interval does not touch zero — otherwise 1/[b.min, b.max] would pass through +-Infinity, which this package treats as a real failure (DivisionByZeroError) rather than letting Infinity/NaN flow silently into the rest of a computation. When it is defined, a / b is a * (1/b): the reciprocal of an interval that is entirely positive or entirely negative is [1/b.max, 1/b.min] in both cases (1/x is monotonically decreasing away from zero on either side, so the corner that was the largest magnitude denominator gives the reciprocal's smallest value), and the four-corner rule above then combines it with a correctly for every sign combination.
 export function divideIntervals(a: Interval, b: Interval): Interval {
   if (b.min <= 0 && b.max >= 0) {
     throw new DivisionByZeroError(
@@ -86,8 +86,8 @@ export function negateInterval(a: Interval): Interval {
 }
 
 // |[min, max]| stated as a closed form rather than the textbook three sign cases (wholly non-negative -> unchanged, wholly non-positive -> negated, straddling -> [0, max(|min|, |max|)]). The two are the same function:
-// - The upper bound is max(|min|, |max|) in all three cases, and since min <= max, max(-min, max) already IS max(|min|, |max|) -- whichever of the two endpoints is further from zero is the one that survives, whatever the signs.
-// - The lower bound is the distance from zero to the nearest point of the interval, which is min when the interval sits above zero, -max when it sits below, and 0 when it contains zero. max(0, min, -max) picks exactly that: at most one of min and -max can be positive at a time (both positive would need max < 0 < min, impossible for min <= max), so the clamp at 0 selects that one when it exists and 0 -- the containing-zero answer -- when neither does.
+// - The upper bound is max(|min|, |max|) in all three cases, and since min <= max, max(-min, max) already IS max(|min|, |max|) — whichever of the two endpoints is further from zero is the one that survives, whatever the signs.
+// - The lower bound is the distance from zero to the nearest point of the interval, which is min when the interval sits above zero, -max when it sits below, and 0 when it contains zero. max(0, min, -max) picks exactly that: at most one of min and -max can be positive at a time (both positive would need max < 0 < min, impossible for min <= max), so the clamp at 0 selects that one when it exists and 0 — the containing-zero answer — when neither does.
 // Writing it this way keeps the boundary cases (min === 0, max === 0) from depending on a comparison operator whose two spellings pick different branches that then compute the same answer anyway.
 export function absInterval(a: Interval): Interval {
   return interval(

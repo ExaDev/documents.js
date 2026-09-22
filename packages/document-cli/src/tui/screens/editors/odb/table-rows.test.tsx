@@ -6,11 +6,11 @@ import { OdbHarness } from "./test-support.js";
 
 const BIG_TABLE_ROW_COUNT = 60;
 const ESCAPE_CHAR_CODE = 27;
-// PageDown -- Escape, then [, 6, ~ -- the xterm/rxvt sequence ink's own parse-keypress.js maps to key.pageDown (see node_modules/ink/build/parse-keypress.js). Built via String.fromCharCode with the plain numeric escape code, not a literal or backslash-escaped control character in this source file's own text, since a raw control byte written directly into this file has proven not to survive edits to it reliably.
+// PageDown — Escape, then [, 6, ~ — the xterm/rxvt sequence ink's own parse-keypress.js maps to key.pageDown (see node_modules/ink/build/parse-keypress.js). Built via String.fromCharCode with the plain numeric escape code, not a literal or backslash-escaped control character in this source file's own text, since a raw control byte written directly into this file has proven not to survive edits to it reliably.
 const PAGE_DOWN = String.fromCharCode(ESCAPE_CHAR_CODE) + "[6~";
 // 8 presses moving the foundation's own PAGE_JUMP_ROWS (10, see keybindings/use-navigation-input.ts) each is comfortably past BIG_TABLE_ROW_COUNT - 1 (59), so the selection is guaranteed to have clamped at the very last row by the end of the loop regardless of the exact per-press jump size.
 const PAGE_DOWN_PRESSES = 8;
-// Real wall-clock settle delays between each of this test's several keypresses (see test-support.ts's own settle()) make this a genuinely slower test than a typical unit test, especially once the rest of the suite's own Ink renders are competing for the same worker thread -- give it real headroom rather than let it flake under load.
+// Real wall-clock settle delays between each of this test's several keypresses (see test-support.ts's own settle()) make this a genuinely slower test than a typical unit test, especially once the rest of the suite's own Ink renders are competing for the same worker thread — give it real headroom rather than let it flake under load.
 const PAGE_DOWN_TEST_TIMEOUT_MS = 15_000;
 
 function buildBigTable(): HsqldbTable {

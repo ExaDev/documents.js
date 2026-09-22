@@ -78,7 +78,7 @@ export type {
   CompactAttrPairs,
 } from "./compact";
 
-// --- The shared content model: one block model (paragraphs, tables, images, page breaks) underlying both readDocxContent's sections and readPptxContent's slides, plus the geometry/colour/unit primitives it's expressed in. Sourced from document-schema.js, the sibling package that also backs documents.js's own PDF-side pivot -- these re-exports keep ooxml.js's own public API surface unchanged even though the definitions no longer live in this package. ---
+// --- The shared content model: one block model (paragraphs, tables, images, page breaks) underlying both readDocxContent's sections and readPptxContent's slides, plus the geometry/colour/unit primitives it's expressed in. Sourced from document-schema.js, the sibling package that also backs documents.js's own PDF-side pivot — these re-exports keep ooxml.js's own public API surface unchanged even though the definitions no longer live in this package. ---
 export {
   BoxSchema,
   MarginsSchema,
@@ -255,7 +255,7 @@ export type {
   ListParagraph,
 } from "document-schema.js";
 
-// --- Style resolution: the pure helpers that turn a group's `style` ref plus a leaf's own direct properties into the properties that actually render, and the styles-table shapes those refs and the styles-minting pass above name. A tree reader's paragraphs and runs are NOT self-describing -- readDocx/readPptx/readXlsx factor repeated formatting into `styles` entries and leave only a `style: 's1'` ref on the enclosing group, stripping the matching keys off every paragraph/run that ref covers (see typed/document-tree.ts's own module comment for why every reader mints rather than calling bare decompose). Reading a run or paragraph's real formatting out of a tree therefore means walking its ancestor groups' `style` refs and resolving them, which is exactly what these four functions do: resolveStyleChain collects the chain of entries from root to a given node, overlayStyleEntries merges that chain outermost-first (nearest wins), and applyParagraphStyleProperties/applyRunStyleProperties gap-fill a resolved entry onto a paragraph/run that already carries some direct properties of its own (a key the node already has always wins over the entry, never the reverse). Re-exported here for the same reason the tree vocabulary above is: a caller holding what readDocx/readPptx/readXlsx return should not need a second dependency just to read a run's own bold/colour back out of it. ---
+// --- Style resolution: the pure helpers that turn a group's `style` ref plus a leaf's own direct properties into the properties that actually render, and the styles-table shapes those refs and the styles-minting pass above name. A tree reader's paragraphs and runs are NOT self-describing — readDocx/readPptx/readXlsx factor repeated formatting into `styles` entries and leave only a `style: 's1'` ref on the enclosing group, stripping the matching keys off every paragraph/run that ref covers (see typed/document-tree.ts's own module comment for why every reader mints rather than calling bare decompose). Reading a run or paragraph's real formatting out of a tree therefore means walking its ancestor groups' `style` refs and resolving them, which is exactly what these four functions do: resolveStyleChain collects the chain of entries from root to a given node, overlayStyleEntries merges that chain outermost-first (nearest wins), and applyParagraphStyleProperties/applyRunStyleProperties gap-fill a resolved entry onto a paragraph/run that already carries some direct properties of its own (a key the node already has always wins over the entry, never the reverse). Re-exported here for the same reason the tree vocabulary above is: a caller holding what readDocx/readPptx/readXlsx return should not need a second dependency just to read a run's own bold/colour back out of it. ---
 export {
   StylesTableSchema,
   StyleEntrySchema,
@@ -297,7 +297,7 @@ export {
   buildXlsxPackage,
 } from "./typed/document-tree";
 
-// --- docx: a WordprocessingML reader resolving the full style cascade (docDefaults -> named-style basedOn chains -> paragraph-mark run properties -> character styles -> direct formatting) and DrawingML theme references (including w:themeColor run colours) into ordered sections of paragraphs/tables/page-breaks, with every block-scoped fidelity construct (structured document tags, fields, bookmarks, tracked changes) bracketed by construct-boundary markers -- paired with buildDocxPackageFromContent, its write-side inverse over those same sections. This is the flat pair readDocx/buildDocxPackage above wrap, exported in its own right: DocxDocument's comments, footnotes, header/footer parts, and numbering definitions have no ContentDocument spelling and therefore no tree spelling, so readDocxContent is the only reader in this package that returns them at all. ---
+// --- docx: a WordprocessingML reader resolving the full style cascade (docDefaults -> named-style basedOn chains -> paragraph-mark run properties -> character styles -> direct formatting) and DrawingML theme references (including w:themeColor run colours) into ordered sections of paragraphs/tables/page-breaks, with every block-scoped fidelity construct (structured document tags, fields, bookmarks, tracked changes) bracketed by construct-boundary markers — paired with buildDocxPackageFromContent, its write-side inverse over those same sections. This is the flat pair readDocx/buildDocxPackage above wrap, exported in its own right: DocxDocument's comments, footnotes, header/footer parts, and numbering definitions have no ContentDocument spelling and therefore no tree spelling, so readDocxContent is the only reader in this package that returns them at all. ---
 export {
   readDocxContent,
   CommentSchema,
@@ -320,10 +320,10 @@ export type {
   EmbeddedPresentationSerialiser,
 } from "./typed/docx/write";
 
-// One <w:shd> element -> a ContentCellFill, the resolution readDocxContent applies to every table cell's own background -- exported on its own so a consumer editing raw docx XML directly (documents.js's live table-cell editor, rather than the full ContentDocument pipeline above) can read a cell's real w:val-based shading (w:val="clear" from w:fill, w:val="solid" from w:color instead, every other named pattern token from whichever of w:color/w:fill states a concrete colour) instead of re-deriving a narrower, easily-diverging approximation of the same logic.
+// One <w:shd> element -> a ContentCellFill, the resolution readDocxContent applies to every table cell's own background — exported on its own so a consumer editing raw docx XML directly (documents.js's live table-cell editor, rather than the full ContentDocument pipeline above) can read a cell's real w:val-based shading (w:val="clear" from w:fill, w:val="solid" from w:color instead, every other named pattern token from whichever of w:color/w:fill states a concrete colour) instead of re-deriving a narrower, easily-diverging approximation of the same logic.
 export { readCellShading } from "./typed/docx/shading";
 
-// word/numbering.xml's own abstractNum/num level definitions (glyph format, start-at value, restart rule) -- a companion to, not a replacement for, ContentListMembership's existing per-paragraph numId/level tracking. See numbering.ts's own doc comment for why this is a separate keyed structure rather than a ContentListMembership field.
+// word/numbering.xml's own abstractNum/num level definitions (glyph format, start-at value, restart rule) — a companion to, not a replacement for, ContentListMembership's existing per-paragraph numId/level tracking. See numbering.ts's own doc comment for why this is a separate keyed structure rather than a ContentListMembership field.
 export {
   NumberingDefinitionSchema,
   NumberingLevelSchema,
@@ -339,7 +339,7 @@ export type {
 export { readPptxContent, PptxDocumentSchema } from "./typed/pptx/read";
 export type { PptxDocument } from "./typed/pptx/read";
 
-// The lossy, cell-values-only xlsx reading view (sheet names, cell references, resolved values, formulas, merged ranges, defined names -- no formats, styles, geometry, or charts), with no write side and no ContentDocument shape. It held the name readXlsx until that name went to the package-native reader above; readXlsxWorkbook says what it returns, exactly as readXlsxContent beside it does.
+// The lossy, cell-values-only xlsx reading view (sheet names, cell references, resolved values, formulas, merged ranges, defined names — no formats, styles, geometry, or charts), with no write side and no ContentDocument shape. It held the name readXlsx until that name went to the package-native reader above; readXlsxWorkbook says what it returns, exactly as readXlsxContent beside it does.
 export {
   readXlsxWorkbook,
   XlsxWorkbookSchema,
@@ -354,6 +354,6 @@ export type {
   DefinedName,
 } from "./typed/xlsx";
 
-// --- xlsx (rich): a geometry- and print-settings-rich SpreadsheetML reader/writer pair around ContentDocument (kind: 'spreadsheet') -- column widths, row heights, hidden rows/columns, merged ranges, every cell value kind xlsx itself distinguishes, cell comments (legacy notes and [MS-XLSX] threads), and print settings (page size/margins/scale/fit-to-page/repeat rows-columns/gridlines/headers/page order/manual breaks). readXlsxContent matches readOds's own established bar in the sibling odf.js package; buildXlsxPackageFromContent is this package's first writer of genuinely new xlsx content, the read side's honest inverse (comments excepted: the reader reads them, the writer emits no comment part, so they do not survive this pair). Distinct from readXlsxWorkbook above (XlsxWorkbook, a lossy one-way cell-values-only projection with no write side) -- both stay exported since they serve different callers. ---
+// --- xlsx (rich): a geometry- and print-settings-rich SpreadsheetML reader/writer pair around ContentDocument (kind: 'spreadsheet') — column widths, row heights, hidden rows/columns, merged ranges, every cell value kind xlsx itself distinguishes, cell comments (legacy notes and [MS-XLSX] threads), and print settings (page size/margins/scale/fit-to-page/repeat rows-columns/gridlines/headers/page order/manual breaks). readXlsxContent matches readOds's own established bar in the sibling odf.js package; buildXlsxPackageFromContent is this package's first writer of genuinely new xlsx content, the read side's honest inverse (comments excepted: the reader reads them, the writer emits no comment part, so they do not survive this pair). Distinct from readXlsxWorkbook above (XlsxWorkbook, a lossy one-way cell-values-only projection with no write side) — both stay exported since they serve different callers. ---
 export { readXlsxContent } from "./typed/xlsx/content";
 export { buildXlsxPackageFromContent } from "./typed/xlsx/build";

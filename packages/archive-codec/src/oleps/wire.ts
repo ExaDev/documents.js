@@ -11,31 +11,31 @@ export const IDENTIFIER_AND_OFFSET_SIZE = 8;
 // [MS-OLEPS] 2.15 TypedPropertyValue: Type(2) + Padding(2), before the Value field.
 export const TYPED_VALUE_HEADER_SIZE = 4;
 
-// [MS-OLEPS] 2.15 PropertyType enumeration -- only the five values this package reads and/or writes (see each module's own scope note for which of read/write covers which).
+// [MS-OLEPS] 2.15 PropertyType enumeration — only the five values this package reads and/or writes (see each module's own scope note for which of read/write covers which).
 export const VT_I2 = 0x0002;
 export const VT_I4 = 0x0003;
 export const VT_LPSTR = 0x001e;
 export const VT_LPWSTR = 0x001f;
 export const VT_FILETIME = 0x0040;
 
-// [MS-OLEPS] 2.17: PID 0 is reserved for the Dictionary property (a Dictionary packet, not a TypedPropertyValue, naming string-keyed properties) -- a structure this package does not parse, and one no "\x05SummaryInformation" stream carries (only DocumentSummaryInformation's user-defined section uses named properties, which is out of scope; see the package README).
+// [MS-OLEPS] 2.17: PID 0 is reserved for the Dictionary property (a Dictionary packet, not a TypedPropertyValue, naming string-keyed properties) — a structure this package does not parse, and one no "\x05SummaryInformation" stream carries (only DocumentSummaryInformation's user-defined section uses named properties, which is out of scope; see the package README).
 export const PID_DICTIONARY = 0;
 // [MS-OLEPS] 2.18: the CodePage property, MUST be VT_I2, governing how every VT_LPSTR (CodePageString) value in the same property set decodes its bytes.
 export const PID_CODEPAGE = 1;
 
-// [MS-OLEPS] 2.19 CodePageString: when the property set's CodePage property has this value, a CodePageString is itself a UTF-16LE array rather than an ANSI one -- the codepage ./write.ts always declares, since it writes Unicode strings only.
+// [MS-OLEPS] 2.19 CodePageString: when the property set's CodePage property has this value, a CodePageString is itself a UTF-16LE array rather than an ANSI one — the codepage ./write.ts always declares, since it writes Unicode strings only.
 export const CP_WINUNICODE = 1200;
-// Windows Western European -- the only single-byte ANSI codepage this package's reader decodes (matching the windows-1252 convention archive-codec's own OLE Package reader, ./cfb/ole-package.ts, already uses for ANSI text), and the value the [MS-OLEPS] SummaryInformation worked example itself declares.
+// Windows Western European — the only single-byte ANSI codepage this package's reader decodes (matching the windows-1252 convention archive-codec's own OLE Package reader, ./cfb/ole-package.ts, already uses for ANSI text), and the value the [MS-OLEPS] SummaryInformation worked example itself declares.
 export const WINDOWS_1252_CODEPAGE = 1252;
 
-// [MS-OLEPS] 2.21: "If no CLSID is provided by the application, it SHOULD be set to GUID_NULL by default" -- this package has no notion of a property set's own associated CLSID, so it always writes this and never inspects it on read.
+// [MS-OLEPS] 2.21: "If no CLSID is provided by the application, it SHOULD be set to GUID_NULL by default" — this package has no notion of a property set's own associated CLSID, so it always writes this and never inspects it on read.
 export const GUID_NULL = "{00000000-0000-0000-0000-000000000000}";
 
 function hex(n: number, width: number): string {
   return n.toString(16).padStart(width, "0");
 }
 
-// [MS-OLEPS] 2.7 GUID (Packet Version), reused from [MS-DTYP] 2.3.4: Data1 (4 bytes) and Data2/Data3 (2 bytes each) are little-endian; Data4 (8 bytes) is written byte-for-byte in the order the GUID's braced string form gives it, with no byte-swapping. The braced-hyphenated-uppercase-hex form is this package's own in-memory representation of a formatId (FMTID) or CLSID -- not part of the wire format itself, just how ./read.ts hands one back and ./write.ts expects one in.
+// [MS-OLEPS] 2.7 GUID (Packet Version), reused from [MS-DTYP] 2.3.4: Data1 (4 bytes) and Data2/Data3 (2 bytes each) are little-endian; Data4 (8 bytes) is written byte-for-byte in the order the GUID's braced string form gives it, with no byte-swapping. The braced-hyphenated-uppercase-hex form is this package's own in-memory representation of a formatId (FMTID) or CLSID — not part of the wire format itself, just how ./read.ts hands one back and ./write.ts expects one in.
 export function readGuid(view: DataView, offset: number): string {
   const data1 = hex(view.getUint32(offset, true), 8);
   const data2 = hex(view.getUint16(offset + 4, true), 4);
@@ -67,7 +67,7 @@ export function writeGuid(view: DataView, offset: number, guid: string): void {
   }
 }
 
-// [MS-OLEPS] 2.15 (VT_FILETIME) / [MS-DTYP] 2.3.3: a FILETIME counts 100-nanosecond intervals since 1601-01-01T00:00:00Z, a JS Date counts milliseconds since 1970-01-01T00:00:00Z. The gap between those two epochs, in 100-nanosecond units -- BigInt throughout, because the raw tick count for any modern date already exceeds Number.MAX_SAFE_INTEGER.
+// [MS-OLEPS] 2.15 (VT_FILETIME) / [MS-DTYP] 2.3.3: a FILETIME counts 100-nanosecond intervals since 1601-01-01T00:00:00Z, a JS Date counts milliseconds since 1970-01-01T00:00:00Z. The gap between those two epochs, in 100-nanosecond units — BigInt throughout, because the raw tick count for any modern date already exceeds Number.MAX_SAFE_INTEGER.
 const FILETIME_EPOCH_OFFSET_100NS = 116444736000000000n;
 const HUNDRED_NS_PER_MS = 10000n;
 
@@ -89,7 +89,7 @@ export function dateToFiletime(date: Date): {
   };
 }
 
-// The typed value of one property, decoded from -- or destined for -- a TypedPropertyValue packet. Tagged by the PropertyType name rather than a synthetic kind, so a caller matching on `type` reads the same vocabulary [MS-OLEPS] itself uses.
+// The typed value of one property, decoded from — or destined for — a TypedPropertyValue packet. Tagged by the PropertyType name rather than a synthetic kind, so a caller matching on `type` reads the same vocabulary [MS-OLEPS] itself uses.
 export type PropertyValue =
   | { readonly type: "VT_I2"; readonly value: number }
   | { readonly type: "VT_I4"; readonly value: number }
@@ -97,7 +97,7 @@ export type PropertyValue =
   | { readonly type: "VT_LPWSTR"; readonly value: string }
   | { readonly type: "VT_FILETIME"; readonly value: Date };
 
-// One property set: its FMTID (as a formatId string) and its properties keyed by PropertyIdentifier. The vocabulary ./read.ts and ./write.ts share both directions -- reading a stream and writing one back take and return the identical shape, so a round trip is well-typed rather than a translation between two.
+// One property set: its FMTID (as a formatId string) and its properties keyed by PropertyIdentifier. The vocabulary ./read.ts and ./write.ts share both directions — reading a stream and writing one back take and return the identical shape, so a round trip is well-typed rather than a translation between two.
 export interface PropertySet {
   readonly formatId: string;
   readonly properties: ReadonlyMap<number, PropertyValue>;

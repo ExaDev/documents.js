@@ -8,7 +8,7 @@ describe("randomBytes", () => {
   });
 
   it("actually fills the buffer from the CSPRNG rather than leaving it zeroed", () => {
-    // 32 bytes of true zero from a CSPRNG has a chance of roughly 1 in 2^256 -- indistinguishable from zero for test purposes, so this reliably catches a no-op stand-in for the real getRandomValues call.
+    // 32 bytes of true zero from a CSPRNG has a chance of roughly 1 in 2^256 — indistinguishable from zero for test purposes, so this reliably catches a no-op stand-in for the real getRandomValues call.
     const bytes = randomBytes(32);
     expect(bytes.some((b) => b !== 0)).toBe(true);
   });

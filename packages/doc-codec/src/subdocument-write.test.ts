@@ -41,7 +41,7 @@ describe("buildNoteSubdocument", () => {
     // One content paragraph (empty) + one guard paragraph = 2 terminators.
     expect(subdoc.ccp).toBe(2 + 1); // + the subdocument's own trailing guard mark.
     expect(subdoc.paragraphs).toHaveLength(3);
-    // Genuinely no runs at all, not a single run carrying an empty-string text -- the two are equal in character count but not in shape.
+    // Genuinely no runs at all, not a single run carrying an empty-string text — the two are equal in character count but not in shape.
     expect(subdoc.paragraphs[0]?.runs).toEqual([]);
   });
 
@@ -134,7 +134,7 @@ describe("buildHeaderSubdocument", () => {
 
   it("writes exactly one section's own worth of slot keys, not one section too many", () => {
     const subdoc = buildHeaderSubdocument([], 1, new DataStreamBuilder());
-    // 6 fixed separator stories + 1 section's own 6 slots + the subdocument's own trailing ccpText/ccp pair = 14 keys, each 4 bytes -- a loop that ran one section past sectionCount would append 6 more.
+    // 6 fixed separator stories + 1 section's own 6 slots + the subdocument's own trailing ccpText/ccp pair = 14 keys, each 4 bytes — a loop that ran one section past sectionCount would append 6 more.
     expect(subdoc.plex.byteLength / 4).toBe(6 + 6 + 2);
   });
 

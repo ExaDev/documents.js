@@ -18,9 +18,9 @@ import { headingStyleId } from "markdown-codec";
 import { formulaPlaceholderText } from "../model/formula";
 import { buildMarkdownText } from "./write";
 
-// documents.js has plenty of ways to get INTO a ContentDocument from any of its eight content formats, and one way out to real bytes per format via buildXPackage -- but no way to get plain Markdown text out of an arbitrary ContentDocument, regardless of which of the five kinds it happens to be. buildMarkdownText (src/markdown/write.ts) already covers the one kind markdown-codec itself understands ('wordprocessing'); this module is what makes every OTHER kind reachable too, by flattening its own shape-specific structure (slides, sheets, drawing pages, a bare formula) into the same ContentBlock vocabulary markdown-codec's writeMarkdownContent already knows how to render, then delegating to buildMarkdownText.
+// documents.js has plenty of ways to get INTO a ContentDocument from any of its eight content formats, and one way out to real bytes per format via buildXPackage — but no way to get plain Markdown text out of an arbitrary ContentDocument, regardless of which of the five kinds it happens to be. buildMarkdownText (src/markdown/write.ts) already covers the one kind markdown-codec itself understands ('wordprocessing'); this module is what makes every OTHER kind reachable too, by flattening its own shape-specific structure (slides, sheets, drawing pages, a bare formula) into the same ContentBlock vocabulary markdown-codec's writeMarkdownContent already knows how to render, then delegating to buildMarkdownText.
 //
-// This is a best-effort DEGRADE, not a second writer: presentation/spreadsheet/drawing/formula content is reshaped into headings + paragraphs/tables using the one mapping that is actually defensible for each (a slide or drawing page becomes a heading-delimited section in document order; a sheet becomes a GFM table; a formula becomes its own plain-text stand-in, exactly like an embedded formula block already does in buildMarkdownText's own markdownBlock). Every one of those decisions is real information loss -- slide/page boundaries, a sheet's own print geometry, a drawing's vector shapes, a slide's speaker notes -- so every decision is reported through options.onDiagnostic rather than made silently. Diagnostics from the underlying writeMarkdownContent call itself (dropped table formatting, a flattened numId, ...) still flow through the ordinary WriteMarkdownOptions.sink this module inherits unchanged.
+// This is a best-effort DEGRADE, not a second writer: presentation/spreadsheet/drawing/formula content is reshaped into headings + paragraphs/tables using the one mapping that is actually defensible for each (a slide or drawing page becomes a heading-delimited section in document order; a sheet becomes a GFM table; a formula becomes its own plain-text stand-in, exactly like an embedded formula block already does in buildMarkdownText's own markdownBlock). Every one of those decisions is real information loss — slide/page boundaries, a sheet's own print geometry, a drawing's vector shapes, a slide's speaker notes — so every decision is reported through options.onDiagnostic rather than made silently. Diagnostics from the underlying writeMarkdownContent call itself (dropped table formatting, a flattened numId, ...) still flow through the ordinary WriteMarkdownOptions.sink this module inherits unchanged.
 
 export type MarkdownRenderDiagnosticSeverity = "info" | "warning";
 
@@ -53,18 +53,18 @@ export type MarkdownRenderDiagnosticSink = (
 ) => void;
 
 const NOOP_RENDER_DIAGNOSTIC_SINK: MarkdownRenderDiagnosticSink = () => {
-  // Deliberately empty -- the default when a caller supplies no onDiagnostic, mirroring markdown-codec's own NOOP_MARKDOWN_DIAGNOSTIC_SINK.
+  // Deliberately empty — the default when a caller supplies no onDiagnostic, mirroring markdown-codec's own NOOP_MARKDOWN_DIAGNOSTIC_SINK.
 };
 
 export interface RenderMarkdownOptions extends WriteMarkdownOptions {
-  // Called once per degrade decision this module makes while flattening a non-wordprocessing ContentDocument. Never called for a 'wordprocessing' document -- there is nothing to degrade on that path, since it goes straight to writeMarkdownContent.
+  // Called once per degrade decision this module makes while flattening a non-wordprocessing ContentDocument. Never called for a 'wordprocessing' document — there is nothing to degrade on that path, since it goes straight to writeMarkdownContent.
   readonly onDiagnostic?: MarkdownRenderDiagnosticSink;
 }
 
-// A synthesised A4/1in section, exactly like markdown-codec's own INVENTED_PAGE_GEOMETRY default (ReadMarkdownOptions.pageSize/margins falling back to PAGE_SIZE_A4/its own DEFAULT_MARGINS) -- writeMarkdownContent never reads a section's pageSize/margins at all (markdown has no page-geometry construct), so these values are here purely to satisfy ContentSection's own schema shape, not because they affect the rendered text.
+// A synthesised A4/1in section, exactly like markdown-codec's own INVENTED_PAGE_GEOMETRY default (ReadMarkdownOptions.pageSize/margins falling back to PAGE_SIZE_A4/its own DEFAULT_MARGINS) — writeMarkdownContent never reads a section's pageSize/margins at all (markdown has no page-geometry construct), so these values are here purely to satisfy ContentSection's own schema shape, not because they affect the rendered text.
 const SYNTHETIC_MARGINS = { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 };
 
-// A column with no width of its own (a spreadsheet cell reader that never individuated it) falls back to this -- again cosmetic: no markdown table renderer reads ContentTable.columnWidthsPt.
+// A column with no width of its own (a spreadsheet cell reader that never individuated it) falls back to this — again cosmetic: no markdown table renderer reads ContentTable.columnWidthsPt.
 const DEFAULT_COLUMN_WIDTH_PT = 72;
 
 function headingParagraph(level: number, text: string): ContentParagraph {
@@ -96,7 +96,7 @@ function wrapAsWordprocessing(
   };
 }
 
-// --- presentation: each slide becomes its own H2-headed section, in slide order. A slide's own shapes carry no inherent reading order beyond array position (the same assumption src/layout/slides.ts's direct-placement engine makes), so shapes render in that order with no attempt to infer which one is a "title" -- there is no structural signal to tell a title placeholder from body text once ContentShape has flattened placeholder inheritance away. ---
+// --- presentation: each slide becomes its own H2-headed section, in slide order. A slide's own shapes carry no inherent reading order beyond array position (the same assumption src/layout/slides.ts's direct-placement engine makes), so shapes render in that order with no attempt to infer which one is a "title" — there is no structural signal to tell a title placeholder from body text once ContentShape has flattened placeholder inheritance away. ---
 function presentationBlocks(
   document: Extract<ContentDocument, { kind: "presentation" }>,
   sink: MarkdownRenderDiagnosticSink,
@@ -124,7 +124,7 @@ function presentationBlocks(
   return blocks;
 }
 
-// --- drawing: each page becomes its own H2-headed section. Only shapes carry text (ContentBlock); vectors (rect/ellipse/line/path) have nothing CommonMark/GFM can represent at all, so they are dropped wholesale and reported once per page rather than once per vector -- the decision made is "this page's vector geometry is unrepresentable", not "vector N specifically". ---
+// --- drawing: each page becomes its own H2-headed section. Only shapes carry text (ContentBlock); vectors (rect/ellipse/line/path) have nothing CommonMark/GFM can represent at all, so they are dropped wholesale and reported once per page rather than once per vector — the decision made is "this page's vector geometry is unrepresentable", not "vector N specifically". ---
 function drawingBlocks(
   document: Extract<ContentDocument, { kind: "drawing" }>,
   sink: MarkdownRenderDiagnosticSink,
@@ -152,7 +152,7 @@ function drawingBlocks(
   return blocks;
 }
 
-// --- spreadsheet: each sheet becomes its own H2-headed section plus (when it has any cells left after hidden rows/columns are excluded) one GFM table. A sheet's own printSettings/formulas have no markdown equivalent and are silently out of scope -- not degraded, since there was never a markdown construct they could have mapped to (the same "structural mismatch, not a bug" framing markdown-codec's own README gives colour/font/alignment). ---
+// --- spreadsheet: each sheet becomes its own H2-headed section plus (when it has any cells left after hidden rows/columns are excluded) one GFM table. A sheet's own printSettings/formulas have no markdown equivalent and are silently out of scope — not degraded, since there was never a markdown construct they could have mapped to (the same "structural mismatch, not a bug" framing markdown-codec's own README gives colour/font/alignment). ---
 function spreadsheetCellToTableCell(
   cell: ContentSheetCell | undefined,
 ): ContentTableCell {
@@ -257,7 +257,7 @@ function spreadsheetBlocks(
   return blocks;
 }
 
-// --- formula: a standalone .odf-style formula document has no page/section/slide structure at all -- it IS one equation. It degrades to the identical plain-text stand-in buildMarkdownText's own markdownBlock already uses for a formula embedded inside a wordprocessing document (its own StarMath annotation, or the literal "[formula]" marker), so a formula reads the same way in markdown regardless of whether it arrived as a whole document or as one block inside a larger one. ---
+// --- formula: a standalone .odf-style formula document has no page/section/slide structure at all — it IS one equation. It degrades to the identical plain-text stand-in buildMarkdownText's own markdownBlock already uses for a formula embedded inside a wordprocessing document (its own StarMath annotation, or the literal "[formula]" marker), so a formula reads the same way in markdown regardless of whether it arrived as a whole document or as one block inside a larger one. ---
 function formulaBlocks(
   document: Extract<ContentDocument, { kind: "formula" }>,
   sink: MarkdownRenderDiagnosticSink,
@@ -287,7 +287,7 @@ function degradedBlocksFor(
   }
 }
 
-// The one entry point this module exists to add: ContentDocument (any of its five kinds) -> Markdown text. A 'wordprocessing' document goes straight to buildMarkdownText/markdown-codec's writeMarkdownContent -- markdown-codec already understands that shape natively, so there is nothing this module should do differently. Every other kind is flattened first (see the per-kind functions above) into a synthetic 'wordprocessing' document built from the real blocks it carries, then handed to the exact same buildMarkdownText call -- so a flattened presentation/spreadsheet/drawing gets every ordinary wordprocessing-side behaviour (list rendering, table-cell formatting diagnostics, front matter, style options) for free, with zero duplicated emission logic.
+// The one entry point this module exists to add: ContentDocument (any of its five kinds) -> Markdown text. A 'wordprocessing' document goes straight to buildMarkdownText/markdown-codec's writeMarkdownContent — markdown-codec already understands that shape natively, so there is nothing this module should do differently. Every other kind is flattened first (see the per-kind functions above) into a synthetic 'wordprocessing' document built from the real blocks it carries, then handed to the exact same buildMarkdownText call — so a flattened presentation/spreadsheet/drawing gets every ordinary wordprocessing-side behaviour (list rendering, table-cell formatting diagnostics, front matter, style options) for free, with zero duplicated emission logic.
 export function renderContentDocumentToMarkdown(
   document: ContentDocument,
   options?: RenderMarkdownOptions,

@@ -4,10 +4,10 @@
 //
 // Every coordinate below is the specification's own: u0/u1 and v0/v1 are the half-open sample ranges of the resolution level being reconstructed, on that level's own grid, and the four subbands' ranges follow from them by the ceil/floor split F.3.3 defines.
 
-// The widest read in either filter is the 9-7's own scaling step, whose loop (F-9) runs two lifting indices -- four samples -- past each end of the signal. Six samples of symmetric extension covers that with room to spare, and covers the 5-3's narrower reach as well.
+// The widest read in either filter is the 9-7's own scaling step, whose loop (F-9) runs two lifting indices — four samples — past each end of the signal. Six samples of symmetric extension covers that with room to spare, and covers the 5-3's narrower reach as well.
 const EXTENSION_MARGIN = 6;
 
-// Calls `fn` once per row index 0..count - 1. Exported for direct unit testing: HOR_SR's own row loop below writes each row at `row * width`, which for row === height lands exactly on output's own one-past-the-end index -- silently absorbed by TypedArray semantics (an out-of-bounds write is a no-op, an out-of-bounds read is undefined) regardless of what that row's own reconstruction would have computed, so a wrong loop bound there is unobservable through inverseDwt53Level/97Level's own returned array. Only counting and recording calls directly, on this extracted primitive, can catch it.
+// Calls `fn` once per row index 0..count - 1. Exported for direct unit testing: HOR_SR's own row loop below writes each row at `row * width`, which for row === height lands exactly on output's own one-past-the-end index — silently absorbed by TypedArray semantics (an out-of-bounds write is a no-op, an out-of-bounds read is undefined) regardless of what that row's own reconstruction would have computed, so a wrong loop bound there is unobservable through inverseDwt53Level/97Level's own returned array. Only counting and recording calls directly, on this extracted primitive, can catch it.
 export function times(count: number, fn: (index: number) => void): void {
   for (let index = 0; index < count; index++) {
     fn(index);
@@ -48,7 +48,7 @@ export function subbandBounds(
   };
 }
 
-// F.3.4's whole-sample symmetric extension: outside [i0, i1) the signal is mirrored about its own two end samples, so index i0 - k reads as i0 + k and index i1 - 1 + k as i1 - 1 - k, repeating with period 2(n - 1). Takes the position as an offset from i0 (rather than an absolute position the caller would otherwise add i0 to, only for this function to immediately subtract it back out again) since mirroring about i0 is an inherently symmetric operation on that offset -- offset and -offset always mirror identically, an equivalence a caller-side i0 + k versus i0 - k mistake could never actually observe either way. Exported for direct unit testing: synthesiseLine, this function's sole production caller, only ever reaches its loop (the one place mirrorIndex is called) once it has already special-cased length 0 and length 1 itself, so no length <= 1 input ever reaches mirrorIndex through that path -- only a direct call can exercise this function's own guard against it.
+// F.3.4's whole-sample symmetric extension: outside [i0, i1) the signal is mirrored about its own two end samples, so index i0 - k reads as i0 + k and index i1 - 1 + k as i1 - 1 - k, repeating with period 2(n - 1). Takes the position as an offset from i0 (rather than an absolute position the caller would otherwise add i0 to, only for this function to immediately subtract it back out again) since mirroring about i0 is an inherently symmetric operation on that offset — offset and -offset always mirror identically, an equivalence a caller-side i0 + k versus i0 - k mistake could never actually observe either way. Exported for direct unit testing: synthesiseLine, this function's sole production caller, only ever reaches its loop (the one place mirrorIndex is called) once it has already special-cased length 0 and length 1 itself, so no length <= 1 input ever reaches mirrorIndex through that path — only a direct call can exercise this function's own guard against it.
 export function mirrorIndex(
   offsetFromI0: number,
   i0: number,
@@ -64,7 +64,7 @@ export function mirrorIndex(
   return i0 + (offset >= length ? period - offset : offset);
 }
 
-// The interleave of F.3.3, written generically over "read a subband sample" / "write an interleaved sample" so the reversible and irreversible paths share one copy of the coordinate arithmetic -- the part most likely to be got wrong, and the part that is identical between them.
+// The interleave of F.3.3, written generically over "read a subband sample" / "write an interleaved sample" so the reversible and irreversible paths share one copy of the coordinate arithmetic — the part most likely to be got wrong, and the part that is identical between them.
 // Exported for direct unit testing of the loop bounds below: the reversible and irreversible reconstructions this function serves both immediately overwrite whatever it writes with a filtered value (a single-sample degenerate case aside, in which the raw interleaved value survives untouched but every call site's own subband is already known-flat there), so no caller-level test can distinguish an interleave loop running one iteration long or short from its output alone.
 export interface InterleaveSource {
   readonly ll: (u: number, v: number) => number;
@@ -103,7 +103,7 @@ export function interleave(
 
 // --- The reversible 5-3 filter (F.3.8.2, equations F-5 and F-6). ---
 
-// Runs in place over an extended buffer where `buffer[index - i0 + EXTENSION_MARGIN]` holds sample `index`, the margin already filled by symmetric extension. Exported for direct unit testing: synthesiseLine's own scratch buffer is always sized generously enough (Math.max(width, height) + 2 * EXTENSION_MARGIN) that a wrong loop bound here would silently write into real, already-allocated cells rather than throwing -- only inspecting exactly which cells this function itself touches, directly, can tell the two apart.
+// Runs in place over an extended buffer where `buffer[index - i0 + EXTENSION_MARGIN]` holds sample `index`, the margin already filled by symmetric extension. Exported for direct unit testing: synthesiseLine's own scratch buffer is always sized generously enough (Math.max(width, height) + 2 * EXTENSION_MARGIN) that a wrong loop bound here would silently write into real, already-allocated cells rather than throwing — only inspecting exactly which cells this function itself touches, directly, can tell the two apart.
 export function inverse53Filter(
   buffer: Int32Array,
   i0: number,
@@ -136,7 +136,7 @@ export function inverse97Filter(
   i0: number,
   i1: number,
 ): void {
-  // F.3.8.2 Table F.4: the four lifting parameters of the 9-7 analysis filter and its normalisation constant. The synthesis below applies each in reverse order with the opposite sign, which is what makes lifting invertible at all. Built inside this function rather than as module-level constants so a mutation to one of them is attributed, by Stryker's per-test coverage analysis, to the tests that actually call this function -- module-level `const`s here would run once at import time as static mutants, which Stryker tests against a single arbitrary covering test rather than the full set that genuinely exercises the 9-7 filter.
+  // F.3.8.2 Table F.4: the four lifting parameters of the 9-7 analysis filter and its normalisation constant. The synthesis below applies each in reverse order with the opposite sign, which is what makes lifting invertible at all. Built inside this function rather than as module-level constants so a mutation to one of them is attributed, by Stryker's per-test coverage analysis, to the tests that actually call this function — module-level `const`s here would run once at import time as static mutants, which Stryker tests against a single arbitrary covering test rather than the full set that genuinely exercises the 9-7 filter.
   const LIFT_ALPHA = -1.586134342059924;
   const LIFT_BETA = -0.052980118572961;
   const LIFT_GAMMA = 0.882911075530934;
@@ -179,7 +179,7 @@ export function inverse97Filter(
   }
 }
 
-// F.3.7 1D_SR: the one-dimensional synthesis of an interleaved signal spanning [i0, i1). `read` supplies sample `index` and `write` receives the reconstructed one, both in absolute coordinates, so the same routine serves rows and columns without transposing anything. Exported for direct unit testing: inverseDwt53Level/97Level, this function's only production callers, already refuse to call it at all once their own width <= 0 || height <= 0 guard has returned, so i1 - i0 is always positive by the time either caller's loop reaches it -- only a direct call can exercise this function's own length <= 0 and length === 1 branches in isolation.
+// F.3.7 1D_SR: the one-dimensional synthesis of an interleaved signal spanning [i0, i1). `read` supplies sample `index` and `write` receives the reconstructed one, both in absolute coordinates, so the same routine serves rows and columns without transposing anything. Exported for direct unit testing: inverseDwt53Level/97Level, this function's only production callers, already refuse to call it at all once their own width <= 0 || height <= 0 guard has returned, so i1 - i0 is always positive by the time either caller's loop reaches it — only a direct call can exercise this function's own length <= 0 and length === 1 branches in isolation.
 export function synthesiseLine(
   read: (index: number) => number,
   write: (index: number, value: number) => void,
@@ -260,7 +260,7 @@ export function inverseDwt53Level(
   interleave(interleaveSource(bands, bounds), bounds, (u, v, value) => {
     output[(v - v0) * width + (u - u0)] = value;
   });
-  // HOR_SR (F.3.5) then VER_SR (F.3.6), in that order -- with integer lifting the two are not commutative.
+  // HOR_SR (F.3.5) then VER_SR (F.3.6), in that order — with integer lifting the two are not commutative.
   times(height, (v) => {
     const rowStart = v * width;
     synthesiseLine(

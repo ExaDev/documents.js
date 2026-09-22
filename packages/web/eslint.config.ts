@@ -16,7 +16,7 @@ export default tseslint.config(
       "@typescript-eslint/promise-function-async",
       "@typescript-eslint/strict-boolean-expressions",
     ],
-    // Off: with noUncheckedIndexedAccess on, every indexed read is typed as possibly-undefined, so this rule fires on array and byte-buffer indexing whose bound the surrounding code has already established -- a loop condition, a prior length check, or a fixture the test itself just built. None of the sites here is a value that can actually be absent. Tracked for a per-package decision on whether any of them is genuine; see the burn-down epic.
+    // Off: with noUncheckedIndexedAccess on, every indexed read is typed as possibly-undefined, so this rule fires on array and byte-buffer indexing whose bound the surrounding code has already established — a loop condition, a prior length check, or a fixture the test itself just built. None of the sites here is a value that can actually be absent. Tracked for a per-package decision on whether any of them is genuine; see the burn-down epic.
     nonNullAssertion: "off",
     // Three programs, not the usual two: the app, the browser Web Worker, and the Node-side config files.
     projects: [
@@ -31,7 +31,7 @@ export default tseslint.config(
     ],
     // Not Worker-isomorphic: this is a browser app, and its own RPC import boundary below is what keeps the conversion engine out of the main bundle.
     isomorphic: false,
-    // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why -- this app's own UI state/reducer helpers genuinely mutate a handful of array/object parameters in place. Tracked for burn-down.
+    // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why — this app's own UI state/reducer helpers genuinely mutate a handful of array/object parameters in place. Tracked for burn-down.
     preferReadonlyParams: "off",
     // No npm exports map and no public entry point, so the rule's default stays right rather than being relaxed to 'single'.
     barrelPolicy: "banned",
@@ -39,7 +39,7 @@ export default tseslint.config(
     nodeGlobals: false,
   }),
   {
-    // React UI layer only -- the worker/rpc/db/ports/adapters layers stay plain TS with no JSX/browser-global rules.
+    // React UI layer only — the worker/rpc/db/ports/adapters layers stay plain TS with no JSX/browser-global rules.
     files: ["src/**/*.tsx", "src/ui/**/*.ts", "src/routes/**/*.ts"],
     languageOptions: { globals: { ...globals.browser } },
     plugins: {
@@ -59,8 +59,8 @@ export default tseslint.config(
   {
     // Three exceptions imposed by TanStack Router's own conventions, not by an avoidable authoring choice in this codebase:
     // - barrel-policy: index routes require literal "index.tsx" / "<segment>.index.tsx" filenames (the router's own file-based generator resolves them, never a bare directory import), which collides with barrel-policy's unrelated "no index.* files" concern.
-    // - react-refresh/only-export-components: every route file's exported `Route` (createFileRoute/createRootRoute) references its component via a `component:` property, which the rule's fast-refresh-boundary heuristic flags regardless of allowExportNames -- allowlisting the export name doesn't cover a component being referenced from within another exported value.
-    // - only-throw-error: `redirect()`/`notFound()` are TanStack Router's documented control-flow mechanism -- both deliberately return a plain object, not an Error instance, that `beforeLoad`/`loader` are meant to `throw`. The router itself catches and interprets these; they are never an actual error propagating to a boundary.
+    // - react-refresh/only-export-components: every route file's exported `Route` (createFileRoute/createRootRoute) references its component via a `component:` property, which the rule's fast-refresh-boundary heuristic flags regardless of allowExportNames — allowlisting the export name doesn't cover a component being referenced from within another exported value.
+    // - only-throw-error: `redirect()`/`notFound()` are TanStack Router's documented control-flow mechanism — both deliberately return a plain object, not an Error instance, that `beforeLoad`/`loader` are meant to `throw`. The router itself catches and interprets these; they are never an actual error propagating to a boundary.
     files: ["src/routes/**/*.tsx"],
     rules: {
       "exadev/barrel-policy": "off",
@@ -69,7 +69,7 @@ export default tseslint.config(
     },
   },
   {
-    // doubleStrokeKeys is a pure helper exported alongside the SlidesPreview component purely so a test can pin its return value directly: the React `key` strings it computes never reach rendered DOM output at all (React keys are consumed internally, not written to markup), so a rendering-only test has no way to observe them -- the one case in this file where allowConstantExport's "still a component-shaped module" carve-out doesn't apply, since the export is a function, not a constant.
+    // doubleStrokeKeys is a pure helper exported alongside the SlidesPreview component purely so a test can pin its return value directly: the React `key` strings it computes never reach rendered DOM output at all (React keys are consumed internally, not written to markup), so a rendering-only test has no way to observe them — the one case in this file where allowConstantExport's "still a component-shaped module" carve-out doesn't apply, since the export is a function, not a constant.
     files: ["src/ui/SlidesPreview.tsx"],
     rules: {
       "react-refresh/only-export-components": [
@@ -96,7 +96,7 @@ export default tseslint.config(
     languageOptions: { globals: { ...globals.worker } },
   },
   {
-    // setup.ts's own window.matchMedia stub implements MediaQueryList's legacy addListener/removeListener members because the real interface still declares them as required -- deprecated does not mean absent, and a stub that only satisfies the non-deprecated half of the type would be an incomplete implementation of what it stands in for. Testing that those two members are genuinely present and callable (setup.test.ts) means calling them by name, which is exactly what this rule exists to flag in ordinary application code; scoped to the one test file that has a legitimate reason to.
+    // setup.ts's own window.matchMedia stub implements MediaQueryList's legacy addListener/removeListener members because the real interface still declares them as required — deprecated does not mean absent, and a stub that only satisfies the non-deprecated half of the type would be an incomplete implementation of what it stands in for. Testing that those two members are genuinely present and callable (setup.test.ts) means calling them by name, which is exactly what this rule exists to flag in ordinary application code; scoped to the one test file that has a legitimate reason to.
     files: ["src/test/setup.test.ts"],
     rules: { "@typescript-eslint/no-deprecated": "off" },
   },
@@ -114,7 +114,7 @@ export default tseslint.config(
     languageOptions: { globals: { ...globals.node } },
   },
   {
-    // Import-boundary enforcement: UI/route code must go through the RPC client for anything that touches real document bytes -- only src/workers/** may call documents.js's conversion/editor functions directly. Uses the typescript-eslint variant of no-restricted-imports (the base rule is turned off below to avoid double-reporting the same import) specifically for its `allowTypeImports` option: a type-only import is erased at compile time regardless of which name it is, so it can never pull the conversion engine into the main bundle -- allowImportNames only needs to name genuine runtime values (DocumentFormatSchema/DOCUMENT_FORMATS/columnIndexToLetters), not every type re-exported alongside them.
+    // Import-boundary enforcement: UI/route code must go through the RPC client for anything that touches real document bytes — only src/workers/** may call documents.js's conversion/editor functions directly. Uses the typescript-eslint variant of no-restricted-imports (the base rule is turned off below to avoid double-reporting the same import) specifically for its `allowTypeImports` option: a type-only import is erased at compile time regardless of which name it is, so it can never pull the conversion engine into the main bundle — allowImportNames only needs to name genuine runtime values (DocumentFormatSchema/DOCUMENT_FORMATS/columnIndexToLetters), not every type re-exported alongside them.
     files: [
       "src/routes/**/*.{ts,tsx}",
       "src/features/**/*.{ts,tsx}",
@@ -136,7 +136,7 @@ export default tseslint.config(
                 "columnIndexToLetters",
               ],
               message:
-                "UI code may not import documents.js's conversion/editor functions directly -- go through the RPC client (src/rpc/client.ts). Only src/workers/** may call them.",
+                "UI code may not import documents.js's conversion/editor functions directly — go through the RPC client (src/rpc/client.ts). Only src/workers/** may call them.",
             },
             {
               group: [
@@ -151,7 +151,7 @@ export default tseslint.config(
               ],
               allowTypeImports: true,
               message:
-                "UI code may not import documents.js's sibling libraries directly -- go through the RPC client. Only src/workers/** may import these.",
+                "UI code may not import documents.js's sibling libraries directly — go through the RPC client. Only src/workers/** may import these.",
             },
           ],
         },

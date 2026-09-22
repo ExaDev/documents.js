@@ -15,7 +15,7 @@ import { readOdgContent } from "../../odf/odg/read";
 import { buildOdgPackage } from "./content";
 import { OdgEditor } from "./editor";
 
-// The first draw:page element of a built package's own content.xml, so a test can assert on RAW child document order -- the only thing that expresses paint order in a written .odg, since this writer never emits a draw:z-index (see OdgPage's own note).
+// The first draw:page element of a built package's own content.xml, so a test can assert on RAW child document order — the only thing that expresses paint order in a written .odg, since this writer never emits a draw:z-index (see OdgPage's own note).
 function rootDrawPage(pkg: Package): XmlElement {
   const part = pkg.parts["content.xml"];
   if (part?.kind !== "xml") {
@@ -77,7 +77,7 @@ describe("buildOdgPackage", () => {
     expect(editor.pages()).toHaveLength(2);
   });
 
-  // The odp text-box contract, one variant over: draw:text-box's content model is (text:p | text:list)* with no text:h anywhere in it, so a heading's depth can never cross into a drawing as markup -- its text:p instead points text:style-name at the scaffold's own Heading_20_N definition (asserted present in styles.xml here, since odg has no scaffold suite of its own), keeping the heading's visual weight through a reference that resolves, as the round-tripped run properties prove.
+  // The odp text-box contract, one variant over: draw:text-box's content model is (text:p | text:list)* with no text:h anywhere in it, so a heading's depth can never cross into a drawing as markup — its text:p instead points text:style-name at the scaffold's own Heading_20_N definition (asserted present in styles.xml here, since odg has no scaffold suite of its own), keeping the heading's visual weight through a reference that resolves, as the round-tripped run properties prove.
   it("points a heading paragraph in a text box at the scaffold's Heading_20_N style, keeping its visual weight without text:h", () => {
     const content = drawingDoc([
       {

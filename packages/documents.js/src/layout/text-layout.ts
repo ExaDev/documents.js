@@ -7,9 +7,9 @@ import type {
   LayoutFont,
 } from "document-schema.js";
 
-// The text-wrapping primitive this package's layout engines (engine.ts/slides.ts/sheets.ts) share, moved out of pdf-codec (which had zero internal callers for it) into the layout engine that owns it. Pure over the injected TextMeasurer port -- no PDF knowledge, no font-parsing -- so a layout engine wraps text against whatever metrics its caller supplied without reaching into a backend. pdf-codec's own copy is dropped in a follow-up breaking step now that nothing imports it.
+// The text-wrapping primitive this package's layout engines (engine.ts/slides.ts/sheets.ts) share, moved out of pdf-codec (which had zero internal callers for it) into the layout engine that owns it. Pure over the injected TextMeasurer port — no PDF knowledge, no font-parsing — so a layout engine wraps text against whatever metrics its caller supplied without reaching into a backend. pdf-codec's own copy is dropped in a follow-up breaking step now that nothing imports it.
 
-// Local extensions of the schema's StyledRun/StyledFragment/WrappedLine carrying the index of the originating run (the position it held in the caller's own runs array, set by shared.ts's toStyledRuns and preserved through every split/merge below). Atomisation deliberately merges fragments from DIFFERENT runs into one unbreakable box atom, so run identity is real information the pipeline owns and cannot be re-derived afterwards -- without it, a layout engine could not stamp a rendered position back onto the exact ContentRun node it came from (ExaDev/documents.js#569). runIndex is optional because a synthesised fallback run (an empty paragraph's substitute, shared.ts's effectiveStyledRuns) has no originating node to point at.
+// Local extensions of the schema's StyledRun/StyledFragment/WrappedLine carrying the index of the originating run (the position it held in the caller's own runs array, set by shared.ts's toStyledRuns and preserved through every split/merge below). Atomisation deliberately merges fragments from DIFFERENT runs into one unbreakable box atom, so run identity is real information the pipeline owns and cannot be re-derived afterwards — without it, a layout engine could not stamp a rendered position back onto the exact ContentRun node it came from (ExaDev/documents.js#569). runIndex is optional because a synthesised fallback run (an empty paragraph's substitute, shared.ts's effectiveStyledRuns) has no originating node to point at.
 export interface SourcedRun extends StyledRun {
   readonly runIndex?: number;
 }
@@ -41,7 +41,7 @@ type Atom = BoxAtom | GlueAtom | BreakAtom;
 
 const WORD_OR_WHITESPACE_PATTERN = /\n|\s+|\S+/g;
 
-// Splits `runs` into word-shaped "box" atoms, "glue" (space) atoms, and explicit line-"break" atoms. Critically, atomisation happens *across run boundaries*: a word split by a formatting change (e.g. "hel" in a plain run immediately followed by "lo" in a bold run) becomes a single box atom carrying both styled fragments, so it can never be broken apart -- only between boxes, and boxes are word-shaped regardless of how the source text was split across runs.
+// Splits `runs` into word-shaped "box" atoms, "glue" (space) atoms, and explicit line-"break" atoms. Critically, atomisation happens *across run boundaries*: a word split by a formatting change (e.g. "hel" in a plain run immediately followed by "lo" in a bold run) becomes a single box atom carrying both styled fragments, so it can never be broken apart — only between boxes, and boxes are word-shaped regardless of how the source text was split across runs.
 function atomizeRuns(
   runs: readonly SourcedRun[],
   measurer: TextMeasurer,
@@ -248,10 +248,10 @@ function buildEmptyLine(
   };
 }
 
-// The atom types wrapRunsToWidth's loop consumes, exported so a caller that needs only SOME of the lines (from-package's wrap re-derivation, which takes one line per recorded frame) can atomise once and consume incrementally instead of re-measuring the whole remaining suffix per line -- the difference between linear and quadratic work over a many-frame run. Opaque by design: everything a caller needs is line-1 semantics through firstWrappedLineOf below.
+// The atom types wrapRunsToWidth's loop consumes, exported so a caller that needs only SOME of the lines (from-package's wrap re-derivation, which takes one line per recorded frame) can atomise once and consume incrementally instead of re-measuring the whole remaining suffix per line — the difference between linear and quadratic work over a many-frame run. Opaque by design: everything a caller needs is line-1 semantics through firstWrappedLineOf below.
 export type WrapAtom = BoxAtom | GlueAtom | BreakAtom;
 
-// Atomises runs once for incremental line consumption through firstWrappedLineOf -- the identical atomisation wrapRunsToWidth performs internally, split out so the one-line consumer and the whole-text wrapper can never drift apart.
+// Atomises runs once for incremental line consumption through firstWrappedLineOf — the identical atomisation wrapRunsToWidth performs internally, split out so the one-line consumer and the whole-text wrapper can never drift apart.
 export function atomizeForWrap(
   runs: readonly SourcedRun[],
   measurer: TextMeasurer,
@@ -259,7 +259,7 @@ export function atomizeForWrap(
   return atomizeRuns(runs, measurer);
 }
 
-// Line 1 of wrapRunsToWidth's greedy algorithm over ALREADY-ATOMISED runs: returns the first line plus the atom array remaining after it (an emergency-split long word's tail spliced back in, exactly as the wrapper's own queue does). Width <= 0 takes the wrapper's own degenerate branch -- one unwrapped line of everything, nothing remaining -- so a caller looping this to exhaustion reproduces wrapRunsToWidth's output line for line.
+// Line 1 of wrapRunsToWidth's greedy algorithm over ALREADY-ATOMISED runs: returns the first line plus the atom array remaining after it (an emergency-split long word's tail spliced back in, exactly as the wrapper's own queue does). Width <= 0 takes the wrapper's own degenerate branch — one unwrapped line of everything, nothing remaining — so a caller looping this to exhaustion reproduces wrapRunsToWidth's output line for line.
 export function firstWrappedLineOf(
   atoms: readonly WrapAtom[],
   measurer: TextMeasurer,
@@ -326,7 +326,7 @@ export function firstWrappedLineOf(
   };
 }
 
-// buildEmptyLine needs the runs its caller had; for the incremental consumer the atoms themselves are the only witness of the runs, so the first box/glue atom's styled fragment stands in for the empty-line metrics the wrapper's own degenerate path would compute. An atom array with no box/glue atoms at all (only break atoms, or nothing) carries no styling to report -- width 0 with no ascent/descent is the honest answer there.
+// buildEmptyLine needs the runs its caller had; for the incremental consumer the atoms themselves are the only witness of the runs, so the first box/glue atom's styled fragment stands in for the empty-line metrics the wrapper's own degenerate path would compute. An atom array with no box/glue atoms at all (only break atoms, or nothing) carries no styling to report — width 0 with no ascent/descent is the honest answer there.
 function dummyRunsOf(atoms: readonly WrapAtom[]): readonly SourcedRun[] {
   for (const atom of atoms) {
     if (atom.kind === "box" && atom.fragments[0] !== undefined) {
@@ -337,7 +337,7 @@ function dummyRunsOf(atoms: readonly WrapAtom[]): readonly SourcedRun[] {
   return [];
 }
 
-// Greedy first-fit line breaking over word-shaped atoms -- the same algorithm Word itself uses (an optimal-fit breaker like Knuth-Plass would produce different, not merely better, line breaks, which is the opposite of matching Word's own output). Never breaks inside a word, regardless of how many runs it spans; an over-long single word is emergency-split at the character level, always making at least one character of progress.
+// Greedy first-fit line breaking over word-shaped atoms — the same algorithm Word itself uses (an optimal-fit breaker like Knuth-Plass would produce different, not merely better, line breaks, which is the opposite of matching Word's own output). Never breaks inside a word, regardless of how many runs it spans; an over-long single word is emergency-split at the character level, always making at least one character of progress.
 export function wrapRunsToWidth(
   runs: readonly SourcedRun[],
   measurer: TextMeasurer,
@@ -347,7 +347,7 @@ export function wrapRunsToWidth(
   const breakLongWords = options.breakLongWords ?? true;
 
   if (maxWidthPt <= 0) {
-    // Guards against an infinite loop when placeholder geometry resolution fails upstream (e.g. a shape with zero content width) -- return one unwrapped line rather than looping forever.
+    // Guards against an infinite loop when placeholder geometry resolution fails upstream (e.g. a shape with zero content width) — return one unwrapped line rather than looping forever.
     const atoms = atomizeRuns(runs, measurer).filter(
       (a): a is BoxAtom | GlueAtom => a.kind !== "break",
     );
@@ -390,7 +390,7 @@ export function wrapRunsToWidth(
       continue;
     }
     if (current.length > 0) {
-      // Doesn't fit what's already on the line -- start a new line and re-attempt this same atom.
+      // Doesn't fit what's already on the line — start a new line and re-attempt this same atom.
       pushLine();
       continue;
     }

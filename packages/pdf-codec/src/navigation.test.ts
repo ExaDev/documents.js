@@ -21,7 +21,7 @@ import {
 import { readPdf } from "./read";
 import { navigationClusterPdf } from "./test-support/pdf";
 
-// The navigation cluster (#721's core): named destinations (old-style /Dests dictionary AND /Names /Dests name tree), the /Outlines bookmark tree, and internal link annotations (/Dest direct and named, /A /GoTo actions) -- all read into the LayoutDocument's destinations/outline surfaces and the internalLink item kind. A direct destination array names no destination, so the reader mints one (dest1, dest2, ...) so every internal link and outline entry targets a destinations-table name.
+// The navigation cluster (#721's core): named destinations (old-style /Dests dictionary AND /Names /Dests name tree), the /Outlines bookmark tree, and internal link annotations (/Dest direct and named, /A /GoTo actions) — all read into the LayoutDocument's destinations/outline surfaces and the internalLink item kind. A direct destination array names no destination, so the reader mints one (dest1, dest2, ...) so every internal link and outline entry targets a destinations-table name.
 
 function destinationNamed(doc: ReturnType<typeof readPdf>, name: string) {
   return doc.destinations?.find((d) => d.name === name);
@@ -48,7 +48,7 @@ describe("readPdf: named destinations", () => {
 
   it("mints a destination for a direct destination array", () => {
     const doc = readPdf(navigationClusterPdf());
-    // The outline is read before the pages, so its own direct destination array mints dest1 and this link's mints dest2 -- encounter order is the minting order, deterministic per file.
+    // The outline is read before the pages, so its own direct destination array mints dest1 and this link's mints dest2 — encounter order is the minting order, deterministic per file.
     const minted = doc.destinations?.find((d) => d.name === "dest2");
     expect(minted).toEqual({
       name: "dest2",
@@ -137,7 +137,7 @@ function collectDiagnostics(): {
   return { sink: (d) => diagnostics.push(d), diagnostics };
 }
 
-// A resolver over a plain ref-number -> object table -- every object in these tests is either direct or a `pdfRef` into this map, matching interpret.test.ts's own makeResolver. Returning the SAME map entry on every resolve is what lets the cycle-detection tests below recognise a repeated node by object identity.
+// A resolver over a plain ref-number -> object table — every object in these tests is either direct or a `pdfRef` into this map, matching interpret.test.ts's own makeResolver. Returning the SAME map entry on every resolve is what lets the cycle-detection tests below recognise a repeated node by object identity.
 function makeResolver(
   objects = new Map<number, PdfObject>(),
 ): PdfObjectResolver {
@@ -148,7 +148,7 @@ function makeResolver(
   return { resolve, resolveDict };
 }
 
-// A page-index lookup that resolves any ref to its own object number -- arbitrary but deterministic, and distinct enough from a small page count that a test asserting `pageIndex: N` can't be confused with a coincidental default.
+// A page-index lookup that resolves any ref to its own object number — arbitrary but deterministic, and distinct enough from a small page count that a test asserting `pageIndex: N` can't be confused with a coincidental default.
 const pageIndexByRefNum: PageIndexLookup = (obj) =>
   obj?.kind === "ref" ? obj.num : undefined;
 
@@ -600,7 +600,7 @@ describe("readOutline", () => {
     ]);
     const catalog = pdfDict({ Outlines: pdfDict({ First: pdfRef(1, 0) }) });
     const items = readOutline(catalog, registry, makeResolver(objects), sink);
-    // Strict, not just structural equality: the item must have no `destination` KEY at all, not merely one whose value happens to be undefined -- the conditional spread this proves is genuinely conditional.
+    // Strict, not just structural equality: the item must have no `destination` KEY at all, not merely one whose value happens to be undefined — the conditional spread this proves is genuinely conditional.
     expect(items).toStrictEqual([{ title: "Node", children: [] }]);
     expect(Object.hasOwn(items[0]!, "destination")).toBe(false);
   });
@@ -630,7 +630,7 @@ describe("readOutline", () => {
       pageIndexByRefNum,
       sink,
     );
-    // A's own child is B, and B's /Next points back to A -- a cycle across the parent/child boundary, not merely a self-loop within one sibling chain.
+    // A's own child is B, and B's /Next points back to A — a cycle across the parent/child boundary, not merely a self-loop within one sibling chain.
     const objects = new Map<number, PdfObject>([
       [1, pdfDict({ Title: str("A"), First: pdfRef(2, 0) })],
       [2, pdfDict({ Title: str("B"), Next: pdfRef(1, 0) })],

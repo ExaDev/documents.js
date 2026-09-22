@@ -128,7 +128,7 @@ describe("DocxTable cell access and mutation", () => {
     expect(() => table.rows()).toThrow(/removed/);
   });
 
-  it("vertical merge already works with zero new code -- the existing verticalMerge setter alone round-trips correctly", () => {
+  it("vertical merge already works with zero new code — the existing verticalMerge setter alone round-trips correctly", () => {
     const editor = createDocx();
     const table = editor.body.appendTable({ rows: 2, columns: 1 });
     table.cell(0, 0).verticalMerge = "restart";
@@ -224,7 +224,7 @@ describe("DocxTable cell access and mutation", () => {
 });
 
 describe("DocxTableCell background", () => {
-  // Walks down to the row-0/col-0 cell's own w:tcPr, creating it (via the public colSpan setter, mirroring the "colSpan and verticalMerge coexist" test above) when the cell has none yet -- so a test can hand-insert a raw w:shd shape this editor's own setter never writes (it always writes w:val="clear"), the same way a real producer's own docx can.
+  // Walks down to the row-0/col-0 cell's own w:tcPr, creating it (via the public colSpan setter, mirroring the "colSpan and verticalMerge coexist" test above) when the cell has none yet — so a test can hand-insert a raw w:shd shape this editor's own setter never writes (it always writes w:val="clear"), the same way a real producer's own docx can.
   function tcPrOf(tableElement: XmlNode, cell: DocxTableCell): XmlElement {
     cell.colSpan = 1;
     const tr = tableElement.type === "element" ? tableElement : undefined;
@@ -265,7 +265,7 @@ describe("DocxTableCell background", () => {
     expect(cell.background).toEqual({ r: 0, g: 0, b: 1 });
   });
 
-  it('resolves a w:val="solid" shading from w:color, not w:fill -- the real bug this getter once had, since it read w:fill unconditionally regardless of w:val', () => {
+  it('resolves a w:val="solid" shading from w:color, not w:fill — the real bug this getter once had, since it read w:fill unconditionally regardless of w:val', () => {
     const tableElement = buildTable({ rows: 1, columns: 1 });
     const table = new DocxTable([tableElement], tableElement);
     const cell = table.cell(0, 0);

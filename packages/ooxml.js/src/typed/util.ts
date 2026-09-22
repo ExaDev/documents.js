@@ -98,10 +98,10 @@ export interface Relationship {
 // The package root's own relationships part, the one .rels path in an OPC package that is fixed rather than derived from a part path.
 export const ROOT_RELS_PART_PATH = "_rels/.rels";
 
-// The .rels part for a given part path: word/document.xml -> word/_rels/document.xml.rels. Exported purely for direct unit coverage -- resolveRelationships is its only real caller.
+// The .rels part for a given part path: word/document.xml -> word/_rels/document.xml.rels. Exported purely for direct unit coverage — resolveRelationships is its only real caller.
 export function relsPathFor(partPath: string): string {
   const lastSlash = partPath.lastIndexOf("/");
-  // slice(-1 + 1) is slice(0), which returns the whole string unchanged -- exactly what a part sitting directly at the package root needs.
+  // slice(-1 + 1) is slice(0), which returns the whole string unchanged — exactly what a part sitting directly at the package root needs.
   const fileName = partPath.slice(lastSlash + 1);
   if (lastSlash === -1) {
     // A root-level part ("document2.xml", which OPC permits and the officeDocument relationship can legitimately name) keeps its relationships at "_rels/document2.xml.rels" with no leading slash: Package.parts is keyed by ZIP entry name, and no OPC package spells an entry with one. Prefixing an empty directory would produce "/_rels/document2.xml.rels", a key nothing in the package ever matches.
@@ -110,7 +110,7 @@ export function relsPathFor(partPath: string): string {
   return `${partPath.slice(0, lastSlash)}/_rels/${fileName}.rels`;
 }
 
-// Resolve a relationship Target (relative to the subject part's directory, or package-rooted with a leading slash) to a package-relative part path. Exported purely for direct unit coverage -- resolveRelationships is its only real caller.
+// Resolve a relationship Target (relative to the subject part's directory, or package-rooted with a leading slash) to a package-relative part path. Exported purely for direct unit coverage — resolveRelationships is its only real caller.
 export function resolveRelTarget(partPath: string, target: string): string {
   if (target.startsWith("/")) {
     return target.slice(1);
@@ -133,7 +133,7 @@ export function resolveRelTarget(partPath: string, target: string): string {
 
 // Resolve a part's relationships to a Map of r:id -> { type, target, targetMode? }. Internal targets become package-relative part paths; an external target (TargetMode="External", e.g. a hyperlink URL) keeps whatever the producer wrote, minus its XML encoding.
 //
-// The Target attribute is entity-decoded before anything else happens to it, since this is the typed (lossy) projection and the lossless layer stores every attribute value exactly as it appeared in the source (parseXml runs with processEntities:false). Without that, an internal target containing '&' never matches its own part key -- package keys are the ZIP entry names, which carry no XML encoding -- and an external one hands a caller a URL still spelled '&amp;', which then re-encodes to '&amp;amp;' the moment anything writes it back out.
+// The Target attribute is entity-decoded before anything else happens to it, since this is the typed (lossy) projection and the lossless layer stores every attribute value exactly as it appeared in the source (parseXml runs with processEntities:false). Without that, an internal target containing '&' never matches its own part key — package keys are the ZIP entry names, which carry no XML encoding — and an external one hands a caller a URL still spelled '&amp;', which then re-encodes to '&amp;amp;' the moment anything writes it back out.
 export function resolveRelationships(
   pkg: Package,
   partPath: string,
@@ -141,9 +141,9 @@ export function resolveRelationships(
   return relationshipsFrom(pkg, relsPathFor(partPath), partPath);
 }
 
-// The package root's own relationships, read from the fixed "_rels/.rels". The root is not itself a part, so its .rels path is stated rather than derived, and its targets resolve against the package root -- which is exactly what an empty base path makes resolveRelTarget do, so a root Relationship spelling "/word/document.xml", "word/document.xml" or even "./word/document.xml" all land on the same part key.
+// The package root's own relationships, read from the fixed "_rels/.rels". The root is not itself a part, so its .rels path is stated rather than derived, and its targets resolve against the package root — which is exactly what an empty base path makes resolveRelTarget do, so a root Relationship spelling "/word/document.xml", "word/document.xml" or even "./word/document.xml" all land on the same part key.
 //
-// The empty base path is an irreducible equivalent-mutation site, not an untested one: resolveRelTarget reads a base path only up to its last "/", so EVERY slash-free string it could be replaced with -- "" included -- yields the identical package-root resolution, and no test built on this function's observable output can tell one from another. Naming it as a constant would move the same literal rather than remove it.
+// The empty base path is an irreducible equivalent-mutation site, not an untested one: resolveRelTarget reads a base path only up to its last "/", so EVERY slash-free string it could be replaced with — "" included — yields the identical package-root resolution, and no test built on this function's observable output can tell one from another. Naming it as a constant would move the same literal rather than remove it.
 export function resolveRootRelationships(
   pkg: Package,
 ): Map<string, Relationship> {

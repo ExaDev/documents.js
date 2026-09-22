@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { readCompoundFile } from "../cfb/read";
 import { compoundFile } from "./cfb";
 
-// Direct coverage for the [MS-CFB] fixture builder itself (src/test-support/cfb.ts), independent of the ../cfb/read.test.ts and ../cfb/write.test.ts suites that consume it as a black box. Most of this builder's own logic is already exercised indirectly by those two suites reading back what it writes -- these cases target the specific internal decisions (sibling-node reuse, byte-exact header/directory-entry fields, loop boundaries) that a correct read-back alone cannot distinguish from a subtly wrong one.
+// Direct coverage for the [MS-CFB] fixture builder itself (src/test-support/cfb.ts), independent of the ../cfb/read.test.ts and ../cfb/write.test.ts suites that consume it as a black box. Most of this builder's own logic is already exercised indirectly by those two suites reading back what it writes — these cases target the specific internal decisions (sibling-node reuse, byte-exact header/directory-entry fields, loop boundaries) that a correct read-back alone cannot distinguish from a subtly wrong one.
 
 const enc = (s: string): Uint8Array<ArrayBuffer> => new TextEncoder().encode(s);
 
-// Follows the directory's own FAT chain to its ENDOFCHAIN terminator, the same way read.ts would, rather than guessing a sector count from the total file length -- a sector that happens to hold mini-stream or mini-FAT content, not real directory rows, can otherwise be miscounted as one more directory sector by coincidence of its own leading byte.
+// Follows the directory's own FAT chain to its ENDOFCHAIN terminator, the same way read.ts would, rather than guessing a sector count from the total file length — a sector that happens to hold mini-stream or mini-FAT content, not real directory rows, can otherwise be miscounted as one more directory sector by coincidence of its own leading byte.
 function directorySectorCount(bytes: Uint8Array<ArrayBuffer>): number {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const directoryStart = view.getUint32(0x30, true);
@@ -33,7 +33,7 @@ function directoryEntryCount(bytes: Uint8Array<ArrayBuffer>): number {
   return (directorySectorCount(bytes) * 512) / 128;
 }
 
-// Reads back every directory entry's own name and object type directly from the bytes, in id order -- a lower-level probe than readCompoundFile, which only ever surfaces stream paths, never a storage's own presence or a duplicate name.
+// Reads back every directory entry's own name and object type directly from the bytes, in id order — a lower-level probe than readCompoundFile, which only ever surfaces stream paths, never a storage's own presence or a duplicate name.
 function directoryEntries(
   bytes: Uint8Array<ArrayBuffer>,
 ): { name: string; objectType: number }[] {
@@ -152,7 +152,7 @@ describe("compoundFile directory-entry byte layout", () => {
   });
 
   it("writes the header's own minor version field as 0x003E", () => {
-    // [MS-CFB] 2.2 names this value for both major version 3 and 4, but real readers (including ../cfb/read.ts) never inspect it -- direct byte inspection is the only way to notice it going unwritten.
+    // [MS-CFB] 2.2 names this value for both major version 3 and 4, but real readers (including ../cfb/read.ts) never inspect it — direct byte inspection is the only way to notice it going unwritten.
     const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
     expect(new DataView(bytes.buffer).getUint16(0x18, true)).toBe(0x3e);
   });
@@ -196,7 +196,7 @@ describe("compoundFile FAT chain lengths", () => {
 
 describe("compoundFile FAT and mini-FAT padding tails", () => {
   it("fills the FAT's own unused tail entries with FREESECT, past the file's real total sector count", () => {
-    // Every chain() call but the very last is immediately followed by the next region's own chain() call, whose first write lands exactly where an off-by-one in the previous call would have -- overwriting it regardless. The very last call (the mini-FAT's own chain) has nothing after it, so an off-by-one there leaks into the FAT's own genuinely unused padding tail, which must still read FREESECT.
+    // Every chain() call but the very last is immediately followed by the next region's own chain() call, whose first write lands exactly where an off-by-one in the previous call would have — overwriting it regardless. The very last call (the mini-FAT's own chain) has nothing after it, so an off-by-one there leaks into the FAT's own genuinely unused padding tail, which must still read FREESECT.
     const bytes = compoundFile([{ path: "A", bytes: enc("x".repeat(5000)) }]);
     const view = new DataView(bytes.buffer);
     const fatSectorCount = view.getUint32(0x2c, true);
@@ -237,7 +237,7 @@ describe("compoundFile FAT and mini-FAT padding tails", () => {
   });
 
   it("fills the mini-FAT's own unused tail entries with FREESECT, past the real mini sector count", () => {
-    // The mini-FAT chain loop is the very last thing this builder writes into the miniFat array -- nothing follows it to overwrite an off-by-one, so its own padding tail is the direct witness.
+    // The mini-FAT chain loop is the very last thing this builder writes into the miniFat array — nothing follows it to overwrite an off-by-one, so its own padding tail is the direct witness.
     const bytes = compoundFile([{ path: "A", bytes: enc("x") }]); // 1 byte -> 1 real mini sector, needing 1 mini-FAT sector of mostly padding
     const view = new DataView(bytes.buffer);
     const miniFatStart = view.getUint32(0x3c, true);
@@ -275,7 +275,7 @@ describe("compoundFile header DIFAT array padding", () => {
 
 describe("compoundFile stream size partitioning", () => {
   it("allocates no FAT-resident data sector at all for a file holding only one mini-resident stream", () => {
-    // A stream this small being also (wrongly) counted among the "big" (FAT-resident) partition would allocate an extra, entirely unused data sector for it -- unobservable through read-back (the entry's own startSector still correctly points into the mini stream), but it inflates the file's own total size. 1 FAT sector + 1 directory sector + 1 mini-stream sector + 1 mini-FAT sector is the true minimum for this fixture.
+    // A stream this small being also (wrongly) counted among the "big" (FAT-resident) partition would allocate an extra, entirely unused data sector for it — unobservable through read-back (the entry's own startSector still correctly points into the mini stream), but it inflates the file's own total size. 1 FAT sector + 1 directory sector + 1 mini-stream sector + 1 mini-FAT sector is the true minimum for this fixture.
     const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
     expect(bytes.length).toBe(512 * (1 + 1 + 1 + 1 + 1)); // header + 4 sectors
   });
@@ -283,7 +283,7 @@ describe("compoundFile stream size partitioning", () => {
 
 describe("compoundFile mini-FAT sector boundary", () => {
   it("keeps a single stream's chain intact even when it straddles the 128-entry mini-FAT-sector boundary", () => {
-    // 126 one-mini-sector filler streams occupy mini sectors 0-125; a 4-mini-sector stream right after them occupies 126-129, so its own chain entries at local indices 126, 127 sit in the first mini-FAT sector and 128, 129 in the second. Every filler stream's own chain entry is ENDOFCHAIN, so a bug that copies the wrong 512-byte chunk into the second mini-FAT sector (duplicating the first, or reading from the wrong offset within the combined buffer) would still read back as ENDOFCHAIN there too if this stream's own real values did not differ from mini sector to mini sector -- filling each of its own four mini sectors with a distinct byte value makes that corruption visible as wrong (truncated or shuffled) content instead.
+    // 126 one-mini-sector filler streams occupy mini sectors 0-125; a 4-mini-sector stream right after them occupies 126-129, so its own chain entries at local indices 126, 127 sit in the first mini-FAT sector and 128, 129 in the second. Every filler stream's own chain entry is ENDOFCHAIN, so a bug that copies the wrong 512-byte chunk into the second mini-FAT sector (duplicating the first, or reading from the wrong offset within the combined buffer) would still read back as ENDOFCHAIN there too if this stream's own real values did not differ from mini sector to mini sector — filling each of its own four mini sectors with a distinct byte value makes that corruption visible as wrong (truncated or shuffled) content instead.
     const fillerCount = 126;
     const filler = Array.from({ length: fillerCount }, (_unused, i) => ({
       path: `Filler${i}`,
@@ -302,7 +302,7 @@ describe("compoundFile mini-FAT sector boundary", () => {
 
 describe("compoundFile directory sector count", () => {
   it("needs exactly two directory sectors for a fixture with more than four real entries", () => {
-    // 4 entries per 512-byte directory sector; root plus 5 streams is 6 real entries, needing 2 sectors -- the directorySectorCount loop's own boundary matters here, not merely whether one sector is enough.
+    // 4 entries per 512-byte directory sector; root plus 5 streams is 6 real entries, needing 2 sectors — the directorySectorCount loop's own boundary matters here, not merely whether one sector is enough.
     const bytes = compoundFile(
       Array.from({ length: 5 }, (_unused, i) => ({
         path: `S${i}`,

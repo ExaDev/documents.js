@@ -141,7 +141,7 @@ export {
 
 export { type Alignment, AlignmentSchema } from "document-schema.js";
 
-// The type every primary reader below returns, re-exported so a consumer can name it without reaching past odf.js for a second dependency -- the same reason AlignmentSchema is re-exported above. The value-level surface it belongs to (DocumentTreeSchema, assembleTree, flattenTree, decompose, factorStyles) deliberately stays where it is defined: this package constructs packages, it does not own the vocabulary, and re-exporting the transform would put a second import path on functions whose home is document-schema.js.
+// The type every primary reader below returns, re-exported so a consumer can name it without reaching past odf.js for a second dependency — the same reason AlignmentSchema is re-exported above. The value-level surface it belongs to (DocumentTreeSchema, assembleTree, flattenTree, decompose, factorStyles) deliberately stays where it is defined: this package constructs packages, it does not own the vocabulary, and re-exporting the transform would put a second import path on functions whose home is document-schema.js.
 export type { DocumentTree } from "document-schema.js";
 
 export {
@@ -199,7 +199,7 @@ export type {
 
 export { readOdfTable, writeOdfTable } from "./typed/shared/table";
 
-// The empty-package scaffold every typed writer starts from -- the mimetype part plus the content.xml/styles.xml roots with their own containers already at the schema positions the format requires. Exported beside the lossless package-io pair above because a caller assembling a package by hand needs the same starting point writeOdt does.
+// The empty-package scaffold every typed writer starts from — the mimetype part plus the content.xml/styles.xml roots with their own containers already at the schema positions the format requires. Exported beside the lossless package-io pair above because a caller assembling a package by hand needs the same starting point writeOdt does.
 export {
   createOdfPackage,
   odfPartContainer,
@@ -249,12 +249,12 @@ export {
 } from "./typed/draw/shapes";
 export type { DrawPageContent } from "./typed/draw/shapes";
 
-// The write-side mirror of the shape reader above: one ContentShape -> the draw:frame element readDrawFrame reads back, shared between odp (typed/odp/write.ts, below) and a future odg writer -- see that module's own top-of-file note for the exact split.
+// The write-side mirror of the shape reader above: one ContentShape -> the draw:frame element readDrawFrame reads back, shared between odp (typed/odp/write.ts, below) and a future odg writer — see that module's own top-of-file note for the exact split.
 //
-// createDrawShapeWriteState, DrawShapeWriteState, and planShapeContent are deliberately NOT re-exported here, and neither is ShapeContentPlan, which only planShapeContent produces: they are the seam odp's own writer and a future odg writer hold between THEMSELVES (the state constructor takes a StyleRegistry plus the raw XmlElement container automatic styles get appended to -- this package's own internal plumbing), and no consumer outside this package exists for them. They stay ordinary exports of their own module, which is all an in-package caller needs; putting them on the published surface would freeze that plumbing into the package's public API ahead of any concrete requirement for it, and every later change to it into a breaking one.
+// createDrawShapeWriteState, DrawShapeWriteState, and planShapeContent are deliberately NOT re-exported here, and neither is ShapeContentPlan, which only planShapeContent produces: they are the seam odp's own writer and a future odg writer hold between THEMSELVES (the state constructor takes a StyleRegistry plus the raw XmlElement container automatic styles get appended to — this package's own internal plumbing), and no consumer outside this package exists for them. They stay ordinary exports of their own module, which is all an in-package caller needs; putting them on the published surface would freeze that plumbing into the package's public API ahead of any concrete requirement for it, and every later change to it into a breaking one.
 export { writeDrawFrame, writeDrawShapes } from "./typed/draw/write-shapes";
 
-// The vector-primitive half of the same write side: one ContentVector -> the draw:rect/draw:ellipse/draw:line/draw:path element typed/draw/shapes.ts's own vector readers read back. Separate from write-shapes.ts above because a ContentShape carries no vector vocabulary at all -- see that module's own writeDrawShapes note. canonicalDrawVector, like canonicalDrawShape beside it, is not re-exported: a consumer states a canonical form through normaliseOdgContent, which is what the round-trip law is actually written against.
+// The vector-primitive half of the same write side: one ContentVector -> the draw:rect/draw:ellipse/draw:line/draw:path element typed/draw/shapes.ts's own vector readers read back. Separate from write-shapes.ts above because a ContentShape carries no vector vocabulary at all — see that module's own writeDrawShapes note. canonicalDrawVector, like canonicalDrawShape beside it, is not re-exported: a consumer states a canonical form through normaliseOdgContent, which is what the round-trip law is actually written against.
 export { writeDrawVector, writeDrawVectors } from "./typed/draw/write-vectors";
 
 export { readDrawObjectReference } from "./typed/draw/embedded";
@@ -263,9 +263,9 @@ export type {
   EmbeddedDocumentKind,
 } from "./typed/draw/embedded";
 
-// --- The typed readers, each at two levels. readOdt/readOdp/readOdg/readOds/readOdfFormula are the PRIMARY entry points and return document-schema.js's DocumentTree -- the single hierarchical artefact (kind, metadata, tables, and a `children` tree of one group per top-level container), assembled via that package's own assembleTree so the styles table is minted exactly as it is at every other package construction site in this family. The *Content functions beneath them are the same readers' flat, ContentDocument-level output ({ metadata, sections|slides|pages|sheets }, or a whole ContentDocument for the formula case), unchanged in behaviour and still the right call for a consumer that works in the flat pivot -- documents.js's own conversion pipeline reads at this level today. Each pair is one read, not two: the package-native function calls its own *Content sibling and reshapes the result, so the two can never disagree about what the file says.
+// --- The typed readers, each at two levels. readOdt/readOdp/readOdg/readOds/readOdfFormula are the PRIMARY entry points and return document-schema.js's DocumentTree — the single hierarchical artefact (kind, metadata, tables, and a `children` tree of one group per top-level container), assembled via that package's own assembleTree so the styles table is minted exactly as it is at every other package construction site in this family. The *Content functions beneath them are the same readers' flat, ContentDocument-level output ({ metadata, sections|slides|pages|sheets }, or a whole ContentDocument for the formula case), unchanged in behaviour and still the right call for a consumer that works in the flat pivot — documents.js's own conversion pipeline reads at this level today. Each pair is one read, not two: the package-native function calls its own *Content sibling and reshapes the result, so the two can never disagree about what the file says.
 //
-// The *Content names belong to the flat reader beneath each package-native function -- see the README's migration table for the full old-to-new name mapping. readOdfFormulaMathMl is the rawest reader in the formula ladder, the MathML-plus-StarMath reader with no pivot shaping at all, unchanged in behaviour: a caller typing "readOdfFormula" wants the format's primary reader, not its rawest one, which is why the bare name belongs to the package-native function instead. ---
+// The *Content names belong to the flat reader beneath each package-native function — see the README's migration table for the full old-to-new name mapping. readOdfFormulaMathMl is the rawest reader in the formula ladder, the MathML-plus-StarMath reader with no pivot shaping at all, unchanged in behaviour: a caller typing "readOdfFormula" wants the format's primary reader, not its rawest one, which is why the bare name belongs to the package-native function instead. ---
 export { readOdp, readOdpContent } from "./typed/odp/read";
 export type { OdpDocument } from "./typed/odp/read";
 
@@ -285,7 +285,7 @@ export type {
   OdtHeaderFooterVariant,
 } from "./typed/odt/read";
 
-// The odt WRITER, the inverse of the two readers above and this package's first content writer: writeOdt takes the DocumentTree readOdt returns, writeOdtContent the flat ContentDocument readOdtContent returns, and both produce a real .odt Package (encodePackage turns it into bytes). normaliseOdtContent states the one canonical form a written-and-reread document equals -- what ODF's own content model can carry -- and is the shape the round-trip law is stated against.
+// The odt WRITER, the inverse of the two readers above and this package's first content writer: writeOdt takes the DocumentTree readOdt returns, writeOdtContent the flat ContentDocument readOdtContent returns, and both produce a real .odt Package (encodePackage turns it into bytes). normaliseOdtContent states the one canonical form a written-and-reread document equals — what ODF's own content model can carry — and is the shape the round-trip law is stated against.
 export {
   writeOdt,
   writeOdtContent,
@@ -296,7 +296,7 @@ export type { OdtWriteOptions } from "./typed/odt/write";
 export { readOdg, readOdgContent } from "./typed/odg/read";
 export type { OdgDocument } from "./typed/odg/read";
 
-// The odg WRITER, the inverse of the two readers above and this package's fourth content writer (typed/odt/write.ts's own top-of-file note states the shared design philosophy; typed/odg/write.ts's own states what a drawing adds beyond a presentation -- the vector primitives of ContentDrawPage's own second array). writeOdg takes the DocumentTree readOdg returns, writeOdgContent the flat ContentDocument readOdgContent returns, and both produce a real .odg Package. normaliseOdgContent states the one canonical form a written-and-reread document equals, including the two facts a drawing page forces that a slide does not: a page's shapes and vectors share one document-encounter counter, and both arrays come back sorted by paint order.
+// The odg WRITER, the inverse of the two readers above and this package's fourth content writer (typed/odt/write.ts's own top-of-file note states the shared design philosophy; typed/odg/write.ts's own states what a drawing adds beyond a presentation — the vector primitives of ContentDrawPage's own second array). writeOdg takes the DocumentTree readOdg returns, writeOdgContent the flat ContentDocument readOdgContent returns, and both produce a real .odg Package. normaliseOdgContent states the one canonical form a written-and-reread document equals, including the two facts a drawing page forces that a slide does not: a page's shapes and vectors share one document-encounter counter, and both arrays come back sorted by paint order.
 export {
   normaliseOdgContent,
   writeOdg,
@@ -307,7 +307,7 @@ export type { OdgWriteOptions } from "./typed/odg/write";
 export { readOds, readOdsContent } from "./typed/ods/read";
 export type { OdsDocument } from "./typed/ods/read";
 
-// The ods WRITER, the inverse of the two readers above and this package's second content writer (typed/odt/write.ts's own top-of-file note states the shared design philosophy): writeOds takes the DocumentTree readOds returns, writeOdsContent the flat ContentDocument readOdsContent returns, and both produce a real .ods Package. normaliseOdsContent states the one canonical form a written-and-reread document equals -- including the forced normalisations readOdsContent's own established behaviour (not this writer's own choices) imposes: a value-less, formula-less, text-less cell vanishes entirely, columns/rows densify to one entry per position, and a 'time' cell's ISO clock value becomes the raw xsd:duration string the reader has not yet been updated to convert back.
+// The ods WRITER, the inverse of the two readers above and this package's second content writer (typed/odt/write.ts's own top-of-file note states the shared design philosophy): writeOds takes the DocumentTree readOds returns, writeOdsContent the flat ContentDocument readOdsContent returns, and both produce a real .ods Package. normaliseOdsContent states the one canonical form a written-and-reread document equals — including the forced normalisations readOdsContent's own established behaviour (not this writer's own choices) imposes: a value-less, formula-less, text-less cell vanishes entirely, columns/rows densify to one entry per position, and a 'time' cell's ISO clock value becomes the raw xsd:duration string the reader has not yet been updated to convert back.
 export {
   writeOds,
   writeOdsContent,
@@ -322,7 +322,7 @@ export {
 } from "./typed/formula/read";
 export type { OdfFormulaDocument } from "./typed/formula/read";
 
-// The formula WRITER, the inverse of the reader ladder above: writeOdfFormula takes the DocumentTree readOdfFormula returns, writeOdfFormulaContent the flat ContentDocument readOdfFormulaContent returns, writeOdfFormulaMathMl the raw MathML document readOdfFormulaMathMl returns -- the identical three-level ladder every other format's writer in this package mirrors.
+// The formula WRITER, the inverse of the reader ladder above: writeOdfFormula takes the DocumentTree readOdfFormula returns, writeOdfFormulaContent the flat ContentDocument readOdfFormulaContent returns, writeOdfFormulaMathMl the raw MathML document readOdfFormulaMathMl returns — the identical three-level ladder every other format's writer in this package mirrors.
 export {
   writeOdfFormula,
   writeOdfFormulaContent,
@@ -330,7 +330,7 @@ export {
 } from "./typed/formula/write";
 export type { OdfFormulaWriteOptions } from "./typed/formula/write";
 
-// The embedded-sub-document WRITER (typed/draw/embedded-write.ts): the write-side counterpart of readOdfInventory's sibling embedded-object reading -- one sub-document serialised under its own "Object N/" directory, with the draw:object element its embedding frame references.
+// The embedded-sub-document WRITER (typed/draw/embedded-write.ts): the write-side counterpart of readOdfInventory's sibling embedded-object reading — one sub-document serialised under its own "Object N/" directory, with the draw:object element its embedding frame references.
 export {
   writeEmbeddedObject,
   writeEmbeddedObjectPackage,
@@ -351,7 +351,7 @@ export type { OdmDocument, OdmSection } from "./typed/odm/read";
 
 export { readOdbInventory, resolveOdbComponent } from "./typed/odb/read";
 
-// The database front-end WRITER, the inverse of readOdbInventory: the db: connection declaration, forms/reports component registry, queries with their SQL commands, and table-name listings -- never the embedded engine's own opaque storage.
+// The database front-end WRITER, the inverse of readOdbInventory: the db: connection declaration, forms/reports component registry, queries with their SQL commands, and table-name listings — never the embedded engine's own opaque storage.
 export { writeOdb } from "./typed/odb/write";
 export type { OdbWriteOptions } from "./typed/odb/write";
 export type {
@@ -397,7 +397,7 @@ export {
   readSxdContent,
 } from "./ooo1/read";
 
-// The .sxw, .sxc, .sxi, and .sxd writers -- the OpenOffice.org 1.x / StarOffice 6-7 counterparts to writeOdt/writeOdtContent, writeOds/writeOdsContent, writeOdp/writeOdpContent, and writeOdg/writeOdgContent above, built on them: those produce a real ODF Package, and transformToOoo1Package (this format's own inverse of transformOoo1Package, the same module the readers above run) rewrites it into genuine OpenOffice.org 1.x XML. See src/ooo1/write.ts for the full scope statement.
+// The .sxw, .sxc, .sxi, and .sxd writers — the OpenOffice.org 1.x / StarOffice 6-7 counterparts to writeOdt/writeOdtContent, writeOds/writeOdsContent, writeOdp/writeOdpContent, and writeOdg/writeOdgContent above, built on them: those produce a real ODF Package, and transformToOoo1Package (this format's own inverse of transformOoo1Package, the same module the readers above run) rewrites it into genuine OpenOffice.org 1.x XML. See src/ooo1/write.ts for the full scope statement.
 export {
   writeSxw,
   writeSxwContent,

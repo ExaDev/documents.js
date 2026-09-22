@@ -20,7 +20,7 @@ import {
   loadFormAndReportOdbBytes,
 } from "../test-support/odb-fixture";
 
-// Minimal Zod schemas for the fields this suite actually inspects on each tool's own structuredContent (typed `unknown` on CallToolResult per SEP-2106 -- see odb-render-report.test.ts's own OdbRenderReportOutputSchema for the same convention). Parsing rather than narrowing by hand keeps every assertion below free of `any`/type assertions while still exercising the real, documents.js-shaped data the tools return.
+// Minimal Zod schemas for the fields this suite actually inspects on each tool's own structuredContent (typed `unknown` on CallToolResult per SEP-2106 — see odb-render-report.test.ts's own OdbRenderReportOutputSchema for the same convention). Parsing rather than narrowing by hand keeps every assertion below free of `any`/type assertions while still exercising the real, documents.js-shaped data the tools return.
 const TableSummarySchema = z.object({
   tableName: z.string(),
   columns: z.array(z.object({ name: z.string() })),
@@ -53,7 +53,7 @@ const ResolvedOutputSchema = z.union([
   }),
 ]);
 
-// odb_tables/odb_forms/odb_reports each return a bare array as structuredContent, matching what the callback itself hands back to registerTool -- but the 2025-11-25 wire era's own SEP-2106 projection (WireCodec.projectCallToolResult) boxes a non-object structuredContent value as `{ result: [...] }` before it reaches a client, since that era's own wire result schema requires an object root (the 2026-07-28 era codec does not do this). Accepting either shape here keeps this suite correct regardless of which era this SDK version negotiates by default.
+// odb_tables/odb_forms/odb_reports each return a bare array as structuredContent, matching what the callback itself hands back to registerTool — but the 2025-11-25 wire era's own SEP-2106 projection (WireCodec.projectCallToolResult) boxes a non-object structuredContent value as `{ result: [...] }` before it reaches a client, since that era's own wire result schema requires an object root (the 2026-07-28 era codec does not do this). Accepting either shape here keeps this suite correct regardless of which era this SDK version negotiates by default.
 function arrayStructuredContentSchema<Item extends z.ZodType>(
   item: Item,
 ): z.ZodType<z.infer<Item>[]> {
@@ -62,7 +62,7 @@ function arrayStructuredContentSchema<Item extends z.ZodType>(
     .transform((value) => (Array.isArray(value) ? value : value.result));
 }
 
-// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip -- not the tool callbacks in isolation -- so this proves the wiring: that odb_tables/odb_forms/odb_reports/odb_query/odb_to_csv/odb_to_xlsx are all registered under those names, that each reaches documents.js's real readOdbTables/readOdbForms/readOdbReports/evaluateSelect+parseSelect/ odbToCsv/odbToXlsx, and that the output really carries the fixture's own real data, not merely non-empty bytes. Ground truth for the fixture's own SALES table and HighValueSales saved query is documents.js's own src/odb/sql/query.test.ts, which runs the identical saved query against the identical fixture and hand-verifies the results. Mirrors src/tools/odb-render-report.test.ts's own connection harness (a sibling tool over the same fixture, for a different documents.js entry point).
+// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip — not the tool callbacks in isolation — so this proves the wiring: that odb_tables/odb_forms/odb_reports/odb_query/odb_to_csv/odb_to_xlsx are all registered under those names, that each reaches documents.js's real readOdbTables/readOdbForms/readOdbReports/evaluateSelect+parseSelect/ odbToCsv/odbToXlsx, and that the output really carries the fixture's own real data, not merely non-empty bytes. Ground truth for the fixture's own SALES table and HighValueSales saved query is documents.js's own src/odb/sql/query.test.ts, which runs the identical saved query against the identical fixture and hand-verifies the results. Mirrors src/tools/odb-render-report.test.ts's own connection harness (a sibling tool over the same fixture, for a different documents.js entry point).
 
 interface ConnectedPair {
   readonly client: Client;
@@ -81,7 +81,7 @@ async function connect(): Promise<ConnectedPair> {
   return { client, close: async () => client.close() };
 }
 
-// Recursively searches every text-node value and element-attribute value in one decoded OOXML part for `needle` -- odb_to_xlsx's own verification that the exported workbook carries the fixture's real sheet name and cell values, without needing ooxml.js's own readXlsxContent (documents.js deliberately doesn't re-export it -- see that package's own README) or any namespace-specific knowledge of xlsx's own XML shape.
+// Recursively searches every text-node value and element-attribute value in one decoded OOXML part for `needle` — odb_to_xlsx's own verification that the exported workbook carries the fixture's real sheet name and cell values, without needing ooxml.js's own readXlsxContent (documents.js deliberately doesn't re-export it — see that package's own README) or any namespace-specific knowledge of xlsx's own XML shape.
 function xmlNodesContainText(
   nodes: readonly XmlNode[],
   needle: string,
@@ -152,7 +152,7 @@ describe("odb tools", () => {
       ]);
       expect(table.rows).toHaveLength(6);
 
-      // content's own JSON text is the bare, unwrapped array the callback itself returned -- SEP-2106's object-root wrapping (see arrayStructuredContentSchema above) applies only to the wire-level structuredContent projection, never to content. Re-parsed with z.unknown() items (rather than TableSummarySchema) so this comparison is lossless -- unlike `tables` above, nothing here should be stripped to just the fields this suite happens to assert on.
+      // content's own JSON text is the bare, unwrapped array the callback itself returned — SEP-2106's object-root wrapping (see arrayStructuredContentSchema above) applies only to the wire-level structuredContent projection, never to content. Re-parsed with z.unknown() items (rather than TableSummarySchema) so this comparison is lossless — unlike `tables` above, nothing here should be stripped to just the fields this suite happens to assert on.
       const [block] = result.content;
       expect(block?.type).toBe("text");
       const rawTables = arrayStructuredContentSchema(z.unknown()).parse(

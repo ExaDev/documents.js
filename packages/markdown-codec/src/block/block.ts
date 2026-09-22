@@ -2,18 +2,18 @@
 //
 // This is CommonMark 0.31.2's own "Phase 1: block structure" algorithm (spec appendix A, "A parsing strategy"), which is not a recursive descent and cannot be written as one. Each line is processed in three steps against a STACK OF OPEN BLOCKS:
 //
-//  1. Continuation matching -- walk down the chain of currently-open blocks from the document, asking each whether this line continues it (a block quote wants its `>`, a list item wants its content indent, a fenced code block wants anything that is not its closing fence) and consuming that block's own prefix from the line as we go. The walk stops at the first block that says no.
-//  2. New block starts -- with whatever prefix remains, try each block start in a FIXED precedence order until one matches, adding the new block to the last block that did match in step 1. A container start (block quote, list item) leaves the loop running so `> - foo` opens both; a leaf start (heading, code block, table, HTML block, thematic break) ends it.
-//  3. Text -- whatever is left of the line becomes the content of the block now at the top of the stack, either as a continuation of an open leaf block or as a new paragraph.
+//  1. Continuation matching — walk down the chain of currently-open blocks from the document, asking each whether this line continues it (a block quote wants its `>`, a list item wants its content indent, a fenced code block wants anything that is not its closing fence) and consuming that block's own prefix from the line as we go. The walk stops at the first block that says no.
+//  2. New block starts — with whatever prefix remains, try each block start in a FIXED precedence order until one matches, adding the new block to the last block that did match in step 1. A container start (block quote, list item) leaves the loop running so `> - foo` opens both; a leaf start (heading, code block, table, HTML block, thematic break) ends it.
+//  3. Text — whatever is left of the line becomes the content of the block now at the top of the stack, either as a continuation of an open leaf block or as a new paragraph.
 //
 // The precedence order in step 2 is fixed and load-bearing: blockquote, ATX heading, fenced code, HTML block, PARAGRAPH PROMOTION, thematic break, list item, indented code. Two consequences that look like special cases but are really just this ordering:
 //
 //  - `- - -` is a thematic break, not a three-item list, because the thematic-break matcher runs before the list-item matcher. Nothing anywhere in this package special-cases that input.
 //  - `Foo` followed by `---` is a setext heading, not a paragraph followed by a thematic break, because paragraph promotion runs before the thematic-break matcher.
 //
-// PARAGRAPH PROMOTION is the one step that is not a block start at all, which is why it is a separate hook rather than another entry in the same list. A block start creates a NEW block from the current line; a promotion REPLACES an already-open paragraph because of the line that follows it. Two constructs work that way -- a setext heading underline and a GFM table delimiter row -- and both need the paragraph's own accumulated content, not just the current line. Their mutual precedence is settled in tryPromoteParagraph below.
+// PARAGRAPH PROMOTION is the one step that is not a block start at all, which is why it is a separate hook rather than another entry in the same list. A block start creates a NEW block from the current line; a promotion REPLACES an already-open paragraph because of the line that follows it. Two constructs work that way — a setext heading underline and a GFM table delimiter row — and both need the paragraph's own accumulated content, not just the current line. Their mutual precedence is settled in tryPromoteParagraph below.
 //
-// LAZY CONTINUATION falls out of steps 1 and 3 together rather than being a rule of its own: when step 1 stops early but the block at the top of the stack is a paragraph and the line is neither blank nor the start of a new block, step 3 adds the line to that paragraph anyway, without closing anything. That is what lets a paragraph inside a block quote continue across a line with no `>`, while a setext underline or a table delimiter row on such a line does not promote it -- step 2 sees the last MATCHED container, which is no longer the paragraph.
+// LAZY CONTINUATION falls out of steps 1 and 3 together rather than being a rule of its own: when step 1 stops early but the block at the top of the stack is a paragraph and the line is neither blank nor the start of a new block, step 3 adds the line to that paragraph anyway, without closing anything. That is what lets a paragraph inside a block quote continue across a line with no `>`, while a setext underline or a table delimiter row on such a line does not promote it — step 2 sees the last MATCHED container, which is no longer the paragraph.
 //
 // Link reference definitions are collected as paragraphs close, and the whole document is parsed to completion before a single inline is parsed. That ordering is structural, not incidental: a definition is forward-visible, so `[foo]` in the first paragraph resolves against a `[foo]: /url` on the last line, including one nested inside a block quote or a list item.
 
@@ -54,14 +54,14 @@ import {
   splitTableRow,
 } from "./table";
 
-// GFM 'Task list items (extension)': a list item is a task item when the first block directly inside it is a paragraph whose raw content begins with a task-list-item marker -- an optional-content left bracket, a space or `x`/`X`, a right bracket, then at least one space or tab before anything else. Matched against the paragraph's own accumulated raw content (leading indentation already stripped by the block phase), never against already-parsed inline nodes.
+// GFM 'Task list items (extension)': a list item is a task item when the first block directly inside it is a paragraph whose raw content begins with a task-list-item marker — an optional-content left bracket, a space or `x`/`X`, a right bracket, then at least one space or tab before anything else. Matched against the paragraph's own accumulated raw content (leading indentation already stripped by the block phase), never against already-parsed inline nodes.
 const TASK_LIST_MARKER_PATTERN = /^\[([ xX])\][ \t]/;
 
 // spec 0.31.2, "Insecure characters": U+0000 must be replaced with U+FFFD.
 const NUL_REPLACEMENT = "�";
 const NUL_PATTERN = /\0/g;
 
-// spec 0.31.2, "ATX headings": one to six `#` characters, followed by spaces/tabs or the end of the line. Exported for src/emit/emit.ts's own setext-safety check (the setext grammar's third clause, spec 0.31.2 "Setext headings": a non-first line of a would-be setext heading's text may not itself be interpretable as an ATX heading among other constructs) -- reusing this pattern rather than restating it there is what keeps the write side's promotion refusal and this module's own reparse from ever drifting apart.
+// spec 0.31.2, "ATX headings": one to six `#` characters, followed by spaces/tabs or the end of the line. Exported for src/emit/emit.ts's own setext-safety check (the setext grammar's third clause, spec 0.31.2 "Setext headings": a non-first line of a would-be setext heading's text may not itself be interpretable as an ATX heading among other constructs) — reusing this pattern rather than restating it there is what keeps the write side's promotion refusal and this module's own reparse from ever drifting apart.
 export const ATX_MARKER_PATTERN = /^#{1,6}(?:[ \t]+|$)/;
 const ATX_ONLY_CLOSING_SEQUENCE_PATTERN = /^[ \t]*#+[ \t]*$/;
 const ATX_TRAILING_CLOSING_SEQUENCE_PATTERN = /[ \t]+#+[ \t]*$/;
@@ -70,7 +70,7 @@ const ATX_TRAILING_CLOSING_SEQUENCE_PATTERN = /[ \t]+#+[ \t]*$/;
 export const CODE_FENCE_PATTERN = /^`{3,}(?!.*`)|^~{3,}/;
 const CLOSING_CODE_FENCE_PATTERN = /^(?:`{3,}|~{3,})(?=[ \t]*$)/;
 
-// Pandoc/GitHub math-extension display math (ExaDev/markdown-codec#53): a line consisting of exactly $$, optionally followed by trailing spaces/tabs and nothing else -- deliberately stricter than the code-fence pattern above (no "info string", no variable length): both the opening and the closing line must match this exact shape, which is what makes a bare "$$" line on its own unambiguous rather than colliding with GFM's own single-dollar-free inline math (this package never adds inline $$ recognition at all, only \( \)). Exported for the same setext-safety reuse as ATX_MARKER_PATTERN above: a $$ line interrupts an open paragraph exactly as a code fence does (see src/emit/emit.ts's own canInterruptOpenParagraph), so a would-be setext heading's own line matching it is just as much a paragraph-interrupting construct as the six CommonMark names explicitly.
+// Pandoc/GitHub math-extension display math (ExaDev/markdown-codec#53): a line consisting of exactly $$, optionally followed by trailing spaces/tabs and nothing else — deliberately stricter than the code-fence pattern above (no "info string", no variable length): both the opening and the closing line must match this exact shape, which is what makes a bare "$$" line on its own unambiguous rather than colliding with GFM's own single-dollar-free inline math (this package never adds inline $$ recognition at all, only \( \)). Exported for the same setext-safety reuse as ATX_MARKER_PATTERN above: a $$ line interrupts an open paragraph exactly as a code fence does (see src/emit/emit.ts's own canInterruptOpenParagraph), so a would-be setext heading's own line matching it is just as much a paragraph-interrupting construct as the six CommonMark names explicitly.
 export const MATH_BLOCK_MARKER_PATTERN = /^\$\$[ \t]*$/;
 
 // The line ending addLine puts after every line it accumulates, whatever the source line itself ended with (see addLine, and the note on BLOCK_EDGE_SPACE_OR_TAB_PATTERN below for why it is there at all).
@@ -105,9 +105,9 @@ export interface MarkdownParseOptions extends InlineParseOptions {
   readonly gfmTables?: boolean;
   // GFM's task-list-item extension (`- [ ] foo` / `- [x] bar`). Enabled by default for the same reason; with it off, a leading `[ ]`/`[x]` is ordinary paragraph text, matching CommonMark's own reading (task lists are not part of CommonMark proper).
   readonly gfmTaskLists?: boolean;
-  // GitHub's footnote extension (`[^label]` markers with `[^label]: body` definitions, ExaDev/markdown-codec#66). Enabled by default like the four above; with it off, both spellings are ordinary text, which is what CommonMark and the GFM spec document itself both say (neither defines footnotes at all -- see src/inline/footnote.ts).
+  // GitHub's footnote extension (`[^label]` markers with `[^label]: body` definitions, ExaDev/markdown-codec#66). Enabled by default like the four above; with it off, both spellings are ordinary text, which is what CommonMark and the GFM spec document itself both say (neither defines footnotes at all — see src/inline/footnote.ts).
   readonly footnotes?: boolean;
-  // Throws MarkdownNestingLimitExceededError (src/diagnostics) rather than opening a block past this many levels deep in the open-block stack -- defaults to DEFAULT_MAX_BLOCK_NESTING (src/defaults), matching cmark's own reference-implementation guard against pathological/adversarial nesting.
+  // Throws MarkdownNestingLimitExceededError (src/diagnostics) rather than opening a block past this many levels deep in the open-block stack — defaults to DEFAULT_MAX_BLOCK_NESTING (src/defaults), matching cmark's own reference-implementation guard against pathological/adversarial nesting.
   readonly maxNesting?: number;
   readonly sink?: MarkdownDiagnosticSink;
 }
@@ -116,7 +116,7 @@ export interface ParsedMarkdown {
   readonly document: MarkdownDocumentNode;
   // The document-global link-reference-definition table, complete before any inline was parsed against it.
   readonly references: LinkReferenceMap;
-  // The document-global set of footnote labels a definition was found for, complete before any inline was parsed against it -- the same forward-visibility guarantee `references` carries, for the same structural reason.
+  // The document-global set of footnote labels a definition was found for, complete before any inline was parsed against it — the same forward-visibility guarantee `references` carries, for the same structural reason.
   readonly footnotes: FootnoteLabelSet;
 }
 
@@ -150,13 +150,13 @@ class BlockParser {
   private readonly sink: MarkdownDiagnosticSink;
   private readonly maxNesting: number;
   private tip: BlockNode = this.document;
-  // The tip as it stood before the current line was processed, and the deepest block that line matched -- together they say exactly which blocks the line failed to continue, which closeUnmatchedBlocks then closes.
+  // The tip as it stood before the current line was processed, and the deepest block that line matched — together they say exactly which blocks the line failed to continue, which closeUnmatchedBlocks then closes.
   private oldTip: BlockNode = this.document;
   private lastMatchedContainer: BlockNode = this.document;
   // No initial value: incorporateLine constructs the line's own cursor as its first act, so every read below happens against the line currently being processed and a seed here could never be observed. LineCursor.lineIsBlank carries no default for the same reason (src/block/line.ts).
   private line!: LineCursor;
   private lineNumber = 0;
-  // Depth of `this.tip` below `this.document` -- maintained incrementally (incremented in addChild, decremented in finalize) rather than walked from `parent` on every check, so the guard costs nothing per line for ordinary, shallow documents.
+  // Depth of `this.tip` below `this.document` — maintained incrementally (incremented in addChild, decremented in finalize) rather than walked from `parent` on every check, so the guard costs nothing per line for ordinary, shallow documents.
   private nestingDepth = 0;
 
   constructor(options: MarkdownParseOptions) {
@@ -187,7 +187,7 @@ class BlockParser {
     return this.document;
   }
 
-  // Recover-tier diagnostics for a leaf block that reached end-of-input without ever meeting its own proper closing condition: a fenced code block whose closing fence never arrived, or an HTML block of type 1-5 (whose end condition is a pattern in the line's own text, not a blank line) that reached EOF without ever matching it. Types 6/7 end at a blank line OR at EOF alike -- both are the block's own ordinary, spec-legal end condition, so EOF is not a diagnostic there.
+  // Recover-tier diagnostics for a leaf block that reached end-of-input without ever meeting its own proper closing condition: a fenced code block whose closing fence never arrived, or an HTML block of type 1-5 (whose end condition is a pattern in the line's own text, not a blank line) that reached EOF without ever matching it. Types 6/7 end at a blank line OR at EOF alike — both are the block's own ordinary, spec-legal end condition, so EOF is not a diagnostic there.
   private reportUnterminatedAtEof(node: BlockNode): void {
     // `fenced` is set by the fenced-code start and by nothing else, so it identifies the block on its own, with no kind to test alongside it.
     if (node.fenced) {
@@ -299,7 +299,7 @@ class BlockParser {
     }
     this.line.advanceToNextNonspace();
     this.line.advance(1);
-    // A tab following the marker counts as ONE column here, with the rest of its expansion left as content indentation -- exactly what MarkdownScanCursor's partial tab consumption models (src/scan).
+    // A tab following the marker counts as ONE column here, with the rest of its expansion left as content indentation — exactly what MarkdownScanCursor's partial tab consumption models (src/scan).
     if (this.line.peek() === " ") {
       this.line.advance(1);
     }
@@ -312,7 +312,7 @@ class BlockParser {
       return "not-matched";
     }
     if (this.line.blank) {
-      // spec 0.31.2: "A list item can begin with at most one blank line" -- an item whose first line was blank and that still has no content ends at a second blank line.
+      // spec 0.31.2: "A list item can begin with at most one blank line" — an item whose first line was blank and that still has no content ends at a second blank line.
       if (node.children.length === 0) {
         return "not-matched";
       }
@@ -326,7 +326,7 @@ class BlockParser {
     return "not-matched";
   }
 
-  // A definition's body continues on any line indented at least four columns -- the same continuation indent Pandoc and GitHub both use for a multi-block footnote, and the same one src/emit/emit.ts writes back out. A blank line continues it too (a definition may hold several paragraphs), except when the definition still has no content at all, mirroring the "a list item can begin with at most one blank line" rule one function up: `[^1]:` on a line of its own followed by a blank line is an empty definition, not the opening of one that swallows the rest of the document.
+  // A definition's body continues on any line indented at least four columns — the same continuation indent Pandoc and GitHub both use for a multi-block footnote, and the same one src/emit/emit.ts writes back out. A blank line continues it too (a definition may hold several paragraphs), except when the definition still has no content at all, mirroring the "a list item can begin with at most one blank line" rule one function up: `[^1]:` on a line of its own followed by a blank line is an empty definition, not the opening of one that swallows the rest of the document.
   private continueFootnoteDefinition(node: BlockNode): ContinueResult {
     if (this.line.blank) {
       if (node.children.length === 0) {
@@ -375,7 +375,7 @@ class BlockParser {
     return "matched";
   }
 
-  // A closing $$ line is never added to the block's own content (matching continueCodeBlock's own closing-fence handling) -- finalize runs directly off the line the closer matched, and the line's processing ends there ('finished').
+  // A closing $$ line is never added to the block's own content (matching continueCodeBlock's own closing-fence handling) — finalize runs directly off the line the closer matched, and the line's processing ends there ('finished').
   private continueMathBlock(node: BlockNode): ContinueResult {
     if (
       !this.line.indented &&
@@ -449,7 +449,7 @@ class BlockParser {
     this.closeUnmatchedBlocks();
     const heading = this.addChild("heading");
     heading.level = headingLevelOf(match[0].trim().length);
-    // spec 0.31.2: "The optional closing sequence of #s must be preceded by spaces and may be followed by spaces only" -- and a heading that is nothing but a closing sequence has empty content.
+    // spec 0.31.2: "The optional closing sequence of #s must be preceded by spaces and may be followed by spaces only" — and a heading that is nothing but a closing sequence has empty content.
     heading.content = rest
       .slice(match[0].length)
       .replace(ATX_ONLY_CLOSING_SEQUENCE_PATTERN, "")
@@ -501,7 +501,7 @@ class BlockParser {
   //
   // One restriction, deliberate, about what the ContentDocument mapping downstream can actually represent rather than about markdown's own grammar: it may not interrupt a paragraph, matching a link reference definition (which is only ever recognised at the FRONT of a paragraph's accumulated content, src/block/definitions.ts) and matching Pandoc. A `[^1]: note` line directly under a line of prose is lazy paragraph continuation text.
   //
-  // A definition may open directly inside a block quote or a list item (ExaDev/markdown-codec#957) -- previously refused, on the reasoning that a definition's own construct pair would need to carry its enclosing container's own scope (ContentListMembership, or the quote's own indent) across the pair with nowhere to attach it. That reasoning predates two mechanisms that already solve exactly this for a blockquote's own division pair, and generalise here unchanged: lowerBlockquote's dual carry threads BlockLowerContext.list straight through a quote's own children regardless of what construct sits among them, and lowerListItem's own placeholder paragraph (ExaDev/documents.js#1012) covers an item whose own first block is ANY construct, not only a blockquote's. A footnote definition's own constructStart/constructEnd pair nests inside the quote's or item's own extent exactly as a nested blockquote already does -- see footnoteDefinitionMayOpenIn below for the container check itself.
+  // A definition may open directly inside a block quote or a list item (ExaDev/markdown-codec#957) — previously refused, on the reasoning that a definition's own construct pair would need to carry its enclosing container's own scope (ContentListMembership, or the quote's own indent) across the pair with nowhere to attach it. That reasoning predates two mechanisms that already solve exactly this for a blockquote's own division pair, and generalise here unchanged: lowerBlockquote's dual carry threads BlockLowerContext.list straight through a quote's own children regardless of what construct sits among them, and lowerListItem's own placeholder paragraph (ExaDev/documents.js#1012) covers an item whose own first block is ANY construct, not only a blockquote's. A footnote definition's own constructStart/constructEnd pair nests inside the quote's or item's own extent exactly as a nested blockquote already does — see footnoteDefinitionMayOpenIn below for the container check itself.
   private tryFootnoteDefinitionStart(container: BlockNode): BlockStartResult {
     if (
       !this.footnotesEnabled ||
@@ -533,7 +533,7 @@ class BlockParser {
     return "container";
   }
 
-  // Whether `container` -- the deepest block the current line matched in step 1 -- sits at the document's own top level, directly inside a block quote, or directly inside a list item, walking up through any still-open `list` ancestors first. `continueBlock` treats a `list` node as unconditionally continued no matter what the line is (a list only actually closes when something tries to become its child and can't), so a line right after a list's last item reports its matched container as that LIST, not whatever encloses it, even though the list itself is about to close. Skipping over `list` ancestors here mirrors what `addChild` does a few lines below once a definition is actually opened: it walks up finalising whatever the tip can't contain, which closes a list the same way any other block start does, landing the definition on the list's own enclosing container (the document, a quote, or an item) exactly as if the list had already closed. `footnoteDefinition` is deliberately NOT one of the three permitted kinds: a definition nested inside another definition's own body has no cross-format shape (document-schema.js's `anchor` descriptor names one body per marker pair) and Pandoc/GitHub give no grammar for it either, so a `[^2]:` line inside a `[^1]:` body stays ordinary body text, matching every OTHER unrecognised-here container.
+  // Whether `container` — the deepest block the current line matched in step 1 — sits at the document's own top level, directly inside a block quote, or directly inside a list item, walking up through any still-open `list` ancestors first. `continueBlock` treats a `list` node as unconditionally continued no matter what the line is (a list only actually closes when something tries to become its child and can't), so a line right after a list's last item reports its matched container as that LIST, not whatever encloses it, even though the list itself is about to close. Skipping over `list` ancestors here mirrors what `addChild` does a few lines below once a definition is actually opened: it walks up finalising whatever the tip can't contain, which closes a list the same way any other block start does, landing the definition on the list's own enclosing container (the document, a quote, or an item) exactly as if the list had already closed. `footnoteDefinition` is deliberately NOT one of the three permitted kinds: a definition nested inside another definition's own body has no cross-format shape (document-schema.js's `anchor` descriptor names one body per marker pair) and Pandoc/GitHub give no grammar for it either, so a `[^2]:` line inside a `[^1]:` body stays ordinary body text, matching every OTHER unrecognised-here container.
   private footnoteDefinitionMayOpenIn(container: BlockNode): boolean {
     let node: BlockNode | undefined = container;
     while (node?.kind === "list") {
@@ -569,7 +569,7 @@ class BlockParser {
   //
   // Neither promotion closes unmatched blocks, and neither needs to: a paragraph is a leaf, so an open one is always the tip, and this hook only runs when the line's own continuation walk reached that very paragraph, which is to say when there is nothing left open below the deepest block the line matched.
   //
-  // Precedence between the two, and against the thematic-break matcher that runs after this hook: a bare `---` is genuinely ambiguous between a thematic break, a setext level-2 underline, and -- on the face of the GFM prose, which defines a row as cells "separated by pipes" and so allows a one-cell row with no pipe at all -- a single-column table delimiter row. It is resolved by testing the setext underline FIRST and by requiring a delimiter row to contain a pipe (see src/block/table.ts), which between them make the three cases disjoint rather than merely ordered: `---` is never a delimiter row, `--- | ---` is never a setext underline, and a thematic break is only ever reached when the open paragraph rejected both.
+  // Precedence between the two, and against the thematic-break matcher that runs after this hook: a bare `---` is genuinely ambiguous between a thematic break, a setext level-2 underline, and — on the face of the GFM prose, which defines a row as cells "separated by pipes" and so allows a one-cell row with no pipe at all — a single-column table delimiter row. It is resolved by testing the setext underline FIRST and by requiring a delimiter row to contain a pipe (see src/block/table.ts), which between them make the three cases disjoint rather than merely ordered: `---` is never a delimiter row, `--- | ---` is never a setext underline, and a thematic break is only ever reached when the open paragraph rejected both.
   private tryPromoteParagraph(container: BlockNode): BlockStartResult {
     if (this.line.indented || container.kind !== "paragraph") {
       return "none";
@@ -668,7 +668,7 @@ class BlockParser {
   }
 
   private tryIndentedCodeStart(): BlockStartResult {
-    // An indented code block cannot interrupt a paragraph (spec 0.31.2, "Indented code blocks") -- such a line is paragraph continuation text, indentation and all.
+    // An indented code block cannot interrupt a paragraph (spec 0.31.2, "Indented code blocks") — such a line is paragraph continuation text, indentation and all.
     if (
       !this.line.indented ||
       this.tip.kind === "paragraph" ||
@@ -831,9 +831,9 @@ interface AstConversionContext {
   readonly options: MarkdownParseOptions;
 }
 
-// Every line addLine appends (including a leaf block's own LAST line) carries a synthetic trailing '\n' -- bookkeeping internal to accumulation, present unconditionally whether or not the ORIGINAL source line it came from was itself followed by one (see Parser.parse above: the source's own final line ending, if any, is deliberately excluded from the split before a single addLine call ever runs). Left in place, that trailing artifact reaches parseInlines indistinguishable from a genuine line ending BETWEEN two real lines of content, and parseLineBreak has no way to tell "nothing follows, this is bookkeeping" apart from "another line of this same block follows, this is a real soft/hard break" -- so a block ending exactly at end-of-input would mint a spurious trailing softBreak/hardBreak node with nothing on its far side (ExaDev/documents.js#940's own debug-softbreak.mjs exploration: `parseLineBreak` fires unconditionally on any '\n' it scans, with no end-of-content lookahead). A leaf block built by some other path than addLine (an ATX heading's single-line content, sliced directly off its own source line -- tryAtxHeadingStart above) never carries this artifact in the first place, so stripping it is conditional on it actually being present, not an unconditional slice.
+// Every line addLine appends (including a leaf block's own LAST line) carries a synthetic trailing '\n' — bookkeeping internal to accumulation, present unconditionally whether or not the ORIGINAL source line it came from was itself followed by one (see Parser.parse above: the source's own final line ending, if any, is deliberately excluded from the split before a single addLine call ever runs). Left in place, that trailing artifact reaches parseInlines indistinguishable from a genuine line ending BETWEEN two real lines of content, and parseLineBreak has no way to tell "nothing follows, this is bookkeeping" apart from "another line of this same block follows, this is a real soft/hard break" — so a block ending exactly at end-of-input would mint a spurious trailing softBreak/hardBreak node with nothing on its far side (ExaDev/documents.js#940's own debug-softbreak.mjs exploration: `parseLineBreak` fires unconditionally on any '\n' it scans, with no end-of-content lookahead). A leaf block built by some other path than addLine (an ATX heading's single-line content, sliced directly off its own source line — tryAtxHeadingStart above) never carries this artifact in the first place, so stripping it is conditional on it actually being present, not an unconditional slice.
 //
-// Once that artifact is gone, what remains is spec 0.31.2's own "Paragraphs" rule: the raw content is formed "by concatenating the lines and removing initial and final spaces or tabs" -- ASCII space (U+0020) and tab (U+0009) ONLY, not the broader Unicode whitespace category JavaScript's own String.prototype.trim() strips (NBSP U+00A0, the various em/en spaces, line/paragraph separators, BOM...). That distinction is load-bearing too: an entity reference decodes to its literal character during INLINE parsing, which runs AFTER this trim -- but this package's own writer re-emits that decoded character verbatim, so a paragraph or heading whose rendered markdown happens to START or END with, say, a &nbsp;-derived U+00A0 reaches this exact trim again on reparse, this time as a literal character already sitting at the block's own edge. A plain .trim() would silently swallow it there, misreading real content as insignificant padding.
+// Once that artifact is gone, what remains is spec 0.31.2's own "Paragraphs" rule: the raw content is formed "by concatenating the lines and removing initial and final spaces or tabs" — ASCII space (U+0020) and tab (U+0009) ONLY, not the broader Unicode whitespace category JavaScript's own String.prototype.trim() strips (NBSP U+00A0, the various em/en spaces, line/paragraph separators, BOM...). That distinction is load-bearing too: an entity reference decodes to its literal character during INLINE parsing, which runs AFTER this trim — but this package's own writer re-emits that decoded character verbatim, so a paragraph or heading whose rendered markdown happens to START or END with, say, a &nbsp;-derived U+00A0 reaches this exact trim again on reparse, this time as a literal character already sitting at the block's own edge. A plain .trim() would silently swallow it there, misreading real content as insignificant padding.
 const BLOCK_EDGE_SPACE_OR_TAB_PATTERN = /^[ \t]+|[ \t]+$/g;
 
 function trimBlockContent(text: string): string {
@@ -871,7 +871,7 @@ function toHeadingNode(
   };
 }
 
-// Extracts a task-list-item marker from the FIRST child of a list item, mutating that child's own raw content in place to strip the marker (so the paragraph's own inline content, parsed afterwards, never sees it). Returns undefined -- never a false/absent sentinel -- when the item is not a task item at all, matching MarkdownListItemNode.checked's own "absent, not false" convention.
+// Extracts a task-list-item marker from the FIRST child of a list item, mutating that child's own raw content in place to strip the marker (so the paragraph's own inline content, parsed afterwards, never sees it). Returns undefined — never a false/absent sentinel — when the item is not a task item at all, matching MarkdownListItemNode.checked's own "absent, not false" convention.
 function extractTaskListMarker(
   itemChildren: readonly BlockNode[],
 ): boolean | undefined {

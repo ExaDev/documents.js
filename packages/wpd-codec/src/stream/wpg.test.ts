@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { decodeWpgGraphic } from "./wpg";
 
-// Every fixture below is assembled directly from the specification's own field tables: the 26-byte prefix, the Class/Type/Extension/Length record header, and each record's documented field order -- so each expectation is checkable against the page it cites without a real graphic to hand. Single precision (16-bit coordinates) throughout unless a test states otherwise; ppi of 72 makes one coordinate unit one point, keeping the arithmetic the assertions describe transparent.
+// Every fixture below is assembled directly from the specification's own field tables: the 26-byte prefix, the Class/Type/Extension/Length record header, and each record's documented field order — so each expectation is checkable against the page it cites without a real graphic to hand. Single precision (16-bit coordinates) throughout unless a test states otherwise; ppi of 72 makes one coordinate unit one point, keeping the arithmetic the assertions describe transparent.
 const PPI = 72;
 
 function word(value: number): number[] {
@@ -12,7 +12,7 @@ function dword(value: number): number[] {
   return [...word(value & 0xffff), ...word((value >>> 16) & 0xffff)];
 }
 
-// One record header: Class (0x0F, the value every drawing object in these fixtures carries -- the class byte selects which of a shadow/extrusion/cap layer a record renders into, and this decoder, like the reference decoders, dispatches on type alone), Type, Extension count, Length.
+// One record header: Class (0x0F, the value every drawing object in these fixtures carries — the class byte selects which of a shadow/extrusion/cap layer a record renders into, and this decoder, like the reference decoders, dispatches on type alone), Type, Extension count, Length.
 function record(
   type: number,
   data: readonly number[],
@@ -435,7 +435,7 @@ describe("decodeWpgGraphic", () => {
     ];
     const graphic = wpg([
       record(0x01, startData),
-      // DP Pen Size (0x2c): the double-precision spelling of Pen Size -- attribute records carry their own DP types rather than doubling with the stream's precision, which doubles only the dagger-marked position/size fields.
+      // DP Pen Size (0x2c): the double-precision spelling of Pen Size — attribute records carry their own DP types rather than doubling with the stream's precision, which doubles only the dagger-marked position/size fields.
       record(0x2c, [...dword(Math.round(2 * 0x10000)), ...dword(0)]),
       record(0x25, [0, 0, 0, 0]),
       record(0x18, [
@@ -680,7 +680,7 @@ describe("readCharacterization's edit-lock and Object ID walks", () => {
     expect(decoded.skippedRecords).toEqual(["Rectangle"]);
   });
 
-  // Unlike Object ID's own overflow (guarded by its own room check before the +2/+4 step is ever taken), the edit-lock descriptor's blind +4 step has no such guard of its own -- readCharacterization's own final `geometryAt > recordEnd` check is the ONLY thing standing between a too-short record and treating the very next record's own bytes as this one's geometry.
+  // Unlike Object ID's own overflow (guarded by its own room check before the +2/+4 step is ever taken), the edit-lock descriptor's blind +4 step has no such guard of its own — readCharacterization's own final `geometryAt > recordEnd` check is the ONLY thing standing between a too-short record and treating the very next record's own bytes as this one's geometry.
   it("refuses a Rectangle whose edit-lock descriptor alone pushes geometryAt past the record, rather than reading the next record's own bytes as geometry", () => {
     const flags = 0x0080; // FLAG_EDIT_LOCK only
     const data = [...word(flags)]; // no room at all for the 4-byte edit-lock descriptor, let alone any geometry
@@ -780,7 +780,7 @@ describe("pen and brush colour record dispatch", () => {
       record(0x01, startWpgData({})),
       record(0x25, [255, 0, 0, 0]), // Pen Fore Color: red
       record(0x2b, [...word(3), ...word(3)]), // Pen Size: 3 units
-      record(0x25, [1, 2]), // truncated Pen Fore Color -- too short to update
+      record(0x25, [1, 2]), // truncated Pen Fore Color — too short to update
       record(0x18, [
         ...word(0x8000),
         ...word(0),
@@ -904,7 +904,7 @@ describe("Text Block frame lifecycle", () => {
   });
 
   it("swallows an unreachable-frame Text Block's own Text Data member rather than decoding it as an orphan", () => {
-    // The Text Block's data is too short to carry a frame at all, so it is skipped -- and its Text Data extension member (declared via the extension count) is swallowed with it rather than walked as its own record.
+    // The Text Block's data is too short to carry a frame at all, so it is skipped — and its Text Data extension member (declared via the extension count) is swallowed with it rather than walked as its own record.
     const graphic = wpg([
       record(0x01, startWpgData({})),
       record(0x1d, [0, 0], 1),
@@ -1178,7 +1178,7 @@ describe("readPolyline boundaries and branching", () => {
 });
 
 describe("readWpgRectangle's rounded-corner path", () => {
-  // rx and ry are checked independently ("if EITHER... is less than or equal to zero"), so each boundary needs its own isolated test with the other axis held well clear of zero -- otherwise a wrong comparison on one axis hides behind the other axis' own, correct, square-corner trigger.
+  // rx and ry are checked independently ("if EITHER... is less than or equal to zero"), so each boundary needs its own isolated test with the other axis held well clear of zero — otherwise a wrong comparison on one axis hides behind the other axis' own, correct, square-corner trigger.
   it("treats rx of exactly zero as a square corner even with a real, positive ry", () => {
     const graphic = wpg([
       record(0x01, startWpgData({})),
@@ -1230,7 +1230,7 @@ describe("readWpgRectangle's rounded-corner path", () => {
         ...word(0),
         ...word(0), // xll, yll (raw)
         ...word(100),
-        ...word(60), // xur, yur (raw) -- so raw width 100, raw height 60
+        ...word(60), // xur, yur (raw) — so raw width 100, raw height 60
         ...word(10), // rx
         ...word(6), // ry
       ]),
@@ -1318,14 +1318,14 @@ describe("readWpgRectangle's rounded-corner path", () => {
     if (firstLine?.kind !== "line") throw new Error("expected a line segment");
     if (firstCubic?.kind !== "cubic")
       throw new Error("expected a cubic segment");
-    // Clamped to half the width (50) and half the height (30) -- not the declared 1000. cornerRyPt (the height's own clamp) surfaces only in the first cubic's own endpoint, never in the first line, which always ends at y=0 regardless of either axis' radius.
+    // Clamped to half the width (50) and half the height (30) — not the declared 1000. cornerRyPt (the height's own clamp) surfaces only in the first cubic's own endpoint, never in the first line, which always ends at y=0 regardless of either axis' radius.
     expect(firstLine.to).toEqual({ xPt: 50, yPt: 0 });
     expect(firstCubic.to).toEqual({ xPt: 100, yPt: 30 });
     expect(Object.hasOwn(path, "stroke")).toBe(false);
   });
 
   it("carries a real stroke on a rounded rectangle, not just a square one", () => {
-    // Every other rounded-rectangle fixture in this file has no active pen width, so its own stroke is always absent regardless -- proving the rounded path's own stroke spread actually fires needs one with a real, active pen width behind it.
+    // Every other rounded-rectangle fixture in this file has no active pen width, so its own stroke is always absent regardless — proving the rounded path's own stroke spread actually fires needs one with a real, active pen width behind it.
     const graphic = wpg([
       record(0x01, startWpgData({})),
       record(0x25, [255, 0, 0, 0]), // Pen Fore Color: red, opaque
@@ -1498,7 +1498,7 @@ describe("readWpgFullEllipse's boundaries and endpoint check", () => {
         ...word(10),
         ...word(5), // ix, iy
         ...word(20),
-        ...word(5), // ex, ey -- x differs, y matches
+        ...word(5), // ex, ey — x differs, y matches
         0,
       ]),
     ]);
@@ -1521,7 +1521,7 @@ describe("readWpgFullEllipse's boundaries and endpoint check", () => {
         ...word(10),
         ...word(5), // ix, iy
         ...word(10),
-        ...word(9), // ex, ey -- y differs, x matches
+        ...word(9), // ex, ey — y differs, x matches
         0,
       ]),
     ]);
@@ -1708,7 +1708,7 @@ describe("readSingleColor and readDoubleColor arithmetic", () => {
 
 describe("the WPG signature scan", () => {
   it("advances past leading garbage bytes one at a time to find the real signature", () => {
-    // The record-start bounds check (recordStart < start + WPG_PREFIX_HEAD_SIZE) is measured from wherever the signature is actually found, so a signature embedded 3 bytes in needs its own {start of document} field large enough to clear that offset too -- 3 padding bytes between the prefix and the real records supply exactly that room.
+    // The record-start bounds check (recordStart < start + WPG_PREFIX_HEAD_SIZE) is measured from wherever the signature is actually found, so a signature embedded 3 bytes in needs its own {start of document} field large enough to clear that offset too — 3 padding bytes between the prefix and the real records supply exactly that room.
     const garbageLength = 3;
     const recordsStart = garbageLength + 26 + garbageLength;
     const records = [record(0x01, startWpgData({})), record(0x02, [])].flat();
@@ -1831,14 +1831,14 @@ describe("the record-walk loop's own boundaries", () => {
     if (decoded?.status !== "decoded") {
       throw new Error("expected a decoded graphic");
     }
-    // The lying Rectangle itself never decodes -- the walk stopped before reaching it.
+    // The lying Rectangle itself never decodes — the walk stopped before reaching it.
     expect(decoded.vectors).toEqual([]);
     expect(decoded.skippedRecords).toEqual([]);
     expect(decoded.sizePt).toEqual({ widthPt: 288, heightPt: 144 });
   });
 
   it("skips (rather than misreading) an undersized Start WPG record, without producing a spurious refusal from its truncated fields", () => {
-    // ppi and precision look valid, but the record is 10 bytes -- under the 13 the fixed fields need -- so decoding it further would misread the (absent) extent, not just the (present) ppi/precision.
+    // ppi and precision look valid, but the record is 10 bytes — under the 13 the fixed fields need — so decoding it further would misread the (absent) extent, not just the (present) ppi/precision.
     const undersized = [...word(72), ...word(72), 0, 0, 0, 0];
     const graphic = wpg([
       record(0x01, undersized),
@@ -1853,9 +1853,9 @@ describe("the record-walk loop's own boundaries", () => {
     expect(decoded.sizePt).toEqual({ widthPt: 288, heightPt: 144 });
   });
 
-  // Exactly 13 bytes: room for ppi/ppi/precision/viewport (the fixed fields this check exists to protect), but genuinely nothing left for the extent that follows -- proving the skip-vs-refuse boundary sits at < 13, not <= 13. A record this size is NOT skipped (data.length < 13 is false): it proceeds to read ppi/precision, then refuses the WHOLE graphic outright once the separate, later extent-room check finds nothing left -- a categorically different outcome (refused vs skipped-and-continue) than an off-by-one here would produce.
+  // Exactly 13 bytes: room for ppi/ppi/precision/viewport (the fixed fields this check exists to protect), but genuinely nothing left for the extent that follows — proving the skip-vs-refuse boundary sits at < 13, not <= 13. A record this size is NOT skipped (data.length < 13 is false): it proceeds to read ppi/precision, then refuses the WHOLE graphic outright once the separate, later extent-room check finds nothing left — a categorically different outcome (refused vs skipped-and-continue) than an off-by-one here would produce.
   it("proceeds past a Start WPG record of exactly 13 bytes rather than skipping it, then refuses for its missing extent", () => {
-    // A genuinely valid Start WPG follows the 13-byte one: the correct code returns refused immediately from inside the first record's own extent check (a whole-function return, not merely a skip), so the second, valid one is never reached at all -- proving that directly needs a record after the boundary one that would, wrongly, produce a real decoded result if the first were skipped instead of refused.
+    // A genuinely valid Start WPG follows the 13-byte one: the correct code returns refused immediately from inside the first record's own extent check (a whole-function return, not merely a skip), so the second, valid one is never reached at all — proving that directly needs a record after the boundary one that would, wrongly, produce a real decoded result if the first were skipped instead of refused.
     const exactlyThirteen = [
       ...word(72),
       ...word(72),
@@ -1916,7 +1916,7 @@ describe("paint order across a text shape followed by another vector", () => {
 });
 
 describe("readCharacterization's callers converge on refusal past their own boundary", () => {
-  // readCharacterization's only two callers (readTextBlockFrame, readPrimitiveVector) always need a positive number of further bytes after a successful characterization, so whenever geometryAt runs past recordEnd, the caller's own downstream boundary check refuses identically -- there is no primitive this decoder reads that needs zero further bytes.
+  // readCharacterization's only two callers (readTextBlockFrame, readPrimitiveVector) always need a positive number of further bytes after a successful characterization, so whenever geometryAt runs past recordEnd, the caller's own downstream boundary check refuses identically — there is no primitive this decoder reads that needs zero further bytes.
   it("still refuses a Rectangle whose Object ID pushes geometryAt past the record, via the primitive's own downstream check", () => {
     const flags = 0x0020; // FLAG_OBJECT_ID
     const data = [...word(flags), ...word(0x8000)];
@@ -1929,12 +1929,12 @@ describe("readCharacterization's callers converge on refusal past their own boun
   });
 
   it("resolves the long-spelling Object ID's own +4 step, not the short spelling's +2, even though both fit the record's own initial bounds", () => {
-    // With the long (+4) step, the coordinates correctly start 2 bytes later than the short (+2) step would put them -- reading the wrong offset would misread the id's own trailing bytes as the first coordinate instead.
+    // With the long (+4) step, the coordinates correctly start 2 bytes later than the short (+2) step would put them — reading the wrong offset would misread the id's own trailing bytes as the first coordinate instead.
     const flags = 0x8020; // FLAG_OBJECT_ID | FLAG_FRAME
     const data = [
       ...word(flags),
       ...word(0x8000), // Object ID, long spelling (high bit set)
-      ...word(0x1234), // the long spelling's own extra 2 bytes -- must be skipped, not read as a coordinate
+      ...word(0x1234), // the long spelling's own extra 2 bytes — must be skipped, not read as a coordinate
       ...word(0), // xll
       ...word(0), // yll
       ...word(10), // xur
@@ -2060,7 +2060,7 @@ describe("readPolyline's own point-local-to-frame arithmetic and stroke", () => 
     }
     const path = decoded.vectors[0];
     if (path?.kind !== "path") throw new Error("expected a path vector");
-    // Not just an undefined value: the key itself must be absent, since toEqual/toBeUndefined can't tell "no stroke key at all" from "a stroke key holding undefined" -- and only the former is what an absent stroke should actually produce.
+    // Not just an undefined value: the key itself must be absent, since toEqual/toBeUndefined can't tell "no stroke key at all" from "a stroke key holding undefined" — and only the former is what an absent stroke should actually produce.
     expect(path).not.toHaveProperty("stroke");
   });
 
@@ -2118,7 +2118,7 @@ describe("a Text Block whose own frame failed to resolve swallows its declared m
   it("swallows a Polyline declared as a failed Text Block's own member, not walking it as real content", () => {
     const graphic = wpg([
       record(0x01, startWpgData({})),
-      // A Text Block with no data at all: readTextBlockFrame fails (readCharacterization can't even read its own flags word), leaving pendingTextBlockFrame undefined -- but it still declares one member.
+      // A Text Block with no data at all: readTextBlockFrame fails (readCharacterization can't even read its own flags word), leaving pendingTextBlockFrame undefined — but it still declares one member.
       record(0x1d, [], 1),
       record(0x15, [
         ...word(0x8000),

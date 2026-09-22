@@ -13,11 +13,11 @@ import {
   TYPED_VALUE_HEADER_SIZE,
 } from "./wire";
 
-// Coverage for the generic [MS-OLEPS] Property Set Stream reader (src/oleps/read.ts). The primary fixture below is transcribed byte-for-byte from [MS-OLEPS]'s own worked "SummaryInformation Property Set" example (the stream contents table in the spec's SummaryInformation Property Set section) -- the strongest possible validation, since it proves this reader parses a real, complete, unmodified 444-byte stream a genuine implementation produced, not merely bytes this reader's own writer happens to agree with itself about. It exercises every property type this reader supports (VT_I2 for CodePage, VT_LPSTR for every string property, VT_FILETIME for every timestamp, VT_I4 for every count) in one pass. Additional fixtures below it, built via ../test-support/oleps.ts (independent of ./write.ts's own construction), cover round-trip correctness for values this reader's own numbers can be hand-verified against, and the structural error paths.
+// Coverage for the generic [MS-OLEPS] Property Set Stream reader (src/oleps/read.ts). The primary fixture below is transcribed byte-for-byte from [MS-OLEPS]'s own worked "SummaryInformation Property Set" example (the stream contents table in the spec's SummaryInformation Property Set section) — the strongest possible validation, since it proves this reader parses a real, complete, unmodified 444-byte stream a genuine implementation produced, not merely bytes this reader's own writer happens to agree with itself about. It exercises every property type this reader supports (VT_I2 for CodePage, VT_LPSTR for every string property, VT_FILETIME for every timestamp, VT_I4 for every count) in one pass. Additional fixtures below it, built via ../test-support/oleps.ts (independent of ./write.ts's own construction), cover round-trip correctness for values this reader's own numbers can be hand-verified against, and the structural error paths.
 
 const FMTID_SUMMARY_INFORMATION = "{F29F85E0-4FF9-1068-AB91-08002B27B3D9}";
 
-// propertySetStream always writes Offset0 = HEADER_SIZE and a genuine PropertySet packet Size covering everything it built, so truncating the array alone to test a check deeper than that declared Size always trips the Size check itself first (it runs earlier in readPropertySetStream, and any truncation short of the packet's true end is also short of its declared Size, which describes that same true end). Corrupting the Size field down to 0 -- nothing else in this reader ever reads it again -- lets the array's own physical truncation reach a boundary further in without the Size check intercepting it.
+// propertySetStream always writes Offset0 = HEADER_SIZE and a genuine PropertySet packet Size covering everything it built, so truncating the array alone to test a check deeper than that declared Size always trips the Size check itself first (it runs earlier in readPropertySetStream, and any truncation short of the packet's true end is also short of its declared Size, which describes that same true end). Corrupting the Size field down to 0 — nothing else in this reader ever reads it again — lets the array's own physical truncation reach a boundary further in without the Size check intercepting it.
 function truncatedPastDeclaredSize(
   full: Uint8Array<ArrayBuffer>,
   length: number,
@@ -87,7 +87,7 @@ const SUMMARY_INFORMATION_WORKED_EXAMPLE = new Uint8Array([
   0x38, 0x4f, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 ]);
 
-// 100-nanosecond intervals since 1601-01-01T00:00:00Z to 1970-01-01T00:00:00Z -- reimplemented independently here (rather than imported from ./wire.ts) so this expected-value derivation genuinely checks the reader's output against the documented [MS-OLEPS]/[MS-DTYP] FILETIME formula, not against this package's own conversion.
+// 100-nanosecond intervals since 1601-01-01T00:00:00Z to 1970-01-01T00:00:00Z — reimplemented independently here (rather than imported from ./wire.ts) so this expected-value derivation genuinely checks the reader's output against the documented [MS-OLEPS]/[MS-DTYP] FILETIME formula, not against this package's own conversion.
 function expectedFiletimeIso(low: bigint, high: bigint): string {
   const ticks = (high << 32n) | low;
   const ms = (ticks - 116444736000000000n) / 10000n;
@@ -215,7 +215,7 @@ describe("readPropertySetStream", () => {
 
   it("skips a VT_LPSTR under a CodePage this reader does not decode, rather than throwing", () => {
     const bytes = propertySetStream(FMTID_SUMMARY_INFORMATION, [
-      { pid: 1, value: { type: "VT_I2", value: 932 } }, // Shift-JIS -- neither CP_WINUNICODE nor windows-1252
+      { pid: 1, value: { type: "VT_I2", value: 932 } }, // Shift-JIS — neither CP_WINUNICODE nor windows-1252
       { pid: 2, value: { type: "VT_LPSTR", value: "x" } },
     ]);
     const propertySet = readPropertySetStream(bytes);
@@ -262,7 +262,7 @@ describe("readPropertySetStream", () => {
   });
 
   it("returns every decodable property when an undecodable one (e.g. a VT_CF thumbnail) sits among them, rather than aborting the whole read", () => {
-    // PIDSI_THUMBNAIL (PID 0x11) is VT_CF in a real SummaryInformation stream, a type this reader does not decode -- Word/Excel/PowerPoint write one whenever "save preview picture" is on. Built as VT_I4 (the test-support encoder has no VT_CF case) then the Type field alone is corrupted to VT_CF's real code, 0x0047, leaving PID 2's own decodable property untouched -- the exact scenario the HIGH-severity review finding names: an unsupported type must not abort a read that also carries properties this reader can decode.
+    // PIDSI_THUMBNAIL (PID 0x11) is VT_CF in a real SummaryInformation stream, a type this reader does not decode — Word/Excel/PowerPoint write one whenever "save preview picture" is on. Built as VT_I4 (the test-support encoder has no VT_CF case) then the Type field alone is corrupted to VT_CF's real code, 0x0047, leaving PID 2's own decodable property untouched — the exact scenario the HIGH-severity review finding names: an unsupported type must not abort a read that also carries properties this reader can decode.
     const bytes = propertySetStream(FMTID_SUMMARY_INFORMATION, [
       { pid: 2, value: { type: "VT_LPWSTR", value: "Joe's document" } },
       { pid: 0x11, value: { type: "VT_I4", value: 0 } },
@@ -297,7 +297,7 @@ describe("readPropertySetStream", () => {
     const bytes = propertySetStream(FMTID_SUMMARY_INFORMATION, [
       { pid: 2, value: { type: "VT_LPWSTR", value: "x" } },
     ]);
-    bytes.set([0x34, 0x12], 0); // 0x1234 little-endian -- a value distinguishable from its own byte-swapped reading, unlike an all-zero or palindromic one
+    bytes.set([0x34, 0x12], 0); // 0x1234 little-endian — a value distinguishable from its own byte-swapped reading, unlike an all-zero or palindromic one
     expect(() => readPropertySetStream(bytes)).toThrow(
       "property set stream's ByteOrder field is 0x1234, not the mandated 0xFFFE",
     );
@@ -333,7 +333,7 @@ describe("readPropertySetStream", () => {
       { pid: 0, value: { type: "VT_LPWSTR", value: "x" } },
     ]);
     expect(() => readPropertySetStream(bytes)).toThrow(
-      'property set carries a Dictionary property (PID 0), which names string-keyed properties this reader does not support -- no "\\x05SummaryInformation" stream should carry one',
+      'property set carries a Dictionary property (PID 0), which names string-keyed properties this reader does not support — no "\\x05SummaryInformation" stream should carry one',
     );
   });
 
@@ -352,7 +352,7 @@ describe("readPropertySetStream", () => {
     const full = propertySetStream(FMTID_SUMMARY_INFORMATION, [
       { pid: 2, value: { type: "VT_I4", value: 1 } },
     ]);
-    // The stream's total length is exactly offset0 + the declared Size (HEADER_SIZE, since propertySetStream always writes Offset0 as HEADER_SIZE, plus the PropertySet packet's own bytes) -- one byte short of that is one byte short of the declared Size fitting.
+    // The stream's total length is exactly offset0 + the declared Size (HEADER_SIZE, since propertySetStream always writes Offset0 as HEADER_SIZE, plus the PropertySet packet's own bytes) — one byte short of that is one byte short of the declared Size fitting.
     const truncatedLength = full.length - 1;
     const bytes = full.subarray(0, truncatedLength);
     const declaredSize = new DataView(full.buffer).getUint32(HEADER_SIZE, true);

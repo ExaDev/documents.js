@@ -14,18 +14,18 @@ import {
   type EscherContainer,
 } from "./escher";
 
-// One worksheet's own drawing tree ([MS-XLS] 2.4.180's own MsoDrawing, whose data concatenates across records into one Escher stream per sheet -- see escher.ts's own top comment): every top-level shape the sheet's drawing layer places, in document order, cell-anchored ([MS-XLS] 2.5.163 OfficeArtClientAnchorSheet). The workbook's own root Escher group (the "patriarch" -- [MS-ODRAW] "fPatriarch": the invisible container every real shape sits inside) carries no anchor and no content of its own, and is not returned as a shape.
+// One worksheet's own drawing tree ([MS-XLS] 2.4.180's own MsoDrawing, whose data concatenates across records into one Escher stream per sheet — see escher.ts's own top comment): every top-level shape the sheet's drawing layer places, in document order, cell-anchored ([MS-XLS] 2.5.163 OfficeArtClientAnchorSheet). The workbook's own root Escher group (the "patriarch" — [MS-ODRAW] "fPatriarch": the invisible container every real shape sits inside) carries no anchor and no content of its own, and is not returned as a shape.
 
-/** One drawing shape's own fixed geometry and identity -- what a Sp/Opt/ClientAnchor triple inside one SpContainer states. Nothing about what KIND of content the shape holds (a picture, a chart, an autoshape) lives here: that is the paired Obj record's own ftCmo.ot, resolved by workbook/drawing.ts once shapes and Obj records are matched up. */
+/** One drawing shape's own fixed geometry and identity — what a Sp/Opt/ClientAnchor triple inside one SpContainer states. Nothing about what KIND of content the shape holds (a picture, a chart, an autoshape) lives here: that is the paired Obj record's own ftCmo.ot, resolved by workbook/drawing.ts once shapes and Obj records are matched up. */
 export interface DrawingShape {
   readonly shapeType: number;
   readonly spid: number;
-  /** 1-based index into the workbook's own Blip Store ([MS-ODRAW] "pib"), present only for a shape whose Opt property table actually states one -- a picture shape, in practice. */
+  /** 1-based index into the workbook's own Blip Store ([MS-ODRAW] "pib"), present only for a shape whose Opt property table actually states one — a picture shape, in practice. */
   readonly blipIndex: number | undefined;
   readonly anchor: ShapeAnchor;
 }
 
-/** [MS-XLS] 2.5.163 OfficeArtClientAnchorSheet: a shape's placement as a top-left and bottom-right corner, each a cell plus a fractional offset within it -- dxL/dxR in 1/1024ths of that cell's own width, dyT/dyB in 1/256ths of that cell's own height (the two axes use different denominators; see this record's own field-by-field citation in escher-constants.ts). */
+/** [MS-XLS] 2.5.163 OfficeArtClientAnchorSheet: a shape's placement as a top-left and bottom-right corner, each a cell plus a fractional offset within it — dxL/dxR in 1/1024ths of that cell's own width, dyT/dyB in 1/256ths of that cell's own height (the two axes use different denominators; see this record's own field-by-field citation in escher-constants.ts). */
 export interface ShapeAnchor {
   readonly colL: number;
   readonly dxL: number;
@@ -42,7 +42,7 @@ const CLIENT_ANCHOR_SIZE = 18;
 /** One FOPTE entry's own fixed size ([MS-ODRAW] OfficeArtFOPTE): a two-byte opid, then a four-byte op. */
 const FOPT_ENTRY_SIZE = 6;
 
-/** Reads one worksheet's own concatenated MsoDrawing bytes into an ordered list of its real (non-patriarch) top-level shapes. A stream this reader cannot make sense of at all (empty, or carrying no DgContainer) yields no shapes rather than throwing -- workbook/drawing.ts already treats "this sheet has a drawing" as optional. An empty `drawingBytes` needs no dedicated check of its own here: readEscherRecords already returns no records at all for a zero-length stream, so the DgContainer search two lines below already comes back empty and takes the same "no shapes" path a genuinely non-empty but DgContainer-less stream does. */
+/** Reads one worksheet's own concatenated MsoDrawing bytes into an ordered list of its real (non-patriarch) top-level shapes. A stream this reader cannot make sense of at all (empty, or carrying no DgContainer) yields no shapes rather than throwing — workbook/drawing.ts already treats "this sheet has a drawing" as optional. An empty `drawingBytes` needs no dedicated check of its own here: readEscherRecords already returns no records at all for a zero-length stream, so the DgContainer search two lines below already comes back empty and takes the same "no shapes" path a genuinely non-empty but DgContainer-less stream does. */
 export function readSheetShapes(
   drawingBytes: Uint8Array<ArrayBuffer>,
 ): readonly DrawingShape[] {
@@ -58,7 +58,7 @@ export function readSheetShapes(
   if (rootSpgr?.kind !== "container") {
     return [];
   }
-  // The root group's own shape tree is read by the identical rule a nested group's is (readGroupShapes' own first-child-is-the-group's-own-shape-record skip) -- the root group's first child is the patriarch's own shape record ([MS-ODRAW] "fPatriarch"), which carries no cell anchor and is not a real placed shape, exactly as a nested group's own first child is that group's shape record rather than one of its children.
+  // The root group's own shape tree is read by the identical rule a nested group's is (readGroupShapes' own first-child-is-the-group's-own-shape-record skip) — the root group's first child is the patriarch's own shape record ([MS-ODRAW] "fPatriarch"), which carries no cell anchor and is not a real placed shape, exactly as a nested group's own first child is that group's shape record rather than one of its children.
   return readGroupShapes(rootSpgr);
 }
 
@@ -74,7 +74,7 @@ function interleaveGroupOrder(
   );
 }
 
-/** A nested shape group: its own first child SpContainer is the group's own shape record (no cell anchor, [MS-ODRAW] "fGroup"/"fChild"), and every shape after it -- ordinary or a further nested group -- is a real child shape, read the identical way. */
+/** A nested shape group: its own first child SpContainer is the group's own shape record (no cell anchor, [MS-ODRAW] "fGroup"/"fChild"), and every shape after it — ordinary or a further nested group — is a real child shape, read the identical way. */
 function readGroupShapes(group: EscherContainer): readonly DrawingShape[] {
   const [, ...rest] = interleaveGroupOrder(group);
   const shapes: DrawingShape[] = [];
@@ -91,7 +91,7 @@ function readGroupShapes(group: EscherContainer): readonly DrawingShape[] {
   return shapes;
 }
 
-/** One SpContainer's own Sp/Opt/ClientAnchor children -- undefined when the shape carries no cell anchor at all (a malformed or unusually authored file; every real placed shape has one). */
+/** One SpContainer's own Sp/Opt/ClientAnchor children — undefined when the shape carries no cell anchor at all (a malformed or unusually authored file; every real placed shape has one). */
 function readShapeContainer(
   container: EscherContainer,
 ): DrawingShape | undefined {
@@ -109,7 +109,7 @@ function readShapeContainer(
     return undefined;
   }
   const opt = childrenOfType(container, ESCHER_OPT)[0];
-  // A malformed Opt table (a FOPTE array whose own byte count is not a whole multiple of one entry's own FOPT_ENTRY_SIZE bytes -- there is no length field of its own beyond the atom's recLen to cross-check against) degrades this ONE shape to carrying no pib, rather than aborting the whole sheet's shape read; every other field this shape already resolved (its type, id, anchor) is still real and worth keeping. Checking the length up front, rather than catching whatever readPibProperty's own BlockCursor reads throw, is what lets that reader assume a well-formed entry run rather than needing its own recovery path: an exact multiple of FOPT_ENTRY_SIZE guarantees every entry it reads lands exactly on the next one's own boundary.
+  // A malformed Opt table (a FOPTE array whose own byte count is not a whole multiple of one entry's own FOPT_ENTRY_SIZE bytes — there is no length field of its own beyond the atom's recLen to cross-check against) degrades this ONE shape to carrying no pib, rather than aborting the whole sheet's shape read; every other field this shape already resolved (its type, id, anchor) is still real and worth keeping. Checking the length up front, rather than catching whatever readPibProperty's own BlockCursor reads throw, is what lets that reader assume a well-formed entry run rather than needing its own recovery path: an exact multiple of FOPT_ENTRY_SIZE guarantees every entry it reads lands exactly on the next one's own boundary.
   const blipIndex =
     opt?.kind === "atom" && opt.data.length % FOPT_ENTRY_SIZE === 0
       ? readPibProperty(opt.data)
@@ -136,13 +136,13 @@ function readClientAnchor(
   return { colL, dxL, rwT, dyT, colR, dxR, rwB, dyB };
 }
 
-/** Walks an Opt atom's own FOPTE array looking for the `pib` property ([MS-ODRAW] "pib": opid.opid MUST be 0x0104, with FOPT_OPID_PIB carrying the plain, non-complex, non-blip-id whole 16-bit entry escher-constants.ts's own comment describes) -- undefined when the shape states no `pib` entry with exactly that opid at all, which is what a complex-data trailer form (fComplex set) this reader does not resolve also produces, since a complex entry's own raw opid is a different 16-bit value from the one this check compares against. */
+/** Walks an Opt atom's own FOPTE array looking for the `pib` property ([MS-ODRAW] "pib": opid.opid MUST be 0x0104, with FOPT_OPID_PIB carrying the plain, non-complex, non-blip-id whole 16-bit entry escher-constants.ts's own comment describes) — undefined when the shape states no `pib` entry with exactly that opid at all, which is what a complex-data trailer form (fComplex set) this reader does not resolve also produces, since a complex entry's own raw opid is a different 16-bit value from the one this check compares against. */
 function readPibProperty(data: Uint8Array<ArrayBuffer>): number | undefined {
   const cursor = new BlockCursor([data]);
   while (cursor.hasMore()) {
     const opid = cursor.u16();
     const op = cursor.u32();
-    // `opid === FOPT_OPID_PIB` alone already pins opid to that exact 16-bit value, whose own fComplex bit (FOPT_FCOMPLEX_MASK) is clear -- a further `(opid & FOPT_FCOMPLEX_MASK) === 0` check here would just be re-testing a fact this equality already established, not a second, independent condition.
+    // `opid === FOPT_OPID_PIB` alone already pins opid to that exact 16-bit value, whose own fComplex bit (FOPT_FCOMPLEX_MASK) is clear — a further `(opid & FOPT_FCOMPLEX_MASK) === 0` check here would just be re-testing a fact this equality already established, not a second, independent condition.
     if (opid === FOPT_OPID_PIB) {
       return op;
     }

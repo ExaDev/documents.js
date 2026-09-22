@@ -20,7 +20,7 @@ describe("isDocBytes", () => {
   });
 
   it("rejects a genuine compound file with the signature but too short to hold a real header", () => {
-    // The 8-byte magic alone, with no header behind it -- readCompoundFile throws for this, and isDocBytes reports it as "not a .doc" rather than propagating the parse error.
+    // The 8-byte magic alone, with no header behind it — readCompoundFile throws for this, and isDocBytes reports it as "not a .doc" rather than propagating the parse error.
     const magic = new Uint8Array([
       0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1,
     ]);
@@ -43,7 +43,7 @@ describe("isDocBytes", () => {
 
   it("accepts a WordDocument stream of exactly 2 bytes when those two bytes are the real FIB signature", () => {
     const minimal = compoundFile([
-      // 0xA5EC little-endian -- the exact FIB_W_IDENT this function checks for.
+      // 0xA5EC little-endian — the exact FIB_W_IDENT this function checks for.
       { path: WORD_DOCUMENT_STREAM, bytes: new Uint8Array([0xec, 0xa5]) },
     ]);
     expect(isDocBytes(minimal)).toBe(true);

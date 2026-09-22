@@ -1,8 +1,8 @@
 import { hsqldbCellDisplayText, type SqlResultSet } from "documents.js";
 
-// The one place a SqlResultSet (documents.js's own src/odb/sql/ engine output -- see odb-query's own command comment) turns into a plain-text table, mirroring odb-structure.ts's role for OdbForm/OdbReport: a pure function of the value evaluateSelect hands back, with no I/O or package knowledge of its own, so it can be unit-tested against a literal SqlResultSet with no real .odb fixture involved.
+// The one place a SqlResultSet (documents.js's own src/odb/sql/ engine output — see odb-query's own command comment) turns into a plain-text table, mirroring odb-structure.ts's role for OdbForm/OdbReport: a pure function of the value evaluateSelect hands back, with no I/O or package knowledge of its own, so it can be unit-tested against a literal SqlResultSet with no real .odb fixture involved.
 //
-// Each cell renders through hsqldbCellDisplayText, the identical ContentCellValue -> display-text mapping src/hsqldb/script.ts's own displayTextFor already gives every extracted table row -- a query result column reads exactly like the same data would in odb-tables' own row dump, not a second, independently-invented rendering.
+// Each cell renders through hsqldbCellDisplayText, the identical ContentCellValue -> display-text mapping src/hsqldb/script.ts's own displayTextFor already gives every extracted table row — a query result column reads exactly like the same data would in odb-tables' own row dump, not a second, independently-invented rendering.
 
 const COLUMN_GAP = "  ";
 
@@ -26,7 +26,7 @@ function formatRow(
     .trimEnd();
 }
 
-// Header line, a rule line the same width as each column, one line per row, then a trailing "N row(s)" summary -- the same summary phrasing odb-tables already uses for a table's own row count.
+// Header line, a rule line the same width as each column, one line per row, then a trailing "N row(s)" summary — the same summary phrasing odb-tables already uses for a table's own row count.
 export function formatSqlResultSetTable(
   result: SqlResultSet,
 ): readonly string[] {

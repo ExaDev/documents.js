@@ -45,7 +45,7 @@ describe("readTableFormula", () => {
   });
 
   it("decodes an absolute range reference with dollar markers", () => {
-    // code 48: flags 0 -- bottom-right relative, top-left absolute (bit2|bit3 set: 0x0C)
+    // code 48: flags 0 — bottom-right relative, top-left absolute (bit2|bit3 set: 0x0C)
     const bytes = new Uint8Array([
       48 + 0x0c,
       ...word(0),
@@ -97,9 +97,9 @@ describe("readTableFormula", () => {
     expect(readTableFormula(new Uint8Array([64, 0, 0, 0]))).toBeUndefined();
   });
 
-  // Every existing cell reference names a column under 26 (a single base-26 digit), which the loop's own boundary happens to satisfy on its first pass regardless of when it stops -- only a two-digit column proves the loop actually continues into a second pass rather than stopping after exactly one.
+  // Every existing cell reference names a column under 26 (a single base-26 digit), which the loop's own boundary happens to satisfy on its first pass regardless of when it stops — only a two-digit column proves the loop actually continues into a second pass rather than stopping after exactly one.
   it("renders a column at or past the base-26 rollover with two letters", () => {
-    // code 64, flags 0: row 0, column 26 -- the base-26 convention's "AA".
+    // code 64, flags 0: row 0, column 26 — the base-26 convention's "AA".
     expect(
       readTableFormula(new Uint8Array([64, ...word(0), ...word(26)])),
     ).toBe("AA1");
@@ -246,7 +246,7 @@ describe("readTableFormula", () => {
     expect(readTableFormula(bytes)).toBe("A1+B1");
   });
 
-  // Every one of the four absolute-reference flag bits a range reference (codes 48-63) carries, isolated one at a time -- the existing "decodes an absolute range reference" test only ever sets bits 2 and 3 together (0x0C), which cannot tell any one of the four apart from the others.
+  // Every one of the four absolute-reference flag bits a range reference (codes 48-63) carries, isolated one at a time — the existing "decodes an absolute range reference" test only ever sets bits 2 and 3 together (0x0C), which cannot tell any one of the four apart from the others.
   it.each([
     [0x01, "A1:$B3"], // bit 0: end column absolute
     [0x02, "A1:B$3"], // bit 1: end row absolute
@@ -344,7 +344,7 @@ describe("readTableFormula", () => {
   });
 
   it("reads a zero-length word string at the exact boundary where its own 16-bit count just fits", () => {
-    // Exactly 2 bytes remain for the count field itself, declaring zero characters -- the tie where "no room" and "just enough room" disagree.
+    // Exactly 2 bytes remain for the count field itself, declaring zero characters — the tie where "no room" and "just enough room" disagree.
     expect(readTableFormula(new Uint8Array([8, ...word(0)]))).toBe("");
   });
 
@@ -366,7 +366,7 @@ describe("readTableFormula", () => {
   });
 
   it("aborts a floating point constant with no spelling data at all after its own double, rather than emitting the double's own text with no more tokens to fail on", () => {
-    // Nothing at all follows the 8-byte double -- not even the 2 bytes a spelling's own length prefix needs. With no further token left in the stream to independently fail on, this is the one case that actually observes whether the missing spelling aborts the whole token or is silently ignored.
+    // Nothing at all follows the 8-byte double — not even the 2 bytes a spelling's own length prefix needs. With no further token left in the stream to independently fail on, this is the one case that actually observes whether the missing spelling aborts the whole token or is silently ignored.
     const bytes = new Uint8Array([30, ...doubleBytes(1)]);
     expect(readTableFormula(bytes)).toBeUndefined();
   });

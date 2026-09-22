@@ -104,7 +104,7 @@ describe("buildDocumentBytes", () => {
     expect(page).toBeDefined();
   });
 
-  // The pdf target rebuilds the pdf-codec view from the package's own fused positions (layoutDocumentFromPackage, the frames-to-layout inverse) and writes it -- the package carries no LayoutDocument any more, only each node's own frames plus the pages array.
+  // The pdf target rebuilds the pdf-codec view from the package's own fused positions (layoutDocumentFromPackage, the frames-to-layout inverse) and writes it — the package carries no LayoutDocument any more, only each node's own frames plus the pages array.
   it("writes PDF bytes rebuilt from a frame-stamped package", () => {
     let captured: DocumentTree | undefined;
     docxToPdf(minimalDocxBytes(), {
@@ -118,7 +118,7 @@ describe("buildDocumentBytes", () => {
     const bytes = buildDocumentBytes(captured, "pdf");
     const layout = readPdf(bytes);
     expect(layout.pages.length).toBe(captured.pages?.length);
-    // The rebuilt page carries the stamped text back as real positioned text: a multi-frame run re-renders as one text item per recorded frame (the wrap re-derivation), so a run's own words all survive the package -> pdf round trip -- verbatim for a single-frame run, and fragment-by-fragment along the recorded placements for a wrapped one.
+    // The rebuilt page carries the stamped text back as real positioned text: a multi-frame run re-renders as one text item per recorded frame (the wrap re-derivation), so a run's own words all survive the package -> pdf round trip — verbatim for a single-frame run, and fragment-by-fragment along the recorded placements for a wrapped one.
     const capturedContent = flattenTree(captured);
     if (capturedContent.kind !== "wordprocessing") {
       throw new Error("expected a wordprocessing ContentDocument");
@@ -291,7 +291,7 @@ describe("layoutDocumentFromPackage: wrap re-derivation (#964)", () => {
             (frame) => item.xPt === frame.xPt && item.yPt === frame.yPt,
           ),
       );
-    // One item per recorded frame, at the frame's own position, and the fragments join back to the run's whole text (whitespace-normalised -- the wrap points themselves are not data).
+    // One item per recorded frame, at the frame's own position, and the fragments join back to the run's whole text (whitespace-normalised — the wrap points themselves are not data).
     expect(items).toHaveLength(frames.length);
     const joined = items
       .map((item) => item.text)
@@ -302,13 +302,13 @@ describe("layoutDocumentFromPackage: wrap re-derivation (#964)", () => {
   });
 
   it("re-derives a many-frame run in linear work, one fragment per frame", () => {
-    // The per-frame consumer atomises once and consumes incrementally rather than re-wrapping the whole remaining suffix per frame -- quadratic work over a many-frame run an untrusted from_package caller can shape. 200 one-word frames each carry their own word, and the run's whole text joins back.
+    // The per-frame consumer atomises once and consumes incrementally rather than re-wrapping the whole remaining suffix per frame — quadratic work over a many-frame run an untrusted from_package caller can shape. 200 one-word frames each carry their own word, and the run's whole text joins back.
     const words = Array.from(
       { length: 200 },
       (_, i) => `w${String(i).padStart(3, "0")}`,
     );
     const text = words.join(" ");
-    // Frame widths derive from the same registry-backed measurer the walk itself measures through (the drift-free pairing from-package's own module comment states), each one hair wider than its word: one word fits a frame exactly, a second word never does -- deterministic one-word-per-frame regardless of which substitute face the registry resolves.
+    // Frame widths derive from the same registry-backed measurer the walk itself measures through (the drift-free pairing from-package's own module comment states), each one hair wider than its word: one word fits a frame exactly, a second word never does — deterministic one-word-per-frame regardless of which substitute face the registry resolves.
     const measure = createFontMeasurer(createFontRegistry({}));
     const wordFont = {
       family: "Helvetica",

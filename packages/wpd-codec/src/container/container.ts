@@ -9,18 +9,18 @@ import {
 } from "./header";
 import { readPrefixPackets, type WpdPrefixPacket } from "./prefix";
 
-// -- The two containers a WordPerfect 6.x-X6 document arrives in, per WPFF Document Structure, "WordPerfect X6 Files" --
+// — The two containers a WordPerfect 6.x-X6 document arrives in, per WPFF Document Structure, "WordPerfect X6 Files" --
 //
 // WordPerfect 6.x writes the prefix and document area straight to disk, so the file's first four bytes are the WP file ID. "WordPerfect added support for the Microsoft OLE Compound File format specification in WP7. The Compound document wraps the WordPerfect file ... The name of the WordPerfect Stream is PerfectOffice_MAIN. This stream holds the WP file."
 //
-// Both spellings are in scope and neither is a version signal on its own: "When creating WordPerfect 7/8 documents you do not need to include the OLE Compound Document wrapper. WordPerfect will read in WP 7/8 documents without it." So the container is decided by inspecting the bytes, exactly as the SDK instructs -- "if the file is a Compound file, the file id will be found at an offset within the Compound document and the application must check for and read the PerfectOffice_Main Stream to identify the file as a WordPerfect file" -- and never by the file's extension or its header's version bytes.
+// Both spellings are in scope and neither is a version signal on its own: "When creating WordPerfect 7/8 documents you do not need to include the OLE Compound Document wrapper. WordPerfect will read in WP 7/8 documents without it." So the container is decided by inspecting the bytes, exactly as the SDK instructs — "if the file is a Compound file, the file id will be found at an offset within the Compound document and the application must check for and read the PerfectOffice_Main Stream to identify the file as a WordPerfect file" — and never by the file's extension or its header's version bytes.
 //
 // The compound-file half is archive-codec's bounded MS-CFB reader rather than anything written here: a compound file's sectors, FAT chains, and directory entries are container structure with no document-format knowledge in them, which is precisely that package's charter.
 
 // "The name of the WordPerfect Stream is PerfectOffice_MAIN." A root-level stream, so archive-codec reports its path with no storage prefix.
 export const PERFECT_OFFICE_MAIN_STREAM = "PerfectOffice_MAIN";
 
-// The storage holding a compound wrapper's OLE embedded objects, whose streams unwrapContainer collects into WpdDocumentContainer.oleObjectStreams -- the bytes a WP7 "OLE 2.0" object's descriptor packet names (stream/ole.ts).
+// The storage holding a compound wrapper's OLE embedded objects, whose streams unwrapContainer collects into WpdDocumentContainer.oleObjectStreams — the bytes a WP7 "OLE 2.0" object's descriptor packet names (stream/ole.ts).
 export const PERFECT_OFFICE_OBJECTS_STORAGE = "PerfectOffice_OBJECTS";
 
 export interface WpdDocumentContainer {
@@ -31,9 +31,9 @@ export interface WpdDocumentContainer {
   // Where the document area begins, and where this reader stops walking it.
   readonly documentAreaOffset: number;
   readonly documentAreaEnd: number;
-  // True when the bytes arrived inside an OLE compound file. Recorded because it is the one fact about the container a caller can act on -- an OLE-wrapped file may carry embedded objects a bare one cannot.
+  // True when the bytes arrived inside an OLE compound file. Recorded because it is the one fact about the container a caller can act on — an OLE-wrapped file may carry embedded objects a bare one cannot.
   readonly compound: boolean;
-  // The streams a compound wrapper stores under its PerfectOffice_OBJECTS storage, keyed by the stream name within that storage -- the bytes a WP7 "OLE 2.0" object's descriptor packet names (stream/ole.ts). Empty for a bare WP 6.x file, which has no storage to hold objects in, and for a compound file carrying none: an OLE 1.0 object's bytes ride its own descriptor packet instead (the pre-WP7 spelling the identical wrapper-less files used).
+  // The streams a compound wrapper stores under its PerfectOffice_OBJECTS storage, keyed by the stream name within that storage — the bytes a WP7 "OLE 2.0" object's descriptor packet names (stream/ole.ts). Empty for a bare WP 6.x file, which has no storage to hold objects in, and for a compound file carrying none: an OLE 1.0 object's bytes ride its own descriptor packet instead (the pre-WP7 spelling the identical wrapper-less files used).
   readonly oleObjectStreams: ReadonlyMap<string, Uint8Array<ArrayBuffer>>;
 }
 
@@ -93,7 +93,7 @@ function unwrapContainer(bytes: Uint8Array<ArrayBuffer>): {
   );
 }
 
-// Where the document area stops. The header's own {file size} would be the answer if it could be trusted, and the SDK is unusually direct that it often cannot: "A common problem occurs when this field is not updated after creating a file or modifying an existing file. If the file size points to the beginning of the document area, then text is added to the document, this field must be updated or it will appear that the document is blank." So the field is honoured only where it is self-consistent -- past the document area's start and within the bytes actually present -- and the buffer's own end is used otherwise. Believing a stale field over the bytes in hand is exactly how a real document reads back empty.
+// Where the document area stops. The header's own {file size} would be the answer if it could be trusted, and the SDK is unusually direct that it often cannot: "A common problem occurs when this field is not updated after creating a file or modifying an existing file. If the file size points to the beginning of the document area, then text is added to the document, this field must be updated or it will appear that the document is blank." So the field is honoured only where it is self-consistent — past the document area's start and within the bytes actually present — and the buffer's own end is used otherwise. Believing a stale field over the bytes in hand is exactly how a real document reads back empty.
 function documentAreaEnd(
   bytes: Uint8Array<ArrayBuffer>,
   header: WpdFileHeader,
@@ -116,7 +116,7 @@ export function openWpdDocument(
     oleObjectStreams,
   } = unwrapContainer(toArrayBufferBacked(input));
   const header = readFileHeader(wrapped, options);
-  // No separate empty-string normalisation is needed here: readFileHeader above already applies the identical "" -> no password rule and throws WpdEncryptedDocumentError before this line is reached for any encrypted document given an empty-string password, so by the time header.encryption !== 0 is true, options.password is already known to be a defined, non-empty string. An encrypted document's index area, packet data, and document area are all beyond the fixed header and therefore all ciphertext; decrypting the whole buffer in one pass here means every downstream reader (the prefix walker, the tokeniser) parses plaintext with no encryption awareness of its own. A password supplied for an unencrypted document never reaches this branch -- the header word gates it -- and is harmlessly ignored, mirroring every other codec here.
+  // No separate empty-string normalisation is needed here: readFileHeader above already applies the identical "" -> no password rule and throws WpdEncryptedDocumentError before this line is reached for any encrypted document given an empty-string password, so by the time header.encryption !== 0 is true, options.password is already known to be a defined, non-empty string. An encrypted document's index area, packet data, and document area are all beyond the fixed header and therefore all ciphertext; decrypting the whole buffer in one pass here means every downstream reader (the prefix walker, the tokeniser) parses plaintext with no encryption awareness of its own. A password supplied for an unencrypted document never reaches this branch — the header word gates it — and is harmlessly ignored, mirroring every other codec here.
   const bytes =
     header.encryption !== 0 && options.password !== undefined
       ? decryptWpdDocument(wrapped, header, options.password)

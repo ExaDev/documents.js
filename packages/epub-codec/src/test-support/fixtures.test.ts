@@ -8,7 +8,7 @@ import { fixtureEpub2MultichapterBytes } from "./epub2-multichapter-fixture";
 import { fixtureEpubMultichapterBytes } from "./epub-multichapter-fixture";
 import { fixtureEpub3Bytes } from "./epub3-fixture";
 
-// These fixture builders assemble a real zip byte-for-byte, entry path by entry path -- a wrong path or a mimetype entry that isn't genuinely stored uncompressed would still let most reading tests pass, since readEpubContent resolves paths through the OPF manifest rather than by any fixed position. Verified directly here against the fixture's own real byte output, the same way the pipeline-level "OCF-mandated mimetype-first/stored byte layout" test verifies the writer's output.
+// These fixture builders assemble a real zip byte-for-byte, entry path by entry path — a wrong path or a mimetype entry that isn't genuinely stored uncompressed would still let most reading tests pass, since readEpubContent resolves paths through the OPF manifest rather than by any fixed position. Verified directly here against the fixture's own real byte output, the same way the pipeline-level "OCF-mandated mimetype-first/stored byte layout" test verifies the writer's output.
 describe.each([
   ["fixtureEpub3Bytes", fixtureEpub3Bytes, ["OEBPS/nav.xhtml"], 6],
   ["fixtureEpub2Bytes", fixtureEpub2Bytes, ["OEBPS/toc.ncx"], 5],

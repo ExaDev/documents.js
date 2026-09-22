@@ -13,11 +13,11 @@ import { readOdg, readOdgContent, type OdgDocument } from "../typed/odg/read";
 
 // The OpenOffice.org 1.x / StarOffice 6-7 readers: .sxw (Writer), .sxc (Calc), .sxi (Impress) and .sxd (Draw), plus their .stw/.stc/.sti/.std template counterparts, which differ from the documents only in their manifest media type and so read through the same function.
 //
-// Each is its ODF counterpart run over a transformed package, not a second reader: ./transform.ts rewrites the package into the ODF shape and readOdt/readOds/readOdp/readOdg do the actual reading. That is the whole point of treating OpenOffice.org XML as a variant of ODF rather than as a separate format -- every construct the ODF readers understand (the fidelity construct vocabulary in readOdt, the repeat-count cursor in readOds, the paint-order resolution in readOdg) works on an OpenOffice.org 1.x document for free, and a fix to any of them fixes both formats at once.
+// Each is its ODF counterpart run over a transformed package, not a second reader: ./transform.ts rewrites the package into the ODF shape and readOdt/readOds/readOdp/readOdg do the actual reading. That is the whole point of treating OpenOffice.org XML as a variant of ODF rather than as a separate format — every construct the ODF readers understand (the fidelity construct vocabulary in readOdt, the repeat-count cursor in readOds, the paint-order resolution in readOdg) works on an OpenOffice.org 1.x document for free, and a fix to any of them fixes both formats at once.
 //
 // Each format has the same two levels its ODF counterpart has: the bare name returns document-schema.js's DocumentTree, and the *Content sibling beneath it returns the flat ContentDocument-level shape. See this package's README for the distinction.
 //
-// What these readers do NOT do is write. Their own writing counterpart lives in write.ts (writeSxw/writeSxwContent, writeSxc/writeSxcContent, writeSxi/writeSxiContent, writeSxd/writeSxdContent), built on transform.ts's own inverse direction and this package's ODF-native writers (writeOdt, writeOds, writeOdp, writeOdg) -- one writer pair per format, so every format read here writes too.
+// What these readers do NOT do is write. Their own writing counterpart lives in write.ts (writeSxw/writeSxwContent, writeSxc/writeSxcContent, writeSxi/writeSxiContent, writeSxd/writeSxdContent), built on transform.ts's own inverse direction and this package's ODF-native writers (writeOdt, writeOds, writeOdp, writeOdg) — one writer pair per format, so every format read here writes too.
 
 // A .sxw or .stw (OpenOffice.org 1.x Writer) package as a flat OdtDocument.
 export function readSxwContent(

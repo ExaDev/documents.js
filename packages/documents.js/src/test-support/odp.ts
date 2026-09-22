@@ -9,7 +9,7 @@ import {
 } from "odf.js";
 import { encodePng } from "byte-codec";
 
-// Never imported by src/index.ts and never reaches dist/. Mirrors src/test-support/odt.ts's own reasoning: hand-authored ODF XML assembled via odf.js's own el/txt fragment builders and serialized via odf.js's own encodePackage, never via this package's own createEmptyOdpPackage (src/edit/odp/scaffold.ts) or createOdp, so a bug in that scaffold/editor cannot hide behind a fixture built with the same code. Shape choices mirror odf.js's own src/typed/odp/read.test.ts fixture -- multiple draw:page elements, a rotated frame, a grouped pair of shapes, an image, a table, and speaker notes -- the same real-shape ground truth that fixture verified against genuine LibreOffice 26.2 output.
+// Never imported by src/index.ts and never reaches dist/. Mirrors src/test-support/odt.ts's own reasoning: hand-authored ODF XML assembled via odf.js's own el/txt fragment builders and serialized via odf.js's own encodePackage, never via this package's own createEmptyOdpPackage (src/edit/odp/scaffold.ts) or createOdp, so a bug in that scaffold/editor cannot hide behind a fixture built with the same code. Shape choices mirror odf.js's own src/typed/odp/read.test.ts fixture — multiple draw:page elements, a rotated frame, a grouped pair of shapes, an image, a table, and speaker notes — the same real-shape ground truth that fixture verified against genuine LibreOffice 26.2 output.
 
 function enc(s: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(s);
@@ -50,7 +50,7 @@ function stylesXmlPart(): Package["parts"][string] {
   };
 }
 
-// Slide 1: a rotated title frame with real text, a grouped pair of shapes, and speaker notes. Slide 2: an image and a table, no notes -- exercising the same shape variety (rotation, grouping, image, table, notes) odf.js's own odp-reader fixture already verified against genuine LibreOffice output, just re-assembled here so odpToPdf's own tests can drive it all the way through to PDF bytes.
+// Slide 1: a rotated title frame with real text, a grouped pair of shapes, and speaker notes. Slide 2: an image and a table, no notes — exercising the same shape variety (rotation, grouping, image, table, notes) odf.js's own odp-reader fixture already verified against genuine LibreOffice output, just re-assembled here so odpToPdf's own tests can drive it all the way through to PDF bytes.
 function buildFixturePackage(): Package {
   const titleFrame = el(
     "draw:frame",
@@ -175,12 +175,12 @@ function buildFixturePackage(): Package {
   };
 }
 
-// A minimal but structurally authentic odp package (mimetype part first and stored, a real office:document-content with two slides, a rotated frame, a grouped pair of shapes, an image, a table, and speaker notes) -- enough to round-trip through decodePackage and readOdpContent without needing a real LibreOffice-exported binary.
+// A minimal but structurally authentic odp package (mimetype part first and stored, a real office:document-content with two slides, a rotated frame, a grouped pair of shapes, an image, a table, and speaker notes) — enough to round-trip through decodePackage and readOdpContent without needing a real LibreOffice-exported binary.
 export function minimalOdpBytes(): Uint8Array<ArrayBuffer> {
   return encodePackage(buildFixturePackage());
 }
 
-// The decoded-Package counterpart to minimalOdpBytes above, mirroring src/test-support/odt.ts's own minimalOdtPackage -- used by src/edit/odp/editor.test.ts's live-view fidelity tests (openOdp(minimalOdpBytes()) against this same fixture, decoded independently) to snapshot "before" state without going through the editor at all.
+// The decoded-Package counterpart to minimalOdpBytes above, mirroring src/test-support/odt.ts's own minimalOdtPackage — used by src/edit/odp/editor.test.ts's live-view fidelity tests (openOdp(minimalOdpBytes()) against this same fixture, decoded independently) to snapshot "before" state without going through the editor at all.
 export function minimalOdpPackage(): Package {
   return decodePackage(minimalOdpBytes());
 }

@@ -18,9 +18,9 @@ function recordHeader(
   return bytes;
 }
 
-// One PICFAndOfficeArtData whose PICF states MFPF.mm as MM_SHAPEFILE (0x0066), the one case [MS-DOC] 2.9.181 gives PICF an extra cchPicName/stPicName pair (the source file's own name) before the OfficeArt container chain begins -- buildInlinePictureBytes' own fixture always states plain MM_SHAPE (0x0064) instead, so this is the only construction that exercises readInlinePicture's own cchPicName skip at all.
+// One PICFAndOfficeArtData whose PICF states MFPF.mm as MM_SHAPEFILE (0x0066), the one case [MS-DOC] 2.9.181 gives PICF an extra cchPicName/stPicName pair (the source file's own name) before the OfficeArt container chain begins — buildInlinePictureBytes' own fixture always states plain MM_SHAPE (0x0064) instead, so this is the only construction that exercises readInlinePicture's own cchPicName skip at all.
 function shapefilePictureBytes(pngBytes: Uint8Array): Uint8Array<ArrayBuffer> {
-  const picName = new Uint8Array([0x41, 0x42, 0x43]); // "ABC" -- content is never read, only its own length skipped.
+  const picName = new Uint8Array([0x41, 0x42, 0x43]); // "ABC" — content is never read, only its own length skipped.
   const picf = new Uint8Array(68);
   new DataView(picf.buffer).setUint16(6, 0x0066, true); // mfpf.mm: MM_SHAPEFILE.
 
@@ -47,7 +47,7 @@ function shapefilePictureBytes(pngBytes: Uint8Array): Uint8Array<ArrayBuffer> {
   cursor += picf.length;
   out[cursor] = picName.length; // cchPicName.
   cursor += 1;
-  out.set(picName, cursor); // stPicName -- never read, only skipped past.
+  out.set(picName, cursor); // stPicName — never read, only skipped past.
   cursor += picName.length;
   out.set(shapeHeader, cursor);
   cursor += shapeHeader.length;
@@ -59,7 +59,7 @@ function shapefilePictureBytes(pngBytes: Uint8Array): Uint8Array<ArrayBuffer> {
   return out;
 }
 
-// Real MS-DOC producers always wrap even a plain bitmap in an OfficeArtInlineSpContainer ([MS-ODRAW] 2.2.15) regardless of PICF.mfpf.mm's own value, so these fixtures build one directly (buildInlinePictureBytes) rather than a bare PICF -- the same shape a real Word/LibreOffice-authored inline picture actually uses.
+// Real MS-DOC producers always wrap even a plain bitmap in an OfficeArtInlineSpContainer ([MS-ODRAW] 2.2.15) regardless of PICF.mfpf.mm's own value, so these fixtures build one directly (buildInlinePictureBytes) rather than a bare PICF — the same shape a real Word/LibreOffice-authored inline picture actually uses.
 
 describe("readDocContent inline pictures", () => {
   it("reads an inline picture's own PNG bytes and its size from PICMID's dxaGoal/dyaGoal", () => {
@@ -146,7 +146,7 @@ describe("readDocContent inline pictures", () => {
   });
 
   it("drops a picture anchor to an empty paragraph when the blip's own payload does not start with its format's own file signature", () => {
-    // A well-formed OfficeArtBlipPNG header, but the payload bytes it wraps do not actually start with the PNG signature -- a genuine wrapper-byte false positive this reader's own signature check exists to refuse (see this module's own top-of-file locating note).
+    // A well-formed OfficeArtBlipPNG header, but the payload bytes it wraps do not actually start with the PNG signature — a genuine wrapper-byte false positive this reader's own signature check exists to refuse (see this module's own top-of-file locating note).
     const notReallyPng = new Uint8Array([1, 2, 3, 4, 5]);
     const picLocation = 0x40;
     const { dataStreamBytes, picLocationGrpprl } = buildInlinePictureBytes(
@@ -225,7 +225,7 @@ describe("readInlinePicture's own bounds labels", () => {
   });
 
   it("skips a candidate blip whose own declared recLen is too small to cover even uidBytes + the tag byte, rather than treating it as found", () => {
-    // recLen one byte short of uidBytes(16) + BLIP_TAG_SIZE(1) = 17 -- a would-be blip whose signature bytes genuinely match, but whose own recLen cannot possibly be real. Bypassing this check would still "find" it, then throw computing a negative blipDataLength downstream; skipping it correctly instead just finds no valid blip at all.
+    // recLen one byte short of uidBytes(16) + BLIP_TAG_SIZE(1) = 17 — a would-be blip whose signature bytes genuinely match, but whose own recLen cannot possibly be real. Bypassing this check would still "find" it, then throw computing a negative blipDataLength downstream; skipping it correctly instead just finds no valid blip at all.
     const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
     const data = shapefilePictureBytes(pngBytes);
     // The blip header's recLen sits 4 bytes into the header, itself 8 bytes past the shape-container header (recVer/recInstance(2) + recType(2) + recLen(4)) that immediately precedes it in shapefilePictureBytes' own layout.
@@ -244,7 +244,7 @@ describe("readInlinePicture's own bounds labels", () => {
   });
 
   it("names 'OfficeArtBlip file data in the Data stream' when the blip's own declared recLen runs past the Data stream", () => {
-    // 4-byte PNG signature plus 10 bytes of padding: recLen (stated as uid + tag + pngBytes.length by shapefilePictureBytes) covers all 14, but truncating the Data stream by 5 bytes leaves only the signature itself intact -- enough for findBlipRecord's own signature check to still land on this blip, not enough for the full declared recLen the subsequent slice needs.
+    // 4-byte PNG signature plus 10 bytes of padding: recLen (stated as uid + tag + pngBytes.length by shapefilePictureBytes) covers all 14, but truncating the Data stream by 5 bytes leaves only the signature itself intact — enough for findBlipRecord's own signature check to still land on this blip, not enough for the full declared recLen the subsequent slice needs.
     const pngBytes = new Uint8Array([
       0x89,
       0x50,
@@ -260,7 +260,7 @@ describe("readInlinePicture's own bounds labels", () => {
   });
 
   it("still finds a one-uid JPEG blip that consumes every one of the Data stream's own last bytes, with zero bytes to spare", () => {
-    // The smallest a validated blip can ever be (ONE_UID_BYTES(16) + tag(1) + JPEG's own 2-byte signature = 19 bytes past the header), placed so the header itself starts at the very last position the scan's own bound admits -- distinguishes that bound's own <= from a <.
+    // The smallest a validated blip can ever be (ONE_UID_BYTES(16) + tag(1) + JPEG's own 2-byte signature = 19 bytes past the header), placed so the header itself starts at the very last position the scan's own bound admits — distinguishes that bound's own <= from a <.
     const mm = 0x0064; // MM_SHAPE.
     const picf = new Uint8Array(68);
     new DataView(picf.buffer).setUint16(6, mm, true);
@@ -283,7 +283,7 @@ describe("readInlinePicture's own bounds labels", () => {
   });
 
   it("finds nothing at all one byte short of that same zero-bytes-to-spare minimum, rather than scanning into a header it has no room left to validate", () => {
-    // The identical minimal one-uid JPEG blip as the previous test, missing its very last byte -- the scan's own bound has no candidate position left to try at all, so this distinguishes the bound's own addition (RECORD_HEADER_SIZE + MIN_BLIP_TAIL_BYTES past `at`) from a subtraction, which would instead admit `at` here and read a record header this data no longer has room for.
+    // The identical minimal one-uid JPEG blip as the previous test, missing its very last byte — the scan's own bound has no candidate position left to try at all, so this distinguishes the bound's own addition (RECORD_HEADER_SIZE + MIN_BLIP_TAIL_BYTES past `at`) from a subtraction, which would instead admit `at` here and read a record header this data no longer has room for.
     const mm = 0x0064; // MM_SHAPE.
     const picf = new Uint8Array(68);
     new DataView(picf.buffer).setUint16(6, mm, true);
@@ -303,7 +303,7 @@ describe("readInlinePicture's own bounds labels", () => {
   });
 
   it("skips a candidate whose recInstance names a real uid count but whose recType is not a blip, continuing on to the genuine one behind it", () => {
-    // A shape-record-shaped header (not 0xf01d/0xf01e) that nonetheless carries a recognised one-uid recInstance and happens to have JPEG's own 2-byte signature sitting where its payload would start -- format is undefined for this header, so findBlipRecord's own format guard, not the recLen/signature check, is what has to skip it. Without that skip this bogus header would be returned as "found", and readInlinePicture's own format check on its bogus recType would then return undefined without ever reaching the real PNG right behind it.
+    // A shape-record-shaped header (not 0xf01d/0xf01e) that nonetheless carries a recognised one-uid recInstance and happens to have JPEG's own 2-byte signature sitting where its payload would start — format is undefined for this header, so findBlipRecord's own format guard, not the recLen/signature check, is what has to skip it. Without that skip this bogus header would be returned as "found", and readInlinePicture's own format check on its bogus recType would then return undefined without ever reaching the real PNG right behind it.
     const mm = 0x0064; // MM_SHAPE.
     const picf = new Uint8Array(68);
     new DataView(picf.buffer).setUint16(6, mm, true);

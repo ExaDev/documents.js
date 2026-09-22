@@ -169,7 +169,7 @@ pnpm test:workers  # turbo run _test:workers (unit suite under the real Cloudfla
 pnpm test:watch    # vitest --project unit
 pnpm test:coverage # turbo run _test:coverage (vitest run --project unit --coverage)
 pnpm test:smoke    # turbo run _test:smoke (rebuilds dist/, verifies ESM/CJS parity + a real round trip per bundle)
-pnpm test:corpus   # turbo run _test:corpus (optional, gitignored real-world sanity check -- see Fidelity)
+pnpm test:corpus   # turbo run _test:corpus (optional, gitignored real-world sanity check — see Fidelity)
 ```
 
 To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.

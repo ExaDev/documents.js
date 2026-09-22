@@ -1,6 +1,6 @@
-// -- Character attributes, per WPFF "Fixed-Length Multi-Byte Functions", 0xF2 Attribute On and 0xF3 Attribute Off --
+// — Character attributes, per WPFF "Fixed-Length Multi-Byte Functions", 0xF2 Attribute On and 0xF3 Attribute Off --
 //
-// Both functions are three bytes -- gate, attribute, gate -- and carry one attribute number in bits 0-5 of the payload byte. Bit 6 is reserved. Bit 7 means "Ignore the attributed text on/off codes. Used when an attributed block of text becomes a subset of a larger attribute block of the same type, such as bolding a sentence that contains a word already bolded", so a code with that bit set changes nothing and is dropped.
+// Both functions are three bytes — gate, attribute, gate — and carry one attribute number in bits 0-5 of the payload byte. Bit 6 is reserved. Bit 7 means "Ignore the attributed text on/off codes. Used when an attributed block of text becomes a subset of a larger attribute block of the same type, such as bolding a sentence that contains a word already bolded", so a code with that bit set changes nothing and is dropped.
 
 export const ATTRIBUTE_ON = 0xf2;
 export const ATTRIBUTE_OFF = 0xf3;
@@ -11,7 +11,7 @@ const ATTRIBUTE_IGNORE_BIT = 0x80;
 // Bits 0-5 hold the attribute number; bit 6 is reserved.
 const ATTRIBUTE_NUMBER_MASK = 0x3f;
 
-// The SDK's attribute numbering, in full. Only the members the shared content schema's own ContentRun can express are consumed by the reader -- italics, double underline, bold, strikeout, underline -- but naming all eighteen keeps the table checkable against the specification rather than looking like an arbitrary subset.
+// The SDK's attribute numbering, in full. Only the members the shared content schema's own ContentRun can express are consumed by the reader — italics, double underline, bold, strikeout, underline — but naming all eighteen keeps the table checkable against the specification rather than looking like an arbitrary subset.
 export const WpdAttribute = {
   ExtraLarge: 0,
   VeryLarge: 1,

@@ -212,7 +212,7 @@ describe("readWorkbookGlobals", () => {
   });
 
   it("does not refuse an SST sitting exactly at its own declared-count-times-entry-width boundary, only genuinely past it", () => {
-    // 3 unique strings times MIN_SST_ENTRY_BYTES (3) is 9, exactly this record's own total byte length (the 8-byte header plus 1 padding byte) -- a strictly-greater-than check leaves this alone (whatever fails next fails somewhere else, reading real string entries from too few bytes), while a greater-than-or-equal check would refuse it right here, before ever attempting to read a single entry.
+    // 3 unique strings times MIN_SST_ENTRY_BYTES (3) is 9, exactly this record's own total byte length (the 8-byte header plus 1 padding byte) — a strictly-greater-than check leaves this alone (whatever fails next fails somewhere else, reading real string entries from too few bytes), while a greater-than-or-equal check would refuse it right here, before ever attempting to read a single entry.
     expect(() =>
       readWorkbookGlobals(
         groupsOf(record(RECORD_SST, [...u32(0), ...u32(3), 0x00])),
@@ -304,7 +304,7 @@ describe("readWorkbookGlobals", () => {
     expect(globals.cellFormats[0]?.decoration).toStrictEqual({
       fillPattern: 1,
       fillForegroundIcv: 12,
-      fillBackgroundIcv: 0x41, // Automatic -- cellXfTrailer's own default when the caller states no background icv.
+      fillBackgroundIcv: 0x41, // Automatic — cellXfTrailer's own default when the caller states no background icv.
       left: { style: 1, icv: 10 },
       right: { style: 0, icv: 0 },
       top: { style: 1, icv: 10 },
@@ -313,7 +313,7 @@ describe("readWorkbookGlobals", () => {
   });
 
   it("reads a Palette record's own 56 colour entries", () => {
-    // LongRGB: red, green, blue, then a reserved byte -- rgColor[0] red, rgColor[1] green, and the remaining entries of the 56 ccv MUST declare.
+    // LongRGB: red, green, blue, then a reserved byte — rgColor[0] red, rgColor[1] green, and the remaining entries of the 56 ccv MUST declare.
     const entries = [
       [0xff, 0x00, 0x00, 0x00],
       [0x00, 0xff, 0x00, 0x00],
@@ -400,7 +400,7 @@ describe("readWorkbookGlobals", () => {
   });
 
   it("resolves a 3D reference's ixti to a sheet range through a self-referencing SupBook", () => {
-    // [MS-XLS] 2.4.271: cch 0x0401 marks a SupBook as self-referencing -- this workbook itself -- so its EXTERNSHEET XTI's itabFirst/itabLast name real BoundSheet8 indices directly.
+    // [MS-XLS] 2.4.271: cch 0x0401 marks a SupBook as self-referencing — this workbook itself — so its EXTERNSHEET XTI's itabFirst/itabLast name real BoundSheet8 indices directly.
     const globals = readWorkbookGlobals(
       groupsOf(
         record(RECORD_SUPBOOK, [...u16(3), ...u16(0x0401)]),
@@ -419,7 +419,7 @@ describe("readWorkbookGlobals", () => {
   });
 
   it("resolves a genuinely external workbook's own file name and sheet name through virtPath and rgst", () => {
-    // rel-volume ([MS-XLS] 480c3d2a: "%x0001 %x0002 file-path" -- relative to the referencing workbook's own drive), the common real-world case of an external workbook in the same folder: virtPath is just the two-character marker followed directly by the file name.
+    // rel-volume ([MS-XLS] 480c3d2a: "%x0001 %x0002 file-path" — relative to the referencing workbook's own drive), the common real-world case of an external workbook in the same folder: virtPath is just the two-character marker followed directly by the file name.
     const virtPath = "\u0001\u0002Budget.xlsx";
     const globals = readWorkbookGlobals(
       groupsOf(
@@ -432,8 +432,8 @@ describe("readWorkbookGlobals", () => {
         record(RECORD_EXTERNSHEET, [
           ...u16(1),
           ...u16(0), // iSupBook
-          ...u16(0), // itabFirst -- rgst[0]
-          ...u16(0), // itabLast -- rgst[0]
+          ...u16(0), // itabFirst — rgst[0]
+          ...u16(0), // itabLast — rgst[0]
         ]),
       ),
     );
@@ -444,7 +444,7 @@ describe("readWorkbookGlobals", () => {
   });
 
   it("resolves a bare simple-file-path virtPath with no leading marker at all", () => {
-    // [MS-XLS] 480c3d2a: simple-file-path = [%x0001] file-path -- the marker is optional, and this is the case where it's absent entirely.
+    // [MS-XLS] 480c3d2a: simple-file-path = [%x0001] file-path — the marker is optional, and this is the case where it's absent entirely.
     const virtPath = "Budget.xlsx";
     const globals = readWorkbookGlobals(
       groupsOf(
@@ -469,7 +469,7 @@ describe("readWorkbookGlobals", () => {
   });
 
   it("resolves a 0x01-prefixed simple-file-path virtPath without losing the file name's own first character", () => {
-    // [MS-XLS] 480c3d2a: simple-file-path's own %x0001 marker stands ALONE, with no second marker byte -- so the character right after it is already the start of file-path, not part of a two-byte marker to also discard.
+    // [MS-XLS] 480c3d2a: simple-file-path's own %x0001 marker stands ALONE, with no second marker byte — so the character right after it is already the start of file-path, not part of a two-byte marker to also discard.
     const virtPath = "\u0001Budget.xlsx";
     const globals = readWorkbookGlobals(
       groupsOf(
@@ -494,7 +494,7 @@ describe("readWorkbookGlobals", () => {
   });
 
   it("declines a virtPath whose file-path carries its own bracketed sheet name, rather than doubling it up with the caller's own brackets", () => {
-    // [MS-XLS] 480c3d2a: file-path = relative-path / "[" relative-path "]" sheet-name -- this reader's own caller already brackets the resolved file name as `[fileName]sheet`, so a file-path that is ITSELF already bracketed would otherwise render as a mangled `[[Book.xlsx]Sheet1]Sheet1` rather than resolving cleanly.
+    // [MS-XLS] 480c3d2a: file-path = relative-path / "[" relative-path "]" sheet-name — this reader's own caller already brackets the resolved file name as `[fileName]sheet`, so a file-path that is ITSELF already bracketed would otherwise render as a mangled `[[Book.xlsx]Sheet1]Sheet1` rather than resolving cleanly.
     const virtPath = "[Book.xlsx]Sheet1";
     const globals = readWorkbookGlobals(
       groupsOf(
@@ -519,7 +519,7 @@ describe("readWorkbookGlobals", () => {
   });
 
   it("declines a plain multi-directory path whose own final directory is itself a legally bracket-named file, not just a bracket leading the whole path", () => {
-    // A whole-path-leading-character check would correctly rule this OUT as the bracketed form: "sub" then a directory separator then "[Book.xlsx]Sheet1" leaves the WHOLE path's own leading character "s", not "[", so per [MS-XLS] 480c3d2a's own grammar (file-path = relative-path / "[" relative-path "]" sheet-name) this is production 1 all the way through -- "[Book.xlsx]Sheet1" here is simply a legally bracket-named file sitting in directory "sub", never a real bracketed sheet-name reference. Even so, this final directory-turned-file-name still carries a bracket, and returning it as-is would double up with the caller's own `[fileName]sheet` bracketing into a mangled label, and leave `diagnostic` wrongly false since fileNameFromVirtPath would have reported success -- so it is declined anyway. See the next test for the genuinely bracketed form reached through a directory separator, which this same final-segment check also has to catch.
+    // A whole-path-leading-character check would correctly rule this OUT as the bracketed form: "sub" then a directory separator then "[Book.xlsx]Sheet1" leaves the WHOLE path's own leading character "s", not "[", so per [MS-XLS] 480c3d2a's own grammar (file-path = relative-path / "[" relative-path "]" sheet-name) this is production 1 all the way through — "[Book.xlsx]Sheet1" here is simply a legally bracket-named file sitting in directory "sub", never a real bracketed sheet-name reference. Even so, this final directory-turned-file-name still carries a bracket, and returning it as-is would double up with the caller's own `[fileName]sheet` bracketing into a mangled label, and leave `diagnostic` wrongly false since fileNameFromVirtPath would have reported success — so it is declined anyway. See the next test for the genuinely bracketed form reached through a directory separator, which this same final-segment check also has to catch.
     const virtPath = "sub\u0003[Book.xlsx]Sheet1";
     const globals = readWorkbookGlobals(
       groupsOf(
@@ -544,7 +544,7 @@ describe("readWorkbookGlobals", () => {
   });
 
   it("declines a genuinely bracketed sheet name whose workbook sits in a subdirectory, whose closing bracket lands non-leading in the final segment", () => {
-    // [MS-XLS] 480c3d2a: file-path = relative-path / "[" relative-path "]" sheet-name, and relative-path = directory *(0x03 directory) -- the bracketed alternative's own relative-path can itself span several directories, so a workbook "Book.xlsx" inside directory "sub", referencing "Sheet1", genuinely encodes with the leading "[" before any directory at all: "[sub" + a directory separator + "Book.xlsx]Sheet1". Splitting on the separator to find the trailing segment puts the closing "]" NON-LEADING in that final segment ("Book.xlsx]Sheet1") -- a real instance of the bracketed form is not limited to a bracket leading the segment this reader isolates, unlike the plain bracket-named-file case in the previous test, which this string is deliberately the mirror image of.
+    // [MS-XLS] 480c3d2a: file-path = relative-path / "[" relative-path "]" sheet-name, and relative-path = directory *(0x03 directory) — the bracketed alternative's own relative-path can itself span several directories, so a workbook "Book.xlsx" inside directory "sub", referencing "Sheet1", genuinely encodes with the leading "[" before any directory at all: "[sub" + a directory separator + "Book.xlsx]Sheet1". Splitting on the separator to find the trailing segment puts the closing "]" NON-LEADING in that final segment ("Book.xlsx]Sheet1") — a real instance of the bracketed form is not limited to a bracket leading the segment this reader isolates, unlike the plain bracket-named-file case in the previous test, which this string is deliberately the mirror image of.
     const virtPath = "[sub\u0003Book.xlsx]Sheet1";
     const globals = readWorkbookGlobals(
       groupsOf(
@@ -607,8 +607,8 @@ describe("readWorkbookGlobals", () => {
         record(RECORD_EXTERNSHEET, [
           ...u16(1),
           ...u16(0),
-          ...u16(0), // itabFirst -- rgst[0] "Jan"
-          ...u16(2), // itabLast -- rgst[2] "Mar"
+          ...u16(0), // itabFirst — rgst[0] "Jan"
+          ...u16(2), // itabLast — rgst[2] "Mar"
         ]),
       ),
     );
@@ -619,7 +619,7 @@ describe("readWorkbookGlobals", () => {
   });
 
   it("shows a known sheet name against a placeholder workbook label when virtPath's own form is not one this reader decodes", () => {
-    // An absolute drive volume ([MS-XLS] 480c3d2a: "%x0001 %x0001 volume-character file-path") needs more of the VirtualPath grammar than a trailing path segment to reproduce faithfully -- fileNameFromVirtPath declines rather than guessing, but rgst's own sheet name is still fully resolvable and is not discarded along with it.
+    // An absolute drive volume ([MS-XLS] 480c3d2a: "%x0001 %x0001 volume-character file-path") needs more of the VirtualPath grammar than a trailing path segment to reproduce faithfully — fileNameFromVirtPath declines rather than guessing, but rgst's own sheet name is still fully resolvable and is not discarded along with it.
     const virtPath = "\u0001\u0001CBudget.xlsx";
     const globals = readWorkbookGlobals(
       groupsOf(
@@ -644,7 +644,7 @@ describe("readWorkbookGlobals", () => {
   });
 
   it("carries a diagnostic label for an add-in-referencing SupBook rather than dropping the reference", () => {
-    // [MS-XLS] 2.4.271: cch 0x3A01 marks an add-in-referencing supporting link, which names XLL/COM add-in functions this reader has no workbook or sheet to resolve a name from. [MS-XLS] 2.5.344's own itabFirst/itabLast table gives an add-in reference -2 ("not used") for both fields -- not 0 -- since there is no sheet scope for this kind of supporting link at all.
+    // [MS-XLS] 2.4.271: cch 0x3A01 marks an add-in-referencing supporting link, which names XLL/COM add-in functions this reader has no workbook or sheet to resolve a name from. [MS-XLS] 2.5.344's own itabFirst/itabLast table gives an add-in reference -2 ("not used") for both fields — not 0 — since there is no sheet scope for this kind of supporting link at all.
     const globals = readWorkbookGlobals(
       groupsOf(
         record(RECORD_SUPBOOK, [...u16(1), ...u16(0x3a01)]),
@@ -663,7 +663,7 @@ describe("readWorkbookGlobals", () => {
   });
 
   it("carries a diagnostic label for a DDE- or OLE-referencing SupBook rather than dropping the reference", () => {
-    // [MS-XLS] 2.4.271: a supporting link whose ctab is reserved-zero and whose virtPath matches neither the same-sheet nor the unused single-character sentinel is a DDE or OLE data source reference -- and, like an add-in reference, gets -2 for both itabFirst and itabLast, since neither has a sheet scope to name.
+    // [MS-XLS] 2.4.271: a supporting link whose ctab is reserved-zero and whose virtPath matches neither the same-sheet nor the unused single-character sentinel is a DDE or OLE data source reference — and, like an add-in reference, gets -2 for both itabFirst and itabLast, since neither has a sheet scope to name.
     const virtPath = "Excel\u0003Sheet1";
     const globals = readWorkbookGlobals(
       groupsOf(
@@ -712,7 +712,7 @@ describe("readWorkbookGlobals", () => {
   });
 
   it("degrades a SupBook whose rgst is shorter than its own declared ctab to a diagnostic, rather than aborting the whole workbook read", () => {
-    // ctab claims 5 sheet names but not one XLUnicodeString actually follows virtPath -- reading the first would run past the end of the record. This must not propagate past readWorkbookGlobals: a malformed SupBook degrades to its own diagnostic, and every OTHER record in the substream (here, a BoundSheet8 after it) still reads normally.
+    // ctab claims 5 sheet names but not one XLUnicodeString actually follows virtPath — reading the first would run past the end of the record. This must not propagate past readWorkbookGlobals: a malformed SupBook degrades to its own diagnostic, and every OTHER record in the substream (here, a BoundSheet8 after it) still reads normally.
     const virtPath = "Budget.xlsx";
     const globals = readWorkbookGlobals(
       groupsOf(

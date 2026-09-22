@@ -1,12 +1,12 @@
 // List-item structure: the marker grammar, the content-indent ("padding") computation every continuation line of an item is measured against, and the after-the-fact tight/loose decision.
 //
-// The padding rule is the single subtlest calculation in the whole block phase, and it is not "marker width plus one". Spec 0.31.2, "List items", basic case: "If a sequence of lines Ls constitute a list item with contents Bs, then the result of indenting each line of Ls by 1-3 spaces (the same for each line) also constitutes a list item with contents Bs" -- and, crucially, the content indent is determined by WHERE THE CONTENT ACTUALLY STARTS on the first line:
+// The padding rule is the single subtlest calculation in the whole block phase, and it is not "marker width plus one". Spec 0.31.2, "List items", basic case: "If a sequence of lines Ls constitute a list item with contents Bs, then the result of indenting each line of Ls by 1-3 spaces (the same for each line) also constitutes a list item with contents Bs" — and, crucially, the content indent is determined by WHERE THE CONTENT ACTUALLY STARTS on the first line:
 //
 //   - 1 to 4 spaces after the marker: content starts there, so padding is the marker's own width plus exactly that many spaces. `-   foo` therefore continues at 4 columns, not 2.
-//   - 5 or more spaces after the marker: the spec's own "item starting with indented code" rule takes over -- the content indent is marker width + 1, and the remaining spaces are part of the content (which is then indented code). `-     foo` is a list item whose content is a code block containing `  foo`.
-//   - a marker followed by nothing at all (a blank first line): "if a sequence of lines Ls starting with a character other than a space or tab, and not separated from each other by more than one blank line, constitute a paragraph... " -- the practical rule is the same as the 5-or-more case, padding is marker width + 1, since there are no following spaces to measure. `-` alone opens an item whose content begins on a later line at 2 columns.
+//   - 5 or more spaces after the marker: the spec's own "item starting with indented code" rule takes over — the content indent is marker width + 1, and the remaining spaces are part of the content (which is then indented code). `-     foo` is a list item whose content is a code block containing `  foo`.
+//   - a marker followed by nothing at all (a blank first line): "if a sequence of lines Ls starting with a character other than a space or tab, and not separated from each other by more than one blank line, constitute a paragraph... " — the practical rule is the same as the 5-or-more case, padding is marker width + 1, since there are no following spaces to measure. `-` alone opens an item whose content begins on a later line at 2 columns.
 //
-// The other rule that lives here only by being ABSENT: `- - -` is a thematic break, not a three-item list. That is not decided in this module at all -- it falls out of the block-start precedence order in src/block/block.ts, where the thematic-break matcher is tried before the list-item matcher. Stating it here as a special case would be a second, redundant answer to a question the ordering already settles.
+// The other rule that lives here only by being ABSENT: `- - -` is a thematic break, not a three-item list. That is not decided in this module at all — it falls out of the block-start precedence order in src/block/block.ts, where the thematic-break matcher is tried before the list-item matcher. Stating it here as a special case would be a second, redundant answer to a question the ordering already settles.
 
 import type {
   MarkdownBulletMarker,
@@ -63,7 +63,7 @@ function matchMarker(
   };
 }
 
-// Matches a list-item start at the line's next non-space position and, when it matches, ADVANCES the cursor to the item's own content column -- so the caller can add the item's first line straight away. Returns undefined without moving the cursor when this is not a list-item start.
+// Matches a list-item start at the line's next non-space position and, when it matches, ADVANCES the cursor to the item's own content column — so the caller can add the item's first line straight away. Returns undefined without moving the cursor when this is not a list-item start.
 //
 // `containerIsParagraph` carries the two paragraph-interruption restrictions the spec places on a list that starts while a paragraph is open: an ordered list must start at 1, and the item's own first line must not be blank ("In order for a list to interrupt a paragraph, it must... not begin with a blank line").
 export function parseListMarker(
@@ -79,7 +79,7 @@ export function parseListMarker(
     return undefined;
   }
 
-  // spec 0.31.2: the marker must be followed by a space, a tab, or the end of the line -- `1.2` and `-foo` are not list items.
+  // spec 0.31.2: the marker must be followed by a space, a tab, or the end of the line — `1.2` and `-foo` are not list items.
   const afterMarker = rest.charAt(match.length);
   if (afterMarker !== "" && afterMarker !== " " && afterMarker !== "\t") {
     return undefined;
@@ -97,7 +97,7 @@ export function parseListMarker(
   // Measure the spaces following the marker in COLUMNS. No cap at the code-indent threshold here — the branch below already resets the cursor back to afterMarkerMark and re-derives the item's own content indent from scratch whenever followingSpaces turns out to exceed it (or the rest of the line is blank), so a mid-scan cap would only change how many spaces this loop itself walks past, never the value parseListMarker returns or the cursor position it leaves behind.
   const afterMarkerMark = line.mark();
   const afterMarkerColumn = line.column;
-  // LineCursor.peek() reports a tab as a single space, one column at a time (src/scan), so testing for a space alone covers both -- there is no '\t' to compare against at this level.
+  // LineCursor.peek() reports a tab as a single space, one column at a time (src/scan), so testing for a space alone covers both — there is no '\t' to compare against at this level.
   do {
     line.advance(1);
   } while (line.peek() === " ");
@@ -115,7 +115,7 @@ export function parseListMarker(
   return { ...match.data, padding: match.length + followingSpaces };
 }
 
-// Whether a newly started item continues the list that is already open, or starts a fresh one. spec 0.31.2: "a list is a sequence of list items of the same type" -- changing the bullet character or the ordered delimiter starts a new list, even with no blank line in between.
+// Whether a newly started item continues the list that is already open, or starts a fresh one. spec 0.31.2: "a list is a sequence of list items of the same type" — changing the bullet character or the ordered delimiter starts a new list, even with no blank line in between.
 //
 // No separate a.type === b.type check: bulletChar is set only on a "bullet" marker and delimiter only on an "ordered" one (see ListMarkerData), so whenever the two markers are different variants exactly one of the two comparisons below pits a real value against undefined and is already false — a same-type comparison could never survive that pairing without the field comparisons already agreeing too.
 export function listsMatch(a: ListMarkerData, b: ListMarkerData): boolean {
@@ -143,7 +143,7 @@ function endsWithBlankLine(block: BlockNode): boolean {
   return false;
 }
 
-// The tight/loose decision, made once when the list closes. spec 0.31.2: "A list is loose if any of its constituent list items are separated by blank lines, or if any of its constituent list items directly contain two block-level elements with a blank line between them." Both halves are tested here -- an item that ends with a blank line and has a following sibling (the items are separated), and a block inside an item that ends with a blank line and is followed by anything (the item's own blocks are separated).
+// The tight/loose decision, made once when the list closes. spec 0.31.2: "A list is loose if any of its constituent list items are separated by blank lines, or if any of its constituent list items directly contain two block-level elements with a blank line between them." Both halves are tested here — an item that ends with a blank line and has a following sibling (the items are separated), and a block inside an item that ends with a blank line and is followed by anything (the item's own blocks are separated).
 export function finalizeListTightness(list: BlockNode): void {
   for (const [index, item] of list.children.entries()) {
     const hasFollowingItem = index < list.children.length - 1;

@@ -8,7 +8,7 @@ import {
   stixMathCffBytes,
 } from "./test-support/cff";
 
-// The real, vendored STIX Two Math font's own 'CFF ' table is genuine CFF data -- 691 KB of it, produced by a real font toolchain, not a fixture written to satisfy this parser -- so the header/INDEX/DICT walk is exercised against a real file first, and the hand-built fixtures (see test-support/cff.ts, shared with cff-bounds.test.ts) only cover the shapes that font does not happen to contain (a CID-keyed Top DICT, and the malformed cases).
+// The real, vendored STIX Two Math font's own 'CFF ' table is genuine CFF data — 691 KB of it, produced by a real font toolchain, not a fixture written to satisfy this parser — so the header/INDEX/DICT walk is exercised against a real file first, and the hand-built fixtures (see test-support/cff.ts, shared with cff-bounds.test.ts) only cover the shapes that font does not happen to contain (a CID-keyed Top DICT, and the malformed cases).
 
 describe("probeCff against the real vendored STIX Two Math CFF table", () => {
   it("reads the header, Name INDEX, and Top DICT of a genuine 691 KB CFF program", () => {
@@ -39,7 +39,7 @@ describe("probeCff CID-keyed detection", () => {
   });
 
   it("detects ROS after other operators and operand kinds have been skipped", () => {
-    // version (operator 0), CharStrings (operator 17, a 32-bit operand), and a real-number operand ahead of the ROS -- each a different operand length this walk has to get right to still land on the escaped operator.
+    // version (operator 0), CharStrings (operator 17, a 32-bit operand), and a real-number operand ahead of the ROS — each a different operand length this walk has to get right to still land on the escaped operator.
     const topDict = [
       139,
       0,
@@ -61,7 +61,7 @@ describe("probeCff CID-keyed detection", () => {
   });
 
   it("does not mistake the bytes INSIDE a real-number operand for the ROS operator", () => {
-    // A real number's nibble stream here is 0x0c 0x1e -- the bytes 12 and 30, adjacent, exactly the escaped-operator pattern. A walk that did not know operand 30 introduces a variable-length nibble stream would read those two bytes as the ROS operator and wrongly refuse a perfectly embeddable font.
+    // A real number's nibble stream here is 0x0c 0x1e — the bytes 12 and 30, adjacent, exactly the escaped-operator pattern. A walk that did not know operand 30 introduces a variable-length nibble stream would read those two bytes as the ROS operator and wrongly refuse a perfectly embeddable font.
     const topDict = [30, 0x0c, 0x1e, 0xff, 139, 0];
     expect(probeCff(cffFont("RealNumberTrap", topDict))?.cidKeyed).toBe(false);
   });
@@ -84,7 +84,7 @@ describe("CFF programs probeCff refuses to read", () => {
   });
 
   it("returns undefined for a major version other than 1 even when the rest of the program parses cleanly", () => {
-    // A header claiming major version 2 (CFF2's own major version) but otherwise laid out exactly like a valid CFF 1.0 program -- headerSize 4, a readable Name INDEX and a plain, non-CID Top DICT. Nothing past the header rejects this input, so the majorVersion check is the only thing standing between it and a wrongly-defined probe result.
+    // A header claiming major version 2 (CFF2's own major version) but otherwise laid out exactly like a valid CFF 1.0 program — headerSize 4, a readable Name INDEX and a plain, non-CID Top DICT. Nothing past the header rejects this input, so the majorVersion check is the only thing standing between it and a wrongly-defined probe result.
     const topDict = [139, 0, 250, 0x00, 12, 0, 29, 0x00, 0x00, 0x01, 0x00, 17];
     expect(
       probeCff(cffFont("WrongMajorVersion", topDict, [2, 0, 4, 1])),
@@ -98,11 +98,11 @@ describe("CFF programs probeCff refuses to read", () => {
   });
 
   it("refuses a too-small headerSize even when a valid Name INDEX and Top DICT sit exactly where that headerSize points", () => {
-    // Unlike the case above (whose fixed 4-byte header, from cffFont's own CFF_HEADER default, leaves the Name INDEX sitting where a genuinely valid header would put it, not where the declared headerSize of 2 points), this fixture writes only 3 literal header bytes before the Name INDEX -- so headerSize's own declared value of 3 is exactly the byte offset readCffIndex(bytes, headerSize) actually starts reading from, and the Name INDEX and Top DICT both parse cleanly from there. The only thing standing between this input and a wrongly-defined probe result is the headerSize < CFF_HEADER_SIZE check itself.
+    // Unlike the case above (whose fixed 4-byte header, from cffFont's own CFF_HEADER default, leaves the Name INDEX sitting where a genuinely valid header would put it, not where the declared headerSize of 2 points), this fixture writes only 3 literal header bytes before the Name INDEX — so headerSize's own declared value of 3 is exactly the byte offset readCffIndex(bytes, headerSize) actually starts reading from, and the Name INDEX and Top DICT both parse cleanly from there. The only thing standing between this input and a wrongly-defined probe result is the headerSize < CFF_HEADER_SIZE check itself.
     const bytes = new Uint8Array([
       1,
       0,
-      3, // majorVersion 1, minorVersion 0, headerSize 3 (invalid: less than the real 4-byte header) -- and, not coincidentally, the exact byte offset the Name INDEX below starts at
+      3, // majorVersion 1, minorVersion 0, headerSize 3 (invalid: less than the real 4-byte header) — and, not coincidentally, the exact byte offset the Name INDEX below starts at
       ...cffIndex([[...new TextEncoder().encode("TooShort")]]),
       ...cffIndex([[139, 0]]),
     ]);

@@ -89,7 +89,7 @@ The server uses **stdio transport** (runs as a local process). This is supported
 One-liner (adds the MCP server directly):
 
 ```sh
-claude mcp add --transport stdio document-mcp -- npx -y document-mcp
+claude mcp add --transport stdio document-mcp — npx -y document-mcp
 ```
 
 Or install as a Claude Code plugin (this repo is a plugin marketplace — includes auto-update on new releases):
@@ -113,7 +113,7 @@ Run `/reload-plugins` to activate in an already-running session. In Claude Deskt
 ### Connecting from Codex CLI
 
 ```sh
-codex mcp add document-mcp -- npx -y document-mcp
+codex mcp add document-mcp — npx -y document-mcp
 ```
 
 Or via the Codex Desktop app: **Settings → MCP Servers → + Add**.
@@ -212,7 +212,7 @@ pnpm typecheck     # turbo -> tsc --noEmit
 pnpm lint          # turbo -> eslint . --fix --cache --max-warnings 0
 pnpm test          # turbo -> vitest run --project unit
 pnpm test:workers  # turbo -> vitest under the real Cloudflare Workers runtime (workerd) via @cloudflare/vitest-pool-workers, driving createServer() through an in-memory JSON-RPC pair
-pnpm test:smoke    # turbo -> tsdown then vitest --project smoke -- spawns dist/bin.js as a real subprocess driven over genuine MCP stdio
+pnpm test:smoke    # turbo -> tsdown then vitest --project smoke — spawns dist/bin.js as a real subprocess driven over genuine MCP stdio
 ```
 
 ## Document I/O

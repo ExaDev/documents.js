@@ -1,10 +1,10 @@
-// -- The End-of-Line group's semantics, per WPFF "D0 EOL Functions" --
+// — The End-of-Line group's semantics, per WPFF "D0 EOL Functions" --
 //
-// This is the single most useful table in the whole specification for a reader: alongside each of the twenty-nine End-of-Line subfunctions, the SDK prints a "Conversion/Search mappings" column giving exactly what a converting application should turn that subfunction into. Everything here is that column, transcribed -- not this package's interpretation of what a soft end of column ought to mean.
+// This is the single most useful table in the whole specification for a reader: alongside each of the twenty-nine End-of-Line subfunctions, the SDK prints a "Conversion/Search mappings" column giving exactly what a converting application should turn that subfunction into. Everything here is that column, transcribed — not this package's interpretation of what a soft end of column ought to mean.
 //
 // The same twenty-nine codes appear in the document area two ways, and both must be handled: as the single-byte functions 180 (0xB4) through 207 (0xCF), and as subfunctions of the variable-length group 208 (0xD0). "WP 7.0 uses the deletable area of the multi-byte functions to store formatter data and will change between corresponding codes as needed. A program reading WP 7.0 documents must handle both the multi-byte and single-byte functions."
 //
-// The correspondence between the two spellings is a reversal, not an offset: subfunction 1 (Soft End of Line) is single-byte 0xCF, and subfunction 28 (Deletable Hard EOP) is single-byte 0xB4, so subfunction = 0xD0 - singleByteCode. Reading the two lists side by side confirms it entry for entry -- 0xC6 Table Cell against subfunction 10 Table Cell, 0xCC Hard EOL against subfunction 4 Hard End of Line, and so on for all twenty-eight. Subfunction 0 (Beginning of File) has no single-byte spelling, which is why the ranges differ in length by one.
+// The correspondence between the two spellings is a reversal, not an offset: subfunction 1 (Soft End of Line) is single-byte 0xCF, and subfunction 28 (Deletable Hard EOP) is single-byte 0xB4, so subfunction = 0xD0 - singleByteCode. Reading the two lists side by side confirms it entry for entry — 0xC6 Table Cell against subfunction 10 Table Cell, 0xCC Hard EOL against subfunction 4 Hard End of Line, and so on for all twenty-eight. Subfunction 0 (Beginning of File) has no single-byte spelling, which is why the ranges differ in length by one.
 //
 // https://github.com/OneWingedShark/WordPerfect/blob/master/doc/SDK_Help/FileFormats/WPFF_D0-EOL.htm
 

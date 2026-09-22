@@ -126,7 +126,7 @@ describe("createEmptyOdsPackage", () => {
     const root = xmlRoot(pkg, "styles.xml");
     expect(root.tag).toBe("office:document-styles");
     expect(attr(root, "office:version")).toBe("1.3");
-    // An empty office:styles sibling, distinct from office:automatic-styles below -- odf.js's own consumers expect this element to exist even when this scaffold defines no named paragraph/cell styles in it.
+    // An empty office:styles sibling, distinct from office:automatic-styles below — odf.js's own consumers expect this element to exist even when this scaffold defines no named paragraph/cell styles in it.
     expect(elementChild(root, "office:styles")).toBeDefined();
 
     const automaticStyles = elementChild(root, "office:automatic-styles");

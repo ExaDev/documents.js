@@ -11,7 +11,7 @@ import {
 import { readOdm } from "./read";
 import { writeOdm } from "./write";
 
-// The section shapes below mirror the real LibreOffice-produced .odm read.ts's own top-of-file note transcribed element-for-element from UNO output: relative sibling-file hrefs ("../chapter1.odt" -- package-relative addressing treats content.xml's base URI as the package file itself), the "writer8" import filter, and self-closing section-source elements.
+// The section shapes below mirror the real LibreOffice-produced .odm read.ts's own top-of-file note transcribed element-for-element from UNO output: relative sibling-file hrefs ("../chapter1.odt" — package-relative addressing treats content.xml's base URI as the package file itself), the "writer8" import filter, and self-closing section-source elements.
 function twoChapterDocument() {
   return {
     sections: [

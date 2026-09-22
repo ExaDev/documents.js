@@ -54,7 +54,7 @@ describe("deriveRc4CryptoApiBlockKey", () => {
 });
 
 describe("verifyRc4CryptoApiPassword", () => {
-  // Built by RC4-encrypting a fixed 16-byte verifier and its SHA-1 hash, as ONE continuous 36-byte keystream application under the same reference script's block-0 key -- exactly what a real EncryptionVerifier's encryptedVerifier/encryptedVerifierHash fields hold, and exactly what verifyRc4CryptoApiPassword must invert.
+  // Built by RC4-encrypting a fixed 16-byte verifier and its SHA-1 hash, as ONE continuous 36-byte keystream application under the same reference script's block-0 key — exactly what a real EncryptionVerifier's encryptedVerifier/encryptedVerifierHash fields hold, and exactly what verifyRc4CryptoApiPassword must invert.
   const encryptedVerifier = fromHex("ab69bbd68757b0b96e237479d34f1aa0");
   const encryptedVerifierHash = fromHex(
     "cae71c7e77e7db599a06e8ba09303fbb52a47207",
@@ -85,7 +85,7 @@ describe("verifyRc4CryptoApiPassword", () => {
   });
 
   it("rejects a decrypted hash that shares one byte with the verifier's own SHA-1 but otherwise disagrees, not just a wholesale mismatch", () => {
-    // A verifier/hash pair built to share exactly one byte (index 0) at whatever position a byte-by-byte comparison checks first, with every other byte of the hash deliberately complemented (`0xff - b` can never equal `b`, so every other position is guaranteed to differ) -- this is exactly the input that would fool a comparison using `.some` (true the moment any single byte matches) where only `.every` (true only when every byte matches) is correct.
+    // A verifier/hash pair built to share exactly one byte (index 0) at whatever position a byte-by-byte comparison checks first, with every other byte of the hash deliberately complemented (`0xff - b` can never equal `b`, so every other position is guaranteed to differ) — this is exactly the input that would fool a comparison using `.some` (true the moment any single byte matches) where only `.every` (true only when every byte matches) is correct.
     const verifier = new Uint8Array(16).fill(0x42);
     const correctHash = sha1(verifier);
     const tamperedHash = correctHash.map((byte, index) =>

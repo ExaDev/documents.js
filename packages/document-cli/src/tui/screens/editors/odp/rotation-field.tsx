@@ -21,7 +21,7 @@ function formatRotationDeg(value: number | undefined): string {
     : `${Math.round(value * ROTATION_DISPLAY_PRECISION) / ROTATION_DISPLAY_PRECISION}°`;
 }
 
-// Both PptxShape and OdpShape have a real `rotationDeg` getter/setter now, so this row is editable for every shape-host format that reaches it (pptx and odp share this component; odg's own rotation editing lives in shape-or-vector-detail.tsx's ShapeDetail) -- there is no per-format gate left to drive from the caller.
+// Both PptxShape and OdpShape have a real `rotationDeg` getter/setter now, so this row is editable for every shape-host format that reaches it (pptx and odp share this component; odg's own rotation editing lives in shape-or-vector-detail.tsx's ShapeDetail) — there is no per-format gate left to drive from the caller.
 export function RotationField(props: RotationFieldProps): ReactElement {
   if (props.isEditing) {
     return (

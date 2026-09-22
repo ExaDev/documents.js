@@ -12,7 +12,7 @@ import {
 } from "../../xml/edit";
 import { el } from "../../xml/fragment";
 
-// Order constants derived from ECMA-376's CT_RPr / CT_PPr content models (abbreviated to the properties this editor supports, in their true relative sequence) -- Word rejects a file whose child element sequence violates these, so every property setter below inserts via insertInSchemaOrder (src/xml/edit.ts), never by appending.
+// Order constants derived from ECMA-376's CT_RPr / CT_PPr content models (abbreviated to the properties this editor supports, in their true relative sequence) — Word rejects a file whose child element sequence violates these, so every property setter below inserts via insertInSchemaOrder (src/xml/edit.ts), never by appending.
 export const RPR_ORDER: readonly string[] = [
   "w:rStyle",
   "w:rFonts",
@@ -38,7 +38,7 @@ export const PPR_ORDER: readonly string[] = [
   "w:rPr",
 ];
 
-// w:rPr must always be the first child of w:r (CT_R), and w:pPr must always be the first child of w:p (CT_P) -- a fixed-prefix invariant distinct from (and simpler than) the ordering *among* sibling properties that insertInSchemaOrder handles, so it gets its own dedicated helper rather than being folded into RPR_ORDER/PPR_ORDER (which order properties *within* rPr/pPr, not rPr/pPr's own position among w:r's or w:p's other children).
+// w:rPr must always be the first child of w:r (CT_R), and w:pPr must always be the first child of w:p (CT_P) — a fixed-prefix invariant distinct from (and simpler than) the ordering *among* sibling properties that insertInSchemaOrder handles, so it gets its own dedicated helper rather than being folded into RPR_ORDER/PPR_ORDER (which order properties *within* rPr/pPr, not rPr/pPr's own position among w:r's or w:p's other children).
 export function ensureFirstChild(parent: XmlElement, tag: string): XmlElement {
   const existing = directChildElement(parent, tag);
   if (existing !== undefined) {
@@ -51,7 +51,7 @@ export function ensureFirstChild(parent: XmlElement, tag: string): XmlElement {
 
 const TOGGLE_OFF_VALUES = new Set(["0", "false", "off"]);
 
-// A toggle property (w:b, w:i, w:strike, w:u's presence form) reflects only this run/paragraph's OWN direct formatting, not the fully style-cascaded effective value -- resolving the cascade is ooxml.js's readDocxContent's job, for the conversion pipeline; this editor is a direct-formatting view, matching how the DocxRun/DocxParagraph API is documented.
+// A toggle property (w:b, w:i, w:strike, w:u's presence form) reflects only this run/paragraph's OWN direct formatting, not the fully style-cascaded effective value — resolving the cascade is ooxml.js's readDocxContent's job, for the conversion pipeline; this editor is a direct-formatting view, matching how the DocxRun/DocxParagraph API is documented.
 export function getToggle(
   propsElement: XmlElement | undefined,
   tag: string,
@@ -67,7 +67,7 @@ export function getToggle(
   return val === undefined || !TOGGLE_OFF_VALUES.has(val.toLowerCase());
 }
 
-// Always writes an explicit w:val="0" when turning a toggle off (rather than omitting the element), so the direct formatting unambiguously overrides anything an inherited style might set -- an editor with no cascade awareness of its own cannot otherwise guarantee "off" actually means off.
+// Always writes an explicit w:val="0" when turning a toggle off (rather than omitting the element), so the direct formatting unambiguously overrides anything an inherited style might set — an editor with no cascade awareness of its own cannot otherwise guarantee "off" actually means off.
 export function setToggle(
   propsElement: XmlElement,
   tag: string,

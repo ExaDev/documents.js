@@ -12,14 +12,14 @@ export interface HeadTable {
   readonly yMin: number;
   readonly xMax: number;
   readonly yMax: number;
-  readonly indexToLocFormat: 0 | 1; // 0 = short 'loca' (uint16 offsets, halved), 1 = long (uint32 offsets) -- see glyf.ts
-  // The style bit field (clause 5.2.2 "macStyle"): bit 0 BOLD, bit 1 ITALIC -- a different bit layout from 'OS/2's own fsSelection, and the fallback a font with no 'OS/2' table at all (a legacy Mac-only TrueType) still declares. Exposed raw, matching Os2Table.fsSelection's own "expose the bits, let the caller decide" convention.
+  readonly indexToLocFormat: 0 | 1; // 0 = short 'loca' (uint16 offsets, halved), 1 = long (uint32 offsets) — see glyf.ts
+  // The style bit field (clause 5.2.2 "macStyle"): bit 0 BOLD, bit 1 ITALIC — a different bit layout from 'OS/2's own fsSelection, and the fallback a font with no 'OS/2' table at all (a legacy Mac-only TrueType) still declares. Exposed raw, matching Os2Table.fsSelection's own "expose the bits, let the caller decide" convention.
   readonly macStyle: number;
 }
 
 const HEAD_TABLE_SIZE = 54;
 const HEAD_MAGIC_NUMBER = 0x5f0f3cf5;
-// The design grid a font's own outlines are expressed on. The spec's stated bounds (clause 5.2.2): a power of two between 16 and 16384 is required for TrueType outlines, and any value in that range is permitted for CFF ones -- a value outside it means these are not head-table bytes at all.
+// The design grid a font's own outlines are expressed on. The spec's stated bounds (clause 5.2.2): a power of two between 16 and 16384 is required for TrueType outlines, and any value in that range is permitted for CFF ones — a value outside it means these are not head-table bytes at all.
 const MIN_UNITS_PER_EM = 16;
 const MAX_UNITS_PER_EM = 16384;
 
@@ -55,7 +55,7 @@ export interface MaxpTable {
   readonly numGlyphs: number;
 }
 
-const MAXP_HEADER_SIZE = 6; // version (Fixed) + numGlyphs -- the whole of a version 0.5 'maxp', and the only part of a version 1.0 one anything here reads
+const MAXP_HEADER_SIZE = 6; // version (Fixed) + numGlyphs — the whole of a version 0.5 'maxp', and the only part of a version 1.0 one anything here reads
 
 export function parseMaxp(font: SfntFont): MaxpTable | undefined {
   const bytes = sfntTableBytes(font, "maxp");
@@ -112,7 +112,7 @@ export function parseOs2(font: SfntFont): Os2Table | undefined {
 }
 
 export interface PostTable {
-  readonly version: number; // 0x00010000 / 0x00020000 / 0x00025000 / 0x00030000, as a raw Version16Dot16 -- which of these a font declares decides whether per-glyph names follow the header
+  readonly version: number; // 0x00010000 / 0x00020000 / 0x00025000 / 0x00030000, as a raw Version16Dot16 — which of these a font declares decides whether per-glyph names follow the header
   readonly italicAngle: number; // degrees counter-clockwise from vertical, negative for the usual forward slant
   readonly underlinePosition: number; // design units, the top of the underline stroke relative to the baseline
   readonly underlineThickness: number; // design units
@@ -143,7 +143,7 @@ export const MAC_STANDARD_GLYPH_ORDER: readonly string[] =
 const POST_VERSION_MAC_STANDARD_ORDER = 0x00010000;
 const POST_VERSION_CUSTOM_NAMES = 0x00020000;
 
-// A glyph ID -> glyph name lookup built from a font's own 'post' table, for the two versions that carry names: 1.0 (the standard Macintosh ordering exactly) and 2.0 (a per-glyph index, below 258 into that same ordering and above it into this table's own array of Pascal strings). Returns `undefined` for versions 2.5 and 3.0, which name no glyph at all -- 3.0 in particular is what a subsetting tool writes when it strips names, so a caller must have another way to identify a glyph rather than treating a nameless font as an error.
+// A glyph ID -> glyph name lookup built from a font's own 'post' table, for the two versions that carry names: 1.0 (the standard Macintosh ordering exactly) and 2.0 (a per-glyph index, below 258 into that same ordering and above it into this table's own array of Pascal strings). Returns `undefined` for versions 2.5 and 3.0, which name no glyph at all — 3.0 in particular is what a subsetting tool writes when it strips names, so a caller must have another way to identify a glyph rather than treating a nameless font as an error.
 export function parsePostGlyphNames(
   font: SfntFont,
 ): ((glyphId: number) => string | undefined) | undefined {
@@ -233,7 +233,7 @@ function decodeUtf16Be(
   return text;
 }
 
-// A Macintosh/Roman name record. Mac Roman and Latin-1 agree exactly below U+0080 and diverge above it; font family and PostScript names are ASCII in practice (a PostScript name is required to be, clause 5.2.7), so no Mac Roman transcoding table is carried here -- a byte at or above 0x80 in such a record decodes as its Latin-1 character rather than its Mac Roman one.
+// A Macintosh/Roman name record. Mac Roman and Latin-1 agree exactly below U+0080 and diverge above it; font family and PostScript names are ASCII in practice (a PostScript name is required to be, clause 5.2.7), so no Mac Roman transcoding table is carried here — a byte at or above 0x80 in such a record decodes as its Latin-1 character rather than its Mac Roman one.
 function decodeMacRoman(
   bytes: Uint8Array<ArrayBuffer>,
   offset: number,

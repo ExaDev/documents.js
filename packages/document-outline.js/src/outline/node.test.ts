@@ -99,7 +99,7 @@ describe("isOutlineNode guard", () => {
         children: [{ kind: "paragraph", runs: "not-an-array" }],
       }),
     ).toBe(false);
-    // A group nested one level down carrying the defect -- the guard must recurse, not check only the top level.
+    // A group nested one level down carrying the defect — the guard must recurse, not check only the top level.
     expect(
       isOutlineNode({
         text: "x",

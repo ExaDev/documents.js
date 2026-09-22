@@ -21,7 +21,7 @@ describe("subDocumentPackage", () => {
       loadFixture("form-and-report.odb"),
       "forms/Obj11",
     );
-    // "Configurations2/" is a genuine zero-length zip DIRECTORY entry real LibreOffice writes into a form sub-document, surfaced as a part like any other -- re-keyed here rather than filtered out, since deciding what is "really" a part is the package reader's own concern, not this helper's.
+    // "Configurations2/" is a genuine zero-length zip DIRECTORY entry real LibreOffice writes into a form sub-document, surfaced as a part like any other — re-keyed here rather than filtered out, since deciding what is "really" a part is the package reader's own concern, not this helper's.
     expect(Object.keys(sub.parts).sort()).toEqual([
       "Configurations2/",
       "content.xml",
@@ -41,7 +41,7 @@ describe("subDocumentPackage", () => {
     );
   });
 
-  it("carries over nothing outside the prefix -- most of all NOT the outer package's own manifest, whose paths are outer-relative", () => {
+  it("carries over nothing outside the prefix — most of all NOT the outer package's own manifest, whose paths are outer-relative", () => {
     const sub = subDocumentPackage(
       loadFixture("form-and-report.odb"),
       "reports/Obj11",

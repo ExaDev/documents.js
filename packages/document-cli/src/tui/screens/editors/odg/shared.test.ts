@@ -40,7 +40,7 @@ describe("vectorsParityMatch", () => {
     ).toBe(true);
   });
 
-  it("fails on a synthetic length mismatch -- the shape a page with an extra reader-only element produces", () => {
+  it("fails on a synthetic length mismatch — the shape a page with an extra reader-only element produces", () => {
     expect(
       vectorsParityMatch(
         [{ kind: "rect" }],
@@ -89,7 +89,7 @@ describe("buildPageItems vector parity", () => {
     }
   });
 
-  // odf.js's own reader (readOdgContent, via typed/draw/shapes.ts) recognises a WIDER vector vocabulary than documents.js's own writer-side OdgPage.vectors() (wrapVectorElement, src/edit/odg/vector.ts): a bare draw:circle salvages into the identical ContentVector 'ellipse' kind on the read side, but OdgPage.vectors() has no wrapper for the draw:circle TAG at all and silently skips the element -- producing a real, page-scoped length mismatch between the two arrays, not merely a hypothetical one. Injected directly into the live package (`doc.editor.toPackage()`) rather than round-tripped through raw bytes, since both `page.vectors()` and `readOdgContent` read that identical live tree.
+  // odf.js's own reader (readOdgContent, via typed/draw/shapes.ts) recognises a WIDER vector vocabulary than documents.js's own writer-side OdgPage.vectors() (wrapVectorElement, src/edit/odg/vector.ts): a bare draw:circle salvages into the identical ContentVector 'ellipse' kind on the read side, but OdgPage.vectors() has no wrapper for the draw:circle TAG at all and silently skips the element — producing a real, page-scoped length mismatch between the two arrays, not merely a hypothetical one. Injected directly into the live package (`doc.editor.toPackage()`) rather than round-tripped through raw bytes, since both `page.vectors()` and `readOdgContent` read that identical live tree.
   it("falls back to read-only for the whole page when it also carries a draw:circle OdgPage.vectors() cannot wrap", () => {
     const editor = createOdg();
     const page = editor.addPage();
@@ -133,7 +133,7 @@ describe("buildPageItems vector parity", () => {
     }
   });
 
-  // The parity failure above is scoped to the one page that actually mismatches -- a second page whose own vectors all line up still gets live handles, proving `buildPageItems` re-checks parity per page rather than once for the whole document.
+  // The parity failure above is scoped to the one page that actually mismatches — a second page whose own vectors all line up still gets live handles, proving `buildPageItems` re-checks parity per page rather than once for the whole document.
   it("does not let a mismatch on one page fall back the parity check on another", () => {
     const editor = createOdg();
     const mismatchingPage = editor.addPage();

@@ -23,12 +23,12 @@ describe("expectBalancedBraces", () => {
   });
 
   it("does not count an escaped brace as a real delimiter", () => {
-    // \{ and \} are RTF's own literal-brace escapes -- a real \{...\} pair here would be miscounted as a genuine unbalanced group if the escape weren't recognized.
+    // \{ and \} are RTF's own literal-brace escapes — a real \{...\} pair here would be miscounted as a genuine unbalanced group if the escape weren't recognized.
     expectBalancedBraces("{\\rtf1 \\{not a group\\}}");
   });
 
   it("does not count an escaped open brace as a real delimiter, even with no escaped close to balance it", () => {
-    // Deliberately asymmetric (one escaped \{ and no matching escaped \}): a reader that mishandled the escape check symmetrically -- unescaping every \{/\} alike, or none at all -- would still land on equal open/close counts for a string carrying one of each, exactly like the test above. Only a genuinely correct per-position escape check gets this one right.
+    // Deliberately asymmetric (one escaped \{ and no matching escaped \}): a reader that mishandled the escape check symmetrically — unescaping every \{/\} alike, or none at all — would still land on equal open/close counts for a string carrying one of each, exactly like the test above. Only a genuinely correct per-position escape check gets this one right.
     expectBalancedBraces("{\\rtf1 \\{a}");
   });
 
@@ -39,7 +39,7 @@ describe("expectBalancedBraces", () => {
   });
 
   it("does not treat the brace following an escaped backslash as escaped", () => {
-    // \\{ is an escaped backslash (\\) followed by a REAL opening brace, not an escaped brace -- the two-character escape must consume exactly \\ and stop there, not swallow the { that follows it too.
+    // \\{ is an escaped backslash (\\) followed by a REAL opening brace, not an escaped brace — the two-character escape must consume exactly \\ and stop there, not swallow the { that follows it too.
     expect(() => {
       expectBalancedBraces("{\\rtf1 \\\\{unclosed");
     }).toThrow();
@@ -47,7 +47,7 @@ describe("expectBalancedBraces", () => {
   });
 
   it("treats a lone trailing backslash with nothing after it as consuming only itself", () => {
-    // The string ends right after the backslash -- rtf[index + 1] is genuinely undefined, not one of the three escape characters, so the backslash must be consumed alone (index += 1) rather than the reader assuming a two-character escape it can't actually see.
+    // The string ends right after the backslash — rtf[index + 1] is genuinely undefined, not one of the three escape characters, so the backslash must be consumed alone (index += 1) rather than the reader assuming a two-character escape it can't actually see.
     expectBalancedBraces("{\\rtf1 text}\\");
   });
 

@@ -142,7 +142,7 @@ describe("createStandardEncryptor: default scope", () => {
   });
 });
 
-// The primary correctness proof requested for this feature: encrypt a real document, then decrypt it back with this package's OWN reader and confirm the content survives. The reader only ever tries the empty user password (see encrypt.ts's own header), so every one of these uses an empty userPassword and a distinct, genuinely non-empty ownerPassword -- a real permissions-only document, still exercising Algorithm 3/9's owner-password computation for real, and (for rc4-128/aes-256) checked deeply; rc4-40/aes-128 get a real round trip too since the assertions are identical for every scheme.
+// The primary correctness proof requested for this feature: encrypt a real document, then decrypt it back with this package's OWN reader and confirm the content survives. The reader only ever tries the empty user password (see encrypt.ts's own header), so every one of these uses an empty userPassword and a distinct, genuinely non-empty ownerPassword — a real permissions-only document, still exercising Algorithm 3/9's owner-password computation for real, and (for rc4-128/aes-256) checked deeply; rc4-40/aes-128 get a real round trip too since the assertions are identical for every scheme.
 describe("writePdf + readPdf: encryption round-trips through this package's own reader", () => {
   for (const scheme of ALL_SCHEMES) {
     it(`round-trips text and metadata through the ${scheme} scheme`, () => {
@@ -176,7 +176,7 @@ describe("writePdf + readPdf: encryption round-trips through this package's own 
   });
 });
 
-// Beyond the reader-level round trip above (necessarily an empty user password, since the reader accepts no other), these reconstruct Algorithm 6 (rc4-128) and Algorithm 2.A (aes-256) directly against the exact same exported primitives encrypt.ts's own read side uses, proving a genuinely non-empty user password is handled correctly end to end -- key derivation, /U validation, and per-object content decryption -- even though the public reader has no way to exercise that path itself.
+// Beyond the reader-level round trip above (necessarily an empty user password, since the reader accepts no other), these reconstruct Algorithm 6 (rc4-128) and Algorithm 2.A (aes-256) directly against the exact same exported primitives encrypt.ts's own read side uses, proving a genuinely non-empty user password is handled correctly end to end — key derivation, /U validation, and per-object content decryption — even though the public reader has no way to exercise that path itself.
 describe("createStandardEncryptor: a real, non-empty user password verifies against the published algorithm", () => {
   it("rc4-128: Algorithm 2 + Algorithm 6 authenticate the real password, and Algorithm 1 decrypts real content", () => {
     const fileId = new Uint8Array(16).fill(0x42);

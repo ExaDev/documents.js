@@ -19,7 +19,7 @@ import {
   serialToIsoDate,
 } from "../../src/index";
 
-// The same reading path the node suite exercises, run inside workerd -- the real Cloudflare Workers runtime -- so this package's Worker-isomorphism is a runtime-checked fact rather than an assertion. If any code path here (or in archive-codec's compound-file reader beneath it) reached for a Node-only API, this isolate would throw rather than the test passing.
+// The same reading path the node suite exercises, run inside workerd — the real Cloudflare Workers runtime — so this package's Worker-isomorphism is a runtime-checked fact rather than an assertion. If any code path here (or in archive-codec's compound-file reader beneath it) reached for a Node-only API, this isolate would throw rather than the test passing.
 //
 // The fixture is built inline rather than through src/test-support, which the published build excludes and which uses Node conveniences the isolate does not have.
 
@@ -69,7 +69,7 @@ function richString(text: string): number[] {
   ];
 }
 
-/** An XF record's own trailing CellXF/StyleXF payload ([MS-XLS] 2.4.353), undecorated: 14 zero bytes, the same shape src/test-support/biff.ts's cellXfTrailer() produces for a decoration-free fixture -- reimplemented locally rather than imported, since this file's own fixtures are built inline for the isolate (see this file's own top comment). */
+/** An XF record's own trailing CellXF/StyleXF payload ([MS-XLS] 2.4.353), undecorated: 14 zero bytes, the same shape src/test-support/biff.ts's cellXfTrailer() produces for a decoration-free fixture — reimplemented locally rather than imported, since this file's own fixtures are built inline for the isolate (see this file's own top comment). */
 function undecoratedXfTrailer(): number[] {
   return new Array<number>(14).fill(0);
 }
@@ -112,7 +112,7 @@ function workbookStreamBytes(): Uint8Array<ArrayBuffer> {
     ]),
     ...record(RECORD_EOF, []),
   ];
-  // The globals substream's own length is what BoundSheet8's lbPlyPos has to name, so it is measured with a placeholder offset first and rebuilt with the real one -- both are the same size.
+  // The globals substream's own length is what BoundSheet8's lbPlyPos has to name, so it is measured with a placeholder offset first and rebuilt with the real one — both are the same size.
   const globalsWith = (offset: number): number[] => [
     ...record(RECORD_BOF, bofData(BOF_TYPE_WORKBOOK)),
     ...xfTable(14),
@@ -127,7 +127,7 @@ function workbookStreamBytes(): Uint8Array<ArrayBuffer> {
   ];
   const globals = globalsWith(globalsWith(0).length);
   const body = [...globals, ...sheetStream];
-  // Padded past the 4096-byte mini-stream cutoff with well-framed filler records placed AFTER the final EOF -- outside any substream, so splitSubstreams ignores them -- which keeps the stream FAT-resident and lets the fixture below skip building a mini-FAT. Zero-padding the bytes instead would leave a truncated record header at the end.
+  // Padded past the 4096-byte mini-stream cutoff with well-framed filler records placed AFTER the final EOF — outside any substream, so splitSubstreams ignores them — which keeps the stream FAT-resident and lets the fixture below skip building a mini-FAT. Zero-padding the bytes instead would leave a truncated record header at the end.
   const FILLER_TYPE = 0x005e;
   while (body.length < 4096) {
     body.push(...record(FILLER_TYPE, new Array<number>(1024).fill(0)));
@@ -138,7 +138,7 @@ function workbookStreamBytes(): Uint8Array<ArrayBuffer> {
 /**
  * A minimal [MS-CFB] version-3 compound file holding one stream, built inline.
  *
- * Only the shape archive-codec's reader needs: a 512-byte header, one FAT sector, one directory sector, and the stream's own sectors -- the stream is written above the 4096-byte mini-stream cutoff so it is FAT-resident and no mini-FAT is needed.
+ * Only the shape archive-codec's reader needs: a 512-byte header, one FAT sector, one directory sector, and the stream's own sectors — the stream is written above the 4096-byte mini-stream cutoff so it is FAT-resident and no mini-FAT is needed.
  */
 function compoundFileWith(
   name: string,
@@ -150,7 +150,7 @@ function compoundFileWith(
   const FATSECT = 0xfffffffd;
   const NOSTREAM = 0xffffffff;
 
-  // The sectors hold whole-sector-aligned bytes, but the directory entry declares the stream's REAL length -- which is what the reader truncates to, so the trailing sector padding never reaches the record parser.
+  // The sectors hold whole-sector-aligned bytes, but the directory entry declares the stream's REAL length — which is what the reader truncates to, so the trailing sector padding never reaches the record parser.
   const payload = new Uint8Array(Math.ceil(stream.length / SECTOR) * SECTOR);
   payload.set(stream);
   const dataSectors = payload.length / SECTOR;

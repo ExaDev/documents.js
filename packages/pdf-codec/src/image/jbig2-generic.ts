@@ -3,11 +3,11 @@ import type { Jbig2Bitmap } from "./jbig2-bitmap";
 import { createBitmap, getPixel } from "./jbig2-bitmap";
 import { Jbig2UnsupportedError } from "./jbig2-errors";
 
-// The generic region decoding procedure (ITU-T T.88 6.2) and the generic refinement region decoding procedure (6.3): the two template-driven, context-modelled procedures that turn an MQ bit stream into a bitmap. Everything a JBIG2 stream ultimately paints -- a whole scanned page, an individual symbol in a dictionary, a refined symbol instance -- comes out of one of these two.
+// The generic region decoding procedure (ITU-T T.88 6.2) and the generic refinement region decoding procedure (6.3): the two template-driven, context-modelled procedures that turn an MQ bit stream into a bitmap. Everything a JBIG2 stream ultimately paints — a whole scanned page, an individual symbol in a dictionary, a refined symbol instance — comes out of one of these two.
 //
 // A template is a fixed set of already-decoded neighbouring pixels; their values, concatenated in a fixed order, form the CONTEXT index into the adaptive probability states the arithmetic decoder keeps. The orderings below are the ones T.88 Figures 4-7 (generic) and Figures 12-13 (refinement) lay out, written MSB-first so each list reads left to right, top row down, exactly as the specification's own diagrams do.
 //
-// Worth knowing when reading or changing these: the SET of positions is load-bearing and cross-checked against a second implementation, but the ORDER within a list is not observable from outside. A context index is only a label for a neighbourhood pattern, so permuting a template's own list produces a different numbering that decodes identically -- the arithmetic coder's adaptive state simply lives under a different label. The one thing that ties a numbering down is a fixed pseudo-context constant used alongside it, which is why GENERIC_SLTP_CONTEXT below must be kept in step with GENERIC_TEMPLATES if either is ever reordered.
+// Worth knowing when reading or changing these: the SET of positions is load-bearing and cross-checked against a second implementation, but the ORDER within a list is not observable from outside. A context index is only a label for a neighbourhood pattern, so permuting a template's own list produces a different numbering that decodes identically — the arithmetic coder's adaptive state simply lives under a different label. The one thing that ties a numbering down is a fixed pseudo-context constant used alongside it, which is why GENERIC_SLTP_CONTEXT below must be kept in step with GENERIC_TEMPLATES if either is ever reordered.
 
 export interface Jbig2AtPixel {
   readonly x: number;
@@ -94,7 +94,7 @@ const GENERIC_TEMPLATES: readonly (readonly TemplatePosition[])[] = [
 
 // T.88 6.2.5.7: the fixed pseudo-context each template uses for the typical-prediction (SLTP) decision that precedes every row when TPGDON is set. Each value is expressed in that template's own context bit ordering above, so the two must move together.
 //
-// Each is the same picture read off the corresponding figure: 0x9b25 splits into the 5, 7 and 4 pixel rows of GBTEMPLATE 0 as 10011 0110010 0101, 0x0795 into GBTEMPLATE 1's 4, 6 and 3 as 0011 110010 101, 0x00e5 into GBTEMPLATE 2's 3, 5 and 2 as 001 11001 01, and 0x0195 into GBTEMPLATE 3's 6 and 4 as 011001 0101. The GBTEMPLATE 0 pairing is confirmed empirically as well, by decoding real `jbig2 -d` output from jbig2enc -- an encoder using the specification's own constant, so a mismatch here would corrupt those fixtures rather than round-trip.
+// Each is the same picture read off the corresponding figure: 0x9b25 splits into the 5, 7 and 4 pixel rows of GBTEMPLATE 0 as 10011 0110010 0101, 0x0795 into GBTEMPLATE 1's 4, 6 and 3 as 0011 110010 101, 0x00e5 into GBTEMPLATE 2's 3, 5 and 2 as 001 11001 01, and 0x0195 into GBTEMPLATE 3's 6 and 4 as 011001 0101. The GBTEMPLATE 0 pairing is confirmed empirically as well, by decoding real `jbig2 -d` output from jbig2enc — an encoder using the specification's own constant, so a mismatch here would corrupt those fixtures rather than round-trip.
 const GENERIC_SLTP_CONTEXT: readonly number[] = [
   0x9b25, 0x0795, 0x00e5, 0x0195,
 ];
@@ -150,7 +150,7 @@ export function decodeGenericRegion(
   const data = bitmap.data;
   const count = positions.length;
 
-  // Precomputed flat indices, valid only where every template position lands inside the bitmap -- which is the overwhelming majority of a real page, since the template only ever reaches a few pixels left, right, and up.
+  // Precomputed flat indices, valid only where every template position lands inside the bitmap — which is the overwhelming majority of a real page, since the template only ever reaches a few pixels left, right, and up.
   const flatOffset = new Int32Array(count);
   let minDx = 0;
   let maxDx = 0;
@@ -215,7 +215,7 @@ function reference(dx: number, dy: number): RefinementPosition {
   return { source: "reference", dx, dy };
 }
 
-// T.88 Figures 12 (GRTEMPLATE 0, 13 pixels, two of them adaptive) and 13 (GRTEMPLATE 1, 10 pixels, none adaptive). Listed most-significant context bit first: the pixels read from the bitmap being decoded come first, then those read from the reference. Only the position set is load-bearing here, per the note at the top of this file -- with TPGRON refused below, no fixed pseudo-context constant ties these two lists to a particular numbering at all.
+// T.88 Figures 12 (GRTEMPLATE 0, 13 pixels, two of them adaptive) and 13 (GRTEMPLATE 1, 10 pixels, none adaptive). Listed most-significant context bit first: the pixels read from the bitmap being decoded come first, then those read from the reference. Only the position set is load-bearing here, per the note at the top of this file — with TPGRON refused below, no fixed pseudo-context constant ties these two lists to a particular numbering at all.
 const REFINEMENT_TEMPLATES: readonly (readonly RefinementPosition[])[] = [
   [
     destination(0, -1),
@@ -248,9 +248,9 @@ const REFINEMENT_TEMPLATES: readonly (readonly RefinementPosition[])[] = [
 
 // Typical prediction in a refinement region (TPGRON, T.88 6.3.5.6) is deliberately NOT implemented, and a region that sets it fails loudly instead of guessing.
 //
-// The decision procedure itself is straightforward -- one pseudo-context decision per row, then pixels whose reference 3x3 neighbourhood is uniform are taken from it rather than coded -- but it hinges on a single fixed pseudo-context constant per template, and this package has no way to establish those two numbers. No encoder available here emits TPGRON (jbig2enc's refinement support is disabled upstream: "Refinement broke in recent releases since it's rarely used"), so the only cross-check available is against a stream this package encoded itself, and that cannot pin the constant even in principle: the pseudo-context shares one adaptive state array with the real pixel contexts, so ANY constant that happens not to collide with a pattern the test image actually produces round-trips perfectly against an independent decoder using a different constant. Brute-forcing all 1024 ten-bit candidates against jbig2dec confirmed this empirically -- for GRTEMPLATE 0 a whole band of unrelated constants passed one test image and a different band passed another, which is the signature of the test measuring collision luck rather than correctness.
+// The decision procedure itself is straightforward — one pseudo-context decision per row, then pixels whose reference 3x3 neighbourhood is uniform are taken from it rather than coded — but it hinges on a single fixed pseudo-context constant per template, and this package has no way to establish those two numbers. No encoder available here emits TPGRON (jbig2enc's refinement support is disabled upstream: "Refinement broke in recent releases since it's rarely used"), so the only cross-check available is against a stream this package encoded itself, and that cannot pin the constant even in principle: the pseudo-context shares one adaptive state array with the real pixel contexts, so ANY constant that happens not to collide with a pattern the test image actually produces round-trips perfectly against an independent decoder using a different constant. Brute-forcing all 1024 ten-bit candidates against jbig2dec confirmed this empirically — for GRTEMPLATE 0 a whole band of unrelated constants passed one test image and a different band passed another, which is the signature of the test measuring collision luck rather than correctness.
 //
-// Everything else about refinement IS cross-checked against jbig2dec and works: both templates, adaptive pixels, arbitrary reference offsets, and refinement of symbol instances inside a text region -- which is where refinement actually appears in practice, and where T.88 6.4.11 fixes TPGRON at 0 anyway. A standalone refinement region setting TPGRON is the only thing this rules out.
+// Everything else about refinement IS cross-checked against jbig2dec and works: both templates, adaptive pixels, arbitrary reference offsets, and refinement of symbol instances inside a text region — which is where refinement actually appears in practice, and where T.88 6.4.11 fixes TPGRON at 0 anyway. A standalone refinement region setting TPGRON is the only thing this rules out.
 const TPGRON_UNSUPPORTED =
   "JBIG2 refinement region sets TPGRON (typical prediction, T.88 6.3.5.6), whose per-template pseudo-context constants this decoder has no way to verify against a real encoder; refusing rather than risking a silently wrong bitmap";
 

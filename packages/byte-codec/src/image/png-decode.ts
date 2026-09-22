@@ -107,7 +107,7 @@ function filterBpp(bitDepth: number, channels: number): number {
   return Math.max(1, Math.ceil((bitDepth * channels) / 8));
 }
 
-// Unpacks one already-unfiltered scanline into `samples`, one entry per sample (raw, unscaled -- 0..2^bitDepth-1 for bit depths under 16, or the 16-bit value's high byte for bitDepth 16, per this decoder's documented 16-bit handling: reduce every depth down to an 8-bit-equivalent raw sample here, and scale to a full 0..255 display range later only for grayscale, where sub-8-bit depths need it). `samples` is the caller's own reusable buffer, exactly width * channels long, so there is neither a loop bound to drift from the sample count nor a new array per row: every element index 0..length-1 is visited by the typed array's own forEach, never by a comparison that could run one iteration short or long.
+// Unpacks one already-unfiltered scanline into `samples`, one entry per sample (raw, unscaled — 0..2^bitDepth-1 for bit depths under 16, or the 16-bit value's high byte for bitDepth 16, per this decoder's documented 16-bit handling: reduce every depth down to an 8-bit-equivalent raw sample here, and scale to a full 0..255 display range later only for grayscale, where sub-8-bit depths need it). `samples` is the caller's own reusable buffer, exactly width * channels long, so there is neither a loop bound to drift from the sample count nor a new array per row: every element index 0..length-1 is visited by the typed array's own forEach, never by a comparison that could run one iteration short or long.
 function unpackRow(
   rowBytes: Uint8Array<ArrayBuffer>,
   samples: Uint8Array<ArrayBuffer>,
@@ -177,7 +177,7 @@ export function decodePng(
   if (idatChunks.length === 0) {
     throw new Error("PNG file has no IDAT chunks");
   }
-  // Every IDAT chunk must be concatenated before inflating -- multi-IDAT files are routine (Office emits them), and inflating only the first chunk is the single most common PNG-decoder bug.
+  // Every IDAT chunk must be concatenated before inflating — multi-IDAT files are routine (Office emits them), and inflating only the first chunk is the single most common PNG-decoder bug.
   const compressed = concatBytes(idatChunks);
   const { bytes: inflated, recovered } = inflateTolerant(compressed);
   if (recovered && options.onWarning !== undefined) {
@@ -248,7 +248,7 @@ function buildRawImage(
         }
       } else if (colorType === 3) {
         const index = samples[pixelBase]!;
-        // decodePng's own colorType === 3 guard, thrown before buildRawImage is ever called, already guarantees palette is defined here -- buildRawImage has no other caller.
+        // decodePng's own colorType === 3 guard, thrown before buildRawImage is ever called, already guarantees palette is defined here — buildRawImage has no other caller.
         data[outBase] = palette![index * 3]!;
         data[outBase + 1] = palette![index * 3 + 1]!;
         data[outBase + 2] = palette![index * 3 + 2]!;

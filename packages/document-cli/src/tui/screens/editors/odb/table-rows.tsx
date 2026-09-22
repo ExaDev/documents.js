@@ -11,7 +11,7 @@ import { useAppDispatch, useAppState } from "../../../state/context.js";
 import { anyOverlayOpen, currentScreen } from "../../../state/types.js";
 import { requireOdbDocument } from "./shared.js";
 
-// The title line, the column-header line beneath it, and the status line at the bottom -- one more row of chrome than ListView's own default reserves for a plain single-line title.
+// The title line, the column-header line beneath it, and the status line at the bottom — one more row of chrome than ListView's own default reserves for a plain single-line title.
 const TABLE_ROWS_RESERVED_ROWS = 5;
 const CELL_SEPARATOR = "  │  ";
 
@@ -32,7 +32,7 @@ function rowText(row: readonly ContentCellValue[]): string {
   return row.map((cell) => hsqldbCellDisplayText(cell)).join(CELL_SEPARATOR);
 }
 
-// The table's own `rows` array is already fully materialised in memory by `readOdbTables` -- paging here is a pure viewport/rendering concern handled by `useNavigationInput`'s PageUp/PageDown handling together with `ListView`'s own scroll-to-selection window, not a fetch-more-rows concern.
+// The table's own `rows` array is already fully materialised in memory by `readOdbTables` — paging here is a pure viewport/rendering concern handled by `useNavigationInput`'s PageUp/PageDown handling together with `ListView`'s own scroll-to-selection window, not a fetch-more-rows concern.
 export function OdbTableRowsScreen(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();
@@ -54,7 +54,7 @@ export function OdbTableRowsScreen(): ReactElement {
   const { selectedIndex } = useNavigationInput({
     itemCount: rows.length,
     onSelect: () => {
-      // A row has no further detail screen in this read-only browsing group -- every cell is already fully rendered inline, so there is nothing left to drill into.
+      // A row has no further detail screen in this read-only browsing group — every cell is already fully rendered inline, so there is nothing left to drill into.
     },
     onBack: () => {
       dispatch({ type: "POP_SCREEN" });

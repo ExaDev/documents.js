@@ -35,7 +35,7 @@ describe("StyleEntrySchema enforces the entry shape", () => {
     expect(StyleEntrySchema.safeParse({}).success).toBe(true);
   });
 
-  it("rejects the banned per-node facts wherever they appear -- frames, sourcePath, and styleId fail outright, they are not silently stripped", () => {
+  it("rejects the banned per-node facts wherever they appear — frames, sourcePath, and styleId fail outright, they are not silently stripped", () => {
     for (const banned of ["frames", "sourcePath", "styleId"]) {
       expect(StyleEntrySchema.safeParse({ [banned]: "x" }).success).toBe(false);
       expect(
@@ -54,7 +54,7 @@ describe("StyleEntrySchema enforces the entry shape", () => {
     ).toBe(false);
   });
 
-  it("rejects misnested properties -- run fields do not belong at entry level or under paragraph, and sizePt is the run field name, not fontPt", () => {
+  it("rejects misnested properties — run fields do not belong at entry level or under paragraph, and sizePt is the run field name, not fontPt", () => {
     expect(StyleEntrySchema.safeParse({ bold: true }).success).toBe(false);
     expect(
       StyleEntrySchema.safeParse({ paragraph: { bold: true } }).success,
@@ -102,7 +102,7 @@ describe("StylesTableSchema", () => {
 });
 
 describe("the definitions facility stays tenant-generic", () => {
-  it("accepts and PRESERVES any tenant body -- unknown keys ride through a parse rather than being stripped", () => {
+  it("accepts and PRESERVES any tenant body — unknown keys ride through a parse rather than being stripped", () => {
     const parsed = DefinitionEntrySchema.parse({
       kind: "link",
       url: "https://example.com",
@@ -128,7 +128,7 @@ describe("the definitions facility stays tenant-generic", () => {
     expect(DefinitionEntrySchema.safeParse({ kind: 7 }).success).toBe(false);
   });
 
-  it("carries no styles vocabulary of its own -- a StyleEntry is not a DefinitionEntry and vice versa", () => {
+  it("carries no styles vocabulary of its own — a StyleEntry is not a DefinitionEntry and vice versa", () => {
     expect(DefinitionEntrySchema.safeParse(BODY).success).toBe(false);
     expect(
       StyleEntrySchema.safeParse({ kind: "link", url: "https://example.com" })
@@ -172,7 +172,7 @@ describe("overlayStyleEntries", () => {
     expect(merged.run).toBe(innerRun);
   });
 
-  it("explicitly-present-undefined inner values do not overwrite outer -- absence is not a value", () => {
+  it("explicitly-present-undefined inner values do not overwrite outer — absence is not a value", () => {
     const merged = overlayStyleEntries(BODY, {
       paragraph: { alignment: undefined },
     });
@@ -200,7 +200,7 @@ describe("resolveStyleChain", () => {
     expect(resolveStyleChain(styles, [])).toEqual({});
   });
 
-  it("throws on a ref naming no entry -- an unresolvable ref is loud, never a silent skip", () => {
+  it("throws on a ref naming no entry — an unresolvable ref is loud, never a silent skip", () => {
     expect(() => resolveStyleChain(styles, ["base", "missing"])).toThrow(
       /missing/,
     );
@@ -242,7 +242,7 @@ describe("applyParagraphStyleProperties and applyRunStyleProperties", () => {
     expect(effective.pageBreakAfter).toBe(true);
   });
 
-  it("applies run defaults under the run's own properties -- the chain's one extra level down", () => {
+  it("applies run defaults under the run's own properties — the chain's one extra level down", () => {
     const run: ContentRun = { text: "x", sizePt: 9 };
     const effective = applyRunStyleProperties(EMPHASIS.run, run);
     expect(effective.sizePt).toBe(9);
@@ -300,7 +300,7 @@ describe("overlayStyleEntries isolates each paragraph property's own overlay gua
     expect(merged.paragraph?.indentFirstLinePt).toBe(20);
   });
 
-  it("indentFirstLinePt: fills from inner, and leaves list untouched -- closing the cycle back to the first field", () => {
+  it("indentFirstLinePt: fills from inner, and leaves list untouched — closing the cycle back to the first field", () => {
     const merged = overlayStyleEntries(outerParagraph, {
       paragraph: { indentFirstLinePt: 99 },
     });
@@ -356,13 +356,13 @@ describe("overlayStyleEntries isolates each run property's own overlay guard", (
     expect(merged.run?.sizePt).toBe(10);
   });
 
-  it("sizePt: fills from inner, and leaves color untouched -- also proving the merge starts from a copy of outer, not an empty object", () => {
+  it("sizePt: fills from inner, and leaves color untouched — also proving the merge starts from a copy of outer, not an empty object", () => {
     const merged = overlayStyleEntries(outerRun, { run: { sizePt: 20 } });
     expect(merged.run?.sizePt).toBe(20);
     expect(merged.run?.color).toEqual({ r: 0, g: 0, b: 0 });
   });
 
-  it("color: fills from inner, and leaves bold untouched -- closing the cycle back to the first field", () => {
+  it("color: fills from inner, and leaves bold untouched — closing the cycle back to the first field", () => {
     const merged = overlayStyleEntries(outerRun, {
       run: { color: { r: 1, g: 1, b: 1 } },
     });

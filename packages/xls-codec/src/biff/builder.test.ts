@@ -23,7 +23,7 @@ describe("RecordBuilder", () => {
   });
 
   it("writes a u32 little-endian, including a value with the top bit set", () => {
-    // The value composed via multiplication, not a signed left shift, matching biff/cursor.ts's own u32 reader -- 0xffffffff must round-trip as an unsigned 32-bit value, not become -1.
+    // The value composed via multiplication, not a signed left shift, matching biff/cursor.ts's own u32 reader — 0xffffffff must round-trip as an unsigned 32-bit value, not become -1.
     const bytes = new RecordBuilder().u32(0xffffffff).build();
     expect(view(bytes).getUint32(0, true)).toBe(0xffffffff);
   });

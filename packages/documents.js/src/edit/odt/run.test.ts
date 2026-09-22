@@ -69,7 +69,7 @@ describe("OdtRun value properties", () => {
   });
 
   it("two runs given the identical single-property change intern the same automatic style (StyleRegistry.intern dedupes by fingerprint)", () => {
-    // A single setter call each, deliberately -- two SEQUENTIAL setter calls on the same run (bold, then color) would each independently resolve-merge-intern, so the run's final style is fingerprinted against its own {bold, color} combination while the intermediate {bold}-only style from the first call is left behind, unreferenced but harmless (see props.ts's own comment on this). That is a real, accepted consequence of every setter interning independently, exactly as this editor's own design requires -- not what this particular test is about, which is purely: does intern() dedupe two structurally-identical requests down to one style.
+    // A single setter call each, deliberately — two SEQUENTIAL setter calls on the same run (bold, then color) would each independently resolve-merge-intern, so the run's final style is fingerprinted against its own {bold, color} combination while the intermediate {bold}-only style from the first call is left behind, unreferenced but harmless (see props.ts's own comment on this). That is a real, accepted consequence of every setter interning independently, exactly as this editor's own design requires — not what this particular test is about, which is purely: does intern() dedupe two structurally-identical requests down to one style.
     const editor = createOdt();
     const paragraph = editor.body.appendParagraph();
     const a = paragraph.appendRun({ text: "A" });

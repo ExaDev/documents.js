@@ -66,7 +66,7 @@ describe("formatSqlResultSetTable", () => {
       columns: ["A", "B"],
       rows: [[str("1"), str("22")]],
     });
-    // 'A' padded to width 1, then two literal spaces, then 'B' padded to width 2 -- but the last column is never padded, since formatRow trims trailing whitespace.
+    // 'A' padded to width 1, then two literal spaces, then 'B' padded to width 2 — but the last column is never padded, since formatRow trims trailing whitespace.
     expect(lines[0]).toBe("A  B");
     expect(lines[2]).toBe("1  22");
   });

@@ -57,7 +57,7 @@ describe("openDocx: main part named by the officeDocument relationship", () => {
       heightPt: 10,
     });
     const written = decodePackage(editor.toBytes());
-    // word/media because the body sits in word/, not because the path is hardcoded -- the directory is derived from wherever the resolved body part lives.
+    // word/media because the body sits in word/, not because the path is hardcoded — the directory is derived from wherever the resolved body part lives.
     expect(Object.hasOwn(written.parts, "word/media/image1.png")).toBe(true);
     // The relationship is registered against the renamed body part, so it resolves back to the media part from there.
     const rels = resolveRelationships(written, "word/document2.xml");

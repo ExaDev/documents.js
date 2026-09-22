@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-// sea-entry.ts calls main() at module top level (the SEA-compatible CommonJS entry point Node's single-executable application feature runs -- see that file's own comment), so the only way to observe its catch handler is to control what main() itself does and import the module fresh.
+// sea-entry.ts calls main() at module top level (the SEA-compatible CommonJS entry point Node's single-executable application feature runs — see that file's own comment), so the only way to observe its catch handler is to control what main() itself does and import the module fresh.
 const mainMock = vi.fn();
 vi.mock("./cli", () => ({ main: mainMock }));
 

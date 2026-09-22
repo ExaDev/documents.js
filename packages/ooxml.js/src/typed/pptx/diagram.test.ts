@@ -85,7 +85,7 @@ describe("readDiagramText", () => {
     ]);
   });
 
-  it("skips a parTrans/sibTrans/pres point's text -- only node and asst carry real content", () => {
+  it("skips a parTrans/sibTrans/pres point's text — only node and asst carry real content", () => {
     const model = dataModel(
       [
         pt("doc", "doc"),
@@ -122,7 +122,7 @@ describe("readDiagramText", () => {
       [pt("doc", "doc"), pt("n1", "node", txBody(el("a:p", {}, [el("a:r")])))],
       [cxn("doc", "n1")],
     );
-    // The node has one run whose text is "" -- since no run is non-empty, the paragraph is dropped entirely (see the "only pushes paragraphs" test below), so this specific node contributes nothing.
+    // The node has one run whose text is "" — since no run is non-empty, the paragraph is dropped entirely (see the "only pushes paragraphs" test below), so this specific node contributes nothing.
     expect(readDiagramText(model)).toEqual([]);
   });
 

@@ -1,6 +1,6 @@
 import { base64ToBytes } from "byte-codec";
 
-// Real JPEG 2000 codestreams -- the exact bytes a PDF /JPXDecode filter carries -- produced by OpenJPEG 2.5.4 (opj_compress) from deterministic source images, by scripts/generate-jpeg2000-fixtures.mjs. Embedded as base64 so the suite needs no filesystem access.
+// Real JPEG 2000 codestreams — the exact bytes a PDF /JPXDecode filter carries — produced by OpenJPEG 2.5.4 (opj_compress) from deterministic source images, by scripts/generate-jpeg2000-fixtures.mjs. Embedded as base64 so the suite needs no filesystem access.
 //
 // For every `lossless: true` fixture, `expected` is the SOURCE image the encoder was handed, not any decoder's output: the generator first proves the configuration round-trips byte-identically through OpenJPEG's own decoder, which makes the source an exact oracle that neither this package nor OpenJPEG produced. A decoder reproducing it has reproduced the original integers.
 //
@@ -32,7 +32,7 @@ export function jpeg2000FixtureSamples(fixture: Jpeg2000Fixture): number[][] {
   const bytes = base64ToBytes(fixture.expected);
   const wide = fixture.bitDepth > 8;
   const perComponent = fixture.width * fixture.height;
-  // Built from fixture.componentCount via Array.from's length argument, not a counted for-loop: an off-by-one loop bound here would silently append one extra all-zero plane (every index inside it reads past the end of `bytes`, and `?? 0` swallows the resulting `undefined`), a difference visible only in the returned array's own length -- exactly the kind of boundary a comparison-operator mutant survives when nothing re-checks the plane count.
+  // Built from fixture.componentCount via Array.from's length argument, not a counted for-loop: an off-by-one loop bound here would silently append one extra all-zero plane (every index inside it reads past the end of `bytes`, and `?? 0` swallows the resulting `undefined`), a difference visible only in the returned array's own length — exactly the kind of boundary a comparison-operator mutant survives when nothing re-checks the plane count.
   return Array.from({ length: fixture.componentCount }, (_, c) => {
     const plane: number[] = [];
     for (let i = 0; i < perComponent; i++) {
@@ -66,7 +66,7 @@ export const JPEG2000_FIXTURES: readonly Jpeg2000Fixture[] = [
   {
     name: "ramp-no-wavelet",
     description:
-      "a single resolution level, i.e. no wavelet decomposition at all -- the samples are entropy coded directly",
+      "a single resolution level, i.e. no wavelet decomposition at all — the samples are entropy coded directly",
     width: 32,
     height: 24,
     componentCount: 1,

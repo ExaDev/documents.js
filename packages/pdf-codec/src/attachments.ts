@@ -8,7 +8,7 @@ import { asArray, asName, dictGet } from "./objects";
 import { decodePdfString } from "./pdf-text";
 import { bytesToBase64 } from "byte-codec";
 
-// Embedded-file reading (#721): one collector for the three places a PDF states an attachment -- the /Names /EmbeddedFiles name tree (the primary, addressable-by-name store), /FileAttachment annotations' /FS filespecs (a file pinned to a page rectangle), and catalog /AF associated files (ISO 32000-2's machine-readable association list). Collection order is that same order, and a filespec whose name was already collected collapses into the first entry: the name is the attachment's identity, and the same file reached through two routes is one attachment, not two.
+// Embedded-file reading (#721): one collector for the three places a PDF states an attachment — the /Names /EmbeddedFiles name tree (the primary, addressable-by-name store), /FileAttachment annotations' /FS filespecs (a file pinned to a page rectangle), and catalog /AF associated files (ISO 32000-2's machine-readable association list). Collection order is that same order, and a filespec whose name was already collected collapses into the first entry: the name is the attachment's identity, and the same file reached through two routes is one attachment, not two.
 
 export function readAttachments(
   catalog: PdfDict,
@@ -73,7 +73,7 @@ export function readAttachments(
   return attachments;
 }
 
-// A filespec's own name: /UF (the Unicode form, preferred when present) falling back to /F -- a producer may write either or both, and /F is not guaranteed representable outside PDFDocEncoding.
+// A filespec's own name: /UF (the Unicode form, preferred when present) falling back to /F — a producer may write either or both, and /F is not guaranteed representable outside PDFDocEncoding.
 function filespecName(filespec: PdfDict): string | undefined {
   for (const key of ["UF", "F"]) {
     const obj = dictGet(filespec, key);
@@ -84,7 +84,7 @@ function filespecName(filespec: PdfDict): string | undefined {
   return undefined;
 }
 
-// One filespec -> one attachment: /Desc, and the /EF /F (falling back to /EF /UF) embedded stream decoded through the ordinary filter path. A filespec with no resolvable embedded stream contributes nothing -- an external/referenced file spec has no bytes to carry, and the name alone is not an attachment.
+// One filespec -> one attachment: /Desc, and the /EF /F (falling back to /EF /UF) embedded stream decoded through the ordinary filter path. A filespec with no resolvable embedded stream contributes nothing — an external/referenced file spec has no bytes to carry, and the name alone is not an attachment.
 function readFilespec(
   name: string,
   filespec: PdfDict,

@@ -38,7 +38,7 @@ function toOrderedNode(node: XmlNode): Record<string, unknown> {
       return { __comment: [{ "#text": node.value }] };
     case "cdata":
       return { __cdata: [{ "#text": node.value }] };
-    // A pi/declaration node's own value is never read at all by fast-xml-parser's builder in preserveOrder mode -- confirmed empirically against every shape tried (an empty array, one holding a real "#text" entry, undefined, null, a plain object): build([{ "?target": <any of these> }]) always produces the identical "<?target?>", the same quirk this builder's own reader hits on the way in (a plain or attribute-shaped PI's content parses back as "" either way). undefined is therefore used here as the plainest spelling of "this value is never consulted", not a placeholder standing in for children data the builder would otherwise use.
+    // A pi/declaration node's own value is never read at all by fast-xml-parser's builder in preserveOrder mode — confirmed empirically against every shape tried (an empty array, one holding a real "#text" entry, undefined, null, a plain object): build([{ "?target": <any of these> }]) always produces the identical "<?target?>", the same quirk this builder's own reader hits on the way in (a plain or attribute-shaped PI's content parses back as "" either way). undefined is therefore used here as the plainest spelling of "this value is never consulted", not a placeholder standing in for children data the builder would otherwise use.
     case "pi":
       return { [`?${node.target}`]: undefined };
     case "declaration":

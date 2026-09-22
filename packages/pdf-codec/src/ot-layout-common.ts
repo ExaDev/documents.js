@@ -1,12 +1,12 @@
 import { hasBytes, u16 } from "./sfnt";
 
-// The two OpenType Common Table Formats every OpenType Layout table is built out of (Microsoft's OpenType spec, "Common Table Formats"; ISO/IEC 14496-22 clause 6.1): a Coverage table, which answers "does this subtable apply to this glyph, and if so where does it sit in the subtable's own parallel value array", and a ClassDef table, which answers "which class does this glyph belong to". Both are shared vocabulary rather than any one table's private business -- 'GPOS' (gpos-table.ts) and 'MATH' (math-table.ts) both index glyphs through the identical Coverage layout -- which is why they live here rather than being parsed twice.
+// The two OpenType Common Table Formats every OpenType Layout table is built out of (Microsoft's OpenType spec, "Common Table Formats"; ISO/IEC 14496-22 clause 6.1): a Coverage table, which answers "does this subtable apply to this glyph, and if so where does it sit in the subtable's own parallel value array", and a ClassDef table, which answers "which class does this glyph belong to". Both are shared vocabulary rather than any one table's private business — 'GPOS' (gpos-table.ts) and 'MATH' (math-table.ts) both index glyphs through the identical Coverage layout — which is why they live here rather than being parsed twice.
 //
 // Both are stored as a sorted range list and searched by bisection rather than expanded into a glyph-keyed Map. That is the on-disk shape of each table's own format 2 (a run of start/end records), and keeping it avoids the one real memory hazard these tables carry for untrusted input: six bytes of a format 2 record can legitimately declare a 65536-glyph range, so materialising every glyph of every range across every subtable of a font extracted from an arbitrary source document turns a small file into a large allocation. Format 1, whose size is inherently bounded by the file (one uint16 per listed glyph), is coalesced into the same representation so one search path serves both.
 //
 // Every read is bounds-checked and a malformed or truncated table yields `undefined` rather than throwing, matching cmap-table.ts's own policy for the same reason: these tables are read from fonts embedded in arbitrary input documents, where an unreadable optional table must cost the caller that one table's worth of information, not the document around it.
 
-// A half-open-free, inclusive glyph range: `[startGlyphId, endGlyphId]`. `value` means different things to the two tables built on it -- a Coverage range's value is the coverage index of its FIRST glyph and climbs by one per glyph across the range, whereas a ClassDef range's value is one class shared by every glyph in it -- so the two resolve it differently rather than sharing a single accessor.
+// A half-open-free, inclusive glyph range: `[startGlyphId, endGlyphId]`. `value` means different things to the two tables built on it — a Coverage range's value is the coverage index of its FIRST glyph and climbs by one per glyph across the range, whereas a ClassDef range's value is one class shared by every glyph in it — so the two resolve it differently rather than sharing a single accessor.
 interface GlyphRange {
   readonly startGlyphId: number;
   readonly endGlyphId: number;
@@ -59,7 +59,7 @@ function pushGlyph(
   ranges.push({ startGlyphId: glyphId, endGlyphId: glyphId, value });
 }
 
-const RANGE_RECORD_SIZE = 6; // uint16 startGlyphID + uint16 endGlyphID + uint16 (startCoverageIndex | class) -- the identical record layout Coverage format 2 and ClassDef format 2 both use
+const RANGE_RECORD_SIZE = 6; // uint16 startGlyphID + uint16 endGlyphID + uint16 (startCoverageIndex | class) — the identical record layout Coverage format 2 and ClassDef format 2 both use
 
 // Reads the shared start/end/value record array both format 2 tables store, at `recordsOffset`, and returns it sorted by start glyph. A record whose end precedes its start is dropped rather than treated as empty or inverted: it describes no glyphs either way, and keeping it would only put an unsearchable entry in the bisection list.
 function parseRangeRecords(
@@ -155,7 +155,7 @@ export function parseCoverage(
 const CLASS_DEF_FORMAT_1_HEADER_SIZE = 6; // uint16 classFormat + uint16 startGlyphID + uint16 glyphCount
 const CLASS_DEF_FORMAT_2_HEADER_SIZE = 4; // uint16 classFormat + uint16 classRangeCount
 
-// A parsed ClassDef table. Class 0 is the spec's own catch-all for "every glyph the table does not otherwise assign", so this resolves to a class for any glyph rather than to `undefined` -- an unlisted glyph genuinely is in class 0, not absent.
+// A parsed ClassDef table. Class 0 is the spec's own catch-all for "every glyph the table does not otherwise assign", so this resolves to a class for any glyph rather than to `undefined` — an unlisted glyph genuinely is in class 0, not absent.
 export type ClassDefTable = (glyphId: number) => number;
 
 export function parseClassDef(

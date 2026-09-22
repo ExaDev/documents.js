@@ -11,15 +11,15 @@ import { RECORD_HEADER_SIZE } from "./record/header";
 import { type PptRecord, readRecordAt } from "./record/tree";
 import { RT_CryptSession10Container } from "./record/types";
 
-// PowerPoint binary documents (.ppt) encrypt with [MS-OFFCRYPTO] 2.3.5 "RC4 CryptoAPI Encryption" -- a genuinely different scheme from the MD5-based 2.3.6 "RC4 Encryption" xls-codec's FilePass record and doc-codec's own Table-stream EncryptionHeader share (see archive-codec's own crypto/office-rc4-cryptoapi.ts for the key derivation itself). Two structural differences from both of those, beyond the key derivation: there is no fixed-offset header -- the DocumentEncryptionAtom (record type 0x2F14, [MS-PPT] names it RT_CryptSession10Container) is just another persist object, reached only by walking UserEditAtom.encryptSessionPersistIdRef through the same persist directory every other record uses -- and re-keying happens per PERSIST OBJECT (each top-level record's own persist ID is the RC4 CryptoAPI "block number"), not at fixed byte intervals within one continuous stream. A persist object's own 8-byte record header is itself encrypted too, unlike the shared xls/doc scheme's never-encrypted headers, so this module decrypts a peek of those 8 bytes first to learn the object's real length before decrypting the object in full.
+// PowerPoint binary documents (.ppt) encrypt with [MS-OFFCRYPTO] 2.3.5 "RC4 CryptoAPI Encryption" — a genuinely different scheme from the MD5-based 2.3.6 "RC4 Encryption" xls-codec's FilePass record and doc-codec's own Table-stream EncryptionHeader share (see archive-codec's own crypto/office-rc4-cryptoapi.ts for the key derivation itself). Two structural differences from both of those, beyond the key derivation: there is no fixed-offset header — the DocumentEncryptionAtom (record type 0x2F14, [MS-PPT] names it RT_CryptSession10Container) is just another persist object, reached only by walking UserEditAtom.encryptSessionPersistIdRef through the same persist directory every other record uses — and re-keying happens per PERSIST OBJECT (each top-level record's own persist ID is the RC4 CryptoAPI "block number"), not at fixed byte intervals within one continuous stream. A persist object's own 8-byte record header is itself encrypted too, unlike the shared xls/doc scheme's never-encrypted headers, so this module decrypts a peek of those 8 bytes first to learn the object's real length before decrypting the object in full.
 //
 // Cross-checked against Apache POI's HSLFSlideShowEncrypted (`decryptRecord`, keyed by `persistId`) and DocumentEncryptionAtom (the on-wire layout: versionMajor/versionMinor/encryptionFlags/headerSize, then the shared [MS-OFFCRYPTO] 2.3.4.5/2.3.4.6 EncryptionHeader/EncryptionVerifier structures CryptoAPIEncryptionHeader/CryptoAPIEncryptionVerifier merely subclass).
 
-// [MS-OFFCRYPTO] 2.3.4.5's own CipherAlgorithm ECMA id for RC4 -- confirmed against Apache POI's `CipherAlgorithm.rc4.ecmaId`. This module refuses any other algId rather than guessing: an AES-flagged DocumentEncryptionAtom is not a shape [MS-PPT] itself specifies, and this module has no code path that could decrypt one correctly.
+// [MS-OFFCRYPTO] 2.3.4.5's own CipherAlgorithm ECMA id for RC4 — confirmed against Apache POI's `CipherAlgorithm.rc4.ecmaId`. This module refuses any other algId rather than guessing: an AES-flagged DocumentEncryptionAtom is not a shape [MS-PPT] itself specifies, and this module has no code path that could decrypt one correctly.
 const ALG_ID_RC4 = 0x6801;
-// [MS-OFFCRYPTO] 2.3.4.5's own HashAlgorithm ECMA id for SHA-1 -- confirmed against Apache POI's `HashAlgorithm.sha1.ecmaId`. [MS-OFFCRYPTO] 2.3.5.1 fixes RC4 CryptoAPI's hash to SHA-1 unconditionally, so this is a sanity check on the file rather than a real choice this module makes.
+// [MS-OFFCRYPTO] 2.3.4.5's own HashAlgorithm ECMA id for SHA-1 — confirmed against Apache POI's `HashAlgorithm.sha1.ecmaId`. [MS-OFFCRYPTO] 2.3.5.1 fixes RC4 CryptoAPI's hash to SHA-1 unconditionally, so this is a sanity check on the file rather than a real choice this module makes.
 const ALG_ID_HASH_SHA1 = 0x8004;
-// [MS-OFFCRYPTO] 2.3.5.1: RC4 CryptoAPI's own EncryptionInfo versionMajor/versionMinor range -- "MUST be 0x0002" for versionMinor, and versionMajor "MUST be 0x02, 0x03, or 0x04" (confirmed against Apache POI's EncryptionInfo, which reads exactly this 2<=major<=4 && minor===2 range to select CryptoAPI/Standard over the fixed-value xor/binaryRC4/agile modes).
+// [MS-OFFCRYPTO] 2.3.5.1: RC4 CryptoAPI's own EncryptionInfo versionMajor/versionMinor range — "MUST be 0x0002" for versionMinor, and versionMajor "MUST be 0x02, 0x03, or 0x04" (confirmed against Apache POI's EncryptionInfo, which reads exactly this 2<=major<=4 && minor===2 range to select CryptoAPI/Standard over the fixed-value xor/binaryRC4/agile modes).
 const CRYPTOAPI_VERSION_MINOR = 2;
 const CRYPTOAPI_VERSION_MAJOR_MIN = 2;
 const CRYPTOAPI_VERSION_MAJOR_MAX = 4;
@@ -32,9 +32,9 @@ const HEADER_START = 12;
 const HEADER_ALG_ID_OFFSET = 8;
 const HEADER_ALG_ID_HASH_OFFSET = 12;
 const HEADER_KEY_SIZE_OFFSET = 16;
-// [MS-OFFCRYPTO] 2.3.4.5: "If set to 0x00000000, it MUST be interpreted as 0x00000028 bits" -- also documented alongside the identical special case in archive-codec's own deriveRc4CryptoApiBlockKey, which this module relies on to apply it during key derivation; this module still needs its own copy to report the effective size faithfully rather than the raw 0.
+// [MS-OFFCRYPTO] 2.3.4.5: "If set to 0x00000000, it MUST be interpreted as 0x00000028 bits" — also documented alongside the identical special case in archive-codec's own deriveRc4CryptoApiBlockKey, which this module relies on to apply it during key derivation; this module still needs its own copy to report the effective size faithfully rather than the raw 0.
 const DEFAULT_KEY_SIZE_BITS = 0x28;
-// The minimum EncryptionHeader length this module needs to read: flags, sizeExtra, algId, algIdHash, keySize, providerType, reserved1, reserved2 -- eight 4-byte fields. A real header also carries a variable-length CSPName after these, which this module never reads: `headerSize` (see HEADER_SIZE_FIELD_OFFSET) already states exactly where the header ends and the EncryptionVerifier begins, so there is no need to parse or skip the CSPName string byte by byte.
+// The minimum EncryptionHeader length this module needs to read: flags, sizeExtra, algId, algIdHash, keySize, providerType, reserved1, reserved2 — eight 4-byte fields. A real header also carries a variable-length CSPName after these, which this module never reads: `headerSize` (see HEADER_SIZE_FIELD_OFFSET) already states exactly where the header ends and the EncryptionVerifier begins, so there is no need to parse or skip the CSPName string byte by byte.
 const MIN_HEADER_FIELDS_LENGTH = 32;
 
 export interface PptEncryptionInfo {
@@ -44,7 +44,7 @@ export interface PptEncryptionInfo {
   readonly encryptedVerifierHash: Uint8Array<ArrayBuffer>;
 }
 
-/** Parses a DocumentEncryptionAtom's own fields -- never encrypted, since it is what a decryptor needs before it can decrypt anything else. */
+/** Parses a DocumentEncryptionAtom's own fields — never encrypted, since it is what a decryptor needs before it can decrypt anything else. */
 export function readDocumentEncryptionAtom(
   record: PptRecord,
 ): PptEncryptionInfo {
@@ -141,11 +141,11 @@ export function readDocumentEncryptionAtom(
 }
 
 /**
- * Decrypts a PowerPoint Document stream protected by [MS-OFFCRYPTO] 2.3.5 RC4 CryptoAPI, given the password and the persist directory/`encryptSessionPersistIdRef` `buildPersistDirectory` already resolved -- both come from parsing the stream's own never-encrypted UserEditAtom/PersistDirectoryAtom chain, which is why this module needs them handed in rather than deriving them itself.
+ * Decrypts a PowerPoint Document stream protected by [MS-OFFCRYPTO] 2.3.5 RC4 CryptoAPI, given the password and the persist directory/`encryptSessionPersistIdRef` `buildPersistDirectory` already resolved — both come from parsing the stream's own never-encrypted UserEditAtom/PersistDirectoryAtom chain, which is why this module needs them handed in rather than deriving them itself.
  *
- * Returns a new, fully decrypted copy of the stream: every persist object in `directory` except the DocumentEncryptionAtom itself gets its own key, derived from its own persist ID as the RC4 CryptoAPI "block number" (see this file's own top comment), and is decrypted as one continuous keystream covering its header and data together -- the header is encrypted too here, unlike the shared xls/doc RC4 scheme, so each object's own recLen has to be learned by decrypting its header first.
+ * Returns a new, fully decrypted copy of the stream: every persist object in `directory` except the DocumentEncryptionAtom itself gets its own key, derived from its own persist ID as the RC4 CryptoAPI "block number" (see this file's own top comment), and is decrypted as one continuous keystream covering its header and data together — the header is encrypted too here, unlike the shared xls/doc RC4 scheme, so each object's own recLen has to be learned by decrypting its header first.
  *
- * Throws `PptEncryptedError` for a missing password, an incorrect one, or an encryption shape this module does not implement (anything other than RC4 CryptoAPI) -- there is no partial or best-effort result to return in any of those cases.
+ * Throws `PptEncryptedError` for a missing password, an incorrect one, or an encryption shape this module does not implement (anything other than RC4 CryptoAPI) — there is no partial or best-effort result to return in any of those cases.
  */
 export function decryptPptDocumentStream(
   streamBytes: Uint8Array<ArrayBuffer>,

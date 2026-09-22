@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { tabEffectFor } from "./tab";
 
-// "bits 3-7: tab type" -- so a definition byte is the type shifted up past the three flag bits, and those flags (soft type, dot leader, generic search) change nothing about what the code does to the text.
+// "bits 3-7: tab type" — so a definition byte is the type shifted up past the three flag bits, and those flags (soft type, dot leader, generic search) change nothing about what the code does to the text.
 function definition(tabType: number, flags = 0): number {
   return (tabType << 3) | flags;
 }
@@ -48,7 +48,7 @@ describe("tabEffectFor", () => {
     },
   );
 
-  // The enumeration is not contiguous -- the number encodes structure rather than counting -- so a value it does not name contributes nothing rather than being guessed at as the nearest type it does.
+  // The enumeration is not contiguous — the number encodes structure rather than counting — so a value it does not name contributes nothing rather than being guessed at as the nearest type it does.
   it.each([0b00011, 0b00101, 0b01111, 0b11111])(
     "declines the unnamed tab type %i",
     (tabType) => {

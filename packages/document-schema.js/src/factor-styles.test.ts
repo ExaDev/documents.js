@@ -45,7 +45,7 @@ function paragraph(
   return { kind: "paragraph", runs: [...runs], ...properties };
 }
 
-// A heading anchor with headingLevel narrowed to its required (non-optional) spelling on HeadingParagraph/HeadingGroupNode -- ContentParagraph's own headingLevel is optional, so a plain `paragraph(...)` call cannot itself satisfy a HeadingGroupNode's `node` field. `headingLevel` is a real parameter, not folded into `properties`, so this stays statically typed rather than widened by the properties bag's own Record<string, unknown> spread.
+// A heading anchor with headingLevel narrowed to its required (non-optional) spelling on HeadingParagraph/HeadingGroupNode — ContentParagraph's own headingLevel is optional, so a plain `paragraph(...)` call cannot itself satisfy a HeadingGroupNode's `node` field. `headingLevel` is a real parameter, not folded into `properties`, so this stays statically typed rather than widened by the properties bag's own Record<string, unknown> spread.
 function headingParagraph(
   runs: readonly ContentRun[],
   headingLevel: number,
@@ -78,7 +78,7 @@ function canon(value: unknown): unknown {
   return JSON.parse(JSON.stringify(canonicalise(value)));
 }
 
-// Recovers every group wrapper carrying a style ref, in tree order, as [ref, node-kind] pairs -- the shape assertions below read the minted tree through it rather than by index-walking.
+// Recovers every group wrapper carrying a style ref, in tree order, as [ref, node-kind] pairs — the shape assertions below read the minted tree through it rather than by index-walking.
 function refsOf(
   pkg: DocumentTree,
 ): { readonly ref: string; readonly nodeKind: string }[] {
@@ -130,7 +130,7 @@ describe("factorStyles minting", () => {
       paragraph([run("three")], { indentLeftPt: 20, alignment: "right" }),
     ]);
     const minted = assembleTree(doc);
-    // The section wrapper is the one scope whose extent holds both indentLeftPt-20-left positions (bare leaves at section root), and alignment+indent are carried by every extent paragraph, so one entry covers both keys for the two matching positions. The third paragraph keeps its differing alignment inline (present-wins), and shares the indent through the same entry only if its tuple matched -- it does not (alignment differs), so it stays fully inline.
+    // The section wrapper is the one scope whose extent holds both indentLeftPt-20-left positions (bare leaves at section root), and alignment+indent are carried by every extent paragraph, so one entry covers both keys for the two matching positions. The third paragraph keeps its differing alignment inline (present-wins), and shares the indent through the same entry only if its tuple matched — it does not (alignment differs), so it stays fully inline.
     expect(refsOf(minted)).toEqual([{ ref: "s1", nodeKind: "section" }]);
     const styles = minted.styles ?? {};
     expect(Object.keys(styles)).toEqual(["s1"]);
@@ -154,7 +154,7 @@ describe("factorStyles minting", () => {
     expect(DocumentTreeSchema.safeParse(minted).success).toBe(true);
   });
 
-  it("mints nothing for singletons -- a ref plus its entry is larger than the inline tuple", () => {
+  it("mints nothing for singletons — a ref plus its entry is larger than the inline tuple", () => {
     const doc = wordprocessingDoc([
       paragraph([run("only")], { indentLeftPt: 20 }),
       paragraph([run("other")], { indentLeftPt: 40 }),
@@ -223,7 +223,7 @@ describe("factorStyles minting", () => {
       ],
     };
     const minted = assembleTree(doc);
-    // Outermost-first: the slide wrapper's extent already covers both shape flows, so it (not the deeper shape group) carries the ref -- one entry styles every run in the slide, which is exactly the "slide body text" case the rule exists for.
+    // Outermost-first: the slide wrapper's extent already covers both shape flows, so it (not the deeper shape group) carries the ref — one entry styles every run in the slide, which is exactly the "slide body text" case the rule exists for.
     expect(refsOf(minted)).toEqual([{ ref: "s1", nodeKind: "slide" }]);
     expect(minted.styles?.s1).toEqual({ run: { bold: true, sizePt: 12 } });
     const flat = flattenTree(minted);
@@ -237,7 +237,7 @@ describe("factorStyles minting", () => {
     ]);
   });
 
-  it("freezes an ancestor's minted key for nested wrappers -- a deeper different value never shadows the ref that restores it", () => {
+  it("freezes an ancestor's minted key for nested wrappers — a deeper different value never shadows the ref that restores it", () => {
     const h1 = paragraph([run("Chapter")], {
       headingLevel: 1,
       indentLeftPt: 20,
@@ -249,7 +249,7 @@ describe("factorStyles minting", () => {
     const body4 = paragraph([run("four")], { indentLeftPt: 40 });
     const doc = wordprocessingDoc([h1, body1, body2, h2, body3, body4]);
     const minted = assembleTree(doc);
-    // The section mints {indentLeftPt: 20} (three positions: the H1 anchor and its two body leaves -- the H2 branch carries a different value and stays inline). indentLeftPt is then frozen for every wrapper below, so the H2 group -- whose extent shares {indentLeftPt: 40} three times -- mints nothing: re-minting the key with 40 would silently rewrite the value the section's ref restores for the stripped 20-positions in nothing, but would shadow it for any nested stripped position, and freezing is the rule that keeps the two namespaces apart.
+    // The section mints {indentLeftPt: 20} (three positions: the H1 anchor and its two body leaves — the H2 branch carries a different value and stays inline). indentLeftPt is then frozen for every wrapper below, so the H2 group — whose extent shares {indentLeftPt: 40} three times — mints nothing: re-minting the key with 40 would silently rewrite the value the section's ref restores for the stripped 20-positions in nothing, but would shadow it for any nested stripped position, and freezing is the rule that keeps the two namespaces apart.
     expect(refsOf(minted)).toEqual([{ ref: "s1", nodeKind: "section" }]);
     expect(minted.styles?.s1).toEqual({ paragraph: { indentLeftPt: 20 } });
     if (minted.kind !== "wordprocessing")
@@ -323,7 +323,7 @@ describe("factorStyles minting", () => {
       paragraph([run("two")], { indentLeftPt: 20 }),
     ]);
     const minted = assembleTree(doc);
-    // definitions is package-root caller data the flat ContentDocument cannot spell, so re-factoring must hand it back verbatim -- dropping it would silently lose the table on every factorStyles round trip. Minting still runs: the indent tuple mints s1 alongside the carried definitions.
+    // definitions is package-root caller data the flat ContentDocument cannot spell, so re-factoring must hand it back verbatim — dropping it would silently lose the table on every factorStyles round trip. Minting still runs: the indent tuple mints s1 alongside the carried definitions.
     const withDefinitions: DocumentTree = {
       ...minted,
       definitions: { tenantNote: { kind: "tenant-note" } },
@@ -342,7 +342,7 @@ describe("factorStyles minting", () => {
       paragraph([run("two")], { indentLeftPt: 20 }),
     ]);
     const minted = assembleTree(doc);
-    // fonts is package-root caller data the flat ContentDocument cannot spell (bytes are a package fact no content node owns), so re-factoring must hand it back verbatim -- dropping it would silently lose the source's own faces on every factorStyles round trip and a later rebuild would regress to vendored substitutes without anything failing.
+    // fonts is package-root caller data the flat ContentDocument cannot spell (bytes are a package fact no content node owns), so re-factoring must hand it back verbatim — dropping it would silently lose the source's own faces on every factorStyles round trip and a later rebuild would regress to vendored substitutes without anything failing.
     const withFonts: DocumentTree = {
       ...minted,
       fonts: [
@@ -371,7 +371,7 @@ describe("factorStyles minting", () => {
       }),
     ]);
     const minted = assembleTree(doc);
-    // The per-node residue must ride the round trip on the paragraphs themselves (minting strips only mintable style keys -- residue is not one and never becomes one), and the package-level table must come back verbatim for the same reason definitions does.
+    // The per-node residue must ride the round trip on the paragraphs themselves (minting strips only mintable style keys — residue is not one and never becomes one), and the package-level table must come back verbatim for the same reason definitions does.
     const withResidue: DocumentTree = {
       ...minted,
       source: { "word/settings.xml": { format: "docx", xml: "<w:settings/>" } },
@@ -429,7 +429,7 @@ describe("factorStyles minting", () => {
     expect(p2.indentLeftPt).toBe(20);
   });
 
-  it("strips an aliased node at every position whose own chain minted -- identical tuple, both sibling wrappers mint", () => {
+  it("strips an aliased node at every position whose own chain minted — identical tuple, both sibling wrappers mint", () => {
     const shared = paragraph([run("a")], {
       alignment: "center",
       indentLeftPt: 20,
@@ -455,7 +455,7 @@ describe("factorStyles minting", () => {
       ],
     };
     const minted = assembleTree(doc);
-    // Both sections' extents hold two matching positions (the shared node plus a sibling leaf), so each mints the identical entry content and shares ONE table entry through the canonical key -- two refs, one row. Global factored bookkeeping would mark the shared node done at the first section, leaving the second position's chain ref-less while a node-keyed strip still took its properties; branch-scoped, both positions resolve their own ref back.
+    // Both sections' extents hold two matching positions (the shared node plus a sibling leaf), so each mints the identical entry content and shares ONE table entry through the canonical key — two refs, one row. Global factored bookkeeping would mark the shared node done at the first section, leaving the second position's chain ref-less while a node-keyed strip still took its properties; branch-scoped, both positions resolve their own ref back.
     expect(refsOf(minted)).toEqual([
       { ref: "s1", nodeKind: "section" },
       { ref: "s1", nodeKind: "section" },
@@ -525,7 +525,7 @@ describe("factorStyles minting", () => {
       ],
     };
     const minted = assembleTree(doc);
-    // Section one mints (two matching positions); section two's extent is the aliased node alone -- a singleton, below the threshold -- so its chain carries no ref and the node must keep every property inline there: a node-keyed global strip would strip it at BOTH positions with no ref to restore the second.
+    // Section one mints (two matching positions); section two's extent is the aliased node alone — a singleton, below the threshold — so its chain carries no ref and the node must keep every property inline there: a node-keyed global strip would strip it at BOTH positions with no ref to restore the second.
     expect(refsOf(minted)).toEqual([{ ref: "s1", nodeKind: "section" }]);
     expect(minted.styles?.s1).toEqual({ paragraph: { indentLeftPt: 20 } });
     if (minted.kind !== "wordprocessing")
@@ -550,7 +550,7 @@ describe("factorStyles minting", () => {
   });
 
   it("factors a paragraph tuple nested inside a construct group's children onto the construct group's own ref (document-schema.js 4.1.0)", () => {
-    // mint() run directly on a hand-built tree, rather than through assembleTree, so extentOf/flowExtent's construct-group recognition is asserted on exactly the tree shape stated here -- independent of which flat marker placement decompose would have promoted to it.
+    // mint() run directly on a hand-built tree, rather than through assembleTree, so extentOf/flowExtent's construct-group recognition is asserted on exactly the tree shape stated here — independent of which flat marker placement decompose would have promoted to it.
     const outside = paragraph([run("outside")], { alignment: "right" });
     const insideA = paragraph([run("a")], { indentLeftPt: 20 });
     const insideB = paragraph([run("b")], { indentLeftPt: 20 });
@@ -568,7 +568,7 @@ describe("factorStyles minting", () => {
       children: [sectionGroup],
     };
     const minted = mint(pkg);
-    // Rule 1 (every extent paragraph must carry a minted key) means the section's own three-paragraph extent shares no key across all three -- outside lacks indentLeftPt, insideA/insideB lack alignment -- so the section wrapper itself mints nothing. Only once the walk descends INTO the construct group's own two-paragraph extent (proof extentOf/flowExtent recurse into a construct group's children rather than stopping at or skipping it) does indentLeftPt become common there and mint.
+    // Rule 1 (every extent paragraph must carry a minted key) means the section's own three-paragraph extent shares no key across all three — outside lacks indentLeftPt, insideA/insideB lack alignment — so the section wrapper itself mints nothing. Only once the walk descends INTO the construct group's own two-paragraph extent (proof extentOf/flowExtent recurse into a construct group's children rather than stopping at or skipping it) does indentLeftPt become common there and mint.
     expect(refsOf(minted)).toEqual([{ ref: "s1", nodeKind: "contentControl" }]);
     expect(minted.styles?.s1).toEqual({ paragraph: { indentLeftPt: 20 } });
     if (minted.kind !== "wordprocessing")
@@ -590,7 +590,7 @@ describe("factorStyles minting", () => {
   });
 
   it("factors a paragraph tuple nested inside a shape-flow construct group onto the construct group's own ref (document-schema.js 4.1.0)", () => {
-    // The section-flow test above exercises a SectionConstructGroupNode through rebuildWrapper; this mirrors it through the shape/list-flow vocabulary instead -- a ShapeConstructGroupNode sat inside a ShapeGroupNode's own children, nested under a SlideGroupNode -- so a construct group in a shape flow gets its own coverage rather than riding untested on the section-flow case's coattails.
+    // The section-flow test above exercises a SectionConstructGroupNode through rebuildWrapper; this mirrors it through the shape/list-flow vocabulary instead — a ShapeConstructGroupNode sat inside a ShapeGroupNode's own children, nested under a SlideGroupNode — so a construct group in a shape flow gets its own coverage rather than riding untested on the section-flow case's coattails.
     const outside = paragraph([run("outside")], { alignment: "right" });
     const insideA = paragraph([run("a")], { indentLeftPt: 20 });
     const insideB = paragraph([run("b")], { indentLeftPt: 20 });
@@ -641,7 +641,7 @@ describe("factorStyles minting", () => {
   });
 
   it("aggregates paragraphs across a draw page's own separate shapes into one draw-page-level extent, minting on the draw page itself when neither shape alone reaches the threshold", () => {
-    // Each shape carries exactly one matching paragraph -- a singleton, below the mint threshold, at that shape's own level -- so only the draw page's own extentOf, walking across BOTH shapes (and skipping the sibling vector, which carries no paragraphs), can find the frequency-2 match and mint on itself.
+    // Each shape carries exactly one matching paragraph — a singleton, below the mint threshold, at that shape's own level — so only the draw page's own extentOf, walking across BOTH shapes (and skipping the sibling vector, which carries no paragraphs), can find the frequency-2 match and mint on itself.
     const p1 = paragraph([run("a")], { alignment: "center" });
     const p2 = paragraph([run("b")], { alignment: "center" });
     const shape1: ShapeGroupNode = {
@@ -700,7 +700,7 @@ describe("factorStyles minting", () => {
   });
 
   it("mints through a construct promoted from flat marker blocks, and the tree it produces flattens back", () => {
-    // The two tests above hand mint() a tree directly; this one comes the whole way round -- flat content carrying a constructStart/constructEnd pair, through assembleTree (decompose then mint), and back through flattenTree. It is the end-to-end proof that minting and the promotion compose: a construct group manufactured by decompose is an ordinary mint wrapper, and a minted tree containing one is still flattenable.
+    // The two tests above hand mint() a tree directly; this one comes the whole way round — flat content carrying a constructStart/constructEnd pair, through assembleTree (decompose then mint), and back through flattenTree. It is the end-to-end proof that minting and the promotion compose: a construct group manufactured by decompose is an ordinary mint wrapper, and a minted tree containing one is still flattenable.
     const doc = wordprocessingDoc([
       paragraph([run("outside")], { alignment: "right" }),
       {
@@ -718,10 +718,10 @@ describe("factorStyles minting", () => {
     expect(canon(flattenTree(minted))).toEqual(canon(doc));
   });
 
-  it("resolves an ancestor heading's ref onto a paragraph nested inside a construct -- a construct extends the style chain, never resets it", () => {
-    // The chain axis, stated on its own because it is the one place a construct differs from the section/slide/sheet/draw-page roots: those start a brand new empty chain, a construct extends the incoming one. A construct is a semantic wrapper sitting inside ambient content, so `inside` must come back carrying the heading group's factored alignment exactly as `a` (its sibling outside the construct) does -- if flatten reset the chain at the construct boundary, `inside` would flatten back stripped and law (i) would fail on it.
+  it("resolves an ancestor heading's ref onto a paragraph nested inside a construct — a construct extends the style chain, never resets it", () => {
+    // The chain axis, stated on its own because it is the one place a construct differs from the section/slide/sheet/draw-page roots: those start a brand new empty chain, a construct extends the incoming one. A construct is a semantic wrapper sitting inside ambient content, so `inside` must come back carrying the heading group's factored alignment exactly as `a` (its sibling outside the construct) does — if flatten reset the chain at the construct boundary, `inside` would flatten back stripped and law (i) would fail on it.
     const doc = wordprocessingDoc([
-      // `intro` carries no alignment, so the SECTION wrapper's own four-paragraph extent shares no mintable key and mints nothing -- which is what puts the ref on the heading group specifically rather than on an ancestor that happens to cover everything.
+      // `intro` carries no alignment, so the SECTION wrapper's own four-paragraph extent shares no mintable key and mints nothing — which is what puts the ref on the heading group specifically rather than on an ancestor that happens to cover everything.
       paragraph([run("intro")]),
       paragraph([run("Chapter")], { headingLevel: 1, alignment: "center" }),
       paragraph([run("a")], { alignment: "center" }),
@@ -859,7 +859,7 @@ describe("factorStyles minting", () => {
   });
 
   it("never re-selects a paragraph an ancestor already factored, even for an unrelated, unfrozen key shared only by that already-factored position and its sibling", () => {
-    // body2 sits before the heading (section-root sibling); h1 and body1 nest inside the heading's own flow. All three share indentLeftPt, so the section mints it, freezing indentLeftPt and factoring [body2, h1, body1]. h1 and body1 ALSO share alignment (an unfrozen key) -- if the heading group's own candidate search failed to skip already-factored positions, it would mint a second, spurious entry for [h1, body1] on alignment.
+    // body2 sits before the heading (section-root sibling); h1 and body1 nest inside the heading's own flow. All three share indentLeftPt, so the section mints it, freezing indentLeftPt and factoring [body2, h1, body1]. h1 and body1 ALSO share alignment (an unfrozen key) — if the heading group's own candidate search failed to skip already-factored positions, it would mint a second, spurious entry for [h1, body1] on alignment.
     const body2 = paragraph([run("two")], { indentLeftPt: 20 });
     const h1 = paragraph([run("Chapter")], {
       headingLevel: 1,
@@ -884,13 +884,13 @@ describe("factorStyles minting", () => {
     const body1 = paragraph([run("one", { bold: true, italic: true })]);
     const doc = wordprocessingDoc([body2, h1, body1]);
     const minted = assembleTree(doc);
-    // The section mints run:{bold:true} across all three runs, factoring them. h1's and body1's runs also share italic:true, but both are already factored -- the heading group must find nothing rather than double-mint.
+    // The section mints run:{bold:true} across all three runs, factoring them. h1's and body1's runs also share italic:true, but both are already factored — the heading group must find nothing rather than double-mint.
     expect(Object.keys(minted.styles ?? {})).toEqual(["s1"]);
     expect(minted.styles?.s1).toEqual({ run: { bold: true } });
   });
 
   it("restores an ancestor's strip for a paragraph even though a NESTED wrapper's own chain link (recorded for OTHER positions) has nothing for that same paragraph", () => {
-    // Q and P (the heading anchor) share indentLeftPt:20 -- R and S (nested inside P's own flow) share a DIFFERENT indentLeftPt value purely so indentLeftPt is common across the section's whole extent (required for the section to consider it at all); the tie between the two same-size value-groups resolves to document order, so the section mints indentLeftPt:20 over [Q, P] specifically. R and S ALSO share alignment with P, but P is already factored by the section's own mint, so the heading group's own candidate search skips P and mints alignment over [R, S] alone -- giving the heading its OWN chain link, one that says nothing about P. P's own strip must still come from the SECTION's link, not be wiped out because the heading's (more nested) link has no entry for it.
+    // Q and P (the heading anchor) share indentLeftPt:20 — R and S (nested inside P's own flow) share a DIFFERENT indentLeftPt value purely so indentLeftPt is common across the section's whole extent (required for the section to consider it at all); the tie between the two same-size value-groups resolves to document order, so the section mints indentLeftPt:20 over [Q, P] specifically. R and S ALSO share alignment with P, but P is already factored by the section's own mint, so the heading group's own candidate search skips P and mints alignment over [R, S] alone — giving the heading its OWN chain link, one that says nothing about P. P's own strip must still come from the SECTION's link, not be wiped out because the heading's (more nested) link has no entry for it.
     const q = paragraph([run("q")], { indentLeftPt: 20 });
     const p = headingParagraph([run("Chapter")], 1, {
       indentLeftPt: 20,
@@ -920,7 +920,7 @@ describe("factorStyles minting", () => {
       !("children" in mintedHeading)
     )
       throw new Error("expected the heading group to survive minting");
-    // The heading minted its OWN entry (s2, over r/s), so it carries its own ref -- but its anchor must still reflect the SECTION's strip, not just its own.
+    // The heading minted its OWN entry (s2, over r/s), so it carries its own ref — but its anchor must still reflect the SECTION's strip, not just its own.
     expect(mintedHeading.style).toBe("s2");
     const mintedAnchor = ContentParagraphSchema.parse(mintedHeading.node);
     expect(mintedAnchor).not.toHaveProperty("indentLeftPt");
@@ -928,7 +928,7 @@ describe("factorStyles minting", () => {
   });
 
   it("sums a wrapper's own combined paragraph-half and run-half positions into one frequency, rather than letting one half's count cancel the other's", () => {
-    // Section X mints BOTH halves on one wrapper: 2 paragraphs (alignment) and 3 runs (bold, since p1 carries two bold runs and p2 one) -- a correctly-summed frequency of 5. Section Y mints only a paragraph half with frequency 2. 5 > 2, so X must rank first; a frequency computed by subtracting the run count from the paragraph count would give X a frequency of -1, putting Y first instead.
+    // Section X mints BOTH halves on one wrapper: 2 paragraphs (alignment) and 3 runs (bold, since p1 carries two bold runs and p2 one) — a correctly-summed frequency of 5. Section Y mints only a paragraph half with frequency 2. 5 > 2, so X must rank first; a frequency computed by subtracting the run count from the paragraph count would give X a frequency of -1, putting Y first instead.
     const doc: ContentDocument = {
       kind: "wordprocessing",
       metadata: {},
@@ -960,7 +960,7 @@ describe("factorStyles minting", () => {
   });
 
   it("adds a second wrapper's contribution onto an already-registered identical entry's frequency, rather than subtracting it or dropping the run half of the addend", () => {
-    // Sections A and B each independently mint the IDENTICAL combined entry (paragraph:{alignment:left}, run:{bold:true}), each contributing frequency 2+2=4 from its own two paragraphs/two runs -- correctly merging to 8. Section C mints a different, single entry with frequency 6, strictly between 4 and 8: a merge that subtracts instead of adds would leave the shared entry at 0, and a merge that adds only the paragraph half of the second contribution (dropping its run half) would leave it at 4 -- both wrongly below 6, flipping the order.
+    // Sections A and B each independently mint the IDENTICAL combined entry (paragraph:{alignment:left}, run:{bold:true}), each contributing frequency 2+2=4 from its own two paragraphs/two runs — correctly merging to 8. Section C mints a different, single entry with frequency 6, strictly between 4 and 8: a merge that subtracts instead of adds would leave the shared entry at 0, and a merge that adds only the paragraph half of the second contribution (dropping its run half) would leave it at 4 — both wrongly below 6, flipping the order.
     const matching = (label: string) => [
       paragraph([run(`${label}1`, { bold: true })], { alignment: "left" }),
       paragraph([run(`${label}2`, { bold: true })], { alignment: "left" }),
@@ -990,7 +990,7 @@ describe("factorStyles minting", () => {
   });
 
   it("strips a heading anchor via an ancestor's ref even when the heading itself mints nothing (its own ref stays undefined, so the anchor-changed check alone must catch it)", () => {
-    // The heading's body is empty, so the ONLY candidate for a mint anywhere is the section's own [q, heading-anchor] pair -- the heading's own plan() call finds nothing (its own extent is just its anchor alone, and indentLeftPt is already frozen), so its ref stays undefined. `unchanged`'s first clause (`ref===undefined`) is therefore true for the heading, and it is the SECOND clause (`anchor===group.node`) that must correctly detect the anchor was rewritten by the section's own strip -- the children clause is vacuously true (empty array) and can't do this alone.
+    // The heading's body is empty, so the ONLY candidate for a mint anywhere is the section's own [q, heading-anchor] pair — the heading's own plan() call finds nothing (its own extent is just its anchor alone, and indentLeftPt is already frozen), so its ref stays undefined. `unchanged`'s first clause (`ref===undefined`) is therefore true for the heading, and it is the SECOND clause (`anchor===group.node`) that must correctly detect the anchor was rewritten by the section's own strip — the children clause is vacuously true (empty array) and can't do this alone.
     const q = paragraph([run("q")], { indentLeftPt: 20 });
     const p = headingParagraph([run("Chapter")], 1, { indentLeftPt: 20 });
     const headingGroup: HeadingGroupNode = { node: p, children: [] };
@@ -1054,8 +1054,8 @@ describe("factorStyles minting", () => {
     expect(mintedList.node).not.toHaveProperty("indentLeftPt");
   });
 
-  it("rebuilds a list group as a new object via an ancestor's strip to ONE of its own body children alone -- ref undefined AND anchor untouched, so the children-changed check alone must catch it", () => {
-    // outside1 and bodyA share alignment:"left"; the list anchor P and bodyB each carry alignment too (their OWN distinct values, purely for universality across the section's whole extent), so their own singleton value-groups never reach the mint threshold and neither is touched. The section mints alignment:"left" over [outside1, bodyA] specifically -- the list's own anchor is untouched (anchor === group.node stays true) and its own candidate search finds nothing (ref stays undefined), so this isolates the children clause: bodyA changed, bodyB didn't, and `.every(...)` must still say "not all match".
+  it("rebuilds a list group as a new object via an ancestor's strip to ONE of its own body children alone — ref undefined AND anchor untouched, so the children-changed check alone must catch it", () => {
+    // outside1 and bodyA share alignment:"left"; the list anchor P and bodyB each carry alignment too (their OWN distinct values, purely for universality across the section's whole extent), so their own singleton value-groups never reach the mint threshold and neither is touched. The section mints alignment:"left" over [outside1, bodyA] specifically — the list's own anchor is untouched (anchor === group.node stays true) and its own candidate search finds nothing (ref stays undefined), so this isolates the children clause: bodyA changed, bodyB didn't, and `.every(...)` must still say "not all match".
     const outside1 = paragraph([run("outside1")], { alignment: "left" });
     const p = listParagraph(
       [run("Item")],
@@ -1090,7 +1090,7 @@ describe("factorStyles minting", () => {
       throw new Error("expected the list group");
     expect(mintedList).not.toBe(listGroup);
     expect(mintedList).not.toHaveProperty("style");
-    // The anchor itself was never touched -- it keeps its own distinct alignment value inline.
+    // The anchor itself was never touched — it keeps its own distinct alignment value inline.
     const mintedAnchor = ContentParagraphSchema.parse(mintedList.node);
     expect(mintedAnchor.alignment).toBe("center");
     expect(mintedList.children[0]).not.toHaveProperty("alignment");
@@ -1103,7 +1103,7 @@ describe("factorStyles minting", () => {
       [run("Chapter", { bold: true, italic: true })],
       1,
     );
-    // r/s carry bold:false (not merely omit it) so bold is common across the WHOLE section extent (required for the section to consider it at all) -- the true/false split then groups [q,p] apart from [r,s], and the tie between the two same-size groups resolves to document order.
+    // r/s carry bold:false (not merely omit it) so bold is common across the WHOLE section extent (required for the section to consider it at all) — the true/false split then groups [q,p] apart from [r,s], and the tie between the two same-size groups resolves to document order.
     const r = paragraph([run("r", { bold: false, italic: true })]);
     const s = paragraph([run("s", { bold: false, italic: true })]);
     const headingGroup: HeadingGroupNode = { node: p, children: [r, s] };
@@ -1135,7 +1135,7 @@ describe("factorStyles minting", () => {
   });
 
   it("returns a genuinely untouched section, heading group, list group, and construct group by the SAME object reference, even while a sibling section mints something", () => {
-    // A sibling section (mintingSection) mints something, so entries.size > 0 and mint() runs the real per-wrapper rebuild walk rather than short-circuiting at the top with `return pkg` -- which would trivially (and uselessly) preserve every reference without ever calling rebuildSectionGroup/rebuildHeadingGroup/rebuildListGroup/rebuildSectionConstructGroup at all. Every paragraph inside untouchedSection is a bare leaf with no mintable property at all, so nothing anywhere inside it ever mints, and every one of those four rebuild functions must return its own input object unchanged.
+    // A sibling section (mintingSection) mints something, so entries.size > 0 and mint() runs the real per-wrapper rebuild walk rather than short-circuiting at the top with `return pkg` — which would trivially (and uselessly) preserve every reference without ever calling rebuildSectionGroup/rebuildHeadingGroup/rebuildListGroup/rebuildSectionConstructGroup at all. Every paragraph inside untouchedSection is a bare leaf with no mintable property at all, so nothing anywhere inside it ever mints, and every one of those four rebuild functions must return its own input object unchanged.
     const mintingSection: SectionGroupNode = {
       node: { kind: "section", ...SECTION },
       children: [
@@ -1265,8 +1265,8 @@ describe("factorStyles minting", () => {
     expect(minted.children[1]).toBe(untouchedPage);
   });
 
-  it("rebuilds a section's children as a new array preserving an untouched sibling's own reference, when exactly one child actually changed -- not a wholesale copy, and not a false 'nothing changed' short-circuit", () => {
-    // The heading anchor carries two of its OWN runs sharing bold:true, reaching the mint threshold entirely from its own text -- independent of the section's own candidate search (which shares nothing across [heading anchor, pristine] and so mints nothing itself). This isolates the "one child changed, one didn't" case: `.some()` in place of `.every()` would find the untouched sibling's own match and wrongly call the whole section unchanged, discarding the heading's own rebuild.
+  it("rebuilds a section's children as a new array preserving an untouched sibling's own reference, when exactly one child actually changed — not a wholesale copy, and not a false 'nothing changed' short-circuit", () => {
+    // The heading anchor carries two of its OWN runs sharing bold:true, reaching the mint threshold entirely from its own text — independent of the section's own candidate search (which shares nothing across [heading anchor, pristine] and so mints nothing itself). This isolates the "one child changed, one didn't" case: `.some()` in place of `.every()` would find the untouched sibling's own match and wrongly call the whole section unchanged, discarding the heading's own rebuild.
     const heading: HeadingGroupNode = {
       node: headingParagraph(
         [run("a", { bold: true }), run("b", { bold: true })],
@@ -1307,7 +1307,7 @@ describe("factorStyles minting", () => {
     expect(mintedAnchor.runs[1]).not.toHaveProperty("bold");
   });
 
-  it("rebuilds a list group's children the same way -- new array, untouched sibling's own reference preserved, when exactly one child changed", () => {
+  it("rebuilds a list group's children the same way — new array, untouched sibling's own reference preserved, when exactly one child changed", () => {
     const list: ListGroupNode = {
       node: listParagraph(
         [run("a", { italic: true }), run("b", { italic: true })],
@@ -1344,7 +1344,7 @@ describe("factorStyles minting", () => {
   });
 
   it("rebuilds a shape-flow construct group as a new object via an ancestor's strip alone, even when the construct group itself mints nothing (its own ref stays undefined)", () => {
-    // outside and insideA share alignment:"left"; insideB carries alignment too (a DIFFERENT value, purely for universality across the shape's own extent), so the SHAPE mints alignment over [outside, insideA] specifically -- freezing alignment before the construct group's own candidate search ever runs. The construct group's own extent ([insideA, insideB]) then shares nothing (alignment is frozen, nothing else matches), so its own ref stays undefined -- but insideA was still stripped via the shape's ref, so the construct's `children.every(...)` check must still detect that change and return a new object, not just short-circuit on its own (never-set) ref.
+    // outside and insideA share alignment:"left"; insideB carries alignment too (a DIFFERENT value, purely for universality across the shape's own extent), so the SHAPE mints alignment over [outside, insideA] specifically — freezing alignment before the construct group's own candidate search ever runs. The construct group's own extent ([insideA, insideB]) then shares nothing (alignment is frozen, nothing else matches), so its own ref stays undefined — but insideA was still stripped via the shape's ref, so the construct's `children.every(...)` check must still detect that change and return a new object, not just short-circuit on its own (never-set) ref.
     const outside = paragraph([run("outside")], { alignment: "left" });
     const insideA = paragraph([run("a")], { alignment: "left" });
     const insideB = paragraph([run("b")], { alignment: "right" });
@@ -1400,7 +1400,7 @@ describe("factorStyles minting", () => {
   });
 
   it("mints a ref on a shape group itself when its own two paragraphs match but nothing shares across the slide's other shape", () => {
-    // Shape1's own extent (its two paragraphs alone) shares alignment, reaching the threshold there; shape2's one paragraph carries no alignment at all, so the SLIDE's own (wider) extent fails commonality and mints nothing itself -- the ref must land on shape1 directly, and its own spread of `style` must actually appear.
+    // Shape1's own extent (its two paragraphs alone) shares alignment, reaching the threshold there; shape2's one paragraph carries no alignment at all, so the SLIDE's own (wider) extent fails commonality and mints nothing itself — the ref must land on shape1 directly, and its own spread of `style` must actually appear.
     const shape1: ShapeGroupNode = {
       node: {
         frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
@@ -1440,7 +1440,7 @@ describe("factorStyles minting", () => {
       throw new Error("expected presentation");
     const mintedSlide = minted.children[0];
     if (mintedSlide === undefined) throw new Error("expected the slide group");
-    // The slide itself carries no ref -- only shape1 does.
+    // The slide itself carries no ref — only shape1 does.
     expect(mintedSlide).not.toHaveProperty("style");
     const mintedShape1 = mintedSlide.children[0];
     if (mintedShape1 === undefined) throw new Error("expected shape1");
@@ -1448,10 +1448,10 @@ describe("factorStyles minting", () => {
     expect(mintedShape1.children[0]).not.toHaveProperty("alignment");
   });
 
-  it("rebuilds a shape group's children the same way -- new array, untouched sibling's own reference preserved, when exactly one child changed", () => {
+  it("rebuilds a shape group's children the same way — new array, untouched sibling's own reference preserved, when exactly one child changed", () => {
     const changing = paragraph([run("a")], { alignment: "left" });
     const other = paragraph([run("b")], { alignment: "left" });
-    // pristine carries alignment too (a DIFFERENT value), purely so alignment is common across the whole extent (required for it to be considered at all) -- its own singleton value-group never reaches the mint threshold, so it stays untouched.
+    // pristine carries alignment too (a DIFFERENT value), purely so alignment is common across the whole extent (required for it to be considered at all) — its own singleton value-group never reaches the mint threshold, so it stays untouched.
     const pristine = paragraph([run("untouched")], { alignment: "right" });
     const shapeGroup: ShapeGroupNode = {
       node: {
@@ -1484,7 +1484,7 @@ describe("factorStyles minting", () => {
     expect(mintedShape.children[0]).not.toHaveProperty("alignment");
   });
 
-  it("rebuilds a draw page's children the same way -- new array, untouched sibling shape's own reference preserved, when exactly one shape changed", () => {
+  it("rebuilds a draw page's children the same way — new array, untouched sibling shape's own reference preserved, when exactly one shape changed", () => {
     const changingShape: ShapeGroupNode = {
       node: {
         frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
@@ -1522,21 +1522,21 @@ describe("factorStyles minting", () => {
     const mintedPage = minted.children[0];
     if (mintedPage === undefined) throw new Error("expected the draw page");
     expect(mintedPage).not.toBe(drawPageGroup);
-    // The draw page's own extent shares no key across both shapes (bold isn't on pristineShape's run at all), so its own candidate search finds nothing and its ref stays undefined -- it must not carry a style property just because a NESTED shape changed.
+    // The draw page's own extent shares no key across both shapes (bold isn't on pristineShape's run at all), so its own candidate search finds nothing and its ref stays undefined — it must not carry a style property just because a NESTED shape changed.
     expect(mintedPage).not.toHaveProperty("style");
     expect(mintedPage.children[1]).toBe(pristineShape);
   });
 
-  it("rebuilds a section-flow construct group's children the same way -- new array, untouched sibling's own reference preserved, when exactly one child changed", () => {
+  it("rebuilds a section-flow construct group's children the same way — new array, untouched sibling's own reference preserved, when exactly one child changed", () => {
     const changing = paragraph([run("a")], { indentLeftPt: 30 });
     const other = paragraph([run("b")], { indentLeftPt: 30 });
-    // pristine carries indentLeftPt too (a DIFFERENT value), purely so the key is common across the whole extent -- its own singleton value-group never reaches the mint threshold.
+    // pristine carries indentLeftPt too (a DIFFERENT value), purely so the key is common across the whole extent — its own singleton value-group never reaches the mint threshold.
     const pristine = paragraph([run("untouched")], { indentLeftPt: 99 });
     const constructGroup: SectionConstructGroupNode = {
       node: { kind: "contentControl", controlType: "richText" },
       children: [changing, other, pristine],
     };
-    // outside carries no indentLeftPt at all, so the SECTION's own (wider) extent fails commonality and mints nothing itself -- the match is only found once the walk descends into the construct group's own (narrower) extent.
+    // outside carries no indentLeftPt at all, so the SECTION's own (wider) extent fails commonality and mints nothing itself — the match is only found once the walk descends into the construct group's own (narrower) extent.
     const outside = paragraph([run("outside")]);
     const sectionGroup: SectionGroupNode = {
       node: { kind: "section", ...SECTION },
@@ -1563,10 +1563,10 @@ describe("factorStyles minting", () => {
     expect(mintedConstruct.children[0]).not.toHaveProperty("indentLeftPt");
   });
 
-  it("rebuilds a shape-flow construct group's children the same way -- new array, untouched sibling's own reference preserved, when exactly one child changed", () => {
+  it("rebuilds a shape-flow construct group's children the same way — new array, untouched sibling's own reference preserved, when exactly one child changed", () => {
     const changing = paragraph([run("a")], { indentLeftPt: 30 });
     const other = paragraph([run("b")], { indentLeftPt: 30 });
-    // pristine carries indentLeftPt too (a DIFFERENT value), purely so the key is common across the whole extent -- its own singleton value-group never reaches the mint threshold.
+    // pristine carries indentLeftPt too (a DIFFERENT value), purely so the key is common across the whole extent — its own singleton value-group never reaches the mint threshold.
     const pristine = paragraph([run("untouched")], { indentLeftPt: 99 });
     const constructGroup: ShapeConstructGroupNode = {
       node: { kind: "contentControl", controlType: "richText" },
@@ -1685,7 +1685,7 @@ describe("factorStyles minting", () => {
   });
 });
 
-// Finds the first group wrapper anywhere in the tree whose anchor paragraph's first run text matches -- the frozen-key test's H2 group sits nested inside the H1 group, not at any fixed depth.
+// Finds the first group wrapper anywhere in the tree whose anchor paragraph's first run text matches — the frozen-key test's H2 group sits nested inside the H1 group, not at any fixed depth.
 function findGroupByText(
   pkg: DocumentTree,
   text: string,

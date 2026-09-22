@@ -18,12 +18,12 @@ export function parseXml(xml: string): XmlNode[] {
   return parseNodes(PARSER.parse(xml));
 }
 
-// Exported for direct unit coverage of the four independent branch shapes (object/null/array/primitive) this guard's own conjunction distinguishes -- parseXml itself only ever hands it real fast-xml-parser output, which never exercises the null or primitive cases.
+// Exported for direct unit coverage of the four independent branch shapes (object/null/array/primitive) this guard's own conjunction distinguishes — parseXml itself only ever hands it real fast-xml-parser output, which never exercises the null or primitive cases.
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// Array.isArray narrows unknown to any[], not unknown[] -- lib.es5.d.ts types its parameter as `any`, so TypeScript can't do better even after the check. This guard exists so indexing the result stays unknown rather than silently reintroducing any.
+// Array.isArray narrows unknown to any[], not unknown[] — lib.es5.d.ts types its parameter as `any`, so TypeScript can't do better even after the check. This guard exists so indexing the result stays unknown rather than silently reintroducing any.
 export function isUnknownArray(value: unknown): value is unknown[] {
   return Array.isArray(value);
 }

@@ -21,7 +21,7 @@ import {
   wordprocessingPackage,
 } from '../../src/test-support/fixtures';
 
-// Proves document-outline.js's surface executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. Every path here -- per-kind outline building, effective-property resolution, flatten, leaf text, content hashing -- is deliberately Node-free (the SHA-256 is hand-rolled over Uint8Array precisely so no node:crypto is needed); if any touched code path in this module graph or its zod / document-schema.js dependencies reached for node:fs/Buffer/process, the workerd isolate would throw rather than these passing. This is the runtime complement to the static ESLint Worker-isomorphism guard.
+// Proves document-outline.js's surface executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. Every path here — per-kind outline building, effective-property resolution, flatten, leaf text, content hashing — is deliberately Node-free (the SHA-256 is hand-rolled over Uint8Array precisely so no node:crypto is needed); if any touched code path in this module graph or its zod / document-schema.js dependencies reached for node:fs/Buffer/process, the workerd isolate would throw rather than these passing. This is the runtime complement to the static ESLint Worker-isomorphism guard.
 describe('document-outline.js under the Cloudflare Workers runtime', () => {
   it('builds and validates outlines for all five package kinds inside the isolate', () => {
     const wordPkg = wordprocessingPackage([sectionGroup([headingGroup('Chapter', 1, [paragraph('body')])])]);
@@ -62,7 +62,7 @@ describe('document-outline.js under the Cloudflare Workers runtime', () => {
       { id: 'one', package: first },
       { id: 'two', package: second },
     ]);
-    // The shared body paragraph is one node with two containment edges, and the style entry node is reachable by its STYLED_BY edge -- all inside workerd, proving the projection is as Node-free as the hash it reuses. Two STYLED_BY edges reach it (#660): the heading's own ref, and the shared bare paragraph leaf's inherited-chain edge (the second document's own occurrence carries no style scope, so it contributes none).
+    // The shared body paragraph is one node with two containment edges, and the style entry node is reachable by its STYLED_BY edge — all inside workerd, proving the projection is as Node-free as the hash it reuses. Two STYLED_BY edges reach it (#660): the heading's own ref, and the shared bare paragraph leaf's inherited-chain edge (the second document's own occurrence carries no style scope, so it contributes none).
     const sharedBody = graph.nodes.filter((node) => node.kind === 'paragraph' && JSON.stringify(node).includes('body'));
     expect(sharedBody).toHaveLength(1);
     expect(graph.edges.filter((edge) => edge.kind === 'CONTAINS' && edge.to === sharedBody[0]!.id)).toHaveLength(2);

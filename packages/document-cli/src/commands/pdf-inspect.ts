@@ -60,7 +60,7 @@ async function runPdfInspect(
     });
 
     if (options.full) {
-      // Serialised as the plain pdf-codec value, with no $schema stamp -- LayoutDocument lost its schema-stamped JSON envelope when the family moved to pdf-codec at document-schema.js 4.0.0 (the demotion), so there is no documentFromJson kind for it any more and nothing to tag it with. A reader that wants the value back parses this JSON as a LayoutDocument directly (it is plain data).
+      // Serialised as the plain pdf-codec value, with no $schema stamp — LayoutDocument lost its schema-stamped JSON envelope when the family moved to pdf-codec at document-schema.js 4.0.0 (the demotion), so there is no documentFromJson kind for it any more and nothing to tag it with. A reader that wants the value back parses this JSON as a LayoutDocument directly (it is plain data).
       process.stdout.write(`${JSON.stringify(layout, undefined, 2)}\n`);
       return EXIT_SUCCESS;
     }

@@ -21,7 +21,7 @@ function streamOf(
   return streams.find((stream) => stream.path === path)?.bytes;
 }
 
-/** Direct, byte-level access to a compound file's own header and directory entries -- for the fields (sector counts, the FAT's own marker bytes, a directory entry's own colour flag and name) that this package's own reader (archive-codec's readCompoundFile) either never reads back or never cross-checks, so a round trip alone cannot prove the writer stated them correctly. */
+/** Direct, byte-level access to a compound file's own header and directory entries — for the fields (sector counts, the FAT's own marker bytes, a directory entry's own colour flag and name) that this package's own reader (archive-codec's readCompoundFile) either never reads back or never cross-checks, so a round trip alone cannot prove the writer stated them correctly. */
 function parseHeader(bytes: Uint8Array<ArrayBuffer>) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const minorVersion = view.getUint16(0x18, true);
@@ -94,7 +94,7 @@ describe("compoundFile", () => {
   });
 
   it("throws for a stream name with no characters at all", () => {
-    // A path segment can never itself be empty (caught above), but a storage segment and a leaf both funnel through the identical checkedName -- an intermediate directory segment that is empty is indistinguishable from this at the writer's own validation layer, so this covers checkedName's own length===0 branch directly via a leaf whose name genuinely has zero characters after path splitting is impossible to construct without also tripping the empty-segment check above. checkedName is instead exercised at its true boundary by the 31-character and non-ASCII cases below, and by every ordinary passing name elsewhere in this suite.
+    // A path segment can never itself be empty (caught above), but a storage segment and a leaf both funnel through the identical checkedName — an intermediate directory segment that is empty is indistinguishable from this at the writer's own validation layer, so this covers checkedName's own length===0 branch directly via a leaf whose name genuinely has zero characters after path splitting is impossible to construct without also tripping the empty-segment check above. checkedName is instead exercised at its true boundary by the 31-character and non-ASCII cases below, and by every ordinary passing name elsewhere in this suite.
     expect(() =>
       compoundFile([{ path: "ok", bytes: textStream("x") }]),
     ).not.toThrow();
@@ -154,7 +154,7 @@ describe("compoundFile", () => {
   });
 
   it("round-trips a stream large enough to need the FAT-chained big-stream path, not the mini stream", () => {
-    // MINI_STREAM_CUTOFF is 4096 bytes -- a stream at or above it lives in ordinary FAT-chained sectors, exercising bigStreamRecords/bigSectorCounts/bigStartOf/chain rather than the mini-FAT path every small-stream test above already covers.
+    // MINI_STREAM_CUTOFF is 4096 bytes — a stream at or above it lives in ordinary FAT-chained sectors, exercising bigStreamRecords/bigSectorCounts/bigStartOf/chain rather than the mini-FAT path every small-stream test above already covers.
     const big = new Uint8Array(5000).map((_, i) => i % 256);
     const bytes = compoundFile([{ path: "Big", bytes: big }]);
     const streams = readCompoundFile(bytes);
@@ -263,7 +263,7 @@ describe("compoundFile", () => {
   });
 
   it("distinguishes a same-named stream and storage rather than attaching the storage's own children to the stream", () => {
-    // "a" is written first as a plain stream; "a/b" then needs a STORAGE also named "a" -- a different node from the stream, never the stream reinterpreted as a folder.
+    // "a" is written first as a plain stream; "a/b" then needs a STORAGE also named "a" — a different node from the stream, never the stream reinterpreted as a folder.
     const bytes = compoundFile([
       { path: "a", bytes: textStream("stream-a") },
       { path: "a/b", bytes: textStream("nested-b") },
@@ -346,7 +346,7 @@ describe("compoundFile", () => {
   });
 
   it("states the real directory sector count in a version-4 header's own field, not the version-3 fixed zero", () => {
-    // entriesPerDirectorySector is 4096/128 = 32 for version 4; 33 records (32 entries plus the root) forces exactly 2 directory sectors -- Math.ceil(33/32), a value multiplication would never produce.
+    // entriesPerDirectorySector is 4096/128 = 32 for version 4; 33 records (32 entries plus the root) forces exactly 2 directory sectors — Math.ceil(33/32), a value multiplication would never produce.
     const entries = Array.from({ length: 32 }, (_, i) => ({
       path: `Stream${i}`,
       bytes: textStream("x"),
@@ -391,7 +391,7 @@ describe("compoundFile", () => {
   });
 
   it("allocates no data sectors at all for a workbook whose only stream is small, not one wastefully allocated for it as if it were also big", () => {
-    // A single 100-byte stream needs exactly fatSectorCount(1) + directorySectorCount(1) + dataSectorCount(0) + miniStreamSectorCount(1) + miniFatSectorCount(1) = 4 sectors, plus the 512-byte header -- 2560 bytes total. A stream wrongly counted as both small and big (or size-partitioned by the wrong boundary) would add a spurious data sector on top.
+    // A single 100-byte stream needs exactly fatSectorCount(1) + directorySectorCount(1) + dataSectorCount(0) + miniStreamSectorCount(1) + miniFatSectorCount(1) = 4 sectors, plus the 512-byte header — 2560 bytes total. A stream wrongly counted as both small and big (or size-partitioned by the wrong boundary) would add a spurious data sector on top.
     const bytes = compoundFile([
       { path: "Small", bytes: new Uint8Array(100).fill(1) },
     ]);
@@ -400,7 +400,7 @@ describe("compoundFile", () => {
   });
 
   it("round-trips enough small streams to force a second mini-FAT sector, each stream still distinct from its own neighbours", () => {
-    // fatEntriesPerSector is 128 for 512-byte sectors; three streams just under the mini-stream cutoff push miniSectorCount well past 128, forcing miniFatSectorCount to 2 -- the only fixture in this suite that ever needs more than one.
+    // fatEntriesPerSector is 128 for 512-byte sectors; three streams just under the mini-stream cutoff push miniSectorCount well past 128, forcing miniFatSectorCount to 2 — the only fixture in this suite that ever needs more than one.
     const streams = Array.from({ length: 3 }, (_, i) => ({
       path: `Small${i}`,
       bytes: new Uint8Array(4000).fill(i + 1),

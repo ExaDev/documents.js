@@ -100,7 +100,7 @@ function workbookStream(options: {
     sheetType?: number;
   }[];
 }): Uint8Array<ArrayBuffer> {
-  // Built in two passes, because BoundSheet8's lbPlyPos has to name a byte offset that only exists once the globals substream's own length is known -- and that length depends on the BoundSheet8 records themselves. The first pass measures with placeholder offsets, the second writes the real ones; both produce identically sized records, so the measurement holds.
+  // Built in two passes, because BoundSheet8's lbPlyPos has to name a byte offset that only exists once the globals substream's own length is known — and that length depends on the BoundSheet8 records themselves. The first pass measures with placeholder offsets, the second writes the real ones; both produce identically sized records, so the measurement holds.
   const build = (offsets: readonly number[]): Uint8Array<ArrayBuffer> => {
     const boundSheets = options.sheets.map((sheet, index) =>
       record(RECORD_BOUNDSHEET8, [
@@ -156,7 +156,7 @@ function xlsFile(stream: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
   return compoundFile([{ path: "Workbook", bytes: stream }]);
 }
 
-/** Adds a real "\x05SummaryInformation" stream beside an .xls file's existing streams -- composed with archive-codec's own writeSummaryInformationStream/writeCompoundFile rather than by extending xlsFile, which stays a pure BIFF8-only fixture builder. */
+/** Adds a real "\x05SummaryInformation" stream beside an .xls file's existing streams — composed with archive-codec's own writeSummaryInformationStream/writeCompoundFile rather than by extending xlsFile, which stays a pure BIFF8-only fixture builder. */
 function withSummaryInformation(
   xls: Uint8Array<ArrayBuffer>,
   metadata: Parameters<typeof writeSummaryInformationStream>[0],
@@ -170,7 +170,7 @@ function withSummaryInformation(
   ]);
 }
 
-/** The fifteen style XFs a real file writes before its first cell XF, so a cell's own ixfe of 15 lands on the first cell format -- which is what [MS-XLS] 2.5.168 requires of an ixfe. Every cell XF here carries an undecorated trailing payload; xfTableWithDecoration below is the sibling a decoration test builds its own cell XF through instead. */
+/** The fifteen style XFs a real file writes before its first cell XF, so a cell's own ixfe of 15 lands on the first cell format — which is what [MS-XLS] 2.5.168 requires of an ixfe. Every cell XF here carries an undecorated trailing payload; xfTableWithDecoration below is the sibling a decoration test builds its own cell XF through instead. */
 function xfTable(...cellFormats: readonly number[]): Uint8Array<ArrayBuffer>[] {
   const styles = Array.from({ length: 15 }, () =>
     record(RECORD_XF, [
@@ -191,7 +191,7 @@ function xfTable(...cellFormats: readonly number[]): Uint8Array<ArrayBuffer>[] {
   return [...styles, ...cells];
 }
 
-/** As xfTable, but the single cell XF this builds carries the given decoration rather than an undecorated payload -- for a test exercising background/borders. */
+/** As xfTable, but the single cell XF this builds carries the given decoration rather than an undecorated payload — for a test exercising background/borders. */
 function xfTableWithDecoration(
   formatId: number,
   decoration: XfTestDecoration,
@@ -215,7 +215,7 @@ function xfTableWithDecoration(
   ];
 }
 
-/** A Font record ([MS-XLS] 2.4.122) with an uncompressed fontName -- the record's own "fontName.fHighByte MUST equal 1" rule -- for a test driving the per-cell font reader. Every field left absent carries the spec's own default shape (Arial at 10pt/200 twips, no flags, Automatic colour, normal weight, no underline). */
+/** A Font record ([MS-XLS] 2.4.122) with an uncompressed fontName — the record's own "fontName.fHighByte MUST equal 1" rule — for a test driving the per-cell font reader. Every field left absent carries the spec's own default shape (Arial at 10pt/200 twips, no flags, Automatic colour, normal weight, no underline). */
 function fontRecord(options: {
   name?: string;
   heightTwips?: number;
@@ -245,7 +245,7 @@ function fontRecord(options: {
   ]);
 }
 
-/** As xfTable, but the single cell XF this builds references the given font index rather than font 0 -- for a test exercising per-cell fonts. */
+/** As xfTable, but the single cell XF this builds references the given font index rather than font 0 — for a test exercising per-cell fonts. */
 function xfTableWithFont(
   fontIndex: number,
   formatId: number,
@@ -523,7 +523,7 @@ describe("readXlsContent", () => {
   });
 
   it("never materialises a phantom anchor for a degenerate 1x1 MergeCells range", () => {
-    // A range whose start and end coincide on both axes is not a real merge at all (rowSpan and colSpan both resolve to exactly 1, ContentSheetCell's own "only when greater than one" contract), so applyMerges must skip it entirely -- including never even looking up or materialising an anchor cell at that position, which an undecorated, valueless position would otherwise gain purely as a side effect of the lookup.
+    // A range whose start and end coincide on both axes is not a real merge at all (rowSpan and colSpan both resolve to exactly 1, ContentSheetCell's own "only when greater than one" contract), so applyMerges must skip it entirely — including never even looking up or materialising an anchor cell at that position, which an undecorated, valueless position would otherwise gain purely as a side effect of the lookup.
     const bytes = xlsFile(
       workbookStream({
         globals: xfTable(0),
@@ -535,9 +535,9 @@ describe("readXlsContent", () => {
               record(RECORD_MERGECELLS, [
                 ...u16(1),
                 ...u16(5), // rowFirst
-                ...u16(5), // rowLast -- same as rowFirst
+                ...u16(5), // rowLast — same as rowFirst
                 ...u16(5), // colFirst
-                ...u16(5), // colLast -- same as colFirst
+                ...u16(5), // colLast — same as colFirst
               ]),
             ],
           },
@@ -552,7 +552,7 @@ describe("readXlsContent", () => {
   });
 
   it("anchors a merge to the cell at its own start row AND column, not just a same-row or same-column neighbour", () => {
-    // Two other real cells sit at the same row and the same column as the merge's own start position, but neither one IS that position -- only the cell at exactly (2,2) may be treated as this merge's anchor.
+    // Two other real cells sit at the same row and the same column as the merge's own start position, but neither one IS that position — only the cell at exactly (2,2) may be treated as this merge's anchor.
     const bytes = xlsFile(
       workbookStream({
         globals: xfTable(0),
@@ -587,7 +587,7 @@ describe("readXlsContent", () => {
     expect(anchor).toMatchObject({ rowSpan: 2, colSpan: 2 });
   });
 
-  it("reads a Dv record into ContentSheet.dataValidations (ExaDev/documents.js#1098) -- workbook/data-validation.test.ts covers the [MS-XLS] field mapping in full; this is the end-to-end proof from real bytes to ContentSheet", () => {
+  it("reads a Dv record into ContentSheet.dataValidations (ExaDev/documents.js#1098) — workbook/data-validation.test.ts covers the [MS-XLS] field mapping in full; this is the end-to-end proof from real bytes to ContentSheet", () => {
     const bytes = xlsFile(
       workbookStream({
         globals: xfTable(0),
@@ -606,7 +606,7 @@ describe("readXlsContent", () => {
                 0x1e,
                 ...u16(0),
                 ...u16(0), // formula2 cce: 0, no second bound
-                ...u16(0), // formula2's own unused field -- DVParsedFormula always carries it, even when cce is 0
+                ...u16(0), // formula2's own unused field — DVParsedFormula always carries it, even when cce is 0
                 ...u16(1),
                 ...u16(0),
                 ...u16(0),
@@ -630,7 +630,7 @@ describe("readXlsContent", () => {
   });
 
   it("leaves formula1 entirely absent for a valType-0 Dv record, ECMA-376's own 'no criteria stated' shape", () => {
-    // valType 0 is unmapped by VALUE_TYPE_BY_VAL_TYPE, so this degrades to type 'custom' with a genuinely zero-length formula1 (cce 0) -- own-property check, not a value check, since a bug materialising the key with an explicit undefined value would pass a plain .toBeUndefined() assertion just as easily as a genuinely absent key would.
+    // valType 0 is unmapped by VALUE_TYPE_BY_VAL_TYPE, so this degrades to type 'custom' with a genuinely zero-length formula1 (cce 0) — own-property check, not a value check, since a bug materialising the key with an explicit undefined value would pass a plain .toBeUndefined() assertion just as easily as a genuinely absent key would.
     const bytes = xlsFile(
       workbookStream({
         globals: xfTable(0),
@@ -671,11 +671,11 @@ describe("readXlsContent", () => {
     expect(Object.hasOwn(validations?.[0] ?? {}, "formula1")).toBe(false);
   });
 
-  it("reads a CondFmt/CF group into ContentSheet.conditionalFormats, resolving its own dxf font colour through the icv fixed table (ExaDev/documents.js#1102) -- workbook/conditional-format.test.ts covers the [MS-XLS] field mapping in full; this is the end-to-end proof from real bytes to ContentSheet", () => {
-    // DXFN ([MS-XLS] 2.4.97): the 6-byte flags header (ibitAtrFnt at bit 26) then a 122-byte DXFFntD whose icvFore sits at byte offset 80 -- every other byte is zero, since only the font colour is under test here.
+  it("reads a CondFmt/CF group into ContentSheet.conditionalFormats, resolving its own dxf font colour through the icv fixed table (ExaDev/documents.js#1102) — workbook/conditional-format.test.ts covers the [MS-XLS] field mapping in full; this is the end-to-end proof from real bytes to ContentSheet", () => {
+    // DXFN ([MS-XLS] 2.4.97): the 6-byte flags header (ibitAtrFnt at bit 26) then a 122-byte DXFFntD whose icvFore sits at byte offset 80 — every other byte is zero, since only the font colour is under test here.
     const fontBlock = new Array<number>(122).fill(0);
     const icvForeBytes = new Uint8Array(4);
-    new DataView(icvForeBytes.buffer).setInt32(0, 0x02, true); // icv 2, Red -- a fixed-table colour, no Palette record needed
+    new DataView(icvForeBytes.buffer).setInt32(0, 0x02, true); // icv 2, Red — a fixed-table colour, no Palette record needed
     fontBlock.splice(80, 4, ...icvForeBytes);
     const dxf = [
       ...u32(1 << 26), // flags1: ibitAtrFnt only
@@ -691,7 +691,7 @@ describe("readXlsContent", () => {
             name: "Sheet1",
             records: [
               record(RECORD_CONDFMT, [
-                ...u16(1), // ccf -- one CF record follows
+                ...u16(1), // ccf — one CF record follows
                 ...u16(0), // fToughRecalc + nID, unused
                 ...u16(0),
                 ...u16(0),
@@ -730,11 +730,11 @@ describe("readXlsContent", () => {
   });
 
   it("resolves to no style at all when a dxf's own fill pattern is FLSNULL, rather than a style object with nothing in it", () => {
-    // DXFPat's own fls of 0 (FLSNULL) is a real, present fill block -- ibitAtrPat is set, so raw.fill is a genuine object, not undefined -- but resolveFillBackground has no pattern type for it and returns undefined, exactly like the "no font colour block at all" half of this style. Both halves resolving to undefined must still collapse the WHOLE style to undefined, not an empty {} object the schema has no field for.
+    // DXFPat's own fls of 0 (FLSNULL) is a real, present fill block — ibitAtrPat is set, so raw.fill is a genuine object, not undefined — but resolveFillBackground has no pattern type for it and returns undefined, exactly like the "no font colour block at all" half of this style. Both halves resolving to undefined must still collapse the WHOLE style to undefined, not an empty {} object the schema has no field for.
     const dxf = [
       ...u32(1 << 29), // flags1: ibitAtrPat only
       ...u16(0), // flags2
-      ...u32(0), // DXFPat: fls(FLSNULL)=0, both icvs irrelevant -- the pattern lookup fails before either is read
+      ...u32(0), // DXFPat: fls(FLSNULL)=0, both icvs irrelevant — the pattern lookup fails before either is read
     ];
     const bytes = xlsFile(
       workbookStream({
@@ -781,7 +781,7 @@ describe("readXlsContent", () => {
     ]);
   });
 
-  it("reads a CondFmt12/CF12 colour-scale rule into ContentSheet.conditionalFormats, resolving its own indexed colours through the icv fixed table (ExaDev/documents.js#1104) -- workbook/conditional-format-12.test.ts covers the [MS-XLS] field mapping in full; this is the end-to-end proof from real bytes to ContentSheet", () => {
+  it("reads a CondFmt12/CF12 colour-scale rule into ContentSheet.conditionalFormats, resolving its own indexed colours through the icv fixed table (ExaDev/documents.js#1104) — workbook/conditional-format-12.test.ts covers the [MS-XLS] field mapping in full; this is the end-to-end proof from real bytes to ContentSheet", () => {
     const bytes = xlsFile(
       workbookStream({
         globals: xfTable(0),
@@ -791,7 +791,7 @@ describe("readXlsContent", () => {
             records: [
               record(RECORD_CONDFMT12, [
                 ...new Array<number>(12).fill(0), // frtRefHeaderU
-                ...u16(1), // ccf -- one CF12 record follows
+                ...u16(1), // ccf — one CF12 record follows
                 ...u16(0), // fToughRecalc + nID, unused
                 ...u16(0),
                 ...u16(0),
@@ -809,7 +809,7 @@ describe("readXlsContent", () => {
                 0x00, // cp
                 ...u16(0), // cce1
                 ...u16(0), // cce2
-                ...u32(0), // cbDxf -- MUST be zero for a colour scale rule
+                ...u32(0), // cbDxf — MUST be zero for a colour scale rule
                 ...u16(0), // fmlaActive cce
                 0x00, // flags
                 ...u16(0), // ipriority
@@ -857,7 +857,7 @@ describe("readXlsContent", () => {
     ]);
   });
 
-  it("reads a CondFmt12/CF12 top10 rule into ContentSheet.conditionalFormats (ExaDev/documents.js#1106) -- workbook/conditional-format-12.test.ts covers the [MS-XLS] field mapping in full; this is the end-to-end proof from real bytes to ContentSheet", () => {
+  it("reads a CondFmt12/CF12 top10 rule into ContentSheet.conditionalFormats (ExaDev/documents.js#1106) — workbook/conditional-format-12.test.ts covers the [MS-XLS] field mapping in full; this is the end-to-end proof from real bytes to ContentSheet", () => {
     const bytes = xlsFile(
       workbookStream({
         globals: xfTable(0),
@@ -867,7 +867,7 @@ describe("readXlsContent", () => {
             records: [
               record(RECORD_CONDFMT12, [
                 ...new Array<number>(12).fill(0), // frtRefHeaderU
-                ...u16(1), // ccf -- one CF12 record follows
+                ...u16(1), // ccf — one CF12 record follows
                 ...u16(0), // fToughRecalc + nID, unused
                 ...u16(0),
                 ...u16(0),
@@ -885,7 +885,7 @@ describe("readXlsContent", () => {
                 0x00, // cp
                 ...u16(0), // cce1
                 ...u16(0), // cce2
-                ...u32(0), // cbDxf -- MUST be zero for a filter rule
+                ...u32(0), // cbDxf — MUST be zero for a filter rule
                 ...u16(0), // fmlaActive cce
                 0x00, // flags
                 ...u16(0), // ipriority
@@ -987,7 +987,7 @@ describe("readXlsContent", () => {
     const SALT = new Uint8Array(16).map((_, index) => index * 7 + 1);
     const FILEPASS_HEADER_LENGTH = 2 + 2 + 2 + 16 + 16 + 16;
 
-    // [MS-XLS] 2.2.10's own excluded-record set and the BoundSheet8 lbPlyPos exception, re-derived here independently of workbook/encryption.ts rather than imported from it -- so a round trip through readXlsContent actually exercises that module's own understanding of the spec, rather than a test built from its own exclusion list vacuously agreeing with itself.
+    // [MS-XLS] 2.2.10's own excluded-record set and the BoundSheet8 lbPlyPos exception, re-derived here independently of workbook/encryption.ts rather than imported from it — so a round trip through readXlsContent actually exercises that module's own understanding of the spec, rather than a test built from its own exclusion list vacuously agreeing with itself.
     const NEVER_ENCRYPTED_TYPES = new Set([
       RECORD_BOF,
       RECORD_FILEPASS,
@@ -1026,7 +1026,7 @@ describe("readXlsContent", () => {
     }
 
     /**
-     * Takes a plaintext workbook stream already carrying a same-length FilePass placeholder record (so every BoundSheet8 lbPlyPos workbookStream computed already accounts for its real size) and turns it into a genuinely RC4-encrypted one: real FilePass header fields in place of the placeholder, and every other record's data encrypted per [MS-XLS] 2.2.10's own rules. RC4's XOR symmetry makes "encrypt" and "decrypt" literally the same operation, so this reuses decryptOfficeRc4 -- the same primitive readXlsContent decrypts with -- rather than a separate encryption routine; the two directions cancelling out is exactly what makes RC4 what it is, not a shortcut that only looks like a round trip.
+     * Takes a plaintext workbook stream already carrying a same-length FilePass placeholder record (so every BoundSheet8 lbPlyPos workbookStream computed already accounts for its real size) and turns it into a genuinely RC4-encrypted one: real FilePass header fields in place of the placeholder, and every other record's data encrypted per [MS-XLS] 2.2.10's own rules. RC4's XOR symmetry makes "encrypt" and "decrypt" literally the same operation, so this reuses decryptOfficeRc4 — the same primitive readXlsContent decrypts with — rather than a separate encryption routine; the two directions cancelling out is exactly what makes RC4 what it is, not a shortcut that only looks like a round trip.
      */
     function encryptWorkbookStream(
       plainStreamWithPlaceholder: Uint8Array<ArrayBuffer>,
@@ -1170,7 +1170,7 @@ describe("readXlsContent", () => {
       0x0138, // RRDHead
     ]);
 
-    /** Parses a stream's own records with their absolute offsets, independently of biff/records.ts -- shares the RC4 suite's own approach above, but duplicated locally since that one is scoped inside the sibling describe block. */
+    /** Parses a stream's own records with their absolute offsets, independently of biff/records.ts — shares the RC4 suite's own approach above, but duplicated locally since that one is scoped inside the sibling describe block. */
     function parseForEncryption(stream: Uint8Array<ArrayBuffer>): {
       type: number;
       offset: number;
@@ -1197,7 +1197,7 @@ describe("readXlsContent", () => {
       return records;
     }
 
-    /** [MS-XLS] 2.2.10's own XorArrayIndex rule, matching workbook/encryption.ts's own xorArrayIndexFor -- re-derived here rather than imported, same rationale as the RC4 suite's own encryptWorkbookStream. */
+    /** [MS-XLS] 2.2.10's own XorArrayIndex rule, matching workbook/encryption.ts's own xorArrayIndexFor — re-derived here rather than imported, same rationale as the RC4 suite's own encryptWorkbookStream. */
     function xorArrayIndexFor(
       spanOffset: number,
       recordDataLength: number,
@@ -1206,7 +1206,7 @@ describe("readXlsContent", () => {
     }
 
     /**
-     * Method 1's own encrypt direction: the inverse of decryptXorObfuscationMethod1's rotate-then-XOR (XOR first, then rotate right 3) -- independently derived and confirmed (in a scratch script, not against this package's own code) to reproduce a genuine Excel-generated XOR-obfuscated fixture's exact ciphertext byte for byte (nolze/msoffcrypto-tool's own tests/inputs/xor_password_123456789012345.xls; see archive-codec's own crypto/xor-obfuscation.test.ts, whose "decrypts a real Excel-generated BoundSheet8 span" vector is lifted from that same file). Method 1's transform is not self-inverse the way Method 2's is, so unlike the RC4 suite's own encryptWorkbookStream (which reuses the decrypt primitive directly), this needs its own, separate direction -- kept local to this test file rather than exported from archive-codec, which implements no encrypt direction at all (see xor-obfuscation.ts's own top comment).
+     * Method 1's own encrypt direction: the inverse of decryptXorObfuscationMethod1's rotate-then-XOR (XOR first, then rotate right 3) — independently derived and confirmed (in a scratch script, not against this package's own code) to reproduce a genuine Excel-generated XOR-obfuscated fixture's exact ciphertext byte for byte (nolze/msoffcrypto-tool's own tests/inputs/xor_password_123456789012345.xls; see archive-codec's own crypto/xor-obfuscation.test.ts, whose "decrypts a real Excel-generated BoundSheet8 span" vector is lifted from that same file). Method 1's transform is not self-inverse the way Method 2's is, so unlike the RC4 suite's own encryptWorkbookStream (which reuses the decrypt primitive directly), this needs its own, separate direction — kept local to this test file rather than exported from archive-codec, which implements no encrypt direction at all (see xor-obfuscation.ts's own top comment).
      */
     function encryptXorObfuscationMethod1(
       array: Uint8Array<ArrayBuffer>,
@@ -1361,7 +1361,7 @@ describe("readXlsContent", () => {
     });
 
     it("decrypts a real Excel-generated XOR-obfuscated BoundSheet8 span using the shared archive-codec primitive directly", () => {
-      // The same real ciphertext vector archive-codec's own crypto/xor-obfuscation.test.ts verifies -- exercised again here to confirm xls-codec's own re-export/import wiring reaches the identical, real-file-validated result, not just archive-codec's own internal test.
+      // The same real ciphertext vector archive-codec's own crypto/xor-obfuscation.test.ts verifies — exercised again here to confirm xls-codec's own re-export/import wiring reaches the identical, real-file-validated result, not just archive-codec's own internal test.
       const array = createXorObfuscationArray(
         "123456789012345",
         XOR_OBFUSCATION_ROTATE_DISTANCE_METHOD1,
@@ -1387,7 +1387,7 @@ describe("readXlsContent", () => {
   });
 
   it("treats a BoundSheet8 lbPlyPos landing on a non-worksheet substream as no substream at all", () => {
-    // A worksheet-typed BoundSheet8 entry whose own lbPlyPos happens to name the byte offset of a CHART substream, not a genuine worksheet one -- a malformed/corrupt file this reader must not misread rather than one any real producer would write. Finding a substream at that offset is not enough on its own; its own BOF-declared documentType must agree with BOF_TYPE_WORKSHEET too, or the sheet degrades to the empty default (readSheet's own module comment) rather than parsing a chart substream's records as if they were a worksheet's.
+    // A worksheet-typed BoundSheet8 entry whose own lbPlyPos happens to name the byte offset of a CHART substream, not a genuine worksheet one — a malformed/corrupt file this reader must not misread rather than one any real producer would write. Finding a substream at that offset is not enough on its own; its own BOF-declared documentType must agree with BOF_TYPE_WORKSHEET too, or the sheet degrades to the empty default (readSheet's own module comment) rather than parsing a chart substream's records as if they were a worksheet's.
     const boundSheetPlaceholder = record(RECORD_BOUNDSHEET8, [
       ...u32(0),
       0x00,
@@ -1406,7 +1406,7 @@ describe("readXlsContent", () => {
       record(RECORD_EOF, []),
     );
     const boundSheet = record(RECORD_BOUNDSHEET8, [
-      ...u32(globals.length), // lbPlyPos -- lands exactly on the chart substream's own BOF, not a worksheet's.
+      ...u32(globals.length), // lbPlyPos — lands exactly on the chart substream's own BOF, not a worksheet's.
       0x00,
       0x00,
       ...shortXlUnicodeString("Sheet1"),
@@ -1433,7 +1433,7 @@ describe("readXlsContent", () => {
   });
 
   it("reads a hidden column with no width at all as hidden alone, not a spurious widthPt", () => {
-    // ColInfo's own coldx of 0 converts to a non-positive widthPt -- a column this reader never materialises a width for, only its hidden state -- unlike a real writeXlsContent round trip, which always states SOME width for every column it emits a ColInfo record for at all.
+    // ColInfo's own coldx of 0 converts to a non-positive widthPt — a column this reader never materialises a width for, only its hidden state — unlike a real writeXlsContent round trip, which always states SOME width for every column it emits a ColInfo record for at all.
     const globals = concat(
       record(RECORD_BOF, bofData(BOF_TYPE_WORKBOOK)),
       ...xfTable(0),
@@ -1460,7 +1460,7 @@ describe("readXlsContent", () => {
         record(RECORD_COLINFO, [
           ...u16(3), // first
           ...u16(3), // last
-          ...u16(0), // coldx: 0 -- no usable width
+          ...u16(0), // coldx: 0 — no usable width
           ...u16(15), // ixfe, unread
           ...u16(0x0001), // grbit: hidden
         ]),
@@ -1475,7 +1475,7 @@ describe("readXlsContent", () => {
   });
 
   it("omits a column entirely when it states neither a usable width nor a hidden flag", () => {
-    // The mirror image of the hidden-alone case above: coldx 0 (no usable width) AND grbit clear (not hidden) means the ColInfo record states nothing ContentSheetColumn has a field for, so the column must not appear in the output at all -- not as a bare {index} entry either.
+    // The mirror image of the hidden-alone case above: coldx 0 (no usable width) AND grbit clear (not hidden) means the ColInfo record states nothing ContentSheetColumn has a field for, so the column must not appear in the output at all — not as a bare {index} entry either.
     const globals = concat(
       record(RECORD_BOF, bofData(BOF_TYPE_WORKBOOK)),
       ...xfTable(0),
@@ -1502,7 +1502,7 @@ describe("readXlsContent", () => {
         record(RECORD_COLINFO, [
           ...u16(3),
           ...u16(3),
-          ...u16(0), // coldx: 0 -- no usable width
+          ...u16(0), // coldx: 0 — no usable width
           ...u16(15),
           ...u16(0x0000), // grbit: not hidden
         ]),
@@ -1518,7 +1518,7 @@ describe("readXlsContent", () => {
   });
 
   it("leaves numberFormatCode entirely absent for a cell whose own ixfe resolves to no cell format at all", () => {
-    // An ixfe past the end of the workbook's own cell-format table -- a malformed record this reader must not crash on, and must not report a fabricated format for either. Own-property check, not a value check: a bug materialising the key with an explicit undefined value would pass a plain .toBeUndefined() assertion just as easily as a genuinely absent key would.
+    // An ixfe past the end of the workbook's own cell-format table — a malformed record this reader must not crash on, and must not report a fabricated format for either. Own-property check, not a value check: a bug materialising the key with an explicit undefined value would pass a plain .toBeUndefined() assertion just as easily as a genuinely absent key would.
     const bytes = xlsFile(
       workbookStream({
         globals: xfTable(0),
@@ -1538,7 +1538,7 @@ describe("readXlsContent", () => {
   });
 
   describe("cell decoration", () => {
-    /** A single populated cell (icv 10, the default palette's own duplicate of Red -- [MS-XLS] "Icv"'s own default-red/green/blue table) so a decoration test only needs to build the globals substream's own XF table, not a whole worksheet's cell records. */
+    /** A single populated cell (icv 10, the default palette's own duplicate of Red — [MS-XLS] "Icv"'s own default-red/green/blue table) so a decoration test only needs to build the globals substream's own XF table, not a whole worksheet's cell records. */
     function decoratedCellDocument(
       decoration: XfTestDecoration,
       globalsExtra: readonly Uint8Array<ArrayBuffer>[] = [],
@@ -1557,7 +1557,7 @@ describe("readXlsContent", () => {
     }
 
     it("keeps a Blank cell whose own XF carries real decoration", () => {
-      // The case a producer writes a Blank record FOR: the cell holds no value, and its fill and borders are the only thing it has to say -- so dropping it as "shows nothing" discards exactly what the record was written to carry. Two XFs here so the decorated one is not also the sheet's default: index 15 undecorated, index 16 carrying the fill and a thin top border.
+      // The case a producer writes a Blank record FOR: the cell holds no value, and its fill and borders are the only thing it has to say — so dropping it as "shows nothing" discards exactly what the record was written to carry. Two XFs here so the decorated one is not also the sheet's default: index 15 undecorated, index 16 carrying the fill and a thin top border.
       const bytes = xlsFile(
         workbookStream({
           globals: [
@@ -1602,7 +1602,7 @@ describe("readXlsContent", () => {
     });
 
     it("still drops a Blank cell whose XF resolves to no decoration this reader can express", () => {
-      // 0x13 is a reserved FillPattern value past FLSGRAY0625 (0x12), the last one [MS-XLS]/[MS-XLSB]'s own enumeration names -- it resolves to no background at all (see the test below), and no side carries a border, so this Blank has nothing to show after resolution and stays dropped, exactly as an undecorated one does.
+      // 0x13 is a reserved FillPattern value past FLSGRAY0625 (0x12), the last one [MS-XLS]/[MS-XLSB]'s own enumeration names — it resolves to no background at all (see the test below), and no side carries a border, so this Blank has nothing to show after resolution and stays dropped, exactly as an undecorated one does.
       const RESERVED_FILL_PATTERN = 0x13;
       const bytes = xlsFile(
         workbookStream({
@@ -1623,7 +1623,7 @@ describe("readXlsContent", () => {
     });
 
     it("reads a solid fill's own foreground colour as a solid background, through the default palette", () => {
-      // icv 10: the default table's own duplicate of Red (rgColor[2], [MS-XLS] "Icv") -- resolvable with no Palette record present at all.
+      // icv 10: the default table's own duplicate of Red (rgColor[2], [MS-XLS] "Icv") — resolvable with no Palette record present at all.
       const bytes = decoratedCellDocument({
         fillPattern: 1,
         fillForegroundIcv: 10,
@@ -1637,7 +1637,7 @@ describe("readXlsContent", () => {
     });
 
     it("maps a genuine two-colour pattern fill instead of dropping it (ExaDev/documents.js#951)", () => {
-      // fls=2 is FLSMEDGRAY, 50% gray ([MS-XLS]/[MS-XLSB] FillPattern) -- ContentCellPatternType's own 'mediumGray'.
+      // fls=2 is FLSMEDGRAY, 50% gray ([MS-XLS]/[MS-XLSB] FillPattern) — ContentCellPatternType's own 'mediumGray'.
       const bytes = decoratedCellDocument({
         fillPattern: 2,
         fillForegroundIcv: 10, // default Red
@@ -1665,7 +1665,7 @@ describe("readXlsContent", () => {
     });
 
     it("reads per-side border style and colour from the CellXF payload", () => {
-      // style 1 = THIN (solid, thin weight); style 3 = DASHED (dashed pattern, thin weight) -- [MS-XLS] BorderStyle.
+      // style 1 = THIN (solid, thin weight); style 3 = DASHED (dashed pattern, thin weight) — [MS-XLS] BorderStyle.
       const bytes = decoratedCellDocument({
         left: { style: 1, icv: 12 }, // icv 12: default Blue
         top: { style: 3, icv: 11 }, // icv 11: default Green
@@ -1687,7 +1687,7 @@ describe("readXlsContent", () => {
     });
 
     it("resolves a fill/border colour through a real Palette record when one is present", () => {
-      // A custom colour at icv 8 (rgColor[0]) that does NOT match the default table's own entry there (black) -- proving this reads the file's own Palette rather than falling back to the default.
+      // A custom colour at icv 8 (rgColor[0]) that does NOT match the default table's own entry there (black) — proving this reads the file's own Palette rather than falling back to the default.
       const customOrange = [0xff, 0x80, 0x00, 0x00];
       const paletteEntries = [
         customOrange,
@@ -1751,7 +1751,7 @@ describe("readXlsContent", () => {
     });
 
     it("states no font for a cell whose XF resolves to the workbook's own default font", () => {
-      // BIFF8 gives a cell no way to say "no font", only an index into the font table -- a cell naming entry 0, the Normal style's font, is stating the default, which the schema models as the field being absent rather than a restated copy of it.
+      // BIFF8 gives a cell no way to say "no font", only an index into the font table — a cell naming entry 0, the Normal style's font, is stating the default, which the schema models as the field being absent rather than a restated copy of it.
       const bytes = xlsFile(
         workbookStream({
           globals: [fontRecord({}), ...xfTableWithFont(0, 0)],
@@ -1795,7 +1795,7 @@ describe("readXlsContent", () => {
     });
 
     it("still drops a Blank cell whose font differs from the default only in a colour this reader cannot resolve", () => {
-      // The cell font's icv (Automatic, 0x7FFF) differs from the default's (icv 10), but Automatic has no fixed RGB triple to resolve to, so the diff yields an empty font -- equivalent to no font at all, the same way a reserved FillPattern value resolves to no background. With no other formatting, the Blank has nothing left to show and stays dropped.
+      // The cell font's icv (Automatic, 0x7FFF) differs from the default's (icv 10), but Automatic has no fixed RGB triple to resolve to, so the diff yields an empty font — equivalent to no font at all, the same way a reserved FillPattern value resolves to no background. With no other formatting, the Blank has nothing left to show and stays dropped.
       const bytes = xlsFile(
         workbookStream({
           globals: [
@@ -2021,7 +2021,7 @@ describe("readXlsContent", () => {
             ...xfTable(0),
             ...supportingLinks(1),
             builtinLblRecord(0x0d, 1, area), // _FilterDatabase
-            builtinLblRecord(0x06, 1, area), // Print_Area -- print-names.ts owns this one
+            builtinLblRecord(0x06, 1, area), // Print_Area — print-names.ts owns this one
           ],
           sheets: [{ name: "Sheet1", records: [] }],
         }),
@@ -2035,7 +2035,7 @@ describe("readXlsContent", () => {
           scopeSheetIndex: 0,
         },
       ]);
-      // The print area the built-in carried is not lost -- it lives where the schema models it.
+      // The print area the built-in carried is not lost — it lives where the schema models it.
       expect(content.sheets[0]?.printSettings.printRange).toStrictEqual({
         startRow: 0,
         startColumn: 0,
@@ -2088,7 +2088,7 @@ describe("readXlsContent", () => {
         },
       );
       const content = readXlsContent(bytes);
-      // .toEqual, not .toStrictEqual: archive-codec's own summaryInformationToLayoutMetadata (shared with doc-codec/ppt-codec) states every LayoutMetadata field explicitly, as undefined rather than omitted, for whichever of subject/keywords/modifiedIso the stream did not carry -- a real, if minor, contract inconsistency against LayoutMetadataSchema's own "optional means absent" convention, but one belonging to that shared package rather than this one.
+      // .toEqual, not .toStrictEqual: archive-codec's own summaryInformationToLayoutMetadata (shared with doc-codec/ppt-codec) states every LayoutMetadata field explicitly, as undefined rather than omitted, for whichever of subject/keywords/modifiedIso the stream did not carry — a real, if minor, contract inconsistency against LayoutMetadataSchema's own "optional means absent" convention, but one belonging to that shared package rather than this one.
       expect(content.metadata).toEqual({
         title: "Budget",
         author: "Cornelius",
@@ -2109,7 +2109,7 @@ describe("readXlsContent", () => {
 });
 
 describe("readXlsContent formula recovery", () => {
-  // A cell reference's own RgceLoc column field ([MS-XLS] 2.5.51 ColRelU), fully relative -- the shape a bare `A1` (as opposed to `$A$1`) carries, both colRelative and rowRelative bits set.
+  // A cell reference's own RgceLoc column field ([MS-XLS] 2.5.51 ColRelU), fully relative — the shape a bare `A1` (as opposed to `$A$1`) carries, both colRelative and rowRelative bits set.
   const relativeColumn = (column: number) => u16(0xc000 | column);
   /** PtgRef (value class, [MS-XLS] 2.5.198.84): a Formula's own operand for a single-cell reference. */
   const ptgRef = (row: number, column: number) => [
@@ -2213,7 +2213,7 @@ describe("readXlsContent formula recovery", () => {
   });
 
   it("leaves formula absent for a shared-formula member's own PtgExp", () => {
-    // PtgExp ([MS-XLS] 2.5.198.58): opcode 0x01, then the shared formula's own base cell -- a formula this reader deliberately does not resolve (see biff/ptg.ts), so the cached value stays correct and formula stays absent rather than reading past the token into something invented.
+    // PtgExp ([MS-XLS] 2.5.198.58): opcode 0x01, then the shared formula's own base cell — a formula this reader deliberately does not resolve (see biff/ptg.ts), so the cached value stays correct and formula stays absent rather than reading past the token into something invented.
     const bytes = xlsFile(
       workbookStream({
         globals: xfTable(0),
@@ -2240,7 +2240,7 @@ describe("readXlsContent formula recovery", () => {
 });
 
 describe("readXlsContent schema conformance", () => {
-  // The strongest single check in this suite: the reader's output is parsed by document-schema.js's OWN validator rather than compared against hand-written expectations. A field this package populates with a shape the schema does not accept -- a zero widthPt where the schema requires a positive number, a cell value kind spelled BIFF8's way rather than the schema's, a required print-settings field left off -- fails here even when every value-level assertion above passes.
+  // The strongest single check in this suite: the reader's output is parsed by document-schema.js's OWN validator rather than compared against hand-written expectations. A field this package populates with a shape the schema does not accept — a zero widthPt where the schema requires a positive number, a cell value kind spelled BIFF8's way rather than the schema's, a required print-settings field left off — fails here even when every value-level assertion above passes.
   const bytes = xlsFile(
     workbookStream({
       globals: [
@@ -2393,7 +2393,7 @@ describe("isXlsFile", () => {
 });
 
 describe("readXlsContent print settings", () => {
-  /** A Setup record ([MS-XLS] 2.4.257) with iPageStart, iRes, iVRes, numHdr, numFtr, and iCopies at values a real producer writes -- none of which this reader acts on. */
+  /** A Setup record ([MS-XLS] 2.4.257) with iPageStart, iRes, iVRes, numHdr, numFtr, and iCopies at values a real producer writes — none of which this reader acts on. */
   function setupRecord(fields: {
     paperCode: number;
     scalePercent: number;
@@ -2534,7 +2534,7 @@ describe("readXlsContent print settings", () => {
   });
 
   it("reports no fit-to-page at all when either count is the spec's own auto value", () => {
-    // [MS-XLS] 2.4.257: "The value 0 means use as many pages as necessary" -- an auto setting ContentSheetPrintSettings cannot express, both its counts being required and positive. A fabricated 1 would claim the sheet is pinned to one page along an axis the file left free.
+    // [MS-XLS] 2.4.257: "The value 0 means use as many pages as necessary" — an auto setting ContentSheetPrintSettings cannot express, both its counts being required and positive. A fabricated 1 would claim the sheet is pinned to one page along an axis the file left free.
     const settings = printSettingsOf([
       record(RECORD_WSBOOL, u16(0x0100)),
       setupRecord({
@@ -2551,7 +2551,7 @@ describe("readXlsContent print settings", () => {
   });
 
   it("reports no fit-to-page at all when the WIDTH count alone is the spec's own auto value", () => {
-    // The mirror image of the fitHeight-is-auto case above: fitWidth 0 with a real, positive fitHeight -- both axes must be positive independently, neither one alone is enough.
+    // The mirror image of the fitHeight-is-auto case above: fitWidth 0 with a real, positive fitHeight — both axes must be positive independently, neither one alone is enough.
     const settings = printSettingsOf([
       record(RECORD_WSBOOL, u16(0x0100)),
       setupRecord({

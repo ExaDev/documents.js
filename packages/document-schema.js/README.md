@@ -61,7 +61,7 @@ Two format-agnostic helpers live here because they operate on the content model 
 ```ts
 import { ContentDocumentSchema, DocumentTreeSchema } from "document-schema.js";
 
-// The codec-exchange form: what every format's reader produces and every writer consumes -- always flat,
+// The codec-exchange form: what every format's reader produces and every writer consumes — always flat,
 // always fully materialised (no styles table, no refs), never versioned (that lives on the serialised artefact).
 const content = ContentDocumentSchema.parse(
   someWordprocessingOrPresentationValue,
@@ -133,7 +133,7 @@ import {
 } from "document-schema.js";
 
 // The one call a construction site makes: decompose the flat content into the tree, splice the envelope
-// onto the root, and mint a styles table over the result. `pages` is optional -- pass it once a layout
+// onto the root, and mint a styles table over the result. `pages` is optional — pass it once a layout
 // pass has produced each rendered page's own size.
 const pkg = assembleTree(content, pages);
 
@@ -397,7 +397,7 @@ import { ColorSchema } from "document-schema.js/color";
 ```ts
 import type { ContentCodec } from "document-schema.js";
 
-declare const docxCodec: ContentCodec; // read(bytes) -> ContentDocument; write(content) -> bytes -- write is optional
+declare const docxCodec: ContentCodec; // read(bytes) -> ContentDocument; write(content) -> bytes — write is optional
 ```
 
 `ContentCodec.write` is optional (`odf` has a reader but no builder — recovering MathML from glyphs is OCR-adjacent), and the interface is generic over its own `TOptions`. There is no `LayoutCodec` any more: it modelled the one format that produces layout cheaply on read — PDF — and the whole `LayoutDocument` family it described moved to pdf-codec in 4.0.0 (see [pdf-codec#65](https://github.com/ExaDev/pdf-codec/issues/65)).

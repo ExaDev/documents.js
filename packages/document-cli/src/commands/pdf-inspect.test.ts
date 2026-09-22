@@ -15,7 +15,7 @@ import {
 import { createProgram } from "../program";
 import { EXIT_SUCCESS } from "../runtime/exit-codes";
 
-// Drives the real assembled commander program against a real PDF (docxToPdf's own real output, not a hand-built LayoutDocument), proving `--full` writes the complete parsed LayoutDocument as plain JSON -- untagged by design since the LayoutDocument family moved to pdf-codec at document-schema.js 4.0.0 and lost its schema-stamped JSON envelope.
+// Drives the real assembled commander program against a real PDF (docxToPdf's own real output, not a hand-built LayoutDocument), proving `--full` writes the complete parsed LayoutDocument as plain JSON — untagged by design since the LayoutDocument family moved to pdf-codec at document-schema.js 4.0.0 and lost its schema-stamped JSON envelope.
 
 let savedExitCode: typeof process.exitCode;
 let workspace: string;
@@ -82,7 +82,7 @@ afterEach(() => {
   process.exitCode = savedExitCode;
 });
 
-// A genuinely decodable 1x1 red PNG (real IHDR/IDAT/IEND chunks) -- appendImage decodes the pixel grid to size the image asset it registers, so a fake signature-only PNG would throw rather than produce a real "png" entry in imagesByFormat.
+// A genuinely decodable 1x1 red PNG (real IHDR/IDAT/IEND chunks) — appendImage decodes the pixel grid to size the image asset it registers, so a fake signature-only PNG would throw rather than produce a real "png" entry in imagesByFormat.
 const REAL_PNG_BYTES = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49,
   0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02,
@@ -92,7 +92,7 @@ const REAL_PNG_BYTES = new Uint8Array([
   0xae, 0x42, 0x60, 0x82,
 ]);
 
-// Two pages, one text item and one rect on page 1 (a mixed item-kind histogram), one image on page 2 (a real, decodable PNG so it survives round-trip and populates imagesByFormat), plus document metadata -- enough to exercise every branch of runPdfInspect's default and --json report paths (multi-page pluralisation, a non-empty histogram, the metadata section, and the images section).
+// Two pages, one text item and one rect on page 1 (a mixed item-kind histogram), one image on page 2 (a real, decodable PNG so it survives round-trip and populates imagesByFormat), plus document metadata — enough to exercise every branch of runPdfInspect's default and --json report paths (multi-page pluralisation, a non-empty histogram, the metadata section, and the images section).
 function multiPagePdfBytes(): Uint8Array<ArrayBuffer> {
   const editor = createPdf();
   editor.metadata = { title: "Inspectable", author: "Test Suite" };
@@ -205,10 +205,10 @@ describe("pdf-inspect --full", () => {
 
     const parsed: unknown = JSON.parse(stdout);
 
-    // `toEqual`, not `toStrictEqual`: a JSON round trip cannot distinguish an explicitly-`undefined` optional field (how `readPdf`'s own in-memory value carries an absent one) from a genuinely missing key (what `JSON.stringify`/`JSON.parse` produces for it instead) -- an inherent property of JSON itself.
+    // `toEqual`, not `toStrictEqual`: a JSON round trip cannot distinguish an explicitly-`undefined` optional field (how `readPdf`'s own in-memory value carries an absent one) from a genuinely missing key (what `JSON.stringify`/`JSON.parse` produces for it instead) — an inherent property of JSON itself.
     expect(parsed).toEqual(readPdf(new Uint8Array(await readFile(pdfPath))));
 
-    // The dump is the plain pdf-codec value -- no $schema key exists for a LayoutDocument any more (the family moved to pdf-codec at document-schema.js 4.0.0 and lost its schema-stamped envelope), so asserting its absence pins the demotion against an accidental re-tag with a schema that no longer defines this kind.
+    // The dump is the plain pdf-codec value — no $schema key exists for a LayoutDocument any more (the family moved to pdf-codec at document-schema.js 4.0.0 and lost its schema-stamped envelope), so asserting its absence pins the demotion against an accidental re-tag with a schema that no longer defines this kind.
     expect(parsed).not.toHaveProperty("$schema");
   });
 });

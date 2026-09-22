@@ -77,7 +77,7 @@ describe("encodeCcittFax: exact bit strings", () => {
   });
 
   it("codes a first black row horizontally with a zero-length leading white run", () => {
-    // 8 black pixels on line 0 against the all-white reference: a1 = 0 (the a0-run is still white, a1 is its first black change), b1 = the sentinel columns = 8, delta -8 is outside vertical range, so horizontal mode codes run 0 white then run 8 black: "001" + white-0 "00110101" + black-8 "000101" -- 17 bits, the last landing alone in a third zero-padded byte.
+    // 8 black pixels on line 0 against the all-white reference: a1 = 0 (the a0-run is still white, a1 is its first black change), b1 = the sentinel columns = 8, delta -8 is outside vertical range, so horizontal mode codes run 0 white then run 8 black: "001" + white-0 "00110101" + black-8 "000101" — 17 bits, the last landing alone in a third zero-padded byte.
     const encoded = encodeCcittFax(packed(["00000000"]), {
       columns: 8,
       rows: 1,
@@ -121,7 +121,7 @@ describe("encodeCcittFax: round trips through this package's own decoder", () =>
   }
 
   it("round-trips a deterministic pseudo-random page of scan-like rows", () => {
-    // Long alternating runs of random lengths -- the shape a dithered scan actually takes, exercising pass and every vertical offset.
+    // Long alternating runs of random lengths — the shape a dithered scan actually takes, exercising pass and every vertical offset.
     let state = 0x12345678;
     const random = (): number => {
       state = (state * 1103515245 + 12345) & 0x7fffffff;

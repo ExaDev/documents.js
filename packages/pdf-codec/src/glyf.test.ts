@@ -183,7 +183,7 @@ describe("compositeComponents", () => {
       transform: undefined,
     });
 
-    // The base and the accent are both real, drawable simple glyphs -- exactly what a subset that dropped them would lose.
+    // The base and the accent are both real, drawable simple glyphs — exactly what a subset that dropped them would lose.
     expect(glyf.glyphHeader(lowercaseE)?.numberOfContours).toBe(2);
     expect(glyf.glyphHeader(172)?.numberOfContours).toBe(1);
   });
@@ -287,7 +287,7 @@ describe("compositeComponents", () => {
   });
 });
 
-// Carlito Regular's own nominal vertical metrics ('hhea' ascent/descent at unitsPerEm 2048), read from the vendored file directly -- the font-wide extent every glyph in the face shares, and the value per-glyph ink bounds exist to replace where a caller is sizing a box around particular characters.
+// Carlito Regular's own nominal vertical metrics ('hhea' ascent/descent at unitsPerEm 2048), read from the vendored file directly — the font-wide extent every glyph in the face shares, and the value per-glyph ink bounds exist to replace where a caller is sizing a box around particular characters.
 const CARLITO_UNITS_PER_EM = 2048;
 const CARLITO_NOMINAL_ASCENT = 1950;
 const CARLITO_NOMINAL_DESCENT = -550;

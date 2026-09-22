@@ -13,9 +13,9 @@
     "stryker.shared.ts"
   ],
 
-  // Every task name is the underscore-prefixed one each package already used for its real command (`_build` runs tsdown; the package's own `build` script was `turbo run _build`). Running the public names from here instead would make turbo invoke those wrapper scripts, which invoke turbo again -- the recursive-call case Turborepo's own docs warn against ("You should only define these commands in the root package.json"). The wrapper scripts stay in place and stay usable for a single package, but the root pipeline reaches straight past them to the leaf commands.
+  // Every task name is the underscore-prefixed one each package already used for its real command (`_build` runs tsdown; the package's own `build` script was `turbo run _build`). Running the public names from here instead would make turbo invoke those wrapper scripts, which invoke turbo again — the recursive-call case Turborepo's own docs warn against ("You should only define these commands in the root package.json"). The wrapper scripts stay in place and stay usable for a single package, but the root pipeline reaches straight past them to the leaf commands.
   //
-  // The web UI (`web`) needs different inputs/outputs/cache settings from the generic _build/_typecheck/etc (a vite.config.ts, a CI-only base-path env var, an uncacheable build since it stamps the commit SHA at build time) -- it uses the same underscore-prefixed task names as every other package via package-scoped overrides below, so a single `turbo run _build` still reaches it; only the settings differ, not the name. It is a leaf: nothing in the workspace depends on it.
+  // The web UI (`web`) needs different inputs/outputs/cache settings from the generic _build/_typecheck/etc (a vite.config.ts, a CI-only base-path env var, an uncacheable build since it stamps the commit SHA at build time) — it uses the same underscore-prefixed task names as every other package via package-scoped overrides below, so a single `turbo run _build` still reaches it; only the settings differ, not the name. It is a leaf: nothing in the workspace depends on it.
   //
   // Every task depends on `^_build`, its dependencies' builds. In the separate repositories a sibling arrived pre-built from the registry, so typecheck, lint, and test needed nothing built first; here a sibling is a workspace symlink whose dist/ exists only once its own build has run, and tsc, type-aware eslint, and vitest all resolve imports through it.
   "tasks": {
@@ -36,7 +36,7 @@
       "inputs": ["$TURBO_DEFAULT$", "tsconfig.json", "tsconfig.node.json"],
       "outputs": []
     },
-    // attw --pack inspects the package's own dist/ against its own package.json exports map, so it depends on this package's own _build (which also builds every sibling `_build` depends on) rather than `^_build` -- the only task here that needs its own build rather than its dependencies'. Previously a raw shell loop in ci.yml's Typecheck job (`pnpm --recursive --filter='!documents' exec attw --pack`), preceded by an explicit `pnpm build` purely to give it a dist/ to inspect; both re-ran uncached on every push regardless of what changed. A package that doesn't publish (`web`) has no `_typecheck:attw` script, so turbo silently skips it here the same way it already skips packages missing `_test:corpus`.
+    // attw --pack inspects the package's own dist/ against its own package.json exports map, so it depends on this package's own _build (which also builds every sibling `_build` depends on) rather than `^_build` — the only task here that needs its own build rather than its dependencies'. Previously a raw shell loop in ci.yml's Typecheck job (`pnpm --recursive --filter='!documents' exec attw --pack`), preceded by an explicit `pnpm build` purely to give it a dist/ to inspect; both re-ran uncached on every push regardless of what changed. A package that doesn't publish (`web`) has no `_typecheck:attw` script, so turbo silently skips it here the same way it already skips packages missing `_test:corpus`.
     "_typecheck:attw": {
       "dependsOn": ["_build"],
       "inputs": ["package.json"],
@@ -52,7 +52,7 @@
       // Unit tests are co-located as src/**/*.test.ts, so src/** covers them; test/ holds only the smoke and workerd suites, which have their own tasks below.
       "inputs": [
         "src/**",
-        // documents.js's examples suite reads the committed goldens under examples/, so they are a real input to the task. Undeclared, editing a golden left the previous result cached and the change untested -- which is how a stale golden survived unnoticed until the schema package's own major bump made it fail.
+        // documents.js's examples suite reads the committed goldens under examples/, so they are a real input to the task. Undeclared, editing a golden left the previous result cached and the change untested — which is how a stale golden survived unnoticed until the schema package's own major bump made it fail.
         "examples/**",
         "vitest.config.ts",
         "vitest.unit.config.ts",
@@ -66,7 +66,7 @@
       "dependsOn": ["^_build"],
       "inputs": [
         "src/**",
-        // documents.js's examples suite reads the committed goldens under examples/, so they are a real input to the task. Undeclared, editing a golden left the previous result cached and the change untested -- which is how a stale golden survived unnoticed until the schema package's own major bump made it fail.
+        // documents.js's examples suite reads the committed goldens under examples/, so they are a real input to the task. Undeclared, editing a golden left the previous result cached and the change untested — which is how a stale golden survived unnoticed until the schema package's own major bump made it fail.
         "examples/**",
         "vitest.config.ts",
         "vitest.unit.config.ts",
@@ -89,7 +89,7 @@
     "_test:smoke": {
       // The smoke suites import from dist/, and each package's own `_test:smoke` script rebuilds before running. Depending on `_build` means the build is turbo's, cached and shared with every other task that needs it, instead of an uncacheable rebuild inside the test command.
       //
-      // `^_test:smoke` is what keeps the run correct, and it is not obvious. Those in-script rebuilds run tsdown with `clean: true`, so a smoke task empties its own dist/ before repopulating it. That was harmless while every sibling arrived pre-built from the npm registry, but here a dependent resolves a sibling through a workspace symlink into that very directory -- so two smoke tasks running concurrently let one observe the other mid-clean. Reproduced directly: document-mcp's smoke suite failed with "Failed to resolve entry for package documents.js" in a parallel run and passed both alone and at --concurrency=1. Ordering the smoke tasks topologically means no package resolves through a dist/ that a dependency is still rewriting.
+      // `^_test:smoke` is what keeps the run correct, and it is not obvious. Those in-script rebuilds run tsdown with `clean: true`, so a smoke task empties its own dist/ before repopulating it. That was harmless while every sibling arrived pre-built from the npm registry, but here a dependent resolves a sibling through a workspace symlink into that very directory — so two smoke tasks running concurrently let one observe the other mid-clean. Reproduced directly: document-mcp's smoke suite failed with "Failed to resolve entry for package documents.js" in a parallel run and passed both alone and at --concurrency=1. Ordering the smoke tasks topologically means no package resolves through a dist/ that a dependency is still rewriting.
       "dependsOn": ["_build", "^_build", "^_test:smoke"],
       "inputs": [
         "src/**",
@@ -105,7 +105,7 @@
     },
     "_test:corpus": {
       "dependsOn": ["^_build"],
-      // markdown-codec's and pdf-codec's real-world conformance layers. Their corpora are gitignored, so this is a local-only task and CI does not run it -- as was true in those packages' own workflows.
+      // markdown-codec's and pdf-codec's real-world conformance layers. Their corpora are gitignored, so this is a local-only task and CI does not run it — as was true in those packages' own workflows.
       "inputs": [
         "src/**",
         "test/corpus/**",
@@ -126,7 +126,7 @@
         "tsconfig.json",
         "package.json"
       ],
-      // reports/stryker-incremental.json is Stryker's own cross-run cache (this workspace's CI restores/saves it separately via actions/cache, keyed independently of turbo's own cache), and the HTML/clear-text reports sit alongside it -- both worth keeping as a declared, replayable output rather than left for turbo to treat as untracked.
+      // reports/stryker-incremental.json is Stryker's own cross-run cache (this workspace's CI restores/saves it separately via actions/cache, keyed independently of turbo's own cache), and the HTML/clear-text reports sit alongside it — both worth keeping as a declared, replayable output rather than left for turbo to treat as untracked.
       "outputs": ["reports/**"],
       // Read by stryker.shared.ts to leave the break threshold to the workflow's own merged gate. Passed through rather than declared under `env` so setting it does not change the task's cache key: the task's reports are the same whichever job produced them.
       "passThroughEnv": ["MUTATION_DEFER_BREAK"]
@@ -145,7 +145,7 @@
       ],
       // CI switches the app's base path to /<repo-name>/ (derived from GITHUB_REPOSITORY) for Pages; strict env mode would strip it and silently produce a build with root-relative asset paths that 404 once deployed.
       "env": ["CI", "GITHUB_REPOSITORY"],
-      // Uncacheable on purpose. vite.config.ts embeds the HEAD commit SHA, its exact release tag, and its commit timestamp into the bundle by shelling out to git at config-load time. None of that is a declared input and none of it can be -- so on a commit that leaves packages/web/** untouched, a cache replay would deploy a bundle stamped with the previous commit's identity. A vite build per deploy is cheaper than shipping wrong version metadata.
+      // Uncacheable on purpose. vite.config.ts embeds the HEAD commit SHA, its exact release tag, and its commit timestamp into the bundle by shelling out to git at config-load time. None of that is a declared input and none of it can be — so on a commit that leaves packages/web/** untouched, a cache replay would deploy a bundle stamped with the previous commit's identity. A vite build per deploy is cheaper than shipping wrong version metadata.
       "cache": false,
       "outputs": ["dist/**"]
     },
@@ -175,7 +175,7 @@
       "outputs": ["coverage/**"]
     },
     "web#_test:e2e": {
-      // The webServer runs `pnpm dev` (vite) straight against src/, not web's own dist/ -- so this depends on siblings' builds (^_build), not web#_build.
+      // The webServer runs `pnpm dev` (vite) straight against src/, not web's own dist/ — so this depends on siblings' builds (^_build), not web#_build.
       "dependsOn": ["^_build"],
       "inputs": ["src/**", "e2e/**", "playwright.config.ts", "package.json"],
       "outputs": ["playwright-report/**"]
@@ -193,7 +193,7 @@
       ],
       "outputs": [".eslintcache"]
     },
-    // The root package has suites of its own -- the two CI scripts under .github/scripts. Without this entry `turbo run _test` skips the root package entirely, so they would never run.
+    // The root package has suites of its own — the two CI scripts under .github/scripts. Without this entry `turbo run _test` skips the root package entirely, so they would never run.
     "//#_test": {
       "inputs": [
         ".github/scripts/**",

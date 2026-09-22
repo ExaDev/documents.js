@@ -123,7 +123,7 @@ describe("OdsCell.displayText", () => {
     expect(cell.displayText).toBe("line one\nline two");
   });
 
-  it("get() also correctly decodes a cell with MULTIPLE text:p children (a real Calc Alt+Enter line break) joined with \\n -- the shape a real producer, not this editor's own writer, would use", () => {
+  it("get() also correctly decodes a cell with MULTIPLE text:p children (a real Calc Alt+Enter line break) joined with \\n — the shape a real producer, not this editor's own writer, would use", () => {
     const pkg = createOds().toPackage();
     const node = el("table:table-cell", { "office:value-type": "string" }, [
       el("text:p", {}, [txt("line one")]),

@@ -4,7 +4,7 @@ import { OdgHarness } from "./test-support.js";
 
 const EFFECT_SETTLE_MS = 50;
 
-// `vi.waitFor`'s first predicate check can resolve the instant a freshly-mounted screen's own render commits, which happens before that screen's own `useInput` effect (setRawMode + attach the readable listener) has actually flushed -- so a `stdin.write` sent immediately after a screen-transition wait can race ahead of the listener that would have handled it. A short real delay after confirming a new screen is showing, before the first interactive keystroke sent to it, gives that effect a genuine chance to run.
+// `vi.waitFor`'s first predicate check can resolve the instant a freshly-mounted screen's own render commits, which happens before that screen's own `useInput` effect (setRawMode + attach the readable listener) has actually flushed — so a `stdin.write` sent immediately after a screen-transition wait can race ahead of the listener that would have handled it. A short real delay after confirming a new screen is showing, before the first interactive keystroke sent to it, gives that effect a genuine chance to run.
 async function settle(): Promise<void> {
   await new Promise((resolve) => {
     setTimeout(resolve, EFFECT_SETTLE_MS);

@@ -7,7 +7,7 @@ import { useAppDispatch, useAppState } from "../../../state/context.js";
 import { anyOverlayOpen } from "../../../state/types.js";
 import { formatSize, requirePdfDocument } from "./shared.js";
 
-// Fixed rather than derived from the union's own member count, because the order here is display order (text and images first, as the most common content, vector primitives after), not an exhaustiveness requirement -- `summariseItemKinds` below tolerates a kind never appearing at all.
+// Fixed rather than derived from the union's own member count, because the order here is display order (text and images first, as the most common content, vector primitives after), not an exhaustiveness requirement — `summariseItemKinds` below tolerates a kind never appearing at all.
 const LAYOUT_ITEM_KIND_ORDER: readonly LayoutItem["kind"][] = [
   "text",
   "image",
@@ -94,7 +94,7 @@ export function PdfPageListScreen(): ReactElement {
         }
         renderItem={({ page, pageIndex }, isSelected) => (
           <Text color={selectedColor(isSelected)} inverse={isSelected}>
-            Page {pageIndex + 1} -- {pageSummaryText(page)}
+            Page {pageIndex + 1} — {pageSummaryText(page)}
           </Text>
         )}
       />

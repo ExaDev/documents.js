@@ -8,7 +8,7 @@ import {
 } from "ooxml.js";
 import { decodeLegacyEmbeddedObject } from "../legacy-embedded";
 
-// pptx-side legacy-OLE-embedding detection (ExaDev/documents.js#921), the counterpart to src/ooxml/docx/embedded-objects.ts's own collectParagraphOleObjects/resolveLegacyOleObject. A p:graphicFrame's a:graphicData[uri=OLE_GRAPHIC_URI]/p:oleObj whose payload is a classic OLE compound file holding native Word 97/Excel 97/PowerPoint 97 streams (no "Package" stream a ZIP could sit in) is already a real ContentShape by the time this pass runs -- ooxml.js's own readGraphicFrameShape (typed/pptx/read.ts) always produces one, from the OLE object's own fallback picture where the frame carries one -- but that shape's blocks never gain the recovered sub-document the way the ZIP-payload case does (readOleEmbeddedObject there pushes an embeddedObject block "beside whatever the display path produced", its own comment's wording). This mirrors that exact append, for the shape the upstream reader already built.
+// pptx-side legacy-OLE-embedding detection (ExaDev/documents.js#921), the counterpart to src/ooxml/docx/embedded-objects.ts's own collectParagraphOleObjects/resolveLegacyOleObject. A p:graphicFrame's a:graphicData[uri=OLE_GRAPHIC_URI]/p:oleObj whose payload is a classic OLE compound file holding native Word 97/Excel 97/PowerPoint 97 streams (no "Package" stream a ZIP could sit in) is already a real ContentShape by the time this pass runs — ooxml.js's own readGraphicFrameShape (typed/pptx/read.ts) always produces one, from the OLE object's own fallback picture where the frame carries one — but that shape's blocks never gain the recovered sub-document the way the ZIP-payload case does (readOleEmbeddedObject there pushes an embeddedObject block "beside whatever the display path produced", its own comment's wording). This mirrors that exact append, for the shape the upstream reader already built.
 const OLE_GRAPHIC_URI =
   "http://schemas.openxmlformats.org/presentationml/2006/ole";
 
@@ -57,7 +57,7 @@ function collectLegacyOleShapes(
   }
 }
 
-// Rebuilds a slide's own shapes array, appending a recovered legacy embedding to each p:graphicFrame shape whose OLE payload turned out to be a classic compound file none of ooxml.js's own ZIP/CFB- Package-stream decoding can place. Undefined for every non-recovery shape: no o:oleObj, no r:id, no matching relationship, a non-binary part, or a payload none of the three legacy readers can place -- the shape keeps whatever the upstream reader's own fallback-picture display already gave it, exactly the same degrade-tier that reader's own OLE resolution already applies. Returns `slide` unchanged when nothing was recovered.
+// Rebuilds a slide's own shapes array, appending a recovered legacy embedding to each p:graphicFrame shape whose OLE payload turned out to be a classic compound file none of ooxml.js's own ZIP/CFB- Package-stream decoding can place. Undefined for every non-recovery shape: no o:oleObj, no r:id, no matching relationship, a non-binary part, or a payload none of the three legacy readers can place — the shape keeps whatever the upstream reader's own fallback-picture display already gave it, exactly the same degrade-tier that reader's own OLE resolution already applies. Returns `slide` unchanged when nothing was recovered.
 export function spliceSlideLegacyEmbeddedObjects(
   slide: ContentSlide,
   spTreeChildren: readonly XmlNode[],

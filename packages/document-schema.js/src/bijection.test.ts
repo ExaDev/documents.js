@@ -21,9 +21,9 @@ import type { PageSize } from "./geometry";
 import { DocumentTreeSchema, type DocumentTree } from "./package";
 import type { SourceResidue } from "./source";
 
-// THE PACKAGE BOUNDARY'S MERGE GATE: the three bijection laws run over a corpus spanning every document kind, every leaf the tree vocabulary admits, and every grouping signal decompose reads. document-outline.js proved the laws property-wise over its local corpus in phase 1, and documents.js runs this same law harness over its own REAL corpus -- reader outputs for every format, editors per kind, onDocument captures carrying the layout pass's real frames and pages. That corpus cannot live here: every reader in it belongs to a package that depends on this one (ooxml.js, odf.js, markdown-codec, pdf-codec), so importing it would invert the dependency the schema layer exists to keep one-way. What lives here instead is the same harness over hand-built content covering the same structural ground, and documents.js's own suite stays the gate over real format output -- the two are complementary, not redundant: this one pins the transform against the schema's whole vocabulary, that one pins it against what codecs actually emit.
+// THE PACKAGE BOUNDARY'S MERGE GATE: the three bijection laws run over a corpus spanning every document kind, every leaf the tree vocabulary admits, and every grouping signal decompose reads. document-outline.js proved the laws property-wise over its local corpus in phase 1, and documents.js runs this same law harness over its own REAL corpus — reader outputs for every format, editors per kind, onDocument captures carrying the layout pass's real frames and pages. That corpus cannot live here: every reader in it belongs to a package that depends on this one (ooxml.js, odf.js, markdown-codec, pdf-codec), so importing it would invert the dependency the schema layer exists to keep one-way. What lives here instead is the same harness over hand-built content covering the same structural ground, and documents.js's own suite stays the gate over real format output — the two are complementary, not redundant: this one pins the transform against the schema's whole vocabulary, that one pins it against what codecs actually emit.
 //
-// The laws (stated on #20 and its errata, and in src/package.ts's own header): (i) flatten(assemble(c)) reproduces c exactly, up to one declared normalisation (a present-but-empty embeddedObjects array normalises to the field absent); (ii) effective-property equality universally -- the flat codec-exchange form flatten produces is fully materialised (zero style refs) and structurally identical to the unfactored original, so a factored and an unfactored serialisation of one document compare equal; (iii) minting idempotence -- assembling the flattened tree again (and factoring an already-factored package) mints the identical table and the identical tree. Never an identity assertion: decompose embeds the source's own node objects, so toBe would pass even for an implementation that mutated its input -- structural comparison over a pre-roundtrip structuredClone snapshot is what actually pins the values, and re-comparing the source against its snapshot additionally pins that neither direction mutates the input in place.
+// The laws (stated on #20 and its errata, and in src/package.ts's own header): (i) flatten(assemble(c)) reproduces c exactly, up to one declared normalisation (a present-but-empty embeddedObjects array normalises to the field absent); (ii) effective-property equality universally — the flat codec-exchange form flatten produces is fully materialised (zero style refs) and structurally identical to the unfactored original, so a factored and an unfactored serialisation of one document compare equal; (iii) minting idempotence — assembling the flattened tree again (and factoring an already-factored package) mints the identical table and the identical tree. Never an identity assertion: decompose embeds the source's own node objects, so toBe would pass even for an implementation that mutated its input — structural comparison over a pre-roundtrip structuredClone snapshot is what actually pins the values, and re-comparing the source against its snapshot additionally pins that neither direction mutates the input in place.
 
 function canon(value: unknown): unknown {
   return JSON.parse(
@@ -31,7 +31,7 @@ function canon(value: unknown): unknown {
   );
 }
 
-// The bijection's one declared normalisation: decompose concatenates a sheet's images and embedded objects into a single children array and flatten rebuilds embeddedObjects only when an embedded object exists, so a present-but-empty array -- schema-legal, emitted by no codec -- cannot survive the round trip and normalises to the field absent. Applied to BOTH sides of every comparison so law (i) stays an equivalence over canonical forms; the direction is pinned outright in decompose.test.ts. Recursive because a sheet can sit inside an embedded document, whose own sheets can carry the same field.
+// The bijection's one declared normalisation: decompose concatenates a sheet's images and embedded objects into a single children array and flatten rebuilds embeddedObjects only when an embedded object exists, so a present-but-empty array — schema-legal, emitted by no codec — cannot survive the round trip and normalises to the field absent. Applied to BOTH sides of every comparison so law (i) stays an equivalence over canonical forms; the direction is pinned outright in decompose.test.ts. Recursive because a sheet can sit inside an embedded document, whose own sheets can carry the same field.
 function normaliseEmbeddedObjects(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normaliseEmbeddedObjects);
   if (typeof value !== "object" || value === null) return value;
@@ -48,7 +48,7 @@ function expectStructurallyEqual(actual: unknown, expected: unknown): void {
   expect(canon(actual)).toEqual(canon(expected));
 }
 
-// True when any object anywhere in the value is a tree group wrapper -- `{ node, children }`, the only shape a style ref can sit on. "The flat encoding is always fully materialised, refs live only on tree wrappers" is the invariant minting depends on and law (ii) asserts, and "no wrapper survived at all" is the strongest form of it: a ref has nowhere else to go. Stated structurally rather than as a scan for any key named `style`, because `style` is also an ordinary content field -- a ContentStroke's own solid/dashed/dotted/double, which a drawing page legitimately carries and which a key-name scan would misread as a leaked ref.
+// True when any object anywhere in the value is a tree group wrapper — `{ node, children }`, the only shape a style ref can sit on. "The flat encoding is always fully materialised, refs live only on tree wrappers" is the invariant minting depends on and law (ii) asserts, and "no wrapper survived at all" is the strongest form of it: a ref has nowhere else to go. Stated structurally rather than as a scan for any key named `style`, because `style` is also an ordinary content field — a ContentStroke's own solid/dashed/dotted/double, which a drawing page legitimately carries and which a key-name scan would misread as a leaked ref.
 function containsGroupWrapper(value: unknown): boolean {
   if (Array.isArray(value)) return value.some(containsGroupWrapper);
   if (typeof value !== "object" || value === null) return false;
@@ -80,7 +80,7 @@ const PRINT_SETTINGS: ContentSheetPrintSettings = {
   pageOrder: "downThenOver",
 };
 
-// One residue value for the corpus's per-node positions and one for its descriptor positions, so the laws pin both spellings of the channel -- the field on ordinary content nodes, and the field inside a construct descriptor riding a marker pair across the boundary.
+// One residue value for the corpus's per-node positions and one for its descriptor positions, so the laws pin both spellings of the channel — the field on ordinary content nodes, and the field inside a construct descriptor riding a marker pair across the boundary.
 const DOCX_RESIDUE: SourceResidue = {
   format: "docx",
   xml: '<w:proofErr w:type="spellStart"/>',
@@ -207,7 +207,7 @@ function corpus(): readonly CorpusEntry[] {
   };
   const table: ContentBlock = {
     kind: "table",
-    // A cell's own blocks stay flat in BOTH encodings -- decomposition treats a table as one leaf and never descends -- so the marker pair inside this cell must ride through untouched and unpromoted, which is the one place a construct is spelled the same way on both sides of the boundary.
+    // A cell's own blocks stay flat in BOTH encodings — decomposition treats a table as one leaf and never descends — so the marker pair inside this cell must ride through untouched and unpromoted, which is the one place a construct is spelled the same way on both sides of the boundary.
     rows: [
       {
         cells: [
@@ -358,7 +358,7 @@ function corpus(): readonly CorpusEntry[] {
     },
     {
       name: "wordprocessing carrying the ban-list fields alongside mintable ones",
-      // styleId, sourcePath, frames, and per-node source residue repeat exactly as often as the mintable keys do, and must stay per-node throughout the round trip -- minting must never factor residue into a styles entry any more than it factors a position or a path.
+      // styleId, sourcePath, frames, and per-node source residue repeat exactly as often as the mintable keys do, and must stay per-node throughout the round trip — minting must never factor residue into a styles entry any more than it factors a position or a path.
       content: wordprocessing([
         [
           paragraph("one", {
@@ -384,7 +384,7 @@ function corpus(): readonly CorpusEntry[] {
     },
     {
       name: "wordprocessing with per-node residue on a container, a run, and a table cell, and descriptor residue inside a construct pair",
-      // Every spelling of the channel in one document: source on the section container (rides the tree's section descriptor through omit+extend), on a run, on a table cell (flat in both encodings), and inside a construct descriptor (rides the marker pair's own payload across the boundary). All three laws must hold verbatim -- the channel is carried, never interpreted, never factored.
+      // Every spelling of the channel in one document: source on the section container (rides the tree's section descriptor through omit+extend), on a run, on a table cell (flat in both encodings), and inside a construct descriptor (rides the marker pair's own payload across the boundary). All three laws must hold verbatim — the channel is carried, never interpreted, never factored.
       content: {
         kind: "wordprocessing",
         metadata: {},
@@ -838,7 +838,7 @@ function constructCorpus(): readonly CorpusEntry[] {
         constructParagraph("in a bookmark", { indentLeftPt: 24 }),
         constructParagraph("still in it", { indentLeftPt: 24 }),
         CONSTRUCT_END,
-        // ExaDev/document-schema.js#1022: constructStart closes the list scope the same way a plain paragraph would, so decompose does NOT nest the bookmark group inside "item one", and this item does not nest under it either -- both land as section-root siblings, "item two" reopening its own list nesting from scratch. The round trip still reproduces every block in place regardless: list.level rides the paragraph object itself, not the tree's own nesting depth, so flatten's document-order walk restores it identically either way.
+        // ExaDev/document-schema.js#1022: constructStart closes the list scope the same way a plain paragraph would, so decompose does NOT nest the bookmark group inside "item one", and this item does not nest under it either — both land as section-root siblings, "item two" reopening its own list nesting from scratch. The round trip still reproduces every block in place regardless: list.level rides the paragraph object itself, not the tree's own nesting depth, so flatten's document-order walk restores it identically either way.
         constructParagraph("item two, nested", { listLevel: 1 }),
       ],
     ),
@@ -901,9 +901,9 @@ function constructCorpus(): readonly CorpusEntry[] {
 
 // --- The run-level extent corpus -----------------------------------------------------------------------------
 
-// The run-level extent mechanism (ContentParagraph.constructs, src/content.ts) is a signal the boundary must carry like any other -- and, unlike the block markers, one it carries by EMBEDDING rather than by transforming: a paragraph is atomic to decomposition (a bare leaf, or a heading/list group's anchor, its runs never regrouped), so decompose and flatten pass the field through on the same node object and no walk below needs a change. These entries pin that for every placement a run extent can sit in, plus the properties (crossing ranges, descriptor residue, minting alongside) that must survive all three laws verbatim.
+// The run-level extent mechanism (ContentParagraph.constructs, src/content.ts) is a signal the boundary must carry like any other — and, unlike the block markers, one it carries by EMBEDDING rather than by transforming: a paragraph is atomic to decomposition (a bare leaf, or a heading/list group's anchor, its runs never regrouped), so decompose and flatten pass the field through on the same node object and no walk below needs a change. These entries pin that for every placement a run extent can sit in, plus the properties (crossing ranges, descriptor residue, minting alongside) that must survive all three laws verbatim.
 function runExtentCorpus(): readonly CorpusEntry[] {
-  // A bare-leaf paragraph carrying a whole-list extent, a crossing pair, a point extent, and a descriptor with residue -- every property of the mechanism in one flow, alongside a block marker pair so both encodings of the construct vocabulary sit in the same document and neither disturbs the other.
+  // A bare-leaf paragraph carrying a whole-list extent, a crossing pair, a point extent, and a descriptor with residue — every property of the mechanism in one flow, alongside a block marker pair so both encodings of the construct vocabulary sit in the same document and neither disturbs the other.
   const runExtentParagraph: ContentBlock = {
     kind: "paragraph",
     runs: [
@@ -969,7 +969,7 @@ function runExtentCorpus(): readonly CorpusEntry[] {
       },
     ],
   };
-  // A table-cell paragraph carrying a run extent: the cell's blocks are flat in BOTH encodings, so this paragraph never crosses the boundary machinery at all -- the same immunity a cell's own marker pair already has.
+  // A table-cell paragraph carrying a run extent: the cell's blocks are flat in BOTH encodings, so this paragraph never crosses the boundary machinery at all — the same immunity a cell's own marker pair already has.
   const cellWithRunExtent: ContentBlock = {
     kind: "table",
     rows: [
@@ -1102,7 +1102,7 @@ describe("decompose/flatten bijection laws over the schema-vocabulary corpus", (
     expect(minting.length).toBeGreaterThan(0);
   });
 
-  // The same anti-vacuity guard, narrowed to the construct entries: laws (ii) and (iii) say nothing about construct groups unless a construct group actually carries a ref, and a construct entry that minted nothing would pass all three laws while proving only that its leaves round-trip. Every construct entry except the deliberately empty one is built to mint on its own construct wrapper, so this pins that the promotion and minting really do compose over the corpus rather than only in factor-styles.test.ts's single fixture. The run-level extent entries are excluded: their wrappers are ordinary groups (a run extent has no construct group of its own -- that is the point of the mechanism), so their anti-vacuity guard is the one immediately below.
+  // The same anti-vacuity guard, narrowed to the construct entries: laws (ii) and (iii) say nothing about construct groups unless a construct group actually carries a ref, and a construct entry that minted nothing would pass all three laws while proving only that its leaves round-trip. Every construct entry except the deliberately empty one is built to mint on its own construct wrapper, so this pins that the promotion and minting really do compose over the corpus rather than only in factor-styles.test.ts's single fixture. The run-level extent entries are excluded: their wrappers are ordinary groups (a run extent has no construct group of its own — that is the point of the mechanism), so their anti-vacuity guard is the one immediately below.
   it("the construct corpus mints refs onto the construct groups themselves", () => {
     const runExtentNames = new Set(
       runExtentCorpus().map((entry) => entry.name),

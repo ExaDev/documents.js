@@ -15,7 +15,7 @@ describe("layoutColorToHex", () => {
   });
 
   it("pads a single-digit byte with a leading zero", () => {
-    // 1/255 rounds to byte 1 -> hex "01", proving the padStart(2, "0") -- without it this would render "#1..." rather than "#01...".
+    // 1/255 rounds to byte 1 -> hex "01", proving the padStart(2, "0") — without it this would render "#1..." rather than "#01...".
     expect(layoutColorToHex({ r: 1 / 255, g: 0, b: 0 })).toBe("#010000");
   });
 

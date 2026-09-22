@@ -1,4 +1,4 @@
-// Unit tests for the GFM table primitives, covering the cases the vendored spec's own eight table examples do not reach -- in particular the pipe requirement on a delimiter row, which is this package's own deliberate narrowing of the GFM prose rather than something the corpus pins (see src/block/table.ts's own top-of-file note).
+// Unit tests for the GFM table primitives, covering the cases the vendored spec's own eight table examples do not reach — in particular the pipe requirement on a delimiter row, which is this package's own deliberate narrowing of the GFM prose rather than something the corpus pins (see src/block/table.ts's own top-of-file note).
 
 import { describe, expect, it } from "vitest";
 import { parseMarkdown } from "./block";

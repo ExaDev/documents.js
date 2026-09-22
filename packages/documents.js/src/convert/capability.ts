@@ -2,7 +2,7 @@ import type { DocumentFormat } from "./port";
 
 // This module models the real ContentDocument-variant compatibility this family already has (wordprocessing = {docx, odt, markdown}, presentation = {pptx, odp}, spreadsheet = {xlsx, ods, csv}, drawing = {odg, svg}) plus which nodes have a direct layout-engine path to/from LayoutDocument (FORMAT_CAPABILITIES below). The composition engine (src/convert/composition.ts) consumes FORMAT_CAPABILITIES' variant declarations to build its composition graph, and UnsupportedConversionError is thrown by convertDocument/local.ts for any pair the pathfinder cannot route. The former DIRECT_EDGES list and resolveConversionPath resolver have been superseded by the pathfinder (resolveCompositionPlan in composition.ts), which derives every resolvable pair from the same registry data.
 
-// All five of document-schema.js's own ContentDocument kinds. 'formula' is a genuine member rather than a forward-looking one: readOdfFormulaContent produces a real `{kind:'formula', ...}` ContentDocument and odfToPdf consumes one, so `odf` below models it. Unlike the other four, it is a variant of exactly ONE format -- there is no second 'formula'-variant format to bridge it to, which is why a shared variant does not by itself imply a bridge edge exists.
+// All five of document-schema.js's own ContentDocument kinds. 'formula' is a genuine member rather than a forward-looking one: readOdfFormulaContent produces a real `{kind:'formula', ...}` ContentDocument and odfToPdf consumes one, so `odf` below models it. Unlike the other four, it is a variant of exactly ONE format — there is no second 'formula'-variant format to bridge it to, which is why a shared variant does not by itself imply a bridge edge exists.
 export type ContentVariant =
   "wordprocessing" | "presentation" | "spreadsheet" | "drawing" | "formula";
 
@@ -10,9 +10,9 @@ export interface FormatCapability {
   readonly format: DocumentFormat;
   // The ContentDocument variant this format reads into / builds from, when it participates in that shared pivot at all. Only `pdf` leaves this undefined: it is the LayoutDocument pivot itself, not a ContentDocument variant at all.
   readonly variant?: ContentVariant;
-  // Whether a direct layout-engine conversion (a real ContentDocument -> LayoutDocument -> PDF pipeline, or its reverse) already exists for this format today. `odf` is a one-way exception -- formula -> PDF only, with no reverse and no genuine round-trip layout pivot (see odfToPdf's own module comment on why pdf -> odf is not attempted) -- so it is modelled as false here even though its own one-way edge is still present as a special case in local.ts.
+  // Whether a direct layout-engine conversion (a real ContentDocument -> LayoutDocument -> PDF pipeline, or its reverse) already exists for this format today. `odf` is a one-way exception — formula -> PDF only, with no reverse and no genuine round-trip layout pivot (see odfToPdf's own module comment on why pdf -> odf is not attempted) — so it is modelled as false here even though its own one-way edge is still present as a special case in local.ts.
   readonly hasLayoutPath: boolean;
-  // Whether this format can only be READ. A read-only format is a legitimate conversion SOURCE and can never be a target: its codec ships a reader and no writer, so there is nothing to build its bytes from. Stated per format rather than inferred, and required on every entry so a new format has to answer it -- the composition engine, buildDocumentBytes, and setDocumentMetadata each enforce the same answer at their own boundary, and READ_ONLY_FORMATS below is the one derivation they share.
+  // Whether this format can only be READ. A read-only format is a legitimate conversion SOURCE and can never be a target: its codec ships a reader and no writer, so there is nothing to build its bytes from. Stated per format rather than inferred, and required on every entry so a new format has to answer it — the composition engine, buildDocumentBytes, and setDocumentMetadata each enforce the same answer at their own boundary, and READ_ONLY_FORMATS below is the one derivation they share.
   readonly readOnly: boolean;
 }
 
@@ -49,14 +49,14 @@ export const FORMAT_CAPABILITIES: Readonly<
     hasLayoutPath: true,
     readOnly: false,
   },
-  // xlsx shares the spreadsheet ContentDocument variant with ods (readXlsxContent/buildXlsxPackage, both from ooxml.js) but has no layout-engine path of its own -- there is no convertSpreadsheetToLayout-equivalent xlsx entry point, only ods's. hasLayoutPath stays false: the composition engine routes xlsx <-> pdf through the ods bridge + ods's own layout engine rather than being a genuine ContentDocument -> LayoutDocument pipeline of xlsx's own.
+  // xlsx shares the spreadsheet ContentDocument variant with ods (readXlsxContent/buildXlsxPackage, both from ooxml.js) but has no layout-engine path of its own — there is no convertSpreadsheetToLayout-equivalent xlsx entry point, only ods's. hasLayoutPath stays false: the composition engine routes xlsx <-> pdf through the ods bridge + ods's own layout engine rather than being a genuine ContentDocument -> LayoutDocument pipeline of xlsx's own.
   xlsx: {
     format: "xlsx",
     variant: "spreadsheet",
     hasLayoutPath: false,
     readOnly: false,
   },
-  // csv shares the spreadsheet variant with xlsx/ods (readCsvContent/buildCsvText, src/csv/) and follows xlsx's routing exactly: plain text carries no layout of its own, so csv <-> pdf goes through the ods bridge + ods's layout engine. TSV is this same member with { delimiter: '\t' }, not a separate format -- see port.ts's own csv comment.
+  // csv shares the spreadsheet variant with xlsx/ods (readCsvContent/buildCsvText, src/csv/) and follows xlsx's routing exactly: plain text carries no layout of its own, so csv <-> pdf goes through the ods bridge + ods's layout engine. TSV is this same member with { delimiter: '\t' }, not a separate format — see port.ts's own csv comment.
   csv: {
     format: "csv",
     variant: "spreadsheet",
@@ -69,7 +69,7 @@ export const FORMAT_CAPABILITIES: Readonly<
     hasLayoutPath: true,
     readOnly: false,
   },
-  // svg shares the drawing ContentDocument variant with odg (readSvgContent/buildSvgText, src/svg/) and has a genuine layout-engine edge of its own: svgToPdf feeds the drawing ContentDocument it reads straight into the same convertDrawingToLayout engine odgToPdf already uses, so hasLayoutPath is true -- unlike csv's text-only entry, plain SVG text still describes real page geometry (a root viewBox is a page size), and the drawing layout engine renders it.
+  // svg shares the drawing ContentDocument variant with odg (readSvgContent/buildSvgText, src/svg/) and has a genuine layout-engine edge of its own: svgToPdf feeds the drawing ContentDocument it reads straight into the same convertDrawingToLayout engine odgToPdf already uses, so hasLayoutPath is true — unlike csv's text-only entry, plain SVG text still describes real page geometry (a root viewBox is a page size), and the drawing layout engine renders it.
   svg: {
     format: "svg",
     variant: "drawing",
@@ -83,49 +83,49 @@ export const FORMAT_CAPABILITIES: Readonly<
     hasLayoutPath: false,
     readOnly: true,
   },
-  // markdown shares the wordprocessing variant with docx/odt (readMarkdownContent produces the identical WordprocessingContentDocument shape -- see convert.ts's own top-of-file comment) and has a genuine layout-engine edge of its own (markdownToPdf/pdfToMarkdown both reuse convertWordprocessingToLayout/reconstructWordprocessing unmodified), unlike xlsx above.
+  // markdown shares the wordprocessing variant with docx/odt (readMarkdownContent produces the identical WordprocessingContentDocument shape — see convert.ts's own top-of-file comment) and has a genuine layout-engine edge of its own (markdownToPdf/pdfToMarkdown both reuse convertWordprocessingToLayout/reconstructWordprocessing unmodified), unlike xlsx above.
   markdown: {
     format: "markdown",
     variant: "wordprocessing",
     hasLayoutPath: true,
     readOnly: false,
   },
-  // rtf shares the wordprocessing variant with docx/odt/markdown (readRtfContent/writeRtfContent, rtf-codec) but follows csv/xlsx's routing exactly rather than markdown's: rtf-codec has no layout engine of its own -- no convertWordprocessingToLayout-equivalent rtf entry point -- so hasLayoutPath stays false and the composition engine routes rtf <-> pdf through a same-variant bridge to docx/odt/markdown plus that format's own layout engine, never a direct rtf -> LayoutDocument pipeline.
+  // rtf shares the wordprocessing variant with docx/odt/markdown (readRtfContent/writeRtfContent, rtf-codec) but follows csv/xlsx's routing exactly rather than markdown's: rtf-codec has no layout engine of its own — no convertWordprocessingToLayout-equivalent rtf entry point — so hasLayoutPath stays false and the composition engine routes rtf <-> pdf through a same-variant bridge to docx/odt/markdown plus that format's own layout engine, never a direct rtf -> LayoutDocument pipeline.
   rtf: {
     format: "rtf",
     variant: "wordprocessing",
     hasLayoutPath: false,
     readOnly: false,
   },
-  // doc shares the wordprocessing variant with docx/odt/markdown/rtf (doc-codec's readDocContent/writeDocContent, the pre-2007 Word Binary File Format) and follows rtf's routing exactly: doc-codec has no layout engine of its own -- no convertWordprocessingToLayout-equivalent doc entry point -- so hasLayoutPath stays false and the composition engine routes doc <-> pdf through a same-variant bridge to docx/odt/markdown/rtf plus that format's own toPdf/fromPdf edge. readOnly is false: doc-codec's writeDocContent is a real writer (single-section wordprocessing content, character/paragraph formatting only -- see that package's own README scope note), not merely a reader with no counterpart the way wpd-codec's is.
+  // doc shares the wordprocessing variant with docx/odt/markdown/rtf (doc-codec's readDocContent/writeDocContent, the pre-2007 Word Binary File Format) and follows rtf's routing exactly: doc-codec has no layout engine of its own — no convertWordprocessingToLayout-equivalent doc entry point — so hasLayoutPath stays false and the composition engine routes doc <-> pdf through a same-variant bridge to docx/odt/markdown/rtf plus that format's own toPdf/fromPdf edge. readOnly is false: doc-codec's writeDocContent is a real writer (single-section wordprocessing content, character/paragraph formatting only — see that package's own README scope note), not merely a reader with no counterpart the way wpd-codec's is.
   doc: {
     format: "doc",
     variant: "wordprocessing",
     hasLayoutPath: false,
     readOnly: false,
   },
-  // xls shares the spreadsheet variant with xlsx/ods/csv (xls-codec's readXlsContent/writeXlsContent, the legacy Excel Binary File Format/BIFF8) and follows xlsx/csv's routing exactly: no layout engine of its own, so xls <-> pdf routes through the ods bridge + ods's own layout engine, never a direct xls -> LayoutDocument pipeline. readOnly is false: xls-codec's writeXlsContent is a real writer (cell values, merges, row/column sizing, number formats -- see that package's own README scope note).
+  // xls shares the spreadsheet variant with xlsx/ods/csv (xls-codec's readXlsContent/writeXlsContent, the legacy Excel Binary File Format/BIFF8) and follows xlsx/csv's routing exactly: no layout engine of its own, so xls <-> pdf routes through the ods bridge + ods's own layout engine, never a direct xls -> LayoutDocument pipeline. readOnly is false: xls-codec's writeXlsContent is a real writer (cell values, merges, row/column sizing, number formats — see that package's own README scope note).
   xls: {
     format: "xls",
     variant: "spreadsheet",
     hasLayoutPath: false,
     readOnly: false,
   },
-  // ppt shares the presentation variant with pptx/odp (ppt-codec's readPptContent/writePptContent, PowerPoint 97-2003 binary presentations) but, unlike pptx/odp, has no layout engine of its own -- so hasLayoutPath stays false and ppt <-> pdf routes through a same-variant bridge to pptx/odp plus that format's own toPdf/fromPdf edge, the identical composed routing rtf/doc get within the wordprocessing family. readOnly is false: ppt-codec's writePptContent is a real writer, narrower in scope than the reader (text-box slides only -- see that package's own README scope note), but a real write path all the same.
+  // ppt shares the presentation variant with pptx/odp (ppt-codec's readPptContent/writePptContent, PowerPoint 97-2003 binary presentations) but, unlike pptx/odp, has no layout engine of its own — so hasLayoutPath stays false and ppt <-> pdf routes through a same-variant bridge to pptx/odp plus that format's own toPdf/fromPdf edge, the identical composed routing rtf/doc get within the wordprocessing family. readOnly is false: ppt-codec's writePptContent is a real writer, narrower in scope than the reader (text-box slides only — see that package's own README scope note), but a real write path all the same.
   ppt: {
     format: "ppt",
     variant: "presentation",
     hasLayoutPath: false,
     readOnly: false,
   },
-  // wpd shares the wordprocessing variant with docx/odt/markdown/rtf/doc (wpd-codec's readWpdContent), and is the first read-only member: wpd-codec ships a reader and no writer, deliberately -- see that package's own Scope. hasLayoutPath is true for markdown's reason rather than rtf's: what it reads is a wordprocessing ContentDocument convertWordprocessingToLayout renders unmodified, and with no reverse direction to keep symmetrical there is nothing to weigh that against, so wpd -> pdf is a direct layout pass rather than a build-and-re-read through a docx bridge.
+  // wpd shares the wordprocessing variant with docx/odt/markdown/rtf/doc (wpd-codec's readWpdContent), and is the first read-only member: wpd-codec ships a reader and no writer, deliberately — see that package's own Scope. hasLayoutPath is true for markdown's reason rather than rtf's: what it reads is a wordprocessing ContentDocument convertWordprocessingToLayout renders unmodified, and with no reverse direction to keep symmetrical there is nothing to weigh that against, so wpd -> pdf is a direct layout pass rather than a build-and-re-read through a docx bridge.
   wpd: {
     format: "wpd",
     variant: "wordprocessing",
     hasLayoutPath: true,
     readOnly: true,
   },
-  // epub shares the wordprocessing variant with docx/odt/markdown/rtf/doc (epub-codec's readEpubContent/writeEpubContent, flowable EPUB 2/3) and follows rtf/doc's routing exactly: epub-codec has no layout engine of its own, so hasLayoutPath stays false and epub <-> pdf routes through a same-variant bridge plus that format's own toPdf/fromPdf edge. readOnly is false: epub-codec's writeEpubContent is a real writer -- narrower than the reader (it always emits EPUB 3, where the reader accepts EPUB 2 or 3), but that asymmetry is internal to epub-codec's own writer and needs no capability-level modelling, since writeEpubContent succeeds for any wordprocessing ContentDocument regardless of which EPUB version originally produced it.
+  // epub shares the wordprocessing variant with docx/odt/markdown/rtf/doc (epub-codec's readEpubContent/writeEpubContent, flowable EPUB 2/3) and follows rtf/doc's routing exactly: epub-codec has no layout engine of its own, so hasLayoutPath stays false and epub <-> pdf routes through a same-variant bridge plus that format's own toPdf/fromPdf edge. readOnly is false: epub-codec's writeEpubContent is a real writer — narrower than the reader (it always emits EPUB 3, where the reader accepts EPUB 2 or 3), but that asymmetry is internal to epub-codec's own writer and needs no capability-level modelling, since writeEpubContent succeeds for any wordprocessing ContentDocument regardless of which EPUB version originally produced it.
   epub: {
     format: "epub",
     variant: "wordprocessing",
@@ -135,14 +135,14 @@ export const FORMAT_CAPABILITIES: Readonly<
   pdf: { format: "pdf", hasLayoutPath: false, readOnly: false },
 };
 
-// Every format that can only be read, derived from the capabilities above rather than restated. This is what buildDocumentBytes and setDocumentMetadata check to refuse a read-only TARGET with a reason instead of an internal-invariant message: a format with no writer is a caller error to name as a target, not a registry gap. The composition engine enforces the same fact structurally instead (nothing points at a read-only node in its graph), so it consults this set for nothing -- one fact, two enforcement points that cannot disagree, because both are downstream of the same declaration.
+// Every format that can only be read, derived from the capabilities above rather than restated. This is what buildDocumentBytes and setDocumentMetadata check to refuse a read-only TARGET with a reason instead of an internal-invariant message: a format with no writer is a caller error to name as a target, not a registry gap. The composition engine enforces the same fact structurally instead (nothing points at a read-only node in its graph), so it consults this set for nothing — one fact, two enforcement points that cannot disagree, because both are downstream of the same declaration.
 export const READ_ONLY_FORMATS: ReadonlySet<DocumentFormat> = new Set(
   Object.values(FORMAT_CAPABILITIES)
     .filter((capability) => capability.readOnly)
     .map((capability) => capability.format),
 );
 
-// Thrown when a requested (source, target) pair has no route in the composition graph (resolveCompositionPlan returned undefined) -- convertDocument and the local DocumentConverter (local.ts) reject rather than silently routing through a path the engine cannot resolve. A named class matching this package's own OdmUnresolvedSectionError/HsqldbSqlUnsupportedError convention for "recognised but unsupported", so a caller can branch on it rather than string-matching a message.
+// Thrown when a requested (source, target) pair has no route in the composition graph (resolveCompositionPlan returned undefined) — convertDocument and the local DocumentConverter (local.ts) reject rather than silently routing through a path the engine cannot resolve. A named class matching this package's own OdmUnresolvedSectionError/HsqldbSqlUnsupportedError convention for "recognised but unsupported", so a caller can branch on it rather than string-matching a message.
 export class UnsupportedConversionError extends Error {
   readonly source: DocumentFormat;
   readonly target: DocumentFormat;

@@ -14,7 +14,7 @@ export interface ParagraphInit {
   readonly alignment?: Alignment;
 }
 
-// A live view over a ContentParagraph node in a section's blocks array (or a table cell's blocks array), mirroring MarkdownParagraph over the identical node shape. The one surface difference from markdown's own paragraph is the alignment/indent/spacing setter family: doc-codec's writer encodes each of those as a direct paragraph-exception sprm (src/prop/pap-write.ts), so unlike markdown -- whose format cannot state them at all -- a doc paragraph genuinely round-trips all of them and the editor exposes all of them.
+// A live view over a ContentParagraph node in a section's blocks array (or a table cell's blocks array), mirroring MarkdownParagraph over the identical node shape. The one surface difference from markdown's own paragraph is the alignment/indent/spacing setter family: doc-codec's writer encodes each of those as a direct paragraph-exception sprm (src/prop/pap-write.ts), so unlike markdown — whose format cannot state them at all — a doc paragraph genuinely round-trips all of them and the editor exposes all of them.
 export class DocParagraph {
   private readonly container: ContentBlock[];
   private readonly node: ContentParagraphNode;
@@ -190,7 +190,7 @@ export class DocParagraph {
   }
 }
 
-// Builds a fresh ContentParagraph node from scratch (not a live view -- for constructing new paragraphs to append, whose properties are then read back through DocParagraph once inserted into a blocks array). Mirrors markdown's paragraph.ts buildParagraph, including the empty-text special case: an empty ContentParagraph node carries one empty-text run rather than none, matching what every reader in this ecosystem produces for an empty paragraph.
+// Builds a fresh ContentParagraph node from scratch (not a live view — for constructing new paragraphs to append, whose properties are then read back through DocParagraph once inserted into a blocks array). Mirrors markdown's paragraph.ts buildParagraph, including the empty-text special case: an empty ContentParagraph node carries one empty-text run rather than none, matching what every reader in this ecosystem produces for an empty paragraph.
 export function buildParagraph(init: ParagraphInit = {}): ContentParagraphNode {
   const node: ContentParagraphNode = {
     kind: "paragraph",

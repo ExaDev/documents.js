@@ -1,7 +1,7 @@
 import { isCompoundFile } from "../cfb/detect";
 import { startsWithMagic } from "../magic";
 
-// ZIP's first four bytes are either a local file header signature ("PK\x03\x04") or, for an archive with zero entries, the end-of-central-directory record signature ("PK\x05\x06") -- a valid archive's leading bytes are always one of these two. Multi-disk spanning markers ("PK\x07\x08") prefix only multi-volume archives, which this package does not accept.
+// ZIP's first four bytes are either a local file header signature ("PK\x03\x04") or, for an archive with zero entries, the end-of-central-directory record signature ("PK\x05\x06") — a valid archive's leading bytes are always one of these two. Multi-disk spanning markers ("PK\x07\x08") prefix only multi-volume archives, which this package does not accept.
 const ZIP_LOCAL_FILE_HEADER_MAGIC = [0x50, 0x4b, 0x03, 0x04] as const;
 const ZIP_END_OF_CENTRAL_DIRECTORY_MAGIC = [0x50, 0x4b, 0x05, 0x06] as const;
 

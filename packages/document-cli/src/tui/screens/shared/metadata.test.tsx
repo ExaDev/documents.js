@@ -118,7 +118,7 @@ describe("MetadataScreen", () => {
     );
     await waitForText(lastFrame, "Original title");
 
-    // title is the first row -- Enter opens it for editing, seeded with the current value.
+    // title is the first row — Enter opens it for editing, seeded with the current value.
     await sendKey(stdin, ENTER_KEY);
     await waitForText(lastFrame, "Editing title");
     stdin.write(" EDITED");
@@ -126,7 +126,7 @@ describe("MetadataScreen", () => {
     await sendKey(stdin, ENTER_KEY);
 
     const committed = await waitForText(lastFrame, "Original title EDITED");
-    // Untouched fields survive the edit -- MetadataOverrides' own partial-merge semantics.
+    // Untouched fields survive the edit — MetadataOverrides' own partial-merge semantics.
     expect(committed).toContain("Original author");
   });
 

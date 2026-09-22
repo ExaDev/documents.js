@@ -13,7 +13,7 @@ import {
 } from "../io/document-output";
 import { defineOperation } from "../operation";
 
-// documents.js's own DocumentFormat enum (see DocumentInputSchema in ../io/document-input) deliberately has no 'odm' member -- a .odm master document is never wired into the DocumentConverter port at all, since odmToPdf needs a caller-supplied resolveSubDocument callback no other conversion does (see documents.js's own README, "odmToPdf is the one conversion in this package that is not purely bytes-in/bytes-out"). The shared hybrid DocumentInputSchema can therefore not represent a .odm source at all: inferFormatFromExtension has no '.odm' entry, and the inline-bytes variant's `format` field has no 'odm' option either. The master document gets its own minimal path-or-inline-bytes union instead -- structurally the same path/bytesBase64 shape, just without a format label a fixed-format input has no use for.
+// documents.js's own DocumentFormat enum (see DocumentInputSchema in ../io/document-input) deliberately has no 'odm' member — a .odm master document is never wired into the DocumentConverter port at all, since odmToPdf needs a caller-supplied resolveSubDocument callback no other conversion does (see documents.js's own README, "odmToPdf is the one conversion in this package that is not purely bytes-in/bytes-out"). The shared hybrid DocumentInputSchema can therefore not represent a .odm source at all: inferFormatFromExtension has no '.odm' entry, and the inline-bytes variant's `format` field has no 'odm' option either. The master document gets its own minimal path-or-inline-bytes union instead — structurally the same path/bytesBase64 shape, just without a format label a fixed-format input has no use for.
 const OdmMasterSourceSchema = z.union([
   z.object({
     path: z
@@ -36,7 +36,7 @@ async function resolveOdmMasterBytes(
   return base64ToBytes(source.bytesBase64);
 }
 
-// Unlike the master document, a chapter IS representable by the shared DocumentInputSchema -- odt is a real DocumentFormat member -- so this reuses it directly rather than a bespoke schema. odmToPdf's own resolveSubDocument contract always reads the resolved bytes as odt regardless of any format label a caller supplies (see documents.js's src/convert/convert.ts: every resolved chapter is decoded via odf.js's decodePackage then readOdtContent), so only `.bytes` is ever used below -- the resolved `.format` is not itself load-bearing.
+// Unlike the master document, a chapter IS representable by the shared DocumentInputSchema — odt is a real DocumentFormat member — so this reuses it directly rather than a bespoke schema. odmToPdf's own resolveSubDocument contract always reads the resolved bytes as odt regardless of any format label a caller supplies (see documents.js's src/convert/convert.ts: every resolved chapter is decoded via odf.js's decodePackage then readOdtContent), so only `.bytes` is ever used below — the resolved `.format` is not itself load-bearing.
 const OdmChapterInputSchema = z.object({
   href: z
     .string()
@@ -44,7 +44,7 @@ const OdmChapterInputSchema = z.object({
       "The chapter's own text:section-source href as declared inside the .odm master document (e.g. '../chapter1.odt').",
     ),
   source: DocumentInputSchema.describe(
-    "The chapter document's own bytes -- always read as odt, regardless of the format this hybrid input declares.",
+    "The chapter document's own bytes — always read as odt, regardless of the format this hybrid input declares.",
   ),
 });
 
@@ -69,7 +69,7 @@ const OdmToPdfInputSchema = z.object({
   ),
 });
 
-// Mirrors ../io/document-output's ResolvedDocumentOutput return shape as a real Zod schema -- lets a caller (this operation's own test included) parse the successful result without an unsafe cast. odmToPdf's own OdmUnresolvedSectionError propagates on failure (see this operation's own run() below); a caller catching it reads its own `hrefs` field directly, so no failure-shape schema is needed alongside this one.
+// Mirrors ../io/document-output's ResolvedDocumentOutput return shape as a real Zod schema — lets a caller (this operation's own test included) parse the successful result without an unsafe cast. odmToPdf's own OdmUnresolvedSectionError propagates on failure (see this operation's own run() below); a caller catching it reads its own `hrefs` field directly, so no failure-shape schema is needed alongside this one.
 export const OdmToPdfOutputSchema = z.union([
   z.object({ path: z.string(), byteLength: z.number() }),
   z.object({
@@ -83,13 +83,13 @@ export const odmToPdfOperation = defineOperation({
   name: "odm_to_pdf",
   title: "Convert ODM master document to PDF",
   description:
-    "Converts a .odm (ODF master document) to PDF. A .odm never carries its own chapters' content inline -- every text:section is a bare external reference to a standalone .odt file -- so each chapter the master document declares must resolve through `chapters` (an explicit href -> document override) and/or `chaptersDir` (a directory searched by the href's own basename), checked in that order. A chapter left unresolved by both fails the whole conversion, naming every unresolved href.",
+    "Converts a .odm (ODF master document) to PDF. A .odm never carries its own chapters' content inline — every text:section is a bare external reference to a standalone .odt file — so each chapter the master document declares must resolve through `chapters` (an explicit href -> document override) and/or `chaptersDir` (a directory searched by the href's own basename), checked in that order. A chapter left unresolved by both fails the whole conversion, naming every unresolved href.",
   inputSchema: OdmToPdfInputSchema,
   outputSchema: OdmToPdfOutputSchema,
   async run({ source, chapters, chaptersDir, output }) {
     const masterBytes = await resolveOdmMasterBytes(source);
 
-    // Pre-resolves every explicit chapters override up front, since odmToPdf's own resolveSubDocument callback is synchronous -- called from within a synchronous read pass, not awaited (see OdmToPdfOptions in documents.js) -- so no hybrid-input resolution (a file read or a base64 decode) can happen lazily inside it.
+    // Pre-resolves every explicit chapters override up front, since odmToPdf's own resolveSubDocument callback is synchronous — called from within a synchronous read pass, not awaited (see OdmToPdfOptions in documents.js) — so no hybrid-input resolution (a file read or a base64 decode) can happen lazily inside it.
     const overrides = new Map<string, Uint8Array<ArrayBuffer>>();
     for (const chapter of chapters) {
       const { bytes: chapterBytes } = await resolveDocumentInput(
@@ -98,7 +98,7 @@ export const odmToPdfOperation = defineOperation({
       overrides.set(chapter.href, chapterBytes);
     }
 
-    // The same precedence document-cli's own odm-to-pdf command uses (createResolveSubDocument, src/commands/odm.ts): an explicit chapters override by href first, then chaptersDir joined with the href's own basename, then undefined -- letting odmToPdf's own OdmUnresolvedSectionError collection do its job.
+    // The same precedence document-cli's own odm-to-pdf command uses (createResolveSubDocument, src/commands/odm.ts): an explicit chapters override by href first, then chaptersDir joined with the href's own basename, then undefined — letting odmToPdf's own OdmUnresolvedSectionError collection do its job.
     const resolveSubDocument = (
       href: string,
     ): Uint8Array<ArrayBuffer> | undefined => {

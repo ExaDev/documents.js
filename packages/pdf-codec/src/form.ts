@@ -6,7 +6,7 @@ import type { PdfDict, PdfObject } from "./objects";
 import { asArray, asName, asNumber, dictGet } from "./objects";
 import { decodePdfString } from "./pdf-text";
 
-// AcroForm reading (#721 phase 5): the /AcroForm /Fields recursion, one node per field. The walk splits terminal fields (which carry /FT) from non-terminal groups (whose /Kids are more fields), and within a terminal field splits widget annotations (a /Kid with no /FT, placed by its /P page) from child fields -- the merged-field/widget split the verdict row names. Names are fully qualified per ISO 32000-1 12.7.3.2: the /T chain from the root joined with '.'.
+// AcroForm reading (#721 phase 5): the /AcroForm /Fields recursion, one node per field. The walk splits terminal fields (which carry /FT) from non-terminal groups (whose /Kids are more fields), and within a terminal field splits widget annotations (a /Kid with no /FT, placed by its /P page) from child fields — the merged-field/widget split the verdict row names. Names are fully qualified per ISO 32000-1 12.7.3.2: the /T chain from the root joined with '.'.
 
 // /Ff flag bit values (ISO 32000-1 Table 220).
 const FLAG_READ_ONLY = 1;

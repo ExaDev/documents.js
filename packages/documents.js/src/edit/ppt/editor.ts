@@ -23,7 +23,7 @@ export interface CreatePptOptions {
   readonly clock?: ClockPort;
 }
 
-// A genuine live-view editor over a mutable presentation ContentDocument -- the ppt sibling of DocEditor/XlsEditor/MarkdownEditor. ppt-codec reads and writes through this package's own src/ppt envelope adapters (its native shape is the flat { metadata, slides }), so openPpt wraps readPptContent's ContentDocument and toBytes() unwraps back through writePptContent. Every PptSlide/PptShape holds a direct reference into document.slides (and each slide's own shapes array); unlike a fresh odp/pptx package (both deliberately scaffold empty), a presentation ContentDocument has no shared slide-geometry scaffold to target, so slide size is stated per slide and addSlide's default is PowerPoint's own widescreen default.
+// A genuine live-view editor over a mutable presentation ContentDocument — the ppt sibling of DocEditor/XlsEditor/MarkdownEditor. ppt-codec reads and writes through this package's own src/ppt envelope adapters (its native shape is the flat { metadata, slides }), so openPpt wraps readPptContent's ContentDocument and toBytes() unwraps back through writePptContent. Every PptSlide/PptShape holds a direct reference into document.slides (and each slide's own shapes array); unlike a fresh odp/pptx package (both deliberately scaffold empty), a presentation ContentDocument has no shared slide-geometry scaffold to target, so slide size is stated per slide and addSlide's default is PowerPoint's own widescreen default.
 export class PptEditor {
   private readonly document: PresentationDocument;
 
@@ -40,7 +40,7 @@ export class PptEditor {
     return this.document.metadata;
   }
 
-  // The patch-style MetadataOverrides setter every other editor's own metadata setter takes (docx/pptx/odt/odp/ods/odg/pdf -- see src/metadata/core-patch.ts): only the fields the caller names change, so an override never clears a field it did not mention.
+  // The patch-style MetadataOverrides setter every other editor's own metadata setter takes (docx/pptx/odt/odp/ods/odg/pdf — see src/metadata/core-patch.ts): only the fields the caller names change, so an override never clears a field it did not mention.
   set metadata(value: MetadataOverrides) {
     this.document.metadata = mergeMetadata(this.document.metadata, value);
   }
@@ -70,7 +70,7 @@ export function openPpt(bytes: Uint8Array<ArrayBuffer>): PptEditor {
   return new PptEditor(readPptContent(bytes));
 }
 
-// Creates a fresh empty presentation with real metadata timestamps -- zero slides, mirroring createOdp/createPptx's own deliberately-empty scaffolds (see odp's scaffold.ts: "office:presentation starts empty").
+// Creates a fresh empty presentation with real metadata timestamps — zero slides, mirroring createOdp/createPptx's own deliberately-empty scaffolds (see odp's scaffold.ts: "office:presentation starts empty").
 export function createPpt(options: CreatePptOptions = {}): PptEditor {
   const clock = options.clock ?? systemClock;
   const document: ContentDocument = {

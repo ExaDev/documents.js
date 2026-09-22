@@ -13,7 +13,7 @@ import {
   formulaOfBlock,
 } from "./formula";
 
-// collectDocumentFormulas is the shared walk latex/lint.ts's lintMathCoherence and document-mcp's compute_formula tool both consume (ExaDev/documents.js#928's round-1 review) -- these tests exercise every ContentDocument arm directly against hand-built content, the same way src/latex/lint.test.ts already exercises table-cell recursion, rather than round-tripping through a format writer. For the drawing-page-shape arm that is a deliberate choice, not a shortcut: no writer in this package writes a formula embeddedObject block onto an odg drawing page's own shape (buildOdgPackage's own appendShape silently skips a non-paragraph/non-image block, and no reader in this family recovers a LibreOffice-authored one either), so a real byte-level document exercising that arm does not exist to build. The table-cell arm is different: docx's own reader genuinely recovers a real Word-authored equation nested inside a table cell (this package's src/ooxml/docx/embedded-objects.ts, spliceContainerBlocks/rebuildTable) even though this package's own docx writer only handles paragraph blocks in a cell (appendCellBlock silently skips the rest) -- test-support/docx.ts's docxWithTableCellEquationPackage builds that real fixture, already read by src/ooxml/docx/read.test.ts; the table-cell arm itself is exercised end-to-end through a docx fixture built independently in document-mcp's own compute-formula.test.ts, rather than through this specific fixture. The presentation-slide-shape and spreadsheet arms also have a real writer (buildPptxPackage's appendShape, OdsSheet.addEmbeddedObject), and are likewise covered end-to-end through real bytes in document-mcp's own compute-formula.test.ts.
+// collectDocumentFormulas is the shared walk latex/lint.ts's lintMathCoherence and document-mcp's compute_formula tool both consume (ExaDev/documents.js#928's round-1 review) — these tests exercise every ContentDocument arm directly against hand-built content, the same way src/latex/lint.test.ts already exercises table-cell recursion, rather than round-tripping through a format writer. For the drawing-page-shape arm that is a deliberate choice, not a shortcut: no writer in this package writes a formula embeddedObject block onto an odg drawing page's own shape (buildOdgPackage's own appendShape silently skips a non-paragraph/non-image block, and no reader in this family recovers a LibreOffice-authored one either), so a real byte-level document exercising that arm does not exist to build. The table-cell arm is different: docx's own reader genuinely recovers a real Word-authored equation nested inside a table cell (this package's src/ooxml/docx/embedded-objects.ts, spliceContainerBlocks/rebuildTable) even though this package's own docx writer only handles paragraph blocks in a cell (appendCellBlock silently skips the rest) — test-support/docx.ts's docxWithTableCellEquationPackage builds that real fixture, already read by src/ooxml/docx/read.test.ts; the table-cell arm itself is exercised end-to-end through a docx fixture built independently in document-mcp's own compute-formula.test.ts, rather than through this specific fixture. The presentation-slide-shape and spreadsheet arms also have a real writer (buildPptxPackage's appendShape, OdsSheet.addEmbeddedObject), and are likewise covered end-to-end through real bytes in document-mcp's own compute-formula.test.ts.
 
 const FRAME = { xPt: 0, yPt: 0, widthPt: 0, heightPt: 22 };
 
@@ -89,7 +89,7 @@ describe("collectDocumentFormulas", () => {
       "test:formula",
       "test:formula",
     ]);
-    // Both formulas share the identical sourcePath the fixture helper stamps on every formula -- exactly the shape a real markdown-authored document produces too (a constant sourcePath, or none at all). locate is the field that still tells them apart: derived from container/index position, not from sourcePath, so the nested table-cell formula and its top-level sibling come back with genuinely distinct structural paths.
+    // Both formulas share the identical sourcePath the fixture helper stamps on every formula — exactly the shape a real markdown-authored document produces too (a constant sourcePath, or none at all). locate is the field that still tells them apart: derived from container/index position, not from sourcePath, so the nested table-cell formula and its top-level sibling come back with genuinely distinct structural paths.
     expect(entries.map((entry) => entry.locate)).toEqual([
       "sections[0]/blocks[0].rows[0].cells[0]/blocks[0]",
       "sections[0]/blocks[1]",
@@ -97,10 +97,10 @@ describe("collectDocumentFormulas", () => {
   });
 
   it("resolves a DIRECTLY embedded formula block's own symbolTable field, not the enclosing document's (ExaDev/documents.js#928 round-8 regression)", () => {
-    // The block IS a formula-kind embedded object -- formulaOfBlock(block) returns non-undefined for it, so this is the DIRECT-match push site, never routed through the recursive nested-document branch below. Its own document.symbolTable must win over the enclosing document's.
+    // The block IS a formula-kind embedded object — formulaOfBlock(block) returns non-undefined for it, so this is the DIRECT-match push site, never routed through the recursive nested-document branch below. Its own document.symbolTable must win over the enclosing document's.
     const ownTable: SymbolTable = { symbols: [], units: [] };
     const block = formulaBlock("1 + 1");
-    // block.document is statically known to be the 'formula'-kind ContentDocument buildFormulaBlock built -- no narrowing needed.
+    // block.document is statically known to be the 'formula'-kind ContentDocument buildFormulaBlock built — no narrowing needed.
     block.document.symbolTable = ownTable;
     const outerTable: SymbolTable = {
       symbols: [{ glyph: "x", scope: "document", id: "symbols:outer-x" }],
@@ -145,7 +145,7 @@ describe("collectDocumentFormulas", () => {
   });
 
   it("recurses into a non-formula embedded object's own nested document when the top-level block itself is not a formula", () => {
-    // document-schema.js's own content.ts comment on ContentEmbeddedObject names this exact shape: "a formula embedded inside a drawing embedded inside a spreadsheet". This test covers the wordprocessing block-flow arm's half of that recursion -- a drawing embedded directly in a section's own blocks, carrying a formula one level further in.
+    // document-schema.js's own content.ts comment on ContentEmbeddedObject names this exact shape: "a formula embedded inside a drawing embedded inside a spreadsheet". This test covers the wordprocessing block-flow arm's half of that recursion — a drawing embedded directly in a section's own blocks, carrying a formula one level further in.
     const nestedFormula = formulaBlock("a^2 + b^2 = c^2");
     const drawingBlock: ContentBlock = {
       kind: "embeddedObject",
@@ -244,7 +244,7 @@ describe("collectDocumentFormulas", () => {
     expect(entries[0]?.formula.presentation?.latex).toBe("x^2");
   });
 
-  it("walks a spreadsheet's cell-anchored embeddedObjects array -- the exact case ExaDev/documents.js#928's round-1 review found silently unwalked (formulaCount: 0 on a real .ods)", () => {
+  it("walks a spreadsheet's cell-anchored embeddedObjects array — the exact case ExaDev/documents.js#928's round-1 review found silently unwalked (formulaCount: 0 on a real .ods)", () => {
     const document: ContentDocument = {
       kind: "spreadsheet",
       metadata: {},
@@ -273,9 +273,9 @@ describe("collectDocumentFormulas", () => {
     const entries = collectDocumentFormulas(document);
     expect(entries).toHaveLength(1);
     expect(entries[0]?.formula.presentation?.latex).toBe("f(x) = x^2");
-    // ContentEmbeddedObject (the spreadsheet shape) carries no sourcePath field at all -- structurally, not merely because none was assigned.
+    // ContentEmbeddedObject (the spreadsheet shape) carries no sourcePath field at all — structurally, not merely because none was assigned.
     expect(entries[0]?.sourcePath).toBeUndefined();
-    // locate is derived from sheet/object position, not from sourcePath -- so a spreadsheet's formulas are still individually locatable even though this arm never has a sourcePath to fall back on.
+    // locate is derived from sheet/object position, not from sourcePath — so a spreadsheet's formulas are still individually locatable even though this arm never has a sourcePath to fall back on.
     expect(entries[0]?.locate).toBe("sheets[0].embeddedObjects[0]");
   });
 
@@ -353,7 +353,7 @@ describe("collectDocumentFormulas", () => {
   });
 
   it("skips a spreadsheet's non-formula embedded objects that carry no formula of their own, but still recurses into their nested document", () => {
-    // A drawing embedded object is not itself a formula, but ContentEmbeddedObject.document is unconditionally a whole ContentDocument -- an EMPTY nested document (pages: []) would pass this assertion whether or not the walk actually recurses, so it pins nothing about the recursion this test exists to cover. A real formula nested inside the drawing's own shape is the only way to prove the walk reaches it.
+    // A drawing embedded object is not itself a formula, but ContentEmbeddedObject.document is unconditionally a whole ContentDocument — an EMPTY nested document (pages: []) would pass this assertion whether or not the walk actually recurses, so it pins nothing about the recursion this test exists to cover. A real formula nested inside the drawing's own shape is the only way to prove the walk reaches it.
     const nestedFormula = formulaBlock("y = mx + b");
     const document: ContentDocument = {
       kind: "spreadsheet",
@@ -408,7 +408,7 @@ describe("collectDocumentFormulas", () => {
     );
   });
 
-  it("recurses through a wordprocessing document embedded inside a spreadsheet's own embeddedObjects array -- the shape a real LibreOffice .ods embedding a Writer document containing an equation produces", () => {
+  it("recurses through a wordprocessing document embedded inside a spreadsheet's own embeddedObjects array — the shape a real LibreOffice .ods embedding a Writer document containing an equation produces", () => {
     const nestedFormula = formulaBlock("E = mc^2");
     const document: ContentDocument = {
       kind: "spreadsheet",

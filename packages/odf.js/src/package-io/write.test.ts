@@ -16,7 +16,7 @@ function packageOf(parts: Package["parts"]): Package {
   return { parts };
 }
 
-// Walks local file headers exactly as localFileHeaderNames does, but also returns each entry's own compression-method field (0 = stored, 8 = deflated) -- what a non-mimetype part's storage mode actually is, which localFileHeaderNames itself has no need to expose.
+// Walks local file headers exactly as localFileHeaderNames does, but also returns each entry's own compression-method field (0 = stored, 8 = deflated) — what a non-mimetype part's storage mode actually is, which localFileHeaderNames itself has no need to expose.
 function localFileHeaderCompressionMethods(bytes: Uint8Array): number[] {
   const methods: number[] = [];
   let offset = 0;

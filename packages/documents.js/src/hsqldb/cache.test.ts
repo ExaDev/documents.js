@@ -17,7 +17,7 @@ import {
 import { HsqldbRowFormatError } from "./rowformat";
 import { parseHsqldbScript } from "./script";
 
-// This suite decodes DATE/TIME/TIMESTAMP columns, which -- per src/hsqldb/rowformat.ts's own documented, inherent format limitation -- are only recoverable correctly when read in the same timezone the fixture was written in (Europe/London, spanning both its GMT and BST halves of the year -- see src/test-support/odb.ts's own module comment on why). Passed explicitly as { timeZone: "Europe/London" } to every call that decodes a real date/time value, rather than by mutating process.env.TZ and relying on the implicit-local-timezone default: a runtime TZ mutation is not observed by Date's local getters inside a worker_threads worker (confirmed against plain Node -- the same mutation works correctly in the main thread but has no effect at all inside a Worker), which is exactly the pool Stryker's vitest-runner forces, so a suite relying on it decoded arbitrarily wrong dates under mutation testing.
+// This suite decodes DATE/TIME/TIMESTAMP columns, which — per src/hsqldb/rowformat.ts's own documented, inherent format limitation — are only recoverable correctly when read in the same timezone the fixture was written in (Europe/London, spanning both its GMT and BST halves of the year — see src/test-support/odb.ts's own module comment on why). Passed explicitly as { timeZone: "Europe/London" } to every call that decodes a real date/time value, rather than by mutating process.env.TZ and relying on the implicit-local-timezone default: a runtime TZ mutation is not observed by Date's local getters inside a worker_threads worker (confirmed against plain Node — the same mutation works correctly in the main thread but has no effect at all inside a Worker), which is exactly the pool Stryker's vitest-runner forces, so a suite relying on it decoded arbitrarily wrong dates under mutation testing.
 
 function decodedFixture() {
   const pkg = decodePackage(embeddedHsqldbCachedOdbBytes());
@@ -262,7 +262,7 @@ describe("readHsqldbCachedTableRows: caller-supplied timeZone override", () => {
       { timeZone: "America/New_York" },
     );
 
-    // Row 0's HIRE_DATE is midnight Europe/London on 2020-01-15 -- 19:00 the previous day in New York.
+    // Row 0's HIRE_DATE is midnight Europe/London on 2020-01-15 — 19:00 the previous day in New York.
     expect(london[0]?.[3]).toEqual({ kind: "date", value: "2020-01-15" });
     expect(newYork[0]?.[3]).toEqual({ kind: "date", value: "2020-01-14" });
   });
@@ -282,9 +282,9 @@ describe("readHsqldbCachedTableRows: caller-supplied timeZone override", () => {
       typeTest.columns,
       { timeZone: "UTC" },
     );
-    // 14:30 London wall clock on 1970-01-01, the epoch day HSQLDB normalises a bare TIME onto -- which reads back as 13:30 UTC, not 14:30, because the UK was on permanent UTC+1 ("British Standard Time") from October 1968 to October 1971. A real, checkable offset difference rather than a coincidental match, and one the local-timezone default cannot express at all.
+    // 14:30 London wall clock on 1970-01-01, the epoch day HSQLDB normalises a bare TIME onto — which reads back as 13:30 UTC, not 14:30, because the UK was on permanent UTC+1 ("British Standard Time") from October 1968 to October 1971. A real, checkable offset difference rather than a coincidental match, and one the local-timezone default cannot express at all.
     expect(rows[0]?.[1]).toEqual({ kind: "time", value: "13:30:00" });
-    // 09:45:30.123456789 London on 2024-03-15 (GMT that day) -- the same wall clock in UTC, nanoseconds untouched.
+    // 09:45:30.123456789 London on 2024-03-15 (GMT that day) — the same wall clock in UTC, nanoseconds untouched.
     expect(rows[0]?.[2]).toEqual({
       kind: "date",
       value: "2024-03-15 09:45:30.123456789",

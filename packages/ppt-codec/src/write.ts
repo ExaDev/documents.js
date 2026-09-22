@@ -65,14 +65,14 @@ import {
   writeUserEditAtom,
 } from "./stream/persist-write";
 
-// Turns a shape's embedded object into the [MS-CFB] compound-file bytes its ExOleObjStg persist object carries -- the write-side mirror of read.ts's DecodeEmbeddedObjectPort, and the identical injected-port answer to the identical cross-codec-layering problem ooxml.js's own EmbeddedPresentationSerialiser solves one layer up: this package depends on no sibling format codec, so it cannot itself serialise an arbitrary nested ContentDocument, and documents.js -- which already depends on every write-capable codec -- is expected to wire one from whichever codec matches the document's own kind. Returning undefined (no port supplied, or a kind the port cannot serialise) degrades the shape to writing with no clientData and no ExOleObjStg entry at all -- the identical silent-drop policy this writer already applies to every other block kind it cannot express (see the package README's write-scope section), deliberately unchanged by this port's addition.
+// Turns a shape's embedded object into the [MS-CFB] compound-file bytes its ExOleObjStg persist object carries — the write-side mirror of read.ts's DecodeEmbeddedObjectPort, and the identical injected-port answer to the identical cross-codec-layering problem ooxml.js's own EmbeddedPresentationSerialiser solves one layer up: this package depends on no sibling format codec, so it cannot itself serialise an arbitrary nested ContentDocument, and documents.js — which already depends on every write-capable codec — is expected to wire one from whichever codec matches the document's own kind. Returning undefined (no port supplied, or a kind the port cannot serialise) degrades the shape to writing with no clientData and no ExOleObjStg entry at all — the identical silent-drop policy this writer already applies to every other block kind it cannot express (see the package README's write-scope section), deliberately unchanged by this port's addition.
 export type EmbeddedObjectSerialiser = (
   document: ContentDocument,
 ) => Uint8Array<ArrayBuffer> | undefined;
 
-// The write options, matching the shape markdown-codec's, pdf-codec's and rtf-codec's own option objects already use in this family: an AbortSignal and a diagnostic sink. A writer's input is a value this process already holds rather than bytes of unknown provenance, so there are no read-side resource limits here -- and every deliberate drop this writer makes fires through the sink rather than passing silently, per the family's own diagnostic-channel convention.
+// The write options, matching the shape markdown-codec's, pdf-codec's and rtf-codec's own option objects already use in this family: an AbortSignal and a diagnostic sink. A writer's input is a value this process already holds rather than bytes of unknown provenance, so there are no read-side resource limits here — and every deliberate drop this writer makes fires through the sink rather than passing silently, per the family's own diagnostic-channel convention.
 //
-// onUnwritableBlock decides what a drop the sink would otherwise merely report DOES: 'drop' (the default) keeps every existing caller's own behaviour unchanged -- the block is named through the sink and excluded from the written text body -- while 'throw' raises a PptUnsupportedContentError naming the identical block and reason instead of writing a file that silently omits it, matching doc-codec's own convention for content it cannot express. The default stays 'drop' rather than converging on doc-codec's 'throw' as this writer's own default, because the two packages' own upstream differs in kind rather than degree: documents.js's PDF-to-ppt and odp-to-ppt reconstruction is this package's primary caller today, and it ROUTINELY hands this writer content the binary PPT format has no spelling for at all (an unrecognised alignment value, a construct marker, an OLE object with no serialiser port supplied) -- not as a rare edge case a bug would explain, but as the ordinary shape of a cross-format conversion into a narrower target. Flipping the default to 'throw' would turn "this slide's OLE object degrades to geometry" into "the whole presentation fails to convert" for every one of those callers, a severe regression this option exists to let a caller opt into deliberately rather than have imposed on it.
+// onUnwritableBlock decides what a drop the sink would otherwise merely report DOES: 'drop' (the default) keeps every existing caller's own behaviour unchanged — the block is named through the sink and excluded from the written text body — while 'throw' raises a PptUnsupportedContentError naming the identical block and reason instead of writing a file that silently omits it, matching doc-codec's own convention for content it cannot express. The default stays 'drop' rather than converging on doc-codec's 'throw' as this writer's own default, because the two packages' own upstream differs in kind rather than degree: documents.js's PDF-to-ppt and odp-to-ppt reconstruction is this package's primary caller today, and it ROUTINELY hands this writer content the binary PPT format has no spelling for at all (an unrecognised alignment value, a construct marker, an OLE object with no serialiser port supplied) — not as a rare edge case a bug would explain, but as the ordinary shape of a cross-format conversion into a narrower target. Flipping the default to 'throw' would turn "this slide's OLE object degrades to geometry" into "the whole presentation fails to convert" for every one of those callers, a severe regression this option exists to let a caller opt into deliberately rather than have imposed on it.
 export type PptUnwritableBlockPolicy = "drop" | "throw";
 
 export interface WritePptOptions {
@@ -82,7 +82,7 @@ export interface WritePptOptions {
   readonly onUnwritableBlock?: PptUnwritableBlockPolicy;
 }
 
-// A generic narrowing helper rather than a plain `x as V` at each call site: this workspace's own strictTypeChecked lint tier auto-fixes a concrete `x as T` narrowing only nullability into `x!`, which no-non-null-assertion then bans outright -- a generic assertion (V unresolved at this call) doesn't match that autofix's own pattern, so it stays exactly the cast it is. Used only where the key is provably present by construction; never for a genuinely optional lookup.
+// A generic narrowing helper rather than a plain `x as V` at each call site: this workspace's own strictTypeChecked lint tier auto-fixes a concrete `x as T` narrowing only nullability into `x!`, which no-non-null-assertion then bans outright — a generic assertion (V unresolved at this call) doesn't match that autofix's own pattern, so it stays exactly the cast it is. Used only where the key is provably present by construction; never for a genuinely optional lookup.
 function definiteGet<K, V>(map: ReadonlyMap<K, V>, key: K): V {
   return map.get(key) as V;
 }
@@ -92,15 +92,15 @@ function definiteAt<T>(array: readonly T[], index: number): T {
   return array[index] as T;
 }
 
-// The write path, the mirror image of read.ts: a presentation's ContentSlide[] mapped onto [MS-PPT] records (document container, master and slide lists, one main master, one slide container per slide with its drawing and text, and one notes container per slide that has speaker notes), a single-edit persist layer over them (stream/persist-write.ts), and the two [MS-CFB] streams archive-codec's writeCompoundFile wraps into real .ppt bytes. Deliberately narrower than the read path's own coverage -- see the package README's write-scope section for exactly what a written file carries and what it does not.
+// The write path, the mirror image of read.ts: a presentation's ContentSlide[] mapped onto [MS-PPT] records (document container, master and slide lists, one main master, one slide container per slide with its drawing and text, and one notes container per slide that has speaker notes), a single-edit persist layer over them (stream/persist-write.ts), and the two [MS-CFB] streams archive-codec's writeCompoundFile wraps into real .ppt bytes. Deliberately narrower than the read path's own coverage — see the package README's write-scope section for exactly what a written file carries and what it does not.
 
 // [MS-PPT] persist identifiers this writer mints, in the order the stream lays them out: 1 names the document, 2 the one main master, slides follow contiguously from 3, and each notes slide that exists takes the next identifier after the last slide's.
 const DOCUMENT_PERSIST_ID = 1;
 const MASTER_PERSIST_ID = 2;
 const FIRST_SLIDE_PERSIST_ID = 3;
-// Real slide ids conventionally start at 256 (this package's own synthetic-presentation fixture uses the same value) -- 256 matches what a real PowerPoint file states. Notes ids are minted from their own base so that a notes id can never collide with a slide id: the two are separate identifier spaces ([MS-PPT] 2.2.14 NotesId and 2.2.26 SlideId), and a reader matching one against the other would silently pair the wrong records.
+// Real slide ids conventionally start at 256 (this package's own synthetic-presentation fixture uses the same value) — 256 matches what a real PowerPoint file states. Notes ids are minted from their own base so that a notes id can never collide with a slide id: the two are separate identifier spaces ([MS-PPT] 2.2.14 NotesId and 2.2.26 SlideId), and a reader matching one against the other would silently pair the wrong records.
 //
-// Since read.ts's own readNotesBySlideId keys a notes container by slideIdRef, this base also has to stay well clear of 0x80000000: [MS-PPT] 2.2.13 requires a MasterId to be at or above that value, and a real producer's own notes-master entry states its slideIdRef as (or near) a sentinel in that range rather than the spec-mandated 0x00000000 (confirmed against LibreOffice, which writes 0x80000001) -- a slide id minted up in that range would risk being mistaken for one. FIRST_SLIDE_ID + slides.length would need to exceed roughly two billion before this became reachable, which is not a bound worth guarding at runtime, but it is the reason this constant must never be changed to start anywhere near the top half of a 32-bit id space.
+// Since read.ts's own readNotesBySlideId keys a notes container by slideIdRef, this base also has to stay well clear of 0x80000000: [MS-PPT] 2.2.13 requires a MasterId to be at or above that value, and a real producer's own notes-master entry states its slideIdRef as (or near) a sentinel in that range rather than the spec-mandated 0x00000000 (confirmed against LibreOffice, which writes 0x80000001) — a slide id minted up in that range would risk being mistaken for one. FIRST_SLIDE_ID + slides.length would need to exceed roughly two billion before this became reachable, which is not a bound worth guarding at runtime, but it is the reason this constant must never be changed to start anywhere near the top half of a 32-bit id space.
 const FIRST_SLIDE_ID = 256;
 const FIRST_NOTES_ID = 512;
 // [MS-PPT] 2.5.2: notesIdRef 0x00000000 means the slide has no notes slide, which is exactly what a slide whose notes are empty has.
@@ -122,7 +122,7 @@ function requireOneSlideSize(slides: readonly ContentSlide[]): PageSize {
   return first;
 }
 
-// [MS-PPT] 2.5.1 orders a SlideContainer's children, and its slideAtom is the first of them. It states the master this slide follows and -- when the slide has speaker notes -- the notes slide those notes live in, which is the link a real consumer actually follows to find them (see document/master-write.ts).
+// [MS-PPT] 2.5.1 orders a SlideContainer's children, and its slideAtom is the first of them. It states the master this slide follows and — when the slide has speaker notes — the notes slide those notes live in, which is the link a real consumer actually follows to find them (see document/master-write.ts).
 function writeSlideContainer(
   shapes: ContentSlide["shapes"],
   notesIdRef: number,
@@ -146,7 +146,7 @@ function writeSlideContainer(
   };
 }
 
-// One ExOleObjStg persist object and one ExObjListContainer entry per shape whose own embeddedObject block a serialiser port actually recovered bytes for -- a shape whose block the port declines (no port supplied, or a document kind it cannot serialise) writes with no clientData at all, identical to a shape that never carried an embeddedObject block. Persist identifiers are minted from firstPersistId contiguously, so the caller only has to reserve as many identifiers as embeds this plan actually produced (readable back from persistObjects.length) rather than an upper bound.
+// One ExOleObjStg persist object and one ExObjListContainer entry per shape whose own embeddedObject block a serialiser port actually recovered bytes for — a shape whose block the port declines (no port supplied, or a document kind it cannot serialise) writes with no clientData at all, identical to a shape that never carried an embeddedObject block. Persist identifiers are minted from firstPersistId contiguously, so the caller only has to reserve as many identifiers as embeds this plan actually produced (readable back from persistObjects.length) rather than an upper bound.
 interface OleEmbedPlan {
   readonly embeds: readonly WritableOleEmbed[];
   readonly persistObjects: readonly {
@@ -204,7 +204,7 @@ function planOleEmbeds(
   };
 }
 
-// The document's whole blip store and the pib each distinct image resolves to. Every png/jpeg image block across every slide contributes one store entry the first time its exact bytes appear -- the same de-duplication a real producer's rgbUid digests exist for, keyed here by the base64 that uniquely names those bytes -- and a shape's property table references it by the one-based index readBlipStore hands back. An image whose format is neither png nor jpeg never enters the store at all: it has no MSOBLIPTYPE token to be written with, and the per-shape planner is the place that drop is diagnosed.
+// The document's whole blip store and the pib each distinct image resolves to. Every png/jpeg image block across every slide contributes one store entry the first time its exact bytes appear — the same de-duplication a real producer's rgbUid digests exist for, keyed here by the base64 that uniquely names those bytes — and a shape's property table references it by the one-based index readBlipStore hands back. An image whose format is neither png nor jpeg never enters the store at all: it has no MSOBLIPTYPE token to be written with, and the per-shape planner is the place that drop is diagnosed.
 interface BlipStorePlan {
   readonly blips: readonly PptBlip[];
   readonly pibOf: (image: ContentImageBlock) => number;
@@ -232,12 +232,12 @@ function planBlipStore(slides: readonly ContentSlide[]): BlipStorePlan {
   }
   return {
     blips,
-    // Always present: pibOf is only ever called (via DrawingWriteContext.blipIndexOf) from shapes-write.ts's own planShapeBlocks, on a block that already passed the identical `block.kind === "image" && isBlipFormat(block.format)` test against the same `slides` this scan just walked, keyed the identical way -- so every key it can ever ask for was set above.
+    // Always present: pibOf is only ever called (via DrawingWriteContext.blipIndexOf) from shapes-write.ts's own planShapeBlocks, on a block that already passed the identical `block.kind === "image" && isBlipFormat(block.format)` test against the same `slides` this scan just walked, keyed the identical way — so every key it can ever ask for was set above.
     pibOf: (image) => definiteGet(pibByKey, `${image.format}:${image.base64}`),
   };
 }
 
-// Streams a caller already holds two [MS-PPT] artifacts for -- the same split readPptStreams exposes on the way in, so a caller assembling its own container can bypass writePptContent's archive-codec dependency entirely.
+// Streams a caller already holds two [MS-PPT] artifacts for — the same split readPptStreams exposes on the way in, so a caller assembling its own container can bypass writePptContent's archive-codec dependency entirely.
 export function writePptStreams(
   document: PptDocument,
   options: WritePptOptions = {},
@@ -261,7 +261,7 @@ export function writePptStreams(
     definiteGet(fontIndexByName, family);
   const store = planBlipStore(slides);
   const strict = options.onUnwritableBlock === "throw";
-  // describeMessage prefixes the location onto reportDrop's own message before it is either sunk or thrown -- not a wrapper around the sink itself, since reportDrop throws using the diagnostic's own message directly, never round-tripping it back out through the sink first.
+  // describeMessage prefixes the location onto reportDrop's own message before it is either sunk or thrown — not a wrapper around the sink itself, since reportDrop throws using the diagnostic's own message directly, never round-tripping it back out through the sink first.
   const contextFor = (location: string): DrawingWriteContext => ({
     fontIndexOf,
     blipIndexOf: store.pibOf,
@@ -269,7 +269,7 @@ export function writePptStreams(
     sink,
     strict,
   });
-  // For a drawing whose own shapes can never carry a block planShapeBlocks/writeTableGroup's diagnostic paths would name at all -- the main master's own placeholders (always built with blocks: [], master-write.ts) and every notes container's own body (notesBodyShape, document/notes-write.ts, always plain unformatted paragraphs with no font family, image, table or embeddedObject block) -- the identity function needs no location value whatsoever, unobservable or otherwise, to state one.
+  // For a drawing whose own shapes can never carry a block planShapeBlocks/writeTableGroup's diagnostic paths would name at all — the main master's own placeholders (always built with blocks: [], master-write.ts) and every notes container's own body (notesBodyShape, document/notes-write.ts, always plain unformatted paragraphs with no font family, image, table or embeddedObject block) — the identity function needs no location value whatsoever, unobservable or otherwise, to state one.
   const nonDiagnosableContext: DrawingWriteContext = {
     fontIndexOf,
     blipIndexOf: store.pibOf,
@@ -283,7 +283,7 @@ export function writePptStreams(
     slideId: FIRST_SLIDE_ID + index,
   }));
 
-  // Only a slide that actually carries notes gets a NotesContainer, and only such a slide's own SlideAtom names one. A slide with no notes is left with no notes slide at all rather than an empty one: readNotesBySlideId then finds nothing for it and read.ts reports "", which is exactly what an absent notes slide means -- whereas an empty NotesContainer would be a real notes slide that happens to say nothing, a different fact, and one no round trip could tell apart from the notes the caller never wrote. The ids are assigned before any container is built, because a slide's own container has to name its notes slide's id.
+  // Only a slide that actually carries notes gets a NotesContainer, and only such a slide's own SlideAtom names one. A slide with no notes is left with no notes slide at all rather than an empty one: readNotesBySlideId then finds nothing for it and read.ts reports "", which is exactly what an absent notes slide means — whereas an empty NotesContainer would be a real notes slide that happens to say nothing, a different fact, and one no round trip could tell apart from the notes the caller never wrote. The ids are assigned before any container is built, because a slide's own container has to name its notes slide's id.
   const notesIdRefs = slides.map((slide, index) =>
     slide.notes.length === 0
       ? NO_NOTES_ID_REF
@@ -293,7 +293,7 @@ export function writePptStreams(
   );
   const notesCount = notesIdRefs.filter((id) => id !== NO_NOTES_ID_REF).length;
 
-  // Persist identifiers reserved above run 1 (document) .. 2 (master) .. 3..3+slides.length-1 (slides) .. one further contiguous run per slide with notes -- so an OLE embed's own persist objects are the ones minted after every one of those, never interleaved with them, which is what lets planOleEmbeds hand out its own ids purely by counting rather than needing to know any other object's identifier.
+  // Persist identifiers reserved above run 1 (document) .. 2 (master) .. 3..3+slides.length-1 (slides) .. one further contiguous run per slide with notes — so an OLE embed's own persist objects are the ones minted after every one of those, never interleaved with them, which is what lets planOleEmbeds hand out its own ids purely by counting rather than needing to know any other object's identifier.
   const oleEmbeds = planOleEmbeds(
     slides,
     options.serialiseEmbeddedObject,
@@ -402,7 +402,7 @@ export function writePptStreams(
     offsetLastEdit: 0,
     offsetPersistDirectory: persistDirectoryOffset,
     docPersistIdRef: DOCUMENT_PERSIST_ID,
-    // [MS-PPT] 2.3.3: persistIdSeed is the identifier a next edit would mint, so it has to stay above every identifier already in the directory -- derived from the entries themselves rather than from the slide count, which stopped being the whole story once the master and the notes slides began taking persist identifiers of their own.
+    // [MS-PPT] 2.3.3: persistIdSeed is the identifier a next edit would mint, so it has to stay above every identifier already in the directory — derived from the entries themselves rather than from the slide count, which stopped being the whole story once the master and the notes slides began taking persist identifiers of their own.
     persistIdSeed:
       Math.max(...persistEntries.map((entry) => entry.persistId)) + 1,
   });
@@ -419,7 +419,7 @@ export function writePptStreams(
   };
 }
 
-// Wraps writePptStreams' two [MS-PPT] streams in a real [MS-CFB] compound file via archive-codec's writeCompoundFile -- genuine .ppt bytes readPptContent (and any conformant [MS-PPT] reader) can open.
+// Wraps writePptStreams' two [MS-PPT] streams in a real [MS-CFB] compound file via archive-codec's writeCompoundFile — genuine .ppt bytes readPptContent (and any conformant [MS-PPT] reader) can open.
 export function writePptContent(
   document: PptDocument,
   options: WritePptOptions = {},

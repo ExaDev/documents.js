@@ -1,7 +1,7 @@
 import { readUint16LE, readUint8, slice } from "../bytes";
 import { DocFormatError, DocUnsupportedError } from "../errors";
 
-// The Sprm ("Single Property Modifier"), [MS-DOC] 2.2.5.1 -- the two-byte opcode every formatting change in the format is expressed as, and the Prl that pairs it with an operand. A grpprl is just a run of Prls back to back, with nothing marking where one ends: the only way to find the next is to size the current one's operand from its own opcode. Get one size wrong and every Prl after it in that grpprl is read from the wrong offset, so the operand-size table below is the single most load-bearing piece of arithmetic in this package after the piece table.
+// The Sprm ("Single Property Modifier"), [MS-DOC] 2.2.5.1 — the two-byte opcode every formatting change in the format is expressed as, and the Prl that pairs it with an operand. A grpprl is just a run of Prls back to back, with nothing marking where one ends: the only way to find the next is to size the current one's operand from its own opcode. Get one size wrong and every Prl after it in that grpprl is read from the wrong offset, so the operand-size table below is the single most load-bearing piece of arithmetic in this package after the piece table.
 
 export interface Sprm {
   /** The raw 16-bit opcode, which is what the property tables in [MS-DOC] 2.6.1-2.6.5 are keyed on. */
@@ -17,7 +17,7 @@ export interface Prl {
   readonly operand: Uint8Array;
 }
 
-/** Sprm.sgc, [MS-DOC] 2.2.5.1 -- which property family the opcode belongs to. */
+/** Sprm.sgc, [MS-DOC] 2.2.5.1 — which property family the opcode belongs to. */
 export const SGC = {
   paragraph: 1,
   character: 2,
@@ -77,7 +77,7 @@ function variableOperandSize(
   offset: number,
 ): number {
   if (sprm.value === SPRM_T_DEF_TABLE) {
-    // TDefTableOperand.cb is two bytes and counts "the number of bytes that are used by the remainder of this structure, incremented by 1" -- so the bytes after cb number cb - 1, and the whole operand is 2 + (cb - 1).
+    // TDefTableOperand.cb is two bytes and counts "the number of bytes that are used by the remainder of this structure, incremented by 1" — so the bytes after cb number cb - 1, and the whole operand is 2 + (cb - 1).
     const cb = readUint16LE(bytes, offset);
     if (cb < 1) {
       throw new DocFormatError(
@@ -89,7 +89,7 @@ function variableOperandSize(
 
   const cb = readUint8(bytes, offset);
   if (sprm.value === SPRM_P_CHG_TABS && cb === P_CHG_TABS_COMPUTED_SIZE) {
-    // The sentinel says the operand's real length is not stored but computed from the tab-stop counts inside PChgTabsDelClose and PChgTabsAdd. doc-codec does not read custom tab stops, so it has no need for the operand itself -- but it does need its length to find the next Prl, and guessing would silently mis-read every property after it in this paragraph. Refusing names the one construct that stopped the read.
+    // The sentinel says the operand's real length is not stored but computed from the tab-stop counts inside PChgTabsDelClose and PChgTabsAdd. doc-codec does not read custom tab stops, so it has no need for the operand itself — but it does need its length to find the next Prl, and guessing would silently mis-read every property after it in this paragraph. Refusing names the one construct that stopped the read.
     throw new DocUnsupportedError(
       "this paragraph carries a sprmPChgTabs whose cb is the 255 sentinel, so its operand length is computed from tab-stop counts doc-codec does not yet parse; the grpprl cannot be walked past it without guessing",
     );
@@ -98,7 +98,7 @@ function variableOperandSize(
   return 1 + cb;
 }
 
-// Splits a grpprl into its Prls. [MS-DOC] 2.9.137: "An array of Prl. ... MUST contain a whole number of Prls" -- so bytes left over that cannot form one are corruption, not padding, and are reported rather than dropped.
+// Splits a grpprl into its Prls. [MS-DOC] 2.9.137: "An array of Prl. ... MUST contain a whole number of Prls" — so bytes left over that cannot form one are corruption, not padding, and are reported rather than dropped.
 export function readGrpprl(bytes: Uint8Array): Prl[] {
   const prls: Prl[] = [];
   let cursor = 0;

@@ -41,7 +41,7 @@ describe("resolveOdfListKind", () => {
   });
 
   it("undefined style name resolves to undefined even when a real, matchable list-style exists", () => {
-    // A text:list-style with no style:name attribute at all would make attrValue(el, "style:name") itself return undefined -- coincidentally equal to an undefined styleName -- if this function didn't short-circuit on an undefined styleName before ever reaching the lookup. Giving it a level-1 ordered child means a version that skipped the short-circuit would resolve "ordered" here instead of undefined.
+    // A text:list-style with no style:name attribute at all would make attrValue(el, "style:name") itself return undefined — coincidentally equal to an undefined styleName — if this function didn't short-circuit on an undefined styleName before ever reaching the lookup. Giving it a level-1 ordered child means a version that skipped the short-circuit would resolve "ordered" here instead of undefined.
     const style = el("text:list-style", {}, [
       el("text:list-level-style-number", { "text:level": "1" }),
     ]);
@@ -73,7 +73,7 @@ describe("resolveOdfListKind", () => {
     expect(resolveOdfListKind(pkg, "L1")).toBe("bullet");
   });
 
-  it("only a level-1 child counts -- a level-2-only number style resolves to undefined, not ordered", () => {
+  it("only a level-1 child counts — a level-2-only number style resolves to undefined, not ordered", () => {
     const style = el("text:list-style", { "style:name": "L1" }, [
       el("text:list-level-style-number", { "text:level": "2" }),
     ]);
@@ -81,7 +81,7 @@ describe("resolveOdfListKind", () => {
     expect(resolveOdfListKind(pkg, "L1")).toBeUndefined();
   });
 
-  it("only a level-1 child counts for a bullet style too -- a level-2-only bullet resolves to undefined", () => {
+  it("only a level-1 child counts for a bullet style too — a level-2-only bullet resolves to undefined", () => {
     const style = el("text:list-style", { "style:name": "L1" }, [
       el("text:list-level-style-bullet", { "text:level": "2" }),
     ]);
@@ -89,7 +89,7 @@ describe("resolveOdfListKind", () => {
     expect(resolveOdfListKind(pkg, "L1")).toBeUndefined();
   });
 
-  it("only a level-1 child counts for an image style too -- a level-2-only image resolves to undefined", () => {
+  it("only a level-1 child counts for an image style too — a level-2-only image resolves to undefined", () => {
     const style = el("text:list-style", { "style:name": "L1" }, [
       el("text:list-level-style-image", { "text:level": "2" }),
     ]);
@@ -176,7 +176,7 @@ describe("buildOdfListStyle", () => {
     )[0]!;
     expect(attrValue(props1, "text:space-before")).toBe("18pt");
     expect(attrValue(props2, "text:space-before")).toBe("36pt");
-    // Every level shares the identical min-label-width -- one indent step, not scaled by level.
+    // Every level shares the identical min-label-width — one indent step, not scaled by level.
     expect(attrValue(props1, "text:min-label-width")).toBe("18pt");
     expect(attrValue(props2, "text:min-label-width")).toBe("18pt");
   });
@@ -258,7 +258,7 @@ describe("writeOdfList", () => {
 
   it("a fractional or negative level is clamped to a whole non-negative depth", () => {
     const root = writeOdfList([entry(-5, "a")], undefined);
-    // Clamped to level 0 -- a single top-level item, no nested text:list at all.
+    // Clamped to level 0 — a single top-level item, no nested text:list at all.
     expect(childrenWithTag(root, "text:list-item")).toHaveLength(1);
     expect(childrenWithTag(root, "text:list")).toHaveLength(0);
   });
@@ -430,7 +430,7 @@ describe("readOdfListParagraphs", () => {
   });
 
   it("ignores an item child that is neither text:p/text:h nor text:list, even one shaped like a nested list inside", () => {
-    // The nested tag ("text:list-header") carries its own text:list-item/text:p descendants specifically so a version that recursed into ANY non-text:p/text:h child (rather than only a genuine text:list) would find and surface this paragraph -- an empty decoy element couldn't tell the two apart.
+    // The nested tag ("text:list-header") carries its own text:list-item/text:p descendants specifically so a version that recursed into ANY non-text:p/text:h child (rather than only a genuine text:list) would find and surface this paragraph — an empty decoy element couldn't tell the two apart.
     const list = el("text:list", {}, [
       el("text:list-item", {}, [
         el("text:list-header", {}, [

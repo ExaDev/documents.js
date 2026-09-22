@@ -62,7 +62,7 @@ describe("parseSelect: select list", () => {
     ]);
   });
 
-  it("rejects SUM(*), which is not valid SQL -- only COUNT takes a star", () => {
+  it("rejects SUM(*), which is not valid SQL — only COUNT takes a star", () => {
     expect(() => parseSelect("SELECT SUM(*) FROM SALES")).toThrow(
       HsqldbSqlParseError,
     );
@@ -269,7 +269,7 @@ describe("parseSelect: JOIN", () => {
     expect(from.joins.map((join) => join.table.name)).toEqual(["T2", "T3"]);
   });
 
-  it("accepts an ON predicate using the identical grammar WHERE does -- AND, comparisons, IS NULL", () => {
+  it("accepts an ON predicate using the identical grammar WHERE does — AND, comparisons, IS NULL", () => {
     const from = parseSelect(
       "SELECT A FROM T1 JOIN T2 ON T1.A = T2.A AND T2.B IS NOT NULL",
     ).from;
@@ -305,7 +305,7 @@ describe("parseSelect: JOIN", () => {
     expect(from.joins[0]?.condition.kind).toBe("on");
   });
 
-  it("parses CROSS JOIN with no condition at all -- no ON, no USING, no NATURAL", () => {
+  it("parses CROSS JOIN with no condition at all — no ON, no USING, no NATURAL", () => {
     const from = parseSelect("SELECT A FROM T1 CROSS JOIN T2").from;
     expect(from.joins[0]).toEqual({
       joinKind: "cross",

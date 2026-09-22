@@ -23,7 +23,7 @@ const REFS: MathFontObjectRefs = {
   toUnicodeRef: pdfRef(9, 0),
 };
 
-// A deliberately non-1000-unitsPerEm descriptor: STIX Two Math (loadMathFont's real vendored font) happens to be drawn on a 1000-unit em, which makes buildFontDescriptor's own `1000 / unitsPerEm` scale factor an identity (1) -- a font with any other em size is what actually distinguishes "multiply by scale" from "divide by scale" or "ignore scale entirely". 2048 is chosen because it is a power of two, so every scaled value below (design-unit field * 1000/2048) lands on an exactly representable IEEE-754 double -- exact `toBe` assertions rather than `toBeCloseTo`, which would tolerate an Arithmetic mutator changing the operator to one that happens to land close by.
+// A deliberately non-1000-unitsPerEm descriptor: STIX Two Math (loadMathFont's real vendored font) happens to be drawn on a 1000-unit em, which makes buildFontDescriptor's own `1000 / unitsPerEm` scale factor an identity (1) — a font with any other em size is what actually distinguishes "multiply by scale" from "divide by scale" or "ignore scale entirely". 2048 is chosen because it is a power of two, so every scaled value below (design-unit field * 1000/2048) lands on an exactly representable IEEE-754 double — exact `toBe` assertions rather than `toBeCloseTo`, which would tolerate an Arithmetic mutator changing the operator to one that happens to land close by.
 const DESCRIPTOR: MathFontDescriptorMetrics = {
   unitsPerEm: 2048,
   ascent: 1900,
@@ -35,7 +35,7 @@ const DESCRIPTOR: MathFontDescriptorMetrics = {
 };
 const SCALE = 1000 / DESCRIPTOR.unitsPerEm;
 
-// A minimal synthetic MathFont: buildMathFontObjects reads only .descriptor, .cffBytes, and .glyphSpaceWidth(), so the remaining members are stubs no test here ever calls -- `metrics` reuses the real vendored font's own already-built value rather than hand-stubbing MathFontMetrics's large, otherwise-irrelevant shape.
+// A minimal synthetic MathFont: buildMathFontObjects reads only .descriptor, .cffBytes, and .glyphSpaceWidth(), so the remaining members are stubs no test here ever calls — `metrics` reuses the real vendored font's own already-built value rather than hand-stubbing MathFontMetrics's large, otherwise-irrelevant shape.
 function fakeFont(
   descriptor: MathFontDescriptorMetrics,
   cffBytes: Uint8Array<ArrayBuffer>,
@@ -104,7 +104,7 @@ describe("buildFontDescriptor", () => {
 
     expect(asName(dictGet(descriptor, "Type"))).toBe("FontDescriptor");
     expect(asName(dictGet(descriptor, "FontName"))).toBe("STIXTwoMath-Regular");
-    // The one FontDescriptor flag this module ever sets -- bit 3 (value 4), "contains glyphs outside the Adobe standard Latin set", true of essentially everything a math font contributes.
+    // The one FontDescriptor flag this module ever sets — bit 3 (value 4), "contains glyphs outside the Adobe standard Latin set", true of essentially everything a math font contributes.
     expect(asNumber(dictGet(descriptor, "Flags"))).toBe(4);
     expect(asNumber(dictGet(descriptor, "ItalicAngle"))).toBe(
       DESCRIPTOR.italicAngle,
@@ -118,7 +118,7 @@ describe("buildFontDescriptor", () => {
     expect(asNumber(dictGet(descriptor, "CapHeight"))).toBe(
       DESCRIPTOR.capHeight * SCALE,
     );
-    // A nominal, spec-required value no conforming reader actually consults for an embedded font -- see the module's own top comment.
+    // A nominal, spec-required value no conforming reader actually consults for an embedded font — see the module's own top comment.
     expect(asNumber(dictGet(descriptor, "StemV"))).toBe(80);
     expect(dictGet(descriptor, "FontFile3")).toEqual(REFS.fontFileRef);
 
@@ -159,7 +159,7 @@ describe("buildFontFileStream", () => {
   });
 
   it("deflates the font's raw CFF bytes and declares FlateDecode when compress is true", () => {
-    // Large and varied enough that deflate genuinely shrinks it -- proving compression actually ran rather than merely being declared.
+    // Large and varied enough that deflate genuinely shrinks it — proving compression actually ran rather than merely being declared.
     const cffBytes = new Uint8Array(400).map((_, i) => (i * 37) % 251);
     const font = fakeFont(DESCRIPTOR, cffBytes, () => 0);
     const { fontFile } = buildMathFontObjects(font, new Map(), REFS, true);
@@ -188,7 +188,7 @@ describe("buildWidthsArray, via the CIDFont's own /W entry", () => {
     const font = fakeFont(DESCRIPTOR, new Uint8Array([1]), (glyphId) =>
       widthByGlyph.get(glyphId)!,
     );
-    // Inserted deliberately out of ascending order -- the output is sorted by the function under test, not by whatever order happened to reach it.
+    // Inserted deliberately out of ascending order — the output is sorted by the function under test, not by whatever order happened to reach it.
     const usedGlyphs = new Map<number, number | undefined>([
       [50, undefined],
       [7, undefined],
@@ -221,7 +221,7 @@ describe("toUnicodeEntries, via the built ToUnicode CMap", () => {
     if (toUnicode.kind !== "stream") {
       throw new Error("unreachable");
     }
-    // buildToUnicodeCMap never compresses its own output -- plain UTF-8 text, readable with no filter decoding.
+    // buildToUnicodeCMap never compresses its own output — plain UTF-8 text, readable with no filter decoding.
     return new TextDecoder().decode(toUnicode.raw);
   }
 

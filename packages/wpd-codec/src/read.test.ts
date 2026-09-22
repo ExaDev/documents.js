@@ -59,7 +59,7 @@ describe("assertDefined", () => {
     }).toThrow("should not be undefined");
   });
 
-  // UNREACHABLE_CHARACTER_MAPPING_MESSAGE's own exact text, asserted against a hardcoded duplicate rather than by importing and comparing the constant to itself -- no real document byte can ever trigger this message at its one call site (applyToken's "character" case), so this is the only test that can catch a change to its actual wording.
+  // UNREACHABLE_CHARACTER_MAPPING_MESSAGE's own exact text, asserted against a hardcoded duplicate rather than by importing and comparing the constant to itself — no real document byte can ever trigger this message at its one call site (applyToken's "character" case), so this is the only test that can catch a change to its actual wording.
   it("carries UNREACHABLE_CHARACTER_MAPPING_MESSAGE's own exact text", () => {
     expect(UNREACHABLE_CHARACTER_MAPPING_MESSAGE).toBe(
       "A single-byte document-area character had no character mapping, which the tokeniser's own byte range should make unreachable.",
@@ -195,7 +195,7 @@ describe("readWpdContent", () => {
     );
   });
 
-  // A fixed-length function code this reader names no specific meaning for at all -- Undo (0xF1), reserved by the format but not one applyFixedFunction handles -- must contribute neither a character nor an attribute change.
+  // A fixed-length function code this reader names no specific meaning for at all — Undo (0xF1), reserved by the format but not one applyFixedFunction handles — must contribute neither a character nor an attribute change.
   it("contributes nothing for a fixed-length function code with no named meaning", () => {
     const document = readDocumentArea([
       ...text("un"),
@@ -367,7 +367,7 @@ describe("readWpdContent", () => {
       ...text("keep"),
       0x8d, // START_OF_TEXT_TO_SKIP
       ...text("drop"),
-      0x8e, // END_OF_TEXT_TO_SKIP -- balances the Start above
+      0x8e, // END_OF_TEXT_TO_SKIP — balances the Start above
       0x8e, // an extra, unmatched END_OF_TEXT_TO_SKIP
       0x8d, // START_OF_TEXT_TO_SKIP again
       ...text("hidden"),
@@ -417,7 +417,7 @@ describe("readWpdContent", () => {
     });
   });
 
-  // "[desired point size (3600ths)]" is the first field of a Font Size Change, and a point is 1/72 inch, so 36,000 3600ths of an inch is ten inches -- and 600 is twelve points.
+  // "[desired point size (3600ths)]" is the first field of a Font Size Change, and a point is 1/72 inch, so 36,000 3600ths of an inch is ten inches — and 600 is twelve points.
   it("converts a font size change from 3600ths of an inch to points", () => {
     const document = readDocumentArea([
       ...variableFunction({
@@ -454,7 +454,7 @@ describe("readWpdContent", () => {
       ...variableFunction({
         group: 0xd4,
         subgroup: 0x1b,
-        nonDeletable: [0x58], // one byte -- not enough for the size word
+        nonDeletable: [0x58], // one byte — not enough for the size word
       }),
       ...text("sized"),
     ]);
@@ -548,7 +548,7 @@ describe("readWpdContent", () => {
     expect(paragraphsOf(document)[0]?.alignment).toBe("center");
   });
 
-  // applyVariableFunction's own paragraph-group dispatch must actually gate on the subgroup being PARAGRAPH_SET_JUSTIFICATION -- a different subfunction in the same group, even one whose own first byte happens to look like a justification mode, must not be misread as one.
+  // applyVariableFunction's own paragraph-group dispatch must actually gate on the subgroup being PARAGRAPH_SET_JUSTIFICATION — a different subfunction in the same group, even one whose own first byte happens to look like a justification mode, must not be misread as one.
   it("does not apply a justification change for an unrelated paragraph-group subfunction", () => {
     const document = readDocumentArea([
       ...variableFunction({
@@ -586,7 +586,7 @@ describe("readWpdContent", () => {
     expect(paragraphs[0]?.runs[0]?.text).toBe("unbroken");
   });
 
-  // Subfunction 0, Beginning of File, is the one End-of-Line subfunction with no single-byte spelling at all -- it exists solely as this group's own subgroup 0 -- and the SDK's own conversion table maps it to nothing: it contributes neither a character nor a paragraph break.
+  // Subfunction 0, Beginning of File, is the one End-of-Line subfunction with no single-byte spelling at all — it exists solely as this group's own subgroup 0 — and the SDK's own conversion table maps it to nothing: it contributes neither a character nor a paragraph break.
   it("ignores the Beginning-of-File End-of-Line subfunction, reachable only through its multi-byte spelling", () => {
     const document = readDocumentArea([
       ...text("before"),
@@ -632,7 +632,7 @@ describe("readWpdContent", () => {
     expect(paragraphs[0]?.runs[0]?.text).toBe("unbroken");
   });
 
-  // "An auto-hyphen was inserted by the formatter at the end of a line" -- displayed exactly like the other end-of-line hyphen functions.
+  // "An auto-hyphen was inserted by the formatter at the end of a line" — displayed exactly like the other end-of-line hyphen functions.
   it("appends a hyphen for an auto-hyphen at the end of a line", () => {
     const document = readDocumentArea([
       ...text("auto"),
@@ -655,7 +655,7 @@ describe("readWpdContent", () => {
     ]);
   });
 
-  // "The formatter inserts a soft End of Line, which causes centering to end, but not the paragraph" -- a wrap, so it becomes the same space every other soft end of line converts to.
+  // "The formatter inserts a soft End of Line, which causes centering to end, but not the paragraph" — a wrap, so it becomes the same space every other soft end of line converts to.
   it("appends a space for a soft end of center align", () => {
     const document = readDocumentArea([
       ...text("centred"),
@@ -680,7 +680,7 @@ describe("readWpdContent", () => {
     ]);
   });
 
-  // A single-byte function code this switch names no case for at all -- one of the format's own formatting/bookkeeping markers this reader has no specific behaviour for -- must fall through to the default case and contribute neither characters nor structure, exactly like the codes with an explicit no-op case.
+  // A single-byte function code this switch names no case for at all — one of the format's own formatting/bookkeeping markers this reader has no specific behaviour for — must fall through to the default case and contribute neither characters nor structure, exactly like the codes with an explicit no-op case.
   it("contributes nothing for a single-byte function code with no named case", () => {
     const document = readDocumentArea([
       ...text("un"),
@@ -693,7 +693,7 @@ describe("readWpdContent", () => {
   });
 
   // A cell or row boundary with no Table Definition open has no grid to belong to, which a stray code left behind by an edit can produce. The text on either side still survives as paragraphs, in reading order.
-  // flushParagraphIfContent must still flush when the pending text is empty but a run has already been split off it (here, by an attribute change) -- checking only state.text.length would wrongly drop that already-built run.
+  // flushParagraphIfContent must still flush when the pending text is empty but a run has already been split off it (here, by an attribute change) — checking only state.text.length would wrongly drop that already-built run.
   it("flushes a paragraph at a boundary whose pending text is empty but whose runs are not", () => {
     const document = readDocumentArea([
       ...text("plain"),
@@ -833,7 +833,7 @@ describe("readWpdContent", () => {
     expect(paragraphsOf(document)[0]?.runs[0]).toEqual({ text: "plain" });
   });
 
-  // A font face change that names an unreadable typeface must leave a PREVIOUSLY set font family in place for the run it starts, rather than clearing it -- the failed change contributes nothing, it does not reset what came before it.
+  // A font face change that names an unreadable typeface must leave a PREVIOUSLY set font family in place for the run it starts, rather than clearing it — the failed change contributes nothing, it does not reset what came before it.
   it("keeps a previously set font family when a later font face change cannot be read", () => {
     const document = readDocumentArea(
       [
@@ -873,7 +873,7 @@ describe("readWpdContent", () => {
     const GLOBAL_OFF = 0x0b;
     const STYLE_GROUP = 0xdd;
     const NORMAL_STYLE_PACKET_TYPE = 0x30;
-    // No system style number, so styleSemanticsFor contributes nothing -- isolating the packet's own direct-formatting effect from the heading/list mapping a system style number would otherwise add.
+    // No system style number, so styleSemanticsFor contributes nothing — isolating the packet's own direct-formatting effect from the heading/list mapping a system style number would otherwise add.
     const NO_SYSTEM_STYLE = 0xff;
 
     // A Normal Style packet (type 0x30) carrying no link PID and a "beginning style text" block of the given raw document-area bytes, laid out exactly as WPFF Prefix Packet Type 48 states.
@@ -1059,7 +1059,7 @@ describe("readWpd", () => {
     }
   });
 
-  // The tree-form section must actually carry a header, footer, and watermark when the document declares them -- proving readWpd's own headers/footers/watermarks spreads fire when non-empty, not just that they stay absent when empty.
+  // The tree-form section must actually carry a header, footer, and watermark when the document declares them — proving readWpd's own headers/footers/watermarks spreads fire when non-empty, not just that they stay absent when empty.
   it("carries a header, footer, and watermark on the tree-form section", () => {
     function furniturePacket(text_: string) {
       const documentArea = text(text_);
@@ -1286,7 +1286,7 @@ describe("boxes", () => {
       (d) => d.code === WpdDiagnosticCodes.BoxContentUnresolved,
     );
     expect(found?.message).toBe(
-      "This document contains a box whose content this reader could not read -- an image, OLE object, or other content type this reader does not yet decode into the shared schema.",
+      "This document contains a box whose content this reader could not read — an image, OLE object, or other content type this reader does not yet decode into the shared schema.",
     );
   });
 
@@ -1296,7 +1296,7 @@ describe("boxes", () => {
       subgroup: PAGE_ANCHORED_BOX,
       prefixIds: [1, 2],
       nonDeletable: boxNonDeletable(
-        0x2000, // bit 13 (content) only -- no position/size override at all
+        0x2000, // bit 13 (content) only — no position/size override at all
         new Map([[13, contentBlock(BOX_CONTENT_TYPE_TEXT)]]),
       ),
     });
@@ -1370,7 +1370,7 @@ describe("boxes", () => {
     });
   });
 
-  // plainTextOf must only ever read paragraph blocks -- a non-paragraph block folded alongside them (a page break, here) carries no `runs` field at all and must be skipped rather than read as one. It must also join a paragraph's own runs with no separator, and join separate paragraphs with a newline.
+  // plainTextOf must only ever read paragraph blocks — a non-paragraph block folded alongside them (a page break, here) carries no `runs` field at all and must be skipped rather than read as one. It must also join a paragraph's own runs with no separator, and join separate paragraphs with a newline.
   it("builds an equation's plain-text residue from only its paragraph blocks, joined correctly", () => {
     const document = readDocumentArea(
       [...boxFunction(BOX_CONTENT_TYPE_EQUATION, [1, 2])],
@@ -1398,7 +1398,7 @@ describe("boxes", () => {
     if (block.document.kind !== "formula") {
       throw new Error("expected a formula document");
     }
-    // The hard end of page unconditionally flushes a paragraph before it, which is empty here (the hard return just before it already flushed the pending text) -- so the join sees three paragraphs ("ab", "", "c"), with the intervening page break filtered out entirely rather than read as a fourth.
+    // The hard end of page unconditionally flushes a paragraph before it, which is empty here (the hard return just before it already flushed the pending text) — so the join sees three paragraphs ("ab", "", "c"), with the intervening page break filtered out entirely rather than read as a fourth.
     expect(block.document.formula.source).toEqual({
       format: "wpd",
       xml: "ab\n\nc",
@@ -1421,11 +1421,11 @@ describe("boxes", () => {
     );
     expect(matches).toHaveLength(1);
     expect(matches[0]?.message).toBe(
-      "This document contains an image box whose content packet carries no decodable PNG or JPEG payload -- a WPG graphic or other image spelling this reader does not decode.",
+      "This document contains an image box whose content packet carries no decodable PNG or JPEG payload — a WPG graphic or other image spelling this reader does not decode.",
     );
   });
 
-  // A minimal well-formed 1x1 white PNG: signature, IHDR, IDAT, IEND -- hand-built here as bytes so the fixture needs no encoder dependency, and structurally complete so stream/image.ts's chunk walk bounds it exactly.
+  // A minimal well-formed 1x1 white PNG: signature, IHDR, IDAT, IEND — hand-built here as bytes so the fixture needs no encoder dependency, and structurally complete so stream/image.ts's chunk walk bounds it exactly.
   function tinyPng(): Uint8Array {
     const chunk = (type: string, data: readonly number[]): number[] => [
       0,
@@ -1487,7 +1487,7 @@ describe("boxes", () => {
       subgroup: PAGE_ANCHORED_BOX,
       prefixIds: [1, 2],
       nonDeletable: boxNonDeletable(
-        0x2000, // bit 13 (content) only -- no position/size override at all
+        0x2000, // bit 13 (content) only — no position/size override at all
         new Map([[13, contentBlock(BOX_CONTENT_TYPE_IMAGE)]]),
       ),
     });
@@ -1843,7 +1843,7 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
       (d) => d.code === "wpd/header-footer-dropped",
     );
     expect(found?.message).toBe(
-      "This document declares a second header for the default slot -- WordPerfect's own A/B two-slot-per-kind mechanism, which the shared one-flow-per-slot page-furniture vocabulary does not carry; the first header to claim the slot is the one lifted.",
+      "This document declares a second header for the default slot — WordPerfect's own A/B two-slot-per-kind mechanism, which the shared one-flow-per-slot page-furniture vocabulary does not carry; the first header to claim the slot is the one lifted.",
     );
   });
 
@@ -1896,7 +1896,7 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
         },
       ],
     });
-    // No OLE objects anywhere in this document -- the attachments table must not appear at all, not even empty.
+    // No OLE objects anywhere in this document — the attachments table must not appear at all, not even empty.
     expect(tree.attachments).toBeUndefined();
   });
 
@@ -1922,7 +1922,7 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
     );
   });
 
-  // The marker text is built from every run between a note's On and Off, flushing whatever text is still pending first -- and only falls back to a generated numeral when that text is genuinely empty. A marker that IS real text, spanning more than one run and happening to be truthy, must be used as-is rather than replaced by the numeral, and the numeral itself must come from the notes already carried plus one, not minus one.
+  // The marker text is built from every run between a note's On and Off, flushing whatever text is still pending first — and only falls back to a generated numeral when that text is genuinely empty. A marker that IS real text, spanning more than one run and happening to be truthy, must be used as-is rather than replaced by the numeral, and the numeral itself must come from the notes already carried plus one, not minus one.
   it("builds a multi-run marker over the generated-numeral fallback, and numbers a genuinely empty marker correctly", () => {
     const bodies = [
       generalWpTextPacket(text("first body")),
@@ -1931,7 +1931,7 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
     const tree = readWpd(
       buildWpdFile(
         [
-          // Note A: an empty reference marker -- must fall back to the generated numeral "1" (state.notes.length is 0 at this point).
+          // Note A: an empty reference marker — must fall back to the generated numeral "1" (state.notes.length is 0 at this point).
           ...variableFunction({ group: 0xd7, subgroup: 0x00, prefixIds: [1] }),
           ...variableFunction({ group: 0xd7, subgroup: 0x01 }),
           // Note B: a genuine, non-empty, two-run marker ("star") that must win over the fallback numeral ("2").
@@ -1966,7 +1966,7 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
     expect(definition?.kind).toBe("endnote");
   });
 
-  // An unrelated subfunction sharing the D7 group (neither Footnote Off nor Endnote Off) must not be mistaken for a closing code and prematurely abandon a note already open -- the note must still resolve normally once its own real Off arrives.
+  // An unrelated subfunction sharing the D7 group (neither Footnote Off nor Endnote Off) must not be mistaken for a closing code and prematurely abandon a note already open — the note must still resolve normally once its own real Off arrives.
   it("does not abandon an open footnote for an unrelated subfunction sharing its own function group", () => {
     const tree = readWpd(
       buildWpdFile(
@@ -2144,7 +2144,7 @@ describe("native OLE objects (#1191)", () => {
       name: "OLE10",
       base64: bytesToBase64(nativeBytes),
     });
-    // No notes anywhere in this document -- the definitions table must not appear at all, not even empty.
+    // No notes anywhere in this document — the definitions table must not appear at all, not even empty.
     expect(tree.definitions).toBeUndefined();
   });
 
@@ -2175,7 +2175,7 @@ describe("native OLE objects (#1191)", () => {
       name: "ole1-2",
       base64: bytesToBase64(new Uint8Array(ole1Data)),
     });
-    // No footnotes or endnotes rode along with the OLE object, so the tree carries no definitions table entry at all -- not merely an empty one.
+    // No footnotes or endnotes rode along with the OLE object, so the tree carries no definitions table entry at all — not merely an empty one.
     expect(tree.definitions).toBeUndefined();
   });
 
@@ -2263,7 +2263,7 @@ describe("WPG vector graphics embedded in an image box", () => {
     return bytes;
   }
 
-  // An image box naming a Graphics Filename packet at prefix ID 2, itself naming one Graphics Cached File Data child at prefix ID 3 -- the one path stream/wpg.ts's own decoder is reached through. `withFrame` false omits the position override entirely, for the "no trustworthy frame" branch.
+  // An image box naming a Graphics Filename packet at prefix ID 2, itself naming one Graphics Cached File Data child at prefix ID 3 — the one path stream/wpg.ts's own decoder is reached through. `withFrame` false omits the position override entirely, for the "no trustworthy frame" branch.
   function imageBoxFunction(withFrame = true): number[] {
     const blocks = new Map<number, readonly number[]>([
       [13, contentBlock(BOX_CONTENT_TYPE_IMAGE)],

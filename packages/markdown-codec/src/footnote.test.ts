@@ -1,6 +1,6 @@
 // GitHub footnotes end to end (ExaDev/markdown-codec#66): the block/inline phases that recognise `[^label]` and `[^label]: body`, the lowering that turns a definition into an `anchor` construct's boundary-marker pair (document-schema.js 4.2.0) and a reference into a marked run, and the writer that renders both back. Deliberately one file across all four stages rather than four scattered additions: the whole point of the feature is that the two halves of a footnote are carried by two DIFFERENT mechanisms and still have to reproduce each other, which no single-stage test can show.
 //
-// The round-trip assertion below is "read -> write -> read -> write reproduces the same text", not "write reproduces the source byte for byte". That is not a weaker bar chosen for convenience: this package normalises freely on the way out (it escapes ASCII punctuation, regenerates code fences, and picks its own bullet glyph), so byte equality with arbitrary source text is not a property `writeMarkdownContent` has for ANY construct. What must hold, and what is asserted, is that nothing about a footnote is lost on the way through -- the second pass produces the identical document and the identical text.
+// The round-trip assertion below is "read -> write -> read -> write reproduces the same text", not "write reproduces the source byte for byte". That is not a weaker bar chosen for convenience: this package normalises freely on the way out (it escapes ASCII punctuation, regenerates code fences, and picks its own bullet glyph), so byte equality with arbitrary source text is not a property `writeMarkdownContent` has for ANY construct. What must hold, and what is asserted, is that nothing about a footnote is lost on the way through — the second pass produces the identical document and the identical text.
 
 import type { ContentBlock, ContentDocument } from "document-schema.js";
 import { PAGE_SIZE_A4 } from "document-schema.js";
@@ -42,7 +42,7 @@ function minimalDocument(blocks: readonly ContentBlock[]): ContentDocument {
   };
 }
 
-// One full pass through the public surface and back, twice -- see this file's own top-of-file note on why the fixed point, rather than the source text, is what a round trip is measured against here.
+// One full pass through the public surface and back, twice — see this file's own top-of-file note on why the fixed point, rather than the source text, is what a round trip is measured against here.
 function roundTrip(source: string): {
   readonly written: string;
   readonly rewritten: string;
@@ -165,7 +165,7 @@ describe("reading footnote definitions", () => {
   });
 
   it("recognises a definition directly inside a block quote or a list item (ExaDev/markdown-codec#957)", () => {
-    // Both used to stay an ordinary paragraph -- see src/block/block.ts's footnoteDefinitionMayOpenIn for why the earlier restriction no longer holds: lowerBlockquote's own dual carry and lowerListItem's own placeholder paragraph (both pre-existing, built for a nested blockquote's division pair) generalise unchanged to a footnote definition's anchor construct pair sitting in the same position.
+    // Both used to stay an ordinary paragraph — see src/block/block.ts's footnoteDefinitionMayOpenIn for why the earlier restriction no longer holds: lowerBlockquote's own dual carry and lowerListItem's own placeholder paragraph (both pre-existing, built for a nested blockquote's division pair) generalise unchanged to a footnote definition's anchor construct pair sitting in the same position.
     expect(parseMarkdown("> [^1]: quoted note text").document.children).toEqual(
       [
         {
@@ -215,7 +215,7 @@ describe("reading footnote definitions", () => {
   });
 
   it("recognises a definition that follows a list, closing the still-open list rather than folding the definition into a paragraph", () => {
-    // continueBlock (src/block/block.ts) reports a `list` node as continued unconditionally, so the container the block-start dispatch sees here is the list itself, not the document -- tryFootnoteDefinitionStart has to walk past that before its own document-only restriction applies. Without that walk this whole shape collapses: `[^1]: note` reads as an ordinary paragraph, extractDefinitions swallows it as a LINK reference definition instead, and the note body is gone.
+    // continueBlock (src/block/block.ts) reports a `list` node as continued unconditionally, so the container the block-start dispatch sees here is the list itself, not the document — tryFootnoteDefinitionStart has to walk past that before its own document-only restriction applies. Without that walk this whole shape collapses: `[^1]: note` reads as an ordinary paragraph, extractDefinitions swallows it as a LINK reference definition instead, and the note body is gone.
     expect(
       parseMarkdown("Body[^1].\n\n- a\n- b\n\n[^1]: note").document.children,
     ).toEqual([
@@ -258,7 +258,7 @@ describe("reading footnote definitions", () => {
   });
 
   it("recognises a definition indented into a list item's own content as that item's own second block (ExaDev/markdown-codec#957)", () => {
-    // "[^1]: note" here is indented to the item's own content column, so matchedContainer is the listItem itself -- footnoteDefinitionMayOpenIn now accepts that directly, and the definition becomes the item's own second block alongside its first paragraph.
+    // "[^1]: note" here is indented to the item's own content column, so matchedContainer is the listItem itself — footnoteDefinitionMayOpenIn now accepts that directly, and the definition becomes the item's own second block alongside its first paragraph.
     expect(parseMarkdown("- a\n\n  [^1]: note").document.children).toEqual([
       {
         type: "list",
@@ -399,7 +399,7 @@ describe("lowering a footnote onto the schema", () => {
     ]);
   });
 
-  it("lowers a bodyless definition to a point anchor -- a pair with nothing between it", () => {
+  it("lowers a bodyless definition to a point anchor — a pair with nothing between it", () => {
     expect(lowered("[^1]:")).toEqual([
       {
         kind: "constructStart",
@@ -542,7 +542,7 @@ describe("lowering a footnote onto the schema", () => {
     if (body?.kind !== "paragraph") {
       throw new Error(`expected a paragraph body block, got '${body?.kind}'`);
     }
-    // The item's own membership is carried straight through the footnote's own body paragraph -- the same dual carry lowerBlockquote already threads through a quote's own children -- so src/emit's constructCarriesListItemId recognises the anchor construct as belonging to this item rather than fracturing it out as separate top-level content.
+    // The item's own membership is carried straight through the footnote's own body paragraph — the same dual carry lowerBlockquote already threads through a quote's own children — so src/emit's constructCarriesListItemId recognises the anchor construct as belonging to this item rather than fracturing it out as separate top-level content.
     expect(body.list?.itemId).toBe(placeholder.list?.itemId);
     expect(blocks[3]).toEqual({ kind: "constructEnd" });
   });
@@ -653,7 +653,7 @@ describe("writing footnotes back out", () => {
   });
 
   it('degrades a footnote-anchor extent whose own name cannot be spelled as a "[^label]" marker, rather than emitting markdown its own reader cannot parse back', () => {
-    // The same gate the definition half applies (isValidFootnoteLabel, src/inline/footnote.ts) and for the same reason: AnchorDescriptorSchema.name is a bare z.string(), so a name arriving from another codec may carry whitespace or a "]" this package's own [^label] grammar cannot represent. Spelling it straight into running text would emit a marker that reparses as something else (a link, or literal prose), losing the construct with no diagnostic -- so the run's own materialised text renders escaped in the reference's place and the extent reports itself unrepresented.
+    // The same gate the definition half applies (isValidFootnoteLabel, src/inline/footnote.ts) and for the same reason: AnchorDescriptorSchema.name is a bare z.string(), so a name arriving from another codec may carry whitespace or a "]" this package's own [^label] grammar cannot represent. Spelling it straight into running text would emit a marker that reparses as something else (a link, or literal prose), losing the construct with no diagnostic — so the run's own materialised text renders escaped in the reference's place and the extent reports itself unrepresented.
     const whitespaceCollector = createDiagnosticCollector();
     const whitespaceWritten = emitMarkdown(
       minimalDocument([
@@ -708,7 +708,7 @@ describe("writing footnotes back out", () => {
   });
 
   it("leaves a run covered only by a RANGED footnote anchor to its own escaped text: a markdown reference is a point, and a range over several runs has no spelling", () => {
-    // A foreign producer may name a footnote anchor over a sub-sequence of runs rather than at a point (odf.js's reader spells its text:note reference that way); this package's own read side never does. Only the point form is a markdown reference site, so the range renders transparently -- its runs keep their own text, the same silent construct loss every other run-level extent markdown cannot spell already takes (a bookmark, a comment reference).
+    // A foreign producer may name a footnote anchor over a sub-sequence of runs rather than at a point (odf.js's reader spells its text:note reference that way); this package's own read side never does. Only the point form is a markdown reference site, so the range renders transparently — its runs keep their own text, the same silent construct loss every other run-level extent markdown cannot spell already takes (a bookmark, a comment reference).
     const written = emitMarkdown(
       minimalDocument([
         {
@@ -752,7 +752,7 @@ describe("writing footnotes back out", () => {
   });
 
   it('degrades a footnote anchor whose own name cannot be spelled as a "[^label]:" marker, rather than emitting markdown its own reader cannot parse back', () => {
-    // AnchorDescriptorSchema.name is a bare z.string() -- document-schema.js places no grammar constraint of its own on it, so a name from another codec sharing the same ContentDocument pivot may carry whitespace or a "]" this package's own [^label] grammar (src/inline/footnote.ts) cannot represent. Spelling either straight into a marker would emit text this package's own reader reparses as something else entirely (a link reference definition, or a plain paragraph), losing the construct with no diagnostic -- so both fall back to the same transparent degrade an unrepresentable construct kind already gets.
+    // AnchorDescriptorSchema.name is a bare z.string() — document-schema.js places no grammar constraint of its own on it, so a name from another codec sharing the same ContentDocument pivot may carry whitespace or a "]" this package's own [^label] grammar (src/inline/footnote.ts) cannot represent. Spelling either straight into a marker would emit text this package's own reader reparses as something else entirely (a link reference definition, or a plain paragraph), losing the construct with no diagnostic — so both fall back to the same transparent degrade an unrepresentable construct kind already gets.
     const whitespaceCollector = createDiagnosticCollector();
     const whitespaceWritten = emitMarkdown(
       minimalDocument([

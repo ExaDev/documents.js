@@ -17,7 +17,7 @@ import {
   UnsupportedExpressionError,
 } from "./errors";
 
-// -- small builders for MathExpression trees, mirroring document-schema.js's src/math.ts grammar --
+// — small builders for MathExpression trees, mirroring document-schema.js's src/math.ts grammar --
 function num(numerator: string, denominator = "1"): MathExpression {
   return { kind: "num", numerator, denominator };
 }
@@ -49,7 +49,7 @@ const context: SymbolTable = {
       dimension: { time: 1 },
       factorToSi: { numerator: "1", denominator: "1" },
     },
-    // 1 foot = 0.3048 m exactly, 381/1250 -- document-schema.js's math.ts cites this exact unit as its own worked example.
+    // 1 foot = 0.3048 m exactly, 381/1250 — document-schema.js's math.ts cites this exact unit as its own worked example.
     {
       id: "imperial:foot",
       symbol: "ft",
@@ -123,7 +123,7 @@ describe("evaluate: sym", () => {
   });
 });
 
-describe("evaluate: app -- arithmetic over bound symbols", () => {
+describe("evaluate: app — arithmetic over bound symbols", () => {
   const bindings: FormulaBindings = {
     m: quantity(2, { mass: 1 }),
     a: quantity(3, { length: 1, time: -2 }),
@@ -263,7 +263,7 @@ describe("evaluate: app -- arithmetic over bound symbols", () => {
   });
 });
 
-describe("evaluate: app -- unary operators", () => {
+describe("evaluate: app — unary operators", () => {
   it("negates, takes the absolute value of, and takes the square root of a Quantity", () => {
     expect(evaluate(app("math:negate", [num("4")]), {})).toEqual(
       quantity(-4, {}),
@@ -401,7 +401,7 @@ describe("evaluate: out-of-scope node kinds", () => {
     expect(caught).toBeInstanceOf(UnsupportedExpressionError);
     expect((caught as UnsupportedExpressionError).context).toBe("evaluate");
     expect((caught as UnsupportedExpressionError).message).toBe(
-      "evaluate: matrix-valued expressions are out of scope for this pass -- document-compute.js evaluates scalar Quantity/Interval values only.",
+      "evaluate: matrix-valued expressions are out of scope for this pass — document-compute.js evaluates scalar Quantity/Interval values only.",
     );
   });
 
@@ -424,7 +424,7 @@ describe("evaluate: out-of-scope node kinds", () => {
   });
 });
 
-describe("evaluate: sum / prod binders -- error paths", () => {
+describe("evaluate: sum / prod binders — error paths", () => {
   it("throws IncompatibleDimensionsError when only the lower bound is dimensioned", () => {
     const expression: MathExpression = {
       kind: "sum",

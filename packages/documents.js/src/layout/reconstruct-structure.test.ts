@@ -296,7 +296,7 @@ describe("reconstructWordprocessing: tagged table recovery (#760)", () => {
   });
 
   it("merges several text-showing items sharing one tagged cell into that one cell, instead of splitting it into a bogus extra column per item", () => {
-    // A real PDF routinely splits one cell's prose across several separate text-showing operations (a font/style change, a kerning-driven TJ break) that all still belong to the same tagged TD -- unlike the fixture above, where every cell happens to be exactly one word. Cell "c1" here carries six such items; "c2" carries one. Grouping by item instead of by the cell each item belongs to would explode "c1" into six single-word columns and, since column position is purely positional, push "c2" out to a phantom seventh column -- scattering row 2's own second cell into an empty slot far from where row 1's second cell sits.
+    // A real PDF routinely splits one cell's prose across several separate text-showing operations (a font/style change, a kerning-driven TJ break) that all still belong to the same tagged TD — unlike the fixture above, where every cell happens to be exactly one word. Cell "c1" here carries six such items; "c2" carries one. Grouping by item instead of by the cell each item belongs to would explode "c1" into six single-word columns and, since column position is purely positional, push "c2" out to a phantom seventh column — scattering row 2's own second cell into an empty slot far from where row 1's second cell sits.
     const doc = reconstructWordprocessing(
       docFrom(
         [

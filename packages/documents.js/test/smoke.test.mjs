@@ -1,4 +1,4 @@
-// Smoke test: the built dist/ artifact loads and works under both ESM and CJS. Run only via `pnpm test:smoke` (tsdown, then vitest scoped to the "smoke" project) -- never part of the default `pnpm test` file set, since it requires a fresh build to mean anything.
+// Smoke test: the built dist/ artifact loads and works under both ESM and CJS. Run only via `pnpm test:smoke` (tsdown, then vitest scoped to the "smoke" project) — never part of the default `pnpm test` file set, since it requires a fresh build to mean anything.
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 const cjs = require('../dist/index.cjs');
 const cjsRead = require('../dist/convert/from-pdf.cjs');
 
-// A representative slice of the public surface, not an exhaustive list: ooxml.js's re-exported lossless core, the read+write live-view editors, the hand-written PDF codec, and the ergonomic conversions -- enough to catch a genuinely broken dual build without duplicating src/index.ts's own export list here.
+// A representative slice of the public surface, not an exhaustive list: ooxml.js's re-exported lossless core, the read+write live-view editors, the hand-written PDF codec, and the ergonomic conversions — enough to catch a genuinely broken dual build without duplicating src/index.ts's own export list here.
 const FUNCTIONS = [
   'decodePackage',
   'encodePackage',
@@ -75,7 +75,7 @@ function minimalOdtBytes() {
   ]);
 }
 
-// This mirrors minimalOdtBytes above exactly, just with office:presentation/draw:page/presentation:notes in place of office:text/text:p -- proving odpToPdf's entire pipeline (odf.js's decodePackage, dist's own readOdpContent/convertPresentationToLayout/writePdf, including the notes hidden-annotation mechanism) actually works from the built dist/ artifact via hand-built ODF XML, independent of this package's own createOdp/openOdp live-view editor (exercised separately below, via a fresh presentation built entirely through cjs.createOdp() itself).
+// This mirrors minimalOdtBytes above exactly, just with office:presentation/draw:page/presentation:notes in place of office:text/text:p — proving odpToPdf's entire pipeline (odf.js's decodePackage, dist's own readOdpContent/convertPresentationToLayout/writePdf, including the notes hidden-annotation mechanism) actually works from the built dist/ artifact via hand-built ODF XML, independent of this package's own createOdp/openOdp live-view editor (exercised separately below, via a fresh presentation built entirely through cjs.createOdp() itself).
 function minimalOdpBytes() {
   const mimetype = new TextEncoder().encode(ODF_MEDIA_TYPES.odp);
   const contentXml = new TextEncoder().encode(
@@ -87,7 +87,7 @@ function minimalOdpBytes() {
   ]);
 }
 
-// This mirrors minimalOdtBytes above exactly, just with office:spreadsheet/table:table/table:table-row/table:table-cell in place of office:text/text:p -- proving odsToPdf's entire pipeline (odf.js's decodePackage, dist's own readOdsContent/convertSpreadsheetToLayout/writePdf) actually works from the built dist/ artifact via hand-built ODF XML, independent of this package's own createOds/openOds live-view editor (exercised separately below, via a fresh spreadsheet built entirely through cjs.createOds() itself). The column carries an explicit wide style (mirroring odt.ts's own Col1/Col2 automatic-styles) so the cell's own real standard-14-font text genuinely fits without src/layout/sheets.ts's own string-overflow truncation kicking in -- a bare default-width column at real font metrics would truncate a sentence-length string, which is the correct algorithm behaviour, not a smoke-test bug, but would make this particular assertion the wrong one to write.
+// This mirrors minimalOdtBytes above exactly, just with office:spreadsheet/table:table/table:table-row/table:table-cell in place of office:text/text:p — proving odsToPdf's entire pipeline (odf.js's decodePackage, dist's own readOdsContent/convertSpreadsheetToLayout/writePdf) actually works from the built dist/ artifact via hand-built ODF XML, independent of this package's own createOds/openOds live-view editor (exercised separately below, via a fresh spreadsheet built entirely through cjs.createOds() itself). The column carries an explicit wide style (mirroring odt.ts's own Col1/Col2 automatic-styles) so the cell's own real standard-14-font text genuinely fits without src/layout/sheets.ts's own string-overflow truncation kicking in — a bare default-width column at real font metrics would truncate a sentence-length string, which is the correct algorithm behaviour, not a smoke-test bug, but would make this particular assertion the wrong one to write.
 function minimalOdsBytes() {
   const mimetype = new TextEncoder().encode(ODF_MEDIA_TYPES.ods);
   const contentXml = new TextEncoder().encode(
@@ -99,7 +99,7 @@ function minimalOdsBytes() {
   ]);
 }
 
-// This mirrors minimalOdsBytes above exactly, just with office:drawing/draw:page/draw:path in place of office:spreadsheet/table:table -- proving odgToPdf's entire pipeline (odf.js's decodePackage, dist's own readOdgContent/convertDrawingToLayout/writePdf, INCLUDING writePath's own m/l/c content-stream emission) actually works from the built dist/ artifact via hand-built ODF XML. The svg:d/svg:viewBox here are the exact ground-truth-verified real LibreOffice curve odf.js's own typed/shared/path.ts documents (see src/test-support/odg.ts's own note) -- this is what proves the curve genuinely reaches the built dist/ writePath as a cubic segment, not just a straight-line approximation. There is no createOdg/openOdg live-view editor to exercise separately in THIS particular block (it is exercised below, via a fresh drawing built entirely through cjs.createOdg() itself), matching ods's own pair of smoke tests above.
+// This mirrors minimalOdsBytes above exactly, just with office:drawing/draw:page/draw:path in place of office:spreadsheet/table:table — proving odgToPdf's entire pipeline (odf.js's decodePackage, dist's own readOdgContent/convertDrawingToLayout/writePdf, INCLUDING writePath's own m/l/c content-stream emission) actually works from the built dist/ artifact via hand-built ODF XML. The svg:d/svg:viewBox here are the exact ground-truth-verified real LibreOffice curve odf.js's own typed/shared/path.ts documents (see src/test-support/odg.ts's own note) — this is what proves the curve genuinely reaches the built dist/ writePath as a cubic segment, not just a straight-line approximation. There is no createOdg/openOdg live-view editor to exercise separately in THIS particular block (it is exercised below, via a fresh drawing built entirely through cjs.createOdg() itself), matching ods's own pair of smoke tests above.
 function minimalOdgBytes() {
   const mimetype = new TextEncoder().encode(ODF_MEDIA_TYPES.odg);
   const contentXml = new TextEncoder().encode(
@@ -111,7 +111,7 @@ function minimalOdgBytes() {
   ]);
 }
 
-// A standalone .odf formula document (office:body > office:math > math:math, real LibreOffice-shaped MathML with a "math:" namespace prefix throughout -- see src/test-support/odf.ts's own note on why this fixture is prefixed rather than bare) -- proves odfToPdf's entire pipeline (odf.js's decodePackage, dist's own readOdfFormulaContent, src/mathml's layoutFormula, and the embedded STIX Two Math font's real cmap/hmtx/MATH-table-driven CID text-showing in src/pdf/write.ts) actually works from the built dist/ artifact, including the base64-embedded font asset itself surviving the tsdown build unmangled.
+// A standalone .odf formula document (office:body > office:math > math:math, real LibreOffice-shaped MathML with a "math:" namespace prefix throughout — see src/test-support/odf.ts's own note on why this fixture is prefixed rather than bare) — proves odfToPdf's entire pipeline (odf.js's decodePackage, dist's own readOdfFormulaContent, src/mathml's layoutFormula, and the embedded STIX Two Math font's real cmap/hmtx/MATH-table-driven CID text-showing in src/pdf/write.ts) actually works from the built dist/ artifact, including the base64-embedded font asset itself surviving the tsdown build unmangled.
 function minimalOdfFormulaBytes() {
   const mimetype = new TextEncoder().encode(ODF_MEDIA_TYPES.odf);
   const contentXml = new TextEncoder().encode(
@@ -123,7 +123,7 @@ function minimalOdfFormulaBytes() {
   ]);
 }
 
-// An ods carrying ONE real cell-anchored formula: a draw:frame inside cell C4's own table:table-cell (column index 2, row index 3, at a 0.4cm/0.2cm cell-relative offset), referencing an "Object 1" sub-document the manifest declares as a formula. This is the shape real LibreOffice writes -- see src/test-support/ods-formula.ts, which embeds an actual LibreOffice-produced file of exactly this structure for the unit suite -- restated inline here because the smoke suite deliberately builds every fixture from hand-authored ODF XML rather than importing anything out of src/. It proves the whole cell-anchored formula pipeline reaches the built dist/ artifact: odf.js's readOdsContent resolving the anchor quartet, dist's own convertSpreadsheetToLayout placing the box against that sheet's real column/row geometry, and src/mathml + the embedded STIX Two Math font actually typesetting it into the page's content stream.
+// An ods carrying ONE real cell-anchored formula: a draw:frame inside cell C4's own table:table-cell (column index 2, row index 3, at a 0.4cm/0.2cm cell-relative offset), referencing an "Object 1" sub-document the manifest declares as a formula. This is the shape real LibreOffice writes — see src/test-support/ods-formula.ts, which embeds an actual LibreOffice-produced file of exactly this structure for the unit suite — restated inline here because the smoke suite deliberately builds every fixture from hand-authored ODF XML rather than importing anything out of src/. It proves the whole cell-anchored formula pipeline reaches the built dist/ artifact: odf.js's readOdsContent resolving the anchor quartet, dist's own convertSpreadsheetToLayout placing the box against that sheet's real column/row geometry, and src/mathml + the embedded STIX Two Math font actually typesetting it into the page's content stream.
 function odsWithAnchoredFormulaBytes() {
   const mimetype = new TextEncoder().encode(ODF_MEDIA_TYPES.ods);
   const contentXml = new TextEncoder().encode(
@@ -174,7 +174,7 @@ describe('dist/ end-to-end: docxToPdf then pdfToDocx, from the CJS build', () =>
   });
 });
 
-// Real font resolution, from the built artifact: a run asking for Calibri resolves through pdf-codec's vendored, metric-compatible Carlito face and a genuine TrueType font program travels in the PDF -- the same "the font asset survived the build and was actually used" proof odfToPdf's own STIX Two Math assertion below makes, for the other font path. The control assertion (Arial, which no vendored substitute claims and the standard 14 cover directly) is what keeps this honest: it proves the embedding above is driven by the requested family rather than by every conversion now embedding something unconditionally.
+// Real font resolution, from the built artifact: a run asking for Calibri resolves through pdf-codec's vendored, metric-compatible Carlito face and a genuine TrueType font program travels in the PDF — the same "the font asset survived the build and was actually used" proof odfToPdf's own STIX Two Math assertion below makes, for the other font path. The control assertion (Arial, which no vendored substitute claims and the standard 14 cover directly) is what keeps this honest: it proves the embedding above is driven by the requested family rather than by every conversion now embedding something unconditionally.
 describe('dist/ end-to-end: font resolution in docxToPdf, from the CJS build', () => {
   function docxAskingFor(fontFamily) {
     const pkg = cjs.createDocx();
@@ -244,14 +244,14 @@ describe('dist/ end-to-end: odsToPdf, from the CJS build', () => {
   });
 });
 
-// pdfToOds now exists, so unlike ods's own PDF-only test above, this closes the full loop: minimalOdsBytes' own real column-width style gives odsToPdf real, non-degenerate geometry to render (unlike a bare cjs.createOds() sheet, which has no column-width/row-height setter of its own yet -- a documented, tracked gap, see src/edit/ods/content.ts's own module doc -- so its cells would render at zero-size bands with nothing meaningful to recover). pdfToOds is then fed the rendered PDF and reopened -- proving reconstructSpreadsheet itself reaches dist/, not just readPdf's own general path tracking.
+// pdfToOds now exists, so unlike ods's own PDF-only test above, this closes the full loop: minimalOdsBytes' own real column-width style gives odsToPdf real, non-degenerate geometry to render (unlike a bare cjs.createOds() sheet, which has no column-width/row-height setter of its own yet — a documented, tracked gap, see src/edit/ods/content.ts's own module doc — so its cells would render at zero-size bands with nothing meaningful to recover). pdfToOds is then fed the rendered PDF and reopened — proving reconstructSpreadsheet itself reaches dist/, not just readPdf's own general path tracking.
 describe('dist/ end-to-end: odsToPdf then pdfToOds, from the CJS build', () => {
   it('round-trips a genuine ODF spreadsheet package\'s cell text through PDF and back', () => {
     const pdfBytes = cjs.odsToPdf(minimalOdsBytes());
     expect(pdfBytes.length).toBeGreaterThan(0);
     expect(new TextDecoder('latin1').decode(pdfBytes.subarray(0, 5))).toBe('%PDF-');
 
-    // pdfToOds, closing the loop: reconstructSpreadsheet (src/layout/reconstruct.ts) recovers the rendered text's own geometry into a grid and reassembles it into a fresh, real ods package via buildOdsPackage -- reachable from the built dist/ artifact, not just from src/ under vitest.
+    // pdfToOds, closing the loop: reconstructSpreadsheet (src/layout/reconstruct.ts) recovers the rendered text's own geometry into a grid and reassembles it into a fresh, real ods package via buildOdsPackage — reachable from the built dist/ artifact, not just from src/ under vitest.
     const roundTrippedOdsBytes = cjs.pdfToOds(pdfBytes);
     expect(roundTrippedOdsBytes.length).toBeGreaterThan(0);
     const roundTripped = cjs.openOds(roundTrippedOdsBytes);
@@ -263,7 +263,7 @@ describe('dist/ end-to-end: odsToPdf then pdfToOds, from the CJS build', () => {
   });
 });
 
-// documentTreeWithSchema/documentFromJson are re-exported from document-schema.js (not defined in this package's own src/) -- this proves the re-export actually resolves through the built dist/ artifact and that the stamped $schema is a real, correctly-versioned document-schema.js URL, not just that the identifier exists.
+// documentTreeWithSchema/documentFromJson are re-exported from document-schema.js (not defined in this package's own src/) — this proves the re-export actually resolves through the built dist/ artifact and that the stamped $schema is a real, correctly-versioned document-schema.js URL, not just that the identifier exists.
 describe('dist/ end-to-end: documentTreeWithSchema/documentFromJson, from the CJS build', () => {
   it('stamps a real DocumentTree built by docxToPdf with $schema, and round-trips it back through documentFromJson', () => {
     const docxEditor = cjs.createDocx();
@@ -285,7 +285,7 @@ describe('dist/ end-to-end: documentTreeWithSchema/documentFromJson, from the CJ
   });
 });
 
-// The printSettings getter/setter (src/edit/ods/print-settings.ts) is genuinely new write code -- exercised here directly on a cjs.createOds() sheet, independent of any real cell geometry, since that's all this specific property needs to prove it reaches dist/ correctly (mints a real style:page-layout/style:master-page/style:style[family="table"] chain and reads it back through a real reopen). buildOdsPackage/OdsEditor are exercised directly too (not merely re-exported), mirroring the odg block below's own "exercised directly" pattern -- the standalone ContentDocument -> ods bridge, reachable from dist/ too.
+// The printSettings getter/setter (src/edit/ods/print-settings.ts) is genuinely new write code — exercised here directly on a cjs.createOds() sheet, independent of any real cell geometry, since that's all this specific property needs to prove it reaches dist/ correctly (mints a real style:page-layout/style:master-page/style:style[family="table"] chain and reads it back through a real reopen). buildOdsPackage/OdsEditor are exercised directly too (not merely re-exported), mirroring the odg block below's own "exercised directly" pattern — the standalone ContentDocument -> ods bridge, reachable from dist/ too.
 describe('dist/ end-to-end: ods printSettings and buildOdsPackage, from the CJS build', () => {
   it('sets and reads back printSettings through a real write -> reread round trip, and rebuilds a package via buildOdsPackage', () => {
     const editor = cjs.createOds();
@@ -347,7 +347,7 @@ describe('dist/ end-to-end: odpToPdf then pdfToOdp, from the CJS build', () => {
   });
 });
 
-// pdfToOdg now exists, so unlike the pre-round-trip version of this test, this closes the full loop: cjs.createOdg()'s live-view editor (page-level add/remove, addRect/addEllipse/addLine/addPath, and reused OdpShape text boxes) reaches the built dist/ artifact and produces a genuinely renderable drawing, which is then fed through odgToPdf, back through pdfToOdg, and reopened -- proving reconstructDrawing itself reaches dist/, not just readPdf's own general path tracking. Mirrors the odpToPdf-then-pdfToOdp block above exactly.
+// pdfToOdg now exists, so unlike the pre-round-trip version of this test, this closes the full loop: cjs.createOdg()'s live-view editor (page-level add/remove, addRect/addEllipse/addLine/addPath, and reused OdpShape text boxes) reaches the built dist/ artifact and produces a genuinely renderable drawing, which is then fed through odgToPdf, back through pdfToOdg, and reopened — proving reconstructDrawing itself reaches dist/, not just readPdf's own general path tracking. Mirrors the odpToPdf-then-pdfToOdp block above exactly.
 describe('dist/ end-to-end: odg live-view editor, odgToPdf then pdfToOdg, from the CJS build', () => {
   it('builds a drawing via cjs.createOdg() (a filled rect, a curved path, a text label), round-trips it through PDF, and reopens it', () => {
     const editor = cjs.createOdg();
@@ -384,13 +384,13 @@ describe('dist/ end-to-end: odg live-view editor, odgToPdf then pdfToOdg, from t
     expect(text).toContain('Hello');
     expect(text).toContain('smoke');
 
-    // buildOdgPackage, exercised directly (not merely re-exported) -- the standalone ContentDocument -> odg bridge, reachable from dist/ too. Goes via editor.toPackage()/new OdgEditor(...) rather than raw decodePackage/encodePackage, since the bare decodePackage/encodePackage names re-exported from documents.js's own index are ooxml.js's (for docx/pptx), not odf.js's -- OdgEditor's own toPackage()/constructor is this package's established way to move an odf.js Package in and out of the live-view editor without that ambiguity.
+    // buildOdgPackage, exercised directly (not merely re-exported) — the standalone ContentDocument -> odg bridge, reachable from dist/ too. Goes via editor.toPackage()/new OdgEditor(...) rather than raw decodePackage/encodePackage, since the bare decodePackage/encodePackage names re-exported from documents.js's own index are ooxml.js's (for docx/pptx), not odf.js's — OdgEditor's own toPackage()/constructor is this package's established way to move an odf.js Package in and out of the live-view editor without that ambiguity.
     const content = cjs.readOdgContent(editor.toPackage());
     const rebuiltPkg = cjs.buildOdgPackage(content);
     const rebuilt = new cjs.OdgEditor(rebuiltPkg);
     expect(rebuilt.pages()).toHaveLength(1);
 
-    // pdfToOdg, closing the loop: reconstructDrawing (src/layout/reconstruct.ts) recovers the rect and the text label from the rendered PDF's own geometry and reassembles them into a fresh, real odg package via buildOdgPackage -- reachable from the built dist/ artifact, not just from src/ under vitest.
+    // pdfToOdg, closing the loop: reconstructDrawing (src/layout/reconstruct.ts) recovers the rect and the text label from the rendered PDF's own geometry and reassembles them into a fresh, real odg package via buildOdgPackage — reachable from the built dist/ artifact, not just from src/ under vitest.
     const roundTrippedOdgBytes = cjs.pdfToOdg(pdfBytes);
     expect(roundTrippedOdgBytes.length).toBeGreaterThan(0);
     const roundTripped = cjs.openOdg(roundTrippedOdgBytes);
@@ -412,7 +412,7 @@ describe('dist/ end-to-end: odfToPdf, from the CJS build', () => {
 
     const layout = cjs.readPdf(pdfBytes);
     expect(layout.pages).toHaveLength(1);
-    // The fraction rule itself never becomes a LayoutRect/LayoutPath item (it's drawn directly into the page's own content stream by writeFormulaContentStream, entirely outside the LayoutItem model -- see write.ts's own module comment on why a formula can't travel through doc.pages[].items), so this checks the PDF actually contains a real embedded Type0 font resource instead, which is the concrete, checkable proof the math font reached the built dist/ artifact and was used.
+    // The fraction rule itself never becomes a LayoutRect/LayoutPath item (it's drawn directly into the page's own content stream by writeFormulaContentStream, entirely outside the LayoutItem model — see write.ts's own module comment on why a formula can't travel through doc.pages[].items), so this checks the PDF actually contains a real embedded Type0 font resource instead, which is the concrete, checkable proof the math font reached the built dist/ artifact and was used.
     const raw = new TextDecoder('latin1').decode(pdfBytes);
     expect(raw).toContain('/Subtype /Type0');
     expect(raw).toContain('/Encoding /Identity-H');
@@ -441,7 +441,7 @@ describe('dist/ end-to-end: odsToPdf with a cell-anchored formula, from the CJS 
   });
 });
 
-// markdownToPdf then pdfToMarkdown, plus the markdownToDocx bridge: the concrete, from-the-built-artifact proof that markdown-codec's own readMarkdown, wrapped by this package's readMarkdownContent, reaches convertWordprocessingToLayout (via markdownToPdf) and buildDocxPackage (via markdownToDocx) unmodified, the identical pipeline docxToPdf's own smoke test above already proves for docx -- markdown is a third, real caller of that same engine, not just a src/ unit-test claim.
+// markdownToPdf then pdfToMarkdown, plus the markdownToDocx bridge: the concrete, from-the-built-artifact proof that markdown-codec's own readMarkdown, wrapped by this package's readMarkdownContent, reaches convertWordprocessingToLayout (via markdownToPdf) and buildDocxPackage (via markdownToDocx) unmodified, the identical pipeline docxToPdf's own smoke test above already proves for docx — markdown is a third, real caller of that same engine, not just a src/ unit-test claim.
 describe('dist/ end-to-end: markdownToPdf then pdfToMarkdown, and markdownToDocx, from the CJS build', () => {
   it('produces a real PDF from markdown bytes, reconstructs back to markdown, and bridges directly to a real docx package', () => {
     const markdownBytes = new TextEncoder().encode('# Smoke Test Heading\n\nHello from the **markdown** smoke test.\n');
@@ -462,7 +462,7 @@ describe('dist/ end-to-end: markdownToPdf then pdfToMarkdown, and markdownToDocx
     expect(roundTrippedMarkdownBytes.length).toBeGreaterThan(0);
     expect(new TextDecoder().decode(roundTrippedMarkdownBytes)).toContain('markdown');
 
-    // markdownToDocx: no PDF pivot at all -- readMarkdownContent feeds buildDocxPackage directly (see convert.ts's own module comment), proving the bridge functions reach the built dist/ artifact too, not just the PDF-pivot conversions above.
+    // markdownToDocx: no PDF pivot at all — readMarkdownContent feeds buildDocxPackage directly (see convert.ts's own module comment), proving the bridge functions reach the built dist/ artifact too, not just the PDF-pivot conversions above.
     const docxBytes = cjs.markdownToDocx(markdownBytes);
     expect(docxBytes.length).toBeGreaterThan(0);
     const docxText = cjs

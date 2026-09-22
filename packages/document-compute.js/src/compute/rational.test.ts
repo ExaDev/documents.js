@@ -70,7 +70,7 @@ describe("rational", () => {
   });
 
   it("divides by a rational whose own numerator is not 1, distinguishing the cross-multiplication from a same-result division", () => {
-    // (1/2) / (3/4) = 4/6 = 2/3 -- the divisor's numerator (3) is not 1, so a*d/(b*n) and a*d*(b*n) (or a*d/(b*n) with integer BigInt division instead of the correct cross-multiply) would disagree here, unlike the "divides exactly" case above where the divisor's numerator is 1 and every wrong formula happens to coincide with the right one.
+    // (1/2) / (3/4) = 4/6 = 2/3 — the divisor's numerator (3) is not 1, so a*d/(b*n) and a*d*(b*n) (or a*d/(b*n) with integer BigInt division instead of the correct cross-multiply) would disagree here, unlike the "divides exactly" case above where the divisor's numerator is 1 and every wrong formula happens to coincide with the right one.
     const result = divideRational(
       toRational({ numerator: "1", denominator: "2" }),
       toRational({ numerator: "3", denominator: "4" }),
@@ -91,7 +91,7 @@ describe("rational", () => {
   });
 
   it("throws when a supplied Rational carries a zero denominator, even though toRational's own callers never construct one", () => {
-    // Rational is a plain interface, not a validated type -- reduce()'s own d === 0n guard is the only thing standing between a directly-constructed zero-denominator Rational and a silent BigInt division-by-zero further down. Exercised here via addRational since reduce itself is not exported.
+    // Rational is a plain interface, not a validated type — reduce()'s own d === 0n guard is the only thing standing between a directly-constructed zero-denominator Rational and a silent BigInt division-by-zero further down. Exercised here via addRational since reduce itself is not exported.
     expect(() => addRational({ n: 1n, d: 0n }, { n: 1n, d: 1n })).toThrow(
       RangeError,
     );
@@ -130,7 +130,7 @@ describe("rational", () => {
   });
 
   it("performs a long conversion chain without floating-point drift, by staying exact until the final conversion", () => {
-    // Multiplying 1/3 by itself 10 times and back down by 3^10 should return exactly to 1/3 -- bit-exact, not merely close -- because every step stays in BigInt rationals until rationalToNumber's single controlled float conversion at the end.
+    // Multiplying 1/3 by itself 10 times and back down by 3^10 should return exactly to 1/3 — bit-exact, not merely close — because every step stays in BigInt rationals until rationalToNumber's single controlled float conversion at the end.
     let value = toRational({ numerator: "1", denominator: "3" });
     for (let i = 0; i < 10; i += 1) {
       value = multiplyRational(

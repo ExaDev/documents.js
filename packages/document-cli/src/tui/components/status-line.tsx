@@ -7,7 +7,7 @@ import type { StatusMessage } from "../state/types.js";
 // Exported so a test can derive its own wait/assert timing from the real constant rather than duplicating the number.
 export const TRANSIENT_STATUS_TTL_MS = 4000;
 
-// Exported purely so a unit test can assert each severity's exact colour directly -- ink strips ANSI colour codes from a non-TTY render, so a rendered frame's text alone can never distinguish one colour from another.
+// Exported purely so a unit test can assert each severity's exact colour directly — ink strips ANSI colour codes from a non-TTY render, so a rendered frame's text alone can never distinguish one colour from another.
 export function statusColour(severity: StatusMessage["severity"]): string {
   switch (severity) {
     case "info":
@@ -56,7 +56,7 @@ export function StatusLine(): ReactElement {
       {showDiagnosticsBadge ? (
         <Text color="yellow">
           {" "}
-          ⚠ {state.diagnostics.length} diagnostics -- Ctrl+D
+          ⚠ {state.diagnostics.length} diagnostics — Ctrl+D
         </Text>
       ) : undefined}
     </Box>

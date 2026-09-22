@@ -25,7 +25,7 @@ export const image = style({ maxWidth: "100%" });
 // Standard list style for <ol>/<ul> when the list kind IS known (ordered: or bullet: prefix in numId). Same margins/indentation as MarkdownPreview's own list style.
 export const list = style({ margin: "0.3em 0", paddingLeft: 24 });
 
-// Blockquote, code block, and horizontal rule styles -- shared by every flowing-document preview (Markdown, WordProcessing, Slides) since all detect these via the same router-side styleId convention.
+// Blockquote, code block, and horizontal rule styles — shared by every flowing-document preview (Markdown, WordProcessing, Slides) since all detect these via the same router-side styleId convention.
 export const blockquote = style({
   margin: "0.6em 0",
   paddingLeft: 12,
@@ -45,7 +45,7 @@ export const hr = style({
   borderTop: `1px solid ${vars.colors.defaultBorder}`,
   margin: "1em 0",
 });
-// A page break's own visual, distinct from hr above (a page break is a layout event, not document content) -- a dashed rule flanking a small "Page break" caption, built from ::before/::after so no extra wrapper markup is needed.
+// A page break's own visual, distinct from hr above (a page break is a layout event, not document content) — a dashed rule flanking a small "Page break" caption, built from ::before/::after so no extra wrapper markup is needed.
 export const pageBreak = style({
   display: "flex",
   alignItems: "center",
@@ -67,7 +67,7 @@ export const pageBreak = style({
   },
 });
 
-// An embedded object this preview cannot lay out inline (a nested wordprocessing/presentation/spreadsheet/drawing document, or a chart's cached data) -- document-schema.js's own ContentEmbeddedObject doc comment states only a 'formula' object is expected to be laid out and rendered; the rest round-trip losslessly without ever being rendered, so a labelled placeholder is the correct treatment here, not a missing feature.
+// An embedded object this preview cannot lay out inline (a nested wordprocessing/presentation/spreadsheet/drawing document, or a chart's cached data) — document-schema.js's own ContentEmbeddedObject doc comment states only a 'formula' object is expected to be laid out and rendered; the rest round-trip losslessly without ever being rendered, so a labelled placeholder is the correct treatment here, not a missing feature.
 export const embeddedObject = style({
   margin: "0.6em 0",
   padding: "12px 16px",
@@ -78,7 +78,7 @@ export const embeddedObject = style({
   fontStyle: "italic",
 });
 
-// The one embedded-object kind that IS rendered inline (a formula, via MathMlView) -- block-level spacing to match paragraph/blockquote/codeBlock above, plus horizontal scroll for an equation wider than the preview column.
+// The one embedded-object kind that IS rendered inline (a formula, via MathMlView) — block-level spacing to match paragraph/blockquote/codeBlock above, plus horizontal scroll for an equation wider than the preview column.
 export const embeddedFormula = style({
   margin: "0.6em 0",
   overflowX: "auto",

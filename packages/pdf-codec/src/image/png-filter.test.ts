@@ -77,7 +77,7 @@ describe("filterScanlines / unfilterScanlines round-trip", () => {
       0,
       0,
       0,
-      0, // row 0: constant -- "None" trivially has the smallest sum (all zero)
+      0, // row 0: constant — "None" trivially has the smallest sum (all zero)
       0,
       1,
       2,
@@ -85,7 +85,7 @@ describe("filterScanlines / unfilterScanlines round-trip", () => {
       4,
       5,
       6,
-      7, // row 1: a steady left-to-right ramp -- "Sub" reduces this to a constant step
+      7, // row 1: a steady left-to-right ramp — "Sub" reduces this to a constant step
       0,
       1,
       2,
@@ -93,7 +93,7 @@ describe("filterScanlines / unfilterScanlines round-trip", () => {
       4,
       5,
       6,
-      7, // row 2: identical to row 1 above -- "Up" reduces this to all zero
+      7, // row 2: identical to row 1 above — "Up" reduces this to all zero
       10,
       30,
       5,
@@ -101,7 +101,7 @@ describe("filterScanlines / unfilterScanlines round-trip", () => {
       2,
       60,
       8,
-      40, // row 3: unrelated to row 2 -- exercises the remaining predictors
+      40, // row 3: unrelated to row 2 — exercises the remaining predictors
     ]);
     const filtered = filterScanlines(raw, height, bytesPerRow, bpp, "adaptive");
     const stride = bytesPerRow + 1;

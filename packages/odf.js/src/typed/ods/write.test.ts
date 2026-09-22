@@ -35,7 +35,7 @@ import {
   canonicalConditionalFormats,
 } from "./write";
 
-// The write side's XML-shape suite: what writeOdsContent actually emits, construct by construct -- the sibling suite (write-round-trip.test.ts) proves the output reads back as the document it came from; this one proves the output is the ODF a real consumer expects, which a round trip through this package's own reader cannot (a writer and reader that agreed on the same wrong spelling would round-trip perfectly and open nowhere). This mirrors typed/odt/write.test.ts's own stated split of responsibility.
+// The write side's XML-shape suite: what writeOdsContent actually emits, construct by construct — the sibling suite (write-round-trip.test.ts) proves the output reads back as the document it came from; this one proves the output is the ODF a real consumer expects, which a round trip through this package's own reader cannot (a writer and reader that agreed on the same wrong spelling would round-trip perfectly and open nowhere). This mirrors typed/odt/write.test.ts's own stated split of responsibility.
 
 const MARGINS = { topPt: 36, rightPt: 36, bottomPt: 36, leftPt: 36 };
 
@@ -277,7 +277,7 @@ describe("writeOdsContent XML shapes", () => {
     );
     const row = childrenWithTag(firstTable(pkg), "table:table-row")[0]!;
     const cells = childrenWithTag(row, "table:table-cell");
-    // anchor cell, one compressed filler run, the far cell -- not 21 individual elements.
+    // anchor cell, one compressed filler run, the far cell — not 21 individual elements.
     expect(cells.length).toBeLessThan(5);
     const filler = cells.find(
       (cellElement) =>
@@ -646,7 +646,7 @@ describe("writeOdsContent XML shapes", () => {
         ]),
       );
       const table = firstTable(pkg);
-      // repeatColumns/repeatRows wrap every column/row 0..end inside their own table:table-header-columns/-rows element (ODF's own repeated-header spelling), rather than leaving them as direct table:table children -- see wrapHeaderRange.
+      // repeatColumns/repeatRows wrap every column/row 0..end inside their own table:table-header-columns/-rows element (ODF's own repeated-header spelling), rather than leaving them as direct table:table children — see wrapHeaderRange.
       const columnHeader = childrenWithTag(
         table,
         "table:table-header-columns",
@@ -1595,8 +1595,8 @@ describe("writeOdsContent: data validation and conditional formatting", () => {
   });
 });
 
-describe("writeOdsContent: a cell's own runs -- bare newline vs. formatted line-break", () => {
-  // A run that is EXACTLY {text: "\n"} with every formatting field absent is the shape readCellText's own multi-text:p join synthesises, so the writer must split it into a new text:p rather than emitting it as a text:line-break. Each of the eight cases below carries the identical "\n" text but sets exactly one formatting field, which must all keep it inside a single text:p (as a text:line-break within a formatted text:span), never splitting a second paragraph -- this is the exhaustive boundary the writer's isBareNewlineRun predicate checks.
+describe("writeOdsContent: a cell's own runs — bare newline vs. formatted line-break", () => {
+  // A run that is EXACTLY {text: "\n"} with every formatting field absent is the shape readCellText's own multi-text:p join synthesises, so the writer must split it into a new text:p rather than emitting it as a text:line-break. Each of the eight cases below carries the identical "\n" text but sets exactly one formatting field, which must all keep it inside a single text:p (as a text:line-break within a formatted text:span), never splitting a second paragraph — this is the exhaustive boundary the writer's isBareNewlineRun predicate checks.
   it("splits a bare '\\n' run (no formatting fields at all) into two text:p elements", () => {
     const pkg = writeOdsContent(
       documentOf([

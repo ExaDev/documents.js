@@ -19,13 +19,13 @@ export type InlineNodeKind =
   | "entity"
   | "mathInline"
   | "footnoteReference"
-  // The synthetic root every inline parse builds into -- never converted to an AST node itself, only its children are.
+  // The synthetic root every inline parse builds into — never converted to an AST node itself, only its children are.
   | "container";
 
 export class InlineNode {
   readonly kind: InlineNodeKind;
 
-  // Literal text (text/codeSpan/rawHtml), the resolved character(s) of an entity, or the destination of a link/image/autolink -- each node kind reads only the fields its own kind defines, exactly as MarkdownInlineNode's discriminated union does after conversion.
+  // Literal text (text/codeSpan/rawHtml), the resolved character(s) of an entity, or the destination of a link/image/autolink — each node kind reads only the fields its own kind defines, exactly as MarkdownInlineNode's discriminated union does after conversion.
   literal = "";
   destination = "";
   title: string | undefined;
@@ -34,7 +34,7 @@ export class InlineNode {
   marker: "_" | "*" = "*";
   // An entity node's own literal source text (e.g. '&amp;'), kept alongside `literal`'s decoded value.
   raw = "";
-  // A footnote reference's own label -- kept in its own field rather than reusing `literal`, since a reference has no literal text of its own: `[^1]` is the label's SPELLING, reconstructed on the way out, not content the parser read.
+  // A footnote reference's own label — kept in its own field rather than reusing `literal`, since a reference has no literal text of its own: `[^1]` is the label's SPELLING, reconstructed on the way out, not content the parser read.
   label = "";
 
   parent: InlineNode | undefined;
@@ -74,7 +74,7 @@ export class InlineNode {
     }
   }
 
-  // Detaches this node from its siblings and parent, leaving its own children intact -- used both to discard a fully-consumed delimiter's text node and to move a node into a newly created emphasis/link wrapper.
+  // Detaches this node from its siblings and parent, leaving its own children intact — used both to discard a fully-consumed delimiter's text node and to move a node into a newly created emphasis/link wrapper.
   unlink(): void {
     if (this.previous !== undefined) {
       this.previous.next = this.next;

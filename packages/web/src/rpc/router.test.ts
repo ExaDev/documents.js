@@ -141,7 +141,7 @@ describe("normalizeContentForSource", () => {
     expect(firstStyleId(result)).toBeUndefined();
   });
 
-  it("the border-only detection is generic to both formats, not docx-specific, so it also matches an odt-sourced paragraph -- odf.js's own reader now populates ContentParagraph.borders from fo:border-* (ExaDev/documents.js#1086), the identical shape docx's own w:pBdr reading (#1082) already produces", () => {
+  it("the border-only detection is generic to both formats, not docx-specific, so it also matches an odt-sourced paragraph — odf.js's own reader now populates ContentParagraph.borders from fo:border-* (ExaDev/documents.js#1086), the identical shape docx's own w:pBdr reading (#1082) already produces", () => {
     const content = wordprocessingWith({
       kind: "paragraph",
       runs: [],
@@ -377,7 +377,7 @@ describe("normalizeContentForSource", () => {
   });
 
   it("dispatches to the markdown-specific rewrite only for a genuinely markdown source, not merely because a docx/odt paragraph happens to carry the same styleId", () => {
-    // HORIZONTAL_RULE_STYLE_ID ("HorizontalRule") deliberately does not contain "Line", so docx/odt's own Horizontal+Line name heuristic never matches it -- only normalizeMarkdownStyling's exact-constant check does, making this genuinely distinguishing rather than coincidentally identical across both branches.
+    // HORIZONTAL_RULE_STYLE_ID ("HorizontalRule") deliberately does not contain "Line", so docx/odt's own Horizontal+Line name heuristic never matches it — only normalizeMarkdownStyling's exact-constant check does, making this genuinely distinguishing rather than coincidentally identical across both branches.
     const content = wordprocessingWith({
       kind: "paragraph",
       runs: [],
@@ -425,7 +425,7 @@ describe("normalizeContentForSource", () => {
   });
 
   it("leaves a wordprocessing-kind ContentDocument untouched for a source other than markdown/docx/odt", () => {
-    // A source that is neither markdown nor docx/odt hits the function's final fallthrough (`return content` unchanged) even when its own document happens to carry a wordprocessing ContentDocument -- distinguishing this from forcing the docx/odt normalizeWordprocessingSemantics branch to always run, which would incorrectly rewrite Heading1 into heading-1 here too.
+    // A source that is neither markdown nor docx/odt hits the function's final fallthrough (`return content` unchanged) even when its own document happens to carry a wordprocessing ContentDocument — distinguishing this from forcing the docx/odt normalizeWordprocessingSemantics branch to always run, which would incorrectly rewrite Heading1 into heading-1 here too.
     const content = wordprocessingWith({
       kind: "paragraph",
       runs: [{ text: "Title" }],
@@ -451,7 +451,7 @@ describe("normalizeContentForSource", () => {
     ).toBe("quote");
   });
 
-  // buildDocumentBytes (documents.js's own tree-based docx writer, used everywhere else in this suite) always synthesises a bullet-format numFmt regardless of the source ContentListMembership's own format (ExaDev/documents.js#1273), so no real docx bytes it produces can ever exercise this function's ordered-list branch. Building genuine bytes directly through ooxml.js's own flat writer instead -- bypassing that bug rather than working around it -- gives a numbering.xml whose numId 1 is unambiguously "decimal", the actual thing this branch is resolving against.
+  // buildDocumentBytes (documents.js's own tree-based docx writer, used everywhere else in this suite) always synthesises a bullet-format numFmt regardless of the source ContentListMembership's own format (ExaDev/documents.js#1273), so no real docx bytes it produces can ever exercise this function's ordered-list branch. Building genuine bytes directly through ooxml.js's own flat writer instead — bypassing that bug rather than working around it — gives a numbering.xml whose numId 1 is unambiguously "decimal", the actual thing this branch is resolving against.
   it("resolves a docx list paragraph against a real, non-bullet numFmt as ordered", () => {
     const bytes = encodePackage(
       buildDocxPackageFromContent({
@@ -490,7 +490,7 @@ describe("normalizeContentForSource", () => {
     );
   });
 
-  // A "none" numFmt is ECMA-376's own spelling for a list level with no visible marker at all -- still resolved as "bullet:" here (no visible marker reads the same as a bullet marker for buildListForest's own neutral-vs-ordered grouping), and distinct from every other non-bullet format, which is why this needs its own real numbering.xml rather than reusing the decimal fixture above.
+  // A "none" numFmt is ECMA-376's own spelling for a list level with no visible marker at all — still resolved as "bullet:" here (no visible marker reads the same as a bullet marker for buildListForest's own neutral-vs-ordered grouping), and distinct from every other non-bullet format, which is why this needs its own real numbering.xml rather than reusing the decimal fixture above.
   it("resolves a docx list paragraph against a real none numFmt as bullet, not ordered", () => {
     const bytes = encodePackage(
       buildDocxPackageFromContent({
@@ -529,7 +529,7 @@ describe("normalizeContentForSource", () => {
     );
   });
 
-  // markdown-codec's own writer only ever mints a numId matching its own md{N}:bullet|ordered grammar, so this fallback is unreachable through the real markdown pipeline -- exercised directly here the same way the docx/odt fallbacks above are, by handing normalizeContentForSource a numId no producer of markdown content would ever actually mint.
+  // markdown-codec's own writer only ever mints a numId matching its own md{N}:bullet|ordered grammar, so this fallback is unreachable through the real markdown pipeline — exercised directly here the same way the docx/odt fallbacks above are, by handing normalizeContentForSource a numId no producer of markdown content would ever actually mint.
   it("falls back to bullet for a markdown paragraph whose numId does not match markdown-codec's own grammar", () => {
     const content = wordprocessingWith({
       kind: "paragraph",
@@ -549,7 +549,7 @@ describe("normalizeContentForSource", () => {
 
 describe("the Package / JSON tool's dump-to-restore pipeline", () => {
   it("round-trips a markdown document's tree through the stamped JSON dump and back as a schema-valid, identically-stamped artefact", () => {
-    // The exact shape the Package / JSON route exchanges: the dump is documentTreeWithSchema(tree) as JSON, the restore parses and schema-validates it before rebuilding bytes. The byte-building half (buildDocumentBytes) is documents.js's own from-package suite's coverage -- asserted here at the tree boundary this package owns.
+    // The exact shape the Package / JSON route exchanges: the dump is documentTreeWithSchema(tree) as JSON, the restore parses and schema-validates it before rebuilding bytes. The byte-building half (buildDocumentBytes) is documents.js's own from-package suite's coverage — asserted here at the tree boundary this package owns.
     const markdown = "# Title\n\nBody text.\n";
     const stamped = documentTreeWithSchema(
       assembleTree(readMarkdownContent(markdown)),
@@ -627,7 +627,7 @@ describe("the Editors tool's session surface", () => {
   });
 
   it("collapses a genuinely multi-run paragraph to its edited text at the first run's position", () => {
-    // markdown-codec splits "**bold** and plain" into a bold run followed by a plain run for the same paragraph -- setParagraphTextAt must remove every run past the first, not just overwrite the first one and leave the rest trailing.
+    // markdown-codec splits "**bold** and plain" into a bold run followed by a plain run for the same paragraph — setParagraphTextAt must remove every run past the first, not just overwrite the first one and leave the rest trailing.
     const session = openEditorSession(
       "markdown",
       new TextEncoder().encode("**bold** and plain\n"),
@@ -666,7 +666,7 @@ describe("the Editors tool's session surface", () => {
 
 describe("sanitizeImageAsset", () => {
   it("estimates byteLength from the base64 string's own length, three bytes per four base64 characters", () => {
-    // "AAAAAAAA" is 8 base64 characters (no padding), so the real decode is exactly 6 bytes -- a formula transposed to *3*4 or /3/4 would report 96 or 1 instead.
+    // "AAAAAAAA" is 8 base64 characters (no padding), so the real decode is exactly 6 bytes — a formula transposed to *3*4 or /3/4 would report 96 or 1 instead.
     const result = sanitizeImageAsset({
       format: "png",
       base64: "AAAAAAAA",

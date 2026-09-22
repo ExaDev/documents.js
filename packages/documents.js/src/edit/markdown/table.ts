@@ -10,7 +10,7 @@ import { resolvePivotTableGrid } from "../table-grid";
 import type { ParagraphInit } from "./paragraph";
 import { buildParagraph, MarkdownParagraph } from "./paragraph";
 
-// 468pt (6.5in) -- matches OdtTable's own DEFAULT_TABLE_WIDTH_PT (src/edit/odt/table.ts): the content width a new table defaults to when no explicit widths are given. columnWidthsPt is a required ContentTable field but is never actually read by markdown-codec's own dist/emit/table.js emitTable -- a GFM table has no column-width concept at all, only a column count (derived from the header row's own cell count) -- so this is carried purely for schema validity, the same "markdown cannot express this, but the shared pivot still needs a value" accommodation ContentParagraph's own unused fields get elsewhere in this editor.
+// 468pt (6.5in) — matches OdtTable's own DEFAULT_TABLE_WIDTH_PT (src/edit/odt/table.ts): the content width a new table defaults to when no explicit widths are given. columnWidthsPt is a required ContentTable field but is never actually read by markdown-codec's own dist/emit/table.js emitTable — a GFM table has no column-width concept at all, only a column count (derived from the header row's own cell count) — so this is carried purely for schema validity, the same "markdown cannot express this, but the shared pivot still needs a value" accommodation ContentParagraph's own unused fields get elsewhere in this editor.
 const DEFAULT_TABLE_WIDTH_PT = 468;
 
 export interface TableInit {
@@ -18,7 +18,7 @@ export interface TableInit {
   readonly columns: number;
 }
 
-// Text-only cells: paragraphs()/appendParagraph()/get-set text, deliberately with no colSpan/rowSpan/per-column-alignment setter of their own. This matches this editor's own real ceiling, not merely markdown's -- markdown-codec's own dist/emit/table.js renderCellText already reports TABLE_CELL_FORMATTING_DROPPED for any cell colSpan/rowSpan/background it finds (a GFM table cell has no merge or fill concept at all) and TABLE_CELL_MULTI_PARAGRAPH_JOINED for more than one block (a GFM cell is exactly one line), so exposing those setters here would only build content markdown-codec's own writer immediately discards or flattens.
+// Text-only cells: paragraphs()/appendParagraph()/get-set text, deliberately with no colSpan/rowSpan/per-column-alignment setter of their own. This matches this editor's own real ceiling, not merely markdown's — markdown-codec's own dist/emit/table.js renderCellText already reports TABLE_CELL_FORMATTING_DROPPED for any cell colSpan/rowSpan/background it finds (a GFM table cell has no merge or fill concept at all) and TABLE_CELL_MULTI_PARAGRAPH_JOINED for more than one block (a GFM cell is exactly one line), so exposing those setters here would only build content markdown-codec's own writer immediately discards or flattens.
 export class MarkdownTableCell {
   private readonly node: ContentTableCellNode;
 
@@ -40,14 +40,14 @@ export class MarkdownTableCell {
     return new MarkdownParagraph(this.node.blocks, paragraph);
   }
 
-  // Newline-joined across this cell's own paragraphs, matching OdtTableCell.text/OdpShape.text's own convention -- markdown-codec's own writer then space-joins them back down to the single line a GFM cell allows (see TABLE_CELL_MULTI_PARAGRAPH_JOINED above), but the getter here reports what the cell actually holds, not what the writer will collapse it to.
+  // Newline-joined across this cell's own paragraphs, matching OdtTableCell.text/OdpShape.text's own convention — markdown-codec's own writer then space-joins them back down to the single line a GFM cell allows (see TABLE_CELL_MULTI_PARAGRAPH_JOINED above), but the getter here reports what the cell actually holds, not what the writer will collapse it to.
   get text(): string {
     return this.paragraphs()
       .map((p) => p.text)
       .join("\n");
   }
 
-  // Clears this cell's existing blocks and replaces them with a single paragraph carrying a single run -- the same clear-and-replace convention OdpShape.text's own setter uses (src/edit/odp/shape.ts).
+  // Clears this cell's existing blocks and replaces them with a single paragraph carrying a single run — the same clear-and-replace convention OdpShape.text's own setter uses (src/edit/odp/shape.ts).
   set text(value: string) {
     this.node.blocks = [buildParagraph({ text: value })];
   }
@@ -77,7 +77,7 @@ function buildRow(columnCount: number): ContentTableRowNode {
   return { cells };
 }
 
-// A live view over a ContentTable object living inside a body's own blocks array -- see odt's table.ts (OdtTable) for the same live-view rationale, adapted for a format with no XmlElement tree (see paragraph.ts's own top-of-file note on why holding the plain object directly stays live).
+// A live view over a ContentTable object living inside a body's own blocks array — see odt's table.ts (OdtTable) for the same live-view rationale, adapted for a format with no XmlElement tree (see paragraph.ts's own top-of-file note on why holding the plain object directly stays live).
 export class MarkdownTable {
   private readonly container: ContentBlock[];
   private readonly node: ContentTableNode;
@@ -118,7 +118,7 @@ export class MarkdownTable {
     );
   }
 
-  // Appends a row with the same column count as this table's own columnWidthsPt. rows()[0] is always treated as the GFM header row on write (markdown-codec's own dist/emit/table.js emitTable destructures `const [header, ...body] = table.rows`, deriving the delimiter row's per-column alignment from the header row alone and never re-emitting it as a body row) -- appendRow does not distinguish header from body itself, so the FIRST row appended (or the first row TableInit built) is the one that becomes the header on write.
+  // Appends a row with the same column count as this table's own columnWidthsPt. rows()[0] is always treated as the GFM header row on write (markdown-codec's own dist/emit/table.js emitTable destructures `const [header, ...body] = table.rows`, deriving the delimiter row's per-column alignment from the header row alone and never re-emitting it as a body row) — appendRow does not distinguish header from body itself, so the FIRST row appended (or the first row TableInit built) is the one that becomes the header on write.
   appendRow(): MarkdownTableRow {
     const node = this.live();
     const row = buildRow(node.columnWidthsPt.length);
@@ -136,7 +136,7 @@ export class MarkdownTable {
   }
 }
 
-// Builds a fresh ContentTable from scratch (not a live view). rows[0] is always the GFM header row on write -- see MarkdownTable.appendRow's own note.
+// Builds a fresh ContentTable from scratch (not a live view). rows[0] is always the GFM header row on write — see MarkdownTable.appendRow's own note.
 export function buildTable(init: TableInit): ContentTableNode {
   const columnWidthsPt = Array.from(
     { length: init.columns },

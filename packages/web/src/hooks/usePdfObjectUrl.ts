@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-// Creates a fresh blob: URL whenever `bytes` changes and revokes the previous one, so PdfPreview's <iframe> always points at a live object URL without leaking one per render. Browsers render a PDF blob URL natively inside an iframe -- no PDF.js or other viewer library needed.
+// Creates a fresh blob: URL whenever `bytes` changes and revokes the previous one, so PdfPreview's <iframe> always points at a live object URL without leaking one per render. Browsers render a PDF blob URL natively inside an iframe — no PDF.js or other viewer library needed.
 export function usePdfObjectUrl(
   bytes: Uint8Array<ArrayBuffer> | undefined,
 ): string | undefined {

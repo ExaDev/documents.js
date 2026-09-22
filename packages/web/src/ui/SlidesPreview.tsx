@@ -31,7 +31,7 @@ export interface SlidesPreviewProps {
   error?: unknown;
 }
 
-// Renders a presentation (pptx/odp) or drawing (odg) ContentDocument natively as SVG instead of routing through a PDF rendition. Each slide/page is an SVG whose viewBox matches the original point dimensions, so the browser handles all scaling. Shapes (positioned text boxes) render as <foreignObject> containing HTML -- the browser handles text wrapping natively, an accepted fidelity trade-off vs documents.js's pixel-exact TextMeasurer. Vectors (rect, ellipse, line, path) render as native SVG elements. fontScale/lineSpacingReduction (OOXML autofit) are pre-computed scale factors in the ContentDocument, so applying them as CSS font-size/line-height multipliers is correct, not approximate. A shape's own text body is rendered via the same renderBlocksNeutral pipeline WordProcessingPreview uses (contentBlocks.tsx), so embedded objects and page breaks inside a shape render the identical inline MathML/placeholder/break-marker treatment documented there.
+// Renders a presentation (pptx/odp) or drawing (odg) ContentDocument natively as SVG instead of routing through a PDF rendition. Each slide/page is an SVG whose viewBox matches the original point dimensions, so the browser handles all scaling. Shapes (positioned text boxes) render as <foreignObject> containing HTML — the browser handles text wrapping natively, an accepted fidelity trade-off vs documents.js's pixel-exact TextMeasurer. Vectors (rect, ellipse, line, path) render as native SVG elements. fontScale/lineSpacingReduction (OOXML autofit) are pre-computed scale factors in the ContentDocument, so applying them as CSS font-size/line-height multipliers is correct, not approximate. A shape's own text body is rendered via the same renderBlocksNeutral pipeline WordProcessingPreview uses (contentBlocks.tsx), so embedded objects and page breaks inside a shape render the identical inline MathML/placeholder/break-marker treatment documented there.
 export function SlidesPreview({
   label,
   format,
@@ -157,7 +157,7 @@ function rotationTransform(
 
 function renderShape(shape: ContentShape, key: number): ReactNode {
   const { xPt, yPt, widthPt, heightPt } = shape.frame;
-  // No `fontScale !== undefined` guard: an absent fontScale would template to the invalid CSS length "undefinedem", and a browser's CSSOM (jsdom included) already rejects an unparseable style value as a no-op rather than ever writing it -- provably the same rendered outcome as this key being `undefined` (which React also drops from the style object outright), so a guard reproducing that already-guaranteed behaviour would only ever hold two provably-equal branches.
+  // No `fontScale !== undefined` guard: an absent fontScale would template to the invalid CSS length "undefinedem", and a browser's CSSOM (jsdom included) already rejects an unparseable style value as a no-op rather than ever writing it — provably the same rendered outcome as this key being `undefined` (which React also drops from the style object outright), so a guard reproducing that already-guaranteed behaviour would only ever hold two provably-equal branches.
   const fontSize = `${shape.fontScale}em`;
   const lineHeight =
     shape.lineSpacingReduction !== undefined
@@ -198,7 +198,7 @@ function renderVector(vector: ContentVector, key: number): ReactNode {
   return renderVectorSingle(vector, key, undefined);
 }
 
-// Distinct React keys for the two stacked elements a double stroke simulates -- factored out so a test can pin the exact strings directly rather than only through a rendered React key, which never reaches the DOM and so is otherwise unobservable from rendered HTML alone (two siblings sharing one key would only ever surface as a React console warning, not a markup difference).
+// Distinct React keys for the two stacked elements a double stroke simulates — factored out so a test can pin the exact strings directly rather than only through a rendered React key, which never reaches the DOM and so is otherwise unobservable from rendered HTML alone (two siblings sharing one key would only ever surface as a React console warning, not a markup difference).
 export function doubleStrokeKeys(key: number): {
   underlay: string;
   gap: string;
@@ -206,7 +206,7 @@ export function doubleStrokeKeys(key: number): {
   return { underlay: `${key}-underlay`, gap: `${key}-gap` };
 }
 
-// SVG has no native double stroke. Simulates it by stacking two elements: a thick stroke in the stroke color (3x width) underneath, and a thin stroke in the fill/gap color on top -- the thin overlay creates a gap in the center of the thick underlay, leaving two visible stroke-colored lines. For unfilled shapes, white is used as the gap color (matching the typical slide background).
+// SVG has no native double stroke. Simulates it by stacking two elements: a thick stroke in the stroke color (3x width) underneath, and a thin stroke in the fill/gap color on top — the thin overlay creates a gap in the center of the thick underlay, leaving two visible stroke-colored lines. For unfilled shapes, white is used as the gap color (matching the typical slide background).
 function renderDoubleStrokeVector(
   vector: ContentVector,
   stroke: ContentStroke,

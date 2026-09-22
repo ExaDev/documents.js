@@ -53,17 +53,17 @@ async function runGenericConvert(
   output: string | undefined,
   options: GenericConvertCliOptions,
 ): Promise<number> {
-  // A .odm master document and a .odb embedded database are never reachable through the generic ContentDocument/LayoutDocument pivot the rest of this command delegates to -- odmToPdf needs a resolveSubDocument callback and odb's own extraction functions have no DocumentConverter port entry at all (see the documents.js README's own Architecture section), so redirecting here is the only correct response rather than attempting a generic conversion doomed to fail confusingly.
+  // A .odm master document and a .odb embedded database are never reachable through the generic ContentDocument/LayoutDocument pivot the rest of this command delegates to — odmToPdf needs a resolveSubDocument callback and odb's own extraction functions have no DocumentConverter port entry at all (see the documents.js README's own Architecture section), so redirecting here is the only correct response rather than attempting a generic conversion doomed to fail confusingly.
   const extension = extname(input).toLowerCase();
   if (extension === ".odm") {
     process.stderr.write(
-      "convert: '.odm' master documents are not supported by the generic convert command -- use 'odm-to-pdf' instead\n",
+      "convert: '.odm' master documents are not supported by the generic convert command — use 'odm-to-pdf' instead\n",
     );
     return EXIT_USAGE_ERROR;
   }
   if (extension === ".odb") {
     process.stderr.write(
-      "convert: '.odb' embedded databases are not supported by the generic convert command -- use 'odb-to-csv', 'odb-to-xlsx', or 'odb-tables' instead\n",
+      "convert: '.odb' embedded databases are not supported by the generic convert command — use 'odb-to-csv', 'odb-to-xlsx', or 'odb-tables' instead\n",
     );
     return EXIT_USAGE_ERROR;
   }
@@ -89,7 +89,7 @@ async function runGenericConvert(
   );
 }
 
-// Registers every explicit `<source>-to-<target>` command (one per pair createLocalDocumentConverter().conversions declares -- the `<format>-to-pdf` conversions including the one-way odf-to-pdf, the `pdf-to-<format>` reverse conversions, and the same-variant and cross-variant PDF-bypassing bridges) plus the generic `convert` command, all delegating to the identical buildConversionAction(source, target) so the conversion logic itself is never duplicated.
+// Registers every explicit `<source>-to-<target>` command (one per pair createLocalDocumentConverter().conversions declares — the `<format>-to-pdf` conversions including the one-way odf-to-pdf, the `pdf-to-<format>` reverse conversions, and the same-variant and cross-variant PDF-bypassing bridges) plus the generic `convert` command, all delegating to the identical buildConversionAction(source, target) so the conversion logic itself is never duplicated.
 export function registerConversionCommands(program: Command): void {
   const { conversions } = createLocalDocumentConverter();
 

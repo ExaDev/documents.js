@@ -1,4 +1,4 @@
-// The minimal XMP reader (#721): a bounded extractor for the standard Dublin Core / XMP Basic fields of an XMP packet (ISO 16684-1), NOT an XML parser. This is a dependency-minimal codec -- a real RDF/XML parser would be the package's largest dependency for one optional stream -- so the extractor handles exactly the shapes the standard fields take (an element whose text content is either a plain value or an rdf:Alt/rdf:Bag/rdf:Seq of rdf:li items) and leaves everything else in the raw packet, which rides whole as package-level residue. Namespaces are matched by their local names (dc:title, xmp:Producer) because every producer of the standard fields spells the prefixes the same way; a packet using exotic prefixes still lands in residue undamaged.
+// The minimal XMP reader (#721): a bounded extractor for the standard Dublin Core / XMP Basic fields of an XMP packet (ISO 16684-1), NOT an XML parser. This is a dependency-minimal codec — a real RDF/XML parser would be the package's largest dependency for one optional stream — so the extractor handles exactly the shapes the standard fields take (an element whose text content is either a plain value or an rdf:Alt/rdf:Bag/rdf:Seq of rdf:li items) and leaves everything else in the raw packet, which rides whole as package-level residue. Namespaces are matched by their local names (dc:title, xmp:Producer) because every producer of the standard fields spells the prefixes the same way; a packet using exotic prefixes still lands in residue undamaged.
 
 export interface XmpMetadata {
   readonly title?: string;
@@ -24,7 +24,7 @@ export function readXmpMetadata(packet: string): XmpMetadata {
   };
 }
 
-// One element's value: its own text content when it carries a plain value, or the concatenation / item list of the rdf:Alt / rdf:Bag / rdf:Seq container the standard's array forms use. Returns undefined for an element the packet does not carry -- absence is the packet's statement, not an error.
+// One element's value: its own text content when it carries a plain value, or the concatenation / item list of the rdf:Alt / rdf:Bag / rdf:Seq container the standard's array forms use. Returns undefined for an element the packet does not carry — absence is the packet's statement, not an error.
 function xmpValue(
   packet: string,
   element: string,
@@ -35,7 +35,7 @@ function xmpValue(
   if (match === null) {
     return undefined;
   }
-  // The capturing group is not itself optional, so a successful match always populates it (with the empty string in the degenerate zero-width case) -- there is no absent-group case to fall back for.
+  // The capturing group is not itself optional, so a successful match always populates it (with the empty string in the degenerate zero-width case) — there is no absent-group case to fall back for.
   const inner = match[1]!;
   const items = listItems(inner);
   if (items.length > 0) {

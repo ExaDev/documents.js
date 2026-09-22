@@ -101,16 +101,16 @@ function readFrame(values: Readonly<Record<string, string>>): GeometryBox {
   };
 }
 
-// Only fired when the parity check (shared.ts's `vectorsParityMatch`, via `buildPageItems`) actually fails for this page -- the common case, a page whose vectors are all plain rect/ellipse/line/path, needs no warning at all any more, since editing a freshly-added vector genuinely works. This only fires when the page ALSO carries an element `OdgPage.vectors()` cannot wrap (a `draw:circle`/`polygon`/`polyline`/`custom-shape`), which pulls every vector on the page -- including the one just added -- back into read-only mode.
+// Only fired when the parity check (shared.ts's `vectorsParityMatch`, via `buildPageItems`) actually fails for this page — the common case, a page whose vectors are all plain rect/ellipse/line/path, needs no warning at all any more, since editing a freshly-added vector genuinely works. This only fires when the page ALSO carries an element `OdgPage.vectors()` cannot wrap (a `draw:circle`/`polygon`/`polyline`/`custom-shape`), which pulls every vector on the page — including the one just added — back into read-only mode.
 function warnVectorIsViewOnly(dispatch: Dispatch<Action>, label: string): void {
   dispatch({
     type: "SET_STATUS",
     severity: "info",
-    text: `${label} added -- but this page also has a vector element documents.js's OdgPage.vectors() cannot wrap, so every vector on it (including this one) shows read-only in this list rather than risk pairing the wrong live handle to the wrong row.`,
+    text: `${label} added — but this page also has a vector element documents.js's OdgPage.vectors() cannot wrap, so every vector on it (including this one) shows read-only in this list rather than risk pairing the wrong live handle to the wrong row.`,
   });
 }
 
-// Re-derives the page's own items right after a vector-adding dispatch and reports the view-only warning only when that vector's own item genuinely came back without a live handle -- `doc.editor` is a live view over the mutable package, and the reducer's mutation already ran synchronously by the time `dispatch` returns, so this reads the real, post-mutation state rather than a stale one.
+// Re-derives the page's own items right after a vector-adding dispatch and reports the view-only warning only when that vector's own item genuinely came back without a live handle — `doc.editor` is a live view over the mutable package, and the reducer's mutation already ran synchronously by the time `dispatch` returns, so this reads the real, post-mutation state rather than a stale one.
 function warnIfVectorAddedReadOnly(
   doc: OdgOpenDocument,
   pageIndex: number,
@@ -137,7 +137,7 @@ function inferImageFormat(path: string): "png" | "jpeg" | undefined {
   return undefined;
 }
 
-// The one async branch (reading an image file off disk) is why this whole function is async -- every other kind dispatches synchronously and resolves immediately. `doc` is only needed to re-check vector parity after a vector-adding dispatch (warnIfVectorAddedReadOnly); textbox/image never touch it.
+// The one async branch (reading an image file off disk) is why this whole function is async — every other kind dispatches synchronously and resolves immediately. `doc` is only needed to re-check vector parity after a vector-adding dispatch (warnIfVectorAddedReadOnly); textbox/image never touch it.
 async function applyAddKind(
   kind: AddKind,
   pageIndex: number,
@@ -215,7 +215,7 @@ async function applyAddKind(
         dispatch({
           type: "SET_STATUS",
           severity: "warning",
-          text: `${path} is not a .png or .jpg/.jpeg file -- image not added`,
+          text: `${path} is not a .png or .jpg/.jpeg file — image not added`,
         });
         return;
       }
@@ -268,7 +268,7 @@ function AddItemFlow(props: {
   if (kind === undefined) {
     return (
       <Box flexDirection="column" borderStyle="round" paddingX={1}>
-        <Text bold>Add item -- choose a kind</Text>
+        <Text bold>Add item — choose a kind</Text>
         {/* A 6-item fixed list inside a 2-row border, so it needs 2 more reserved rows than list-view.tsx's own default (title + status line + blank + slack) already assumes. */}
         <ListView
           items={ADD_KIND_OPTIONS}
@@ -385,13 +385,13 @@ export function OdgPageDetailScreen(): ReactElement {
   return (
     <Box flexDirection="column">
       <Text bold>
-        Page {pageIndex + 1} -- {items.length} item
+        Page {pageIndex + 1} — {items.length} item
         {items.length === 1 ? "" : "s"}
       </Text>
       <ListView
         items={rows}
         selectedIndex={selectedIndex}
-        emptyMessage="No items yet -- press 'a' to add one"
+        emptyMessage="No items yet — press 'a' to add one"
         renderItem={(row, isSelected) => (
           <Text color={selectedColor(isSelected)}>
             {isSelected ? "> " : "  "}

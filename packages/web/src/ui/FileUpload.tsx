@@ -11,9 +11,9 @@ import { inferFormatFromFilename } from "../shared/extensionToFormat";
 import { dropzoneContent } from "./FileUpload.css";
 
 export interface FileUploadProps {
-  /** Passed straight through to FileAccessPort.openFile's `accept` -- normalised below into Dropzone's own (looser) Accept shape, so both consumers stay driven by a single value with no risk of drift. */
+  /** Passed straight through to FileAccessPort.openFile's `accept` — normalised below into Dropzone's own (looser) Accept shape, so both consumers stay driven by a single value with no risk of drift. */
   accept?: FilePickerAcceptType["accept"];
-  /** Short hint under the dropzone, e.g. "docx, odt, pdf, or markdown". Purely textual -- accept is what's enforced. */
+  /** Short hint under the dropzone, e.g. "docx, odt, pdf, or markdown". Purely textual — accept is what's enforced. */
   formatHint?: string;
   file?: OpenedFile;
   onFile: (file: OpenedFile) => void;
@@ -21,13 +21,13 @@ export interface FileUploadProps {
   loading?: boolean;
 }
 
-// On a Chromium drop, file-selector (the library @mantine/dropzone is built on) already calls DataTransferItem.getAsFileSystemHandle() internally and attaches the result as FileWithPath.handle -- confirmed by reading its real, published type declaration (file-selector's file.d.ts declares `readonly handle?: FileSystemFileHandle` directly on FileWithPath). Drag-and-drop gets a real, persistable handle with zero extra wiring here.
+// On a Chromium drop, file-selector (the library @mantine/dropzone is built on) already calls DataTransferItem.getAsFileSystemHandle() internally and attaches the result as FileWithPath.handle — confirmed by reading its real, published type declaration (file-selector's file.d.ts declares `readonly handle?: FileSystemFileHandle` directly on FileWithPath). Drag-and-drop gets a real, persistable handle with zero extra wiring here.
 async function toOpenedFile(file: FileWithPath): Promise<OpenedFile> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   return { bytes, name: file.name, handle: file.handle };
 }
 
-// Recorded here rather than per-route so every tool's opens land in Recent Files for free -- skipped when the filename's extension isn't recognised, since a format-less record wouldn't be reopenable as anything in particular.
+// Recorded here rather than per-route so every tool's opens land in Recent Files for free — skipped when the filename's extension isn't recognised, since a format-less record wouldn't be reopenable as anything in particular.
 function recordIfRecognised(opened: OpenedFile) {
   const format = inferFormatFromFilename(opened.name);
   if (format === undefined) return;
@@ -48,7 +48,7 @@ export function FileUpload({
   loading,
 }: FileUploadProps) {
   const theme = useMantineTheme();
-  // useState's lazy initializer, not useMemo(() => createFileAccess(), []): the initializer runs exactly once on mount by React's own contract, with no dependency array whose own literal contents a mutation could tamper with -- an empty deps array here is otherwise a mutation an equal-length array of any other literal value survives too, since useMemo's own comparison is element-by-element against the previous array's values, never the array's identity or length.
+  // useState's lazy initializer, not useMemo(() => createFileAccess(), []): the initializer runs exactly once on mount by React's own contract, with no dependency array whose own literal contents a mutation could tamper with — an empty deps array here is otherwise a mutation an equal-length array of any other literal value survives too, since useMemo's own comparison is element-by-element against the previous array's values, never the array's identity or length.
   const [fileAccess] = useState(() => createFileAccess());
   const dropzoneAccept = useMemo(() => {
     if (accept === undefined) return undefined;
@@ -70,7 +70,7 @@ export function FileUpload({
     });
   };
 
-  // Chromium's native picker (used elsewhere in the app -- e.g. Convert's "reuse this upload for a different target" flow relies on it returning a FileSystemFileHandle) is driven directly rather than Dropzone's own <input type=file> click path, so there is exactly one code path that ever calls showOpenFilePicker. activateOnClick=false leaves drag-and-drop untouched. No supportsNativePicker() guard here: this handler is only ever wired up as Dropzone's onClick below when that already holds, so a second check inside the handler itself would never see it fail.
+  // Chromium's native picker (used elsewhere in the app — e.g. Convert's "reuse this upload for a different target" flow relies on it returning a FileSystemFileHandle) is driven directly rather than Dropzone's own <input type=file> click path, so there is exactly one code path that ever calls showOpenFilePicker. activateOnClick=false leaves drag-and-drop untouched. No supportsNativePicker() guard here: this handler is only ever wired up as Dropzone's onClick below when that already holds, so a second check inside the handler itself would never see it fail.
   const handleClick = () => {
     void fileAccess.openFile({ accept }).then((opened) => {
       if (opened === undefined) return;

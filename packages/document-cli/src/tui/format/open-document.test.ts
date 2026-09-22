@@ -78,13 +78,13 @@ describe("openDocumentAtPath for .xlsx", () => {
       throw new Error(`expected an open xlsx document, got ${doc.format}`);
     }
     expect(doc.path).toBe(path);
-    // A real xlsxToPdf conversion of a one-cell sheet produces at least one page -- this is the same LayoutDocument shape a real .pdf opens as, which is what lets the pdf page-list/page-items/item-detail screens browse it with no xlsx-specific code (see pdf/shared.ts's own broadened requirePdfDocument).
+    // A real xlsxToPdf conversion of a one-cell sheet produces at least one page — this is the same LayoutDocument shape a real .pdf opens as, which is what lets the pdf page-list/page-items/item-detail screens browse it with no xlsx-specific code (see pdf/shared.ts's own broadened requirePdfDocument).
     expect(doc.layout.pages.length).toBeGreaterThan(0);
     // The original bytes are kept alongside the preview so a real export can re-run xlsxToPdf later with the caller's own fonts/diagnostics (see export-pdf.ts) rather than reusing this fixed preview conversion.
     expect(doc.bytes).toStrictEqual(bytes);
   });
 
-  it("cannot be written back to disk -- it is read-only, the same as .odb (.pdf gained a real live-view editor and is no longer in this group)", async () => {
+  it("cannot be written back to disk — it is read-only, the same as .odb (.pdf gained a real live-view editor and is no longer in this group)", async () => {
     const bytes = xlsxTestBytes();
     const path = join(workspace, "report.xlsx");
     await writeFile(path, bytes);
@@ -127,7 +127,7 @@ describe("openDocumentAtPath for .csv and .svg", () => {
     expect(doc.bytes).toStrictEqual(bytes);
   });
 
-  it("cannot write either format back to disk -- both open read-only, the same group as .odb and .xlsx", async () => {
+  it("cannot write either format back to disk — both open read-only, the same group as .odb and .xlsx", async () => {
     const csvPath = join(workspace, "table.csv");
     await writeFile(csvPath, new TextEncoder().encode("a,b\n1,2\n"));
     const csvDoc = await openDocumentAtPath(csvPath);
@@ -166,7 +166,7 @@ describe("openDocumentAtPath for .rtf", () => {
     expect(doc.bytes).toStrictEqual(bytes);
   });
 
-  it("cannot be written back to disk -- it is read-only, the same group as .odb/.xlsx/.csv/.svg", async () => {
+  it("cannot be written back to disk — it is read-only, the same group as .odb/.xlsx/.csv/.svg", async () => {
     const path = join(workspace, "letter.rtf");
     await writeFile(
       path,
@@ -215,7 +215,7 @@ describe("openDocumentAtPath / saveDocumentTo for .md", () => {
         `expected the edited open document to still be markdown, got ${edited?.format}`,
       );
     }
-    // originalText stays exactly what the file was opened with, proving it is genuinely decoupled from the live editor -- the same invariant the ':view-source' screen depends on.
+    // originalText stays exactly what the file was opened with, proving it is genuinely decoupled from the live editor — the same invariant the ':view-source' screen depends on.
     expect(edited.originalText).toBe("# Title\n\nOriginal paragraph.\n");
 
     const savedPath = join(workspace, "saved.md");
@@ -224,7 +224,7 @@ describe("openDocumentAtPath / saveDocumentTo for .md", () => {
 
     expect(written).toContain("**New paragraph**");
 
-    // The written bytes are genuinely valid, re-parseable markdown containing the edit -- opened fresh through the same openMarkdown a real reducer.UNDO restore uses.
+    // The written bytes are genuinely valid, re-parseable markdown containing the edit — opened fresh through the same openMarkdown a real reducer.UNDO restore uses.
     const reopened = openMarkdown(written);
     const reopenedParagraphs = reopened.paragraphs();
     expect(reopenedParagraphs).toHaveLength(3);
@@ -234,7 +234,7 @@ describe("openDocumentAtPath / saveDocumentTo for .md", () => {
 
   it("reports every diagnostic openMarkdown emits while parsing, through the same onDiagnostic channel exportToPdf already uses", async () => {
     const path = join(workspace, "fenced.md");
-    // A fenced code block's own info string (the language tag after the opening fence) has no ContentParagraph field to survive on -- markdown-codec reports md/code-block-info-string-dropped for it, a real, reachable read-side diagnostic (see documents.js's own README Gotchas table).
+    // A fenced code block's own info string (the language tag after the opening fence) has no ContentParagraph field to survive on — markdown-codec reports md/code-block-info-string-dropped for it, a real, reachable read-side diagnostic (see documents.js's own README Gotchas table).
     // A raw HTML block is the guaranteed-fire vehicle (md/raw-html-preserved-as-text); the info-string diagnostic this fixture used to lean on is retired, since a fence's language word now carries semantically on the code paragraph and nothing is dropped.
     await writeFile(path, "<div>\nfoo\n</div>\n");
 

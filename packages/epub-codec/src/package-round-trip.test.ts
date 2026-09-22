@@ -8,7 +8,7 @@ import {
 } from "./test-support/zip";
 import { zipPackage, type ZipEntry } from "./zip";
 
-// The lossless byte-level Package model (ExaDev/documents.js#963): decodePackage/encodePackage's own core round-trip guarantee, exercised independently of any ContentDocument/DocumentTree mapping -- src/roundtrip.test.ts's own identically-named file (no hyphen) covers THAT higher, lossy level; this file covers only the Package model itself, mirroring odf.js's own round-trip.test.ts precedent for the identical OCF-style mimetype-first/stored requirement.
+// The lossless byte-level Package model (ExaDev/documents.js#963): decodePackage/encodePackage's own core round-trip guarantee, exercised independently of any ContentDocument/DocumentTree mapping — src/roundtrip.test.ts's own identically-named file (no hyphen) covers THAT higher, lossy level; this file covers only the Package model itself, mirroring odf.js's own round-trip.test.ts precedent for the identical OCF-style mimetype-first/stored requirement.
 
 function enc(s: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(s);
@@ -24,7 +24,7 @@ const PNG_BYTES: Uint8Array<ArrayBuffer> = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4, 5,
 ]);
 
-// Deliberately scrambled -- mimetype is neither first nor adjacent to META-INF/container.xml here -- so a test built on this fixture proves serializePackage's hoisting is driven by part identity, not by preserving whatever order the input happened to arrive in.
+// Deliberately scrambled — mimetype is neither first nor adjacent to META-INF/container.xml here — so a test built on this fixture proves serializePackage's hoisting is driven by part identity, not by preserving whatever order the input happened to arrive in.
 function epubEntries(): [string, ZipEntry][] {
   return [
     ["OEBPS/chapter1.xhtml", { bytes: enc(CHAPTER1_XHTML) }],

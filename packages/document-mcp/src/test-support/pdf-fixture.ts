@@ -1,12 +1,12 @@
 import { createPptx, pptxToPdf, type Box } from "documents.js";
 
-// A real, genuine multi-page PDF for exercising pdf_inspect -- built via a pptx's own slide-per-page direct-placement layout engine (documents.js's README: "no pagination needed"), so each addSlide() call is deterministically exactly one PDF page, unlike a docx/odt flow document where forcing a page break needs enough paragraph content to overflow the first page. The first slide carries a real embedded PNG image alongside its text; the second is text-only, so pdf_inspect's summary mode has a real, page-varying item-kind histogram and a real imagesByFormat count to report.
+// A real, genuine multi-page PDF for exercising pdf_inspect — built via a pptx's own slide-per-page direct-placement layout engine (documents.js's README: "no pagination needed"), so each addSlide() call is deterministically exactly one PDF page, unlike a docx/odt flow document where forcing a page break needs enough paragraph content to overflow the first page. The first slide carries a real embedded PNG image alongside its text; the second is text-only, so pdf_inspect's summary mode has a real, page-varying item-kind histogram and a real imagesByFormat count to report.
 
 const TITLE_FRAME: Box = { xPt: 40, yPt: 30, widthPt: 400, heightPt: 60 };
 const BODY_FRAME: Box = { xPt: 40, yPt: 120, widthPt: 400, heightPt: 60 };
 const IMAGE_FRAME: Box = { xPt: 40, yPt: 220, widthPt: 60, heightPt: 60 };
 
-// Real PNG magic bytes followed by a minimal but genuine 1x1 payload -- documents.js's own src/convert/convert.test.ts fixture (pdf-codec sniffs the image format from these bytes, not a file extension, so it has to be a real, decodable PNG rather than arbitrary bytes).
+// Real PNG magic bytes followed by a minimal but genuine 1x1 payload — documents.js's own src/convert/convert.test.ts fixture (pdf-codec sniffs the image format from these bytes, not a file extension, so it has to be a real, decodable PNG rather than arbitrary bytes).
 const TINY_PNG_BYTES = new Uint8Array([
   137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0,
   0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120,

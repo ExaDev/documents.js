@@ -63,7 +63,7 @@ describe("measureOdfNodeLength / sumOdfNodeLength", () => {
     expect(measureOdfNodeLength(span)).toBe(4);
   });
 
-  it("measures an inline field recursively as the sum of its own children -- a field displays its cached text", () => {
+  it("measures an inline field recursively as the sum of its own children — a field displays its cached text", () => {
     const field = el("text:page-number", {}, [txt("12")]);
     expect(measureOdfNodeLength(field)).toBe(2);
   });
@@ -193,7 +193,7 @@ describe("decodeOdfText", () => {
     expect(decodeOdfText(paragraph)).toBe("ab");
   });
 
-  it("decodes XML entities in text-node content -- the lossless model keeps them raw, this projection undoes that", () => {
+  it("decodes XML entities in text-node content — the lossless model keeps them raw, this projection undoes that", () => {
     expect(
       decodeOdfText(paragraphOf(txt("AT&amp;T said &quot;hi&quot;"))),
     ).toBe('AT&T said "hi"');
@@ -216,7 +216,7 @@ describe("decodeOdfText", () => {
   });
 });
 
-// The write direction of the same content model. ODF collapses a run of white space to one character and strips a leading or trailing run from a paragraph outright, so exactly three positions need the explicit text:s spelling and everything else stays literal -- the property that keeps ordinary prose one text node rather than a node per word.
+// The write direction of the same content model. ODF collapses a run of white space to one character and strips a leading or trailing run from a paragraph outright, so exactly three positions need the explicit text:s spelling and everything else stays literal — the property that keeps ordinary prose one text node rather than a node per word.
 describe("segmentOdfText", () => {
   it("leaves a single interior space literal, so ordinary prose is one segment", () => {
     expect(segmentOdfText("one two three", false, false)).toEqual([

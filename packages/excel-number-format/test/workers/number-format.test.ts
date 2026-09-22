@@ -30,7 +30,7 @@ describe("excel-number-format under the Cloudflare Workers runtime", () => {
 
   it("classifies every ECMA-376 built-in format code inside the isolate", () => {
     for (const [id, code] of BUILTIN_NUMBER_FORMATS) {
-      // Every built-in id has a defined classification -- none of them fall through to an exception -- which is the property this loop actually checks; the per-id kind is already pinned in the node test suite.
+      // Every built-in id has a defined classification — none of them fall through to an exception — which is the property this loop actually checks; the per-id kind is already pinned in the node test suite.
       expect(() => classifyNumberFormat(code)).not.toThrow();
       expect(id).toBeGreaterThanOrEqual(0);
     }

@@ -171,7 +171,7 @@ describe("buildGsubShaper: lookupFlag skipping over GDEF glyph classes (Caladea 
 
 describe("buildGsubShaper: faces with nothing to apply", () => {
   it("answers undefined for Caladea, whose GSUB declares no applied feature under the Latin default language system", () => {
-    // Caladea's GSUB exists (small-caps and case features) but enables no default-on feature its 'latn' default language system reaches, so there is nothing this package applies -- and `undefined` (not an identity shaper) is what lets embedded-font.ts skip the pass entirely.
+    // Caladea's GSUB exists (small-caps and case features) but enables no default-on feature its 'latn' default language system reaches, so there is nothing this package applies — and `undefined` (not an identity shaper) is what lets embedded-font.ts skip the pass entirely.
     expect(buildGsubShaper(parse(caladeaRegularBytes()))).toBeUndefined();
   });
 });

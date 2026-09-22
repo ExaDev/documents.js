@@ -1,10 +1,10 @@
-// Builders for hand-constructed MS-ODRAW (Escher) byte sequences, mirroring test-support/biff.ts's own "state the input as the field layout the spec gives, not as an opaque captured blob" discipline -- see that module's own top comment.
+// Builders for hand-constructed MS-ODRAW (Escher) byte sequences, mirroring test-support/biff.ts's own "state the input as the field layout the spec gives, not as an opaque captured blob" discipline — see that module's own top comment.
 //
 // Test-support only: excluded from the published dist by tsdown.config.ts, and exempt from the Worker-isomorphism lint rule.
 
 import { u16, u32 } from "./biff";
 
-/** [MS-ODRAW] 2.2.1 OfficeArtRecordHeader: an 8-byte header -- a little-endian word packing `recVer` (low nibble) and `recInstance` (remaining 12 bits), a little-endian recType, then a little-endian recLen counting `body`'s own length. */
+/** [MS-ODRAW] 2.2.1 OfficeArtRecordHeader: an 8-byte header — a little-endian word packing `recVer` (low nibble) and `recInstance` (remaining 12 bits), a little-endian recType, then a little-endian recLen counting `body`'s own length. */
 function escherRecord(
   recVer: number,
   recInstance: number,
@@ -34,7 +34,7 @@ export function escherContainer(
   return escherRecord(0xf, recInstance, recType, body);
 }
 
-/** [MS-ODRAW] OfficeArtFBSE: the fixed fields this package's own readBseImage reads past, then an embedded blip record's own bytes -- nameData is always omitted (cbName 0), which every real BSE this reader is meant to accept also does when the file carries no picture name. */
+/** [MS-ODRAW] OfficeArtFBSE: the fixed fields this package's own readBseImage reads past, then an embedded blip record's own bytes — nameData is always omitted (cbName 0), which every real BSE this reader is meant to accept also does when the file carries no picture name. */
 export function bseEntry(embeddedBlip: readonly number[]): number[] {
   return [
     0x00, // btWin32
@@ -98,12 +98,12 @@ export function spAtom(
   return escherAtom(0xf00a, shapeType, [...u32(spid), ...u32(flags)]);
 }
 
-/** [MS-ODRAW] OfficeArtFOPTE: opid (property id, with fBid/fComplex already folded in by the caller) then a 4-byte op value -- one property per call, concatenated by the caller into an Opt atom's own body. */
+/** [MS-ODRAW] OfficeArtFOPTE: opid (property id, with fBid/fComplex already folded in by the caller) then a 4-byte op value — one property per call, concatenated by the caller into an Opt atom's own body. */
 export function foptEntry(opid: number, op: number): number[] {
   return [...u16(opid), ...u32(op)];
 }
 
-/** [MS-ODRAW] OfficeArtFOPT: recInstance carries the property COUNT, per that record's own spec -- derived here from `entries.length` so a fixture never states it separately from the entries it actually holds. */
+/** [MS-ODRAW] OfficeArtFOPT: recInstance carries the property COUNT, per that record's own spec — derived here from `entries.length` so a fixture never states it separately from the entries it actually holds. */
 export function optAtom(entries: readonly (readonly number[])[]): number[] {
   const body = entries.flatMap((entry) => entry);
   return escherAtom(0xf00b, entries.length, body);

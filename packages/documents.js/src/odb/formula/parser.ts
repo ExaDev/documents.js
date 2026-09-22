@@ -1,11 +1,11 @@
 import type { CellAggregateFunction } from "../values";
 import { RptFormulaParseError, RptFormulaUnsupportedError } from "./errors";
 
-// The parser for a single rpt:formula attribute value -- the string LibreOffice Report Builder writes on a rpt:formatted-text control, on a rpt:function definition, and on a rpt:group's own rpt:group-expression. Formula text in, one RptFormula out. It makes no evaluation decisions at all: resolving a reference to a column or a named function, and deciding which rows an aggregate covers, are src/odb/formula/evaluate.ts's job.
+// The parser for a single rpt:formula attribute value — the string LibreOffice Report Builder writes on a rpt:formatted-text control, on a rpt:function definition, and on a rpt:group's own rpt:group-expression. Formula text in, one RptFormula out. It makes no evaluation decisions at all: resolving a reference to a column or a named function, and deciding which rows an aggregate covers, are src/odb/formula/evaluate.ts's job.
 //
-// Unlike src/odb/sql/, this module has no separate lexer file. The SQL engine needs one because SQL has a keyword vocabulary, operator precedence, and statement structure to keep out of the grammar; this language has none of that -- a formula is a prefix, optionally one function name, and a parenthesised argument list -- so a separate token stream would be ceremony rather than separation.
+// Unlike src/odb/sql/, this module has no separate lexer file. The SQL engine needs one because SQL has a keyword vocabulary, operator precedence, and statement structure to keep out of the grammar; this language has none of that — a formula is a prefix, optionally one function name, and a parenthesised argument list — so a separate token stream would be ceremony rather than separation.
 //
-// The grammar, taken verbatim from the shape real LibreOffice 26.2 output uses (every production below appears in the checked-in form-and-report.odb fixture -- see src/odb/formula/report.test.ts, which reads each one straight out of the package rather than restating it):
+// The grammar, taken verbatim from the shape real LibreOffice 26.2 output uses (every production below appears in the checked-in form-and-report.odb fixture — see src/odb/formula/report.test.ts, which reads each one straight out of the package rather than restating it):
 //
 // - formula     := fieldRef | rptCall
 // - fieldRef    := 'field:' bracketRef                                  e.g. field:[CUSTOMER]
@@ -14,39 +14,39 @@ import { RptFormulaParseError, RptFormulaUnsupportedError } from "./errors";
 // - bracketRef  := '[' name ']'                                         e.g. [QUARTER]
 // - quotedRef   := '"' name '"'                                         e.g. "REGION"
 //
-// Two details are worth stating because they are easy to get wrong from a comma-and-parenthesis intuition. The argument separator is a SEMICOLON, not a comma -- LibreOffice's formula languages use the Basic/Calc convention throughout, and rpt:LEFT([QUARTER];2) in the real fixture is the confirmation. And the two reference spellings, [NAME] and "NAME", are treated here as one concept: the real fixture writes rpt:HASCHANGED("REGION") with quotes and rpt:SUM([AMOUNT]) with brackets, with no observable difference in meaning beyond which the writer emitted, so both parse to the same RptReference and resolve by the same rule. The spelling is retained on the node purely so an error message can quote the reference the way its author wrote it.
+// Two details are worth stating because they are easy to get wrong from a comma-and-parenthesis intuition. The argument separator is a SEMICOLON, not a comma — LibreOffice's formula languages use the Basic/Calc convention throughout, and rpt:LEFT([QUARTER];2) in the real fixture is the confirmation. And the two reference spellings, [NAME] and "NAME", are treated here as one concept: the real fixture writes rpt:HASCHANGED("REGION") with quotes and rpt:SUM([AMOUNT]) with brackets, with no observable difference in meaning beyond which the writer emitted, so both parse to the same RptReference and resolve by the same rule. The spelling is retained on the node purely so an error message can quote the reference the way its author wrote it.
 //
-// The function allowlist is closed, matching src/odb/sql/'s own policy (see src/odb/formula/errors.ts's top-of-file comment): HASCHANGED, LEFT, and the same five aggregates the SQL engine implements. Every other rpt: function name -- and Report Builder ships many -- throws RptFormulaUnsupportedError naming it, rather than being evaluated to a plausible-looking wrong value.
+// The function allowlist is closed, matching src/odb/sql/'s own policy (see src/odb/formula/errors.ts's top-of-file comment): HASCHANGED, LEFT, and the same five aggregates the SQL engine implements. Every other rpt: function name — and Report Builder ships many — throws RptFormulaUnsupportedError naming it, rather than being evaluated to a plausible-looking wrong value.
 
 export type RptAggregateFunction = CellAggregateFunction;
 
-// A reference to a result-set column or to a named rpt:function, as written. `spelling` records which of the two forms carried it, for error messages only -- resolution never consults it.
+// A reference to a result-set column or to a named rpt:function, as written. `spelling` records which of the two forms carried it, for error messages only — resolution never consults it.
 export interface RptReference {
   readonly name: string;
   readonly spelling: "bracket" | "quote";
 }
 
 export type RptFormula =
-  // field:[X] -- a plain bound-field reference. No computation at all: the referenced value passes straight through. It shares this attribute (and therefore this parser) with the rpt: forms below, which is why it is handled here rather than being left to the renderer to sniff for.
+  // field:[X] — a plain bound-field reference. No computation at all: the referenced value passes straight through. It shares this attribute (and therefore this parser) with the rpt: forms below, which is why it is handled here rather than being left to the renderer to sniff for.
   | {
       readonly kind: "field";
       readonly reference: RptReference;
       readonly text: string;
     }
-  // rpt:HASCHANGED(X) -- true when X's value differs from its value on the immediately preceding row, and on the first row. Report Builder's group-break test.
+  // rpt:HASCHANGED(X) — true when X's value differs from its value on the immediately preceding row, and on the first row. Report Builder's group-break test.
   | {
       readonly kind: "hasChanged";
       readonly reference: RptReference;
       readonly text: string;
     }
-  // rpt:LEFT(X;n) -- the first n characters of X's text.
+  // rpt:LEFT(X;n) — the first n characters of X's text.
   | {
       readonly kind: "left";
       readonly reference: RptReference;
       readonly length: number;
       readonly text: string;
     }
-  // rpt:SUM(X) / COUNT / AVG / MIN / MAX -- an aggregate over the rows of whichever band the formula sits in. See src/odb/formula/evaluate.ts for the scoping rule, which is the whole substance of this engine.
+  // rpt:SUM(X) / COUNT / AVG / MIN / MAX — an aggregate over the rows of whichever band the formula sits in. See src/odb/formula/evaluate.ts for the scoping rule, which is the whole substance of this engine.
   | {
       readonly kind: "aggregate";
       readonly aggregate: RptAggregateFunction;
@@ -156,19 +156,19 @@ class FormulaScanner {
     const close = this.formula.indexOf("]", this.offset);
     if (close < 0) {
       this.offset = this.formula.length;
-      this.fail('unterminated column reference -- no closing "]"');
+      this.fail('unterminated column reference — no closing "]"');
     }
     this.offset = close + 1;
     return { name: this.formula.slice(start, close), spelling: "bracket" };
   }
 
-  // A quoted reference, with "" as an embedded double quote -- SQL's own escaping convention, which is what both engines this package reads .odb expressions with already follow (see src/odb/sql/lexer.ts).
+  // A quoted reference, with "" as an embedded double quote — SQL's own escaping convention, which is what both engines this package reads .odb expressions with already follow (see src/odb/sql/lexer.ts).
   readQuotedReference(): RptReference {
     this.expect('"', "the opening quote of a name reference");
     let name = "";
     for (;;) {
       if (this.offset >= this.formula.length) {
-        this.fail("unterminated name reference -- no closing double quote");
+        this.fail("unterminated name reference — no closing double quote");
       }
       const character = this.formula.charAt(this.offset);
       this.offset += 1;
@@ -322,7 +322,7 @@ function buildCall(
   throw new RptFormulaUnsupportedError(functionName, formula);
 }
 
-// Parses one rpt:formula attribute value. The two prefixes are the only two this grammar admits: anything else -- an empty attribute, a bare column name, a Basic expression -- throws RptFormulaParseError rather than being guessed at.
+// Parses one rpt:formula attribute value. The two prefixes are the only two this grammar admits: anything else — an empty attribute, a bare column name, a Basic expression — throws RptFormulaParseError rather than being guessed at.
 export function parseRptFormula(formula: string): RptFormula {
   const scanner = new FormulaScanner(formula);
   if (scanner.tryConsume(FIELD_PREFIX)) {

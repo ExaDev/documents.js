@@ -17,7 +17,7 @@ import { settle, waitForFrame } from "../../../test-support.js";
 import { DocxExtrasScreen } from "./extras.js";
 import { DocxBodyListScreen } from "./index.js";
 
-// `AppStateProvider` exposes no way to seed its initial state from outside, so this harness opens a real docx document the same way the real app does: by dispatching `OPEN_FILE_SUCCESS` from an effect after mount, with a genuine `DocxEditor` built by `openDocx` over the real fixture bytes (test-support/docx-extras-fixture.ts) -- not a hand-built `DocxExtras` value. Only `bodyList`/`docxExtras` are routed, the two screens 'x' actually connects.
+// `AppStateProvider` exposes no way to seed its initial state from outside, so this harness opens a real docx document the same way the real app does: by dispatching `OPEN_FILE_SUCCESS` from an effect after mount, with a genuine `DocxEditor` built by `openDocx` over the real fixture bytes (test-support/docx-extras-fixture.ts) — not a hand-built `DocxExtras` value. Only `bodyList`/`docxExtras` are routed, the two screens 'x' actually connects.
 function DocxExtrasHarness(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();

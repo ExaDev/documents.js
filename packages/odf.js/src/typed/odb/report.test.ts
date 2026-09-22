@@ -7,7 +7,7 @@ import { el, txt } from "../../xml/fragment";
 import { parsePackage } from "../../package-io/read";
 import { readOdbReport } from "./report";
 
-// Every assertion below is against src/typed/odb/fixtures/form-and-report.odb, a real, unmodified LibreOffice 26.2 Report Builder report (see typed/odb/report.ts's own top-of-file note for the six structural findings it produced, and typed/odb/read.ts's for how the fixture was generated and cross-verified). The rpt: vocabulary has no ratified public schema this package could have read the shape off instead, so real producer output is the ONLY ground truth here -- most of all for the two things that would have been got wrong by assumption: the detail band's nesting inside the innermost group, and a group key being a formula rather than a bare column name.
+// Every assertion below is against src/typed/odb/fixtures/form-and-report.odb, a real, unmodified LibreOffice 26.2 Report Builder report (see typed/odb/report.ts's own top-of-file note for the six structural findings it produced, and typed/odb/read.ts's for how the fixture was generated and cross-verified). The rpt: vocabulary has no ratified public schema this package could have read the shape off instead, so real producer output is the ONLY ground truth here — most of all for the two things that would have been got wrong by assumption: the detail band's nesting inside the innermost group, and a group key being a formula rather than a bare column name.
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 
@@ -17,7 +17,7 @@ function loadFixture(name: string): Package {
 }
 
 describe("readOdbReport: form-and-report.odb (real LibreOffice Report Builder output)", () => {
-  // Computed in beforeEach, not directly in this describe block (and not in beforeAll either): Stryker's per-test mutation coverage only attributes an executed statement to a specific test when that statement runs inside that test's own tracked window, which beforeEach (run immediately before each test, as part of running it) is part of but describe-body and beforeAll code (which run once, tied to no single test) are not -- either of those leaves every mutant this fixture alone would kill permanently unattributed to any test, regardless of how thorough the assertions below are.
+  // Computed in beforeEach, not directly in this describe block (and not in beforeAll either): Stryker's per-test mutation coverage only attributes an executed statement to a specific test when that statement runs inside that test's own tracked window, which beforeEach (run immediately before each test, as part of running it) is part of but describe-body and beforeAll code (which run once, tied to no single test) are not — either of those leaves every mutant this fixture alone would kill permanently unattributed to any test, regardless of how thorough the assertions below are.
   let report: ReturnType<typeof readOdbReport>;
 
   beforeEach(() => {
@@ -60,7 +60,7 @@ describe("readOdbReport: form-and-report.odb (real LibreOffice Report Builder ou
     ]);
   });
 
-  it("reads an empty band as genuinely empty rather than omitting it -- the page footer exists but was never populated", () => {
+  it("reads an empty band as genuinely empty rather than omitting it — the page footer exists but was never populated", () => {
     expect(report.pageFooter).toEqual({
       kind: "page-footer",
       name: "Page Footer",
@@ -124,7 +124,7 @@ describe("readOdbReport: form-and-report.odb (real LibreOffice Report Builder ou
     );
   });
 
-  it("reads each group footer's SUM as a computed expression -- a formula with no dataField, unlike a plain bound field", () => {
+  it("reads each group footer's SUM as a computed expression — a formula with no dataField, unlike a plain bound field", () => {
     for (const footer of [
       report.groups[0]?.footer,
       report.groups[0]?.groups[0]?.footer,
@@ -175,7 +175,7 @@ describe("readOdbReport: form-and-report.odb (real LibreOffice Report Builder ou
     ]);
   });
 
-  it("never reconstructs the band layout table itself -- only its own producer-assigned name is carried", () => {
+  it("never reconstructs the band layout table itself — only its own producer-assigned name is carried", () => {
     expect(report.detail?.name).toBe("Detail");
     expect(report.detail).not.toHaveProperty("rows");
     expect(report.detail).not.toHaveProperty("columns");
@@ -333,7 +333,7 @@ describe("readOdbReport: synthetic report shapes", () => {
     ]);
     const element = readOdbReport(pkg, "R").reportHeader?.elements[0];
     expect(element?.text).toBe("Total for region");
-    // toStrictEqual, not toEqual: this control's rpt:report-element has no rpt:report-component (no name) and the element itself carries no rpt:formula, so both fields must be genuinely ABSENT from the object -- toEqual alone would pass even if the reader set them to `undefined` explicitly, since it treats an undefined-valued property as equivalent to a missing one.
+    // toStrictEqual, not toEqual: this control's rpt:report-element has no rpt:report-component (no name) and the element itself carries no rpt:formula, so both fields must be genuinely ABSENT from the object — toEqual alone would pass even if the reader set them to `undefined` explicitly, since it treats an undefined-valued property as equivalent to a missing one.
     expect(element).toStrictEqual({
       tag: "rpt:fixed-content",
       text: "Total for region",
@@ -464,7 +464,7 @@ describe("readOdbReport: error paths", () => {
     ).toThrow(/reports\/Obj1\/content\.xml/);
   });
 
-  it("throws when the sub-document has no office:body/office:report element -- e.g. an ordinary text sub-document", () => {
+  it("throws when the sub-document has no office:body/office:report element — e.g. an ordinary text sub-document", () => {
     const pkg: Package = {
       parts: {
         "content.xml": baseContent,

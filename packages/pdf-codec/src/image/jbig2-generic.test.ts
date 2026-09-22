@@ -3,7 +3,7 @@ import { createArithContexts, MqDecoder } from "./jbig2-arith";
 import { Jbig2UnsupportedError } from "./jbig2-errors";
 import { decodeGenericRegion, decodeRefinementRegion } from "./jbig2-generic";
 
-// decodeGenericRegion/decodeRefinementRegion are exported, so their own template guard is part of their public contract, even though jbig2.ts's own segment parser always masks GBTEMPLATE/GRTEMPLATE to a range GENERIC_TEMPLATES/REFINEMENT_TEMPLATES already cover -- a direct caller (or a future one) is not bound by that masking.
+// decodeGenericRegion/decodeRefinementRegion are exported, so their own template guard is part of their public contract, even though jbig2.ts's own segment parser always masks GBTEMPLATE/GRTEMPLATE to a range GENERIC_TEMPLATES/REFINEMENT_TEMPLATES already cover — a direct caller (or a future one) is not bound by that masking.
 function dummyDecoder(): MqDecoder {
   return new MqDecoder(new Uint8Array(0));
 }

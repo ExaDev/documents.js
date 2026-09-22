@@ -1,17 +1,17 @@
 import { uint16At } from "../bytes/view";
 import { pointsFromWpu } from "./units";
 
-// -- Boxes, per WPFF DF Box Functions and Prefix Packet Type 65 (0x41), "Graphics Box Style" --
+// — Boxes, per WPFF DF Box Functions and Prefix Packet Type 65 (0x41), "Graphics Box Style" --
 //
-// A box function (0xDF00-02) names its own contents through an override mechanism rather than positionally: "The order of the data depends on the order of the override bits" -- so which of a box's prefix IDs is its contents, its caption, its border or its fill is decided by walking the SAME box override flags word that also gates each bit's own inline override data. This module owns exactly that walk, far enough to answer two questions read.ts needs and no further: what content type and prefix ID does this box's own function-level override name, and what frame does it state.
+// A box function (0xDF00-02) names its own contents through an override mechanism rather than positionally: "The order of the data depends on the order of the override bits" — so which of a box's prefix IDs is its contents, its caption, its border or its fill is decided by walking the SAME box override flags word that also gates each bit's own inline override data. This module owns exactly that walk, far enough to answer two questions read.ts needs and no further: what content type and prefix ID does this box's own function-level override name, and what frame does it state.
 //
-// A box's TEMPLATE packet (type 0x41, resolved separately by read.ts through the box's own required first prefix ID) states rendering defaults and a box KIND (Figure/Table/Text/User/Equation/Button) but never real content -- "content prefix IDs (content rendering IDs, actual content not allowed)" -- so a box's real content, when it has any, is ALWAYS named through this function-level override, never the template. A box whose function carries no content override genuinely has no lifted content to offer.
+// A box's TEMPLATE packet (type 0x41, resolved separately by read.ts through the box's own required first prefix ID) states rendering defaults and a box KIND (Figure/Table/Text/User/Equation/Button) but never real content — "content prefix IDs (content rendering IDs, actual content not allowed)" — so a box's real content, when it has any, is ALWAYS named through this function-level override, never the template. A box whose function carries no content override genuinely has no lifted content to offer.
 //
-// THE GENERIC OVERRIDE-BLOCK SHAPE, which is what makes this walk tractable without a real box-bearing file to check it against: every one of the eleven top-level override bits except bit 7 (HTML, whose data "will be in Prefix Packet" rather than inline) opens with "[total size of X override data] (not including this word)" before its own flag word and data -- so a bit this module does not otherwise care about is skipped by that size field alone, and a walk that stops caring after the bits it needs never risks drifting into a later bit's data misread as something else.
+// THE GENERIC OVERRIDE-BLOCK SHAPE, which is what makes this walk tractable without a real box-bearing file to check it against: every one of the eleven top-level override bits except bit 7 (HTML, whose data "will be in Prefix Packet" rather than inline) opens with "[total size of X override data] (not including this word)" before its own flag word and data — so a bit this module does not otherwise care about is skipped by that size field alone, and a walk that stops caring after the bits it needs never risks drifting into a later bit's data misread as something else.
 //
 // https://github.com/OneWingedShark/WordPerfect/blob/master/doc/SDK_Help/FileFormats/WPFF_DF-BOX.htm https://github.com/OneWingedShark/WordPerfect/blob/master/doc/SDK_Help/FileFormats/WPFF_PrefixPkt65-82.htm
 
-// Bits of the box's own override flags word (the one at the FUNCTION level -- WPFF_DF-BOX.htm's "Specific Format of Box Override Flags and Data").
+// Bits of the box's own override flags word (the one at the FUNCTION level — WPFF_DF-BOX.htm's "Specific Format of Box Override Flags and Data").
 const OVERRIDE_BIT_COUNTER = 15;
 const OVERRIDE_BIT_POSITION = 14;
 const OVERRIDE_BIT_CONTENT = 13;
@@ -22,11 +22,11 @@ const RESERVED_SIZE = 14;
 const OVERRIDE_FLAGS_OFFSET = RESERVED_SIZE + 2 + 2;
 const FIRST_OVERRIDE_BLOCK_OFFSET = OVERRIDE_FLAGS_OFFSET + 2;
 
-// Walks the box function's own top-level override blocks, returning each SET bit's own data (everything after that bit's leading size field, exactly `size` bytes) -- undefined for any block whose stated size runs past the buffer, since a walk that cannot trust its own size fields cannot safely skip past what it does not understand to reach what it does.
+// Walks the box function's own top-level override blocks, returning each SET bit's own data (everything after that bit's leading size field, exactly `size` bytes) — undefined for any block whose stated size runs past the buffer, since a walk that cannot trust its own size fields cannot safely skip past what it does not understand to reach what it does.
 function walkOverrideBlocks(
   nonDeletable: Uint8Array,
 ): { flags: number; blocks: ReadonlyMap<number, Uint8Array> } | undefined {
-  // uint16At throws (via byteAt) rather than returning undefined for a read that runs past nonDeletable's own end, caught once below -- so neither the flags word itself nor a block's own size field needs a separate room check ahead of reading it.
+  // uint16At throws (via byteAt) rather than returning undefined for a read that runs past nonDeletable's own end, caught once below — so neither the flags word itself nor a block's own size field needs a separate room check ahead of reading it.
   try {
     const flags = uint16At(nonDeletable, OVERRIDE_FLAGS_OFFSET);
     const blocks = new Map<number, Uint8Array>();
@@ -52,13 +52,13 @@ function walkOverrideBlocks(
   }
 }
 
-// The content override block's own nested flags (WPFF_DF-BOX.htm, "bit 13: box content data"): [content override flags], then bit15 (PID flags, 2 bytes, no size prefix of its own) and bit14 (the content type byte itself). Bit 13 (rendering information) and bit 12 (alignment) are not read -- this module only needs the type, not how it renders.
+// The content override block's own nested flags (WPFF_DF-BOX.htm, "bit 13: box content data"): [content override flags], then bit15 (PID flags, 2 bytes, no size prefix of its own) and bit14 (the content type byte itself). Bit 13 (rendering information) and bit 12 (alignment) are not read — this module only needs the type, not how it renders.
 function readContentType(contentBlock: Uint8Array): number | undefined {
-  // uint16At throws (via byteAt) rather than returning undefined for a read that runs past contentBlock's own end, caught below -- so the flags word needs no separate room check ahead of reading it.
+  // uint16At throws (via byteAt) rather than returning undefined for a read that runs past contentBlock's own end, caught below — so the flags word needs no separate room check ahead of reading it.
   try {
     const flags = uint16At(contentBlock, 0);
     let cursor = 2;
-    // No separate room guard is needed for the PID-flags skip: it only advances cursor (no read of its own), and the type byte this function ultimately returns is read through plain bracket access, which safely answers undefined for any offset this skip could have advanced cursor past without a guard -- there is no buffer length where skipping the guard produces an in-bounds-but-wrong byte instead of the identical out-of-bounds undefined a guard would have forced.
+    // No separate room guard is needed for the PID-flags skip: it only advances cursor (no read of its own), and the type byte this function ultimately returns is read through plain bracket access, which safely answers undefined for any offset this skip could have advanced cursor past without a guard — there is no buffer length where skipping the guard produces an in-bounds-but-wrong byte instead of the identical out-of-bounds undefined a guard would have forced.
     if ((flags & 0x8000) !== 0) {
       cursor += 2;
     }
@@ -71,13 +71,13 @@ function readContentType(contentBlock: Uint8Array): number | undefined {
   }
 }
 
-// The position override block's own nested flags (WPFF_DF-BOX.htm, "bit 14: Box positioning data"), read only for bit 11 (width) and bit 10 (height) -- both unconditionally in WPU -- and bits 13/12 (horizontal/vertical offset), accepted only when their own alignment-type bits state "absolute from page edge" (type 0), the one case whose offset is unambiguously the box's own page-space position rather than a value relative to margins or columns this module has no page geometry in hand to resolve against.
+// The position override block's own nested flags (WPFF_DF-BOX.htm, "bit 14: Box positioning data"), read only for bit 11 (width) and bit 10 (height) — both unconditionally in WPU — and bits 13/12 (horizontal/vertical offset), accepted only when their own alignment-type bits state "absolute from page edge" (type 0), the one case whose offset is unambiguously the box's own page-space position rather than a value relative to margins or columns this module has no page geometry in hand to resolve against.
 function readPositionOverride(
   positionBlock: Uint8Array,
 ):
   | { widthWpu?: number; heightWpu?: number; xWpu?: number; yWpu?: number }
   | undefined {
-  // uint16At throws (via byteAt) rather than returning undefined for a read that runs past positionBlock's own end, caught below -- so none of the four sub-block reads below need a separate room guard ahead of them. A dedicated need(n) guard (checking room for a whole sub-block, e.g. 5 bytes for horizontal positioning, even though 2 of those are unread leftcol/rightcol fields) used to sit ahead of each one, but it was never observably different from the throw it deferred to: a buffer too short even for THIS walk's own reads throws in exactly the place the guard would have rejected it, and a buffer with enough real data for cursor to legitimately reach a LATER bit's own reads is, by construction, already long enough to satisfy every earlier bit's own need, since cursor only ever advances by each bit's full declared width regardless -- so no input can tell a removed guard from the throw it would have deferred to.
+  // uint16At throws (via byteAt) rather than returning undefined for a read that runs past positionBlock's own end, caught below — so none of the four sub-block reads below need a separate room guard ahead of them. A dedicated need(n) guard (checking room for a whole sub-block, e.g. 5 bytes for horizontal positioning, even though 2 of those are unread leftcol/rightcol fields) used to sit ahead of each one, but it was never observably different from the throw it deferred to: a buffer too short even for THIS walk's own reads throws in exactly the place the guard would have rejected it, and a buffer with enough real data for cursor to legitimately reach a LATER bit's own reads is, by construction, already long enough to satisfy every earlier bit's own need, since cursor only ever advances by each bit's full declared width regardless — so no input can tell a removed guard from the throw it would have deferred to.
   try {
     const flags = uint16At(positionBlock, 0);
     let cursor = 2;
@@ -86,7 +86,7 @@ function readPositionOverride(
     let xWpu: number | undefined;
     let yWpu: number | undefined;
 
-    // Neither the PID-flags skip (bit 15) nor the general-positioning-flags skip (bit 14) below needs a room guard: neither reads anything through it (each only advances cursor), so an insufficient buffer only ever surfaces once a later bit that actually reads data hits its own throw -- or, with no later bit set, the walk safely ends with every optional field left undefined, exactly as if this block had been correctly rejected.
+    // Neither the PID-flags skip (bit 15) nor the general-positioning-flags skip (bit 14) below needs a room guard: neither reads anything through it (each only advances cursor), so an insufficient buffer only ever surfaces once a later bit that actually reads data hits its own throw — or, with no later bit set, the walk safely ends with every optional field left undefined, exactly as if this block had been correctly rejected.
     if ((flags & 0x8000) !== 0) {
       // bit 15: PID flags, 2 bytes.
       cursor += 2;
@@ -96,7 +96,7 @@ function readPositionOverride(
       cursor += 2;
     }
     if ((flags & 0x2000) !== 0) {
-      // bit 13: horizontal positioning, 5 bytes -- <flags>[offset]<leftcol><rightcol>.
+      // bit 13: horizontal positioning, 5 bytes — <flags>[offset]<leftcol><rightcol>.
       const horizontalFlags = positionBlock[cursor];
       const offset = uint16At(positionBlock, cursor + 1);
       if (horizontalFlags !== undefined && (horizontalFlags & 0x03) === 0) {
@@ -105,7 +105,7 @@ function readPositionOverride(
       cursor += 5;
     }
     if ((flags & 0x1000) !== 0) {
-      // bit 12: vertical positioning, 3 bytes -- <flags>[offset].
+      // bit 12: vertical positioning, 3 bytes — <flags>[offset].
       const verticalFlags = positionBlock[cursor];
       const offset = uint16At(positionBlock, cursor + 1);
       if (verticalFlags !== undefined && (verticalFlags & 0x03) === 0) {
@@ -114,12 +114,12 @@ function readPositionOverride(
       cursor += 3;
     }
     if ((flags & 0x0800) !== 0) {
-      // bit 11: width, 3 bytes -- <flags>[width].
+      // bit 11: width, 3 bytes — <flags>[width].
       widthWpu = uint16At(positionBlock, cursor + 1);
       cursor += 3;
     }
     if ((flags & 0x0400) !== 0) {
-      // bit 10: height, 3 bytes -- <flags>[height].
+      // bit 10: height, 3 bytes — <flags>[height].
       heightWpu = uint16At(positionBlock, cursor + 1);
       // cursor is never read again after this: height is always the last bit this walk processes, and the function returns unconditionally next, so there is nothing left for a final "cursor += 3" to affect.
     }
@@ -151,7 +151,7 @@ export const BOX_CONTENT_TYPE_LINKED_TEXT = 2;
 export const BOX_CONTENT_TYPE_IMAGE = 3;
 export const BOX_CONTENT_TYPE_EQUATION = 4;
 
-// Resolves a box function's own content type, content prefix ID, and frame from its function-level override -- the ONLY place real box content is ever named (see this module's own top comment). Returns undefined for a box with no content override at all: a box relying entirely on its template's own rendering defaults, with no override naming what fills it, has nothing this reader can lift.
+// Resolves a box function's own content type, content prefix ID, and frame from its function-level override — the ONLY place real box content is ever named (see this module's own top comment). Returns undefined for a box with no content override at all: a box relying entirely on its template's own rendering defaults, with no override naming what fills it, has nothing this reader can lift.
 export function readBoxContent(
   nonDeletable: Uint8Array,
   prefixIds: readonly number[],
@@ -170,7 +170,7 @@ export function readBoxContent(
     return undefined;
   }
 
-  // The PID list order is exactly the order of the SET override bits with a PID slot, per WPFF_DF-BOX.htm's own base list: the required template PID first, then the counter PID (bit 15) if present, then the contents PID (bit 13) -- position (bit 14) names no PID of its own, since its data is entirely inline offsets and flags.
+  // The PID list order is exactly the order of the SET override bits with a PID slot, per WPFF_DF-BOX.htm's own base list: the required template PID first, then the counter PID (bit 15) if present, then the contents PID (bit 13) — position (bit 14) names no PID of its own, since its data is entirely inline offsets and flags.
   const counterPidPresent = (flags & (1 << OVERRIDE_BIT_COUNTER)) !== 0;
   const contentPidIndex = 1 + (counterPidPresent ? 1 : 0);
   const contentPrefixId = prefixIds[contentPidIndex];

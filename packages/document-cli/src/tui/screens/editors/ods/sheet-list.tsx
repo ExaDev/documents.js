@@ -22,7 +22,7 @@ export function OdsSheetListScreen(): ReactElement {
   const isAdding = draftName !== undefined;
   const isActive = !anyOverlayOpen(state) && !isAdding;
 
-  // Sheet names alone are cheap to read straight off the live editor -- `OdsSheet.name` is a plain getter, so there is no need to walk `readOdsContent` (which shared.ts's `resolveSheet` reserves for the sparse-cell-extent problem the grid actually has) just to list them.
+  // Sheet names alone are cheap to read straight off the live editor — `OdsSheet.name` is a plain getter, so there is no need to walk `readOdsContent` (which shared.ts's `resolveSheet` reserves for the sparse-cell-extent problem the grid actually has) just to list them.
   const query = state.searchQuery.trim().toLowerCase();
   const rows: readonly SheetRow[] = doc.editor
     .sheets()
@@ -72,7 +72,7 @@ export function OdsSheetListScreen(): ReactElement {
       <ListView
         items={rows}
         selectedIndex={selectedIndex}
-        emptyMessage="This workbook has no sheets yet -- press 'a' to add one."
+        emptyMessage="This workbook has no sheets yet — press 'a' to add one."
         renderItem={(row, isSelected) => (
           <Text color={selectedColor(isSelected)} inverse={isSelected}>
             {row.name}

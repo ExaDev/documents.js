@@ -1,6 +1,6 @@
 import type { ContentStroke, ContentSubpath, LayoutColor } from "documents.js";
 
-// Vector-primitive field parsing shared across every screen that lets a caller type a fill/stroke/path into a plain TextField -- originally local to odg/shared.ts (odg's own add-item wizard, page-detail.tsx), extracted here once slide-detail.tsx's own odp vector-creation flow needed the identical parse. odg/shared.ts re-exports these three unchanged so every existing import from './shared.js' keeps working, matching field-wizard.tsx's own extraction precedent.
+// Vector-primitive field parsing shared across every screen that lets a caller type a fill/stroke/path into a plain TextField — originally local to odg/shared.ts (odg's own add-item wizard, page-detail.tsx), extracted here once slide-detail.tsx's own odp vector-creation flow needed the identical parse. odg/shared.ts re-exports these three unchanged so every existing import from './shared.js' keeps working, matching field-wizard.tsx's own extraction precedent.
 
 export function parseColorField(raw: string): LayoutColor | undefined {
   const trimmed = raw.trim();

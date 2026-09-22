@@ -1,6 +1,6 @@
 import type { ContentBlock, ContentDocument } from "documents.js";
 
-// Recurses through table cells (which themselves contain blocks) so a table-heavy document's block count reflects the blocks inside cells, not just the table-as-one-block. Embedded objects are counted as a single block rather than recursing into their nested ContentDocument -- bounded depth, not unbounded.
+// Recurses through table cells (which themselves contain blocks) so a table-heavy document's block count reflects the blocks inside cells, not just the table-as-one-block. Embedded objects are counted as a single block rather than recursing into their nested ContentDocument — bounded depth, not unbounded.
 function countBlocksDeep(blocks: readonly ContentBlock[]): number {
   let count = 0;
   for (const block of blocks) {
@@ -16,7 +16,7 @@ function countBlocksDeep(blocks: readonly ContentBlock[]): number {
   return count;
 }
 
-// A variant-appropriate one-line structural summary of a ContentDocument, for the content-backed structure panel -- the detailed tree (StructureTree) shows everything else. Each variant has a genuinely different shape (sections vs slides vs sheets vs pages vs formula), so forcing them all into one "blockKindCounts" table would be misleading for the variants that have no blocks at all (spreadsheets have cells, not blocks).
+// A variant-appropriate one-line structural summary of a ContentDocument, for the content-backed structure panel — the detailed tree (StructureTree) shows everything else. Each variant has a genuinely different shape (sections vs slides vs sheets vs pages vs formula), so forcing them all into one "blockKindCounts" table would be misleading for the variants that have no blocks at all (spreadsheets have cells, not blocks).
 export function contentSummary(content: ContentDocument): readonly string[] {
   switch (content.kind) {
     case "wordprocessing": {

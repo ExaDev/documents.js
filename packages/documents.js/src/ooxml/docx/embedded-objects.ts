@@ -33,11 +33,11 @@ import {
   PARAGRAPH_NON_CONTENT_TAGS,
 } from "./formula";
 
-// A second, independent pass over the SAME body part the upstream reader already read, splicing every OOXML math equation, every recovered vector-only shape, AND every classic-OLE-compound-file embedding it found into the ContentSections that reader produced -- the docx-side counterpart to src/odf/odt/read.ts's own combined embedded-formula/vector pass, and the direct replacement of what used to be a formula-only spliceDocxFormulas (src/ooxml/docx/formula.ts). Merging these into ONE splice pass rather than running several sequential ones is load-bearing, not tidiness: a second pass run against the ALREADY-spliced block array would count paragraph ordinals against the wrong (post-splice) indices, since this pass's own paragraph-to-block ordinal correspondence assumes nothing has moved yet.
+// A second, independent pass over the SAME body part the upstream reader already read, splicing every OOXML math equation, every recovered vector-only shape, AND every classic-OLE-compound-file embedding it found into the ContentSections that reader produced — the docx-side counterpart to src/odf/odt/read.ts's own combined embedded-formula/vector pass, and the direct replacement of what used to be a formula-only spliceDocxFormulas (src/ooxml/docx/formula.ts). Merging these into ONE splice pass rather than running several sequential ones is load-bearing, not tidiness: a second pass run against the ALREADY-spliced block array would count paragraph ordinals against the wrong (post-splice) indices, since this pass's own paragraph-to-block ordinal correspondence assumes nothing has moved yet.
 //
-// A formula's own detection (collectOfficeMathElements/readOfficeMath) is unchanged from the old spliceDocxFormulas; collectParagraphVectors (./vector.ts) is the vector-side detector, mirroring src/odf/odt/read.ts's own collectContainerVectors call exactly one paragraph at a time; collectParagraphOleObjects (below) is the legacy-embedding detector (ExaDev/documents.js#921) -- a w:object/o:OLEObject whose payload is a classic OLE compound file holding native Word 97/Excel 97/PowerPoint 97 streams (no "Package" stream a ZIP could sit in) leaves no trace in ooxml.js's own readDocxContent at all, exactly the gap a vector-only w:drawing leaves, so recovering it needs the identical second-pass treatment. This pass now also descends into every table's cells (and any table nested in a cell, recursively): collectBodyParagraphs/collectBodyTables were extended to collect w:tbl alongside w:p, and a table block is rebuilt with each of its cells' own blocks spliced independently -- so an equation, vector, or legacy embedding inside a table cell is recovered into THAT cell's blocks, not dropped the way it was when this pass walked only top-level paragraphs.
+// A formula's own detection (collectOfficeMathElements/readOfficeMath) is unchanged from the old spliceDocxFormulas; collectParagraphVectors (./vector.ts) is the vector-side detector, mirroring src/odf/odt/read.ts's own collectContainerVectors call exactly one paragraph at a time; collectParagraphOleObjects (below) is the legacy-embedding detector (ExaDev/documents.js#921) — a w:object/o:OLEObject whose payload is a classic OLE compound file holding native Word 97/Excel 97/PowerPoint 97 streams (no "Package" stream a ZIP could sit in) leaves no trace in ooxml.js's own readDocxContent at all, exactly the gap a vector-only w:drawing leaves, so recovering it needs the identical second-pass treatment. This pass now also descends into every table's cells (and any table nested in a cell, recursively): collectBodyParagraphs/collectBodyTables were extended to collect w:tbl alongside w:p, and a table block is rebuilt with each of its cells' own blocks spliced independently — so an equation, vector, or legacy embedding inside a table cell is recovered into THAT cell's blocks, not dropped the way it was when this pass walked only top-level paragraphs.
 
-// The one document-level relationship part every w:object in the body resolves r:id against -- headers/footers carry their own separate relationship parts and are out of scope here, the same pre-existing limit the formula/vector detectors above already have (see this module's own README gotcha list).
+// The one document-level relationship part every w:object in the body resolves r:id against — headers/footers carry their own separate relationship parts and are out of scope here, the same pre-existing limit the formula/vector detectors above already have (see this module's own README gotcha list).
 
 function isVectorOnlyRun(
   run: XmlElement,
@@ -65,7 +65,7 @@ interface DetectedParagraphOleObject {
   readonly block: ContentEmbeddedObjectBlock;
 }
 
-// w:object's own w:dxaOrig/w:dyaOrig (twips) size the frame, mirroring ooxml.js's own readObjectEmbeddedObject exactly (typed/docx/read.ts) -- an inline flow object has no absolute position of its own, so the frame sits at the origin, positioned by the flow like every other block this pass inserts. Malformed geometry (a non-numeric ST_TwipsMeasure) degrades to no block rather than emitting one no geometry schema accepts, the same guard the upstream reader applies before it will even resolve the payload.
+// w:object's own w:dxaOrig/w:dyaOrig (twips) size the frame, mirroring ooxml.js's own readObjectEmbeddedObject exactly (typed/docx/read.ts) — an inline flow object has no absolute position of its own, so the frame sits at the origin, positioned by the flow like every other block this pass inserts. Malformed geometry (a non-numeric ST_TwipsMeasure) degrades to no block rather than emitting one no geometry schema accepts, the same guard the upstream reader applies before it will even resolve the payload.
 function objectFrame(
   object: XmlElement,
 ): { widthPt: number; heightPt: number } | undefined {
@@ -81,7 +81,7 @@ function objectFrame(
     : undefined;
 }
 
-// Resolves one w:object's payload through the identical r:id -> relationship -> part chain ooxml.js's own readObjectEmbeddedObject uses, but for the shape that reader's own ZIP/CFB-Package-stream decode never recovers: a classic compound file whose root storage carries native Word 97/Excel 97/PowerPoint 97 streams directly, with no "Package" stream a ZIP could sit in at all (ExaDev/documents.js#921). Undefined for every non-recovery shape: no o:OLEObject, no matching relationship (including an externally-linked object, whose target is a URI no part key matches), a non-binary part, or a payload none of the three legacy readers can place -- exactly the same degrade-tier the upstream reader's own embedded-object resolution already applies, so one unrecoverable legacy embedding never fails the host document's own read.
+// Resolves one w:object's payload through the identical r:id -> relationship -> part chain ooxml.js's own readObjectEmbeddedObject uses, but for the shape that reader's own ZIP/CFB-Package-stream decode never recovers: a classic compound file whose root storage carries native Word 97/Excel 97/PowerPoint 97 streams directly, with no "Package" stream a ZIP could sit in at all (ExaDev/documents.js#921). Undefined for every non-recovery shape: no o:OLEObject, no matching relationship (including an externally-linked object, whose target is a URI no part key matches), a non-binary part, or a payload none of the three legacy readers can place — exactly the same degrade-tier the upstream reader's own embedded-object resolution already applies, so one unrecoverable legacy embedding never fails the host document's own read.
 function resolveLegacyOleObject(
   object: XmlElement,
   rels: ReadonlyMap<string, Relationship>,
@@ -244,7 +244,7 @@ function paragraphEmbeddings(
   const insertAt = blockIndex + 1;
   const placements: BlockPlacement[] = [];
   for (const result of rendered) {
-    // Diagnostics for a rendered equation are reported from inside its own build thunk, at the exact sourcePath the resulting formula block receives -- spliceBlocks only learns that position once it actually places the block, so eagerly computing one here is not available to this lazily-built placement.
+    // Diagnostics for a rendered equation are reported from inside its own build thunk, at the exact sourcePath the resulting formula block receives — spliceBlocks only learns that position once it actually places the block, so eagerly computing one here is not available to this lazily-built placement.
     placements.push({
       index: insertAt,
       build: (sourcePath) => {
@@ -259,7 +259,7 @@ function paragraphEmbeddings(
       },
     });
   }
-  // An equation whose OMML produced no MathML at all (an empty m:oMath) is not a formula to carry, so nothing is spliced in for it -- but a caller still wants to know it was attempted.
+  // An equation whose OMML produced no MathML at all (an empty m:oMath) is not a formula to carry, so nothing is spliced in for it — but a caller still wants to know it was attempted.
   for (const result of converted) {
     if (result.mathml.length > 0) {
       continue;

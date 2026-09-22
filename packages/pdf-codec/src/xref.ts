@@ -14,7 +14,7 @@ import {
 } from "./objects";
 import { parseIndirectObject, parseValue } from "./parse";
 
-// Cross-reference resolution: the highest real-world compatibility surface in the whole parser. Most modern producers (Word, PowerPoint, Chrome, LibreOffice) default to PDF 1.5+ cross-reference *streams* with packed object streams, not the classic text-based table our own writer emits -- supporting only the classic form would fail to read the overwhelming majority of real-world, non-self-produced input.
+// Cross-reference resolution: the highest real-world compatibility surface in the whole parser. Most modern producers (Word, PowerPoint, Chrome, LibreOffice) default to PDF 1.5+ cross-reference *streams* with packed object streams, not the classic text-based table our own writer emits — supporting only the classic form would fail to read the overwhelming majority of real-world, non-self-produced input.
 
 export interface XrefOffsetEntry {
   readonly type: "offset";
@@ -38,12 +38,12 @@ export interface XrefTable {
 const STARTXREF_BYTES = new TextEncoder().encode("startxref");
 const OBJ_BYTES = new TextEncoder().encode("obj");
 const TRAILER_BYTES = new TextEncoder().encode("trailer");
-// A minimal local copy of the lexer's own delimiter set (ISO 32000-1 7.2.2), used only to boundary-check a recovered "obj" keyword occurrence during linear-scan recovery -- lexer.ts keeps its own copy private, and this is the one other place PDF syntax needs to know what counts as a token boundary.
+// A minimal local copy of the lexer's own delimiter set (ISO 32000-1 7.2.2), used only to boundary-check a recovered "obj" keyword occurrence during linear-scan recovery — lexer.ts keeps its own copy private, and this is the one other place PDF syntax needs to know what counts as a token boundary.
 const DELIMITER_BYTES = new Set([
   0x28, 0x29, 0x3c, 0x3e, 0x5b, 0x5d, 0x7b, 0x7d, 0x2f, 0x25,
 ]);
 
-// Guards a looping /Prev chain (a corrupt or adversarial file pointing back at an already-visited offset) -- generous for any real-world incremental-update history, which rarely exceeds single digits of revisions.
+// Guards a looping /Prev chain (a corrupt or adversarial file pointing back at an already-visited offset) — generous for any real-world incremental-update history, which rarely exceeds single digits of revisions.
 const MAX_XREF_SECTIONS = 64;
 
 export function readXref(
@@ -94,7 +94,7 @@ function findStartxrefOffset(
   return token?.kind === "number" ? token.value : undefined;
 }
 
-// A /Root that resolves to a real object, and -- for a directly-located object -- whose recorded byte offset genuinely lands on that object's own "N G obj" header, is the whole table's fitness check: if the very entry every other lookup depends on is wrong, the rest almost certainly is too.
+// A /Root that resolves to a real object, and — for a directly-located object — whose recorded byte offset genuinely lands on that object's own "N G obj" header, is the whole table's fitness check: if the very entry every other lookup depends on is wrong, the rest almost certainly is too.
 function isTableUsable(
   bytes: Uint8Array<ArrayBuffer>,
   entries: ReadonlyMap<number, XrefEntry>,
@@ -170,7 +170,7 @@ function walkXrefChain(
     }
     for (const [num, entry] of section.entries) {
       if (!merged.has(num)) {
-        merged.set(num, entry); // first (newest) definition wins -- sections are walked newest-first via /Prev
+        merged.set(num, entry); // first (newest) definition wins — sections are walked newest-first via /Prev
       }
     }
     for (const [key, value] of section.trailer.entries) {
@@ -248,7 +248,7 @@ function readClassicXrefSection(
           gen: genTok.value,
         });
       }
-      // A 'f' (free) entry is simply not recorded -- resolving a free object number is diagnosed at fetch() time in document.ts, not here.
+      // A 'f' (free) entry is simply not recorded — resolving a free object number is diagnosed at fetch() time in document.ts, not here.
     }
   }
   const trailerTok = nextToken(reader);
@@ -265,7 +265,7 @@ function readClassicXrefSection(
   return { entries, trailer, prevOffset: asNumber(dictGet(trailer, "Prev")) };
 }
 
-// A default /W width of [1 1 1] only applies if /W is entirely absent (never valid in a real file, but a harmless fallback); each of /W's three fields defaults independently is NOT a spec behaviour -- /W is mandatory per-field when present, so a genuinely missing field is a malformed-file condition read as 0 (making that field's type default to 1, matching ISO 32000-1's own "if the first element is zero, the type field defaults to type 1" rule).
+// A default /W width of [1 1 1] only applies if /W is entirely absent (never valid in a real file, but a harmless fallback); each of /W's three fields defaults independently is NOT a spec behaviour — /W is mandatory per-field when present, so a genuinely missing field is a malformed-file condition read as 0 (making that field's type default to 1, matching ISO 32000-1's own "if the first element is zero, the type field defaults to type 1" rule).
 function readXrefStreamSection(
   dict: PdfDict,
   raw: Uint8Array<ArrayBuffer>,
@@ -347,7 +347,7 @@ function readBigEndian(
   return value;
 }
 
-// --- Linear-scan recovery: rebuilds the table from scratch by scanning the whole file for "N G obj" headers, for the case where startxref is missing/unusable or the section(s) it names don't check out. Also decodes any recovered /Type /ObjStm streams, since exactly the modern-producer files most likely to need recovery are also the ones packing their Catalog/Pages/Font dictionaries inside object streams -- a rebuilt table that only found top-level headers would still be missing the objects that matter most. ---
+// --- Linear-scan recovery: rebuilds the table from scratch by scanning the whole file for "N G obj" headers, for the case where startxref is missing/unusable or the section(s) it names don't check out. Also decodes any recovered /Type /ObjStm streams, since exactly the modern-producer files most likely to need recovery are also the ones packing their Catalog/Pages/Font dictionaries inside object streams — a rebuilt table that only found top-level headers would still be missing the objects that matter most. ---
 
 function isBoundaryByte(byte: number | undefined): boolean {
   return (
@@ -381,7 +381,7 @@ function isDigitByte(byte: number | undefined): boolean {
   return byte !== undefined && byte >= 0x30 && byte <= 0x39;
 }
 
-// Walks `bytes` backward from `end`, stopping at the first byte (from the right) that fails `predicate` -- e.g. skipping a run of trailing whitespace or trailing digits. Returns the index just past that stopping point, i.e. the start of the run that satisfied `predicate`.
+// Walks `bytes` backward from `end`, stopping at the first byte (from the right) that fails `predicate` — e.g. skipping a run of trailing whitespace or trailing digits. Returns the index just past that stopping point, i.e. the start of the run that satisfied `predicate`.
 function scanBackWhile(
   bytes: Uint8Array<ArrayBuffer>,
   end: number,
@@ -394,7 +394,7 @@ function scanBackWhile(
   return i;
 }
 
-// Scans backward from just before a recovered "obj" keyword occurrence to recover its "N G" header -- the header is always exactly two whitespace-separated non-negative integers immediately preceding "obj", so a dedicated backward scan is simpler and more direct here than pressing the forward-only tokenizer into service.
+// Scans backward from just before a recovered "obj" keyword occurrence to recover its "N G" header — the header is always exactly two whitespace-separated non-negative integers immediately preceding "obj", so a dedicated backward scan is simpler and more direct here than pressing the forward-only tokenizer into service.
 function scanObjectHeaderBackward(
   bytes: Uint8Array<ArrayBuffer>,
   objKeywordStart: number,

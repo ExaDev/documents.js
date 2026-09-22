@@ -94,12 +94,12 @@ function aiRangeRecord(
   ]);
 }
 
-/** An AI record with no formula at all (rt=0, auto-generated) -- used for the AI ids this test doesn't care about resolving. */
+/** An AI record with no formula at all (rt=0, auto-generated) — used for the AI ids this test doesn't care about resolving. */
 function aiAutoRecord(id: number): Uint8Array<ArrayBuffer> {
   return record(RECORD_AI, [id, 0x00, ...u16(0), ...u16(0), ...u16(0)]);
 }
 
-/** The general AI (BRAI) record builder every other aiXRecord helper specialises: id, an explicit rt (rather than always rt=2), and arbitrary token bytes -- for a test proving the reader dispatches on rt itself, not merely on which bytes a particular rt conventionally carries. */
+/** The general AI (BRAI) record builder every other aiXRecord helper specialises: id, an explicit rt (rather than always rt=2), and arbitrary token bytes — for a test proving the reader dispatches on rt itself, not merely on which bytes a particular rt conventionally carries. */
 function aiRecord(
   id: number,
   rt: number,
@@ -173,7 +173,7 @@ function cachedLabel(
   ]);
 }
 
-/** A cached BoolErr record: point, series, xf(2, ignored), a value byte, an fError byte -- errorTextOf(value) when fError is set, else "TRUE"/"FALSE" from whether value is nonzero. */
+/** A cached BoolErr record: point, series, xf(2, ignored), a value byte, an fError byte — errorTextOf(value) when fError is set, else "TRUE"/"FALSE" from whether value is nonzero. */
 function cachedBoolErr(
   point: number,
   series: number,
@@ -189,7 +189,7 @@ function cachedBoolErr(
   ]);
 }
 
-/** A cached Blank record: point, series, xf(2, ignored) -- no value fields at all, deliberately not one of addCacheEntry's own recognised record types (RECORD_NUMBER/RECORD_LABEL/RECORD_BOOLERR), so it contributes nothing to the cache. */
+/** A cached Blank record: point, series, xf(2, ignored) — no value fields at all, deliberately not one of addCacheEntry's own recognised record types (RECORD_NUMBER/RECORD_LABEL/RECORD_BOOLERR), so it contributes nothing to the cache. */
 function cachedBlank(point: number, series: number): Uint8Array<ArrayBuffer> {
   return record(RECORD_BLANK, [...u16(point), ...u16(series), ...u16(0)]);
 }
@@ -486,7 +486,7 @@ describe("readChartSeries", () => {
     expect(series[0]?.categories).toStrictEqual(["Q1", "Q2"]);
   });
 
-  it("walks a genuine rectangular range row-major -- across every column of one row before moving to the next", () => {
+  it("walks a genuine rectangular range row-major — across every column of one row before moving to the next", () => {
     const cells: ContentSheetCell[] = [
       {
         row: 0,
@@ -656,7 +656,7 @@ describe("readChartSeries", () => {
     ];
     const groups = chartRecords([
       seriesRecord(2, 0),
-      // colFirst=1, colLast=0 -- reversed, so startColumn must come from Math.min and endColumn from Math.max, not the other way round.
+      // colFirst=1, colLast=0 — reversed, so startColumn must come from Math.min and endColumn from Math.max, not the other way round.
       aiRangeRecord(AI_ID_CATEGORIES, area3dToken(0, 0, 0, 1, 0)),
     ]);
 
@@ -696,7 +696,7 @@ describe("readChartSeries", () => {
     const multiSheetContext: ChartRangeContext = {
       formulaSheets: {
         sheets: SHEET0_CONTEXT.sheets,
-        sheetRanges: [{ firstSheetIndex: 0, lastSheetIndex: 1 }], // Sheet1:Sheet2 -- spans the owning sheet (0) but is not single-sheet
+        sheetRanges: [{ firstSheetIndex: 0, lastSheetIndex: 1 }], // Sheet1:Sheet2 — spans the owning sheet (0) but is not single-sheet
       },
       ownSheetIndex: 0,
       ownSheetCells: cells,
@@ -780,7 +780,7 @@ describe("readChartSeries", () => {
     ];
     const groups = chartRecords([
       seriesRecord(2, 0),
-      // rowFirst=1, rowLast=0 -- reversed, so startRow must come from Math.min and endRow from Math.max, not the other way round.
+      // rowFirst=1, rowLast=0 — reversed, so startRow must come from Math.min and endRow from Math.max, not the other way round.
       aiRangeRecord(AI_ID_CATEGORIES, area3dToken(0, 1, 0, 0, 0)),
     ]);
 

@@ -70,7 +70,7 @@ describe("scanDelimiterRun", () => {
     expect(classify(text, start, char)).toBe("close");
   });
 
-  // spec 0.31.2's own "both left and right-flanking" examples -- note `_` is deliberately NOT both here: an underscore run between two word characters can neither open nor close, which is the whole intraword-emphasis restriction.
+  // spec 0.31.2's own "both left and right-flanking" examples — note `_` is deliberately NOT both here: an underscore run between two word characters can neither open nor close, which is the whole intraword-emphasis restriction.
   it("classifies an asterisk run between two word characters as both an opener and a closer", () => {
     expect(classify(" abc***def", 4, "*")).toBe("both");
   });
@@ -97,7 +97,7 @@ describe("scanDelimiterRun", () => {
   });
 
   it("classifies an astral symbol adjacent to a run as punctuation, not as a lone surrogate", () => {
-    // U+1F600 is in the Unicode `So` category, which spec 0.31.2 counts as a punctuation character for flanking purposes -- so this run is followed by punctuation and preceded by whitespace, making it an opener.
+    // U+1F600 is in the Unicode `So` category, which spec 0.31.2 counts as a punctuation character for flanking purposes — so this run is followed by punctuation and preceded by whitespace, making it an opener.
     expect(classify(" *\u{1F600}", 1, "*")).toBe("open");
   });
 

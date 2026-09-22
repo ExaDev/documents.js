@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// jsdom implements no Worker at all -- getRpcClient() is untestable without stubbing one, plus the two @orpc entry points it wires the worker's MessagePort through.
+// jsdom implements no Worker at all — getRpcClient() is untestable without stubbing one, plus the two @orpc entry points it wires the worker's MessagePort through.
 interface CapturedWorker {
   url: URL;
   options: WorkerOptions | undefined;
 }
 const workerInstances: CapturedWorker[] = [];
-// A plain constructor function, not a class -- the only thing under test is that `new Worker(url, options)` was called with the right arguments and that the resulting instance is threaded through to RPCLink's own `port` option, neither of which needs a class body beyond the constructor a class-with-only-a-constructor would just be a longer way to write.
+// A plain constructor function, not a class — the only thing under test is that `new Worker(url, options)` was called with the right arguments and that the resulting instance is threaded through to RPCLink's own `port` option, neither of which needs a class body beyond the constructor a class-with-only-a-constructor would just be a longer way to write.
 function FakeWorker(this: object, url: URL, options?: WorkerOptions): void {
   workerInstances.push({ url, options });
 }

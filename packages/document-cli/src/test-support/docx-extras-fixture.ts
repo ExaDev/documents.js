@@ -1,4 +1,4 @@
-// A real docx that carries every field `readDocxExtras` (documents.js) reads and `readDocxContent`'s own `ContentDocument` cannot: comments, footnotes, headers, footers, and a numbering definition. `DocxEditor` has no write side for any of these -- comments/footnotes/headers/footers/numbering are none of them addressable through `DocxBody`/`DocxParagraph` -- so this builder starts from a real editor-built package and writes the four extra parts directly, at the exact conventional paths (`word/comments.xml`, `word/footnotes.xml`, `word/header1.xml`/`word/footer1.xml`, `word/numbering.xml`) documents.js's own reader resolves them from with no relationship indirection at all (see that package's own `src/ooxml/docx/extras.ts` and `src/typed/docx/numbering.ts` in ooxml.js).
+// A real docx that carries every field `readDocxExtras` (documents.js) reads and `readDocxContent`'s own `ContentDocument` cannot: comments, footnotes, headers, footers, and a numbering definition. `DocxEditor` has no write side for any of these — comments/footnotes/headers/footers/numbering are none of them addressable through `DocxBody`/`DocxParagraph` — so this builder starts from a real editor-built package and writes the four extra parts directly, at the exact conventional paths (`word/comments.xml`, `word/footnotes.xml`, `word/header1.xml`/`word/footer1.xml`, `word/numbering.xml`) documents.js's own reader resolves them from with no relationship indirection at all (see that package's own `src/ooxml/docx/extras.ts` and `src/typed/docx/numbering.ts` in ooxml.js).
 import { createDocx, encodePackage, type XmlElement } from "documents.js";
 import { el, txt, xmlDeclaration } from "./ooxml-fixture";
 
@@ -9,7 +9,7 @@ function paragraphWithText(text: string): XmlElement {
   return el("w:p", {}, [el("w:r", {}, [el("w:t", {}, [txt(text)])])]);
 }
 
-// The comment/footnote/header/footer/numbering text this fixture declares -- exported so a test asserting against `readDocxExtras`'s own output, or the `docx-extras` command's rendered lines, states its expectations against named constants rather than string literals repeated at every call site.
+// The comment/footnote/header/footer/numbering text this fixture declares — exported so a test asserting against `readDocxExtras`'s own output, or the `docx-extras` command's rendered lines, states its expectations against named constants rather than string literals repeated at every call site.
 export const DOCX_EXTRAS_FIXTURE = {
   commentAuthor: "Alice",
   commentWithAuthorText: "Looks good to me.",
@@ -21,7 +21,7 @@ export const DOCX_EXTRAS_FIXTURE = {
   numberingLevel: { format: "decimal", text: "%1." },
 } as const;
 
-// A real docx, comments/footnotes/headers/footers/numbering included. The footnotes part also declares a `w:type="separator"` footnote -- the horizontal rule Word always writes alongside real footnotes -- deliberately, since `readDocxExtras`'s own `readFootnotes` (ooxml.js) skips exactly that type; a fixture that omitted it would never exercise the skip at all.
+// A real docx, comments/footnotes/headers/footers/numbering included. The footnotes part also declares a `w:type="separator"` footnote — the horizontal rule Word always writes alongside real footnotes — deliberately, since `readDocxExtras`'s own `readFootnotes` (ooxml.js) skips exactly that type; a fixture that omitted it would never exercise the skip at all.
 export function buildDocxWithExtras(): Uint8Array<ArrayBuffer> {
   const editor = createDocx();
   editor.body

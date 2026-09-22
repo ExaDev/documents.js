@@ -7,7 +7,7 @@ import {
   readDataValidations,
 } from "./data-validation";
 
-// buildDataValidationElement is not exported -- exercised indirectly through buildDataValidationsElement, which wraps it 1:1 for a single-entry array.
+// buildDataValidationElement is not exported — exercised indirectly through buildDataValidationsElement, which wraps it 1:1 for a single-entry array.
 function buildOne(validation: ContentSheetDataValidation) {
   const wrapper = buildDataValidationsElement([validation]);
   const child = wrapper?.children[0];

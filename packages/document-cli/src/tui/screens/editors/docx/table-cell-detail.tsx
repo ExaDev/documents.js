@@ -9,7 +9,7 @@ import {
 import { ParagraphRunsView } from "./paragraph-detail.js";
 import { RunTextEditor } from "./run-editor.js";
 
-// documents.js's DocxTableCell/OdtTableCell expose `paragraphs()`/`appendParagraph()` and a read-only `text`, but no per-run access at all -- there is no reducer action to toggle bold/italic/underline or set a colour on a run inside a cell (SET_TABLE_CELL_TEXT is the only cell-mutating action, and it replaces the cell's whole text, matching `setCellText` in state/reducer.ts). This screen therefore reuses paragraph-detail's own `ParagraphRunsView` purely to DISPLAY a cell's existing paragraphs with their real styling, and run-editor's own `RunTextEditor` to replace the cell's text wholesale -- it does not duplicate either screen's editing UI, and it does not offer bold/italic/underline/colour keys the underlying API has nowhere to send.
+// documents.js's DocxTableCell/OdtTableCell expose `paragraphs()`/`appendParagraph()` and a read-only `text`, but no per-run access at all — there is no reducer action to toggle bold/italic/underline or set a colour on a run inside a cell (SET_TABLE_CELL_TEXT is the only cell-mutating action, and it replaces the cell's whole text, matching `setCellText` in state/reducer.ts). This screen therefore reuses paragraph-detail's own `ParagraphRunsView` purely to DISPLAY a cell's existing paragraphs with their real styling, and run-editor's own `RunTextEditor` to replace the cell's text wholesale — it does not duplicate either screen's editing UI, and it does not offer bold/italic/underline/colour keys the underlying API has nowhere to send.
 export function TableCellDetailScreen(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();

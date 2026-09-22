@@ -14,7 +14,7 @@ export interface InlineResult {
   readonly constructs: RunConstructExtent[];
 }
 
-// Collapses any run of ASCII whitespace (space/tab/CR/LF) to a single space -- a deliberately simple per-text-node normalisation, not the full HTML5 cross-node whitespace-collapsing algorithm, matching this package's own corpus-tolerance scope (see README): real-world pretty-printed XHTML indentation inside a paragraph reads sensibly, and a producer that never pretty-prints is untouched either way. Never applied inside <pre> (src/xhtml/read.ts reads that content verbatim instead).
+// Collapses any run of ASCII whitespace (space/tab/CR/LF) to a single space — a deliberately simple per-text-node normalisation, not the full HTML5 cross-node whitespace-collapsing algorithm, matching this package's own corpus-tolerance scope (see README): real-world pretty-printed XHTML indentation inside a paragraph reads sensibly, and a producer that never pretty-prints is untouched either way. Never applied inside <pre> (src/xhtml/read.ts reads that content verbatim instead).
 function normalizeWhitespace(text: string): string {
   return text.replace(/[ \t\r\n]+/gu, " ");
 }
@@ -26,7 +26,7 @@ function mergeStyle(
   return { ...outer, ...inner };
 }
 
-// hyperlink is never set here: appendAnchor's own external-href fallback (below) spreads it directly onto each nested run instead, so this constructor never takes it as a parameter -- there is no call site that would ever pass one.
+// hyperlink is never set here: appendAnchor's own external-href fallback (below) spreads it directly onto each nested run instead, so this constructor never takes it as a parameter — there is no call site that would ever pass one.
 function styledRun(text: string, style: InlineStyle): ContentRun {
   const run: ContentRun = { text };
   if (style.bold === true) run.bold = true;
@@ -49,7 +49,7 @@ function withDirStyle(element: XmlElement, style: InlineStyle): InlineStyle {
   return style;
 }
 
-// Builds the ContentRun[] (plus any run-level footnote/endnote construct extents) for one inline block's own children -- the text and inline-formatting content of a <p>/<h1-6>/<li>/<td>/<dt>/<dd>, walked recursively so nested emphasis (<strong><em>...</em></strong>) composes rather than only the innermost tag winning.
+// Builds the ContentRun[] (plus any run-level footnote/endnote construct extents) for one inline block's own children — the text and inline-formatting content of a <p>/<h1-6>/<li>/<td>/<dt>/<dd>, walked recursively so nested emphasis (<strong><em>...</em></strong>) composes rather than only the innermost tag winning.
 export function buildInlineRuns(
   nodes: readonly XmlNode[],
   style: InlineStyle,
@@ -60,7 +60,7 @@ export function buildInlineRuns(
 
   for (const node of nodes) {
     if (isTextLikeNode(node)) {
-      // A text node and a CDATA section (xml/node.ts's own isTextLikeNode) are both real, extractable inline content -- a producer reaches for CDATA only when its own literal text would otherwise need escaping, never as a distinct kind of content -- decoded identically to how a text node has always been decoded here, except CDATA never through decodeEntities (xml/entities.ts's own decodeTextLikeNode comment: CDATA content was never entity-encoded to begin with).
+      // A text node and a CDATA section (xml/node.ts's own isTextLikeNode) are both real, extractable inline content — a producer reaches for CDATA only when its own literal text would otherwise need escaping, never as a distinct kind of content — decoded identically to how a text node has always been decoded here, except CDATA never through decodeEntities (xml/entities.ts's own decodeTextLikeNode comment: CDATA content was never entity-encoded to begin with).
       const text = normalizeWhitespace(decodeTextLikeNode(node));
       if (text.length > 0) {
         runs.push(styledRun(text, style));
@@ -84,11 +84,11 @@ function appendElement(
   constructs: RunConstructExtent[],
 ): void {
   if (isInertElement(element.tag)) {
-    // Never legitimate document text -- see context.ts's own isInertElement for why <script>/<template>/<style>/<noscript> all share this treatment. This is the universal safety net: it fires regardless of where one of these is reached from -- directly inside a <p>/<td>/<figcaption>, or several levels deep inside a stray <div> a container's own recovery path (e.g. src/xhtml/read.ts's readList/flushListStrayContent) has recursed into -- rather than only the single position a narrower, call-site-specific check would guard against.
+    // Never legitimate document text — see context.ts's own isInertElement for why <script>/<template>/<style>/<noscript> all share this treatment. This is the universal safety net: it fires regardless of where one of these is reached from — directly inside a <p>/<td>/<figcaption>, or several levels deep inside a stray <div> a container's own recovery path (e.g. src/xhtml/read.ts's readList/flushListStrayContent) has recursed into — rather than only the single position a narrower, call-site-specific check would guard against.
     reportInertElementSkip(element.tag, context);
     return;
   }
-  // The element's own dir attribute, merged once here so every case below (and the nested buildInlineRuns calls they make) composes it with the element's own formatting rather than each case needing its own attribute read -- the inline twin of src/xhtml/read.ts's own withDirection threading for block containers.
+  // The element's own dir attribute, merged once here so every case below (and the nested buildInlineRuns calls they make) composes it with the element's own formatting rather than each case needing its own attribute read — the inline twin of src/xhtml/read.ts's own withDirection threading for block containers.
   const styled = withDirStyle(element, style);
   switch (element.tag) {
     case "strong":
@@ -144,7 +144,7 @@ function appendElement(
       return;
     case "sub":
     case "sup": {
-      // The XHTML spellings of exactly the two members ContentRun.verticalAlign carries, so the element's own vertical position rides the run like any other inline formatting -- composing with nested emphasis (<strong>H<sub>2</sub>O</sub></strong>) rather than degrading to plain text the way it did before the schema field existed.
+      // The XHTML spellings of exactly the two members ContentRun.verticalAlign carries, so the element's own vertical position rides the run like any other inline formatting — composing with nested emphasis (<strong>H<sub>2</sub>O</sub></strong>) rather than degrading to plain text the way it did before the schema field existed.
       appendNested(
         element,
         mergeStyle(styled, {
@@ -173,7 +173,7 @@ function appendElement(
   }
 }
 
-// appendElement is buildInlineRuns's own per-node dispatch, and buildInlineRuns is called from every container that hands its children straight to run-building with no block-splitting step of its own first: a heading's own children directly, and every readContainerChildren-routed container's own inline segments between block-level siblings (a <p>'s, a <figcaption>'s, a <dt>'s/<dd>'s, a table cell's, a <caption>'s -- all via src/xhtml/read.ts, ExaDev/documents.js#1023 having moved the latter four off a bare buildInlineRuns call). Only readContainerChildren ever splits a direct-child <img> out into its own ContentImageBlock (see that module's own <p>-with-a-direct-<img> gotcha) -- everywhere else this case fires, an <img> sitting several levels deep inside a <span>/<a> (nested inside any container, readContainerChildren-routed or not), appendElement's recursion has already committed to producing a flat ContentRun[] with no block list to insert a sibling image block into. Rather than let the image vanish the way falling through to appendNested (which recurses into a childless <img> and yields nothing) would, this degrades it to its alt text -- the same honest degrade-with-diagnostic policy src/xhtml/read.ts's own readImage applies to an unresolved or unsupported-format image.
+// appendElement is buildInlineRuns's own per-node dispatch, and buildInlineRuns is called from every container that hands its children straight to run-building with no block-splitting step of its own first: a heading's own children directly, and every readContainerChildren-routed container's own inline segments between block-level siblings (a <p>'s, a <figcaption>'s, a <dt>'s/<dd>'s, a table cell's, a <caption>'s — all via src/xhtml/read.ts, ExaDev/documents.js#1023 having moved the latter four off a bare buildInlineRuns call). Only readContainerChildren ever splits a direct-child <img> out into its own ContentImageBlock (see that module's own <p>-with-a-direct-<img> gotcha) — everywhere else this case fires, an <img> sitting several levels deep inside a <span>/<a> (nested inside any container, readContainerChildren-routed or not), appendElement's recursion has already committed to producing a flat ContentRun[] with no block list to insert a sibling image block into. Rather than let the image vanish the way falling through to appendNested (which recurses into a childless <img> and yields nothing) would, this degrades it to its alt text — the same honest degrade-with-diagnostic policy src/xhtml/read.ts's own readImage applies to an unresolved or unsupported-format image.
 function appendImageFallback(
   element: XmlElement,
   style: InlineStyle,
@@ -194,7 +194,7 @@ function appendImageFallback(
   }
 }
 
-// A nested buildInlineRuns (or readPreRuns) call always starts counting its own runs from zero, so its constructs' startRun/endRun are relative to ITS OWN runs array, not the outer one they are about to be spliced into -- shifting each by however many runs the outer array already held before the splice is what src/xhtml/read.ts's own readPreRuns already does inline; exported so appendNested and both appendAnchor branches below can share the identical fix rather than each reimplementing it (ExaDev/documents.js#1038).
+// A nested buildInlineRuns (or readPreRuns) call always starts counting its own runs from zero, so its constructs' startRun/endRun are relative to ITS OWN runs array, not the outer one they are about to be spliced into — shifting each by however many runs the outer array already held before the splice is what src/xhtml/read.ts's own readPreRuns already does inline; exported so appendNested and both appendAnchor branches below can share the identical fix rather than each reimplementing it (ExaDev/documents.js#1038).
 export function rebaseConstructs(
   constructs: readonly RunConstructExtent[],
   offset: number,
@@ -227,7 +227,7 @@ function appendAnchor(
   constructs: RunConstructExtent[],
 ): void {
   const href = attrValue(element, "href");
-  // A same-/cross-document href resolving to a real, block-level element anywhere in the spine (ExaDev/documents.js#963): a footnote/endnote reference, or an ordinary internal link target (document-schema.js's own `link` construct, README Architecture) otherwise -- rather than the plain ContentRun.hyperlink degrade below. context.resolveAnchorHref (src/xhtml/read.ts's own whole-document, and src/read.ts's own whole-spine, prescan) is the single place same-document vs. cross-document resolution, footnote-vs-bookmark classification, and eligibility (BLOCK_LEVEL_TAGS membership) are all decided; this call site only builds the run-level construct extent once it already has a target to build one with.
+  // A same-/cross-document href resolving to a real, block-level element anywhere in the spine (ExaDev/documents.js#963): a footnote/endnote reference, or an ordinary internal link target (document-schema.js's own `link` construct, README Architecture) otherwise — rather than the plain ContentRun.hyperlink degrade below. context.resolveAnchorHref (src/xhtml/read.ts's own whole-document, and src/read.ts's own whole-spine, prescan) is the single place same-document vs. cross-document resolution, footnote-vs-bookmark classification, and eligibility (BLOCK_LEVEL_TAGS membership) are all decided; this call site only builds the run-level construct extent once it already has a target to build one with.
   const target =
     href === undefined ? undefined : context.resolveAnchorHref(href);
   if (target !== undefined) {
@@ -253,7 +253,7 @@ function appendAnchor(
     appendNested(element, style, context, runs, constructs);
     return;
   }
-  // Every href this package cannot resolve to a real, addressable in-package element -- an external URI, or an internal-looking href naming no element this package's own read pass ever wraps in an anchor marker -- rides ContentRun.hyperlink verbatim; every href still restores byte-for-byte either way. A same-/cross-document fragment already recognised as a footnote reference or an ordinary internal link target above never reaches this branch.
+  // Every href this package cannot resolve to a real, addressable in-package element — an external URI, or an internal-looking href naming no element this package's own read pass ever wraps in an anchor marker — rides ContentRun.hyperlink verbatim; every href still restores byte-for-byte either way. A same-/cross-document fragment already recognised as a footnote reference or an ordinary internal link target above never reaches this branch.
   const offset = runs.length;
   const nested = buildInlineRuns(element.children, style, context);
   for (const run of nested.runs) {

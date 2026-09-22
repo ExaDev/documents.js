@@ -25,7 +25,7 @@ const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
 import { DEFAULT_LAYOUT_FONT } from "document-schema.js";
 import { convertSpreadsheetToLayout } from "./sheets";
 
-// Every character is sizePt/10 pt wide; lineHeightAtSize is 1.2x, ascender 0.8x, descender -0.2x -- the same fake-measurer convention already used across src/layout/engine.test.ts and src/layout/slides.test.ts.
+// Every character is sizePt/10 pt wide; lineHeightAtSize is 1.2x, ascender 0.8x, descender -0.2x — the same fake-measurer convention already used across src/layout/engine.test.ts and src/layout/slides.test.ts.
 function fakeMeasurer(): TextMeasurer {
   return {
     widthOfTextAtSize: (text, _font, sizePt) =>
@@ -126,7 +126,7 @@ function convertResult(
   });
 }
 
-// The LayoutDocument half alone, which is all every geometry/text/gridline assertion below cares about -- the formula half has its own dedicated describe block, and reads convertResult directly.
+// The LayoutDocument half alone, which is all every geometry/text/gridline assertion below cares about — the formula half has its own dedicated describe block, and reads convertResult directly.
 function convert(
   sheets: ContentSheet[],
   measurer: TextMeasurer = fakeMeasurer(),
@@ -197,7 +197,7 @@ describe("step 2: column/row offset arrays skip hidden entirely", () => {
   });
 
   it("a cell anchored in a hidden column is not rendered at all, not merely rendered at zero width", () => {
-    // Zero available width would otherwise still trigger the numeric-overflow ###/string-truncate path -- confirmed as a real bug via this module's own real-file verification (a genuine hidden ODS column produced a stray '###' overlapping the next visible column). The fix checks hidden-ness directly, not the incidental zero-width side effect.
+    // Zero available width would otherwise still trigger the numeric-overflow ###/string-truncate path — confirmed as a real bug via this module's own real-file verification (a genuine hidden ODS column produced a stray '###' overlapping the next visible column). The fix checks hidden-ness directly, not the incidental zero-width side effect.
     const s = sheet([stringCell(0, 0, "Visible"), numberCell(0, 1, 42, "42")], {
       columns: [
         { index: 0, widthPt: 50 },
@@ -235,7 +235,7 @@ describe("step 2: column/row offset arrays skip hidden entirely", () => {
     const texts = textItems(layout.pages[0]!.items);
     const a = texts.find((t) => t.text === "A")!;
     const b = texts.find((t) => t.text === "B")!;
-    // y-up: row B sits BELOW row A by exactly one visible row height (30pt) -- the hidden row between contributes nothing.
+    // y-up: row B sits BELOW row A by exactly one visible row height (30pt) — the hidden row between contributes nothing.
     expect(a.yPt - b.yPt).toBeCloseTo(30, 5);
   });
 });
@@ -377,7 +377,7 @@ describe("step 5: band partitioning, manual breaks, and the oversized-item guara
       },
     );
     const layout = convert([s]);
-    // Without the manual break, all three 10pt columns fit easily in a 100pt page -- one band. The break at column 1 forces a second.
+    // Without the manual break, all three 10pt columns fit easily in a 100pt page — one band. The break at column 1 forces a second.
     expect(layout.pages).toHaveLength(2);
     expect(textItems(layout.pages[0]!.items).map((t) => t.text)).toEqual(["A"]);
     expect(textItems(layout.pages[1]!.items).map((t) => t.text)).toEqual([
@@ -483,18 +483,18 @@ describe("step 7: gridlines are one line per boundary, never one per cell", () =
 
 describe("cell text sizing: a run with no sizePt of its own defaults to the nominal CELL size, not shared.ts's docx-paragraph nominal size", () => {
   it("does not truncate real-world-shaped text (runs present, no sizePt) that comfortably fits at the 10pt cell default but would overflow at shared.ts's 18pt paragraph default", () => {
-    // Confirmed as a real bug via this module's own real-file verification against a genuine LibreOffice-generated .ods: odf.js's readOdsContent populates `runs` for every cell with any text at all (not only genuinely mixed-formatting cells), and those runs carry no sizePt -- 'Acme Corp' (9 chars) at 18pt (90pt) overflows an 85pt-wide real column and gets wrongly truncated to 'Acme Cor', even though the very same text at the intended 10pt nominal size (50pt) fits comfortably.
+    // Confirmed as a real bug via this module's own real-file verification against a genuine LibreOffice-generated .ods: odf.js's readOdsContent populates `runs` for every cell with any text at all (not only genuinely mixed-formatting cells), and those runs carry no sizePt — 'Acme Corp' (9 chars) at 18pt (90pt) overflows an 85pt-wide real column and gets wrongly truncated to 'Acme Cor', even though the very same text at the intended 10pt nominal size (50pt) fits comfortably.
     const s = sheet([stringCell(0, 0, "Acme Corp")], {
       columns: [{ index: 0, widthPt: 85 }],
     });
     const layout = convert([s]);
     const texts = textItems(layout.pages[0]!.items);
-    // wrapRunsToWidth atomises on whitespace -- glue (space) atoms advance the cursor but produce no rendered fragment of their own, so the two words join with no space between them here; the point under test is that BOTH full words ('Acme' and 'Corp') survive unclipped, not the exact inter-word spacing.
+    // wrapRunsToWidth atomises on whitespace — glue (space) atoms advance the cursor but produce no rendered fragment of their own, so the two words join with no space between them here; the point under test is that BOTH full words ('Acme' and 'Corp') survive unclipped, not the exact inter-word spacing.
     expect(texts.map((t) => t.text).join("")).toBe("AcmeCorp");
   });
 
   it("still respects a run's own explicit sizePt when it has one", () => {
-    // At the 10pt nominal default, 'Big' (3 chars * 1pt = 3pt) fits an 20pt column (16pt available) untouched. At the run's own explicit 60pt (3 chars * 6pt = 18pt), it overflows and truncates to 'Bi' (2 chars * 6pt = 12pt <= 16pt; a 3rd char would take it to 18pt > 16pt) -- proves the explicit size, not the nominal default, drove the overflow decision.
+    // At the 10pt nominal default, 'Big' (3 chars * 1pt = 3pt) fits an 20pt column (16pt available) untouched. At the run's own explicit 60pt (3 chars * 6pt = 18pt), it overflows and truncates to 'Bi' (2 chars * 6pt = 12pt <= 16pt; a 3rd char would take it to 18pt > 16pt) — proves the explicit size, not the nominal default, drove the overflow decision.
     const s = sheet(
       [stringCell(0, 0, "Big", { runs: [{ text: "Big", sizePt: 60 }] })],
       { columns: [{ index: 0, widthPt: 20 }] },
@@ -516,7 +516,7 @@ describe("step 7: cell text alignment, overflow, and vertical positioning", () =
   });
 
   it("spills a left-aligned string into an empty neighbor cell to the right when it overflows", () => {
-    // The neighbor cell is present but genuinely empty (kind 'empty', no displayText) -- both to exercise isCellVisuallyEmpty's own "present but valueless" branch, and so the print range's own populated-cell extent reaches column 1 at all (an absent cell at column 1 would leave nothing for the print range to widen the sheet's own bandable columns to).
+    // The neighbor cell is present but genuinely empty (kind 'empty', no displayText) — both to exercise isCellVisuallyEmpty's own "present but valueless" branch, and so the print range's own populated-cell extent reaches column 1 at all (an absent cell at column 1 would leave nothing for the print range to widen the sheet's own bandable columns to).
     const s = sheet(
       [
         stringCell(0, 0, "HelloWorld"),
@@ -571,7 +571,7 @@ describe("step 7: cell text alignment, overflow, and vertical positioning", () =
   });
 
   it("stretches inter-word gaps on a justified cell's own rendered (first, non-final) line, mirroring src/layout/engine.ts's own identical justify behaviour", () => {
-    // The cell's own source text carries an explicit line break ("aa bb\ncc dd"), the one way this module's own single-line-per-cell scope (see its top-of-file doc comment) ever produces more than one WrappedLine -- only the FIRST ("aa bb") is ever rendered, and since lines.length > 1 it counts as a genuinely non-final line for justification purposes. Column width 11pt minus 2*2pt padding = 7pt available -- "aa bb" is naturally 5pt wide (2 + 1 + 2, each word 2pt, the space 1pt), so it stretches to fill the remaining 2pt of slack across its own one gap, exactly as engine.ts's own justify test does.
+    // The cell's own source text carries an explicit line break ("aa bb\ncc dd"), the one way this module's own single-line-per-cell scope (see its top-of-file doc comment) ever produces more than one WrappedLine — only the FIRST ("aa bb") is ever rendered, and since lines.length > 1 it counts as a genuinely non-final line for justification purposes. Column width 11pt minus 2*2pt padding = 7pt available — "aa bb" is naturally 5pt wide (2 + 1 + 2, each word 2pt, the space 1pt), so it stretches to fill the remaining 2pt of slack across its own one gap, exactly as engine.ts's own justify test does.
     const s = sheet(
       [stringCell(0, 0, "aa bb\ncc dd", { alignment: "justify" })],
       {
@@ -581,7 +581,7 @@ describe("step 7: cell text alignment, overflow, and vertical positioning", () =
     );
     const layout = convert([s]);
     const texts = textItems(layout.pages[0]!.items);
-    expect(texts.map((t) => t.text)).toEqual(["aa", "bb"]); // only the first line ever renders -- 'cc dd' never appears
+    expect(texts.map((t) => t.text)).toEqual(["aa", "bb"]); // only the first line ever renders — 'cc dd' never appears
     expect(texts[0]?.xPt).toBeCloseTo(2, 5); // xLeft(0) + padding(2), no justify stretch on the first fragment
     expect(texts[1]?.xPt).toBeCloseTo(7, 5); // padding(2) + natural offset(3) + 2pt of distributed slack
   });
@@ -676,7 +676,7 @@ describe("step 7: a cell's own background paints as a real LayoutRect", () => {
   });
 
   it("emits no rect at all for a pattern fill that resolves to no colour, rather than a fill-less no-op one", () => {
-    // A 'pattern' fill stating neither foregroundColor nor backgroundColor (the reserved gray125 scaffolding pattern, or a theme/indexed colour this reader could not resolve) is exactly the case resolveCellFillColor's own doc comment names as returning undefined -- genuinely no fill, not a reason to still push a rect item that would render invisibly.
+    // A 'pattern' fill stating neither foregroundColor nor backgroundColor (the reserved gray125 scaffolding pattern, or a theme/indexed colour this reader could not resolve) is exactly the case resolveCellFillColor's own doc comment names as returning undefined — genuinely no fill, not a reason to still push a rect item that would render invisibly.
     const s = sheet(
       [
         stringCell(0, 0, "A", {
@@ -709,7 +709,7 @@ describe("step 7: a cell's own borders paint as real LayoutLines, one per declar
       },
     );
     const lines = lineItems(convert([s]).pages[0]!.items);
-    expect(lines).toHaveLength(2); // top and left only -- right/bottom were never declared
+    expect(lines).toHaveLength(2); // top and left only — right/bottom were never declared
     // The cell's y-down frame is (0, 0, 50, 20); its top edge is y-down 0 -> PDF y 800, its left edge x 0 running from PDF y 800 down to 780.
     expect(lines).toContainEqual(
       expect.objectContaining({
@@ -814,7 +814,7 @@ describe("step 7: a cell's own alignment/verticalAlignment override the defaults
       rows: [{ index: 0, heightPt: 20 }],
     });
     const [text] = textItems(convert([s]).pages[0]!.items);
-    expect(text!.xPt).toBeCloseTo(2, 5); // left: xLeft(0) + padding(2) -- the value-kind default would have put it at 46
+    expect(text!.xPt).toBeCloseTo(2, 5); // left: xLeft(0) + padding(2) — the value-kind default would have put it at 46
   });
 
   it("honours an explicit alignment on a STRING cell too (right, not the string default of left)", () => {
@@ -895,7 +895,7 @@ describe("convertSpreadsheetToLayout: cancellation", () => {
     ).toThrow();
   });
 
-  it("honors cancellation raised mid-run, from inside the main cell-emission loop -- not merely checked once at the top of the function", () => {
+  it("honors cancellation raised mid-run, from inside the main cell-emission loop — not merely checked once at the top of the function", () => {
     const controller = new AbortController();
     const cellCount = 200;
     const cells = Array.from({ length: cellCount }, (_, i) =>
@@ -957,7 +957,7 @@ const MI_X: MathMlNode[] = [
   },
 ];
 
-// A genuinely STACKED formula (a fraction inside a square root): its total height is well over twice its base font size, the case the single-pass height/2 heuristic over-estimates badly for -- the two-pass fit exists to size it to the declared frame instead.
+// A genuinely STACKED formula (a fraction inside a square root): its total height is well over twice its base font size, the case the single-pass height/2 heuristic over-estimates badly for — the two-pass fit exists to size it to the declared frame instead.
 const SQRT_FRAC: MathMlNode[] = [
   {
     type: "element",
@@ -1065,7 +1065,7 @@ describe("convertSpreadsheetToLayout: cell-anchored embedded formulas", () => {
       800 - 30 - formulas[0]!.box.heightPt,
       6,
     );
-    // The cell content itself is unaffected -- widening the range adds no text of its own.
+    // The cell content itself is unaffected — widening the range adds no text of its own.
     expect(textItems(layout.pages[0]!.items).map((t) => t.text)).toEqual(["A"]);
   });
 
@@ -1106,7 +1106,7 @@ describe("convertSpreadsheetToLayout: cell-anchored embedded formulas", () => {
     });
     const measurer = fakeMeasurer();
     const { formulas } = convertResult([s], measurer);
-    // Header gutter: as wide as the widest row label plus two paddings, as tall as one header line -- read back from the measurer rather than restated as a literal.
+    // Header gutter: as wide as the widest row label plus two paddings, as tall as one header line — read back from the measurer rather than restated as a literal.
     const gutterWidthPt =
       measurer.widthOfTextAtSize("1", DEFAULT_LAYOUT_FONT, 8) + 2 * 2;
     const gutterHeightPt = measurer.lineHeightAtSize(DEFAULT_LAYOUT_FONT, 8);
@@ -1171,7 +1171,7 @@ describe("convertSpreadsheetToLayout: cell-anchored embedded formulas", () => {
   });
 
   it("emits a formula anchored inside a repeat row band once per page carrying that band", () => {
-    // Two row bands (four 10pt rows, 20pt of bandable height available after the repeat row) means two pages; the repeat row -- and therefore its anchored formula -- appears on both.
+    // Two row bands (four 10pt rows, 20pt of bandable height available after the repeat row) means two pages; the repeat row — and therefore its anchored formula — appears on both.
     const cells = [0, 1, 2, 3, 4].map((row) => stringCell(row, 0, `r${row}`));
     const s = sheet(cells, {
       columns: COLUMNS_20,
@@ -1209,7 +1209,7 @@ describe("convertSpreadsheetToLayout: cell-anchored embedded formulas", () => {
   });
 });
 
-// A ContentSheetImage carries the identical anchor quartet a cell-anchored formula does, and resolves through the same axis lookup -- these tests hold that it now reaches the LayoutDocument as a real LayoutImage (it used to render nothing at all: sheets.ts emitted no image items, and convertSpreadsheetToLayout hardcoded images: {}).
+// A ContentSheetImage carries the identical anchor quartet a cell-anchored formula does, and resolves through the same axis lookup — these tests hold that it now reaches the LayoutDocument as a real LayoutImage (it used to render nothing at all: sheets.ts emitted no image items, and convertSpreadsheetToLayout hardcoded images: {}).
 function tinyPngImage(
   anchorRow: number,
   anchorColumn: number,

@@ -1,6 +1,6 @@
 import { isCompoundFile } from "./detect";
 
-// A bounded reader for the classic OLE compound-file container ([MS-CFB]): header and sector-size parsing, DIFAT/FAT chain walking, the directory entry tree, and stream extraction from both the FAT and the mini stream. It exists because the ZIP-payload spelling is not the only way an OOXML package embeds an object -- real-world Word and PowerPoint files frequently store the embeddee as an OLE compound file (word|ppt/embeddings/oleObject1.bin), whose storages and streams this reader surfaces (see documents.js#739). Structural knowledge only: it knows sectors, chains, and directory entries, never that any stream is a document.
+// A bounded reader for the classic OLE compound-file container ([MS-CFB]): header and sector-size parsing, DIFAT/FAT chain walking, the directory entry tree, and stream extraction from both the FAT and the mini stream. It exists because the ZIP-payload spelling is not the only way an OOXML package embeds an object — real-world Word and PowerPoint files frequently store the embeddee as an OLE compound file (word|ppt/embeddings/oleObject1.bin), whose storages and streams this reader surfaces (see documents.js#739). Structural knowledge only: it knows sectors, chains, and directory entries, never that any stream is a document.
 
 // [MS-CFB] 2.3 special FAT values: a chain slot either names the chain's next sector, ends it (ENDOFCHAIN), or describes the sector itself (FATSECT marks a sector holding FAT data, DIFSECT one holding DIFAT data, FREESECT marks an unused slot).
 const ENDOFCHAIN = 0xfffffffe;
@@ -17,10 +17,10 @@ const OBJECT_TYPE_STORAGE = 1;
 const OBJECT_TYPE_STREAM = 2;
 const OBJECT_TYPE_ROOT = 5;
 
-// Cumulative-extraction derivation: a compound file stores its streams uncompressed, so honest content cannot exceed the file itself -- but the FAT is attacker-controlled bytes, and nothing structural stops one sector from appearing in many chains, so a hostile file with S stream entries can each declare a chain covering the whole file and extract S x file-size bytes from an input of a few kilobytes. One budget shared across every extracted stream bounds that multiplication at a single figure. The 512 MiB is the same figure the family already grants one honest decompressed stream (byte-codec's MAX_INFLATE_OUTPUT_BYTES, re-used as archive-codec's MAX_WALK_TOTAL_BYTES): a compound file holding genuine documents decompresses nothing, so its total stream content sits well inside what one compressed stream already may.
+// Cumulative-extraction derivation: a compound file stores its streams uncompressed, so honest content cannot exceed the file itself — but the FAT is attacker-controlled bytes, and nothing structural stops one sector from appearing in many chains, so a hostile file with S stream entries can each declare a chain covering the whole file and extract S x file-size bytes from an input of a few kilobytes. One budget shared across every extracted stream bounds that multiplication at a single figure. The 512 MiB is the same figure the family already grants one honest decompressed stream (byte-codec's MAX_INFLATE_OUTPUT_BYTES, re-used as archive-codec's MAX_WALK_TOTAL_BYTES): a compound file holding genuine documents decompresses nothing, so its total stream content sits well inside what one compressed stream already may.
 export const MAX_CFB_TOTAL_STREAM_BYTES = 512 * 1024 * 1024;
 
-// Thrown when input claiming the compound-file signature does not conform to [MS-CFB]: a bad header field, a chain that cycles or points outside the file, a directory entry outside the entry array, or a declared stream size its chain cannot fill. A distinct error class (rather than a plain Error) because malformed-container detection is one half of this package's contract -- a consumer must be able to catch structural failure by name and decide its own degradation, rather than parse a message string.
+// Thrown when input claiming the compound-file signature does not conform to [MS-CFB]: a bad header field, a chain that cycles or points outside the file, a directory entry outside the entry array, or a declared stream size its chain cannot fill. A distinct error class (rather than a plain Error) because malformed-container detection is one half of this package's contract — a consumer must be able to catch structural failure by name and decide its own degradation, rather than parse a message string.
 export class CompoundFileFormatError extends Error {
   constructor(message: string) {
     super(message);
@@ -28,7 +28,7 @@ export class CompoundFileFormatError extends Error {
   }
 }
 
-// One named stream: its path is the slash-joined names of the storages enclosing it plus its own name, root-relative with no leading slash (a root-level stream's path is just its name -- the OLE packaging's "Package" stream reads back as 'Package'). This is the package's compound-file vocabulary in both directions, not the reader's alone: writeCompoundFile (src/cfb/write.ts) takes the same array this returns, so re-writing what was read is a well-typed round trip rather than a translation between two shapes.
+// One named stream: its path is the slash-joined names of the storages enclosing it plus its own name, root-relative with no leading slash (a root-level stream's path is just its name — the OLE packaging's "Package" stream reads back as 'Package'). This is the package's compound-file vocabulary in both directions, not the reader's alone: writeCompoundFile (src/cfb/write.ts) takes the same array this returns, so re-writing what was read is a well-typed round trip rather than a translation between two shapes.
 export interface CompoundFileStream {
   readonly path: string;
   readonly bytes: Uint8Array<ArrayBuffer>;
@@ -57,7 +57,7 @@ function u16(view: DataView, offset: number): number {
   return view.getUint16(offset, true);
 }
 
-// Reads every stream out of a compound file, in deterministic in-order tree-walk order (left siblings, the entry itself, right siblings -- the order the spec's name-sorted sibling trees produce). Throws CompoundFileFormatError on any structural nonconformance rather than returning a partial listing: a malformed container must fail loudly, never look complete while silently missing streams.
+// Reads every stream out of a compound file, in deterministic in-order tree-walk order (left siblings, the entry itself, right siblings — the order the spec's name-sorted sibling trees produce). Throws CompoundFileFormatError on any structural nonconformance rather than returning a partial listing: a malformed container must fail loudly, never look complete while silently missing streams.
 export function readCompoundFile(
   bytes: Uint8Array<ArrayBuffer>,
   options: ReadCompoundFileOptions = {},
@@ -115,7 +115,7 @@ export function readCompoundFile(
   const firstMiniFatSector = u32(view, 0x3c);
   const firstDifatSector = u32(view, 0x44);
 
-  // Sector N occupies bytes [(N + 1) * sectorSize, (N + 2) * sectorSize): the header takes the first sectorSize bytes of the file (the 3584 bytes past version 4's 512-byte header are zero padding; version 3's header fills its 512-byte sector exactly), so a sector number is valid only when the file fully contains its end. This derivation doubles as every chain's cycle bound -- a chain of more than sectorCount sectors must revisit one, because every valid sector number is below sectorCount.
+  // Sector N occupies bytes [(N + 1) * sectorSize, (N + 2) * sectorSize): the header takes the first sectorSize bytes of the file (the 3584 bytes past version 4's 512-byte header are zero padding; version 3's header fills its 512-byte sector exactly), so a sector number is valid only when the file fully contains its end. This derivation doubles as every chain's cycle bound — a chain of more than sectorCount sectors must revisit one, because every valid sector number is below sectorCount.
   const sectorCount = Math.floor(bytes.length / sectorSize) - 1;
   if (sectorCount < 1) {
     throw new CompoundFileFormatError(
@@ -179,7 +179,7 @@ export function readCompoundFile(
   }
   const fat = new DataView(fatBytes.buffer);
 
-  // No offset<0 guard: sector is always a chain's own start (a u32 header/entry read) or a prior fatEntry return (itself a u32 read), so it can never actually be negative -- a defensive check against an input this closure never receives.
+  // No offset<0 guard: sector is always a chain's own start (a u32 header/entry read) or a prior fatEntry return (itself a u32 read), so it can never actually be negative — a defensive check against an input this closure never receives.
   const fatEntry = (sector: number): number => {
     const offset = sector * 4;
     if (offset + 4 > fatBytes.length) {
@@ -190,7 +190,7 @@ export function readCompoundFile(
     return fat.getUint32(offset, true);
   };
 
-  // Cycle detection is a direct visited-set membership check, not a count-based pigeonhole bound (ids.length >= sectorCount): the two are equivalent in the cases they actually reject, but a revisited sector's own FAT entry is deterministic, so a count-based bound only ever fires one or more full cycles after the true repeat -- every intervening iteration replays a step this same chain already took, producing byte-for-byte the same eventual outcome regardless of exactly which iteration trips the bound. A membership check instead fires on the exact iteration a sector is seen twice, matching the directory tree walk's own visited-set below.
+  // Cycle detection is a direct visited-set membership check, not a count-based pigeonhole bound (ids.length >= sectorCount): the two are equivalent in the cases they actually reject, but a revisited sector's own FAT entry is deterministic, so a count-based bound only ever fires one or more full cycles after the true repeat — every intervening iteration replays a step this same chain already took, producing byte-for-byte the same eventual outcome regardless of exactly which iteration trips the bound. A membership check instead fires on the exact iteration a sector is seen twice, matching the directory tree walk's own visited-set below.
   const chainSectorIds = (start: number): number[] => {
     const ids: number[] = [];
     const visited = new Set<number>();
@@ -259,7 +259,7 @@ export function readCompoundFile(
     });
   }
   const root = entries[0];
-  // Only the root's type matters to reading -- its stream is the mini stream and its child starts the entry tree; its own name is the "Root Entry" convention and nothing depends on it.
+  // Only the root's type matters to reading — its stream is the mini stream and its child starts the entry tree; its own name is the "Root Entry" convention and nothing depends on it.
   if (root?.objectType !== OBJECT_TYPE_ROOT) {
     throw new CompoundFileFormatError(
       "the first directory entry is not the root storage entry (object type 5), as [MS-CFB] 2.6.1 requires",
@@ -344,7 +344,7 @@ export function readCompoundFile(
     return out.slice(0, entry.size);
   };
 
-  // The entry tree: a storage's child link points at one child, whose left/right siblings are the storage's other children, and [MS-CFB] recommends (but only recommends) producers keep that sibling tree sorted and balanced -- so traversal is structural, not assuming any shape. In-order (left, self, right) gives the deterministic order a name-sorted tree would have. The walk is iterative, not recursive: sibling chains in real compound files can be long (balancing is only recommended), and a recursive walk would spend the call stack on them, failing a corrupted deep chain with a stack overflow instead of this reader's named error. A visited set catches sibling/child cycles and bounds each entry to one visit.
+  // The entry tree: a storage's child link points at one child, whose left/right siblings are the storage's other children, and [MS-CFB] recommends (but only recommends) producers keep that sibling tree sorted and balanced — so traversal is structural, not assuming any shape. In-order (left, self, right) gives the deterministic order a name-sorted tree would have. The walk is iterative, not recursive: sibling chains in real compound files can be long (balancing is only recommended), and a recursive walk would spend the call stack on them, failing a corrupted deep chain with a stack overflow instead of this reader's named error. A visited set catches sibling/child cycles and bounds each entry to one visit.
   const streams: CompoundFileStream[] = [];
   const visited = new Set<number>();
   type Frame =
@@ -366,7 +366,7 @@ export function readCompoundFile(
         continue;
       }
       const entry = entries[id];
-      // First encounter: bounds, cycle, and shape validation happen here only -- the self-stage revisit of the same entry must not trip the visited set. No separate id >= entryCount guard: entries is a dense array of exactly entryCount elements, so any id at or past that length reads back as undefined regardless of how large id is -- the entry === undefined check alone already catches every out-of-range id.
+      // First encounter: bounds, cycle, and shape validation happen here only — the self-stage revisit of the same entry must not trip the visited set. No separate id >= entryCount guard: entries is a dense array of exactly entryCount elements, so any id at or past that length reads back as undefined regardless of how large id is — the entry === undefined check alone already catches every out-of-range id.
       if (entry === undefined) {
         throw new CompoundFileFormatError(
           `the directory tree links to entry ${id}, which is outside the directory's ${entryCount} entries`,

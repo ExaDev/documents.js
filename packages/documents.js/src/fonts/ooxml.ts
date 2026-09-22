@@ -1,6 +1,6 @@
 // Source-embedded font extraction for OOXML packages. A docx/pptx that embeds its fonts already carries the exact bytes the document was authored against, which beats every substitute this package could reach for: the vendored Carlito/Caladea faces pdf-codec falls back to are metric-compatible with Calibri/Cambria and nothing else, and the standard-14 faces are metric-compatible with Arial/Times New Roman and nothing else. Whenever the source package embedded a face, using it is not an optimisation but the only path that renders the document's real typeface at its real metrics.
 //
-// The two formats declare embedded fonts in completely different parts, but resolve to the same three facts per face: a family name, a bold/italic pair, and a relationship id pointing at the font part. docx puts them in word/fontTable.xml (w:font/w:name plus w:embedRegular/w:embedBold/w:embedItalic/w:embedBoldItalic, each with r:id and a w:fontKey GUID); pptx puts them in ppt/presentation.xml (p:embeddedFontLst/p:embeddedFont, whose p:font carries `typeface` and whose p:regular/p:bold/p:italic/p:boldItalic carry r:id alone, with no font key). Everything downstream of resolving those three facts -- reading the part, sniffing whether its bytes are obfuscated, XORing them back -- is shared.
+// The two formats declare embedded fonts in completely different parts, but resolve to the same three facts per face: a family name, a bold/italic pair, and a relationship id pointing at the font part. docx puts them in word/fontTable.xml (w:font/w:name plus w:embedRegular/w:embedBold/w:embedItalic/w:embedBoldItalic, each with r:id and a w:fontKey GUID); pptx puts them in ppt/presentation.xml (p:embeddedFontLst/p:embeddedFont, whose p:font carries `typeface` and whose p:regular/p:bold/p:italic/p:boldItalic carry r:id alone, with no font key). Everything downstream of resolving those three facts — reading the part, sniffing whether its bytes are obfuscated, XORing them back — is shared.
 //
 // A face this extractor recovers is deliberately NOT filtered by what the document actually uses. Word and PowerPoint both subset an embedded font to the glyphs the document contained at save time, so a character this package synthesises rather than reads (a list bullet, sheets.ts's own ### column-overflow marker) can legitimately be absent from a face that is otherwise exactly right for every real character on the page. That is a per-character concern, resolved per character by pdf-codec's own writePdf: a cmap miss on an embedded face reports through onMissingGlyph and falls back for that one character, never failing the run. Dropping the whole face here because one synthesised glyph might be missing would trade a faithful render for a substituted one over a character the source document never contained.
 import type { Package, Relationship, XmlElement } from "ooxml.js";
@@ -32,7 +32,7 @@ const DOCX_EMBED_ELEMENTS: readonly (readonly [
   ["w:embedBoldItalic", true, true],
 ];
 
-// pptx's own equivalent, inside p:embeddedFont. Same four faces, different vocabulary, and no font-key attribute anywhere -- see obfuscation.ts on why that does not need a format branch here.
+// pptx's own equivalent, inside p:embeddedFont. Same four faces, different vocabulary, and no font-key attribute anywhere — see obfuscation.ts on why that does not need a format branch here.
 const PPTX_EMBED_ELEMENTS: readonly (readonly [
   tag: string,
   bold: boolean,
@@ -219,7 +219,7 @@ function extractPptxFonts(pkg: Package): ProvidedFont[] {
   return out;
 }
 
-// Every font face a docx or pptx package embeds, as pdf-codec's own ProvidedFont shape -- ready to hand straight to createFontRegistry's `sourceFonts`, where an exact family+bold+italic match wins over both a caller-supplied face and the vendored substitutes. An empty array means the package embedded nothing, which is the ordinary case for a document saved without font embedding turned on.
+// Every font face a docx or pptx package embeds, as pdf-codec's own ProvidedFont shape — ready to hand straight to createFontRegistry's `sourceFonts`, where an exact family+bold+italic match wins over both a caller-supplied face and the vendored substitutes. An empty array means the package embedded nothing, which is the ordinary case for a document saved without font embedding turned on.
 export function extractOoxmlEmbeddedFonts(
   pkg: Package,
   kind: "docx" | "pptx",

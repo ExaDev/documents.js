@@ -3,7 +3,7 @@ import type { PdfDiagnosticSink } from "./diagnostics";
 import type { PdfDict } from "./objects";
 import { asNumber, dictGet } from "./objects";
 
-// PDF's own /Predictor convention (ISO 32000-1 7.4.4.4) for Flate/LZW-filtered stream data: 1 = none; 2 = TIFF Predictor 2 (horizontal differencing between same-component samples in adjacent pixels); >=10 selects one of PNG's five per-scanline filters, chosen independently per row via a leading filter-type byte -- exactly image/png-filter.ts's own unfilterScanlines. Cross-reference streams are almost always /Predictor 12, which is why that PNG module sits on the critical path for reading modern PDFs even in documents with no images at all.
+// PDF's own /Predictor convention (ISO 32000-1 7.4.4.4) for Flate/LZW-filtered stream data: 1 = none; 2 = TIFF Predictor 2 (horizontal differencing between same-component samples in adjacent pixels); >=10 selects one of PNG's five per-scanline filters, chosen independently per row via a leading filter-type byte — exactly image/png-filter.ts's own unfilterScanlines. Cross-reference streams are almost always /Predictor 12, which is why that PNG module sits on the critical path for reading modern PDFs even in documents with no images at all.
 export interface PredictorParams {
   readonly predictor: number;
   readonly colors: number;
@@ -65,7 +65,7 @@ export function applyPredictor(
   return data;
 }
 
-// Differences each component against the same component in the previous pixel of the same row, then undoes that differencing by summing left to right -- the inverse of what an encoder's forward pass computes. Only 8- and 16-bit components are supported: TIFF predictor 2 at 1/2/4-bit depth would need sub-byte bit-packing arithmetic and is vanishingly rare in real-world PDF streams (xref streams, the dominant real-world predictor consumer, always use the PNG predictors instead).
+// Differences each component against the same component in the previous pixel of the same row, then undoes that differencing by summing left to right — the inverse of what an encoder's forward pass computes. Only 8- and 16-bit components are supported: TIFF predictor 2 at 1/2/4-bit depth would need sub-byte bit-packing arithmetic and is vanishingly rare in real-world PDF streams (xref streams, the dominant real-world predictor consumer, always use the PNG predictors instead).
 function applyTiffPredictor(
   data: Uint8Array<ArrayBuffer>,
   params: PredictorParams,

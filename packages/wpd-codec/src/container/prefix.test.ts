@@ -16,7 +16,7 @@ function packetsOfGenericHeader() {
 }
 
 describe("readPrefixPackets", () => {
-  // The SDK's generic-header example states in prose that this prefix carries "the 5 default indexes and associated packets" and that the document area begins at 718. Five index slots of fourteen bytes fill 512..582, the first being the index header, so four real packets follow -- and their sizes and pointers must tile 582..718 exactly with no gap.
+  // The SDK's generic-header example states in prose that this prefix carries "the 5 default indexes and associated packets" and that the document area begins at 718. Five index slots of fourteen bytes fill 512..582, the first being the index header, so four real packets follow — and their sizes and pointers must tile 582..718 exactly with no gap.
   it("reads the four packets of the SDK's own generic header example", () => {
     // Compared without each packet's own bytes, which the next test checks by length; an index record and the packet data it points at are two separate claims.
     expect(
@@ -108,7 +108,7 @@ describe("readPrefixPackets", () => {
     );
   });
 
-  // Packet Type 0 ("Index Entry Is Available or Was Deleted") is a live slot whose size and pointer fields mean nothing -- it must still consume a prefix ID (recorded with empty bytes), never be resolved through sliceAt against its own (meaningless) size and offset fields the way a real packet is.
+  // Packet Type 0 ("Index Entry Is Available or Was Deleted") is a live slot whose size and pointer fields mean nothing — it must still consume a prefix ID (recorded with empty bytes), never be resolved through sliceAt against its own (meaningless) size and offset fields the way a real packet is.
   it("records a deleted index slot with empty bytes rather than resolving its meaningless size and offset", () => {
     const bytes = buildWpdFile(
       [0],
@@ -122,7 +122,7 @@ describe("readPrefixPackets", () => {
 });
 
 describe("readTypefaceName", () => {
-  // The example's Desired Font Descriptor carries primary family ID 0x0911 (TimesRoman in the SDK's own family enumeration), font type 0x8B (TrueType), source file type 0x14 (.DRS), and a 54-byte typeface name -- "Times New Roman Regular" as a WP word string, followed by the three empty strings the descriptor's four-string name field always ends with.
+  // The example's Desired Font Descriptor carries primary family ID 0x0911 (TimesRoman in the SDK's own family enumeration), font type 0x8B (TrueType), source file type 0x14 (.DRS), and a 54-byte typeface name — "Times New Roman Regular" as a WP word string, followed by the three empty strings the descriptor's four-string name field always ends with.
   it("reads the typeface family from the SDK example's font descriptor", () => {
     const descriptor = packetsOfGenericHeader().find(
       (packet) => packet.packetType === PACKET_TYPE_DESIRED_FONT_DESCRIPTOR,
@@ -143,7 +143,7 @@ describe("readTypefaceName", () => {
     expect(readTypefaceName(packet)).toBeUndefined();
   });
 
-  // A descriptor whose stated name length (6) is genuinely shorter than the bytes physically remaining in the packet (12, six whole word slots) -- the SDK's own generic-header example never exercises this because its name length happens to equal its remaining bytes exactly, so the two candidate bounds always agree there.
+  // A descriptor whose stated name length (6) is genuinely shorter than the bytes physically remaining in the packet (12, six whole word slots) — the SDK's own generic-header example never exercises this because its name length happens to equal its remaining bytes exactly, so the two candidate bounds always agree there.
   it("stops at the stated name length even though more word slots physically follow it", () => {
     const packet = new Uint8Array(36);
     packet.set(word(6), 22); // [typeface name length] = 6 bytes = 3 words
@@ -187,7 +187,7 @@ describe("readGeneralWpTextBlocks", () => {
     ).toBeUndefined();
   });
 
-  // A single zero-length block whose one size field exactly fills out the packet, with no room to spare -- sizesEnd (4 + blockCount * 2 = 6) lands exactly on the packet's own six-byte length, the one boundary where "runs past" and "fits exactly" agree or disagree depending on which comparison runs.
+  // A single zero-length block whose one size field exactly fills out the packet, with no room to spare — sizesEnd (4 + blockCount * 2 = 6) lands exactly on the packet's own six-byte length, the one boundary where "runs past" and "fits exactly" agree or disagree depending on which comparison runs.
   it("reads a zero-length block when its own size field exactly fills the packet", () => {
     const bytes = new Uint8Array([1, 0, 0, 0, 0, 0]); // [count=1] [offset=0] [size1=0]
     expect(readGeneralWpTextBlocks(bytes)).toEqual(new Uint8Array(0));

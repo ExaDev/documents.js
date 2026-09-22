@@ -11,7 +11,7 @@ function tablePrl(value: number, operand: readonly number[]): Prl {
   return { sprm: decodeSprm(value), operand: Uint8Array.from(operand) };
 }
 
-/** A minimal sprmTDefTable Prl: `boundaries.length - 1` columns, each with an all-zero 20-byte TC80 (no merge, no border) -- unless `tc80Count` states fewer, the format's own "fewer TC80s than columns" case ([MS-DOC] 2.9.313's own "the remaining columns are formatted with the default TC80 formatting"). */
+/** A minimal sprmTDefTable Prl: `boundaries.length - 1` columns, each with an all-zero 20-byte TC80 (no merge, no border) — unless `tc80Count` states fewer, the format's own "fewer TC80s than columns" case ([MS-DOC] 2.9.313's own "the remaining columns are formatted with the default TC80 formatting"). */
 function defTablePrl(
   boundaries: readonly number[],
   tc80Count = boundaries.length - 1,

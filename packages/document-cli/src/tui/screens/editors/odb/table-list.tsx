@@ -6,10 +6,10 @@ import { useAppDispatch, useAppState } from "../../../state/context.js";
 import { anyOverlayOpen } from "../../../state/types.js";
 import { requireOdbDocument } from "./shared.js";
 
-// The title line, the hint line beneath the list, and the status line at the bottom -- one more row of chrome than ListView's own default reserves for a plain title-plus-status screen.
+// The title line, the hint line beneath the list, and the status line at the bottom — one more row of chrome than ListView's own default reserves for a plain title-plus-status screen.
 const TABLE_LIST_RESERVED_ROWS = 5;
 
-// The root screen of every open `.odb` document (see `rootScreenForFormat`): one row per table, each showing its own shape at a glance so a wide database is easy to scan before drilling into any one table's rows. It is also the only way into the form and report browsers, via `f` and `r` -- a `.odb`'s tables, forms, and reports are three independent collections read from one package, and this screen is the one place all three are reachable from.
+// The root screen of every open `.odb` document (see `rootScreenForFormat`): one row per table, each showing its own shape at a glance so a wide database is easy to scan before drilling into any one table's rows. It is also the only way into the form and report browsers, via `f` and `r` — a `.odb`'s tables, forms, and reports are three independent collections read from one package, and this screen is the one place all three are reachable from.
 export function OdbTableListScreen(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();

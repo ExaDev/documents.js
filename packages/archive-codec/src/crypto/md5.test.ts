@@ -43,7 +43,7 @@ describe("splitBitLength64", () => {
   });
 
   it("carries the excess into the high half once the bit length passes 2^32", () => {
-    // A message longer than 512 MiB overflows the low 32-bit half -- exercised here directly against a fabricated bit length, since hashing an actual 512 MiB buffer to reach this boundary would make the suite itself pathologically slow.
+    // A message longer than 512 MiB overflows the low 32-bit half — exercised here directly against a fabricated bit length, since hashing an actual 512 MiB buffer to reach this boundary would make the suite itself pathologically slow.
     expect(splitBitLength64(0x100000005)).toEqual({ low: 5, high: 1 });
   });
 
@@ -54,7 +54,7 @@ describe("splitBitLength64", () => {
 
 describe("writeBitLength64", () => {
   it("writes both halves little-endian, including a non-zero high half", () => {
-    // A bit length whose high half is non-zero and distinct from its low half, written directly rather than via an actual >512 MiB message -- proving the high half's own byte order without hashing anything pathologically large. A big-endian mistake on the high half would write 0x02000000 here, not 0x00000002.
+    // A bit length whose high half is non-zero and distinct from its low half, written directly rather than via an actual >512 MiB message — proving the high half's own byte order without hashing anything pathologically large. A big-endian mistake on the high half would write 0x02000000 here, not 0x00000002.
     const buffer = new ArrayBuffer(8);
     const view = new DataView(buffer);
     writeBitLength64(view, 0, 0x200000005);

@@ -50,7 +50,7 @@ const RED_TEXT = [0x42, 0x2a, 0x06]; // sprmCIco, palette entry 6.
 const CENTRED = [0x61, 0x24, 0x01]; // sprmPJc, logical centre.
 const SPACE_BEFORE_12PT = [0x13, 0xa4, 0xf0, 0x00]; // sprmPDyaBefore, 240 twips.
 const PAGE_BREAK_BEFORE = [0x07, 0x24, 0x01]; // sprmPFPageBreakBefore, Bool8 true.
-// A section grpprl stating a page 600x800pt with a 90/54/45/36pt left/right/top/bottom margin -- one Prl per sprm, none of them the format's own default value, so a test reading them back proves the real field rather than coincidentally matching a fallback.
+// A section grpprl stating a page 600x800pt with a 90/54/45/36pt left/right/top/bottom margin — one Prl per sprm, none of them the format's own default value, so a test reading them back proves the real field rather than coincidentally matching a fallback.
 const SECTION_GEOMETRY = [
   0x1f,
   0xb0,
@@ -385,7 +385,7 @@ describe("readDocContent", () => {
     ).toEqual(["second section"]);
   });
 
-  it("reads a manual page break -- a 0x000C where no section ends -- as a pageBreak block after the paragraph it terminates", () => {
+  it("reads a manual page break — a 0x000C where no section ends — as a pageBreak block after the paragraph it terminates", () => {
     const document = readDocContent(
       buildDoc({
         paragraphs: [
@@ -440,7 +440,7 @@ describe("readDocContent", () => {
   });
 
   it("never treats the first section's own startCp as a manual-page-break boundary, even if PlcfSed's own aCp[0] were corrupted off its structural 0", () => {
-    // The first section's startCp is always 0 in any real file (nothing precedes the document's own first character), so no ordinary construction can ever place a real paragraph's endCp on it -- corrupting PlcfSed's own aCp[0] directly is the only way to prove markManualPageBreaks genuinely excludes the first section rather than happening to never collide with it.
+    // The first section's startCp is always 0 in any real file (nothing precedes the document's own first character), so no ordinary construction can ever place a real paragraph's endCp on it — corrupting PlcfSed's own aCp[0] directly is the only way to prove markManualPageBreaks genuinely excludes the first section rather than happening to never collide with it.
     const SECOND_GEOMETRY = [0x1f, 0xb0, 0x40, 0x1f, 0x20, 0xb0, 0xa0, 0x27];
     const bytes = buildDoc({
       paragraphs: [
@@ -456,7 +456,7 @@ describe("readDocContent", () => {
       FIB_FC_LCB_BLOB_OFFSET + FC_LCB_VALUE_INDEX.fcPlcfSed * 4,
     );
     const patchedTable = new Uint8Array(table);
-    // PlcfSed's own aCp[0] sits at its first 4 bytes -- corrupted here from the real 0 to 4, "one"'s own endCp (3 characters plus its own terminator).
+    // PlcfSed's own aCp[0] sits at its first 4 bytes — corrupted here from the real 0 to 4, "one"'s own endCp (3 characters plus its own terminator).
     new DataView(patchedTable.buffer).setUint32(fcPlcfSed, 4, true);
     const document = readDocContent(
       compoundFile([
@@ -533,8 +533,8 @@ describe("readDocContent", () => {
     ]);
   });
 
-  // The spelling a real producer writes for note stories: no separate guard paragraph, the story ending at its own final content mark (confirmed against a LibreOffice-authored .doc -- without this fix, that producer's single-paragraph footnotes read as "" and its multi-paragraph ones lost their last paragraph). The guard spelling every test above uses is the other legal shape and must keep reading identically.
-  it("reads a note story with no separate guard paragraph -- the real-producer spelling -- without dropping its last paragraph", () => {
+  // The spelling a real producer writes for note stories: no separate guard paragraph, the story ending at its own final content mark (confirmed against a LibreOffice-authored .doc — without this fix, that producer's single-paragraph footnotes read as "" and its multi-paragraph ones lost their last paragraph). The guard spelling every test above uses is the other legal shape and must keep reading identically.
+  it("reads a note story with no separate guard paragraph — the real-producer spelling — without dropping its last paragraph", () => {
     const document = readDocContent(
       buildDoc({
         paragraphs: [{ runs: [{ text: "main" }] }],
@@ -572,7 +572,7 @@ describe("readDocContent", () => {
   });
 
   it("reads header/footer stories as real block flow, positioned by section and slot, with an empty story omitted entirely", () => {
-    // Plcfhdd's own fixed layout: six separator stories (all empty here, since nothing under test needs them), then one section's own six -- evenHeader, oddHeader, evenFooter, oddFooter, firstHeader, firstFooter -- only the odd header and odd footer given real content, the rest left empty.
+    // Plcfhdd's own fixed layout: six separator stories (all empty here, since nothing under test needs them), then one section's own six — evenHeader, oddHeader, evenFooter, oddFooter, firstHeader, firstFooter — only the odd header and odd footer given real content, the rest left empty.
     const document = readDocContent(
       buildDoc({
         paragraphs: [{ runs: [{ text: "main text" }] }],
@@ -707,7 +707,7 @@ describe("readDocContent", () => {
     expect(paragraphAt(document, 0).styleId).toBe("heading 1");
   });
 
-  // Issue #1005: a style's own grLPUpxSw was read for identity only (name, kind, base) and never for its own formatting sets, so a "heading 1" paragraph carried its styleId but none of the boldness, size, or spacing the style itself supplies. These pin the fix -- both the paragraph-level and run-level halves of a style's own formatting, the "more specific wins" precedence up an istdBase inheritance chain, and every layer's own precedence over the one beneath it.
+  // Issue #1005: a style's own grLPUpxSw was read for identity only (name, kind, base) and never for its own formatting sets, so a "heading 1" paragraph carried its styleId but none of the boldness, size, or spacing the style itself supplies. These pin the fix — both the paragraph-level and run-level halves of a style's own formatting, the "more specific wins" precedence up an istdBase inheritance chain, and every layer's own precedence over the one beneath it.
   describe("resolves a style's own formatting (#1005)", () => {
     it("folds a paragraph style's own grpprlPapx into the paragraph, with no direct exception present", () => {
       const document = readDocContent(
@@ -748,7 +748,7 @@ describe("readDocContent", () => {
         }),
       );
       const paragraph = paragraphAt(document, 0);
-      // The style's own spacing still applies -- direct formatting overrides only the properties it actually touches, not the whole style.
+      // The style's own spacing still applies — direct formatting overrides only the properties it actually touches, not the whole style.
       expect(paragraph.spacingBeforePt).toBe(12);
       expect(paragraph.alignment).toBe("center");
     });
@@ -769,7 +769,7 @@ describe("readDocContent", () => {
         }),
       );
       const run = paragraphAt(document, 0).runs[0];
-      // The style's own bold and size still apply -- the run's own exception only touches italic.
+      // The style's own bold and size still apply — the run's own exception only touches italic.
       expect(run?.bold).toBe(true);
       expect(run?.sizePt).toBe(24);
       expect(run?.italic).toBe(true);
@@ -782,7 +782,7 @@ describe("readDocContent", () => {
             { name: "Normal" },
             // heading 1: bold + 24pt, no base.
             { name: "heading 1", chpxGrpprl: [...BOLD_ON, ...SIZE_24PT] },
-            // heading 2: based on heading 1, overrides only the size to 12pt (half-points 24) -- bold must still come from the base, and 12pt (not 24pt) must win for size.
+            // heading 2: based on heading 1, overrides only the size to 12pt (half-points 24) — bold must still come from the base, and 12pt (not 24pt) must win for size.
             {
               name: "heading 2",
               istdBase: 1,
@@ -827,7 +827,7 @@ describe("readDocContent", () => {
     });
 
     it("resolves no formatting at all for a table- or numbering-kind style, without throwing", () => {
-      // stk 3 (table) and 4 (numbering) carry StkTableGRLPUPX/StkListGRLPUPX, a differently-shaped formatting set parseGrLPUpxSw does not read -- a paragraph naming one as its istd (an unusual document, but not a malformed one) must still read cleanly, with nothing folded in from the style.
+      // stk 3 (table) and 4 (numbering) carry StkTableGRLPUPX/StkListGRLPUPX, a differently-shaped formatting set parseGrLPUpxSw does not read — a paragraph naming one as its istd (an unusual document, but not a malformed one) must still read cleanly, with nothing folded in from the style.
       const document = readDocContent(
         buildDoc({
           styles: [{ name: "Normal" }, { name: "Table Grid", stk: 3 }],
@@ -853,7 +853,7 @@ describe("readDocContent", () => {
     });
   });
 
-  // No sprmPFInTable is set on either paragraph here, so these cell marks sit outside any table -- the case this asserts is a bare cell-mark character still ending a paragraph on its own account (endsParagraph's own rule), not table grouping, which table/read.test.ts covers directly.
+  // No sprmPFInTable is set on either paragraph here, so these cell marks sit outside any table — the case this asserts is a bare cell-mark character still ending a paragraph on its own account (endsParagraph's own rule), not table grouping, which table/read.test.ts covers directly.
   it("treats a cell mark outside a table as an ordinary paragraph end", () => {
     const document = readDocContent(
       buildDoc({
@@ -869,7 +869,7 @@ describe("readDocContent", () => {
 
   // sprmPHugePapx (0x6646), hand-encoded: a lone first Prl whose 4-byte operand is a Data-stream offset.
   const HUGE_PAPX_AT_0 = [0x46, 0x66, 0x00, 0x00, 0x00, 0x00];
-  // A PrcData (cbGrpprl then GrpPrl) whose GrpPrl states sprmPDxaLeft 720 twips and sprmPDyaBefore 240 twips -- 11 bytes of GrpPrl, at or past the 10-byte minimum [MS-DOC] 2.6.2's own sprmPHugePapx entry requires of a referenced PrcData.
+  // A PrcData (cbGrpprl then GrpPrl) whose GrpPrl states sprmPDxaLeft 720 twips and sprmPDyaBefore 240 twips — 11 bytes of GrpPrl, at or past the 10-byte minimum [MS-DOC] 2.6.2's own sprmPHugePapx entry requires of a referenced PrcData.
   const indirectGrpPrl = [
     0x5e,
     0x84,
@@ -893,7 +893,7 @@ describe("readDocContent", () => {
     const document = readDocContent(
       buildDoc({
         paragraphs: [
-          // The direct grpprl opens with sprmPHugePapx naming the PrcData at Data offset 0, then a sprmPJc the PrcData's own GrpPrl displaces -- "it MUST NOT process any more Prl elements in the array that contained the sprmPHugePapx".
+          // The direct grpprl opens with sprmPHugePapx naming the PrcData at Data offset 0, then a sprmPJc the PrcData's own GrpPrl displaces — "it MUST NOT process any more Prl elements in the array that contained the sprmPHugePapx".
           {
             runs: [{ text: "indirect" }],
             grpprl: [...HUGE_PAPX_AT_0, 0x61, 0x24, 0x01],
@@ -913,7 +913,7 @@ describe("readDocContent", () => {
 
   it("throws on a sprmPHugePapx chain that never terminates, rather than looping", () => {
     const loopGrpPrl = [
-      ...HUGE_PAPX_AT_0, // names the PrcData at offset 0 -- this very one.
+      ...HUGE_PAPX_AT_0, // names the PrcData at offset 0 — this very one.
       0x07,
       0x24,
       0x00, // sprmPFPageBreakBefore, false, padding the GrpPrl past the 10-byte minimum.
@@ -944,7 +944,7 @@ describe("readDocContent", () => {
   });
 
   it("reads a run of sprmPFInTable paragraphs that never closes a row as paragraphs, not a refusal", () => {
-    // The genuine Word 2000 shape: title-page paragraphs each carrying sprmPFInTable and sprmPItap, with no cell mark and no row mark anywhere -- a run that states zero rows and therefore no table at all (see tryAssembleTable's own note).
+    // The genuine Word 2000 shape: title-page paragraphs each carrying sprmPFInTable and sprmPItap, with no cell mark and no row mark anywhere — a run that states zero rows and therefore no table at all (see tryAssembleTable's own note).
     const inTable = [
       0x16,
       0x24,
@@ -972,7 +972,7 @@ describe("readDocContent", () => {
   });
 
   it("reads the same never-closes-a-row run as paragraphs even at the end of a non-last section, not a refusal", () => {
-    // Only the true last section's own walk ever passes documentStreamEnds true to assembleBlocks -- an earlier section ending in this identical unclosed run must still degrade to paragraphs (the wider document continues past it, in its own next section), not throw the "ends without a row-ending mark" refusal that firing here would mean documentStreamEnds leaked into a section that is not actually the document's last.
+    // Only the true last section's own walk ever passes documentStreamEnds true to assembleBlocks — an earlier section ending in this identical unclosed run must still degrade to paragraphs (the wider document continues past it, in its own next section), not throw the "ends without a row-ending mark" refusal that firing here would mean documentStreamEnds leaked into a section that is not actually the document's last.
     const inTable = [
       0x16,
       0x24,
@@ -1164,7 +1164,7 @@ describe("readDocContent", () => {
     const original = buildDoc({
       paragraphs: [
         { runs: [{ text: "first" }] },
-        // Its own direct character formatting, not shared with "first" -- a wrong (unsliced) fcs handed to buildRuns for this trailing text would resolve formatting from "first"'s own byte range instead, so this only passes when the trailing text's own bytes are genuinely what gets looked up.
+        // Its own direct character formatting, not shared with "first" — a wrong (unsliced) fcs handed to buildRuns for this trailing text would resolve formatting from "first"'s own byte range instead, so this only passes when the trailing text's own bytes are genuinely what gets looked up.
         { runs: [{ text: "second", grpprl: BOLD_ON }] },
       ],
     });
@@ -1240,7 +1240,7 @@ describe("readDocContent", () => {
     });
 
     it("keeps the istd-derived heading level, ignoring sprmPOutLvl entirely, when the paragraph's own istd already supplies one", () => {
-      const outlineLevel5 = [0x40, 0x26, 5]; // sprmPOutLvl, level 5 -- a different level than the style's own istd would derive.
+      const outlineLevel5 = [0x40, 0x26, 5]; // sprmPOutLvl, level 5 — a different level than the style's own istd would derive.
       const document = readDocContent(
         buildDoc({
           styles: [{ name: "Normal" }, { name: "heading 1" }],
@@ -1328,7 +1328,7 @@ describe("readDocContent", () => {
               {
                 text: `${begin} HYPERLINK "https://example.com" ${separator}plain`,
               },
-              // A distinct exception from the result's first run, so the field's result is genuinely two runs rather than one -- the case that distinguishes tagging every result run from tagging only resultStart itself.
+              // A distinct exception from the result's first run, so the field's result is genuinely two runs rather than one — the case that distinguishes tagging every result run from tagging only resultStart itself.
               { text: "bold", grpprl: BOLD_ON },
               { text: end },
             ],
@@ -1367,7 +1367,7 @@ describe("readDocContent", () => {
       1000,
       1000,
     );
-    // A benign, non-matching sprm placed BEFORE sprmCPicLocation in the picture run's own grpprl -- proving the reader scans past it rather than only ever checking the first Prl.
+    // A benign, non-matching sprm placed BEFORE sprmCPicLocation in the picture run's own grpprl — proving the reader scans past it rather than only ever checking the first Prl.
     const pictureGrpprl = [...BOLD_ON, ...picLocationGrpprl];
     const document = readDocContent(
       buildDoc({
@@ -1404,7 +1404,7 @@ describe("readDocContent", () => {
   });
 });
 
-// Sets one FibRgFcLcb97 lcb field directly in a well-formed document's own WordDocument stream bytes, for exercising a specific bounds-check label readDocContent names when the corresponding structure runs past the Table stream -- a well-formed buildDoc fixture never produces an out-of-range lcb on its own.
+// Sets one FibRgFcLcb97 lcb field directly in a well-formed document's own WordDocument stream bytes, for exercising a specific bounds-check label readDocContent names when the corresponding structure runs past the Table stream — a well-formed buildDoc fixture never produces an out-of-range lcb on its own.
 function docWithLcb(valueIndex: number, lcb: number): Uint8Array<ArrayBuffer> {
   const bytes = buildDoc({ paragraphs: [{ runs: [{ text: "x" }] }] });
   const { wordDocument, table } = readDocStreams(bytes);
@@ -1558,7 +1558,7 @@ describe("isDocBytes", () => {
 });
 
 describe("metadata", () => {
-  // A real "\x05SummaryInformation" stream added beside the WordDocument/1Table streams a real producer would already have written -- composed here with archive-codec's own writeSummaryInformationStream/writeCompoundFile rather than by extending test-support/doc.ts's buildDoc, which stays a pure [MS-DOC]-only fixture builder.
+  // A real "\x05SummaryInformation" stream added beside the WordDocument/1Table streams a real producer would already have written — composed here with archive-codec's own writeSummaryInformationStream/writeCompoundFile rather than by extending test-support/doc.ts's buildDoc, which stays a pure [MS-DOC]-only fixture builder.
   function withSummaryInformation(
     doc: Uint8Array<ArrayBuffer>,
     metadata: Parameters<typeof writeSummaryInformationStream>[0],
@@ -1601,9 +1601,9 @@ describe("RC4-encrypted documents", () => {
   const WORD_DOCUMENT_PREFIX_LENGTH = 68;
 
   /**
-   * Takes a plain (unencrypted) .doc's compound-file bytes and turns them into a genuinely RC4-encrypted one: sets FibBase.fEncrypted and lKey, writes a real EncryptionHeader at the start of the Table stream, and encrypts WordDocument from byte 68 and Table from lKey on -- each independently, its own block-number counter starting fresh at that stream's own byte 0, exactly as [MS-DOC] 2.2.6.2 requires and encryption.ts's own top comment documents.
+   * Takes a plain (unencrypted) .doc's compound-file bytes and turns them into a genuinely RC4-encrypted one: sets FibBase.fEncrypted and lKey, writes a real EncryptionHeader at the start of the Table stream, and encrypts WordDocument from byte 68 and Table from lKey on — each independently, its own block-number counter starting fresh at that stream's own byte 0, exactly as [MS-DOC] 2.2.6.2 requires and encryption.ts's own top comment documents.
    *
-   * RC4's XOR symmetry makes "encrypt" and "decrypt" the identical operation, so this reuses decryptOfficeRc4 -- the same primitive readDocContent decrypts with -- rather than a separate encryption routine; the two directions cancelling out is exactly what makes RC4 what it is, not a shortcut that only looks like a round trip. What this test actually proves is read.ts's own orchestration: locating the right Table stream before a full Fib exists, decrypting at the right offsets, and handing the result to parseFib correctly -- the crypto itself is already independently verified (archive-codec's own office-rc4.test.ts, this package's own encryption.test.ts).
+   * RC4's XOR symmetry makes "encrypt" and "decrypt" the identical operation, so this reuses decryptOfficeRc4 — the same primitive readDocContent decrypts with — rather than a separate encryption routine; the two directions cancelling out is exactly what makes RC4 what it is, not a shortcut that only looks like a round trip. What this test actually proves is read.ts's own orchestration: locating the right Table stream before a full Fib exists, decrypting at the right offsets, and handing the result to parseFib correctly — the crypto itself is already independently verified (archive-codec's own office-rc4.test.ts, this package's own encryption.test.ts).
    */
   function encryptDoc(
     plainDoc: Uint8Array<ArrayBuffer>,
@@ -1643,13 +1643,13 @@ describe("RC4-encrypted documents", () => {
     header.set(encryptedVerifier, 20);
     header.set(encryptedVerifierHash, 36);
 
-    // A plaintext copy of WordDocument, patched before any encryption happens: fEncrypted/lKey (both in the always-unencrypted 68-byte prefix, so either order would do), and every fc offset FibRgFcLcb97 states relative to the Table stream's own byte 0 -- which, in a real encrypted file, the producer writes already accounting for the EncryptionHeader occupying the first lKey bytes there, exactly as it would for any other structure sharing the stream. buildDoc computed these assuming no header at all, so inserting one here means shifting every fc value (never the matching lcb, a length rather than a position) by the same headerSize this fixture is about to prepend -- the one piece of this fixture that is not simply "encrypt bytes 68 onward", and the reason this helper reads real field offsets from fib/offsets.ts rather than reimplementing them. This has to happen on the plaintext, not the ciphertext: the FibRgFcLcb97 blob itself sits well past byte 68 (FIB_FC_LCB_BLOB_OFFSET is 154), so it is encrypted content like any other -- patching it after encryption would be overwriting ciphertext bytes with a plaintext-shaped value instead of shifting the value the encryption itself protects.
+    // A plaintext copy of WordDocument, patched before any encryption happens: fEncrypted/lKey (both in the always-unencrypted 68-byte prefix, so either order would do), and every fc offset FibRgFcLcb97 states relative to the Table stream's own byte 0 — which, in a real encrypted file, the producer writes already accounting for the EncryptionHeader occupying the first lKey bytes there, exactly as it would for any other structure sharing the stream. buildDoc computed these assuming no header at all, so inserting one here means shifting every fc value (never the matching lcb, a length rather than a position) by the same headerSize this fixture is about to prepend — the one piece of this fixture that is not simply "encrypt bytes 68 onward", and the reason this helper reads real field offsets from fib/offsets.ts rather than reimplementing them. This has to happen on the plaintext, not the ciphertext: the FibRgFcLcb97 blob itself sits well past byte 68 (FIB_FC_LCB_BLOB_OFFSET is 154), so it is encrypted content like any other — patching it after encryption would be overwriting ciphertext bytes with a plaintext-shaped value instead of shifting the value the encryption itself protects.
     const shiftedWordDocument = new Uint8Array(wordDocumentStream.bytes);
     const shiftedView = new DataView(shiftedWordDocument.buffer);
     const existingFlags = shiftedView.getUint16(10, true);
     shiftedView.setUint16(10, existingFlags | 0x0100, true); // fEncrypted
     shiftedView.setUint32(FIB_LKEY_OFFSET, headerSize, true); // lKey
-    // Shifted unconditionally, even where the existing value happens to be 0: 0 is a genuinely valid Table-stream offset (a real producer often places the Clx at the very start), not a sentinel for "field unused" -- every real reader (read.ts's own `fib.lcbStshf > 0 ? ... : undefined`, and the same pattern for every other fc/lcb pair) gates on the matching *lcb* being positive, never on the fc value itself, so shifting an unused field's fc (whose lcb is 0 regardless) changes nothing anything actually reads.
+    // Shifted unconditionally, even where the existing value happens to be 0: 0 is a genuinely valid Table-stream offset (a real producer often places the Clx at the very start), not a sentinel for "field unused" — every real reader (read.ts's own `fib.lcbStshf > 0 ? ... : undefined`, and the same pattern for every other fc/lcb pair) gates on the matching *lcb* being positive, never on the fc value itself, so shifting an unused field's fc (whose lcb is 0 regardless) changes nothing anything actually reads.
     for (const [name, valueIndex] of Object.entries(FC_LCB_VALUE_INDEX)) {
       if (!name.startsWith("fc")) continue;
       const offset = FIB_FC_LCB_BLOB_OFFSET + valueIndex * 4;
@@ -1732,9 +1732,9 @@ describe("XOR-obfuscated documents", () => {
   const WORD_DOCUMENT_PREFIX_LENGTH = 68;
 
   /**
-   * Takes a plain (unencrypted) .doc's compound-file bytes and turns them into a genuinely XOR-obfuscated one: sets FibBase.fEncrypted/fObfuscated and lKey (the 32-bit password verifier itself here, not a header byte length -- see encryption.ts's own top comment), and obfuscates WordDocument from byte 68 and Table from byte 0 -- each independently, exactly as [MS-DOC]'s own XOR Obfuscation section requires.
+   * Takes a plain (unencrypted) .doc's compound-file bytes and turns them into a genuinely XOR-obfuscated one: sets FibBase.fEncrypted/fObfuscated and lKey (the 32-bit password verifier itself here, not a header byte length — see encryption.ts's own top comment), and obfuscates WordDocument from byte 68 and Table from byte 0 — each independently, exactly as [MS-DOC]'s own XOR Obfuscation section requires.
    *
-   * Unlike RC4, XOR obfuscation needs no EncryptionHeader occupying space at the start of the Table stream, so FibRgFcLcb97's own fc offsets (computed by buildDoc assuming no header) need no shifting here -- the one genuine simplification over the sibling RC4 fixture above. Method 2's data transform (plain XOR with a zero-byte exception) is its own inverse, so this reuses decryptXorObfuscationMethod2 -- the same primitive readDocContent decrypts with -- rather than a separate encryption routine, mirroring RC4's own XOR-symmetry reuse above.
+   * Unlike RC4, XOR obfuscation needs no EncryptionHeader occupying space at the start of the Table stream, so FibRgFcLcb97's own fc offsets (computed by buildDoc assuming no header) need no shifting here — the one genuine simplification over the sibling RC4 fixture above. Method 2's data transform (plain XOR with a zero-byte exception) is its own inverse, so this reuses decryptXorObfuscationMethod2 — the same primitive readDocContent decrypts with — rather than a separate encryption routine, mirroring RC4's own XOR-symmetry reuse above.
    */
   function obfuscateDoc(
     plainDoc: Uint8Array<ArrayBuffer>,

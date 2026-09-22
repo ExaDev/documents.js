@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readXmpMetadata } from "./xmp";
 
-// A minimal XMP packet wrapper: each field element the standard defines, given plain string content -- readXmpMetadata itself has no test file at all, only indirect exercise through a full PDF's own /Metadata stream, which never distinguishes which element name maps to which output field.
+// A minimal XMP packet wrapper: each field element the standard defines, given plain string content — readXmpMetadata itself has no test file at all, only indirect exercise through a full PDF's own /Metadata stream, which never distinguishes which element name maps to which output field.
 function packet(elements: string): string {
   return `<x:xmpmeta><rdf:RDF><rdf:Description>${elements}</rdf:Description></rdf:RDF></x:xmpmeta>`;
 }

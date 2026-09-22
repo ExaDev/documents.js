@@ -1,8 +1,8 @@
 // The exact stable-hash recipe (every step is part of the published contract; changing any step changes every hash ever issued):
-// 1. Strip every `$schema` key from the value, at any depth: a serialised tree-form package carries a release-pinned `$schema` URI that labels the content rather than being content (document-schema.js's own schema-io strips it the same way before ITS canonicalisation, so both canonicalisers exclude exactly the one key). Without this step, reserialising the same package against a different schema release would change every hash, which would make a hash name the release it was minted under rather than the document -- the opposite of stable. No content schema field is named `$schema`, so no hash ever issued changes.
-// 2. Canonicalise the value: rebuild every plain object with its own keys sorted ascending by UTF-16 code unit (Array.prototype.sort's default comparison -- a total, implementation-specified-stable order), preserving arrays in order and primitives as-is. This removes construction-order differences between independently built but structurally identical content, which is the whole point: two readers producing the same logical leaf must hash equal regardless of the order they happened to assign fields.
-// 3. JSON.stringify the canonicalised value with no spacing. Objects whose optional fields were left absent versus explicitly assigned undefined collapse to the same string, because JSON.stringify drops undefined-valued properties -- intended: both spellings mean "field absent" in the content schemas. Numbers use ECMAScript's own number-to-string, which is specified exactly, so the same numeric value always yields the same digits.
-// 4. UTF-8 encode the JSON text with TextEncoder (available in Node, browsers, and workerd alike -- no node:buffer, no node:util TextDecoder polyfill).
+// 1. Strip every `$schema` key from the value, at any depth: a serialised tree-form package carries a release-pinned `$schema` URI that labels the content rather than being content (document-schema.js's own schema-io strips it the same way before ITS canonicalisation, so both canonicalisers exclude exactly the one key). Without this step, reserialising the same package against a different schema release would change every hash, which would make a hash name the release it was minted under rather than the document — the opposite of stable. No content schema field is named `$schema`, so no hash ever issued changes.
+// 2. Canonicalise the value: rebuild every plain object with its own keys sorted ascending by UTF-16 code unit (Array.prototype.sort's default comparison — a total, implementation-specified-stable order), preserving arrays in order and primitives as-is. This removes construction-order differences between independently built but structurally identical content, which is the whole point: two readers producing the same logical leaf must hash equal regardless of the order they happened to assign fields.
+// 3. JSON.stringify the canonicalised value with no spacing. Objects whose optional fields were left absent versus explicitly assigned undefined collapse to the same string, because JSON.stringify drops undefined-valued properties — intended: both spellings mean "field absent" in the content schemas. Numbers use ECMAScript's own number-to-string, which is specified exactly, so the same numeric value always yields the same digits.
+// 4. UTF-8 encode the JSON text with TextEncoder (available in Node, browsers, and workerd alike — no node:buffer, no node:util TextDecoder polyfill).
 // 5. SHA-256 over those bytes, implemented below by hand for the same Worker-isomorphism reason: node:crypto's createHash is banned in runtime src by this package's ESLint guard, and every Web Crypto subtle.digest is async (and unavailable synchronously inside a synchronous helper), so a pure-integer SHA-256 keeps leafContentHash a plain function call.
 // 6. Hex-encode the 32 digest bytes, lowercase.
 // The result is deterministic across processes and platforms (every step is either an ECMAScript-specified operation or a fixed byte-level algorithm), equal for independently constructed identical content, and different for different content up to SHA-256's collision resistance.
@@ -19,7 +19,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// Recipe step 1: remove every `$schema` key at any depth, rebuilding rather than mutating so the input is never touched. Runs BEFORE canonicalisation (the strip and the sort are independent orderings of the same walk, but this order keeps canonicalise's own contract -- the documented recipe for anyone who imports it -- free of the label-key concern, which belongs to hashing alone).
+// Recipe step 1: remove every `$schema` key at any depth, rebuilding rather than mutating so the input is never touched. Runs BEFORE canonicalisation (the strip and the sort are independent orderings of the same walk, but this order keeps canonicalise's own contract — the documented recipe for anyone who imports it — free of the label-key concern, which belongs to hashing alone).
 function stripSchemaKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stripSchemaKeys);
   if (isRecord(value)) {
@@ -33,7 +33,7 @@ function stripSchemaKeys(value: unknown): unknown {
   return value;
 }
 
-// Step 1 of the documented recipe, exported because the decompose/flatten bijection tests canonicalise with the exact same function (src/outline/bijection.test.ts) -- one canonical key order across the package, not a second recipe that could drift from the hash's. `unknown` in, `unknown` out: the output is a fresh structure safe to hand to JSON.stringify, never a mutation of the input. Plain objects (the JSON-mappable class) are rebuilt with sorted keys; arrays and primitives pass through structurally untouched (arrays are copied so the output never aliases the input).
+// Step 1 of the documented recipe, exported because the decompose/flatten bijection tests canonicalise with the exact same function (src/outline/bijection.test.ts) — one canonical key order across the package, not a second recipe that could drift from the hash's. `unknown` in, `unknown` out: the output is a fresh structure safe to hand to JSON.stringify, never a mutation of the input. Plain objects (the JSON-mappable class) are rebuilt with sorted keys; arrays and primitives pass through structurally untouched (arrays are copied so the output never aliases the input).
 export function canonicalise(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalise);
   if (isRecord(value)) {
@@ -52,7 +52,7 @@ function sha256Hex(bytes: Uint8Array): string {
   return hex;
 }
 
-// SHA-256, FIPS 180-4. Hand-rolled over Uint8Array/DataView with 32-bit integer arithmetic only -- no Node crypto, no async SubtleCrypto -- so the hash helper stays a synchronous, Worker-isomorphic plain function. Test vectors for the empty string and 'abc' are pinned in hash.test.ts against the specification's own published digests.
+// SHA-256, FIPS 180-4. Hand-rolled over Uint8Array/DataView with 32-bit integer arithmetic only — no Node crypto, no async SubtleCrypto — so the hash helper stays a synchronous, Worker-isomorphic plain function. Test vectors for the empty string and 'abc' are pinned in hash.test.ts against the specification's own published digests.
 const K = [
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
   0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
@@ -71,7 +71,7 @@ function rotr(x: number, n: number): number {
   return ((x >>> n) | (x << (32 - n))) >>> 0;
 }
 
-// Writes the SHA-256 length suffix -- the message's own bit length as a big-endian 64-bit integer -- at `offset` in `view`. Split out from sha256 below so the arithmetic (only observable once a message exceeds 2^32 bits, ~512 MiB, an input size no unit test can afford to allocate and hash) is exercisable directly against an arbitrary `bitLength` number rather than requiring an actual multi-hundred-megabyte byte array to reach it. Exported for exactly that test.
+// Writes the SHA-256 length suffix — the message's own bit length as a big-endian 64-bit integer — at `offset` in `view`. Split out from sha256 below so the arithmetic (only observable once a message exceeds 2^32 bits, ~512 MiB, an input size no unit test can afford to allocate and hash) is exercisable directly against an arbitrary `bitLength` number rather than requiring an actual multi-hundred-megabyte byte array to reach it. Exported for exactly that test.
 export function writeBitLength(
   view: DataView,
   offset: number,
@@ -81,7 +81,7 @@ export function writeBitLength(
   view.setUint32(offset + 4, bitLength >>> 0);
 }
 
-// Bounds-checked in place of a bare `w[i] = value`: Uint32Array silently drops an out-of-range write and returns `undefined` (not a throw) for an out-of-range read, so a loop bound weakened by one (i <= 64 instead of i < 64) would otherwise write to index 64 -- one past `w`'s own 64-element length -- with no observable effect at all, since nothing ever reads that index back. Throwing here is what turns that boundary into a genuine, catchable failure instead of a silently-absorbed no-op. Split out from sha256 below, the same reason writeBitLength above is: no legitimate call through sha256's own correctly-bounded loop can ever reach the throw, so it needs a direct unit test calling this function itself with an out-of-range index. Exported for exactly that test.
+// Bounds-checked in place of a bare `w[i] = value`: Uint32Array silently drops an out-of-range write and returns `undefined` (not a throw) for an out-of-range read, so a loop bound weakened by one (i <= 64 instead of i < 64) would otherwise write to index 64 — one past `w`'s own 64-element length — with no observable effect at all, since nothing ever reads that index back. Throwing here is what turns that boundary into a genuine, catchable failure instead of a silently-absorbed no-op. Split out from sha256 below, the same reason writeBitLength above is: no legitimate call through sha256's own correctly-bounded loop can ever reach the throw, so it needs a direct unit test calling this function itself with an out-of-range index. Exported for exactly that test.
 export function writeScheduleWord(
   w: Uint32Array,
   i: number,

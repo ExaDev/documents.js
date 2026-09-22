@@ -57,7 +57,7 @@ describe("readXLUnicodeString", () => {
   });
 
   it("reads an astral character from its surrogate pair", () => {
-    // Two UTF-16 code units, so cch is 2 even though the string is one code point -- cch counts characters as the format's own UTF-16 units, not as code points.
+    // Two UTF-16 code units, so cch is 2 even though the string is one code point — cch counts characters as the format's own UTF-16 units, not as code points.
     const cursor = new BlockCursor([
       bytes(0x02, 0x00, 0x01, ...uncompressed("😀")),
     ]);
@@ -90,7 +90,7 @@ describe("readXLUnicodeString", () => {
 });
 
 describe("readXLUnicodeStringNoCch", () => {
-  // [MS-XLS] 2.5.296: a flags byte then the characters, with the character count supplied by the caller rather than read from a cch field of its own -- SupBook's own virtPath is this shape.
+  // [MS-XLS] 2.5.296: a flags byte then the characters, with the character count supplied by the caller rather than read from a cch field of its own — SupBook's own virtPath is this shape.
 
   it("reads a compressed string given its own count, with no cch field to read first", () => {
     const cursor = new BlockCursor([bytes(0x00, ...compressed("C:\\"))]);
@@ -133,7 +133,7 @@ describe("readRichExtendedString", () => {
   });
 
   it("skips exactly the formatting runs a rich string carries, leaving the cursor correctly positioned on whatever follows", () => {
-    // fRichSt (bit 3) set means cRun follows the flags byte and cRun FormatRun structures ([MS-XLS] 2.5.132, four bytes each) follow rgb. The text is the same either way; this package reads the characters, not the run formatting -- but a wrong (or entirely dropped) skip would only ever show up in what a LATER read off the same cursor sees, never in this string's own returned text, so a sentinel byte read right after the runs is what actually proves the skip consumed exactly cRun*4 bytes rather than none, or the wrong count.
+    // fRichSt (bit 3) set means cRun follows the flags byte and cRun FormatRun structures ([MS-XLS] 2.5.132, four bytes each) follow rgb. The text is the same either way; this package reads the characters, not the run formatting — but a wrong (or entirely dropped) skip would only ever show up in what a LATER read off the same cursor sees, never in this string's own returned text, so a sentinel byte read right after the runs is what actually proves the skip consumed exactly cRun*4 bytes rather than none, or the wrong count.
     const cursor = new BlockCursor([
       bytes(
         0x05,
@@ -182,7 +182,7 @@ describe("readRichExtendedString", () => {
   });
 
   it("skips neither runs nor phonetic data when the string states neither, leaving the cursor immediately on whatever follows", () => {
-    // The (runCount > 0)/(extendedSize > 0) guards must genuinely gate the skip rather than always (or never) firing -- a plain string with both flags clear is the case that proves the "false" side of both conditions.
+    // The (runCount > 0)/(extendedSize > 0) guards must genuinely gate the skip rather than always (or never) firing — a plain string with both flags clear is the case that proves the "false" side of both conditions.
     const cursor = new BlockCursor([
       bytes(0x05, 0x00, 0x00, ...compressed("Alpha"), 0x99),
     ]);
@@ -194,7 +194,7 @@ describe("readRichExtendedString", () => {
   it("consumes the re-stated flag byte when a compressed string continues into the next block", () => {
     // The continuation rule this whole cursor design exists for. [MS-XLS] 2.5.293: "This structure's variable fields can be extended with Continue records. A value from the table for fHighByte MUST be specified in the first byte of the continue field of the Continue record followed by the remaining portions of this structure's variable fields."
     //
-    // Read naively -- by concatenating the blocks and taking cch bytes -- the 0x00 opening the second block would be read as a NUL character and every character after it would shift by one. That is the silent-truncation bug a BIFF reader has to get right.
+    // Read naively — by concatenating the blocks and taking cch bytes — the 0x00 opening the second block would be read as a NUL character and every character after it would shift by one. That is the silent-truncation bug a BIFF reader has to get right.
     const cursor = new BlockCursor([
       bytes(0x06, 0x00, 0x00, ...compressed("Abc")),
       bytes(0x00, ...compressed("def")),
@@ -213,7 +213,7 @@ describe("readRichExtendedString", () => {
   });
 
   it("honours a continuation that switches from compressed to uncompressed", () => {
-    // The re-stated flag governs the REMAINDER of the string, so the two halves can legitimately disagree -- which is exactly why the flag is re-stated rather than assumed to carry over.
+    // The re-stated flag governs the REMAINDER of the string, so the two halves can legitimately disagree — which is exactly why the flag is re-stated rather than assumed to carry over.
     const cursor = new BlockCursor([
       bytes(0x04, 0x00, 0x00, ...compressed("Ab")),
       bytes(0x01, ...uncompressed("語")),
@@ -233,7 +233,7 @@ describe("readRichExtendedString", () => {
   });
 
   it("reads a string that ends exactly on a block boundary without consuming the next block's flag byte", () => {
-    // The boundary byte belongs to the string only while characters remain to read. A string whose last character lands on the final byte of a block must leave the next block's first byte alone -- it is the next string's cch, not this string's flag.
+    // The boundary byte belongs to the string only while characters remain to read. A string whose last character lands on the final byte of a block must leave the next block's first byte alone — it is the next string's cch, not this string's flag.
     const cursor = new BlockCursor([
       bytes(0x03, 0x00, 0x00, ...compressed("Abc")),
       bytes(0x01, 0x00, 0x00, ...compressed("Z")),

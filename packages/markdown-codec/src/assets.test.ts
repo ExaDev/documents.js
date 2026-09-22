@@ -1,4 +1,4 @@
-// Regression coverage for the vendored conformance corpora (assets/) -- not a placeholder: these fixtures are the actual test data src/scan, src/block, and src/inline will validate against once implemented, so a corrupted, truncated, or accidentally-replaced-with-a-stub fetch needs to fail CI immediately rather than silently drift until someone reaches for the corpus much later.
+// Regression coverage for the vendored conformance corpora (assets/) — not a placeholder: these fixtures are the actual test data src/scan, src/block, and src/inline will validate against once implemented, so a corrupted, truncated, or accidentally-replaced-with-a-stub fetch needs to fail CI immediately rather than silently drift until someone reaches for the corpus much later.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";

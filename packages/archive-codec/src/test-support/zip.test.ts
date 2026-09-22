@@ -9,7 +9,7 @@ import {
 
 // Coverage for the little-endian readers and local-file-header walkers this package's own test suites lean on to verify byte-exact ZIP layout. Built and tested independently of fflate's own zipSync/unzipSync, since these exist specifically to check what fflate produces rather than to duplicate it.
 
-// One ZIP local file header (PK\x03\x04) plus its own filename, extra field, and (stored, uncompressed) data -- built by hand so a non-zero extra-field length can be exercised, which fflate's own zipSync never emits for a plain entry.
+// One ZIP local file header (PK\x03\x04) plus its own filename, extra field, and (stored, uncompressed) data — built by hand so a non-zero extra-field length can be exercised, which fflate's own zipSync never emits for a plain entry.
 function localFileHeader(
   name: string,
   data: Uint8Array,
@@ -87,7 +87,7 @@ describe("localFileHeaderNames / localHeaderCompressionMethod", () => {
   });
 
   it("stops cleanly, without over-reading, when the local headers run exactly to the end of the bytes", () => {
-    // A real archive's central directory follows its local headers, so `offset` never naturally lands exactly on `bytes.length` inside the loop -- constructed here directly so that boundary is genuinely exercised, rather than merely assumed safe.
+    // A real archive's central directory follows its local headers, so `offset` never naturally lands exactly on `bytes.length` inside the loop — constructed here directly so that boundary is genuinely exercised, rather than merely assumed safe.
     const entry = localFileHeader("only.txt", new TextEncoder().encode("x"), 0);
     expect(() => localFileHeaderNames(entry)).not.toThrow();
     expect(localFileHeaderNames(entry)).toEqual(["only.txt"]);
@@ -126,7 +126,7 @@ describe("localFileHeaderNames / localHeaderCompressionMethod", () => {
   });
 
   it("stops at a signature mismatch rather than misreading whatever bytes happen to follow as another header", () => {
-    // The "fewer entries than the archive holds" case above can never actually distinguish a missing signature check: both a signature mismatch and simply running out of bytes end up at the identical throw, since its message names only the requested entryIndex, never anything the loop itself observed. This instead places 40 zero bytes -- long enough to read as a well-formed (if nonsensical) header, but not starting with the local-file-header magic -- right after one real entry, so a walk that skipped the signature check would treat them as a second header, find its own compression-method field there (0, since every byte is 0), and return that instead of throwing.
+    // The "fewer entries than the archive holds" case above can never actually distinguish a missing signature check: both a signature mismatch and simply running out of bytes end up at the identical throw, since its message names only the requested entryIndex, never anything the loop itself observed. This instead places 40 zero bytes — long enough to read as a well-formed (if nonsensical) header, but not starting with the local-file-header magic — right after one real entry, so a walk that skipped the signature check would treat them as a second header, find its own compression-method field there (0, since every byte is 0), and return that instead of throwing.
     const first = localFileHeader("only.txt", new TextEncoder().encode("x"), 0);
     const notAHeader = new Uint8Array(40);
     const bytes = concat(first, notAHeader);

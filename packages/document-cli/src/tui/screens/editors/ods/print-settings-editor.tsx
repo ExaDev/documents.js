@@ -8,7 +8,7 @@ import { useAppDispatch, useAppState } from "../../../state/context.js";
 import { anyOverlayOpen, currentScreen } from "../../../state/types.js";
 import { odsDocument } from "./shared.js";
 
-// The five fields `ContentSheetPrintSettingsSchema` always carries (pageSize, margins, gridlines, headers, pageOrder) -- printRange/scale/fitToPages/repeatRows/repeatColumns/manualBreaks are all optional and, per documents.js's own README, neither `OdsSheet.printSettings`'s getter nor `buildOdsPackage` reads or writes them yet, so there is nothing meaningful for this form to show or set for those.
+// The five fields `ContentSheetPrintSettingsSchema` always carries (pageSize, margins, gridlines, headers, pageOrder) — printRange/scale/fitToPages/repeatRows/repeatColumns/manualBreaks are all optional and, per documents.js's own README, neither `OdsSheet.printSettings`'s getter nor `buildOdsPackage` reads or writes them yet, so there is nothing meaningful for this form to show or set for those.
 type FieldKey =
   | "pageWidthPt"
   | "pageHeightPt"
@@ -75,7 +75,7 @@ function fieldValueText(
   }
 }
 
-// Only ever called for a key in NUMERIC_FIELD_KEYS -- every call site checks that set first, so a boolean/enum key reaching the default branch is a genuine caller bug, not a case worth handling quietly.
+// Only ever called for a key in NUMERIC_FIELD_KEYS — every call site checks that set first, so a boolean/enum key reaching the default branch is a genuine caller bug, not a case worth handling quietly.
 function withNumericField(
   settings: ContentSheetPrintSettings,
   key: FieldKey,
@@ -105,7 +105,7 @@ function withNumericField(
   }
 }
 
-// Only ever called for a key outside NUMERIC_FIELD_KEYS -- the mirror image of withNumericField above.
+// Only ever called for a key outside NUMERIC_FIELD_KEYS — the mirror image of withNumericField above.
 function toggledSettings(
   settings: ContentSheetPrintSettings,
   key: FieldKey,
@@ -190,7 +190,7 @@ export function OdsPrintSettingsEditorScreen(): ReactElement {
 
   return (
     <Box flexDirection="column">
-      <Text bold>Print settings -- {sheet.name}</Text>
+      <Text bold>Print settings — {sheet.name}</Text>
       <ListView
         items={FIELD_ROWS}
         selectedIndex={selectedIndex}

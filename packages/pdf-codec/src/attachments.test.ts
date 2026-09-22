@@ -34,7 +34,7 @@ describe("readPdf: embedded files", () => {
     const manifest = doc.attachments?.find((a) => a.name === "manifest.json");
     expect(manifest?.description).toBeUndefined();
     expect(manifest?.base64).toBe(b64("{}"));
-    // The only diagnostic expected is the deliberately-broken /AF entry (object 16) tested separately below -- the second /FileAttachment annotation (object 11, the dedup case) must itself parse cleanly rather than merely happening to contribute nothing because it is malformed.
+    // The only diagnostic expected is the deliberately-broken /AF entry (object 16) tested separately below — the second /FileAttachment annotation (object 11, the dedup case) must itself parse cleanly rather than merely happening to contribute nothing because it is malformed.
     expect(diagnostics).toEqual([
       expect.objectContaining({ code: "pdf/embedded-file-missing-stream" }),
     ]);

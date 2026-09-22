@@ -165,7 +165,7 @@ describe("readCurrentUserAtom", () => {
   });
 
   it("accepts a record carrying exactly the 20-byte fixed portion and nothing more", () => {
-    // lenUserName 0, no ansiUserName/relVersion/unicodeUserName bytes at all -- ansiEnd and unicodeStart both then sit exactly at (or past) the buffer's own end, which must not be treated as an overrun.
+    // lenUserName 0, no ansiUserName/relVersion/unicodeUserName bytes at all — ansiEnd and unicodeStart both then sit exactly at (or past) the buffer's own end, which must not be treated as an overrun.
     const bytes = atom(
       RT_CurrentUserAtom,
       concatBytes(

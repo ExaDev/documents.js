@@ -242,7 +242,7 @@ describe("readChartTable", () => {
       ),
     );
     const table = readChartTable(chartRoot, FRAME);
-    // Only index 0 ("kept") should have made it through -- the header row plus exactly one data row.
+    // Only index 0 ("kept") should have made it through — the header row plus exactly one data row.
     expect(table?.rows).toHaveLength(2);
     expect(table?.rows[1]?.cells[0]).toEqual({
       blocks: [{ kind: "paragraph", runs: [{ text: "kept" }] }],

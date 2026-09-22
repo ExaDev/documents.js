@@ -22,7 +22,7 @@ function stylesPackage(styleSheet: ReturnType<typeof el>): Package {
   return { parts: { "xl/styles.xml": { kind: "xml", nodes: [styleSheet] } } };
 }
 
-// True precisely when `key` is an own property of `obj`, regardless of whether its value is `undefined` -- unlike `toBeUndefined()`, which is satisfied identically by a key holding `undefined` and by the key's own absence, and so cannot distinguish "never assigned" from "assigned undefined". Several of this module's own optional-field copies are guarded by a presence check specifically to avoid ever assigning the key at all when the source has nothing to offer, and only a key-existence assertion can prove that guard is doing real work.
+// True precisely when `key` is an own property of `obj`, regardless of whether its value is `undefined` — unlike `toBeUndefined()`, which is satisfied identically by a key holding `undefined` and by the key's own absence, and so cannot distinguish "never assigned" from "assigned undefined". Several of this module's own optional-field copies are guarded by a presence check specifically to avoid ever assigning the key at all when the source has nothing to offer, and only a key-existence assertion can prove that guard is doing real work.
 function hasOwn(obj: object, key: string): boolean {
   return Object.hasOwn(obj, key);
 }
@@ -45,7 +45,7 @@ describe("readCellFormatCodes: real LibreOffice output (kitchen-sink.xlsx)", () 
     ]);
   });
 
-  it("decodes the XML entities a real formatCode attribute carries -- the quoted literals would tokenize as bare codes otherwise", () => {
+  it("decodes the XML entities a real formatCode attribute carries — the quoted literals would tokenize as bare codes otherwise", () => {
     expect(codes[1]).not.toContain("&quot;");
   });
 });
@@ -82,7 +82,7 @@ describe("readCellFormatCodes: the built-in table, the <numFmts> overlay, and th
     expect(readCellFormatCodes(pkg)).toEqual(["General"]);
   });
 
-  it("reports undefined -- not General -- for an id with no code anywhere (a reserved 23-36 id, or a dangling custom reference)", () => {
+  it("reports undefined — not General — for an id with no code anywhere (a reserved 23-36 id, or a dangling custom reference)", () => {
     const pkg = stylesPackage(
       el("styleSheet", {}, [
         el("cellXfs", {}, [
@@ -270,7 +270,7 @@ describe("readCellStyles: per-cellXfs background/borders/alignment (synthetic st
     expect(readCellStyles(pkg)).toEqual([{ numberFormatCode: "General" }]);
   });
 
-  it('collapses the dash-dot border tokens onto style "dashed" -- the closest ContentStrokeStyle member', () => {
+  it('collapses the dash-dot border tokens onto style "dashed" — the closest ContentStrokeStyle member', () => {
     const pkg = stylesPackage(
       el("styleSheet", {}, [
         el("borders", {}, [
@@ -650,7 +650,7 @@ describe("readNumberFormatCodesById: a non-integer numFmtId registers no code", 
 });
 
 describe("readFontToggle/readFontUnderline: exact val-string behaviour", () => {
-  // Diffs a single font against a plain Calibri baseline with NO toggles at all, so bare presence (no val) and val="1" show up as an explicit `true` difference. A `val="0"`/`val="false"` toggle reads as `false`, which is indistinguishable from this baseline via a diff (false against false is no difference) -- those two cases use offToggleFont below instead, against an ALL-toggles-on baseline, so turning one off is what shows up as the difference.
+  // Diffs a single font against a plain Calibri baseline with NO toggles at all, so bare presence (no val) and val="1" show up as an explicit `true` difference. A `val="0"`/`val="false"` toggle reads as `false`, which is indistinguishable from this baseline via a diff (false against false is no difference) — those two cases use offToggleFont below instead, against an ALL-toggles-on baseline, so turning one off is what shows up as the difference.
   function diffedToggleFont(toggle: ReturnType<typeof el>) {
     const pkg = stylesPackage(
       el("styleSheet", {}, [
@@ -664,7 +664,7 @@ describe("readFontToggle/readFontUnderline: exact val-string behaviour", () => {
     return readCellStyles(pkg)[0]?.font ?? {};
   }
 
-  // Diffs a single font, WITH b/i/strike all on, against a baseline that ALSO has them all on -- so replacing one of the baseline's own toggles with an explicit val="0"/"false" version is what shows up as that one property's own false in the diff.
+  // Diffs a single font, WITH b/i/strike all on, against a baseline that ALSO has them all on — so replacing one of the baseline's own toggles with an explicit val="0"/"false" version is what shows up as that one property's own false in the diff.
   function offToggleFont(toggle: ReturnType<typeof el>) {
     const pkg = stylesPackage(
       el("styleSheet", {}, [
@@ -838,7 +838,7 @@ describe("contentFontOf: omits fontFamily/sizePt/color entirely (not merely as u
 });
 
 describe("colorFromElement/readColorRgb: hex length boundary and validation", () => {
-  it("returns undefined -- not a garbage colour -- for a 6-character rgb that is not valid hex", () => {
+  it("returns undefined — not a garbage colour — for a 6-character rgb that is not valid hex", () => {
     expect(colorFromElement(el("color", { rgb: "ZZZZZZ" }))).toBeUndefined();
   });
 
@@ -858,7 +858,7 @@ describe("colorFromElement/readColorRgb: hex length boundary and validation", ()
     ).toBeUndefined();
   });
 
-  // The regex's own "^"/"$" anchors are a genuinely irreducible equivalent mutation opportunity here, not merely an untested one: `hex` is constructed immediately above as either exactly 6 characters (raw.slice(-6), whenever raw.length >= 6) or fewer than 6 (raw itself, otherwise) -- never more. A {6}-quantified pattern can only ever match a 6-character string across its ENTIRE length regardless of anchors (there is no room for a partial match either before or after), and can never match a shorter one at all, so no input this function can ever construct `hex` from can tell an anchored and an unanchored match apart. The same reasoning makes the raw.length ">= 6" vs "> 6" boundary equivalent too: at raw.length exactly 6, slice(-6) returns the whole (unchanged) string, identical to what the ">" branch's bare `raw` would have returned directly.
+  // The regex's own "^"/"$" anchors are a genuinely irreducible equivalent mutation opportunity here, not merely an untested one: `hex` is constructed immediately above as either exactly 6 characters (raw.slice(-6), whenever raw.length >= 6) or fewer than 6 (raw itself, otherwise) — never more. A {6}-quantified pattern can only ever match a 6-character string across its ENTIRE length regardless of anchors (there is no room for a partial match either before or after), and can never match a shorter one at all, so no input this function can ever construct `hex` from can tell an anchored and an unanchored match apart. The same reasoning makes the raw.length ">= 6" vs "> 6" boundary equivalent too: at raw.length exactly 6, slice(-6) returns the whole (unchanged) string, identical to what the ">" branch's bare `raw` would have returned directly.
 });
 
 describe("readFillBackground: fgColor/bgColor tag names and presence", () => {
@@ -950,7 +950,7 @@ describe("readBorders: each edge's own presence is independent", () => {
     expect(readCellStyles(pkg)[0]?.borders).toBeUndefined();
   });
 
-  it("carries exactly the right edge -- none of left/top/bottom -- for a border naming only right", () => {
+  it("carries exactly the right edge — none of left/top/bottom — for a border naming only right", () => {
     const pkg = stylesPackage(
       el("styleSheet", {}, [
         el("borders", {}, [
@@ -1079,7 +1079,7 @@ describe("readCellStyles: numFmtId/numberFormatCode/alignment key presence", () 
 });
 
 describe("CellFormatTable: font signature isolates every one of its own segments", () => {
-  // Interns two fonts differing in exactly ONE property and asserts they mint DISTINCT font entries -- if a signature segment were ever dropped (a template literal collapsed, a boolean-to-string comparison broken), the two would wrongly collide onto the same fontId instead.
+  // Interns two fonts differing in exactly ONE property and asserts they mint DISTINCT font entries — if a signature segment were ever dropped (a template literal collapsed, a boolean-to-string comparison broken), the two would wrongly collide onto the same fontId instead.
   function internedFontIds(
     fontA: {
       bold?: boolean;
@@ -1274,7 +1274,7 @@ describe("CellFormatTable: border signature and caching across different outer f
     });
   });
 
-  it("writes a dashed border at thin weight as plain dashed, not mediumDashed -- the medium check is not a no-op", () => {
+  it("writes a dashed border at thin weight as plain dashed, not mediumDashed — the medium check is not a no-op", () => {
     const table = new CellFormatTable();
     table.intern(
       { kind: "builtin", id: GENERAL_NUM_FMT_ID },

@@ -1,4 +1,4 @@
-// A chunked, growable byte-output builder: writes accumulate into a list of chunks rather than repeatedly reallocating and copying one growing buffer, which is O(n^2) for many small writes -- exactly the access pattern the PDF writer (one write per operator) and the PNG encoder (one write per scanline) both have.
+// A chunked, growable byte-output builder: writes accumulate into a list of chunks rather than repeatedly reallocating and copying one growing buffer, which is O(n^2) for many small writes — exactly the access pattern the PDF writer (one write per operator) and the PNG encoder (one write per scanline) both have.
 export class ByteWriter {
   private readonly chunks: Uint8Array[] = [];
   private byteLength = 0;

@@ -8,7 +8,7 @@ import {
   renumberedOrderKeys,
 } from "./order-keys";
 
-// Unit-level coverage of the #660 fractional order-key primitive, independent of graph.test.ts's own single integration-style property test: every branch of orderKeyBetween's digit walk (a direct single-step midpoint, a step that needs one extra digit of precision because its neighbours are adjacent, repeated bisection into an already-narrow interval until the width cap refuses, and the different-length/implicit-zero-pad case), the two minting functions' own guarantees, and the unbounded-end pair -- front-insert below a drifted minimum, append above a drifted maximum, each op's exhaustion handing off to a renumberedOrderKeys rebalance.
+// Unit-level coverage of the #660 fractional order-key primitive, independent of graph.test.ts's own single integration-style property test: every branch of orderKeyBetween's digit walk (a direct single-step midpoint, a step that needs one extra digit of precision because its neighbours are adjacent, repeated bisection into an already-narrow interval until the width cap refuses, and the different-length/implicit-zero-pad case), the two minting functions' own guarantees, and the unbounded-end pair — front-insert below a drifted minimum, append above a drifted maximum, each op's exhaustion handing off to a renumberedOrderKeys rebalance.
 describe("orderKeyForIndex", () => {
   it("produces strictly increasing, equal-width keys for a run of consecutive indices", () => {
     const keys = [0, 1, 2, 3, 10, 100].map(orderKeyForIndex);
@@ -23,7 +23,7 @@ describe("orderKeyForIndex", () => {
     expect(orderKeyForIndex(0)).toBe(orderKeyForIndex(0));
   });
 
-  // The exact boundary between the widest index that still fits in ORDER_KEY_WIDTH (8) base-36 digits and the smallest that does not -- computed directly (36**8 - 1 is the largest 8-digit base-36 value, and the gap of 1000 scales every index before encoding).
+  // The exact boundary between the widest index that still fits in ORDER_KEY_WIDTH (8) base-36 digits and the smallest that does not — computed directly (36**8 - 1 is the largest 8-digit base-36 value, and the gap of 1000 scales every index before encoding).
   it("accepts the largest index whose scaled value still fits in 8 base-36 digits", () => {
     expect(() => orderKeyForIndex(2821109907)).not.toThrow();
   });
@@ -88,7 +88,7 @@ describe("orderKeyBetween", () => {
         high = mid;
         iterations += 1;
         if (iterations > 1000)
-          throw new Error("orderKeyBetween never refused -- unbounded growth");
+          throw new Error("orderKeyBetween never refused — unbounded growth");
       }
     }).toThrow(OrderKeyBudgetExhaustedError);
   });
@@ -103,7 +103,7 @@ describe("orderKeyBetween", () => {
   });
 
   it("refuses immediately once the shared prefix reaches the width cap, rather than growing one digit past it", () => {
-    // low and high share their first 15 digits, then differ by exactly one at position 15 -- the adjacent-digit case extends the prefix to exactly ORDER_KEY_MAX_LENGTH (16) at that point, which must refuse right there rather than growing a 17th digit.
+    // low and high share their first 15 digits, then differ by exactly one at position 15 — the adjacent-digit case extends the prefix to exactly ORDER_KEY_MAX_LENGTH (16) at that point, which must refuse right there rather than growing a 17th digit.
     const low = "0".repeat(16);
     const high = "0".repeat(15) + "1";
     expect(() => orderKeyBetween(low, high)).toThrow(
@@ -130,11 +130,11 @@ describe("orderKeyBefore", () => {
     const low = "00001eo";
     const minted = orderKeyBefore(low);
     expect(minted < low).toBe(true);
-    expect(() => orderKeyBetween(minted, low)).not.toThrow(); // the mint is not jammed against its upper neighbour -- a further between-insert still fits
+    expect(() => orderKeyBetween(minted, low)).not.toThrow(); // the mint is not jammed against its upper neighbour — a further between-insert still fits
   });
 
   it("returns at the first digit with room from the left, stepping it down by half its own value", () => {
-    // digit 9 has half-its-own-value headroom of ceil(9/2)=5, distinct from both Math.min(1, 5)=1 and a doubled digit -- this pins the exact minted value, not merely its ordering.
+    // digit 9 has half-its-own-value headroom of ceil(9/2)=5, distinct from both Math.min(1, 5)=1 and a doubled digit — this pins the exact minted value, not merely its ordering.
     expect(orderKeyBefore("9")).toBe("4");
   });
 
@@ -190,8 +190,8 @@ describe("orderKeyAfter", () => {
     expect(() => orderKeyBetween(high, minted)).not.toThrow(); // a further between-insert still fits below the mint
   });
 
-  it("returns at the first digit with room, stepping it up by half the remaining headroom -- truncating there rather than walking the rest of the key", () => {
-    // digit 0 has half-remaining-headroom of ceil(35/2)=18 ('i'), distinct from both Math.min(1, 18)=1 and a headroom computed from the wrong base -- this pins the exact minted value (and its length), not merely its ordering.
+  it("returns at the first digit with room, stepping it up by half the remaining headroom — truncating there rather than walking the rest of the key", () => {
+    // digit 0 has half-remaining-headroom of ceil(35/2)=18 ('i'), distinct from both Math.min(1, 18)=1 and a headroom computed from the wrong base — this pins the exact minted value (and its length), not merely its ordering.
     expect(orderKeyAfter("00001eo")).toBe("i");
   });
 
@@ -217,7 +217,7 @@ describe("orderKeyAfter", () => {
     const minted = new Set<string>();
     let key = orderKeyForIndex(0);
     for (let iterations = 0; ; iterations += 1) {
-      expect(iterations).toBeLessThan(1000); // a bound only -- the halving walk converges in the low hundreds
+      expect(iterations).toBeLessThan(1000); // a bound only — the halving walk converges in the low hundreds
       let next: string;
       try {
         next = orderKeyAfter(key);
@@ -236,7 +236,7 @@ describe("orderKeyAfter", () => {
 
 describe("orderKeyBefore / orderKeyAfter at the ends of a minted list", () => {
   it("places each end mint at its exact splice position, comparing correctly against both adjacent keys", () => {
-    // A drifted list -- the floor key gone to earlier front inserts, a between()-mint wedged into the first interval -- which is the shape the end ops exist for. The position invariant holds because the argument is the list's minimum/maximum: the truncated mint shares the argument's prefix, so every other key compares the same way at the stepped digit.
+    // A drifted list — the floor key gone to earlier front inserts, a between()-mint wedged into the first interval — which is the shape the end ops exist for. The position invariant holds because the argument is the list's minimum/maximum: the truncated mint shares the argument's prefix, so every other key compares the same way at the stepped digit.
     const keys = [...renumberedOrderKeys(4).slice(1)];
     keys.splice(1, 0, orderKeyBetween(keys[0]!, keys[1]!));
     keys.sort();

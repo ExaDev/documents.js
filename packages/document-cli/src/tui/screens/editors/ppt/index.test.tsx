@@ -10,7 +10,7 @@ import {
 import { settle, waitForFrame } from "../../../test-support.js";
 import { PptSlideDetailScreen, PptSlideListScreen } from "./index.js";
 
-// Creates a fresh, empty ppt presentation (a real createPpt() editor -- see PptEditor's own comment, it starts with zero slides, unlike ods/xls's default sheet) and exposes the current screen stack's top plus the live slide count as probes.
+// Creates a fresh, empty ppt presentation (a real createPpt() editor — see PptEditor's own comment, it starts with zero slides, unlike ods/xls's default sheet) and exposes the current screen stack's top plus the live slide count as probes.
 function ListHarness(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();
@@ -85,7 +85,7 @@ describe("PptSlideListScreen", () => {
   });
 });
 
-// A harness that seeds a real slide, and a real text-box shape on it, directly through PptEditor.addSlide()/PptSlide.addTextBox() -- test setup, not the behaviour under test, exactly like the xls grid harness seeds a cell directly -- so the detail screen has real, pre-populated content to render rather than starting from ADD_SLIDE's own bare default. The push happens exactly once, guarded by a ref, so popping back to the slide list later does not immediately re-trigger this same setup effect.
+// A harness that seeds a real slide, and a real text-box shape on it, directly through PptEditor.addSlide()/PptSlide.addTextBox() — test setup, not the behaviour under test, exactly like the xls grid harness seeds a cell directly — so the detail screen has real, pre-populated content to render rather than starting from ADD_SLIDE's own bare default. The push happens exactly once, guarded by a ref, so popping back to the slide list later does not immediately re-trigger this same setup effect.
 function DetailHarness(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();

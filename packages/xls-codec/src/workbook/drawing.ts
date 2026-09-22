@@ -31,12 +31,12 @@ import { readChartSeries, type ChartRangeContext } from "./chart";
 import { readEmbeddedObjectPackage } from "./embedded-object";
 import type { RawColumn, RawRow } from "./sheet";
 
-// One worksheet's own drawing content: pictures (ContentSheetImage) and everything else a shape can hold that has no dedicated image slot -- a chart ([MS-XLS] "Obj" ftCmo objType Chart, resolved through its own nested BOF(dt=chart)...EOF substream, see chart.ts) or a generic autoshape/textbox/line (objectKind 'drawing', a ContentDrawPage of one ContentShape). A shape's own drawing geometry (Sp/Opt/ClientAnchor, drawing/shapes.ts) and the Obj record naming what it actually IS pair up 1:1, in document order, across the worksheet substream's own MsoDrawing/Obj records -- the same positional correlation every real BIFF8 reader (this reader's own design, cross-checked against how Apache POI's EscherAggregate and xlrd both resolve this exact pairing) relies on, since neither record names the other directly.
+// One worksheet's own drawing content: pictures (ContentSheetImage) and everything else a shape can hold that has no dedicated image slot — a chart ([MS-XLS] "Obj" ftCmo objType Chart, resolved through its own nested BOF(dt=chart)...EOF substream, see chart.ts) or a generic autoshape/textbox/line (objectKind 'drawing', a ContentDrawPage of one ContentShape). A shape's own drawing geometry (Sp/Opt/ClientAnchor, drawing/shapes.ts) and the Obj record naming what it actually IS pair up 1:1, in document order, across the worksheet substream's own MsoDrawing/Obj records — the same positional correlation every real BIFF8 reader (this reader's own design, cross-checked against how Apache POI's EscherAggregate and xlrd both resolve this exact pairing) relies on, since neither record names the other directly.
 
 /** [MS-XLS] "FtCmo" ot enumeration, the values this reader routes on. */
 const OBJECT_TYPE_CHART = 0x05;
 const OBJECT_TYPE_PICTURE = 0x08;
-/** The Note object type comments.ts's own Note/Obj/Txo reading already fully accounts for -- a comment's own callout box carries an MsoDrawing shape too, and pairing it here as well would emit a spurious, contentless 'drawing' embedded object for every cell comment on the sheet. */
+/** The Note object type comments.ts's own Note/Obj/Txo reading already fully accounts for — a comment's own callout box carries an MsoDrawing shape too, and pairing it here as well would emit a spurious, contentless 'drawing' embedded object for every cell comment on the sheet. */
 const OBJECT_TYPE_NOTE = 0x19;
 
 export interface SheetDrawing {
@@ -52,16 +52,16 @@ export interface SheetDrawingContext {
   readonly formulaSheets: FormulaSheetContext;
   readonly ownSheetCells: readonly ContentSheetCell[];
   readonly metadata: LayoutMetadata;
-  /** Every substream the workbook stream carries -- searched for the chart substream a Chart-type Obj record's own nested BOF...EOF produced (splitSubstreams reports it as its own entry, positioned by byte offset rather than nested inside the worksheet's own `records`; see biff/substreams.ts's own top comment for why). */
+  /** Every substream the workbook stream carries — searched for the chart substream a Chart-type Obj record's own nested BOF...EOF produced (splitSubstreams reports it as its own entry, positioned by byte offset rather than nested inside the worksheet's own `records`; see biff/substreams.ts's own top comment for why). */
   readonly allSubstreams: readonly Substream[];
-  /** Every "MBD<hex>/Package" Embedding Storage the outer compound file carries, keyed by the storage id a Picture-type Obj record's own FtPictFmla names (container.ts's own readWorkbookStreams) -- resolved here for a Picture Obj record whose data lives in an OLE embedding rather than the workbook-wide Blip Store. */
+  /** Every "MBD<hex>/Package" Embedding Storage the outer compound file carries, keyed by the storage id a Picture-type Obj record's own FtPictFmla names (container.ts's own readWorkbookStreams) — resolved here for a Picture Obj record whose data lives in an OLE embedding rather than the workbook-wide Blip Store. */
   readonly embeddingStreams: ReadonlyMap<number, Uint8Array<ArrayBuffer>>;
 }
 
 const GRID_UNITS_X = 1024;
 const GRID_UNITS_Y = 256;
 
-/** The worksheet grid geometry a cell anchor resolves against -- declared column widths/row heights with Excel's own Normal-style default beneath, mirroring ooxml.js's identical SheetGridGeometry for the xlsx case. Exported for direct testing: a wrong declared width/height is invisible through most of this file's own integration tests, since a shape's anchor typically spans only one or two cells near the sheet's own origin, where the cumulative xPt/yPt sum an off-by-one column/row bound would silently miscompute is small enough to look identical to the correct value by coincidence. */
+/** The worksheet grid geometry a cell anchor resolves against — declared column widths/row heights with Excel's own Normal-style default beneath, mirroring ooxml.js's identical SheetGridGeometry for the xlsx case. Exported for direct testing: a wrong declared width/height is invisible through most of this file's own integration tests, since a shape's anchor typically spans only one or two cells near the sheet's own origin, where the cumulative xPt/yPt sum an off-by-one column/row bound would silently miscompute is small enough to look identical to the correct value by coincidence. */
 export class SheetGridGeometry {
   private readonly columnWidths = new Map<number, number>();
   private readonly rowHeights = new Map<number, number>();
@@ -90,7 +90,7 @@ export class SheetGridGeometry {
     return this.rowHeights.get(index) ?? DEFAULT_ROW_HEIGHT_PT;
   }
 
-  /** The absolute page-space X of a given column's own left edge -- the cumulative width of every column before it. */
+  /** The absolute page-space X of a given column's own left edge — the cumulative width of every column before it. */
   xPt(column: number): number {
     let x = 0;
     for (let index = 0; index < column; index += 1) {
@@ -119,7 +119,7 @@ interface AnchorPlacement {
   readonly offsetYPt: number;
 }
 
-/** Resolves an OfficeArtClientAnchorSheet into the cell-relative placement ContentSheetImage/ContentEmbeddedObject both carry, plus the page-absolute frame box a Box's own xPt/yPt/widthPt/heightPt need -- dxL/dxR in 1/1024ths of the anchor cell's own width, dyT/dyB in 1/256ths of its own height ([MS-XLS] 2.5.163). */
+/** Resolves an OfficeArtClientAnchorSheet into the cell-relative placement ContentSheetImage/ContentEmbeddedObject both carry, plus the page-absolute frame box a Box's own xPt/yPt/widthPt/heightPt need — dxL/dxR in 1/1024ths of the anchor cell's own width, dyT/dyB in 1/256ths of its own height ([MS-XLS] 2.5.163). */
 export function resolveAnchorPlacement(
   anchor: ShapeAnchor,
   geometry: SheetGridGeometry,
@@ -154,7 +154,7 @@ export function readSheetDrawing(
   context: SheetDrawingContext,
 ): SheetDrawing {
   const drawingChunks: Uint8Array<ArrayBuffer>[] = [];
-  // nextOffset bounds where a Chart-type Obj record's own nested substream can be found: the first worksheet record AFTER this Obj in the true stream, which -- because splitSubstreams' own nesting fix carves a chart substream's records out of `worksheetRecords` entirely -- is exactly the byte position a chart's own EOF closed before. Without this upper bound a workbook with more than one embedded chart could match a LATER chart's own BOF instead of the one this specific Obj record actually precedes.
+  // nextOffset bounds where a Chart-type Obj record's own nested substream can be found: the first worksheet record AFTER this Obj in the true stream, which — because splitSubstreams' own nesting fix carves a chart substream's records out of `worksheetRecords` entirely — is exactly the byte position a chart's own EOF closed before. Without this upper bound a workbook with more than one embedded chart could match a LATER chart's own BOF instead of the one this specific Obj record actually precedes.
   const objEntries: {
     readonly ot: number;
     readonly offset: number;
@@ -163,7 +163,7 @@ export function readSheetDrawing(
   }[] = [];
   for (const [index, record] of worksheetRecords.entries()) {
     if (record.type === RECORD_MSODRAWING) {
-      // record.blocks is the whole group -- the base MsoDrawing record's own data plus every Continue record chained onto it ([MS-XLS] 2.4.180); a real picture's blip bytes routinely exceed one record's 8224-byte ceiling, so only reading blocks[0] would silently truncate the Escher stream for any sheet carrying an image past that size.
+      // record.blocks is the whole group — the base MsoDrawing record's own data plus every Continue record chained onto it ([MS-XLS] 2.4.180); a real picture's blip bytes routinely exceed one record's 8224-byte ceiling, so only reading blocks[0] would silently truncate the Escher stream for any sheet carrying an image past that size.
       drawingChunks.push(...record.blocks);
       continue;
     }
@@ -174,14 +174,14 @@ export function readSheetDrawing(
       objEntries.push({ ot, offset: record.offset, nextOffset, group: record });
     }
   }
-  // No early-out for an empty drawingChunks: concatBytes([]) is an empty Uint8Array, and readSheetShapes on empty bytes already returns [] on its own (its own readEscherRecords loop condition `offset < bytes.length` never runs for a zero-length stream), so shapes stays [] and the pairing loop below never executes either way -- a special case here would state nothing the general path doesn't already produce.
+  // No early-out for an empty drawingChunks: concatBytes([]) is an empty Uint8Array, and readSheetShapes on empty bytes already returns [] on its own (its own readEscherRecords loop condition `offset < bytes.length` never runs for a zero-length stream), so shapes stays [] and the pairing loop below never executes either way — a special case here would state nothing the general path doesn't already produce.
   const drawingBytes = concatBytes(drawingChunks);
   const shapes = readSheetShapes(drawingBytes);
   const geometry = new SheetGridGeometry(context.columns, context.rows);
 
   const images: ContentSheetImage[] = [];
   const embeddedObjects: ContentEmbeddedObject[] = [];
-  // No explicit pair count: since neither array has genuine holes, the index of the first missing shape or Obj record is also the index of every one after it, so the moment EITHER side runs out, no further real pair can ever exist and the loop is done -- there is nothing left to skip past.
+  // No explicit pair count: since neither array has genuine holes, the index of the first missing shape or Obj record is also the index of every one after it, so the moment EITHER side runs out, no further real pair can ever exist and the loop is done — there is nothing left to skip past.
   for (let index = 0; ; index += 1) {
     const shape = shapes[index];
     const obj = objEntries[index];
@@ -232,7 +232,7 @@ export function readSheetDrawing(
   return { images, embeddedObjects };
 }
 
-/** A Picture-type Obj record whose FtPictFmla names an Embedding Storage this workbook's own outer compound file carries: resolved through readEmbeddedObjectPackage rather than the plain Blip Store path imageFromShape covers, since an OLE-embedded object's data lives in that storage's own Package stream instead of a pib reference into the workbook-wide Blip Store. Undefined for a plain picture (no FtPictFmla at all), an FtPictFmla naming a storage id this workbook's container did not report, or a storage whose Package stream is not this codec's own payload (readEmbeddedObjectPackage's own foreign-payload degrade) -- each falls through to imageFromShape instead. */
+/** A Picture-type Obj record whose FtPictFmla names an Embedding Storage this workbook's own outer compound file carries: resolved through readEmbeddedObjectPackage rather than the plain Blip Store path imageFromShape covers, since an OLE-embedded object's data lives in that storage's own Package stream instead of a pib reference into the workbook-wide Blip Store. Undefined for a plain picture (no FtPictFmla at all), an FtPictFmla naming a storage id this workbook's container did not report, or a storage whose Package stream is not this codec's own payload (readEmbeddedObjectPackage's own foreign-payload degrade) — each falls through to imageFromShape instead. */
 export function embeddedObjectFromObjRecord(
   objGroup: RecordGroup,
   shape: DrawingShape,
@@ -288,7 +288,7 @@ export function imageFromShape(
   };
 }
 
-/** Locates the chart's own nested BOF(dt=chart)...EOF substream: the one whose own BOF offset falls strictly between this Obj record's offset and whichever worksheet record comes right after it in the ORIGINAL stream -- splitSubstreams' own nesting fix (biff/substreams.ts) pulls a nested chart's records out of the worksheet substream's own `records` array entirely and reports it as its own top-level Substream instead, so byte-offset containment, not array position, is what still ties the two together. */
+/** Locates the chart's own nested BOF(dt=chart)...EOF substream: the one whose own BOF offset falls strictly between this Obj record's offset and whichever worksheet record comes right after it in the ORIGINAL stream — splitSubstreams' own nesting fix (biff/substreams.ts) pulls a nested chart's records out of the worksheet substream's own `records` array entirely and reports it as its own top-level Substream instead, so byte-offset containment, not array position, is what still ties the two together. */
 export function chartFromShape(
   shape: DrawingShape,
   objOffset: number,
@@ -347,7 +347,7 @@ export function chartFromShape(
   };
 }
 
-/** Lays a chart's own series out as ooxml.js's readChartTable does for the identical xlsx/pptx case: a header row of series names over the category column, then one row per category with each series' own value -- see workbook/chart.ts's own top comment for why this flattened shape, not a typed chart object, is what document-schema.js's 'chart' objectKind actually carries. */
+/** Lays a chart's own series out as ooxml.js's readChartTable does for the identical xlsx/pptx case: a header row of series names over the category column, then one row per category with each series' own value — see workbook/chart.ts's own top comment for why this flattened shape, not a typed chart object, is what document-schema.js's 'chart' objectKind actually carries. */
 export function chartTableCells(
   series: readonly {
     readonly name: string | undefined;
@@ -378,7 +378,7 @@ export function chartTableCells(
       });
     });
   });
-  // A chart's series share one category axis: the union across every series, in series order (the first series to label a given point wins), matching readChartTable's own identical convention for the xlsx/pptx case -- written once here rather than once per series, which would otherwise push one cell per series at the SAME (row, 0) position whenever two series' own category arrays disagree.
+  // A chart's series share one category axis: the union across every series, in series order (the first series to label a given point wins), matching readChartTable's own identical convention for the xlsx/pptx case — written once here rather than once per series, which would otherwise push one cell per series at the SAME (row, 0) position whenever two series' own category arrays disagree.
   const categories = new Map<number, string>();
   for (const entry of series) {
     entry.categories.forEach((category, pointIndex) => {
@@ -398,7 +398,7 @@ export function chartTableCells(
   return cells;
 }
 
-/** A shape this reader recognises as neither a picture nor a chart -- an autoshape, a text box, a line, a group -- carried as a 'drawing' embedded object: a single-page ContentDocument holding one ContentShape sized and positioned at the shape's own anchor. Undefined for the patriarch/group-only case readSheetShapes already excludes, and for a shape whose own anchor collapses to zero size. */
+/** A shape this reader recognises as neither a picture nor a chart — an autoshape, a text box, a line, a group — carried as a 'drawing' embedded object: a single-page ContentDocument holding one ContentShape sized and positioned at the shape's own anchor. Undefined for the patriarch/group-only case readSheetShapes already excludes, and for a shape whose own anchor collapses to zero size. */
 export function drawingObjectFromShape(
   shape: DrawingShape,
   geometry: SheetGridGeometry,

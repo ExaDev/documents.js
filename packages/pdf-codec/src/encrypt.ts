@@ -8,11 +8,11 @@ import type { PdfDiagnosticSink } from "./diagnostics";
 import type { PdfDict, PdfObject } from "./objects";
 import { asDict, asName, asNumber, dictGet } from "./objects";
 
-// The PDF standard security handler (ISO 32000-1 7.6.3, extended by ISO 32000-2 7.6.4.3 for revisions 5 and 6), scoped deliberately to the *empty user password* case: a permissions-only PDF, where an owner password may well be set but opening the file needs no password at all. That is overwhelmingly the encryption a document-conversion pipeline actually meets in the wild -- a file marked "no printing"/"no copying" by whoever exported it.
+// The PDF standard security handler (ISO 32000-1 7.6.3, extended by ISO 32000-2 7.6.4.3 for revisions 5 and 6), scoped deliberately to the *empty user password* case: a permissions-only PDF, where an owner password may well be set but opening the file needs no password at all. That is overwhelmingly the encryption a document-conversion pipeline actually meets in the wild — a file marked "no printing"/"no copying" by whoever exported it.
 //
 // What this module does NOT do, and will not be quietly extended to do: crack, guess, or brute-force a password. If the empty user password fails to verify against /U, it throws PdfPasswordRequiredError and stops. Only the *user* password is tried; a file whose user password is non-empty is not openable here even if its owner password happens to be empty, because authenticating as owner is a permissions escalation, not a way to read a file you were already allowed to read.
 //
-// Every primitive this needs (MD5, SHA-2, RC4, AES-CBC) is hand-written under src/crypto/ rather than imported from node:crypto -- see those modules' own headers for why that is a hard requirement of this package's platform-neutral build rather than a preference.
+// Every primitive this needs (MD5, SHA-2, RC4, AES-CBC) is hand-written under src/crypto/ rather than imported from node:crypto — see those modules' own headers for why that is a hard requirement of this package's platform-neutral build rather than a preference.
 
 export type CipherMethod = "identity" | "rc4" | "aes";
 
@@ -39,7 +39,7 @@ export const PASSWORD_PADDING = new Uint8Array([
   0xa9, 0xfe, 0x64, 0x53, 0x69, 0x7a,
 ]);
 
-// Algorithm 1's own trailing salt, appended to the per-object key input for an AES (but not an RC4) crypt filter -- the four bytes of the ASCII string "sAlT". Exported: the same per-object key derivation (objectKey below) is symmetric between read and write, so encrypt-write.ts reuses this rather than re-deriving it.
+// Algorithm 1's own trailing salt, appended to the per-object key input for an AES (but not an RC4) crypt filter — the four bytes of the ASCII string "sAlT". Exported: the same per-object key derivation (objectKey below) is symmetric between read and write, so encrypt-write.ts reuses this rather than re-deriving it.
 export const AES_OBJECT_KEY_SALT = new Uint8Array([0x73, 0x41, 0x6c, 0x54]);
 
 export const MD5_DIGEST_BYTES = 16;
@@ -124,7 +124,7 @@ export function padOrTruncatePassword(
   return padded;
 }
 
-// ISO 32000-1 7.6.3.3, Algorithm 2, generalised over an already-padded password (step (a) run once by the caller): both the read path (always the padded empty password -- see computeLegacyFileKey below) and encrypt-write.ts's write path (a real, possibly non-empty, padded password) share every remaining step. Exported for that reuse.
+// ISO 32000-1 7.6.3.3, Algorithm 2, generalised over an already-padded password (step (a) run once by the caller): both the read path (always the padded empty password — see computeLegacyFileKey below) and encrypt-write.ts's write path (a real, possibly non-empty, padded password) share every remaining step. Exported for that reuse.
 export function computeLegacyFileKeyFromPaddedPassword(
   paddedPassword: Uint8Array<ArrayBuffer>,
   owner: Uint8Array<ArrayBuffer>,
@@ -174,7 +174,7 @@ function computeLegacyFileKey(
   );
 }
 
-// ISO 32000-1 7.6.3.4, Algorithm 4 (revision 2) steps (a)-(c) and Algorithm 5 (revision 3+) steps (a)-(e): computing /U in the first place IS this forward computation (a writer stores its result directly), and Algorithm 6 (authenticating a supplied password) is just this same computation compared against whatever a writer already stored. Returns the full 32 bytes for revision 2 (already meaningful throughout) or the 16 meaningful bytes for revision 3+ (the caller decides what -- if anything -- to compare or to append the 16 bytes of arbitrary padding Algorithm 5 step (f) requires after). Exported so both this module's read-side Algorithm 6 and encrypt-write.ts's write-side Algorithm 4/5 share one implementation.
+// ISO 32000-1 7.6.3.4, Algorithm 4 (revision 2) steps (a)-(c) and Algorithm 5 (revision 3+) steps (a)-(e): computing /U in the first place IS this forward computation (a writer stores its result directly), and Algorithm 6 (authenticating a supplied password) is just this same computation compared against whatever a writer already stored. Returns the full 32 bytes for revision 2 (already meaningful throughout) or the 16 meaningful bytes for revision 3+ (the caller decides what — if anything — to compare or to append the 16 bytes of arbitrary padding Algorithm 5 step (f) requires after). Exported so both this module's read-side Algorithm 6 and encrypt-write.ts's write-side Algorithm 4/5 share one implementation.
 export function legacyUserValueCore(
   fileKey: Uint8Array<ArrayBuffer>,
   fileId: Uint8Array<ArrayBuffer>,
@@ -191,7 +191,7 @@ export function legacyUserValueCore(
   return value;
 }
 
-// ISO 32000-1 7.6.3.4, Algorithm 6: run Algorithm 4/5 forwards and compare against the stored /U -- "does the supplied password open this file" (this codec only ever supplies the empty password; see this module's own header).
+// ISO 32000-1 7.6.3.4, Algorithm 6: run Algorithm 4/5 forwards and compare against the stored /U — "does the supplied password open this file" (this codec only ever supplies the empty password; see this module's own header).
 function legacyUserPasswordVerifies(
   encryptDict: PdfDict,
   fileId: Uint8Array<ArrayBuffer>,
@@ -235,7 +235,7 @@ export function hardenedHash(
       k.subarray(AES_BLOCK_BYTES, AES_BLOCK_BYTES * 2),
       k1,
     );
-    // "The first 16 bytes of E taken as an unsigned big-endian integer, modulo 3." Because 256 is congruent to 1 modulo 3, that value's remainder equals the remainder of the plain sum of those bytes -- the same shortcut every mainstream implementation uses, and exact rather than approximate.
+    // "The first 16 bytes of E taken as an unsigned big-endian integer, modulo 3." Because 256 is congruent to 1 modulo 3, that value's remainder equals the remainder of the plain sum of those bytes — the same shortcut every mainstream implementation uses, and exact rather than approximate.
     let sum = 0;
     for (let i = 0; i < AES_BLOCK_BYTES; i++) {
       sum += e[i]!;

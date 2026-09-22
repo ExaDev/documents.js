@@ -7,7 +7,7 @@ import {
   ParagraphFamilyBodyList,
 } from "../../shared/paragraph-family.js";
 
-// The docx-specific root of this screen family: constructs a fresh, unwrapped adapter straight from `DocxEditor.paragraphs()`/`.tables()` on every render (never cached -- see the live-view rule in state/types.ts) and hands it to the shared body list. docx has no `.lists()` accessor at all (a docx paragraph's own list membership is flat metadata, not a separate container), so its adapter simply omits `lists`.
+// The docx-specific root of this screen family: constructs a fresh, unwrapped adapter straight from `DocxEditor.paragraphs()`/`.tables()` on every render (never cached — see the live-view rule in state/types.ts) and hands it to the shared body list. docx has no `.lists()` accessor at all (a docx paragraph's own list membership is flat metadata, not a separate container), so its adapter simply omits `lists`.
 export function DocxBodyListScreen(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();

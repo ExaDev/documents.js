@@ -25,7 +25,7 @@ import {
   writeOutput,
 } from "../runtime/io";
 
-// Every DocumentFormat this CLI's commands know how to name in a usage error -- shared between the generic `convert` command (commands/convert.ts) and `from-package` (commands/from-package.ts), the two commands whose target format is not already fixed by their own name.
+// Every DocumentFormat this CLI's commands know how to name in a usage error — shared between the generic `convert` command (commands/convert.ts) and `from-package` (commands/from-package.ts), the two commands whose target format is not already fixed by their own name.
 export const KNOWN_DOCUMENT_FORMATS =
   "docx, pptx, xlsx, odt, odp, ods, odg, svg, odf, csv, markdown, rtf, wpd, doc, xls, ppt, epub, pdf";
 
@@ -47,7 +47,7 @@ export function resolveTargetFormat(
   if (destination === undefined) {
     return {
       errorMessage:
-        "cannot infer a target format -- pass an output path with a recognised extension, --out with one, or --to <format>",
+        "cannot infer a target format — pass an output path with a recognised extension, --out with one, or --to <format>",
     };
   }
   const inferred = inferFormatFromExtension(destination);
@@ -66,16 +66,16 @@ export interface ConversionCommandOptions {
   readonly quiet: boolean;
   readonly verbose: boolean;
   readonly dumpPackage?: string;
-  // Both absent on a command addFontOptions (commands/options.ts) was never applied to -- a pdf-to-<format> reconstruction or a format-to-format bridge, neither of which resolves a typeface at all.
+  // Both absent on a command addFontOptions (commands/options.ts) was never applied to — a pdf-to-<format> reconstruction or a format-to-format bridge, neither of which resolves a typeface at all.
   readonly fontFiles?: readonly string[];
   readonly reportFontSubstitutions?: boolean;
-  // The csv/svg edge selections from commands/options.ts's own SelectionCliFlags -- threaded straight into the port's own ConversionOptions, which passes them only to the edges that read them (a csv read/write delimiter and sheet pick, an svg write page pick). Undefined on a pair with no csv or svg edge, where the port has nothing to hand them to.
+  // The csv/svg edge selections from commands/options.ts's own SelectionCliFlags — threaded straight into the port's own ConversionOptions, which passes them only to the edges that read them (a csv read/write delimiter and sheet pick, an svg write page pick). Undefined on a pair with no csv or svg edge, where the port has nothing to hand them to.
   readonly delimiter?: string;
   readonly sheet?: string;
   readonly page?: number;
 }
 
-// One clean line for a human, with a full stack trace appended only under --verbose -- a bare stack trace on every failure is noise for the common "wrong file" case, but indispensable when actually debugging this CLI itself.
+// One clean line for a human, with a full stack trace appended only under --verbose — a bare stack trace on every failure is noise for the common "wrong file" case, but indispensable when actually debugging this CLI itself.
 export function formatError(error: unknown, verbose: boolean): string {
   if (!(error instanceof Error)) {
     return `error: ${String(error)}`;
@@ -85,7 +85,7 @@ export function formatError(error: unknown, verbose: boolean): string {
   return `error: ${error.message}${stackClause}`;
 }
 
-// The single implementation behind every explicit per-conversion command (docx-to-pdf, pdf-to-docx, ...) and the generic `convert` command -- each just partially applies (source, target) and gets back a ready action function for commander to wire up.
+// The single implementation behind every explicit per-conversion command (docx-to-pdf, pdf-to-docx, ...) and the generic `convert` command — each just partially applies (source, target) and gets back a ready action function for commander to wire up.
 export function buildConversionAction(
   source: DocumentFormat,
   target: DocumentFormat,
@@ -122,7 +122,7 @@ export function buildConversionAction(
       const fonts = await loadProvidedFonts(options.fontFiles ?? [], {
         signal,
       });
-      // Resolve a markdown source's own non-data: image destinations against the input file's directory, so `convert notes.md` embeds `![](./image.png)` rather than degrading it to alt text. Ignored by every non-markdown conversion, so wiring it unconditionally is a no-op for docx/pptx/odt/... sources. For stdin (`-`) the base directory is the current working directory. Shared between the real conversion below and, when --dump-package is set, the separate native-tree read -- both read the identical source bytes, so a markdown source resolves its images identically either way.
+      // Resolve a markdown source's own non-data: image destinations against the input file's directory, so `convert notes.md` embeds `![](./image.png)` rather than degrading it to alt text. Ignored by every non-markdown conversion, so wiring it unconditionally is a no-op for docx/pptx/odt/... sources. For stdin (`-`) the base directory is the current working directory. Shared between the real conversion below and, when --dump-package is set, the separate native-tree read — both read the identical source bytes, so a markdown source resolves its images identically either way.
       const images = createFilesystemMarkdownImageResolver(
         input === "-" ? "." : dirname(resolve(input)),
       );
@@ -163,13 +163,13 @@ export function buildConversionAction(
       }
 
       if (options.dumpPackage !== undefined) {
-        // Reads the SOURCE's own native tree directly, rather than trusting result.package/onDocument's report -- the intermediate hop that actually produced `target`'s bytes, which can be a lossy cross-variant bridge's shape for a target sharing no ContentDocument variant with the source (xlsx -> markdown composing through a pdf pivot reports that pivot's wordprocessing-shaped tree, with no sheet/cell/formula/A1 data at all -- ExaDev/documents.js#823). --dump-package is about what the SOURCE document itself carries, regardless of --to, so it always reads that instead. No `sink` here: the real conversion above already reports every diagnostic (including a pdf source's own parse diagnostics) through result.diagnostics, and this second read must not report them a second time.
+        // Reads the SOURCE's own native tree directly, rather than trusting result.package/onDocument's report — the intermediate hop that actually produced `target`'s bytes, which can be a lossy cross-variant bridge's shape for a target sharing no ContentDocument variant with the source (xlsx -> markdown composing through a pdf pivot reports that pivot's wordprocessing-shaped tree, with no sheet/cell/formula/A1 data at all — ExaDev/documents.js#823). --dump-package is about what the SOURCE document itself carries, regardless of --to, so it always reads that instead. No `sink` here: the real conversion above already reports every diagnostic (including a pdf source's own parse diagnostics) through result.diagnostics, and this second read must not report them a second time.
         const nativeTree = readNativeDocumentTree(
           source,
           new Uint8Array(inputBytes),
           { signal, images },
         );
-        // Tagged with its own $schema before serialising, not written raw -- documentFromJson (the read side `from-package` uses to read this file back in) identifies a value's kind and version purely from that URI, so an untagged dump would be unreadable by its own round trip.
+        // Tagged with its own $schema before serialising, not written raw — documentFromJson (the read side `from-package` uses to read this file back in) identifies a value's kind and version purely from that URI, so an untagged dump would be unreadable by its own round trip.
         await writeFile(
           options.dumpPackage,
           JSON.stringify(documentTreeWithSchema(nativeTree), undefined, 2),

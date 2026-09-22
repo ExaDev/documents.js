@@ -34,7 +34,7 @@ import {
   twoPagesFirstWithoutResourcesPdf,
 } from "./test-support/pdf";
 
-// renderPdfPage's tests drive it through a recording rasteriser (the port's cheapest consumer) so every assertion is on the op stream itself -- the exact positioned geometry a real backend would receive -- rather than on any one backend's pixels. The end-to-end pixel tests (renderPdfPage plus the pdf-raster-cpu reference backend) live in that backend package's own suite; here the port contract, the coordinate transforms, and the refusal diagnostics are what is pinned.
+// renderPdfPage's tests drive it through a recording rasteriser (the port's cheapest consumer) so every assertion is on the op stream itself — the exact positioned geometry a real backend would receive — rather than on any one backend's pixels. The end-to-end pixel tests (renderPdfPage plus the pdf-raster-cpu reference backend) live in that backend package's own suite; here the port contract, the coordinate transforms, and the refusal diagnostics are what is pinned.
 //
 // The small fixtures below are built by local literal concatenation on the same independence principle src/test-support/pdf.ts states (a fixture built by this package's own writer would let a writer bug hide from the renderer test): the raster suite's fixtures differ from the reader suite's and are few enough to build inline.
 
@@ -133,7 +133,7 @@ class SmallFixture {
   }
 }
 
-// Repoints a table record past the end of the file, the same technique embedded-font.test.ts's own dropTable uses -- parseSfnt drops that one table entirely, exactly as it would for a genuinely truncated font, while every other table (head/maxp/glyf included) stays intact and readable.
+// Repoints a table record past the end of the file, the same technique embedded-font.test.ts's own dropTable uses — parseSfnt drops that one table entirely, exactly as it would for a genuinely truncated font, while every other table (head/maxp/glyf included) stays intact and readable.
 function dropSfntTable(bytes: Uint8Array<ArrayBuffer>, tag: string): void {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const numTables = view.getUint16(4);
@@ -222,7 +222,7 @@ describe("renderPdfPage: geometry and clipPt", () => {
       widthPt: 200,
       heightPt: 100,
     });
-    // The rect at page point (10, 20) with extent 30x40 sits 40pt below the page's 100pt top edge, so its device top-left is (10, 100 - 60) = (10, 40) -- the flip every consumer's OCR coordinate expectations ride on.
+    // The rect at page point (10, 20) with extent 30x40 sits 40pt below the page's 100pt top edge, so its device top-left is (10, 100 - 60) = (10, 40) — the flip every consumer's OCR coordinate expectations ride on.
     expect(rasteriser.ops.filter(isFillRect)).toEqual([
       {
         kind: "fillRect",
@@ -308,7 +308,7 @@ describe("renderPdfPage: geometry and clipPt", () => {
   });
 
   it("rejects a clipPt whose heightPt alone is zero, with a positive widthPt", () => {
-    // A widthPt/heightPt boundary check written as two independent `> 0` guards has two ways to go wrong; the sibling case above already pins widthPt, so this pins heightPt on its own -- a positive widthPt must not mask a degenerate heightPt.
+    // A widthPt/heightPt boundary check written as two independent `> 0` guards has two ways to go wrong; the sibling case above already pins widthPt, so this pins heightPt on its own — a positive widthPt must not mask a degenerate heightPt.
     expect(() =>
       drive(
         onePagePdf(content),
@@ -320,7 +320,7 @@ describe("renderPdfPage: geometry and clipPt", () => {
   });
 
   it("rejects a clipPt that just touches the page's right edge with zero overlap width, a positive-widthPt clip the earlier guard cannot catch", () => {
-    // clipLeft === clipRight exactly (200, the page's own right edge) -- a genuine intersection-width check at its own zero boundary, distinct from the requested-widthPt guard above (which never sees this clipPt at all, since its own widthPt is a positive 30).
+    // clipLeft === clipRight exactly (200, the page's own right edge) — a genuine intersection-width check at its own zero boundary, distinct from the requested-widthPt guard above (which never sees this clipPt at all, since its own widthPt is a positive 30).
     expect(() =>
       drive(
         onePagePdf(content),
@@ -369,7 +369,7 @@ describe("renderPdfPage: geometry and clipPt", () => {
   });
 
   it("does not find a %PDF- header planted past the search window's own 1024-byte limit", () => {
-    // hasPdfHeader searches only a bounded prefix (ISO 32000-1 7.5.2 allows junk before the header, not an unbounded scan) -- a header sitting well past that window is exactly as absent as no header at all.
+    // hasPdfHeader searches only a bounded prefix (ISO 32000-1 7.5.2 allows junk before the header, not an unbounded scan) — a header sitting well past that window is exactly as absent as no header at all.
     const junkPrefix = new Uint8Array(1030).fill(0x41); // 1030 > HEADER_SEARCH_WINDOW's own 1024
     const bytes = new Uint8Array([...junkPrefix, ...enc("%PDF-1.7\n")]);
     expect(() =>
@@ -391,7 +391,7 @@ describe("renderPdfPage: geometry and clipPt", () => {
   });
 
   it("checks an already-aborted signal at entry even for a page with no /Resources, whose walk never reaches the per-item abort check at all", () => {
-    // twoPagesFirstWithoutResourcesPdf's first page returns before interpretContentStream ever runs, so this is the ONLY throwIfAborted call reachable for it -- unlike the top-of-module test above, whose fixture always has at least one item and so could throw from the per-item check even were the entry check removed entirely.
+    // twoPagesFirstWithoutResourcesPdf's first page returns before interpretContentStream ever runs, so this is the ONLY throwIfAborted call reachable for it — unlike the top-of-module test above, whose fixture always has at least one item and so could throw from the per-item check even were the entry check removed entirely.
     const controller = new AbortController();
     controller.abort();
     expect(() =>
@@ -470,7 +470,7 @@ describe("renderPdfPage: geometry and clipPt", () => {
   });
 
   it("does not fall back for a CropBox whose corners have a negative-but-non-degenerate origin, where a mutated urx+llx (or ury+lly) sum would wrongly read as degenerate", () => {
-    // llx = -20 and lly = -30 both make the sum urx+llx (or ury+lly) negative -- exactly the wrong-sign value a `+` in place of the real `-` would compute -- while the real width (30) and height (40) stay positive and non-degenerate.
+    // llx = -20 and lly = -30 both make the sum urx+llx (or ury+lly) negative — exactly the wrong-sign value a `+` in place of the real `-` would compute — while the real width (30) and height (40) stay positive and non-degenerate.
     const diagnostics: PdfDiagnostic[] = [];
     const rasteriser = new RecordingRasteriser();
     drive(
@@ -486,7 +486,7 @@ describe("renderPdfPage: geometry and clipPt", () => {
   });
 
   it("translates by the visible region's own minY, not adds it, when the CropBox's own lower edge sits above the page's own origin", () => {
-    // With no rotation the rotation matrix is the identity, so visibleRect is exactly the CropBox itself and visibleRect.minY = cropBox.lly = 30 directly -- a clean, direct pin on the translation's own sign.
+    // With no rotation the rotation matrix is the identity, so visibleRect is exactly the CropBox itself and visibleRect.minY = cropBox.lly = 30 directly — a clean, direct pin on the translation's own sign.
     const rasteriser = new RecordingRasteriser();
     drive(
       onePagePdf("1 0 0 rg 10 40 30 10 re f", {
@@ -529,7 +529,7 @@ describe("renderPdfPage: geometry and clipPt", () => {
     const bytes = b.classicXrefAndTrailer(5, "/Root 1 0 R");
     const rasteriser = new RecordingRasteriser();
     drive(bytes, 0, {}, rasteriser);
-    // width = urx - llx = 200, height = ury - lly = 100 -- urx + llx (300) or ury + lly (200) would both be wrong here precisely because the origin is non-zero.
+    // width = urx - llx = 200, height = ury - lly = 100 — urx + llx (300) or ury + lly (200) would both be wrong here precisely because the origin is non-zero.
     expect(rasteriser.geometry).toMatchObject({ widthPx: 200, heightPx: 100 });
   });
 
@@ -602,7 +602,7 @@ describe("renderPdfPage: geometry and clipPt", () => {
   });
 
   it("keeps the array's own two keyword tokens apart across the chunk boundary, not merged into one unrecognised keyword", () => {
-    // Unlike the sibling test above (whose split falls after a number, already a complete token on its own), this one splits directly between two bare keywords -- "re" ending one chunk, "f" starting the next. Without a separator the two concatenate into the single unrecognised keyword "ref", and the rect is never actually filled.
+    // Unlike the sibling test above (whose split falls after a number, already a complete token on its own), this one splits directly between two bare keywords — "re" ending one chunk, "f" starting the next. Without a separator the two concatenate into the single unrecognised keyword "ref", and the rect is never actually filled.
     const b = new SmallFixture();
     b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
     b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
@@ -694,7 +694,7 @@ describe("renderPdfPage: coordinate agreement with readPdf", () => {
       if (rect?.kind !== "rect") {
         throw new Error("fixture setup: no rect item recovered");
       }
-      // The region bounds document-outline.js's segmentPdfRegions would hand back for this figure: exactly PdfRegionBounds' shape, passed straight through as clipPt. This rect deliberately straddles the crop boundary, so the rendered region is the intersection with the visible page -- the same clipping a viewer applies, not an error.
+      // The region bounds document-outline.js's segmentPdfRegions would hand back for this figure: exactly PdfRegionBounds' shape, passed straight through as clipPt. This rect deliberately straddles the crop boundary, so the rendered region is the intersection with the visible page — the same clipping a viewer applies, not an error.
       const clipPt = {
         xPt: rect.xPt,
         yPt: rect.yPt,
@@ -719,7 +719,7 @@ describe("renderPdfPage: coordinate agreement with readPdf", () => {
 
 // --- Vector items through the port. ---
 
-// flattenCubic exercised directly: every real caller reaches it only through curves recovered from actual PDF content streams, which are never carefully enough constructed to pin an exact subdivision count or force the recursion depth cap deterministically -- both properties this suite verifies directly against hand-computed control points.
+// flattenCubic exercised directly: every real caller reaches it only through curves recovered from actual PDF content streams, which are never carefully enough constructed to pin an exact subdivision count or force the recursion depth cap deterministically — both properties this suite verifies directly against hand-computed control points.
 describe("flattenCubic", () => {
   it("returns the endpoint alone for an already-flat (collinear) curve, with no subdivision", () => {
     const points = flattenCubic(
@@ -739,7 +739,7 @@ describe("flattenCubic", () => {
       { x: 10, y: 0 },
     );
     expect(points).toHaveLength(10);
-    // The true, symmetric peak of this curve -- wrong chord/dist arithmetic or a wrong midpoint divisor shifts every one of these values.
+    // The true, symmetric peak of this curve — wrong chord/dist arithmetic or a wrong midpoint divisor shifts every one of these values.
     expect(points[4]).toEqual({ x: 5, y: 0.75 });
     expect(points[points.length - 1]).toEqual({ x: 10, y: 0 });
   });
@@ -751,7 +751,7 @@ describe("flattenCubic", () => {
       { x: -1e9, y: 1e9 },
       { x: 1e-12, y: 0 },
     );
-    // Every leaf hits the depth cap, never the flatness check, so the tree is a perfectly balanced binary recursion of depth 16 -- exactly 2**16 leaves. A boundary of >16, <16, or an unconditional true/false all produce a different power of two (or an infinite loop for false).
+    // Every leaf hits the depth cap, never the flatness check, so the tree is a perfectly balanced binary recursion of depth 16 — exactly 2**16 leaves. A boundary of >16, <16, or an unconditional true/false all produce a different power of two (or an infinite loop for false).
     expect(points).toHaveLength(65536);
   });
 
@@ -766,7 +766,7 @@ describe("flattenCubic", () => {
   });
 
   it("subdivides on the LARGER of the two control points' chord distances, not the smaller", () => {
-    // c1 sits almost exactly on the chord (dist1 ~ 0.001, well under the flatness tolerance) while c2 sits far off it (dist2 = 5, far over) -- a curve constructed so the two distances disagree about whether this piece is flat enough to stop. Only checking the larger one is correct: a single wildly-off control point must still force a split even when its sibling is nearly collinear.
+    // c1 sits almost exactly on the chord (dist1 ~ 0.001, well under the flatness tolerance) while c2 sits far off it (dist2 = 5, far over) — a curve constructed so the two distances disagree about whether this piece is flat enough to stop. Only checking the larger one is correct: a single wildly-off control point must still force a split even when its sibling is nearly collinear.
     const points = flattenCubic(
       { x: 0, y: 0 },
       { x: 5, y: 0.001 },
@@ -777,7 +777,7 @@ describe("flattenCubic", () => {
   });
 
   it("treats the flatness check as <= at the tolerance boundary, not <", () => {
-    // Both control points sit exactly 0.05 page-space units off the chord -- the module's own STROKE_FLATTEN_TOLERANCE_PX. At exactly the boundary the piece must already count as flat enough (<=) and stop without subdividing; a strict < would subdivide once more here, doubling the point count.
+    // Both control points sit exactly 0.05 page-space units off the chord — the module's own STROKE_FLATTEN_TOLERANCE_PX. At exactly the boundary the piece must already count as flat enough (<=) and stop without subdividing; a strict < would subdivide once more here, doubling the point count.
     const points = flattenCubic(
       { x: 0, y: 0 },
       { x: 3, y: 0.05 },
@@ -812,7 +812,7 @@ describe("glyphOutlineSubpaths", () => {
   });
 
   it("draws nothing for a non-empty outline whose only contour is still too short to produce a subpath", () => {
-    // decodeGlyphOutline's own contract only guarantees a non-empty contours array, not that every contour individually clears the 3-point floor -- the same tooShort shape above, but driven through drawGlyphOutline's own draw-or-skip decision rather than glyphOutlineSubpaths directly.
+    // decodeGlyphOutline's own contract only guarantees a non-empty contours array, not that every contour individually clears the 3-point floor — the same tooShort shape above, but driven through drawGlyphOutline's own draw-or-skip decision rather than glyphOutlineSubpaths directly.
     const tooShort = outlineOf([pt(0, 0, true), pt(1, 0, true)]);
     const rasteriser = new RecordingRasteriser();
     drawGlyphOutline(
@@ -870,7 +870,7 @@ describe("glyphOutlineSubpaths", () => {
   });
 
   it("needs no rotation when the contour already starts on-curve, and produces exactly two segments for a single on/off/on run", () => {
-    // On, off, on: the sole off-curve point never triggers the mid-pair emit (only one point in its run), so it folds into the following on-curve point's own quad -- exactly two segments (one line, one quad), the fewest a non-degenerate (length >= 3) contour can ever produce.
+    // On, off, on: the sole off-curve point never triggers the mid-pair emit (only one point in its run), so it folds into the following on-curve point's own quad — exactly two segments (one line, one quad), the fewest a non-degenerate (length >= 3) contour can ever produce.
     const outline = outlineOf([
       pt(0, 0, true),
       pt(6, 9, false),
@@ -898,7 +898,7 @@ describe("glyphOutlineSubpaths", () => {
   });
 
   it("rotates to start on the first on-curve point, walks a run of consecutive off-curve points through their implied midpoint, and closes a still-pending control point back to the start", () => {
-    // Stored order [A(off) B(on) C(off) D(off) E(on) F(off)]: firstOn = 1, so the walk starts at B, continues C, D, E, F, and wraps to A -- exercising the on-curve-with-pending quad (B->C->mid(C,D)), the consecutive-off-curve implied-midpoint quad (twice: C/D and F/A), and the final trailing quad closing a still-pending control point (A) back to the rotated start (B).
+    // Stored order [A(off) B(on) C(off) D(off) E(on) F(off)]: firstOn = 1, so the walk starts at B, continues C, D, E, F, and wraps to A — exercising the on-curve-with-pending quad (B->C->mid(C,D)), the consecutive-off-curve implied-midpoint quad (twice: C/D and F/A), and the final trailing quad closing a still-pending control point (A) back to the rotated start (B).
     const a = pt(27, 15, false);
     const b = pt(0, 0, true);
     const c = pt(3, 6, false);
@@ -955,7 +955,7 @@ describe("glyphOutlineSubpaths", () => {
   });
 
   it("applies the caller's own matrix to every emitted point, not just the on-curve endpoints", () => {
-    // A pure translation confirms the matrix reaches the start point, the line endpoint, AND the quad's own control-derived points -- not only the segment's final on-curve xPx/yPx.
+    // A pure translation confirms the matrix reaches the start point, the line endpoint, AND the quad's own control-derived points — not only the segment's final on-curve xPx/yPx.
     const outline = outlineOf([
       pt(0, 0, true),
       pt(6, 9, false),
@@ -1077,7 +1077,7 @@ describe("renderPdfPage: vector draw ops", () => {
   });
 
   it("draws a dotted two-point path as an exact dot train, scaling the dot size by widthPt x scale", () => {
-    // A single "m ... l S" open segment is exactly the shape detectLine reduces to an ExtractedLine (interpret.ts), so this actually drives drawLine's own dotted branch, not drawPath's -- drawPath's dotted branch needs a path detectLine won't collapse, which the two-segment test below covers. At scale 1, multiplying and dividing widthPt by pixelsPerPt are indistinguishable, so this pins it at scale 3.
+    // A single "m ... l S" open segment is exactly the shape detectLine reduces to an ExtractedLine (interpret.ts), so this actually drives drawLine's own dotted branch, not drawPath's — drawPath's dotted branch needs a path detectLine won't collapse, which the two-segment test below covers. At scale 1, multiplying and dividing widthPt by pixelsPerPt are indistinguishable, so this pins it at scale 3.
     const rasteriser = new RecordingRasteriser();
     drive(
       onePagePdf("[0 4] 0 d 1 J 2 w 0 0 0 RG 20 20 m 60 20 l S"),
@@ -1086,7 +1086,7 @@ describe("renderPdfPage: vector draw ops", () => {
       rasteriser,
     );
     const squares = rasteriser.ops.filter(isFillRect);
-    // Device length 40pt x 3 = 120px, spacing = max(widthPx x 2, 1) = 12px: dots at 0, 12, ..., 120 -- 11 of them.
+    // Device length 40pt x 3 = 120px, spacing = max(widthPx x 2, 1) = 12px: dots at 0, 12, ..., 120 — 11 of them.
     expect(squares).toHaveLength(11);
     expect(squares[0]).toEqual({
       kind: "fillRect",
@@ -1100,7 +1100,7 @@ describe("renderPdfPage: vector draw ops", () => {
   });
 
   it("draws a dotted general path's own line segment as a dot train, not only through drawLine's single-segment shape", () => {
-    // Two straight segments in one open subpath: detectLine only ever collapses a subpath of exactly one segment, so this one stays an ExtractedPath and genuinely drives drawPath's own "line" kind branch -- the sibling test above, despite drawing a straight line, never reaches this branch at all.
+    // Two straight segments in one open subpath: detectLine only ever collapses a subpath of exactly one segment, so this one stays an ExtractedPath and genuinely drives drawPath's own "line" kind branch — the sibling test above, despite drawing a straight line, never reaches this branch at all.
     const rasteriser = new RecordingRasteriser();
     drive(
       onePagePdf("[0 4] 0 d 1 J 2 w 0 0 0 RG 20 20 m 60 20 l 60 60 l S"),
@@ -1109,7 +1109,7 @@ describe("renderPdfPage: vector draw ops", () => {
       rasteriser,
     );
     const squares = rasteriser.ops.filter(isFillRect);
-    // Two 40pt segments, spacing = max(2 x 2, 1) = 4px: 11 dots each (0, 4, ..., 40), 22 total -- including the shared corner point drawn once by each segment's own end/start.
+    // Two 40pt segments, spacing = max(2 x 2, 1) = 4px: 11 dots each (0, 4, ..., 40), 22 total — including the shared corner point drawn once by each segment's own end/start.
     expect(squares).toHaveLength(22);
     expect(squares[0]).toMatchObject({ xPx: 19, yPx: 79 });
     expect(squares[10]).toMatchObject({ xPx: 59, yPx: 79 });
@@ -1131,7 +1131,7 @@ describe("renderPdfPage: vector draw ops", () => {
   });
 
   it("draws a dotted general path's own cubic segment as a dot train too, not only its line segments", () => {
-    // A cubic whose control points are collinear with its endpoints flattens to just its own endpoint (the same fact flattenCubic's own suite pins directly), so the resulting dot train is exactly as predictable as the line-segment case above -- this isolates drawPath's cubic branch from its line branch, which the line-only test above never touches.
+    // A cubic whose control points are collinear with its endpoints flattens to just its own endpoint (the same fact flattenCubic's own suite pins directly), so the resulting dot train is exactly as predictable as the line-segment case above — this isolates drawPath's cubic branch from its line branch, which the line-only test above never touches.
     const rasteriser = new RecordingRasteriser();
     drive(
       onePagePdf("[0 4] 0 d 1 J 2 w 0 0 0 RG 20 20 m 40 20 60 20 80 20 c S"),
@@ -1140,7 +1140,7 @@ describe("renderPdfPage: vector draw ops", () => {
       rasteriser,
     );
     const squares = rasteriser.ops.filter(isFillRect);
-    // Device length 60pt, spacing = max(2 x 2, 1) = 4px: dots at 0, 4, ..., 60 -- 16 of them.
+    // Device length 60pt, spacing = max(2 x 2, 1) = 4px: dots at 0, 4, ..., 60 — 16 of them.
     expect(squares).toHaveLength(16);
     expect(squares[0]).toMatchObject({ xPx: 19, yPx: 79 });
     expect(squares[squares.length - 1]).toMatchObject({ xPx: 79, yPx: 79 });
@@ -1228,7 +1228,7 @@ describe("renderPdfPage: vector draw ops", () => {
       rasteriser,
     );
     const squares = rasteriser.ops.filter(isFillRect);
-    // The segment's own length (180pt) is an exact multiple of the spacing (4pt), so a dot lands exactly on the final point too -- this pins that boundary (`distance <= length`) as an exact count, not just "more than a few": 180/4 + 1 = 46 dots, one at every multiple of 4 from 0 through 180 inclusive.
+    // The segment's own length (180pt) is an exact multiple of the spacing (4pt), so a dot lands exactly on the final point too — this pins that boundary (`distance <= length`) as an exact count, not just "more than a few": 180/4 + 1 = 46 dots, one at every multiple of 4 from 0 through 180 inclusive.
     expect(squares.length).toBe(46);
     // First dot at the segment's start: a 2x2 square centred on (10, 90) page points, i.e. device (10, 100 - 90) = (10, 10).
     expect(squares[0]).toEqual({
@@ -1253,7 +1253,7 @@ describe("renderPdfPage: vector draw ops", () => {
   });
 
   it("draws a dotted diagonal line's dots along both axes, not just x", () => {
-    // The sibling test above is purely horizontal (p1.y === p2.y throughout), which cannot distinguish `p1.y + (p2.y - p1.y) * t` from a sign-flipped or operand-swapped variant of the same expression -- every dot would land at the same y regardless. A diagonal segment where y genuinely varies with t is the only way to pin that arithmetic.
+    // The sibling test above is purely horizontal (p1.y === p2.y throughout), which cannot distinguish `p1.y + (p2.y - p1.y) * t` from a sign-flipped or operand-swapped variant of the same expression — every dot would land at the same y regardless. A diagonal segment where y genuinely varies with t is the only way to pin that arithmetic.
     const rasteriser = new RecordingRasteriser();
     drive(
       onePagePdf("[0 4] 0 d 1 J 2 w 0 0 0 RG 10 10 m 50 50 l S"),
@@ -1262,7 +1262,7 @@ describe("renderPdfPage: vector draw ops", () => {
       rasteriser,
     );
     const squares = rasteriser.ops.filter(isFillRect);
-    // length = hypot(40, 40), spacing = 4 -- not an exact multiple, so the dot count is governed by the loop's own `<=` boundary rather than pinned to a round number; what matters here is each dot's own position, not the count.
+    // length = hypot(40, 40), spacing = 4 — not an exact multiple, so the dot count is governed by the loop's own `<=` boundary rather than pinned to a round number; what matters here is each dot's own position, not the count.
     expect(squares.length).toBeGreaterThan(3);
     // First dot at (10, 10) page -> device (10, 90).
     expect(squares[0]).toMatchObject({ xPx: 9, yPx: 89 });
@@ -1423,7 +1423,7 @@ describe("renderPdfPage: image ops", () => {
     expect(image.format).toBe("png");
     expect(image.sourceWidthPx).toBe(2);
     expect(image.sourceHeightPx).toBe(2);
-    // The port's top-left-origin unit square: (0,0) is the image's top-left, (1,1) its bottom-right. The image occupies page rect (10, 60)-(50, 80), i.e. device (10, 20)-(50, 40) after the y flip -- if the flip or the CTM order were wrong, these corners would transpose.
+    // The port's top-left-origin unit square: (0,0) is the image's top-left, (1,1) its bottom-right. The image occupies page rect (10, 60)-(50, 80), i.e. device (10, 20)-(50, 40) after the y flip — if the flip or the CTM order were wrong, these corners would transpose.
     const corner = (u: number, v: number) =>
       applyMatrix(image.matrix, { x: u, y: v });
     const topLeft = corner(0, 0);
@@ -1448,7 +1448,7 @@ describe("renderPdfPage: image ops", () => {
 
 // --- Text: outline resolution, per-glyph placement, and named refusals. ---
 
-// A Type0/Identity-H/CIDFontType2 fixture around the real vendored Carlito face -- the exact dominant embedded-font shape mainstream producers emit and this package's own writer produces. The glyph IDs, advances, and units-per-em the fixture needs are read out of the same bytes with this package's own table parsers (legitimate here: the table parsers are independently tested against the real font files, and what is under test is the raster walk, not the fixture's arithmetic).
+// A Type0/Identity-H/CIDFontType2 fixture around the real vendored Carlito face — the exact dominant embedded-font shape mainstream producers emit and this package's own writer produces. The glyph IDs, advances, and units-per-em the fixture needs are read out of the same bytes with this package's own table parsers (legitimate here: the table parsers are independently tested against the real font files, and what is under test is the raster walk, not the fixture's arithmetic).
 function type0CarlitoPdf(
   text: string,
   textState = "",
@@ -1508,7 +1508,7 @@ function type0CarlitoPdf(
   return b.classicXrefAndTrailer(9, "/Root 1 0 R");
 }
 
-// A plain simple (non-Type0) /TrueType font resource: code -> Unicode through the PDF's own encoding (WinAnsi, since this face carries no Symbolic flag), then Unicode -> GID through the embedded program's own cmap -- the whole other half of buildTextOutlineFace's own branch, entirely separate from the Type0/CID path type0CarlitoPdf drives.
+// A plain simple (non-Type0) /TrueType font resource: code -> Unicode through the PDF's own encoding (WinAnsi, since this face carries no Symbolic flag), then Unicode -> GID through the embedded program's own cmap — the whole other half of buildTextOutlineFace's own branch, entirely separate from the Type0/CID path type0CarlitoPdf drives.
 function trueTypeCarlitoPdf(
   text: string,
   overrides: {
@@ -1572,7 +1572,7 @@ describe("renderPdfPage: text through embedded sfnt outlines", () => {
       expect(op.subpaths.length).toBeGreaterThanOrEqual(1);
       expect(op.subpaths.every((subpath) => subpath.closed)).toBe(true);
     }
-    // First glyph's ink window, straight from Carlito's own declared box: page x [20 + xMin/em*24, 20 + xMax/em*24], y from the baseline at 50 up by yMax/em*24 -- flipped into device space. This is the placement assertion: wrong matrix order, missing unitsPerEm division, or a lost y flip all move it.
+    // First glyph's ink window, straight from Carlito's own declared box: page x [20 + xMin/em*24, 20 + xMax/em*24], y from the baseline at 50 up by yMax/em*24 — flipped into device space. This is the placement assertion: wrong matrix order, missing unitsPerEm division, or a lost y flip all move it.
     const first = pathOpBounds(glyphOps[0]!);
     expect(first.minX).toBeCloseTo(
       20 + (ink.xMin / head.unitsPerEm) * sizePt,
@@ -1592,7 +1592,7 @@ describe("renderPdfPage: text through embedded sfnt outlines", () => {
     const rasteriser = new RecordingRasteriser();
     drive(bytes, 0, {}, rasteriser);
     const glyphOps = rasteriser.ops.filter(isPath);
-    // Two H's painted, the space between them painting nothing -- not three ops, and not two ops sitting on top of each other.
+    // Two H's painted, the space between them painting nothing — not three ops, and not two ops sitting on top of each other.
     expect(glyphOps.length).toBe(2);
     const sfnt = parseSfnt(carlitoRegularBytes())!;
     const cmap = buildCmapLookup(sfnt)!;
@@ -1707,7 +1707,7 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
   });
 
   it("resolves a font resource's outline face once per font dictionary, not once per run that references it", () => {
-    // Two separate text runs through the same /F1 resource (a standard-14 face with no embedded program): resolveTextOutlineFace's own cache means buildTextOutlineFace, and the diagnostic it emits, runs exactly once -- not once per run naming the same already-diagnosed font all over again.
+    // Two separate text runs through the same /F1 resource (a standard-14 face with no embedded program): resolveTextOutlineFace's own cache means buildTextOutlineFace, and the diagnostic it emits, runs exactly once — not once per run naming the same already-diagnosed font all over again.
     const diagnostics: PdfDiagnostic[] = [];
     const rasteriser = new RecordingRasteriser();
     drive(
@@ -1722,7 +1722,7 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
     expect(rasteriser.ops).toEqual([]);
   });
 
-  // A bare Type0/CIDFontType2 skeleton around the real vendored Carlito face, with every dict entry a caller can override -- the same font bytes type0CarlitoPdf uses, but exposing the descendant/descriptor/encoding shape directly so each of buildTextOutlineFace's own branch conditions can be driven independently of the others.
+  // A bare Type0/CIDFontType2 skeleton around the real vendored Carlito face, with every dict entry a caller can override — the same font bytes type0CarlitoPdf uses, but exposing the descendant/descriptor/encoding shape directly so each of buildTextOutlineFace's own branch conditions can be driven independently of the others.
   function type0Skeleton(overrides: {
     readonly encoding?: string;
     readonly descendantFontsEntry?: string;
@@ -1934,7 +1934,7 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
 
   it("refuses a descendant font of a subtype that is neither CIDFontType0 nor CIDFontType2, naming the real subtype", () => {
     const bytes = type0Skeleton({});
-    // Overwrite object 7's own Subtype in place -- simplest way to force an unsupported descendant subtype without duplicating the whole skeleton.
+    // Overwrite object 7's own Subtype in place — simplest way to force an unsupported descendant subtype without duplicating the whole skeleton.
     const text = new TextDecoder("latin1").decode(bytes);
     const patched = new TextEncoder().encode(
       text.replace("/Subtype /CIDFontType2", "/Subtype /CIDFontType9"),
@@ -1976,7 +1976,7 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
   });
 
   it("reads an embedded program from /FontFile3 when /FontFile2 is absent, not only from /FontFile2", () => {
-    // openEmbeddedProgram tries FontFile2 then FontFile3 in a loop -- a descriptor carrying only the latter is the only way to prove the loop actually reaches its second key rather than stopping after the first.
+    // openEmbeddedProgram tries FontFile2 then FontFile3 in a loop — a descriptor carrying only the latter is the only way to prove the loop actually reaches its second key rather than stopping after the first.
     const { rasteriser } = refusalDiagnostics(
       type0Skeleton({ fontFileKey: "FontFile3" }),
     );
@@ -1997,7 +1997,7 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
   });
 
   it("detects CFF outlines wrapped in an OTTO sfnt container by its 'CFF ' table, not only a bare CFF header", () => {
-    // The real, vendored STIX Two Math font is a genuine OTTO container carrying a 'CFF ' table -- an /OpenType-wrapped CFF program is a legal /FontFile3 value per ISO 32000-1, distinct from the bare-CFF-header case above.
+    // The real, vendored STIX Two Math font is a genuine OTTO container carrying a 'CFF ' table — an /OpenType-wrapped CFF program is a legal /FontFile3 value per ISO 32000-1, distinct from the bare-CFF-header case above.
     const { diagnostics } = refusalDiagnostics(
       type0Skeleton({
         fontFileKey: "FontFile3",
@@ -2034,7 +2034,7 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
   });
 
   it("maps CIDs through an explicit /CIDToGIDMap stream rather than treating CID as GID directly", () => {
-    // CID 0 (the shown code) maps to GID 15 ('H') via the stream -- Identity would instead look up GID 0 (.notdef), a completely different, much smaller shape. type0Skeleton has no stream-object escape hatch for the map itself, so this one is built directly rather than bending the helper further.
+    // CID 0 (the shown code) maps to GID 15 ('H') via the stream — Identity would instead look up GID 0 (.notdef), a completely different, much smaller shape. type0Skeleton has no stream-object escape hatch for the map itself, so this one is built directly rather than bending the helper further.
     const cidToGidMapBytes = new Uint8Array([0x00, 0x0f]); // one entry: CID 0 -> GID 15
     const b = new SmallFixture();
     const fontBytes = carlitoRegularBytes();
@@ -2082,7 +2082,7 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
   });
 
   it("ignores a trailing unpaired byte in a /CIDToGIDMap stream rather than reading it as a further entry", () => {
-    // A 3-byte map declares exactly one 2-byte entry (CID 0 -> GID 15); the loop's own `i + 1 < length` bound must stop before the stray third byte, not read it paired with a phantom fourth. Were it read anyway, CID 1 would land on GID (0x00 << 8 | 0), i.e. GID 0 (.notdef) -- which Carlito's own .notdef genuinely draws (4 contours), so a wrongly-read entry paints a second, wrong path rather than silently doing nothing.
+    // A 3-byte map declares exactly one 2-byte entry (CID 0 -> GID 15); the loop's own `i + 1 < length` bound must stop before the stray third byte, not read it paired with a phantom fourth. Were it read anyway, CID 1 would land on GID (0x00 << 8 | 0), i.e. GID 0 (.notdef) — which Carlito's own .notdef genuinely draws (4 contours), so a wrongly-read entry paints a second, wrong path rather than silently doing nothing.
     const cidToGidMapBytes = new Uint8Array([0x00, 0x0f, 0x00]);
     const b = new SmallFixture();
     const fontBytes = carlitoRegularBytes();
@@ -2300,7 +2300,7 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
   });
 
   it("refuses a simple TrueType font's embedded program when it carries no usable Unicode cmap subtable", () => {
-    // dropTable repoints the 'cmap' table record past the end of the file -- parseSfnt drops it, exactly as it would for a genuinely truncated font -- while head/maxp/glyf stay intact, so openEmbeddedProgram still classifies this as a fillable "glyf" program; only buildCmapLookup finds nothing to resolve a code point through.
+    // dropTable repoints the 'cmap' table record past the end of the file — parseSfnt drops it, exactly as it would for a genuinely truncated font — while head/maxp/glyf stay intact, so openEmbeddedProgram still classifies this as a fillable "glyf" program; only buildCmapLookup finds nothing to resolve a code point through.
     const patched = new Uint8Array(carlitoRegularBytes());
     dropSfntTable(patched, "cmap");
     const { diagnostics, rasteriser } = refusalDiagnostics(
@@ -2354,7 +2354,7 @@ describe("renderPdfPage: optional-content visibility", () => {
   });
 
   it("still draws content in a NAMED layer the default configuration leaves ON, alongside one it leaves OFF", () => {
-    // Two named layers this time -- L1 (OFF) and L2 (ON, not listed in /OFF at all) -- so hiding every layer indiscriminately (rather than only the ones the default configuration actually turns off) would be indistinguishable from correct behaviour in the single-layer fixture above.
+    // Two named layers this time — L1 (OFF) and L2 (ON, not listed in /OFF at all) — so hiding every layer indiscriminately (rather than only the ones the default configuration actually turns off) would be indistinguishable from correct behaviour in the single-layer fixture above.
     const b = new SmallFixture();
     b.object(
       1,

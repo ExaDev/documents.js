@@ -11,7 +11,7 @@ import {
 } from "./color";
 
 describe("icoColor", () => {
-  it("resolves 0x00 (fAuto) to undefined -- no concrete colour", () => {
+  it("resolves 0x00 (fAuto) to undefined — no concrete colour", () => {
     expect(icoColor(0x00)).toBeUndefined();
   });
 

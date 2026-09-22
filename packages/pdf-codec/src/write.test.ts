@@ -50,7 +50,7 @@ function tinyPngAsset(): LayoutImageAsset {
   };
 }
 
-// A minimal, hand-built JPEG: SOI, a baseline SOF0 segment declaring 3x2 pixels / 3 components / 8-bit precision, then EOI. No huffman/quant tables or entropy-coded scan data -- readJpegInfo only scans for the SOF marker and never decodes samples, so this is a fully valid input for it despite not being a real, viewable image.
+// A minimal, hand-built JPEG: SOI, a baseline SOF0 segment declaring 3x2 pixels / 3 components / 8-bit precision, then EOI. No huffman/quant tables or entropy-coded scan data — readJpegInfo only scans for the SOF marker and never decodes samples, so this is a fully valid input for it despite not being a real, viewable image.
 function tinyJpegAsset(): LayoutImageAsset {
   // prettier-ignore
   const bytes = new Uint8Array([
@@ -289,7 +289,7 @@ describe("writePdf: text and fonts", () => {
     expect(text).toContain("/BaseFont /Helvetica");
     expect(text).toContain("/F1 10 Tf");
     expect(text).toContain("/F2 10 Tf");
-    // Sorted alphabetically, "Helvetica" < "Times-Roman", so F1 must resolve to the Helvetica object specifically -- not merely "some Font resource named F1 exists", which the two toContain checks above don't distinguish from insertion order (Times New Roman was the first item's own font).
+    // Sorted alphabetically, "Helvetica" < "Times-Roman", so F1 must resolve to the Helvetica object specifically — not merely "some Font resource named F1 exists", which the two toContain checks above don't distinguish from insertion order (Times New Roman was the first item's own font).
     const f1Ref = /\/F1 (\d+) 0 R/.exec(text);
     expect(f1Ref).not.toBeNull();
     const f1Obj = new RegExp(
@@ -415,7 +415,7 @@ describe("writePdf: text and fonts", () => {
     expect(widthsMatch).not.toBeNull();
     const widths = widthsMatch![1]!.trim().split(/\s+/).map(Number);
     expect(widths).toHaveLength(255 - 32 + 1);
-    // Every code in range resolves to a real, positive advance width -- WINANSI_GLYPH_NAMES has no gap in this range and every standard-14 AFM table defines every glyph name it can produce, so a 0 anywhere here would mean a genuine regression, not a legitimate "unassigned code" placeholder.
+    // Every code in range resolves to a real, positive advance width — WINANSI_GLYPH_NAMES has no gap in this range and every standard-14 AFM table defines every glyph name it can produce, so a 0 anywhere here would mean a genuine regression, not a legitimate "unassigned code" placeholder.
     expect(widths.every((w) => w > 0)).toBe(true);
     // Space (code 32, the first entry) is a known, specific value worth pinning exactly.
     expect(widths[0]).toBe(278);
@@ -554,12 +554,12 @@ describe("writePdf: images", () => {
     expect(text).toContain("/ColorSpace /DeviceRGB");
     expect(text).toContain("/Width 2");
     expect(text).toContain("/Height 2");
-    // The Im1 Do operator itself lives inside the (by-default-compressed) content stream, so check the page's own Resources dict mapping instead -- that stays plain ASCII regardless of the compress option.
+    // The Im1 Do operator itself lives inside the (by-default-compressed) content stream, so check the page's own Resources dict mapping instead — that stays plain ASCII regardless of the compress option.
     expect(text).toContain("/XObject <</Im1 ");
   });
 
   it("names image resources by sorted imageId order, not first-encountered order", () => {
-    // Two distinctly-sized assets so each one's own object dict is independently identifiable. "zebra" is the FIRST page item (first-encountered), but "apple" sorts first alphabetically -- if imageIds were resource-named by encounter order instead of sorted order, Im1 would resolve to zebra's own 4x4 dict instead of apple's 2x2 one.
+    // Two distinctly-sized assets so each one's own object dict is independently identifiable. "zebra" is the FIRST page item (first-encountered), but "apple" sorts first alphabetically — if imageIds were resource-named by encounter order instead of sorted order, Im1 would resolve to zebra's own 4x4 dict instead of apple's 2x2 one.
     const small = tinyPngAsset(); // 2x2
     const width = 4;
     const height = 4;
@@ -734,7 +734,7 @@ describe("writePdf: images", () => {
   });
 
   it("writes a bilevel image as CCITT Group 4 when that is smaller than Flate, and reads it back (#975)", async () => {
-    // A diagonal edge: every row shifts the black/white boundary one pixel right, so each row codes as two vertical-mode offsets against the previous one -- the vertically coherent shape CCITT Group 4 exists for (a real scan's edges and text baselines behave exactly this way). Decorrelated noise would instead be deflate's own best case, which is what the pick-the-smaller rule protects onto Flate.
+    // A diagonal edge: every row shifts the black/white boundary one pixel right, so each row codes as two vertical-mode offsets against the previous one — the vertically coherent shape CCITT Group 4 exists for (a real scan's edges and text baselines behave exactly this way). Decorrelated noise would instead be deflate's own best case, which is what the pick-the-smaller rule protects onto Flate.
     const width = 96;
     const height = 96;
     const data = new Uint8Array(width * height);
@@ -771,7 +771,7 @@ describe("writePdf: images", () => {
         },
       },
     );
-    // compress defaults to true -- G4 is compression, so it sits behind the same option as Flate; the dictionary entries stay plain ASCII either way, only streams are flated.
+    // compress defaults to true — G4 is compression, so it sits behind the same option as Flate; the dictionary entries stay plain ASCII either way, only streams are flated.
     const out = writePdf(doc);
     const text = new TextDecoder("latin1").decode(out);
     expect(text).toContain("/Type /XObject");
@@ -954,7 +954,7 @@ describe("writePdf: empty rect/ellipse", () => {
         { compress: false },
       ),
     );
-    // The Contents stream exists but is empty -- "stream\n\nendstream" with nothing between.
+    // The Contents stream exists but is empty — "stream\n\nendstream" with nothing between.
     expect(text).toContain("stream\n\nendstream");
   });
 });
@@ -1130,7 +1130,7 @@ describe("writePdf: the outline (#967)", () => {
     expect(rawText).toContain("/Count 2");
     const { readPdf } = await import("./read");
     const reread = readPdf(bytes);
-    // Destinations are spelled as direct arrays (the identical convention the internal-link writer established: no /Dests tree is emitted), so the reader re-mints table names in read order -- "dest1", "dest2" -- while titles, nesting, and the TARGETS themselves round-trip exactly.
+    // Destinations are spelled as direct arrays (the identical convention the internal-link writer established: no /Dests tree is emitted), so the reader re-mints table names in read order — "dest1", "dest2" — while titles, nesting, and the TARGETS themselves round-trip exactly.
     expect(reread.outline).toEqual([
       {
         title: "Chapter 1",
@@ -1372,7 +1372,7 @@ describe("writePdf: AcroForm fields (#967)", () => {
       ],
     };
     const text = decode(writePdf(doc, { compress: false }));
-    // Exactly 2 field objects (the group itself, plus its one terminal child) -- if the group's own 2 widgets were wrongly split into their own kid objects, a third and fourth "/Subtype /Widget" object would exist beyond the child's own.
+    // Exactly 2 field objects (the group itself, plus its one terminal child) — if the group's own 2 widgets were wrongly split into their own kid objects, a third and fourth "/Subtype /Widget" object would exist beyond the child's own.
     expect(text.match(/\/Subtype \/Widget/g)).toHaveLength(1);
   });
 
@@ -1412,7 +1412,7 @@ describe("writePdf: AcroForm fields (#967)", () => {
     const text = decode(writePdf(doc, { compress: false }));
     expect(text).toContain("/FT /Btn");
     expect(text).toContain("/FT /Sig");
-    // radio and button both map to Btn, so distinguishing them isn't possible from /FT alone -- but exactly two Btn fields and one Sig field must exist.
+    // radio and button both map to Btn, so distinguishing them isn't possible from /FT alone — but exactly two Btn fields and one Sig field must exist.
     expect(text.match(/\/FT \/Btn/g)).toHaveLength(2);
   });
 
@@ -1431,7 +1431,7 @@ describe("writePdf: AcroForm fields (#967)", () => {
       pages: [{ widthPt: 200, heightPt: 100, items: [] }],
       images: {},
       form: [
-        fieldFor({ name: "plain" }), // no flags at all -- no /Ff entry
+        fieldFor({ name: "plain" }), // no flags at all — no /Ff entry
         fieldFor({ name: "locked", readOnly: true }), // 1
         fieldFor({ name: "push", fieldType: "button" }), // 4
         fieldFor({ name: "choice", fieldType: "radio" }), // 32768
@@ -1443,7 +1443,7 @@ describe("writePdf: AcroForm fields (#967)", () => {
     for (const ff of ["1", "4", "32768", "131072", "5"]) {
       expect(text).toContain(`/Ff ${ff}`);
     }
-    // "plain" carries no flag bits at all -- no /Ff entry for it, distinct from the others which each have their own combination. Field names are written as hex strings, so "plain" (0x706c61696e) identifies its own object's line.
+    // "plain" carries no flag bits at all — no /Ff entry for it, distinct from the others which each have their own combination. Field names are written as hex strings, so "plain" (0x706c61696e) identifies its own object's line.
     const plainLine = text
       .split("\n")
       .find((line) => line.includes("<706c61696e>"));
@@ -1774,7 +1774,7 @@ describe("writePdf: package-level residue (#967)", () => {
   });
 });
 
-// options.formulas is writePdf's own side channel for embedded-math-font content (see this module's own top comment for why a formula cannot travel as an ordinary LayoutItem) -- exercised here through writePdf itself, not just through math-content-write.ts/math-font-write.ts's own unit tests, since only this integration proves the allocation, the resource dict, and the emitted content stream actually agree on object numbers.
+// options.formulas is writePdf's own side channel for embedded-math-font content (see this module's own top comment for why a formula cannot travel as an ordinary LayoutItem) — exercised here through writePdf itself, not just through math-content-write.ts/math-font-write.ts's own unit tests, since only this integration proves the allocation, the resource dict, and the emitted content stream actually agree on object numbers.
 describe("writePdf: embedded formulas", () => {
   function formula(pageIndex: number): PositionedFormula {
     return {

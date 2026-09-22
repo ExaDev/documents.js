@@ -71,7 +71,7 @@ describe("XlsEditor cell values", () => {
       kind: "percentage",
       value: 0.25,
     });
-    // A currency cell's ISO code survives the round trip through the writer's [$USD]-shaped bracket format -- the one carrier the reader can re-classify the code back out of, the identical encoding ooxml.js's xlsx writer states for the same schema field.
+    // A currency cell's ISO code survives the round trip through the writer's [$USD]-shaped bracket format — the one carrier the reader can re-classify the code back out of, the identical encoding ooxml.js's xlsx writer states for the same schema field.
     expect(reread.cell(2, 0).value).toEqual({
       kind: "currency",
       value: 7.99,

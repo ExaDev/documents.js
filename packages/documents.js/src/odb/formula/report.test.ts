@@ -11,9 +11,9 @@ import { rptDefinitionFromReport } from "./definition";
 import type { RptBandInstance } from "./evaluate";
 import { runRptReport } from "./evaluate";
 
-// The end-to-end proof for src/odb/formula/: a real Report Builder report, read out of a real .odb, run over that same .odb's own real data. Nothing here is hand-authored -- the report's bands, groups, named function, and every rpt formula come from the package itself via readOdbReport; the rows come from readOdbTables' Tier 3 Firebird decoder by way of src/odb/sql/'s own engine; so a regression in the parser, the scoping, the report reader, the query engine, or the fixture surfaces here rather than being papered over by a transcribed expectation.
+// The end-to-end proof for src/odb/formula/: a real Report Builder report, read out of a real .odb, run over that same .odb's own real data. Nothing here is hand-authored — the report's bands, groups, named function, and every rpt formula come from the package itself via readOdbReport; the rows come from readOdbTables' Tier 3 Firebird decoder by way of src/odb/sql/'s own engine; so a regression in the parser, the scoping, the report reader, the query engine, or the fixture surfaces here rather than being papered over by a transcribed expectation.
 //
-// The fixture is ExaDev/odf.js's own form-and-report.odb (see src/test-support/odb-fixture.ts for its provenance). Its SalesByRegion report is exactly the shape this engine exists for: two nested groups, one report-level rpt:function wrapping rpt:LEFT, and rpt:SUM([AMOUNT]) at all three footer levels. Its inner group breaks on the quarter while its outer group breaks on the region, which is what makes it a genuine test of the enclosing-break cascade -- see the assertions on the North Q2 to South Q2 transition below.
+// The fixture is ExaDev/odf.js's own form-and-report.odb (see src/test-support/odb-fixture.ts for its provenance). Its SalesByRegion report is exactly the shape this engine exists for: two nested groups, one report-level rpt:function wrapping rpt:LEFT, and rpt:SUM([AMOUNT]) at all three footer levels. Its inner group breaks on the quarter while its outer group breaks on the region, which is what makes it a genuine test of the enclosing-break cascade — see the assertions on the North Q2 to South Q2 transition below.
 
 const EXPECTED_FUNCTION_FORMULA = "rpt:LEFT([QUARTER];2)";
 const EXPECTED_OUTER_GROUP_EXPRESSION = 'rpt:HASCHANGED("REGION")';
@@ -46,7 +46,7 @@ function reportRows(): SqlResultSet {
   return evaluateSelect(parseSelect(query.command), readOdbTables(pkg));
 }
 
-// The whole SALES table under the report's own sort order, for the wider six-row exercise below -- the same REGION/QUARTER/AMOUNT ordering the saved query applies, with its AMOUNT >= 100 filter dropped so the two rows the query excludes take part in the grouping too.
+// The whole SALES table under the report's own sort order, for the wider six-row exercise below — the same REGION/QUARTER/AMOUNT ordering the saved query applies, with its AMOUNT >= 100 filter dropped so the two rows the query excludes take part in the grouping too.
 function everySalesRow(): SqlResultSet {
   return evaluateSelect(
     parseSelect(
@@ -112,7 +112,7 @@ describe("the real SalesByRegion report own formulas, read straight out of form-
       EXPECTED_FOOTER_TOTAL_FORMULA,
     ]);
 
-    // The detail band and both group headers are plain field: bindings -- no computation, just a column value passing through.
+    // The detail band and both group headers are plain field: bindings — no computation, just a column value passing through.
     expect(definition.detail?.formulas).toEqual([
       "field:[CUSTOMER]",
       "field:[AMOUNT]",
@@ -148,7 +148,7 @@ describe("the real SalesByRegion report own formulas, read straight out of form-
       "group-header:0@0",
       "group-header:1@0",
       "detail@0",
-      // Row 1 (North, Q1) breaks nothing -- same region, same quarter.
+      // Row 1 (North, Q1) breaks nothing — same region, same quarter.
       "detail@1",
       // Row 2 (North, Q2) breaks the inner group only: the quarter changed, the region did not.
       "group-footer:1@1",
@@ -176,7 +176,7 @@ describe("the real SalesByRegion report own formulas, read straight out of form-
     expect(
       bandsOfKind(bands, "group-header", 0).map((band) => stringAt(band, 0)),
     ).toEqual(["North", "South"]);
-    // The inner group's own header prints field:[QUARTER], while the break it opens on is decided by rpt:HASCHANGED("LEFT_QUARTER") -- the named function wrapping rpt:LEFT([QUARTER];2).
+    // The inner group's own header prints field:[QUARTER], while the break it opens on is decided by rpt:HASCHANGED("LEFT_QUARTER") — the named function wrapping rpt:LEFT([QUARTER];2).
     expect(
       bandsOfKind(bands, "group-header", 1).map((band) => stringAt(band, 0)),
     ).toEqual(["Q1", "Q2", "Q2"]);
@@ -188,7 +188,7 @@ describe("the real SalesByRegion report own formulas, read straight out of form-
       reportRows(),
     );
 
-    // Inner ("Quarter total:") -- North/Q1 is 1200.50 + 340.00; North/Q2 is Crown Foods alone; South/Q2 is Everest Tools alone. The middle number is the cascade's whole point: without it, North's Q2 and South's Q2 would total 4560.25 together.
+    // Inner ("Quarter total:") — North/Q1 is 1200.50 + 340.00; North/Q2 is Crown Foods alone; South/Q2 is Everest Tools alone. The middle number is the cascade's whole point: without it, North's Q2 and South's Q2 would total 4560.25 together.
     expect(
       bandsOfKind(bands, "group-footer", 1).map((band) => numberAt(band, 1)),
     ).toEqual([1540.5, 2750.25, 1810]);
@@ -198,7 +198,7 @@ describe("the real SalesByRegion report own formulas, read straight out of form-
       bandsOfKind(bands, "group-footer", 0).map((band) => numberAt(band, 1)),
     ).toEqual([4290.75, 1810]);
 
-    // Report ("Grand total:") -- every row the query returned.
+    // Report ("Grand total:") — every row the query returned.
     expect(
       bandsOfKind(bands, "report-footer").map((band) => numberAt(band, 1)),
     ).toEqual([6100.75]);
@@ -263,7 +263,7 @@ describe("the same real report own formulas over all six real SALES rows", () =>
     ).toEqual([6256.5]);
   });
 
-  // The per-region totals this report produces are the same numbers the SQL engine reaches by a completely different route -- GROUP BY REGION rather than report grouping -- so the two implementations cross-check each other on the same real data.
+  // The per-region totals this report produces are the same numbers the SQL engine reaches by a completely different route — GROUP BY REGION rather than report grouping — so the two implementations cross-check each other on the same real data.
   it("reaches the same per-region totals the SQL engine own GROUP BY does", () => {
     const grouped = evaluateSelect(
       parseSelect(
@@ -284,7 +284,7 @@ describe("the same real report own formulas over all six real SALES rows", () =>
     ).toEqual(viaSql);
   });
 
-  // rpt:HASCHANGED on its own, with no enclosing group to cascade from, is a purely per-row comparison -- which is exactly why the cascade above has to live in the report structure rather than inside HASCHANGED. Same expression, same rows, one group instead of two: South's Q2 row and West's Q2 row now fall in ONE instance, because nothing broke between them.
+  // rpt:HASCHANGED on its own, with no enclosing group to cascade from, is a purely per-row comparison — which is exactly why the cascade above has to live in the report structure rather than inside HASCHANGED. Same expression, same rows, one group instead of two: South's Q2 row and West's Q2 row now fall in ONE instance, because nothing broke between them.
   it("groups South and West Q2 together when the quarter is the only group, proving HASCHANGED itself carries no nesting rule", () => {
     const report = salesReport();
     const inner = rptDefinitionFromReport(report).groups[1];

@@ -51,7 +51,7 @@ describe("deriveNeighbourLabels", () => {
   });
 
   it("looks past a blank immediate neighbour to find the nearest text cell further away", () => {
-    // Row 1, column 0 is blank -- the nearest text cell above (0,0) is two rows away, not adjacent, and the row gap (1) is within the tolerance rule's own connectivity, so the two cells share a region.
+    // Row 1, column 0 is blank — the nearest text cell above (0,0) is two rows away, not adjacent, and the row gap (1) is within the tolerance rule's own connectivity, so the two cells share a region.
     const cells = [textCell(0, 0, "Label"), numberCell(2, 0, 99)];
     const label = labelFor(deriveNeighbourLabels(cells), 2, 0);
     expect(label.above).toEqual({
@@ -68,7 +68,7 @@ describe("deriveNeighbourLabels", () => {
     const label = labelFor(deriveNeighbourLabels(cells), 5, 5);
     expect(label.above).toBeUndefined();
     expect(label.left).toBeUndefined();
-    // Absence must be a genuinely missing key, not a key present with value undefined -- the module's own documented "no fabricated placeholder" contract.
+    // Absence must be a genuinely missing key, not a key present with value undefined — the module's own documented "no fabricated placeholder" contract.
     expect("above" in label).toBe(false);
     expect("left" in label).toBe(false);
   });
@@ -96,7 +96,7 @@ describe("deriveNeighbourLabels", () => {
   });
 
   it("finds the nearest of two text cells sharing a column via the above search", () => {
-    // "Near" must be the SECOND text cell inserted into column 0's own candidate list -- so that if the second-and-later push into that list's array were ever dropped, "Near" would be missing entirely and "Far" would wrongly win by default, rather than merely losing a tie-break it was never going to win anyway.
+    // "Near" must be the SECOND text cell inserted into column 0's own candidate list — so that if the second-and-later push into that list's array were ever dropped, "Near" would be missing entirely and "Far" would wrongly win by default, rather than merely losing a tie-break it was never going to win anyway.
     const cells = [
       textCell(0, 0, "Far"),
       textCell(2, 0, "Near"),
@@ -128,7 +128,7 @@ describe("deriveNeighbourLabels", () => {
   });
 
   it("never lets a farther candidate overwrite an already-found nearer one", () => {
-    // Processed in an order where the genuinely nearest candidate (row 6) comes FIRST -- a check that failed to skip farther candidates afterward would let row 2 or row 4 wrongly overwrite it, landing on the wrong (farther) row instead of silently agreeing by coincidence of processing order.
+    // Processed in an order where the genuinely nearest candidate (row 6) comes FIRST — a check that failed to skip farther candidates afterward would let row 2 or row 4 wrongly overwrite it, landing on the wrong (farther) row instead of silently agreeing by coincidence of processing order.
     const cells = [
       textCell(6, 0, "Closest"),
       textCell(2, 0, "Far1"),

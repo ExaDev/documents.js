@@ -1,13 +1,13 @@
 import { byteAt, sliceAt, uint16At } from "../bytes/view";
 import { WpdFormatError } from "../errors";
 
-// -- The document area's function-code stream, per WPFF Document Structure, "Document Area" --
+// — The document area's function-code stream, per WPFF Document Structure, "Document Area" --
 //
 // "Document formatting is accomplished by embedding function codes in the text of a document. A function is any byte greater than 127 (0x7F)." Everything at or below 0x7F is a literal character, and the four ranges above it are these: 0x80-0xCF single-byte functions, standing alone with no payload and no end gate; 0xD0-0xEF variable-length multi-byte functions, self-describing through a size field; 0xF0-0xFE fixed-length multi-byte functions, whose length this module holds as a table; and 0xFF, which "cannot be used. -1 is reserved so no size is assigned to this value."
 //
-// Every multi-byte function -- both kinds -- appears as a matched pair of gates: "The first occurrence is the begin gate ... and a second occurrence is the end gate", with the same function code at both ends. This module verifies both gates and the variable form's duplicated size field, because those redundancies are the format's own integrity check: a stream that has gone out of step produces a mismatched gate at the very next function rather than silently decoding rubbish for the rest of the file.
+// Every multi-byte function — both kinds — appears as a matched pair of gates: "The first occurrence is the begin gate ... and a second occurrence is the end gate", with the same function code at both ends. This module verifies both gates and the variable form's duplicated size field, because those redundancies are the format's own integrity check: a stream that has gone out of step produces a mismatched gate at the very next function rather than silently decoding rubbish for the rest of the file.
 //
-// This module is deliberately structural only. It decodes no characters, resolves no prefix IDs, and attaches no meaning to any subgroup -- that is src/read.ts's job. What it guarantees is that the byte stream was walked correctly: every token's extent is exactly what the format says it is.
+// This module is deliberately structural only. It decodes no characters, resolves no prefix IDs, and attaches no meaning to any subgroup — that is src/read.ts's job. What it guarantees is that the byte stream was walked correctly: every token's extent is exactly what the format says it is.
 
 // A literal character byte, 1 (0x01) through 127 (0x7F). Byte 0 never reaches here: "The character 0 (0x00) has special meaning as the null character and is always deleted by WordPerfect", so the walk skips it outright.
 export interface WpdCharacterToken {
@@ -26,7 +26,7 @@ export interface WpdVariableFunctionToken {
   readonly kind: "variableFunction";
   readonly group: number;
   readonly subgroup: number;
-  // The function's total size including both gates -- the value that appears twice, once after the subgroup and once before the end gate.
+  // The function's total size including both gates — the value that appears twice, once after the subgroup and once before the end gate.
   readonly size: number;
   // bits 0-2 the paired/encased/revert kind, bit 6 "ignore function ... inactive due to the context of a function enclosing it", bit 7 PRFXID.
   readonly flags: number;
@@ -54,7 +54,7 @@ export const FIRST_SINGLE_BYTE_FUNCTION = 0x80;
 export const FIRST_VARIABLE_FUNCTION = 0xd0;
 export const FIRST_FIXED_FUNCTION = 0xf0;
 
-// The SDK's "Fixed-Length Multi-Byte Functions" size table, indexed by code less 0xF0. Every entry counts both gates, so the smallest (3) is a gate, one payload byte, and a gate -- the shape of Attribute On and Attribute Off. 0xFF has no entry at all: "Cannot be used."
+// The SDK's "Fixed-Length Multi-Byte Functions" size table, indexed by code less 0xF0. Every entry counts both gates, so the smallest (3) is a gate, one payload byte, and a gate — the shape of Attribute On and Attribute Off. 0xFF has no entry at all: "Cannot be used."
 const FIXED_FUNCTION_SIZES: readonly number[] = [
   4, // 0xF0 Extended Character
   5, // 0xF1 Undo

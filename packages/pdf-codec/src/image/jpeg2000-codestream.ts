@@ -3,7 +3,7 @@ import {
   Jpeg2000UnsupportedError,
 } from "./jpeg2000-errors";
 
-// The JPEG 2000 codestream syntax of ISO/IEC 15444-1 (ITU-T T.800) Annex A: the marker segments of the main header and of each tile-part header, parsed into a structural model with no decoding attached. Splitting this out from the entropy decoding is what makes real metadata -- image size, component count and depth, tile grid, wavelet kind, decomposition levels, quality layers -- readable from a codestream this package cannot fully decode, which is most of what a PDF caller wants from a JPXDecode image it is going to skip anyway.
+// The JPEG 2000 codestream syntax of ISO/IEC 15444-1 (ITU-T T.800) Annex A: the marker segments of the main header and of each tile-part header, parsed into a structural model with no decoding attached. Splitting this out from the entropy decoding is what makes real metadata — image size, component count and depth, tile grid, wavelet kind, decomposition levels, quality layers — readable from a codestream this package cannot fully decode, which is most of what a PDF caller wants from a JPXDecode image it is going to skip anyway.
 //
 // Every field name below is the specification's own (Xsiz, XTOsiz, Scod, SPqcd, Psot, ...) so each read can be checked line for line against the tables of A.5 through A.9.
 
@@ -98,7 +98,7 @@ export interface Jpeg2000HeaderOverrides {
   readonly coc: ReadonlyMap<number, Jpeg2000CodingStyle>;
   readonly qcd?: Jpeg2000Quantization;
   readonly qcc: ReadonlyMap<number, Jpeg2000Quantization>;
-  // T.800 A.6.6: whether a POC marker changes the progression order partway through. Recorded as a flag rather than as parsed entries because the decoder refuses such a codestream outright -- reading the entries would be code nothing could act on.
+  // T.800 A.6.6: whether a POC marker changes the progression order partway through. Recorded as a flag rather than as parsed entries because the decoder refuses such a codestream outright — reading the entries would be code nothing could act on.
   readonly hasProgressionChanges: boolean;
   // A.6.3: whether an RGN marker declares a region of interest, whose coefficient upshift the decoder does not undo. A flag for the same reason.
   readonly hasRegionOfInterest: boolean;
@@ -128,7 +128,7 @@ export interface Jpeg2000Codestream {
   readonly truncated: boolean;
 }
 
-// Exported for direct unit testing of the primitives below: readHeaderSegment (the class's sole production caller) already re-derives and re-checks segmentEnd against cursor.data.length before ever calling bytes(), so the length it passes always already satisfies position + length <= data.length on its own -- only a direct cursor test can exercise this class's own arithmetic and bounds-checking in isolation from that guarantee.
+// Exported for direct unit testing of the primitives below: readHeaderSegment (the class's sole production caller) already re-derives and re-checks segmentEnd against cursor.data.length before ever calling bytes(), so the length it passes always already satisfies position + length <= data.length on its own — only a direct cursor test can exercise this class's own arithmetic and bounds-checking in isolation from that guarantee.
 export class MarkerCursor {
   position: number;
 
@@ -179,7 +179,7 @@ function readImageSize(
   cursor: MarkerCursor,
   segmentEnd: number,
 ): Jpeg2000ImageSize {
-  cursor.uint16(); // Rsiz: the capabilities field. Deliberately not enforced -- a profile a decoder does not recognise is not by itself a reason to refuse a codestream whose actual markers it does understand.
+  cursor.uint16(); // Rsiz: the capabilities field. Deliberately not enforced — a profile a decoder does not recognise is not by itself a reason to refuse a codestream whose actual markers it does understand.
   const xsiz = cursor.uint32();
   const ysiz = cursor.uint32();
   const xosiz = cursor.uint32();
@@ -266,7 +266,7 @@ function readCodingStyleParameters(
 }
 
 function readCodingDefaults(cursor: MarkerCursor): Jpeg2000CodingDefaults {
-  // T.800 A.6.1 Table A.16: the five progression orders, in the order the Table's own values run. Built inside this function rather than as a module-level constant so a mutation to one of its entries is attributed, by Stryker's per-test coverage analysis, to the tests that actually call this function -- a module-level `const` here would run once at import time as a static mutant, which Stryker tests against a single arbitrary covering test rather than the full set that genuinely exercises this lookup.
+  // T.800 A.6.1 Table A.16: the five progression orders, in the order the Table's own values run. Built inside this function rather than as a module-level constant so a mutation to one of its entries is attributed, by Stryker's per-test coverage analysis, to the tests that actually call this function — a module-level `const` here would run once at import time as a static mutant, which Stryker tests against a single arbitrary covering test rather than the full set that genuinely exercises this lookup.
   const progressionOrders: readonly Jpeg2000ProgressionOrder[] = [
     "LRCP",
     "RLCP",
@@ -327,7 +327,7 @@ function readQuantization(
   );
 }
 
-// T.800 A.6.2/A.6.5: the component index is one byte when the image has fewer than 257 components and two otherwise -- the one place in the codestream where a field's width depends on a value from a different marker segment.
+// T.800 A.6.2/A.6.5: the component index is one byte when the image has fewer than 257 components and two otherwise — the one place in the codestream where a field's width depends on a value from a different marker segment.
 function readComponentIndex(
   cursor: MarkerCursor,
   componentCount: number,
@@ -424,11 +424,11 @@ function readHeaderSegment(
       );
     }
   }
-  // TLM, PLM, PLT and CRG (and anything else) are positional or informational only: skipping to segmentEnd is the whole of their handling. PPM specifically would change where packet headers live, so the decoder refuses a codestream carrying one rather than reading past it silently -- see readCodestreamHeader's own check.
+  // TLM, PLM, PLT and CRG (and anything else) are positional or informational only: skipping to segmentEnd is the whole of their handling. PPM specifically would change where packet headers live, so the decoder refuses a codestream carrying one rather than reading past it silently — see readCodestreamHeader's own check.
   cursor.position = segmentEnd;
 }
 
-// A COC or QCC before any COD or QCD would leave the override with nothing to override, and a PPM moves every tile's packet headers into the main header -- a genuinely different bitstream organisation this parser does not reassemble.
+// A COC or QCC before any COD or QCD would leave the override with nothing to override, and a PPM moves every tile's packet headers into the main header — a genuinely different bitstream organisation this parser does not reassemble.
 function validateMainHeader(header: MutableHeader): void {
   if (header.cod === undefined) {
     throw new Jpeg2000ParseError(
@@ -527,7 +527,7 @@ function readTilePart(
   const tileIndex = cursor.uint16();
   const psot = cursor.uint32();
   const partIndex = cursor.uint8();
-  cursor.uint8(); // TNsot: the number of tile-parts the encoder declares for this tile, which may legitimately be 0 ("not yet known") and which nothing here needs -- the tile-parts actually present are what get decoded.
+  cursor.uint8(); // TNsot: the number of tile-parts the encoder declares for this tile, which may legitimately be 0 ("not yet known") and which nothing here needs — the tile-parts actually present are what get decoded.
 
   const header = emptyHeader();
   for (;;) {
@@ -568,7 +568,7 @@ function readTilePart(
   cursor.position = dataEnd;
 }
 
-// A Psot of 0 runs the tile-part to the end of the codestream, which includes the EOC marker; the packet decoder must not see those two bytes as coded data. Takes no separate start/length: readTilePart, this function's sole caller, always calls it with a range beginning immediately after a real SOD marker (0xFF 0x93), so whenever that range is under 2 bytes long, one of the two positions checked below falls on that marker's own fixed bytes rather than on data -- and 0x93 can never be mistaken for 0xD9 -- making the byte comparisons already refuse a too-short range on their own, with no need to measure it first.
+// A Psot of 0 runs the tile-part to the end of the codestream, which includes the EOC marker; the packet decoder must not see those two bytes as coded data. Takes no separate start/length: readTilePart, this function's sole caller, always calls it with a range beginning immediately after a real SOD marker (0xFF 0x93), so whenever that range is under 2 bytes long, one of the two positions checked below falls on that marker's own fixed bytes rather than on data — and 0x93 can never be mistaken for 0xD9 — making the byte comparisons already refuse a too-short range on their own, with no need to measure it first.
 function trimTrailingEoc(data: Uint8Array<ArrayBuffer>, end: number): number {
   if (data[end - 2] === 0xff && data[end - 1] === 0xd9) {
     return end - 2;

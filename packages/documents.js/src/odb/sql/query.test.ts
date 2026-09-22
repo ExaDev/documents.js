@@ -5,9 +5,9 @@ import { readOdbTables } from "../read";
 import { evaluateSelect } from "./evaluate";
 import { parseSelect } from "./parser";
 
-// The end-to-end proof for src/odb/sql/: a real saved query, read out of a real .odb, run against that same .odb's own real table data. Nothing here is hand-authored -- the SQL text comes from the package's own db:command via readOdbInventory, and the rows come from readOdbTables' Tier 3 Firebird decoder, so a regression in the parser, the evaluator, the fixture, or the decoder all surface here rather than being papered over by a transcribed expectation.
+// The end-to-end proof for src/odb/sql/: a real saved query, read out of a real .odb, run against that same .odb's own real table data. Nothing here is hand-authored — the SQL text comes from the package's own db:command via readOdbInventory, and the rows come from readOdbTables' Tier 3 Firebird decoder, so a regression in the parser, the evaluator, the fixture, or the decoder all surface here rather than being papered over by a transcribed expectation.
 //
-// The fixture is ExaDev/odf.js's own form-and-report.odb (see src/test-support/odb-fixture.ts for its provenance): an embedded-Firebird database whose SALES table holds six rows, and whose saved HighValueSales query filters on AMOUNT and sorts on three columns at once, in mixed directions -- exactly the shape that would expose a broken comparison, an unstable sort, or a mis-ordered ORDER BY term.
+// The fixture is ExaDev/odf.js's own form-and-report.odb (see src/test-support/odb-fixture.ts for its provenance): an embedded-Firebird database whose SALES table holds six rows, and whose saved HighValueSales query filters on AMOUNT and sorts on three columns at once, in mixed directions — exactly the shape that would expose a broken comparison, an unstable sort, or a mis-ordered ORDER BY term.
 
 const EXPECTED_SAVED_QUERY =
   'SELECT "SALES"."REGION", "SALES"."QUARTER", "SALES"."CUSTOMER", "SALES"."AMOUNT" FROM "SALES" WHERE "SALES"."AMOUNT" >= 100 ORDER BY "SALES"."REGION" ASC, "SALES"."QUARTER" ASC, "SALES"."AMOUNT" DESC';
@@ -48,7 +48,7 @@ describe("src/odb/sql against the real form-and-report.odb saved query", () => {
       readOdbTables(formAndReportOdbPackage()),
     );
 
-    // The select list reorders and narrows relative to the table's own storage order (AMOUNT, ID, REGION, QUARTER, CUSTOMER) -- ID is dropped entirely and AMOUNT moves last.
+    // The select list reorders and narrows relative to the table's own storage order (AMOUNT, ID, REGION, QUARTER, CUSTOMER) — ID is dropped entirely and AMOUNT moves last.
     expect(result.columns).toEqual(["REGION", "QUARTER", "CUSTOMER", "AMOUNT"]);
 
     expect(result.rows).toEqual([

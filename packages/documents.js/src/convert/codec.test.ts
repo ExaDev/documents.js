@@ -156,7 +156,7 @@ describe("odpPdfCodec", () => {
     expect(pdfHeader(pdfBytes)).toBe("%PDF-");
   });
 
-  // The fixture's title frame is rotated (see test-support/odp.ts), so reconstructPresentation's word-level fragments are not guaranteed to reconstruct in original reading order -- see convert.test.ts's own pdfToOdp test for the identical reasoning. Checked word-by-word rather than as one phrase.
+  // The fixture's title frame is rotated (see test-support/odp.ts), so reconstructPresentation's word-level fragments are not guaranteed to reconstruct in original reading order — see convert.test.ts's own pdfToOdp test for the identical reasoning. Checked word-by-word rather than as one phrase.
   it("z.encode then z.decode round-trips text content, like odpToPdf/pdfToOdp", () => {
     const pdfBytes = z.decode(odpPdfCodec, minimalOdpBytes());
     const odpBytes = z.encode(odpPdfCodec, pdfBytes);
@@ -188,7 +188,7 @@ describe("odsPdfCodec", () => {
     expect(pdfHeader(pdfBytes)).toBe("%PDF-");
   });
 
-  // gridOdsBytes (src/test-support/ods.ts) has gridlines enabled, so this exercises the same gridline-lattice reconstruction path as convert.test.ts's own pdfToOds test -- see that test's own note for why.
+  // gridOdsBytes (src/test-support/ods.ts) has gridlines enabled, so this exercises the same gridline-lattice reconstruction path as convert.test.ts's own pdfToOds test — see that test's own note for why.
   it("z.encode then z.decode round-trips every cell's text content, like odsToPdf/pdfToOds", () => {
     const pdfBytes = z.decode(odsPdfCodec, gridOdsBytes());
     const odsBytes = z.encode(odsPdfCodec, pdfBytes);
@@ -243,7 +243,7 @@ describe("odgPdfCodec", () => {
   });
 });
 
-// gridOdsBytes -> odsToXlsx builds a genuine xlsx starting point (rather than a hand-rolled ooxml.js xlsx package), mirroring odsPdfCodec's own gridOdsBytes usage above -- xlsxToPdf/pdfToXlsx compose the ods<->xlsx bridge with the ods<->pdf layout pair internally (see convert.ts's own module comment on xlsxToPdf), so this exercises that composition through the codec, not a genuine xlsx-native layout engine.
+// gridOdsBytes -> odsToXlsx builds a genuine xlsx starting point (rather than a hand-rolled ooxml.js xlsx package), mirroring odsPdfCodec's own gridOdsBytes usage above — xlsxToPdf/pdfToXlsx compose the ods<->xlsx bridge with the ods<->pdf layout pair internally (see convert.ts's own module comment on xlsxToPdf), so this exercises that composition through the codec, not a genuine xlsx-native layout engine.
 describe("xlsxPdfCodec", () => {
   it("z.decode produces valid PDF bytes from xlsx bytes", () => {
     const xlsxBytes = odsToXlsx(gridOdsBytes());
@@ -531,7 +531,7 @@ describe("markdownPdfCodec", () => {
   });
 });
 
-// csvToPdf composes the csv -> ods bridge with ods -> pdf internally (csv has no layout engine of its own, exactly like xlsxPdfCodec above), and pdfToCsv composes pdf -> ods -> csv -- so this pair carries the same stacked-reconstruction caveat as xlsxPdfCodec, with csv read's heuristic re-typing on top.
+// csvToPdf composes the csv -> ods bridge with ods -> pdf internally (csv has no layout engine of its own, exactly like xlsxPdfCodec above), and pdfToCsv composes pdf -> ods -> csv — so this pair carries the same stacked-reconstruction caveat as xlsxPdfCodec, with csv read's heuristic re-typing on top.
 describe("csvPdfCodec", () => {
   it("z.decode produces valid PDF bytes from csv bytes", () => {
     const pdfBytes = z.decode(
@@ -565,7 +565,7 @@ describe("csvPdfCodec", () => {
   });
 });
 
-// The same-variant spreadsheet bridges: direct ContentDocument pivot copies with no layout engine and no reconstruction, exactly like odsXlsxCodec. The csv boundary is displayText-only -- a typed ods/xlsx cell re-reads as whatever inferCellValue re-types its printed text as on the way back through the encode side.
+// The same-variant spreadsheet bridges: direct ContentDocument pivot copies with no layout engine and no reconstruction, exactly like odsXlsxCodec. The csv boundary is displayText-only — a typed ods/xlsx cell re-reads as whatever inferCellValue re-types its printed text as on the way back through the encode side.
 describe("odsCsvCodec", () => {
   it("z.decode produces csv text carrying every rendered cell of the ods fixture", () => {
     const csvBytes = z.decode(odsCsvCodec, gridOdsBytes());
@@ -631,7 +631,7 @@ describe("xlsxCsvCodec", () => {
   });
 });
 
-// The pdf-composed last-resort pair, mirroring xlsxMarkdownCodec's own shape: neither direction is remotely round-trip-lossless (spreadsheet render stacked on markdown reconstruction and back), so the assertions are structural -- valid output of the target schema carrying real text on the decode side.
+// The pdf-composed last-resort pair, mirroring xlsxMarkdownCodec's own shape: neither direction is remotely round-trip-lossless (spreadsheet render stacked on markdown reconstruction and back), so the assertions are structural — valid output of the target schema carrying real text on the decode side.
 describe("csvMarkdownCodec", () => {
   it("z.decode produces markdown carrying the rendered cell text, like csvToMarkdown", () => {
     const markdownBytes = z.decode(

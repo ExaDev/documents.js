@@ -5,26 +5,26 @@ import {
 
 // The read/write diagnostic sink, matching markdown-codec's and pdf-codec's own three-tier policy exactly (see markdown-codec's src/diagnostics/diagnostics.ts and pdf-codec's src/diagnostics.ts): throw for input this package cannot meaningfully process at all; recover-with-diagnostic for RTF that is spec-legal but almost certainly not what the producer meant, where continuing is more useful than failing; degrade-with-diagnostic for an individual construct this package's own ContentDocument mapping cannot represent, while the rest of the document still reads.
 //
-// RTF makes that third tier load-bearing in a way the XML formats do not. The specification's own reader conventions require an unknown control word to be ignored and an unknown `{\*` destination to be skipped whole (RTF 1.9.1, "Conventions of an RTF Reader"), so "I did not understand this" is the format's normal, specified operating mode rather than an error condition -- but a reader that silently drops a construct a caller cared about is indistinguishable from one that never saw it. Every drop this package makes deliberately therefore names itself through a code below.
+// RTF makes that third tier load-bearing in a way the XML formats do not. The specification's own reader conventions require an unknown control word to be ignored and an unknown `{\*` destination to be skipped whole (RTF 1.9.1, "Conventions of an RTF Reader"), so "I did not understand this" is the format's normal, specified operating mode rather than an error condition — but a reader that silently drops a construct a caller cared about is indistinguishable from one that never saw it. Every drop this package makes deliberately therefore names itself through a code below.
 //
 // No Zod schema wraps RtfDiagnostic, matching MarkdownDiagnostic's and PdfDiagnostic's own precedent: a diagnostic is produced exclusively by this package's own pipeline, is consumed by a caller-supplied sink rather than round-tripped through JSON, and validating our own output would validate nothing a caller couldn't already see from the TypeScript type.
 
 export type RtfDiagnosticSeverity = "info" | "warning";
 
 export interface RtfDiagnostic {
-  // A stable, namespaced code (e.g. 'rtf/unknown-destination-skipped') -- callers branch on this, not on `message`, which is free text for humans. See RtfDiagnosticCodes below for the codes this package names.
+  // A stable, namespaced code (e.g. 'rtf/unknown-destination-skipped') — callers branch on this, not on `message`, which is free text for humans. See RtfDiagnosticCodes below for the codes this package names.
   readonly code: string;
   readonly severity: RtfDiagnosticSeverity;
   readonly message: string;
-  // Where in the token stream the fault was noticed: a 0-based index into the tokens src/tokenize.ts produced, when the stage reporting it has one to hand. A token index rather than a byte offset because that is what the reader actually holds -- the tokenizer emits text in runs and does not carry each token's own input position, so a byte offset here would have to be invented. A write-side diagnostic has no input position at all and omits it.
+  // Where in the token stream the fault was noticed: a 0-based index into the tokens src/tokenize.ts produced, when the stage reporting it has one to hand. A token index rather than a byte offset because that is what the reader actually holds — the tokenizer emits text in runs and does not carry each token's own input position, so a byte offset here would have to be invented. A write-side diagnostic has no input position at all and omits it.
   readonly tokenIndex?: number;
 }
 
 export type RtfDiagnosticSink = (diagnostic: RtfDiagnostic) => void;
 
-// Deliberately prefixed (not the bare NOOP_DIAGNOSTIC_SINK pdf-codec uses, nor markdown-codec's NOOP_MARKDOWN_DIAGNOSTIC_SINK) -- documents.js will import several of these packages' no-op sinks into the same modules once it composes RTF alongside the existing formats, and an unprefixed name here would collide on import.
+// Deliberately prefixed (not the bare NOOP_DIAGNOSTIC_SINK pdf-codec uses, nor markdown-codec's NOOP_MARKDOWN_DIAGNOSTIC_SINK) — documents.js will import several of these packages' no-op sinks into the same modules once it composes RTF alongside the existing formats, and an unprefixed name here would collide on import.
 export const NOOP_RTF_DIAGNOSTIC_SINK: RtfDiagnosticSink = () => {
-  /* discards every diagnostic -- the deliberate default for a caller that doesn't want them */
+  /* discards every diagnostic — the deliberate default for a caller that doesn't want them */
 };
 
 export const RtfDiagnosticCodes = {
@@ -69,7 +69,7 @@ export class RtfNotAnRtfDocumentError extends RtfParseError {
   }
 }
 
-// ReadRtfOptions.maxInputBytes exceeded -- a resource-limit guard, not a content problem, so it throws rather than degrading.
+// ReadRtfOptions.maxInputBytes exceeded — a resource-limit guard, not a content problem, so it throws rather than degrading.
 export class RtfInputTooLargeError extends RtfParseError {
   readonly byteLength: number;
   readonly maxInputBytes: number;

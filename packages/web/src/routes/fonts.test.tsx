@@ -13,7 +13,7 @@ vi.mock("../ui/notify", () => ({
   },
 }));
 
-// Stands in for the real FileUpload (already covered by its own dedicated test suite): FontsPage's own logic -- inferring the format, resetting the previous mutation, triggering extractFonts only for a recognised format, and surfacing an unrecognised-format alert -- is what this file exercises, not FileUpload's drag-and-drop wiring.
+// Stands in for the real FileUpload (already covered by its own dedicated test suite): FontsPage's own logic — inferring the format, resetting the previous mutation, triggering extractFonts only for a recognised format, and surfacing an unrecognised-format alert — is what this file exercises, not FileUpload's drag-and-drop wiring.
 let latestOnFile: ((file: OpenedFile) => void) | undefined;
 vi.mock("../ui/FileUpload", () => ({
   FileUpload: (props: {

@@ -8,7 +8,7 @@ function gcd(a: bigint, b: bigint): bigint {
     x = y;
     y = next;
   }
-  // gcd(0, 0) is defined as 1 here so 0/0-shaped degenerates reduce to 0/1 rather than dividing by zero -- the schema's patterns keep 0's denominator at '1', and this keeps the arithmetic total on the same convention.
+  // gcd(0, 0) is defined as 1 here so 0/0-shaped degenerates reduce to 0/1 rather than dividing by zero — the schema's patterns keep 0's denominator at '1', and this keeps the arithmetic total on the same convention.
   return x === 0n ? 1n : x;
 }
 

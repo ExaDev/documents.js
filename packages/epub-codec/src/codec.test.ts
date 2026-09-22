@@ -29,7 +29,7 @@ describe("EpubBytesSchema", () => {
   });
 
   it("rejects bytes matching only part of the zip header", () => {
-    // The first byte matches PK\x03\x04's own 0x50, but the rest don't -- .some() would wrongly accept this, .every() correctly rejects it.
+    // The first byte matches PK\x03\x04's own 0x50, but the rest don't — .some() would wrongly accept this, .every() correctly rejects it.
     expect(
       EpubBytesSchema.safeParse(new Uint8Array([0x50, 0, 0, 0])).success,
     ).toBe(false);

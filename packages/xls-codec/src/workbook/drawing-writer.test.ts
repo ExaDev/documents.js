@@ -80,7 +80,7 @@ function embeddedDrawing(
   };
 }
 
-/** Concatenates a sheet's own MsoDrawing record chain back into one raw Escher byte stream -- the exact inverse of what drawing.ts's own readSheetDrawing does with the records it reads, but starting from buildDrawingWritePlan's output directly rather than a full read-side round trip. */
+/** Concatenates a sheet's own MsoDrawing record chain back into one raw Escher byte stream — the exact inverse of what drawing.ts's own readSheetDrawing does with the records it reads, but starting from buildDrawingWritePlan's output directly rather than a full read-side round trip. */
 function escherBytesFromMsoDrawingRecords(
   records: readonly Uint8Array<ArrayBuffer>[],
 ): Uint8Array<ArrayBuffer> {
@@ -311,7 +311,7 @@ describe("writeFtPictFmla", () => {
     const bytes = writeFtPictFmla(7);
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const className = writeXLUnicodeStringNoCch("Package");
-    // ft(2) + cb(2) + cbFmla(2) + ObjectParsedFormula(cce 2 + unused 4 + PtgTbl 1 + 4 reserved = 11) + ttb(1) -- cbClass sits right after.
+    // ft(2) + cb(2) + cbFmla(2) + ObjectParsedFormula(cce 2 + unused 4 + PtgTbl 1 + 4 reserved = 11) + ttb(1) — cbClass sits right after.
     const cbClassOffset = 2 + 2 + 2 + 11 + 1;
 
     expect(view.getUint8(cbClassOffset)).toBe(className.length - 1);
@@ -361,24 +361,24 @@ describe("writeEmbeddedObjRecord", () => {
 
 describe("bytesFromBase64", () => {
   it("decodes a base64 string whose length forces two padding characters, without treating either as real data", () => {
-    // "f" alone (length 1) encodes to "Zg==" -- two padding characters, and the ONLY way to exercise the padding-character skip at all, since every other fixture in this package's own test suite happens to use base64 with no padding at all.
+    // "f" alone (length 1) encodes to "Zg==" — two padding characters, and the ONLY way to exercise the padding-character skip at all, since every other fixture in this package's own test suite happens to use base64 with no padding at all.
     expect(bytesFromBase64("Zg==")).toStrictEqual(new Uint8Array([0x66]));
   });
 
   it("refuses a character that is not part of the base64 alphabet, naming it exactly, rather than silently skipping it", () => {
-    // "=" is only ever valid as genuine trailing padding, sliced off before this loop even runs -- one sitting anywhere else in the string is exactly as invalid as any other non-alphabet character.
+    // "=" is only ever valid as genuine trailing padding, sliced off before this loop even runs — one sitting anywhere else in the string is exactly as invalid as any other non-alphabet character.
     expect(() => bytesFromBase64("AB=C")).toThrow(
       'a sheet image\'s own base64 payload contains "=", which is not part of the base64 alphabet',
     );
   });
 
   it("decodes a base64 string whose length forces exactly one padding character", () => {
-    // "fo" (length 2) encodes to "Zm8=" -- one padding character.
+    // "fo" (length 2) encodes to "Zm8=" — one padding character.
     expect(bytesFromBase64("Zm8=")).toStrictEqual(new Uint8Array([0x66, 0x6f]));
   });
 
   it("decodes a base64 string needing no padding at all, isolating the zero-padding arithmetic from both padded cases above", () => {
-    // "foo" (length 3) encodes to "Zm9v" -- no padding.
+    // "foo" (length 3) encodes to "Zm9v" — no padding.
     expect(bytesFromBase64("Zm9v")).toStrictEqual(
       new Uint8Array([0x66, 0x6f, 0x6f]),
     );
@@ -545,7 +545,7 @@ describe("buildDrawingWritePlan", () => {
       return view.getUint16(6, true);
     });
 
-    // 3 cells, 2 of which carry a comment -- ids start at 3 (2 comments + 1) and continue sequentially, not starting at 1 (which would collide with the comments' own ids) and not counting the third, comment-free cell.
+    // 3 cells, 2 of which carry a comment — ids start at 3 (2 comments + 1) and continue sequentially, not starting at 1 (which would collide with the comments' own ids) and not counting the third, comment-free cell.
     expect(objectIds).toStrictEqual([3, 4]);
   });
 
@@ -610,11 +610,11 @@ describe("buildDrawingWritePlan", () => {
       fdgg.data.byteOffset,
       fdgg.data.byteLength,
     );
-    // Sheet A allocates spids 1024 (patriarch) and 1025 (its one image); sheet B continues from 1026 (patriarch) through 1028 (its two images) -- spidMax is B's own last spid, and cspSaved is every shape (patriarch included) across both sheets: 2 + 3 = 5.
+    // Sheet A allocates spids 1024 (patriarch) and 1025 (its one image); sheet B continues from 1026 (patriarch) through 1028 (its two images) — spidMax is B's own last spid, and cspSaved is every shape (patriarch included) across both sheets: 2 + 3 = 5.
     expect(view.getUint32(0, true)).toBe(1028); // spidMax
     expect(view.getUint32(8, true)).toBe(5); // cspSaved
     expect(view.getUint32(12, true)).toBe(2); // cdgSaved
-    // One OfficeArtIDCL per drawing, right after the four header fields: drawingId(4) + lastSpid(4) each, in drawing order -- sheet A's own drawing is id 1, sheet B's is id 2, not the reverse and not both landing on the same id.
+    // One OfficeArtIDCL per drawing, right after the four header fields: drawingId(4) + lastSpid(4) each, in drawing order — sheet A's own drawing is id 1, sheet B's is id 2, not the reverse and not both landing on the same id.
     expect(view.getUint32(16, true)).toBe(1); // sheet A's own drawingId
     expect(view.getUint32(24, true)).toBe(2); // sheet B's own drawingId
   });

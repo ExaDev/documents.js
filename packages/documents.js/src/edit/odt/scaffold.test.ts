@@ -85,7 +85,7 @@ describe("createEmptyOdtPackage", () => {
     expect(masterPage).toBeDefined();
   });
 
-  // Every level OdtParagraph's headingLevel setter can point at needs a real definition, or the reference resolves to nothing and the heading renders unstyled in every consumer that resolves names (LibreOffice; odf.js's own resolveStyle cascade). The visual convention is the PDF layout engine's own HEADING_STYLES table -- the single source of truth -- so an odt this scaffold builds renders its headings the same way odtToPdf renders the same document.
+  // Every level OdtParagraph's headingLevel setter can point at needs a real definition, or the reference resolves to nothing and the heading renders unstyled in every consumer that resolves names (LibreOffice; odf.js's own resolveStyle cascade). The visual convention is the PDF layout engine's own HEADING_STYLES table — the single source of truth — so an odt this scaffold builds renders its headings the same way odtToPdf renders the same document.
   it("defines a Heading_20_N common style for every level of the heading convention in office:styles", () => {
     const pkg = createEmptyOdtPackage();
     const root = rootElement(

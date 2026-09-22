@@ -19,7 +19,7 @@ import {
 
 // The symbol dictionary decoding procedure (ITU-T T.88 6.5) and the text region decoding procedure (6.4): how a scanned page of text is actually coded in practice. Rather than coding every pixel of the page through a generic region, an encoder collects the distinct connected components ("symbols") into a dictionary, codes each one once, and then codes the page as a sequence of (symbol, position) instances.
 //
-// Only the arithmetic variants are implemented here (SDHUFF = 0, SBHUFF = 0). The Huffman variants are a wholly separate coding path -- standard tables B.1-B.15 plus optional custom table segments -- and no mainstream JBIG2 encoder that targets PDF emits them; a stream that uses one raises Jbig2UnsupportedError rather than being silently mis-decoded.
+// Only the arithmetic variants are implemented here (SDHUFF = 0, SBHUFF = 0). The Huffman variants are a wholly separate coding path — standard tables B.1-B.15 plus optional custom table segments — and no mainstream JBIG2 encoder that targets PDF emits them; a stream that uses one raises Jbig2UnsupportedError rather than being silently mis-decoded.
 
 // Which corner of a symbol instance's bitmap the decoded (S, T) coordinate pair actually locates. The two edges are all the decoding procedure needs from T.88's REFCORNER, so the four named values resolve to exactly that pair rather than being carried around as a raw code.
 export interface Jbig2ReferenceCorner {
@@ -119,7 +119,7 @@ export interface TextRegionParams {
 
 // Where a symbol instance's own top-left pixel lands, given the decoded (s, t) pair, the corner that pair actually names, and whether the region is transposed. T.88 6.4.5 step 3(c)(x) states this as eight separate cases; the two coordinates are simply swapped between the transposed and non-transposed halves, and within each half the "right"/"bottom" corners shift back by the instance's own extent.
 //
-// Transposed placement pairs the two coordinates the other way round -- (T, S) rather than (S, T) -- but which edge each names is still read off the same corner, so `right` continues to govern the horizontal shift and `bottom` the vertical one.
+// Transposed placement pairs the two coordinates the other way round — (T, S) rather than (S, T) — but which edge each names is still read off the same corner, so `right` continues to govern the horizontal shift and `bottom` the vertical one.
 function instanceTopLeft(
   s: number,
   t: number,
@@ -187,7 +187,7 @@ export function decodeTextRegion(
         symbol = refineInstance(symbol, params, mq, contexts);
       }
 
-      // T.88 6.4.5 steps 3(c)(viii) and 3(c)(xi): CURS advances by the instance's own extent either side of the placement, depending on which corner the (S, T) pair names. S runs along the strip -- horizontally when not transposed, vertically when it is -- so the corner edge that decides which side the advance falls on flips with it.
+      // T.88 6.4.5 steps 3(c)(viii) and 3(c)(xi): CURS advances by the instance's own extent either side of the placement, depending on which corner the (S, T) pair names. S runs along the strip — horizontally when not transposed, vertically when it is — so the corner edge that decides which side the advance falls on flips with it.
       const advance = (params.transposed ? symbol.height : symbol.width) - 1;
       const advanceBefore = params.transposed
         ? params.referenceCorner.bottom
@@ -373,7 +373,7 @@ function decodeDictionarySymbol(
   );
 }
 
-// T.88 6.5.10: which of the input-plus-new symbols this dictionary hands on to the segments that refer to it, transmitted as alternating run lengths of not-exported and exported symbols, starting with a (possibly zero-length) not-exported run. A zero-length run is legal and flips the flag without advancing, so the loop is bounded by twice the symbol count plus one -- the most alternations a well-formed export sequence can need.
+// T.88 6.5.10: which of the input-plus-new symbols this dictionary hands on to the segments that refer to it, transmitted as alternating run lengths of not-exported and exported symbols, starting with a (possibly zero-length) not-exported run. A zero-length run is legal and flips the flag without advancing, so the loop is bounded by twice the symbol count plus one — the most alternations a well-formed export sequence can need.
 function exportSymbols(
   allSymbols: readonly Jbig2Bitmap[],
   exportedCount: number,

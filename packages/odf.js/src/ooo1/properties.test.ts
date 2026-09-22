@@ -7,7 +7,7 @@ import {
   mergeStyleProperties,
 } from "./properties";
 
-// This module had no direct unit tests at all -- every reader/writer that touches it only exercises it indirectly through a whole-document round trip. Direct coverage below targets propertyTypesForContainer's own routing branches, splitStyleProperties' first-match-wins/fallback-to-first-candidate routing (including the two OpenOffice.org compound-attribute expansions), and mergeStyleProperties' found/not-found and multi-child concatenation behaviour.
+// This module had no direct unit tests at all — every reader/writer that touches it only exercises it indirectly through a whole-document round trip. Direct coverage below targets propertyTypesForContainer's own routing branches, splitStyleProperties' first-match-wins/fallback-to-first-candidate routing (including the two OpenOffice.org compound-attribute expansions), and mergeStyleProperties' found/not-found and multi-child concatenation behaviour.
 
 describe("propertyTypesForContainer", () => {
   it("resolves a container tag with no style:family attribute at all, e.g. style:page-master", () => {

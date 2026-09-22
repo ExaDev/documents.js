@@ -32,7 +32,7 @@ function defTablePrl(boundaries: readonly number[]): Prl {
   return { sprm: decodeSprm(0xd608), operand: Uint8Array.from(operand) };
 }
 
-// assembleBlocks is exported and takes a plain ParagraphEntry[], so every scenario here is built directly rather than through a real .doc byte stream -- table/read.test.ts's own hand-assembled-bytes tests exercise the identical machinery from real grpprl bytes; these instead isolate walkBlocksAtDepth/tryAssembleTable's own internal boundary logic with full control over each entry's properties.
+// assembleBlocks is exported and takes a plain ParagraphEntry[], so every scenario here is built directly rather than through a real .doc byte stream — table/read.test.ts's own hand-assembled-bytes tests exercise the identical machinery from real grpprl bytes; these instead isolate walkBlocksAtDepth/tryAssembleTable's own internal boundary logic with full control over each entry's properties.
 
 function entry(overrides: Partial<ParagraphEntry> = {}): ParagraphEntry {
   return {
@@ -65,7 +65,7 @@ describe("assembleBlocks", () => {
   });
 
   it("requires both the paragraph mark and innerTableCellMark to close a nested cell, not either alone", () => {
-    // Nested cell 1's own three entries: a paragraph mark with no innerTableCellMark of its own (should NOT close the cell), innerTableCellMark stated on the wrong terminator -- SECTION_MARK, never a real nested-cell spelling, chosen specifically because CELL_MARK would itself be misread as the OUTER table's own depth-1 cell mark (should NOT close it either), and finally the genuine paragraph-mark-plus-flag combination that does. If any of the first two wrongly closed the cell, the nested row's own two-column TAP definition would disagree with the physical cell count it actually finds, and the whole nested run would degrade to flat paragraphs instead of a real table.
+    // Nested cell 1's own three entries: a paragraph mark with no innerTableCellMark of its own (should NOT close the cell), innerTableCellMark stated on the wrong terminator — SECTION_MARK, never a real nested-cell spelling, chosen specifically because CELL_MARK would itself be misread as the OUTER table's own depth-1 cell mark (should NOT close it either), and finally the genuine paragraph-mark-plus-flag combination that does. If any of the first two wrongly closed the cell, the nested row's own two-column TAP definition would disagree with the physical cell count it actually finds, and the whole nested run would degrade to flat paragraphs instead of a real table.
     const nestedDef = entry({
       properties: { tableDepth: 2, innerTtpMark: true },
       terminator: PARAGRAPH_MARK,
@@ -115,7 +115,7 @@ describe("assembleBlocks", () => {
   });
 
   it("degrades a cell's own dangling nested run rather than throwing, even when the run reaches the cell's own last entry, regardless of whether the whole document stream ends", () => {
-    // A cell's own accumulated entries always end with the boundary paragraph that closed the cell in the first place (tryAssembleTable's own isCellBoundary branch pushes `entry` before checking it), so a nested run collected from them can never reach the cell's own array end -- unlike the top-level walk two tests above, streamContinues for a cell's own content is unconditional, never routed through documentStreamEnds at all. Passing true here (the "worst case" for the outer table's own run, which itself reaches this whole array's end) proves the cell's own degrade is genuinely independent of it, not merely untriggered by this particular value.
+    // A cell's own accumulated entries always end with the boundary paragraph that closed the cell in the first place (tryAssembleTable's own isCellBoundary branch pushes `entry` before checking it), so a nested run collected from them can never reach the cell's own array end — unlike the top-level walk two tests above, streamContinues for a cell's own content is unconditional, never routed through documentStreamEnds at all. Passing true here (the "worst case" for the outer table's own run, which itself reaches this whole array's end) proves the cell's own degrade is genuinely independent of it, not merely untriggered by this particular value.
     const nestedDangling = entry({
       blocks: [marker("nested")],
       properties: { tableDepth: 2 },
@@ -145,7 +145,7 @@ describe("assembleBlocks", () => {
 });
 
 describe("indexOrUndefined", () => {
-  // gridIndexFor's own real caller can never pass -1 here (canonicalColumnBoundariesTwips is always built from the union of every boundary gridIndexFor is ever asked to look up, so a match always exists) -- exercised directly, the same discipline this file's other internal-defect helpers already follow.
+  // gridIndexFor's own real caller can never pass -1 here (canonicalColumnBoundariesTwips is always built from the union of every boundary gridIndexFor is ever asked to look up, so a match always exists) — exercised directly, the same discipline this file's other internal-defect helpers already follow.
   it("turns findIndex's own -1 sentinel into undefined", () => {
     expect(indexOrUndefined(-1)).toBeUndefined();
   });
@@ -157,7 +157,7 @@ describe("indexOrUndefined", () => {
 });
 
 describe("read.ts's own internal-defect messages", () => {
-  // Every message named here is an invariant this module already maintains elsewhere in the same function, never one a caller's own input could violate -- see each message function's own comment. Tested against a hardcoded duplicate of the exact text, the same discipline prop/fkp-write.ts's own internal-defect messages follow.
+  // Every message named here is an invariant this module already maintains elsewhere in the same function, never one a caller's own input could violate — see each message function's own comment. Tested against a hardcoded duplicate of the exact text, the same discipline prop/fkp-write.ts's own internal-defect messages follow.
   it("carries cellMergeEntryMissingMessage's own exact text", () => {
     expect(cellMergeEntryMissingMessage(3)).toBe(
       "internal defect: table row cell 3 has no TAP merge entry despite the length check above",

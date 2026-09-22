@@ -30,7 +30,7 @@ export function readRecordHeader(
     );
   }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  // The version/instance word is one little-endian uint16 with recVer in bits 0-3 and recInstance in bits 4-15 -- the spec's packet diagram numbers bits big-endian while the value itself is little-endian ([MS-PPT] 1.3.1 Byte Ordering), so the split is by shift on the assembled value, never by reading the two bytes separately.
+  // The version/instance word is one little-endian uint16 with recVer in bits 0-3 and recInstance in bits 4-15 — the spec's packet diagram numbers bits big-endian while the value itself is little-endian ([MS-PPT] 1.3.1 Byte Ordering), so the split is by shift on the assembled value, never by reading the two bytes separately.
   const versionAndInstance = view.getUint16(offset, true);
   return {
     recVer: versionAndInstance & 0xf,

@@ -2,7 +2,7 @@ import * as zlib from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { decodePng } from "./png-decode";
 
-// Every fixture here is built with Node's own built-in zlib module -- deliberately NOT this package's own deflate/crc32 -- so decodePng is exercised against a genuinely independent implementation of PNG's container format, not merely its own inverse.
+// Every fixture here is built with Node's own built-in zlib module — deliberately NOT this package's own deflate/crc32 — so decodePng is exercised against a genuinely independent implementation of PNG's container format, not merely its own inverse.
 
 function u32be(n: number): Buffer {
   const b = Buffer.alloc(4);
@@ -192,7 +192,7 @@ describe("decodePng against hand-built (Node zlib) fixtures", () => {
     );
     const iendChunkLength = pngChunk("IEND", Buffer.alloc(0)).length;
     const withoutIend = png.subarray(0, png.length - iendChunkLength);
-    // A chunk header (length + type, 8 bytes) with nothing after it -- exactly the boundary offset + 8 === bytes.length that distinguishes "enter the loop and discover there's no room for the data/CRC" from "stop the loop before reading a header at all".
+    // A chunk header (length + type, 8 bytes) with nothing after it — exactly the boundary offset + 8 === bytes.length that distinguishes "enter the loop and discover there's no room for the data/CRC" from "stop the loop before reading a header at all".
     const truncatedHeader = Buffer.concat([
       u32be(0),
       Buffer.from("tEXt", "ascii"),

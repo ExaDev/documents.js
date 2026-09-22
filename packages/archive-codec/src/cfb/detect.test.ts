@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { isCompoundFile } from "./detect";
 import { detectArchiveFormat } from "../zip/detect";
 
-// Detection of the classic OLE compound-file signature ([MS-CFB] header bytes D0 CF 11 E0 A1 B1 1A E1) -- the leading magic of every legacy OLE payload (.doc, .xls, .ppt, and the word|ppt/embeddings/oleObject1.bin spelling of an OOXML-embedded object). A byte check, never a parse-and-catch: it says "these bytes start a compound file", not "these bytes are a well-formed one" (structural validation is readCompoundFile's job).
+// Detection of the classic OLE compound-file signature ([MS-CFB] header bytes D0 CF 11 E0 A1 B1 1A E1) — the leading magic of every legacy OLE payload (.doc, .xls, .ppt, and the word|ppt/embeddings/oleObject1.bin spelling of an OOXML-embedded object). A byte check, never a parse-and-catch: it says "these bytes start a compound file", not "these bytes are a well-formed one" (structural validation is readCompoundFile's job).
 
 describe("isCompoundFile", () => {
   it("accepts bytes carrying the OLE/CFB signature", () => {

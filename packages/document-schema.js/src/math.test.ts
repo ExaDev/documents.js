@@ -457,7 +457,7 @@ describe("the MathExpression grammar", () => {
   });
 });
 
-// isMathExpression stopped backing MathExpressionSchema in ExaDev/documents.js#1009 (the schema is a real, self-recursive z.discriminatedUnion() now, mirroring isMathMlNode's own identical demotion to a standalone guard in #937 -- see mathml.test.ts's own dedicated describe block for the precedent this one follows) -- kept exported regardless, for a caller narrowing an unknown value with no Zod import in hand. Every branch below is exercised directly against the guard, not through the schema, since the two no longer share one code path.
+// isMathExpression stopped backing MathExpressionSchema in ExaDev/documents.js#1009 (the schema is a real, self-recursive z.discriminatedUnion() now, mirroring isMathMlNode's own identical demotion to a standalone guard in #937 — see mathml.test.ts's own dedicated describe block for the precedent this one follows) — kept exported regardless, for a caller narrowing an unknown value with no Zod import in hand. Every branch below is exercised directly against the guard, not through the schema, since the two no longer share one code path.
 describe("isMathExpression", () => {
   it("accepts a valid num, and rejects a malformed numerator/denominator", () => {
     expect(
@@ -743,7 +743,7 @@ describe("IntervalSchema", () => {
     );
   });
 
-  it("accepts a min exactly equal to max -- both bounds are inclusive", () => {
+  it("accepts a min exactly equal to max — both bounds are inclusive", () => {
     expect(
       IntervalSchema.safeParse({
         kind: "interval",

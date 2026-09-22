@@ -23,11 +23,11 @@ import type {
 
 export interface DrawingLayoutResult {
   readonly document: LayoutDocument;
-  // The DocumentTree's own pages array (each rendered page's size, indexed to match every content node's own frames[].pageIndex) -- the input `doc` argument itself comes back with frames stamped in place, which together with this array is the fused unified DocumentTree a conversion reports through onDocument.
+  // The DocumentTree's own pages array (each rendered page's size, indexed to match every content node's own frames[].pageIndex) — the input `doc` argument itself comes back with frames stamped in place, which together with this array is the fused unified DocumentTree a conversion reports through onDocument.
   readonly pages: readonly PageSize[];
 }
 
-// The axis-aligned PDF-space bounding box of one emitted vector item, the geometry a content node's own frame records for it. An unrotated rect/ellipse is its own box exactly; a rotated vector (emitted as a path) and a freeform path bound by the tight hull of all their points INCLUDING cubic controls -- the identical hull convention reconstruct.ts's own pathBoundingFrame documents (a cubic lies within the convex hull of its control points, so the frame contains the rendered curve).
+// The axis-aligned PDF-space bounding box of one emitted vector item, the geometry a content node's own frame records for it. An unrotated rect/ellipse is its own box exactly; a rotated vector (emitted as a path) and a freeform path bound by the tight hull of all their points INCLUDING cubic controls — the identical hull convention reconstruct.ts's own pathBoundingFrame documents (a cubic lies within the convex hull of its control points, so the frame contains the rendered curve).
 function boundsOfPoints(points: readonly Point[]): Box {
   let minX = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
@@ -73,7 +73,7 @@ function vectorItemBounds(
   return boundsOfPoints(points);
 }
 
-// Emits the vector's item(s) and stamps the vector node's own frame from the item that was emitted -- one frame per vector per page, at the exact placement the item carries (rotation already resolved into the geometry for rotated kinds).
+// Emits the vector's item(s) and stamps the vector node's own frame from the item that was emitted — one frame per vector per page, at the exact placement the item carries (rotation already resolved into the geometry for rotated kinds).
 function emitVector(
   vector: ContentVector,
   pageIndex: number,
@@ -94,9 +94,9 @@ function emitVector(
   }
 }
 
-// ContentDocument (the drawing variant, odf.js's .odg target) -> LayoutDocument: structurally the same shape as slides.ts's own pptx/odp direction (one ContentDrawPage per PDF page, direct placement, no pagination), extended with one new emission path -- ContentVector, the vector-primitive vocabulary a drawing carries that a slide typically doesn't. rect/ellipse/line vectors map onto the LayoutRect/LayoutEllipse/LayoutLine kinds documents.js already had before this module existed; 'path' is the one genuinely new LayoutItem kind (document-schema.js's LayoutPathSchema), constructed here as a plain value -- writePath (pdf-codec's content-write.ts) is what later turns that value into PDF content-stream operators, a separate, downstream concern from building it. ContentShape content (draw:frame text/image/table, and salvaged custom-shape text) reuses convertShape verbatim from slides.ts, which is what makes odg free-riding on odp's/pptx's own already-correct paragraph flow, image placement, and table layout, not a second reimplementation of any of it.
+// ContentDocument (the drawing variant, odf.js's .odg target) -> LayoutDocument: structurally the same shape as slides.ts's own pptx/odp direction (one ContentDrawPage per PDF page, direct placement, no pagination), extended with one new emission path — ContentVector, the vector-primitive vocabulary a drawing carries that a slide typically doesn't. rect/ellipse/line vectors map onto the LayoutRect/LayoutEllipse/LayoutLine kinds documents.js already had before this module existed; 'path' is the one genuinely new LayoutItem kind (document-schema.js's LayoutPathSchema), constructed here as a plain value — writePath (pdf-codec's content-write.ts) is what later turns that value into PDF content-stream operators, a separate, downstream concern from building it. ContentShape content (draw:frame text/image/table, and salvaged custom-shape text) reuses convertShape verbatim from slides.ts, which is what makes odg free-riding on odp's/pptx's own already-correct paragraph flow, image placement, and table layout, not a second reimplementation of any of it.
 //
-// PAINT ORDER: ContentDrawPageSchema (document-schema.js's content.ts) still keeps `shapes` and `vectors` as two separate arrays, but both ContentVector and ContentShape now carry a shared `paintOrder` -- one monotonically increasing per-page document index odf.js's own reader stamps on every element it walks (typed/draw/shapes.ts's walkDrawPageContent/paintOrderKey, honouring a real draw:z-index when a producer wrote one, falling back to document position otherwise). convertPage merges the two arrays back into one true-paint-order walk through that field (src/model/paint-order.ts), so a page that genuinely interleaves the two mid-stack -- a text label between two rectangles, a rectangle over a picture -- paints in the order its author actually built it. This replaces the fixed "every vector first, every shape after" choice this module used to make when the schema had no shared ordering field at all; that order survives only as the documented fallback for a page missing paintOrder anywhere (see mergeByPaintOrder's own note).
+// PAINT ORDER: ContentDrawPageSchema (document-schema.js's content.ts) still keeps `shapes` and `vectors` as two separate arrays, but both ContentVector and ContentShape now carry a shared `paintOrder` — one monotonically increasing per-page document index odf.js's own reader stamps on every element it walks (typed/draw/shapes.ts's walkDrawPageContent/paintOrderKey, honouring a real draw:z-index when a producer wrote one, falling back to document position otherwise). convertPage merges the two arrays back into one true-paint-order walk through that field (src/model/paint-order.ts), so a page that genuinely interleaves the two mid-stack — a text label between two rectangles, a rectangle over a picture — paints in the order its author actually built it. This replaces the fixed "every vector first, every shape after" choice this module used to make when the schema had no shared ordering field at all; that order survives only as the documented fallback for a page missing paintOrder anywhere (see mergeByPaintOrder's own note).
 
 export interface DrawingLayoutOptions {
   readonly measurer: TextMeasurer;
@@ -108,9 +108,9 @@ type EllipseVector = Extract<ContentVector, { kind: "ellipse" }>;
 type LineVector = Extract<ContentVector, { kind: "line" }>;
 type PathVector = Extract<ContentVector, { kind: "path" }>;
 
-// ROTATION, and why a rotated vector becomes a LayoutPath rather than a rotated LayoutRect/LayoutEllipse: LayoutRectSchema and LayoutEllipseSchema (document-schema.js's layout.ts) carry no rotation field at all -- only LayoutText and LayoutImage do, because pdf-codec's own content-write.ts rotates those two by emitting a text/image transformation matrix, a mechanism a path-painting operator sequence has no equivalent of. Rather than widen the shared layout schema for it, a rotated vector is resolved HERE into the one layout kind that can already express arbitrary rotated geometry exactly: a LayoutPath whose own points are the shape's own corners/curve controls after rotation. Nothing is approximated by this -- an affine rotation maps a straight edge to a straight edge and a cubic Bezier to a cubic Bezier exactly -- so a rotated rect is a genuine four-point closed subpath and a rotated ellipse is its own four cubics rotated, not a polygon stand-in for either.
+// ROTATION, and why a rotated vector becomes a LayoutPath rather than a rotated LayoutRect/LayoutEllipse: LayoutRectSchema and LayoutEllipseSchema (document-schema.js's layout.ts) carry no rotation field at all — only LayoutText and LayoutImage do, because pdf-codec's own content-write.ts rotates those two by emitting a text/image transformation matrix, a mechanism a path-painting operator sequence has no equivalent of. Rather than widen the shared layout schema for it, a rotated vector is resolved HERE into the one layout kind that can already express arbitrary rotated geometry exactly: a LayoutPath whose own points are the shape's own corners/curve controls after rotation. Nothing is approximated by this — an affine rotation maps a straight edge to a straight edge and a cubic Bezier to a cubic Bezier exactly — so a rotated rect is a genuine four-point closed subpath and a rotated ellipse is its own four cubics rotated, not a polygon stand-in for either.
 //
-// The rotation itself reuses pdf-codec's rotatePointAboutCenter, in PDF space, about the FLIPPED frame's own centre, with the same `-rotationDeg` clockwise-to-counter-clockwise negation src/layout/slides.ts's own shapePlacement already applies (see that function's comment for how the two conventions were reconciled) -- so a rotated vector and a rotated shape on the same page rotate identically rather than through two independently-derived rotation conventions.
+// The rotation itself reuses pdf-codec's rotatePointAboutCenter, in PDF space, about the FLIPPED frame's own centre, with the same `-rotationDeg` clockwise-to-counter-clockwise negation src/layout/slides.ts's own shapePlacement already applies (see that function's comment for how the two conventions were reconciled) — so a rotated vector and a rotated shape on the same page rotate identically rather than through two independently-derived rotation conventions.
 function isRotated(rotationDeg: number | undefined): rotationDeg is number {
   return rotationDeg !== undefined && rotationDeg !== 0;
 }
@@ -175,10 +175,10 @@ function convertRectVector(
   });
 }
 
-// The circle-to-cubic control-point ratio: the distance, as a fraction of the radius, from an axis endpoint to its own adjacent Bezier control point that makes a single cubic segment best approximate a quarter arc. Derived, not a transcribed literal -- 4/3 * (sqrt(2) - 1) is the exact value obtained by forcing the cubic through the quarter arc's own 45-degree midpoint.
+// The circle-to-cubic control-point ratio: the distance, as a fraction of the radius, from an axis endpoint to its own adjacent Bezier control point that makes a single cubic segment best approximate a quarter arc. Derived, not a transcribed literal — 4/3 * (sqrt(2) - 1) is the exact value obtained by forcing the cubic through the quarter arc's own 45-degree midpoint.
 const CIRCLE_CUBIC_RATIO = (4 / 3) * (Math.SQRT2 - 1);
 
-// One ellipse as four cubic quarter-arcs, walked counter-clockwise from the rightmost axis point -- the same four-arc construction pdf-codec's own writeEllipse emits for an unrotated LayoutEllipse, restated here in explicit point form so every one of its control points can be run through the rotation before being written out.
+// One ellipse as four cubic quarter-arcs, walked counter-clockwise from the rightmost axis point — the same four-arc construction pdf-codec's own writeEllipse emits for an unrotated LayoutEllipse, restated here in explicit point form so every one of its control points can be run through the rotation before being written out.
 function ellipseCubicPoints(flipped: Box): {
   readonly start: Point;
   readonly arcs: readonly {
@@ -256,7 +256,7 @@ function convertEllipseVector(
       yPt: to.y,
     };
   });
-  // closed: true even though the four arcs already return exactly to their own start -- see the README's own writeEllipse gotcha: readPdf only marks a subpath closed when it sees a real `h` operator, and an ODF/SVG consumer refuses to fill an unclosed path.
+  // closed: true even though the four arcs already return exactly to their own start — see the README's own writeEllipse gotcha: readPdf only marks a subpath closed when it sees a real `h` operator, and an ODF/SVG consumer refuses to fill an unclosed path.
   out.push({
     kind: "path",
     subpaths: [
@@ -290,7 +290,7 @@ function convertLineVector(
   });
 }
 
-// A path's own subpath/segment points are in the path's LOCAL coordinate space -- top-left origin, y down, sized to frame.widthPt x frame.heightPt (ContentVectorSchema's own 'path' variant contract, document-schema.js's content.ts) -- distinct from frame's own PAGE-space placement. Resolving one point to absolute PDF user space is therefore two steps in one: add the frame's own offset (placing the local point into page-space, still y-down), then flip that page-space y-down point into PDF's bottom-left/y-up space -- the same flipY math LayoutRect/LayoutEllipse use above, just applied to a bare point rather than a whole box.
+// A path's own subpath/segment points are in the path's LOCAL coordinate space — top-left origin, y down, sized to frame.widthPt x frame.heightPt (ContentVectorSchema's own 'path' variant contract, document-schema.js's content.ts) — distinct from frame's own PAGE-space placement. Resolving one point to absolute PDF user space is therefore two steps in one: add the frame's own offset (placing the local point into page-space, still y-down), then flip that page-space y-down point into PDF's bottom-left/y-up space — the same flipY math LayoutRect/LayoutEllipse use above, just applied to a bare point rather than a whole box.
 function placePathPoint(
   frame: Box,
   point: ContentPathPoint,
@@ -302,7 +302,7 @@ function placePathPoint(
   };
 }
 
-// A rotated path needs no separate emission branch the way a rotated rect/ellipse does -- it was already becoming a LayoutPath regardless -- so rotation is folded straight into the same per-point placement step, applied after placePathPoint has resolved each point into PDF space and about the same flipped-frame centre every other rotated vector kind uses.
+// A rotated path needs no separate emission branch the way a rotated rect/ellipse does — it was already becoming a LayoutPath regardless — so rotation is folded straight into the same per-point placement step, applied after placePathPoint has resolved each point into PDF space and about the same flipped-frame centre every other rotated vector kind uses.
 function convertPathVector(
   vector: PathVector,
   pageHeightPt: number,
@@ -381,7 +381,7 @@ function convertPage(
   images: Record<string, LayoutImageAsset>,
 ): LayoutPage {
   const items: LayoutItem[] = [];
-  // One merged walk in true paint order, rather than the two sequential arrays the page stores them in -- see src/model/paint-order.ts for how the merge resolves, and for what a page missing the field anywhere falls back to.
+  // One merged walk in true paint order, rather than the two sequential arrays the page stores them in — see src/model/paint-order.ts for how the merge resolves, and for what a page missing the field anywhere falls back to.
   for (const entry of mergeByPaintOrder(page.vectors, page.shapes)) {
     if (entry.kind === "vector") {
       emitVector(entry.value, pageIndex, page.size.heightPt, items);
@@ -399,7 +399,7 @@ function convertPage(
   return { widthPt: page.size.widthPt, heightPt: page.size.heightPt, items };
 }
 
-// BREAKING (documents.js 2.0.0): returns a DrawingLayoutResult ({ document, pages }) rather than a bare LayoutDocument, matching the shape the other three engines already return -- the pages half of the fused DocumentTree, alongside the frames stamped in place on `doc`'s own nodes.
+// BREAKING (documents.js 2.0.0): returns a DrawingLayoutResult ({ document, pages }) rather than a bare LayoutDocument, matching the shape the other three engines already return — the pages half of the fused DocumentTree, alongside the frames stamped in place on `doc`'s own nodes.
 export function convertDrawingToLayout(
   doc: DrawingContentDocument,
   options: DrawingLayoutOptions,

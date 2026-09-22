@@ -9,7 +9,7 @@ export interface NotesEditorScreenProps {
   readonly screen: Extract<Screen, { kind: "notesEditor" }>;
 }
 
-// Reached via slide-detail's own 'n' key for either an open pptx or odp document -- PptxSlide and OdpSlide both carry a real `.notes` getter/setter (documents.js's own README confirms pptx speaker notes round-trip through pptxToPdf/pdfToPptx via a hidden annotation, the same as odp's own presentation:notes element), so this screen is shared between the two formats rather than being odp-only.
+// Reached via slide-detail's own 'n' key for either an open pptx or odp document — PptxSlide and OdpSlide both carry a real `.notes` getter/setter (documents.js's own README confirms pptx speaker notes round-trip through pptxToPdf/pdfToPptx via a hidden annotation, the same as odp's own presentation:notes element), so this screen is shared between the two formats rather than being odp-only.
 export function NotesEditorScreen(props: NotesEditorScreenProps): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();
@@ -23,7 +23,7 @@ export function NotesEditorScreen(props: NotesEditorScreenProps): ReactElement {
     dispatch({ type: "POP_SCREEN" });
   };
 
-  // TextField already claims Escape while it is focused (see components/text-field.tsx); this covers the one case where no TextField renders at all -- the slide the screen was pushed for has since gone missing.
+  // TextField already claims Escape while it is focused (see components/text-field.tsx); this covers the one case where no TextField renders at all — the slide the screen was pushed for has since gone missing.
   useInput(
     (_input, key) => {
       if (key.escape) {
@@ -38,7 +38,7 @@ export function NotesEditorScreen(props: NotesEditorScreenProps): ReactElement {
       <Box flexDirection="column">
         <Text bold>Slide {slideIndex + 1} notes</Text>
         <Text color="yellow">
-          This slide no longer exists -- press Esc to go back
+          This slide no longer exists — press Esc to go back
         </Text>
       </Box>
     );

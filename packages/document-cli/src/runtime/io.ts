@@ -18,7 +18,7 @@ async function readStdin(signal: AbortSignal | undefined): Promise<Uint8Array> {
     }
     chunks.push(chunk);
   }
-  // Buffer.concat's result is a Buffer, itself a Uint8Array<ArrayBufferLike> -- rewrapped through the constructor's ArrayLike overload so every caller of readInput gets a genuine, freshly-allocated Uint8Array<ArrayBuffer> regardless of whether the bytes came from stdin or a file (see readInput below).
+  // Buffer.concat's result is a Buffer, itself a Uint8Array<ArrayBufferLike> — rewrapped through the constructor's ArrayLike overload so every caller of readInput gets a genuine, freshly-allocated Uint8Array<ArrayBuffer> regardless of whether the bytes came from stdin or a file (see readInput below).
   return new Uint8Array(Buffer.concat(chunks));
 }
 
@@ -29,7 +29,7 @@ export async function readInput(
   if (pathOrDash === "-") {
     return readStdin(options?.signal);
   }
-  // A missing file throws Node's own ENOENT Error unmodified -- already a clear, specific message; wrapping it would only obscure the real cause.
+  // A missing file throws Node's own ENOENT Error unmodified — already a clear, specific message; wrapping it would only obscure the real cause.
   const buffer = await readFile(pathOrDash, { signal: options?.signal });
   return new Uint8Array(buffer);
 }

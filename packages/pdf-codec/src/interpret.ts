@@ -19,21 +19,21 @@ import { readContentStream } from "./content-read";
 import type { PdfDiagnosticSink } from "./diagnostics";
 import { decodePdfString } from "./pdf-text";
 
-// The graphics/text state machine: walks a page's (or a recursed form XObject's) content-stream operations, tracking exactly the state v1 needs to recover -- CTM, fill/stroke colour, line width, and text position/font/size -- and emits one ExtractedItem per meaningful paint operation. Everything else (clipping, shadings, patterns) is deliberately not modelled; see the implementation plan's v1 scope for the reasoning. General path construction (m/l/c/v/y/h/re) and stroking ARE modelled, recovered as ExtractedPath below -- or, when the recovered geometry matches one of the three characteristic simple-shape patterns classifyShape recognises, as the more specific ExtractedRect/ExtractedEllipse/ExtractedLine instead.
+// The graphics/text state machine: walks a page's (or a recursed form XObject's) content-stream operations, tracking exactly the state v1 needs to recover — CTM, fill/stroke colour, line width, and text position/font/size — and emits one ExtractedItem per meaningful paint operation. Everything else (clipping, shadings, patterns) is deliberately not modelled; see the implementation plan's v1 scope for the reasoning. General path construction (m/l/c/v/y/h/re) and stroking ARE modelled, recovered as ExtractedPath below — or, when the recovered geometry matches one of the three characteristic simple-shape patterns classifyShape recognises, as the more specific ExtractedRect/ExtractedEllipse/ExtractedLine instead.
 
 export interface ExtractedTextRun {
   readonly kind: "text";
-  readonly codes: Uint8Array<ArrayBuffer>; // raw show-string bytes, undecoded -- font-read.ts/cmap.ts turn these into Unicode
+  readonly codes: Uint8Array<ArrayBuffer>; // raw show-string bytes, undecoded — font-read.ts/cmap.ts turn these into Unicode
   readonly fontResourceName: string;
   readonly resources: PdfDict;
   readonly startMatrix: Matrix; // the text rendering matrix (Trm) at the run's first glyph
-  readonly endMatrix: Matrix; // Trm at the position the *next* glyph would start -- lets a caller derive the run's on-page width as the device-space distance between the two baseline points, with no separate unit bookkeeping
+  readonly endMatrix: Matrix; // Trm at the position the *next* glyph would start — lets a caller derive the run's on-page width as the device-space distance between the two baseline points, with no separate unit bookkeeping
   readonly sizePt: number;
   readonly color: LayoutColor;
   readonly layerName?: string; // the optional-content group in scope (innermost /OC BDC span, or the recursed form XObject's own)
   readonly actualText?: string; // a /ActualText marked-content property in scope: the producer's replacement reading for extraction
   readonly alt?: string; // a /Alt marked-content property in scope: the producer's alternate description
-  readonly mcid?: number; // the /MCID of the innermost marked-content span in scope -- tagged PDF's handle for the (page, MCID) structure association read.ts resolves through /ParentTree
+  readonly mcid?: number; // the /MCID of the innermost marked-content span in scope — tagged PDF's handle for the (page, MCID) structure association read.ts resolves through /ParentTree
   readonly vertical?: boolean; // the font's CMap selects writing mode 1, so this run advances DOWN the page: startMatrix and endMatrix differ in y rather than x, and both already carry the first glyph's position vector
 }
 
@@ -42,11 +42,11 @@ export interface ExtractedPaint {
   readonly fill: LayoutColor | undefined;
   readonly stroke:
     { readonly color: LayoutColor; readonly widthPt: number } | undefined;
-  readonly layerName?: string; // the optional-content group in scope -- membership is a fact of every painted item, not only text
-  readonly mcid?: number; // the /MCID in scope -- ownership is as much a fact of a painted item as layer membership
+  readonly layerName?: string; // the optional-content group in scope — membership is a fact of every painted item, not only text
+  readonly mcid?: number; // the /MCID in scope — ownership is as much a fact of a painted item as layer membership
 }
 
-// An axis-aligned rectangle, recovered from a single closed four-corner all-straight-line subpath under any CTM that leaves those corners axis-aligned -- so a bare `re` under a non-rotated CTM (by far the common case), a `re` under a 90-degree-multiple rotation (a rotated rectangle is still a rectangle), and a hand-constructed m/l/l/l/h rectangle all reach it, with any combination of fill and stroke. Anything else (a non-90-degree rotation, curves, multiple subpaths) falls through to ExtractedPath below instead.
+// An axis-aligned rectangle, recovered from a single closed four-corner all-straight-line subpath under any CTM that leaves those corners axis-aligned — so a bare `re` under a non-rotated CTM (by far the common case), a `re` under a 90-degree-multiple rotation (a rotated rectangle is still a rectangle), and a hand-constructed m/l/l/l/h rectangle all reach it, with any combination of fill and stroke. Anything else (a non-90-degree rotation, curves, multiple subpaths) falls through to ExtractedPath below instead.
 export interface ExtractedRect extends ExtractedPaint {
   readonly kind: "rect";
   readonly xPt: number;
@@ -55,7 +55,7 @@ export interface ExtractedRect extends ExtractedPaint {
   readonly heightPt: number;
 }
 
-// An axis-aligned ellipse, recovered from the four-cubic-Bezier-quadrant construction every ellipse-as-Beziers writer emits (this package's own content-write.ts writeEllipse included) -- see detectEllipse for the exact pattern matched and the honest false-positive caveat. Geometry is the ellipse's bounding box, matching ExtractedRect's own convention and document-schema.js's LayoutEllipse.
+// An axis-aligned ellipse, recovered from the four-cubic-Bezier-quadrant construction every ellipse-as-Beziers writer emits (this package's own content-write.ts writeEllipse included) — see detectEllipse for the exact pattern matched and the honest false-positive caveat. Geometry is the ellipse's bounding box, matching ExtractedRect's own convention and document-schema.js's LayoutEllipse.
 export interface ExtractedEllipse extends ExtractedPaint {
   readonly kind: "ellipse";
   readonly xPt: number;
@@ -64,7 +64,7 @@ export interface ExtractedEllipse extends ExtractedPaint {
   readonly heightPt: number;
 }
 
-// A single straight stroked segment, recovered from an open one-line-segment stroke-only subpath. No fill variant exists because a filled two-point path encloses no area and paints nothing -- a fill on this shape would be a producer error, not a line.
+// A single straight stroked segment, recovered from an open one-line-segment stroke-only subpath. No fill variant exists because a filled two-point path encloses no area and paints nothing — a fill on this shape would be a producer error, not a line.
 export interface ExtractedLine {
   readonly kind: "line";
   readonly x1Pt: number;
@@ -73,12 +73,12 @@ export interface ExtractedLine {
   readonly y2Pt: number;
   readonly color: LayoutColor;
   readonly widthPt: number;
-  readonly style?: ContentStrokeStyle; // recovered from the dash array in effect when this line was stroked -- see strokeStyleFromDashArray
-  readonly layerName?: string; // the optional-content group in scope -- membership is a fact of every painted item, not only text
-  readonly mcid?: number; // the /MCID in scope -- ownership is as much a fact of a painted item as layer membership
+  readonly style?: ContentStrokeStyle; // recovered from the dash array in effect when this line was stroked — see strokeStyleFromDashArray
+  readonly layerName?: string; // the optional-content group in scope — membership is a fact of every painted item, not only text
+  readonly mcid?: number; // the /MCID in scope — ownership is as much a fact of a painted item as layer membership
 }
 
-// One line or cubic-Bezier segment of a subpath, device-space (CTM-applied, not yet page-matrix-applied -- matching ExtractedRect's own convention), mirroring document-schema.js's LayoutPathSegment shape exactly so read.ts's conversion is a pure per-point transform.
+// One line or cubic-Bezier segment of a subpath, device-space (CTM-applied, not yet page-matrix-applied — matching ExtractedRect's own convention), mirroring document-schema.js's LayoutPathSegment shape exactly so read.ts's conversion is a pure per-point transform.
 export type ExtractedPathSegment =
   | { readonly kind: "line"; readonly xPt: number; readonly yPt: number }
   | {
@@ -98,30 +98,30 @@ export interface ExtractedSubpath {
   readonly closed: boolean;
 }
 
-// General vector-path recovery: anything painted by a path-construction sequence too general for the three characteristic-shape detections above -- a skewed or non-90-degree-rotated CTM, an arbitrary curve, a polygon that isn't a rectangle, multiple subpaths, or a `re` mixed with other path operators in the same sequence. `fillRule` always reflects which paint operator actually ran (nonzero for the plain family, evenodd for the starred family) even when `fill` is undefined, since it costs nothing to record accurately here; read.ts's convertPath is the layer that decides whether it's worth keeping in the minimal LayoutPath it builds.
+// General vector-path recovery: anything painted by a path-construction sequence too general for the three characteristic-shape detections above — a skewed or non-90-degree-rotated CTM, an arbitrary curve, a polygon that isn't a rectangle, multiple subpaths, or a `re` mixed with other path operators in the same sequence. `fillRule` always reflects which paint operator actually ran (nonzero for the plain family, evenodd for the starred family) even when `fill` is undefined, since it costs nothing to record accurately here; read.ts's convertPath is the layer that decides whether it's worth keeping in the minimal LayoutPath it builds.
 export interface ExtractedPath extends ExtractedPaint {
   readonly kind: "path";
   readonly subpaths: readonly ExtractedSubpath[];
   readonly fillRule: "nonzero" | "evenodd";
-  readonly style?: ContentStrokeStyle; // recovered from the dash array in effect when this path was stroked -- see strokeStyleFromDashArray
+  readonly style?: ContentStrokeStyle; // recovered from the dash array in effect when this path was stroked — see strokeStyleFromDashArray
 }
 
 export interface ExtractedImage {
   readonly kind: "image";
   readonly resourceName: string;
   readonly resources: PdfDict;
-  readonly matrix: Matrix; // the CTM at the moment of Do -- placement is x=ctm[4], y=ctm[5], width=|ctm[0]|, height=|ctm[3]| for the axis-aligned case
+  readonly matrix: Matrix; // the CTM at the moment of Do — placement is x=ctm[4], y=ctm[5], width=|ctm[0]|, height=|ctm[3]| for the axis-aligned case
   readonly layerName?: string; // the optional-content group in scope, or the image XObject dict's own /OC
-  readonly mcid?: number; // the /MCID in scope -- ownership is as much a fact of an image as layer membership (unlike /OC, an XObject dict cannot carry /MCID itself)
+  readonly mcid?: number; // the /MCID in scope — ownership is as much a fact of an image as layer membership (unlike /OC, an XObject dict cannot carry /MCID itself)
 }
 
 export interface ExtractedInlineImage {
   readonly kind: "inlineImage";
-  readonly dict: PdfDict; // BI dict, keys possibly abbreviated (/W /H /CS /BPC /F /DP /IM) -- images-read.ts normalises
+  readonly dict: PdfDict; // BI dict, keys possibly abbreviated (/W /H /CS /BPC /F /DP /IM) — images-read.ts normalises
   readonly data: Uint8Array<ArrayBuffer>;
   readonly matrix: Matrix;
   readonly layerName?: string;
-  readonly mcid?: number; // the /MCID in scope -- ownership is as much a fact of an inline image as layer membership
+  readonly mcid?: number; // the /MCID in scope — ownership is as much a fact of an inline image as layer membership
 }
 
 export type ExtractedItem =
@@ -146,7 +146,7 @@ export interface GlyphAdvance {
   readonly vertical?: VerticalGlyphAdvance; // absent for a horizontally set font, which is every simple font and every composite font whose CMap is horizontal
 }
 
-// interpret.ts knows nothing about font dictionaries, /ToUnicode CMaps, or embedded-font tables -- it only needs "how wide is the next glyph and how many bytes did it consume" to advance the text matrix correctly. font-read.ts implements this against a real PdfDocument; tests here use a fake.
+// interpret.ts knows nothing about font dictionaries, /ToUnicode CMaps, or embedded-font tables — it only needs "how wide is the next glyph and how many bytes did it consume" to advance the text matrix correctly. font-read.ts implements this against a real PdfDocument; tests here use a fake.
 export interface FontMetricsPort {
   glyphAdvance(
     fontResourceName: string,
@@ -158,7 +158,7 @@ export interface FontMetricsPort {
   isVertical(fontResourceName: string, resources: PdfDict): boolean;
 }
 
-// The minimal reference-resolution surface interpret.ts needs (looking up /XObject and /Font resources, and recursing into a resolved Form XObject) -- a structural subset of PdfDocument, not a dependency on document.ts itself.
+// The minimal reference-resolution surface interpret.ts needs (looking up /XObject and /Font resources, and recursing into a resolved Form XObject) — a structural subset of PdfDocument, not a dependency on document.ts itself.
 export interface PdfObjectResolver {
   resolve(obj: PdfObject | undefined): PdfObject | undefined;
   resolveDict(obj: PdfObject | undefined): PdfDict | undefined;
@@ -172,20 +172,20 @@ export interface InterpretContext {
   readonly layerNameOf?: (obj: PdfObject | undefined) => string | undefined;
 }
 
-// Guards a self-referential or runaway chain of nested form XObjects -- a corrupt or adversarial file, not something a real producer emits.
+// Guards a self-referential or runaway chain of nested form XObjects — a corrupt or adversarial file, not something a real producer emits.
 const MAX_FORM_XOBJECT_DEPTH = 12;
-// An unremarkable mid-range glyph advance (half an em) used only when a shown font resource can't be resolved to any width table at all -- purely to stop subsequent glyphs collapsing onto the same point; the position is already degraded at that point regardless, and is reported via a diagnostic.
+// An unremarkable mid-range glyph advance (half an em) used only when a shown font resource can't be resolved to any width table at all — purely to stop subsequent glyphs collapsing onto the same point; the position is already degraded at that point regardless, and is reported via a diagnostic.
 const FALLBACK_GLYPH_WIDTH_PER_1000 = 500;
 // ISO 32000-1 Table 52: the graphics state's own line width parameter defaults to 1.0 (user-space units) until a `w` operator sets it explicitly.
 const DEFAULT_LINE_WIDTH_PT = 1;
 
-// ISO 32000-1 Table 52 lists the text state parameters -- the font and size a Tf selects, plus Tc/Tw/Tz/TL/Ts -- among the device-independent graphics state parameters, so they belong here rather than beside the text matrix: `q` saves them and `Q` restores them exactly as it does the CTM or the fill colour, and a form XObject invoked by `Do` inherits them exactly as it inherits the CTM (8.10.2). Only the text matrix and text line matrix are excluded, and they live in TextObjectState below. Modelling the two as one record is what makes both facts structural rather than something each operator has to remember.
+// ISO 32000-1 Table 52 lists the text state parameters — the font and size a Tf selects, plus Tc/Tw/Tz/TL/Ts — among the device-independent graphics state parameters, so they belong here rather than beside the text matrix: `q` saves them and `Q` restores them exactly as it does the CTM or the fill colour, and a form XObject invoked by `Do` inherits them exactly as it inherits the CTM (8.10.2). Only the text matrix and text line matrix are excluded, and they live in TextObjectState below. Modelling the two as one record is what makes both facts structural rather than something each operator has to remember.
 interface GraphicsState {
   readonly ctm: Matrix;
   readonly fillColor: LayoutColor;
   readonly strokeColor: LayoutColor;
   readonly lineWidth: number;
-  readonly dashArray: readonly number[]; // the `d` operator's own dash array (ISO 32000-1 8.4.3.6), empty for the PDF default (a solid line) -- the dash phase is write-only state this package never reads back, since content-write.ts always emits phase 0 and no recoverable ContentStrokeStyle distinguishes phases
+  readonly dashArray: readonly number[]; // the `d` operator's own dash array (ISO 32000-1 8.4.3.6), empty for the PDF default (a solid line) — the dash phase is write-only state this package never reads back, since content-write.ts always emits phase 0 and no recoverable ContentStrokeStyle distinguishes phases
   readonly fontResourceName: string | undefined;
   readonly fontSizePt: number;
   readonly charSpace: number;
@@ -195,7 +195,7 @@ interface GraphicsState {
   readonly rise: number;
 }
 
-// The text matrix and text line matrix: text OBJECT state (ISO 32000-1 9.4.1), not graphics state. They exist only between BT and ET, are reset to identity by every BT, and are the one part of the text machinery `Q` must not restore -- so they sit outside GraphicsState and outside the q/Q stack entirely.
+// The text matrix and text line matrix: text OBJECT state (ISO 32000-1 9.4.1), not graphics state. They exist only between BT and ET, are reset to identity by every BT, and are the one part of the text machinery `Q` must not restore — so they sit outside GraphicsState and outside the q/Q stack entirely.
 interface TextObjectState {
   tm: Matrix;
   tlm: Matrix;
@@ -254,7 +254,7 @@ function markedContentProperties(
   return undefined;
 }
 
-// The accessibility properties a marked-content span puts in scope (/ActualText, /Alt, /MCID) -- the tagged-PDF facts that ride marked content rather than structure elements. /ActualText and /Alt are the #721 phase-6 subset; /MCID is the span's own marked-content identifier, the handle read.ts resolves to an owning structure element through the parent tree (#760).
+// The accessibility properties a marked-content span puts in scope (/ActualText, /Alt, /MCID) — the tagged-PDF facts that ride marked content rather than structure elements. /ActualText and /Alt are the #721 phase-6 subset; /MCID is the span's own marked-content identifier, the handle read.ts resolves to an owning structure element through the parent tree (#760).
 function markedContentScopeProps(props: PdfDict | undefined): {
   actualText?: string;
   alt?: string;
@@ -297,7 +297,7 @@ function cmykColor(operands: readonly PdfObject[]): LayoutColor {
   return { r: (1 - c) * (1 - k), g: (1 - m) * (1 - k), b: (1 - y) * (1 - k) };
 }
 
-// The generic sc/SC/scn/SCN operators set a colour in whatever space a prior `cs`/`CS` selected, which can be an arbitrary ICC/Indexed/Separation/Pattern resource -- fully resolving that is out of v1 scope. This heuristic (dispatch purely on operand count) covers the overwhelming common case where the selected space is in fact DeviceGray/RGB/CMYK; a trailing pattern-name operand (SCN's own Pattern form) is left as `undefined`, meaning "leave the current colour unchanged," which is honest given a pattern fill has no single flat colour to report anyway.
+// The generic sc/SC/scn/SCN operators set a colour in whatever space a prior `cs`/`CS` selected, which can be an arbitrary ICC/Indexed/Separation/Pattern resource — fully resolving that is out of v1 scope. This heuristic (dispatch purely on operand count) covers the overwhelming common case where the selected space is in fact DeviceGray/RGB/CMYK; a trailing pattern-name operand (SCN's own Pattern form) is left as `undefined`, meaning "leave the current colour unchanged," which is honest given a pattern fill has no single flat colour to report anyway.
 function genericColor(operands: readonly PdfObject[]): LayoutColor | undefined {
   const numericOperands = operands.filter((o) => o.kind === "number");
   if (numericOperands.length === 1) {
@@ -325,11 +325,11 @@ function matrixFromOperands(operands: readonly PdfObject[]): Matrix {
 
 // --- Characteristic-shape detection over a recovered general path ---
 //
-// PDF's content-stream vocabulary has exactly one shape primitive, `re`, and no ellipse or line operator at all: an ellipse is written as four cubic Bezier arcs, a line as a two-point stroked path, and even a rectangle stops being a `re` the moment its producer chooses to draw it corner by corner. Recovering all four as an undifferentiated LayoutPath is truthful but lossy in a way that matters downstream -- a caller reconstructing an ODF drawing wants draw:rect/draw:ellipse/draw:line back, not a path approximating each. These detectors recover the specific kind whenever the geometry unambiguously matches the characteristic pattern that kind is always written as.
+// PDF's content-stream vocabulary has exactly one shape primitive, `re`, and no ellipse or line operator at all: an ellipse is written as four cubic Bezier arcs, a line as a two-point stroked path, and even a rectangle stops being a `re` the moment its producer chooses to draw it corner by corner. Recovering all four as an undifferentiated LayoutPath is truthful but lossy in a way that matters downstream — a caller reconstructing an ODF drawing wants draw:rect/draw:ellipse/draw:line back, not a path approximating each. These detectors recover the specific kind whenever the geometry unambiguously matches the characteristic pattern that kind is always written as.
 //
-// This is a deliberate, bounded heuristic, not a certainty, and the false-positive risk is real in both directions of the ellipse case in particular: a hand-authored freeform path that happens to consist of four cubic segments meeting at the four cardinal points of its own bounding box, with control points at the kappa ratio, is indistinguishable from a "real" ellipse in the PDF bytes -- because at that point it geometrically IS one, whatever the author called it. The rect and line detections carry the same character (a four-corner axis-aligned polygon is a rectangle; a single stroked segment is a line) but far less risk, since neither has a tolerance-sensitive constant to match. What the heuristic cannot do is misreport geometry: every detected shape reproduces its source path's own points exactly, so a false positive changes an item's KIND, never where or how big it is.
+// This is a deliberate, bounded heuristic, not a certainty, and the false-positive risk is real in both directions of the ellipse case in particular: a hand-authored freeform path that happens to consist of four cubic segments meeting at the four cardinal points of its own bounding box, with control points at the kappa ratio, is indistinguishable from a "real" ellipse in the PDF bytes — because at that point it geometrically IS one, whatever the author called it. The rect and line detections carry the same character (a four-corner axis-aligned polygon is a rectangle; a single stroked segment is a line) but far less risk, since neither has a tolerance-sensitive constant to match. What the heuristic cannot do is misreport geometry: every detected shape reproduces its source path's own points exactly, so a false positive changes an item's KIND, never where or how big it is.
 
-// Every coordinate reaching these detectors has been through PDF's own number formatting (serialize.ts's formatNumber rounds to 4 decimal places), so it carries up to 5e-5pt of quantisation error before any geometry is derived from it. The absolute floor is twenty times that -- still three orders of magnitude below any real output device's resolution -- and the relative term scales it with the shape's own size, which is what lets a large ellipse from a producer that rounded its kappa constant to fewer digits than BEZIER_KAPPA (0.5523, say) still match.
+// Every coordinate reaching these detectors has been through PDF's own number formatting (serialize.ts's formatNumber rounds to 4 decimal places), so it carries up to 5e-5pt of quantisation error before any geometry is derived from it. The absolute floor is twenty times that — still three orders of magnitude below any real output device's resolution — and the relative term scales it with the shape's own size, which is what lets a large ellipse from a producer that rounded its kappa constant to fewer digits than BEZIER_KAPPA (0.5523, say) still match.
 const SHAPE_ABS_TOLERANCE_PT = 1e-3;
 const SHAPE_REL_TOLERANCE = 1e-4;
 
@@ -366,7 +366,7 @@ function boundsOf(points: readonly Point[]): Bounds {
   };
 }
 
-// A closed subpath's corner points, when every one of its segments is a straight line. A producer may close a polygon either by relying on `h` alone (ISO 32000-1's own `re` expansion does exactly this, emitting three `l` segments for four corners) or by drawing the closing edge explicitly and then closing anyway -- the redundant final point is dropped here so both spellings yield the same corner list.
+// A closed subpath's corner points, when every one of its segments is a straight line. A producer may close a polygon either by relying on `h` alone (ISO 32000-1's own `re` expansion does exactly this, emitting three `l` segments for four corners) or by drawing the closing edge explicitly and then closing anyway — the redundant final point is dropped here so both spellings yield the same corner list.
 function closedPolygonCorners(subpath: ExtractedSubpath): Point[] | undefined {
   if (!subpath.closed) {
     return undefined;
@@ -393,7 +393,7 @@ function closedPolygonCorners(subpath: ExtractedSubpath): Point[] | undefined {
   return corners;
 }
 
-// A single closed four-corner straight-line subpath is an axis-aligned rectangle exactly when every corner sits on both an x extreme and a y extreme AND every edge moves along exactly one axis. The second condition is what rejects a bowtie -- four points that individually sit on the right extremes but are traversed in an order that crosses the middle -- which the first alone would happily accept. Both winding directions and either starting corner satisfy this equally, so no normalisation is needed.
+// A single closed four-corner straight-line subpath is an axis-aligned rectangle exactly when every corner sits on both an x extreme and a y extreme AND every edge moves along exactly one axis. The second condition is what rejects a bowtie — four points that individually sit on the right extremes but are traversed in an order that crosses the middle — which the first alone would happily accept. Both winding directions and either starting corner satisfy this equally, so no normalisation is needed.
 function detectRect(
   subpath: ExtractedSubpath,
   paint: ExtractedPaint,
@@ -500,7 +500,7 @@ function expectedEllipseControl(
   };
 }
 
-// A closed subpath of exactly four cubic segments whose on-curve points are the four cardinal extremes of its bounding box, and whose eight control points all sit at the kappa offset those extremes imply, is the four-quadrant Bezier ellipse -- the only way an axis-aligned ellipse is ever expressible in PDF. A rotated ellipse deliberately does not match: its on-curve points are no longer at its bounding box's cardinal extremes, and document-schema.js's LayoutEllipse carries no rotation to report one with, so leaving it as a general path is the honest outcome rather than a silently unrotated ellipse.
+// A closed subpath of exactly four cubic segments whose on-curve points are the four cardinal extremes of its bounding box, and whose eight control points all sit at the kappa offset those extremes imply, is the four-quadrant Bezier ellipse — the only way an axis-aligned ellipse is ever expressible in PDF. A rotated ellipse deliberately does not match: its on-curve points are no longer at its bounding box's cardinal extremes, and document-schema.js's LayoutEllipse carries no rotation to report one with, so leaving it as a general path is the honest outcome rather than a silently unrotated ellipse.
 function detectEllipse(
   subpath: ExtractedSubpath,
   paint: ExtractedPaint,
@@ -605,8 +605,8 @@ function detectEllipse(
   };
 }
 
-// An open subpath of exactly one straight segment, stroked and not filled, is a line -- the only shape a `m ... l S` sequence can be. A fill disqualifies it because a two-point path encloses no area, so a producer that filled one meant something this detector should not guess at.
-// The inverse of content-write.ts's writeStrokeStyleState: that module emits a two-element dash array for both styles it writes -- a nonzero on-length ('dashed', `[3w 3w] 0 d`) or a zero on-length under a round cap ('dotted', `[0 2w] 0 d`) -- so the on-length alone (present or zero) is what distinguishes them on the way back in, and any other non-empty dash array a third-party producer wrote collapses to 'dashed', the closer of the two words this package's ContentStrokeStyleSchema models. An empty array (the PDF default, and what resetStrokeStyleState restores after a styled stroke) reads back as 'solid', i.e. the field left absent -- matching ContentStrokeStyleSchema's own documented default.
+// An open subpath of exactly one straight segment, stroked and not filled, is a line — the only shape a `m ... l S` sequence can be. A fill disqualifies it because a two-point path encloses no area, so a producer that filled one meant something this detector should not guess at.
+// The inverse of content-write.ts's writeStrokeStyleState: that module emits a two-element dash array for both styles it writes — a nonzero on-length ('dashed', `[3w 3w] 0 d`) or a zero on-length under a round cap ('dotted', `[0 2w] 0 d`) — so the on-length alone (present or zero) is what distinguishes them on the way back in, and any other non-empty dash array a third-party producer wrote collapses to 'dashed', the closer of the two words this package's ContentStrokeStyleSchema models. An empty array (the PDF default, and what resetStrokeStyleState restores after a styled stroke) reads back as 'solid', i.e. the field left absent — matching ContentStrokeStyleSchema's own documented default.
 function strokeStyleFromDashArray(
   dashArray: readonly number[],
 ): ContentStrokeStyle | undefined {
@@ -644,7 +644,7 @@ function detectLine(
   };
 }
 
-// The three detections are mutually exclusive by construction (rect needs all-line closed, ellipse all-cubic closed, line a single open segment), so the order below is cheapest-first rather than a priority. Only a single-subpath path is ever considered: a multi-subpath path is a compound shape -- a hole construction, a glyph outline, a diagram drawn in one go -- which no single LayoutRect/LayoutEllipse/LayoutLine can represent without losing part of it.
+// The three detections are mutually exclusive by construction (rect needs all-line closed, ellipse all-cubic closed, line a single open segment), so the order below is cheapest-first rather than a priority. Only a single-subpath path is ever considered: a multi-subpath path is a compound shape — a hole construction, a glyph outline, a diagram drawn in one go — which no single LayoutRect/LayoutEllipse/LayoutLine can represent without losing part of it.
 function classifyShape(
   subpaths: readonly ExtractedSubpath[],
   paint: ExtractedPaint,
@@ -687,7 +687,7 @@ interface MarkedContentProps {
   readonly mcid?: number;
 }
 
-// A subpath still being accumulated within one runContentStream call -- `segments` is mutable (pushed to as l/c/v/y arrive) and `closed` flips true on `h` (or the implicit closepath s/b/b* perform); once finalized it is pushed as-is into pathSubpaths, which is exactly ExtractedSubpath's own shape (a mutable segments array satisfies the readonly array field type).
+// A subpath still being accumulated within one runContentStream call — `segments` is mutable (pushed to as l/c/v/y arrive) and `closed` flips true on `h` (or the implicit closepath s/b/b* perform); once finalized it is pushed as-is into pathSubpaths, which is exactly ExtractedSubpath's own shape (a mutable segments array satisfies the readonly array field type).
 interface MutableSubpath {
   readonly startXPt: number;
   readonly startYPt: number;
@@ -719,7 +719,7 @@ function runContentStream(
   let pathSubpaths: MutableSubpath[] = [];
   let currentSubpath: MutableSubpath | undefined;
 
-  // The innermost span that states the property: a frame carrying the key at all ends the search -- including one that explicitly voids it, like a form-stream MCID pushed as `mcid: undefined` below -- while a span that simply lacks the key falls through to the enclosing one (ISO 32000-1 14.10's nested-span model).
+  // The innermost span that states the property: a frame carrying the key at all ends the search — including one that explicitly voids it, like a form-stream MCID pushed as `mcid: undefined` below — while a span that simply lacks the key falls through to the enclosing one (ISO 32000-1 14.10's nested-span model).
   const inScope = <K extends keyof MarkedContentProps>(
     key: K,
   ): MarkedContentProps[K] | undefined => {
@@ -755,7 +755,7 @@ function runContentStream(
     items.push(mcid === undefined ? layerStamped : { ...layerStamped, mcid });
   };
 
-  // `m` starts a new subpath, finalizing whatever was previously open into pathSubpaths -- `re`'s own implicit leading `m` (see appendRectSubpath) reuses this too. Both a real paint operator and the very next `m` are the only two things that ever finalize a subpath.
+  // `m` starts a new subpath, finalizing whatever was previously open into pathSubpaths — `re`'s own implicit leading `m` (see appendRectSubpath) reuses this too. Both a real paint operator and the very next `m` are the only two things that ever finalize a subpath.
   const finalizeCurrentSubpath = (): void => {
     if (currentSubpath !== undefined) {
       pathSubpaths.push(currentSubpath);
@@ -769,7 +769,7 @@ function runContentStream(
     currentSubpath = undefined;
   };
 
-  // ISO 32000-1 8.5.2.1: `re` is defined as exactly the sequence "x y m (x+w) y l (x+w)(y+h) l x (y+h) l h", so that is precisely what it appends -- one 4-point closed subpath, its corners through the current CTM. There is no separate rectangle bookkeeping alongside it: classifyShape recovers the rectangle back out of exactly these four corners, which is what lets a hand-constructed m/l/l/l/h rectangle and a `re` be recognised by one code path rather than two.
+  // ISO 32000-1 8.5.2.1: `re` is defined as exactly the sequence "x y m (x+w) y l (x+w)(y+h) l x (y+h) l h", so that is precisely what it appends — one 4-point closed subpath, its corners through the current CTM. There is no separate rectangle bookkeeping alongside it: classifyShape recovers the rectangle back out of exactly these four corners, which is what lets a hand-constructed m/l/l/l/h rectangle and a `re` be recognised by one code path rather than two.
   const appendRectSubpath = (
     operands: readonly PdfObject[],
     ctm: Matrix,
@@ -795,11 +795,11 @@ function runContentStream(
     });
   };
 
-  // f/F/S/B/b use the nonzero winding rule; the starred variants (f*/B*/b*) use even-odd -- ISO 32000-1 Table 60. `s`/`n` have no fill at all, so their nonzero default is never actually consulted (convertPath in read.ts only keeps fillRule when fill is set).
+  // f/F/S/B/b use the nonzero winding rule; the starred variants (f*/B*/b*) use even-odd — ISO 32000-1 Table 60. `s`/`n` have no fill at all, so their nonzero default is never actually consulted (convertPath in read.ts only keeps fillRule when fill is set).
   const paintFillRuleFor = (operator: string): "nonzero" | "evenodd" =>
     operator.endsWith("*") ? "evenodd" : "nonzero";
 
-  // Every path-painting operator (f/F/f*/S/s/B/B*/b/b*/n) funnels through here. `n` never emits (a clip-only path has no ink); everything else that actually constructed a path is offered to classifyShape first, and emits the specific rect/ellipse/line it matched or one general ExtractedPath if it matched none. The even-odd fill rule is deliberately not a barrier to shape classification: for the single closed subpath every detector requires, even-odd and nonzero winding select exactly the same interior, so a rectangle painted with `f*` is the same rectangle `f` would have painted -- and LayoutRect/LayoutEllipse carry no fill rule to lose in the first place.
+  // Every path-painting operator (f/F/f*/S/s/B/B*/b/b*/n) funnels through here. `n` never emits (a clip-only path has no ink); everything else that actually constructed a path is offered to classifyShape first, and emits the specific rect/ellipse/line it matched or one general ExtractedPath if it matched none. The even-odd fill rule is deliberately not a barrier to shape classification: for the single closed subpath every detector requires, even-odd and nonzero winding select exactly the same interior, so a rectangle painted with `f*` is the same rectangle `f` would have painted — and LayoutRect/LayoutEllipse carry no fill rule to lose in the first place.
   const emitPaint = (operator: string): void => {
     if (operator === "n") {
       resetPath();
@@ -1044,13 +1044,13 @@ function runContentStream(
         context.resolver.resolveDict(dictGet(xobj.dict, "Resources")) ??
         resources;
       const decoded = decodeStream(xobj.raw, xobj.dict, context.sink);
-      // ISO 32000-1 8.10.2: the form executes in the graphics state in effect at this Do, as if nested inline inside an implicit q/Q -- so the whole state travels inward, the text parameters (a font a preceding Tf already selected, spacing, scaling) among them, and a form whose own content omits a redundant Tf still draws in the caller's font. The recursed call binds its own `gs` local, so nothing the form changes travels back out; the text matrix is not carried because it is text object state the form's own BT resets regardless.
+      // ISO 32000-1 8.10.2: the form executes in the graphics state in effect at this Do, as if nested inline inside an implicit q/Q — so the whole state travels inward, the text parameters (a font a preceding Tf already selected, spacing, scaling) among them, and a form whose own content omits a redundant Tf still draws in the caller's font. The recursed call binds its own `gs` local, so nothing the form changes travels back out; the text matrix is not carried because it is text object state the form's own BT resets regardless.
       const formState: GraphicsState = {
         ...gs,
         ctm: multiplyMatrices(formMatrix, gs.ctm),
       };
       const formLayer = ownLayer ?? inScope("layerName");
-      // The enclosing span's marked-content identity carries into an invoked form the same way its layer membership does: a form painted inside a span paints that span's content, so the page MCID in scope seeds the form's own span stack. One boundary stops it -- a form whose dict declares /StructParents numbers its own MCIDs in its own parent-tree key (14.7.4.4), so the page's MCID is not the form's and must not be stamped onto what it paints.
+      // The enclosing span's marked-content identity carries into an invoked form the same way its layer membership does: a form painted inside a span paints that span's content, so the page MCID in scope seeds the form's own span stack. One boundary stops it — a form whose dict declares /StructParents numbers its own MCIDs in its own parent-tree key (14.7.4.4), so the page's MCID is not the form's and must not be stamped onto what it paints.
       const formMcid =
         dictGet(xobj.dict, "StructParents") !== undefined
           ? undefined
@@ -1085,7 +1085,7 @@ function runContentStream(
     const { operands, operator } = token.operation;
     switch (operator) {
       case "q":
-        // One push covers every saved parameter, the text state included, because GraphicsState holds them all -- see its own comment for why that is the spec's own division rather than a convenience. An unbalanced Q with nothing to pop leaves the state as it stands, the most content a malformed stream can still be read with.
+        // One push covers every saved parameter, the text state included, because GraphicsState holds them all — see its own comment for why that is the spec's own division rather than a convenience. An unbalanced Q with nothing to pop leaves the state as it stands, the most content a malformed stream can still be read with.
         gsStack.push(gs);
         break;
       case "Q":
@@ -1352,7 +1352,7 @@ function runContentStream(
           ...(layerName !== undefined ? { layerName } : {}),
           ...markedContentScopeProps(props),
         };
-        // An MCID is a PAGE-scoped handle: the parent tree maps (page, MCID), so an MCID opened INSIDE a recursed form XObject's own stream (depth > 0) must not be looked up as though it were the enclosing page's -- the file addresses such content through the form's own /StructParents key in the parent tree. Voiding it as an explicit `mcid: undefined` also closes the fall-through to the page MCID the form inherited at its invocation (seeded in handleDo), so content the form marks as its own resolves to no owner rather than to the invoking span's element.
+        // An MCID is a PAGE-scoped handle: the parent tree maps (page, MCID), so an MCID opened INSIDE a recursed form XObject's own stream (depth > 0) must not be looked up as though it were the enclosing page's — the file addresses such content through the form's own /StructParents key in the parent tree. Voiding it as an explicit `mcid: undefined` also closes the fall-through to the page MCID the form inherited at its invocation (seeded in handleDo), so content the form marks as its own resolves to no owner rather than to the invoking span's element.
         markedContent.push(
           depth === 0 ? scopeProps : { ...scopeProps, mcid: undefined },
         );

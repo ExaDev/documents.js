@@ -2,7 +2,7 @@
 //
 // Two flag bits in the low end of the word choose between four readings of the remaining 30:
 //
-// fInt = 1 -- num is a signed 30-bit integer. fInt = 0 -- num is the top 30 bits of an IEEE 754 double whose remaining 34 bits are all zero. fX100 = 1 -- whatever the above produced is divided by 100 (how a value like 12.34 stays an integer payload).
+// fInt = 1 — num is a signed 30-bit integer. fInt = 0 — num is the top 30 bits of an IEEE 754 double whose remaining 34 bits are all zero. fX100 = 1 — whatever the above produced is divided by 100 (how a value like 12.34 stays an integer payload).
 //
 // Both readings hinge on details that are easy to get subtly wrong rather than obviously wrong: the integer's sign bit is bit 29 of the payload rather than bit 31 of the word, so a plain `>> 2` sign-extends from the wrong place; and the float's flag bits sit exactly where the double's bits 32 and 33 live, so they must be masked off rather than shifted away.
 
@@ -34,7 +34,7 @@ function decodeSignedPayload(bits: number): number {
   return (payload & INT_SIGN_BIT) !== 0 ? payload - INT_MODULUS : payload;
 }
 
-/** The payload read as the high 32 bits of a double whose low 32 bits are zero, with the two flag bits (the double's own bits 32 and 33, which the spec requires be zero) cleared first. The low 32 bits are never written: a freshly allocated ArrayBuffer is already zero-filled, and endianness has no observable effect on a word of all-zero bytes -- so stating it explicitly would be a redundant call rather than a real fact about the format. */
+/** The payload read as the high 32 bits of a double whose low 32 bits are zero, with the two flag bits (the double's own bits 32 and 33, which the spec requires be zero) cleared first. The low 32 bits are never written: a freshly allocated ArrayBuffer is already zero-filled, and endianness has no observable effect on a word of all-zero bytes — so stating it explicitly would be a redundant call rather than a real fact about the format. */
 function decodeTruncatedDouble(bits: number): number {
   const buffer = new ArrayBuffer(8);
   const view = new DataView(buffer);

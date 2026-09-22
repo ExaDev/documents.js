@@ -12,7 +12,7 @@ import {
   type PapxParagraphToWrite,
 } from "./fkp-write";
 
-// buildChpxPages/buildPapxPages return Uint8Array[], so noUncheckedIndexedAccess types every pages[index] as possibly undefined even though these tests always construct enough input to guarantee the index exists -- this narrows that genuinely-non-optional value without an `as`/`!` assertion, both of which this package's own lint config forbids in production and test files alike once past the assertionStyle carve-out `as` itself still gets in tests.
+// buildChpxPages/buildPapxPages return Uint8Array[], so noUncheckedIndexedAccess types every pages[index] as possibly undefined even though these tests always construct enough input to guarantee the index exists — this narrows that genuinely-non-optional value without an `as`/`!` assertion, both of which this package's own lint config forbids in production and test files alike once past the assertionStyle carve-out `as` itself still gets in tests.
 function pageAt(pages: readonly Uint8Array[], index: number): Uint8Array {
   const page = pages[index];
   if (page === undefined) {
@@ -99,7 +99,7 @@ describe("buildChpxPages", () => {
   });
 
   it("accepts two runs whose own record region lands exactly on the front region's own boundary, not one byte short", () => {
-    // Two 247-byte grpprls: their own records (1 length-prefix byte + 247 apiece) leave the record region's own writeAt landing exactly at frontUsed for this two-run page -- found by direct arithmetic search, not a round number.
+    // Two 247-byte grpprls: their own records (1 length-prefix byte + 247 apiece) leave the record region's own writeAt landing exactly at frontUsed for this two-run page — found by direct arithmetic search, not a round number.
     const grpprl = Array.from({ length: 247 }, (_u, index) => index & 0xff);
     const pages = buildChpxPages(
       [
@@ -183,7 +183,7 @@ describe("buildPapxPages", () => {
     expect(pages).toHaveLength(2);
     const first = parsePapxFkp(pageAt(pages, 0));
     const second = parsePapxFkp(pageAt(pages, 1));
-    // The first page's own bracketing rgfc entry matches the second page's own first paragraph fc exactly, whatever that split point turns out to be -- not the far-off overall fcLim (0x1000).
+    // The first page's own bracketing rgfc entry matches the second page's own first paragraph fc exactly, whatever that split point turns out to be — not the far-off overall fcLim (0x1000).
     expect(first.rgfc[first.rgfc.length - 1]).toBe(second.rgfc[0]);
     expect(first.rgfc[first.rgfc.length - 1]).not.toBe(0x1000);
   });
@@ -196,7 +196,7 @@ describe("buildPapxPages", () => {
   });
 
   it("accepts two paragraphs whose own record region lands exactly on the front region's own boundary, not one byte short", () => {
-    // Two 232-byte grpprls: their own GrpPrlAndIstd records leave the record region's own writeAt landing exactly at frontUsed for this two-paragraph page -- found by direct arithmetic search, not a round number.
+    // Two 232-byte grpprls: their own GrpPrlAndIstd records leave the record region's own writeAt landing exactly at frontUsed for this two-paragraph page — found by direct arithmetic search, not a round number.
     const grpprl = Array.from({ length: 232 }, (_u, index) => index & 0xff);
     const pages = buildPapxPages(
       [
@@ -266,7 +266,7 @@ describe("buildPropertyBinTable", () => {
   });
 });
 
-// Both messages name an invariant buildChpxPages/buildPapxPages already maintain, never one a caller's input could violate, so nothing in the public build path can ever trigger either -- asserted against a hardcoded duplicate rather than by importing and comparing a constant to itself, the same discipline errors.test.ts's own assertDefined tests follow.
+// Both messages name an invariant buildChpxPages/buildPapxPages already maintain, never one a caller's input could violate, so nothing in the public build path can ever trigger either — asserted against a hardcoded duplicate rather than by importing and comparing a constant to itself, the same discipline errors.test.ts's own assertDefined tests follow.
 describe("buildChpxPages/buildPapxPages' own internal-defect messages", () => {
   it("carries CHPX_BATCH_REFIT_FAILED_MESSAGE's own exact text", () => {
     expect(CHPX_BATCH_REFIT_FAILED_MESSAGE).toBe(

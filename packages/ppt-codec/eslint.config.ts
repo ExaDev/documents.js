@@ -13,7 +13,7 @@ export default packageLintConfig({
     "tsdoc/syntax",
   ],
   isomorphic: true,
-  // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why -- this package's own [MS-PPT] record-tree reader/writer genuinely mutates several array/object parameters in place. Tracked for burn-down.
+  // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why — this package's own [MS-PPT] record-tree reader/writer genuinely mutates several array/object parameters in place. Tracked for burn-down.
   preferReadonlyParams: "off",
   // Passed to the shared config rather than declared in a second block, because flat config replaces a same-key rule instead of merging it: a second no-restricted-imports over runtime src would silently drop the Worker-isomorphism Node-builtin ban while still reporting these.
   //
@@ -22,17 +22,17 @@ export default packageLintConfig({
     {
       group: ["cfb", "cfb/**"],
       message:
-        "Use archive-codec's readCompoundFile for [MS-CFB] container reading instead of a second compound-file implementation -- see README Architecture.",
+        "Use archive-codec's readCompoundFile for [MS-CFB] container reading instead of a second compound-file implementation — see README Architecture.",
     },
     {
       group: ["officeparser", "officeparser/**"],
       message:
-        "Hand-write the [MS-PPT] record-tree read instead of depending on officeparser -- see README Architecture.",
+        "Hand-write the [MS-PPT] record-tree read instead of depending on officeparser — see README Architecture.",
     },
     {
       group: ["node-pptx", "node-pptx/**", "pptxgenjs", "pptxgenjs/**"],
       message:
-        "These target the OOXML pptx format, which is ooxml.js's territory -- this package reads the PowerPoint 97-2003 binary format instead. See README Architecture.",
+        "These target the OOXML pptx format, which is ooxml.js's territory — this package reads the PowerPoint 97-2003 binary format instead. See README Architecture.",
     },
   ],
 });

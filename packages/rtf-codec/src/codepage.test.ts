@@ -8,7 +8,7 @@ import { NOOP_RTF_DIAGNOSTIC_SINK, RtfDiagnosticCodes } from "./diagnostics";
 import { readRtfContent } from "./read";
 import { bytes } from "./test-support/bytes";
 
-// Each byte sequence below is a real word in the language its code page is for, produced by scripts/generate-dbcs-tables.py's own generation method (`text.encode(py_codec)` -- the encode direction of the same Python codec the table's own decode direction was built from) rather than hand-picked bytes, so a round trip here is checking the generated table against an independent encode pass through the same primary source cited in that script's header comment, not merely asserting the table is self-consistent.
+// Each byte sequence below is a real word in the language its code page is for, produced by scripts/generate-dbcs-tables.py's own generation method (`text.encode(py_codec)` — the encode direction of the same Python codec the table's own decode direction was built from) rather than hand-picked bytes, so a round trip here is checking the generated table against an independent encode pass through the same primary source cited in that script's header comment, not merely asserting the table is self-consistent.
 describe("decodeCodepageBytes: East Asian DBCS pages", () => {
   it("932 Shift-JIS decodes 日本語 (Japanese)", () => {
     expect(
@@ -21,7 +21,7 @@ describe("decodeCodepageBytes: East Asian DBCS pages", () => {
   });
 
   it("932 Shift-JIS decodes a halfwidth katakana single-byte extension alongside a two-byte run", () => {
-    // 0xb1 is halfwidth ｱ (U+FF71) on its own, not a lead byte -- DBCS_SINGLE_BYTE_EXTRAS, not DBCS_LEAD_BYTE_TABLES.
+    // 0xb1 is halfwidth ｱ (U+FF71) on its own, not a lead byte — DBCS_SINGLE_BYTE_EXTRAS, not DBCS_LEAD_BYTE_TABLES.
     expect(
       decodeCodepageBytes(
         Uint8Array.from([0xb1, 0x93, 0xfa]),
@@ -72,7 +72,7 @@ describe("decodeCodepageBytes: East Asian DBCS pages", () => {
   });
 
   it("decodes ASCII either side of a DBCS run within the same byte run", () => {
-    // "AB中文CD" -- proves the lead-byte state machine advances past a two-byte character by exactly two bytes and resumes ASCII passthrough at the right offset either side of it.
+    // "AB中文CD" — proves the lead-byte state machine advances past a two-byte character by exactly two bytes and resumes ASCII passthrough at the right offset either side of it.
     expect(
       decodeCodepageBytes(
         Uint8Array.from([0x41, 0x42, 0xd6, 0xd0, 0xce, 0xc4, 0x43, 0x44]),

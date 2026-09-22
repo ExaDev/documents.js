@@ -19,7 +19,7 @@ import {
 } from "../../test-support/document-tree";
 import { readOdt, readOdtContent } from "./read";
 
-// This suite reads real, unmodified LibreOffice 26.2-generated .odt fixtures (src/typed/odt/fixtures/*.odt, built via a headless UNO Basic macro -- see this repository's own commit history for the exact macro -- never hand-edited afterwards) rather than programmatically reconstructing the expected XML shapes: the task this reader was built against is explicit that whitespace preservation, list nesting, and merged-cell handling must each be proven against genuine producer output, not just this package's own idea of what that output looks like. A handful of narrow error/fallback-path tests at the end use small, synthetic, hand-built packages instead (via el/txt, matching this package's other typed-reader tests), since those specific paths -- a missing content.xml, a missing office:text -- are not something any real LibreOffice document can ever actually produce.
+// This suite reads real, unmodified LibreOffice 26.2-generated .odt fixtures (src/typed/odt/fixtures/*.odt, built via a headless UNO Basic macro — see this repository's own commit history for the exact macro — never hand-edited afterwards) rather than programmatically reconstructing the expected XML shapes: the task this reader was built against is explicit that whitespace preservation, list nesting, and merged-cell handling must each be proven against genuine producer output, not just this package's own idea of what that output looks like. A handful of narrow error/fallback-path tests at the end use small, synthetic, hand-built packages instead (via el/txt, matching this package's other typed-reader tests), since those specific paths — a missing content.xml, a missing office:text — are not something any real LibreOffice document can ever actually produce.
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 
@@ -290,7 +290,7 @@ describe("readOdtContent: minimal.odt (real LibreOffice output, default/unmodifi
     expect(metadata.author).toBe("odf.js test suite");
   });
 
-  it("reads LibreOffice's own default (unmodified) page geometry from the first master page -- A4, 2cm margins", () => {
+  it("reads LibreOffice's own default (unmodified) page geometry from the first master page — A4, 2cm margins", () => {
     expect(section.pageSize.widthPt).toBeCloseTo(knownLength("21.001cm"), 5);
     expect(section.pageSize.heightPt).toBeCloseTo(knownLength("29.7cm"), 5);
     expect(section.margins.topPt).toBeCloseTo(knownLength("2cm"), 5);
@@ -309,7 +309,7 @@ describe("readOdtContent: minimal.odt (real LibreOffice output, default/unmodifi
 });
 
 describe("readOdtContent: master pages after the first, and header/footer content (synthetic packages built to the OASIS grammar)", () => {
-  // Every package below carries content.xml + styles.xml with two style:master-page elements: "Standard" (A4 portrait) and "Landscape" (A4 landscape), matching the shape a real Writer document's own mid-document page-style switch produces. The fixtures are programmatic, but the one detail they used to get wrong is now producer-verified: style:master-page-name is an attribute of the style:style ELEMENT, not of its style:paragraph-properties child. A controlled LibreOffice round trip settles it -- a flat-ODF document carrying it on style:style renders two pages at the two master pages' own sizes and survives a re-save verbatim, while the identical document carrying it on style:paragraph-properties renders one page and has the attribute stripped on re-save -- and it agrees with this package's own recorded real-LibreOffice style:style attribute set (styles/properties.test.ts) and with the ods reader's equivalent lookup.
+  // Every package below carries content.xml + styles.xml with two style:master-page elements: "Standard" (A4 portrait) and "Landscape" (A4 landscape), matching the shape a real Writer document's own mid-document page-style switch produces. The fixtures are programmatic, but the one detail they used to get wrong is now producer-verified: style:master-page-name is an attribute of the style:style ELEMENT, not of its style:paragraph-properties child. A controlled LibreOffice round trip settles it — a flat-ODF document carrying it on style:style renders two pages at the two master pages' own sizes and survives a re-save verbatim, while the identical document carrying it on style:paragraph-properties renders one page and has the attribute stripped on re-save — and it agrees with this package's own recorded real-LibreOffice style:style attribute set (styles/properties.test.ts) and with the ods reader's equivalent lookup.
   function masterPage(
     name: string,
     pageLayoutName: string,
@@ -468,7 +468,7 @@ describe("readOdtContent: master pages after the first, and header/footer conten
     const { sections } = readOdtContent(pkg);
     expect(sections).toHaveLength(2);
     for (const section of sections) {
-      // Each section's marker list balances on its own -- the division's extent crossed the section boundary, and a pair split across two block lists has no encoding (the same ratification a table-cell-straddling pair takes).
+      // Each section's marker list balances on its own — the division's extent crossed the section boundary, and a pair split across two block lists has no encoding (the same ratification a table-cell-straddling pair takes).
       expect(
         section.blocks.filter((block) => block.kind === "constructStart"),
       ).toHaveLength(0);
@@ -528,7 +528,7 @@ describe("readOdtContent: master pages after the first, and header/footer conten
   });
 });
 
-describe("readOdtContent: error and fallback paths (synthetic packages -- not something real LibreOffice output can exercise)", () => {
+describe("readOdtContent: error and fallback paths (synthetic packages — not something real LibreOffice output can exercise)", () => {
   it("throws when the package has no content.xml part at all", () => {
     expect(() => readOdtContent({ parts: {} })).toThrow(/content\.xml/);
   });
@@ -583,7 +583,7 @@ describe("readOdtContent: error and fallback paths (synthetic packages -- not so
   });
 });
 
-describe("readOdtContent: fo:border-* on a paragraph's own automatic style (ExaDev/documents.js#1086 -- the odt half of #1082's own docx w:pBdr reading)", () => {
+describe("readOdtContent: fo:border-* on a paragraph's own automatic style (ExaDev/documents.js#1086 — the odt half of #1082's own docx w:pBdr reading)", () => {
   function packageWithParagraphStyle(styleProperties: XmlElement): Package {
     return {
       parts: {
@@ -610,7 +610,7 @@ describe("readOdtContent: fo:border-* on a paragraph's own automatic style (ExaD
     };
   }
 
-  it("reads a bottom-only fo:border-* into ContentParagraph.borders -- the exact shape a border-only horizontal rule takes", () => {
+  it("reads a bottom-only fo:border-* into ContentParagraph.borders — the exact shape a border-only horizontal rule takes", () => {
     const pkg = packageWithParagraphStyle(
       el("style:paragraph-properties", {
         "fo:border-bottom": "0.75pt solid #000000",
@@ -663,9 +663,9 @@ describe("readOdt: the package-native reader over the same real fixtures", () =>
     const documentPackage = readOdt(pkg);
 
     expect(documentPackage.kind).toBe("wordprocessing");
-    // The definitions table is tree-only by design (the flat ContentDocument is the codec-exchange content shape and has no root to hold one), so the round-trip harness below compares against the flat projection -- readOdt's own root carries the fixture's sequence declarations, pinned in the constructs suite.
+    // The definitions table is tree-only by design (the flat ContentDocument is the codec-exchange content shape and has no root to hold one), so the round-trip harness below compares against the flat projection — readOdt's own root carries the fixture's sequence declarations, pinned in the constructs suite.
     expect(documentPackage.metadata).toEqual(content.metadata);
-    // One section group per ContentSection -- the tree's mandatory top-level grouping, not a flattening of the section's own blocks.
+    // One section group per ContentSection — the tree's mandatory top-level grouping, not a flattening of the section's own blocks.
     expect(documentPackage.children).toHaveLength(content.sections.length);
     assertPackageRoundTrip(documentPackage, {
       kind: "wordprocessing",

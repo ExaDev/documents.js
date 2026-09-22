@@ -1,8 +1,8 @@
 /// <reference lib="dom" />
-// tsconfig.node.json (which typechecks every *.test.ts(x)) deliberately omits the DOM lib -- this file constructs a real Document via document.implementation.createHTMLDocument, so it opts in per-file the same way contentBlocks.test.tsx does.
+// tsconfig.node.json (which typechecks every *.test.ts(x)) deliberately omits the DOM lib — this file constructs a real Document via document.implementation.createHTMLDocument, so it opts in per-file the same way contentBlocks.test.tsx does.
 import { describe, expect, it, vi } from "vitest";
 
-// Mocked rather than let mountApp mount the real <App/>: that would pull in the full router tree (every route, including convert.tsx's worker-backed conversion machinery), none of which is what mountApp's own logic -- the #root lookup and the createRoot(...).render(...) call -- actually needs exercised against.
+// Mocked rather than let mountApp mount the real <App/>: that would pull in the full router tree (every route, including convert.tsx's worker-backed conversion machinery), none of which is what mountApp's own logic — the #root lookup and the createRoot(...).render(...) call — actually needs exercised against.
 const render = vi.fn();
 const createRoot = vi.fn(() => ({ render }));
 vi.mock("react-dom/client", () => ({ createRoot }));

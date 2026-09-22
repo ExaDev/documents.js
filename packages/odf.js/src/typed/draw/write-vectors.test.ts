@@ -15,7 +15,7 @@ import {
   canonicalDrawVector,
 } from "./write-vectors";
 
-// writeDrawVector/canonicalDrawVector had no direct unit tests at all -- only indirect exercise through typed/odg/write.test.ts's own round-trip suite, which (see typed/shared/canonicalise.ts's own top-of-file note) cannot observe a mutation that changes what gets WRITTEN in a way the reader's own inverse tolerates. These tests assert directly against the raw written XML and against canonicalDrawVector's own return value.
+// writeDrawVector/canonicalDrawVector had no direct unit tests at all — only indirect exercise through typed/odg/write.test.ts's own round-trip suite, which (see typed/shared/canonicalise.ts's own top-of-file note) cannot observe a mutation that changes what gets WRITTEN in a way the reader's own inverse tolerates. These tests assert directly against the raw written XML and against canonicalDrawVector's own return value.
 
 function writeState(): DrawShapeWriteState {
   const automaticStyles = el("office:automatic-styles", {}, []);
@@ -59,7 +59,7 @@ function graphicPropsOf(
   return props;
 }
 
-// `satisfies` rather than `: ContentVector`, so each fixture keeps its own literal "rect"/"line"/"path" member type -- annotating with the full union would widen it back to the union and lose the narrowing canonicalDrawVector's own per-kind assertions below rely on.
+// `satisfies` rather than `: ContentVector`, so each fixture keeps its own literal "rect"/"line"/"path" member type — annotating with the full union would widen it back to the union and lose the narrowing canonicalDrawVector's own per-kind assertions below rely on.
 const RECT = {
   kind: "rect",
   frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },

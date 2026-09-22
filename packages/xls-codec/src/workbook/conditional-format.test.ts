@@ -12,7 +12,7 @@ import { parseDxfStyle, readCondFmtGroup } from "./conditional-format";
 
 const NO_SHEETS: FormulaSheetContext = { sheets: [], sheetRanges: [] };
 
-/** PtgInt ([MS-XLS] 2.5.198.66): opcode 0x1E then an unsigned 16-bit value -- the simplest possible formula token, used here only to prove formula bytes are read and handed to parseFormulaText, not to exercise that parser's own grammar. */
+/** PtgInt ([MS-XLS] 2.5.198.66): opcode 0x1E then an unsigned 16-bit value — the simplest possible formula token, used here only to prove formula bytes are read and handed to parseFormulaText, not to exercise that parser's own grammar. */
 function ptgInt(value: number): number[] {
   return [0x1e, ...u16(value)];
 }
@@ -39,7 +39,7 @@ function sqRefU(...ranges: readonly TestRange[]): number[] {
 const DXFFNTD_LENGTH = 122;
 const DXFFNTD_ICV_FORE_OFFSET = 80;
 
-/** A DXFFntD block ([MS-XLS] 2.4.298) with every byte zero except icvFore (a signed 32-bit LE value at its own documented offset) -- the only field parseDxfStyle reads out of it. */
+/** A DXFFntD block ([MS-XLS] 2.4.298) with every byte zero except icvFore (a signed 32-bit LE value at its own documented offset) — the only field parseDxfStyle reads out of it. */
 function dxfFontBlock(icvFore: number): number[] {
   const block = new Array<number>(DXFFNTD_LENGTH).fill(0);
   const buffer = new ArrayBuffer(4);
@@ -49,7 +49,7 @@ function dxfFontBlock(icvFore: number): number[] {
   return block;
 }
 
-/** DXFPat's own bit-packed word ([MS-XLS] 2.4.97's nested structure), LSB first: unused1(10) fls(6) icvForeground(7) icvBackground(7) unused2(2) -- the same packing parseDxfStyle's own comment cites. */
+/** DXFPat's own bit-packed word ([MS-XLS] 2.4.97's nested structure), LSB first: unused1(10) fls(6) icvForeground(7) icvBackground(7) unused2(2) — the same packing parseDxfStyle's own comment cites. */
 function dxfPatWord(fls: number, foreIcv: number, backIcv: number): number {
   return (
     (((fls & 0x3f) << 10) |
@@ -59,7 +59,7 @@ function dxfPatWord(fls: number, foreIcv: number, backIcv: number): number {
   );
 }
 
-/** A DXFN structure ([MS-XLS] 2.4.97): the 6-byte flags header, then only whichever of dxfnum/dxffntd/dxfalc/dxfbdr/dxfpat the caller asks for, in their own declared field order -- dxfprot is never exercised here since parseDxfStyle never reads it either. `numUser` writes the ambiguous-length DXFNumUsr form (parseDxfStyle degrades to no style the moment fIfmtUser is set, before reading anything else); `numFixed` writes the real fixed-length DXFNumIFmt form instead (fIfmtUser clear), which parseDxfStyle skips by exactly 2 bytes and keeps reading past. `alignment`/`border` write an 8-byte DXFALC/DXFBdr block of arbitrary, distinguishable filler -- neither field is modelled by this schema, so parseDxfStyle only ever needs to skip past them correctly, never to read their content. */
+/** A DXFN structure ([MS-XLS] 2.4.97): the 6-byte flags header, then only whichever of dxfnum/dxffntd/dxfalc/dxfbdr/dxfpat the caller asks for, in their own declared field order — dxfprot is never exercised here since parseDxfStyle never reads it either. `numUser` writes the ambiguous-length DXFNumUsr form (parseDxfStyle degrades to no style the moment fIfmtUser is set, before reading anything else); `numFixed` writes the real fixed-length DXFNumIFmt form instead (fIfmtUser clear), which parseDxfStyle skips by exactly 2 bytes and keeps reading past. `alignment`/`border` write an 8-byte DXFALC/DXFBdr block of arbitrary, distinguishable filler — neither field is modelled by this schema, so parseDxfStyle only ever needs to skip past them correctly, never to read their content. */
 function dxf(
   options: {
     fontColorIcv?: number;
@@ -81,19 +81,19 @@ function dxf(
   const flags2 = numUser === true ? 1 : 0;
   const bytes: number[] = [...u32(flags1 >>> 0), ...u16(flags2)];
   if (numUser === true) {
-    // DXFNumUsr: cb(2 bytes) then a format-code string -- content is irrelevant, since parseDxfStyle degrades to no style the moment fIfmtUser is set, before reading any of these bytes.
+    // DXFNumUsr: cb(2 bytes) then a format-code string — content is irrelevant, since parseDxfStyle degrades to no style the moment fIfmtUser is set, before reading any of these bytes.
     bytes.push(...u16(2), 0x30, 0x00);
   } else if (numFixed === true) {
-    bytes.push(0xff, 0xff); // DXFNumIFmt: unused(1 byte) + ifmt(1 byte) -- content is irrelevant, skipped either way.
+    bytes.push(0xff, 0xff); // DXFNumIFmt: unused(1 byte) + ifmt(1 byte) — content is irrelevant, skipped either way.
   }
   if (fontColorIcv !== undefined) {
     bytes.push(...dxfFontBlock(fontColorIcv));
   }
   if (alignment === true) {
-    bytes.push(...new Array<number>(8).fill(0xaa)); // DXFALC -- 8 bytes of filler a correct skip must never feed into the block that follows.
+    bytes.push(...new Array<number>(8).fill(0xaa)); // DXFALC — 8 bytes of filler a correct skip must never feed into the block that follows.
   }
   if (border === true) {
-    bytes.push(...new Array<number>(8).fill(0xbb)); // DXFBdr -- 8 bytes of filler a correct skip must never feed into the block that follows.
+    bytes.push(...new Array<number>(8).fill(0xbb)); // DXFBdr — 8 bytes of filler a correct skip must never feed into the block that follows.
   }
   if (fill !== undefined) {
     bytes.push(...u32(dxfPatWord(fill.fls, fill.foreIcv, fill.backIcv)));
@@ -125,11 +125,11 @@ function condFmt(
 ): Uint8Array<ArrayBuffer> {
   return record(RECORD_CONDFMT, [
     ...u16(ccf),
-    ...u16(0), // fToughRecalc(1 bit) + nID(15 bits) -- CFEx's own linkage, unused
+    ...u16(0), // fToughRecalc(1 bit) + nID(15 bits) — CFEx's own linkage, unused
     ...u16(0),
     ...u16(0),
     ...u16(0),
-    ...u16(0), // refBound (Ref8U, 8 bytes) -- a redundant bounding superset of sqref, unused
+    ...u16(0), // refBound (Ref8U, 8 bytes) — a redundant bounding superset of sqref, unused
     ...sqRefU(...ranges),
   ]);
 }
@@ -206,7 +206,7 @@ describe("readCondFmtGroup", () => {
   });
 
   it("does not promote a formula-type condition (ct 0x02), even carrying an otherwise-valid cp", () => {
-    // cp 0x05 ("greaterThan") is a real, recognised operator -- proving the ct===0x02 guard itself is what excludes this rule, not an incidentally-unrecognised cp.
+    // cp 0x05 ("greaterThan") is a real, recognised operator — proving the ct===0x02 guard itself is what excludes this rule, not an incidentally-unrecognised cp.
     const groups = groupsFrom(
       condFmt(1, ONE_RANGE),
       cf(0x02, 0x05, ptgInt(1), [], []),
@@ -232,7 +232,7 @@ describe("readCondFmtGroup", () => {
   it("degrades a single CF to no format and no raw operand when its own header is truncated, without throwing", () => {
     const groups = groupsFrom(
       condFmt(1, ONE_RANGE),
-      // ct(1) + cp(1) + only one byte of the 2-byte cce1 field -- truncated before cce1 can be read in full.
+      // ct(1) + cp(1) + only one byte of the 2-byte cce1 field — truncated before cce1 can be read in full.
       record(RECORD_CF, [0x01, 0x03, 0x00]),
     );
 
@@ -297,7 +297,7 @@ describe("readCondFmtGroup", () => {
 
     const result = readCondFmtGroup(groups, 0, NO_SHEETS);
 
-    // The rule itself still promotes (condition/operator/formula are unaffected -- their position is computed independently of the dxf's own internal layout), only its style is dropped.
+    // The rule itself still promotes (condition/operator/formula are unaffected — their position is computed independently of the dxf's own internal layout), only its style is dropped.
     expect(result.formats[0]?.operator).toBe("equal");
     expect(result.formats[0]?.style).toBeUndefined();
   });

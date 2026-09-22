@@ -86,12 +86,12 @@ import { inchesToPoints } from "./units";
 //
 // The target shape is deliberately the one ooxml.js's readXlsxContent produces, field for field: a ContentDocument of kind 'spreadsheet' holding one ContentSheet per sheet, each with a SPARSE, zero-based cell array (a cell with nothing to show is simply absent, never materialised as an empty one), displayText on every cell, and a numeric cell's real kind resolved through its number format rather than left as a bare number. A caller converting .xls and .xlsx therefore holds the same type with the same conventions, which is the entire point of the shared schema.
 //
-// The one structural difference is the input. An .xlsx decodes to a Package first, and readXlsxContent takes that; a .xls has no equivalent intermediate -- the compound-file container yields one opaque byte stream -- so these take the file's own bytes.
+// The one structural difference is the input. An .xlsx decodes to a Package first, and readXlsxContent takes that; a .xls has no equivalent intermediate — the compound-file container yields one opaque byte stream — so these take the file's own bytes.
 
 /**
  * The spreadsheet member of ContentDocument's own discriminated union.
  *
- * Named and returned in place of the bare union, which is what ooxml.js's readXlsxContent declares. A .xls is a spreadsheet by construction -- there is no input this reader could accept that produced a wordprocessing or presentation document -- so returning the union would force every caller to re-narrow on `kind` to reach `sheets`, discarding a fact this function already knows. The narrowed type stays assignable to ContentDocument, so a caller holding one (documents.js's conversion registry among them) is unaffected.
+ * Named and returned in place of the bare union, which is what ooxml.js's readXlsxContent declares. A .xls is a spreadsheet by construction — there is no input this reader could accept that produced a wordprocessing or presentation document — so returning the union would force every caller to re-narrow on `kind` to reach `sheets`, discarding a fact this function already knows. The narrowed type stays assignable to ContentDocument, so a caller holding one (documents.js's conversion registry among them) is unaffected.
  */
 export type XlsContentDocument = Extract<
   ContentDocument,
@@ -104,7 +104,7 @@ const SHEET_TYPE_WORKSHEET = 0x00;
 /**
  * Excel's own "Normal" page-setup preset, the per-field fallback for a print setting the file states nothing about.
  *
- * ContentSheetPrintSettings makes pageSize, margins, gridlines, headers, and pageOrder REQUIRED, while [MS-XLS] 2.1.7.20.6's own PAGESETUP production makes every record behind them optional -- so a sheet whose page setup was never touched genuinely carries no Setup and no margin records, and something has to stand in. These are the values Excel itself calls Normal (top/bottom 0.75in, left/right 0.7in, on Letter paper, gridlines and row/column headers not printed, pages down-then-over), and the identical constants ooxml.js falls back to for an xlsx carrying no pageMargins element -- so the same untouched sheet reads the same either way.
+ * ContentSheetPrintSettings makes pageSize, margins, gridlines, headers, and pageOrder REQUIRED, while [MS-XLS] 2.1.7.20.6's own PAGESETUP production makes every record behind them optional — so a sheet whose page setup was never touched genuinely carries no Setup and no margin records, and something has to stand in. These are the values Excel itself calls Normal (top/bottom 0.75in, left/right 0.7in, on Letter paper, gridlines and row/column headers not printed, pages down-then-over), and the identical constants ooxml.js falls back to for an xlsx carrying no pageMargins element — so the same untouched sheet reads the same either way.
  *
  * Each field falls back independently: a sheet that declares a left margin and nothing else keeps its real left margin and takes the preset for the other three, rather than the whole preset displacing the one value the file actually stated.
  */
@@ -124,14 +124,14 @@ const DEFAULT_PRINT_SETTINGS: ContentSheetPrintSettings = {
 /**
  * The iScale value that says "print at actual size", which is what ContentSheetPrintSettings already means by carrying no scalePercent at all.
  *
- * Setup's own iScale is a mandatory field of a mandatory record, with no spelling for "this sheet declares no scale" -- so an untouched sheet still states 100. Reporting that as an explicit scalePercent would put a field on every sheet of every workbook read, carrying nothing a consumer could act on that its absence does not already say, and would mean a document written with no scale came back with one. The two spellings render identically, so collapsing them onto the absent one is lossless in both directions; a scale that is genuinely anything else is reported exactly as the file states it.
+ * Setup's own iScale is a mandatory field of a mandatory record, with no spelling for "this sheet declares no scale" — so an untouched sheet still states 100. Reporting that as an explicit scalePercent would put a field on every sheet of every workbook read, carrying nothing a consumer could act on that its absence does not already say, and would mean a document written with no scale came back with one. The two spellings render identically, so collapsing them onto the absent one is lossless in both directions; a scale that is genuinely anything else is reported exactly as the file states it.
  */
 const ACTUAL_SIZE_SCALE_PERCENT = 100;
 
 /**
  * The print settings a sheet's own records and its built-in print names state, with the Normal preset filling in what they do not.
  *
- * Two of BIFF8's own conditional rules are honoured rather than flattened. A Setup record whose fNoPls bit is set declares its own paper size and scale undefined ([MS-XLS] 2.4.257: "whether the iPaperSize, iScale, iRes, iVRes, iCopies, fNoOrient, and fPortrait data are undefined and ignored"), so neither is read from it -- the page size falls back to the preset and no scalePercent is reported, rather than a paper code the file itself disowns being resolved into a confident page size. And WsBool's own fFitToPage decides which of Setup's two mutually exclusive scaling fields is live: iFitWidth/iFitHeight when set, iScale when clear. Real producers write both regardless (confirmed against LibreOffice-written BIFF8, which carries iScale=100 alongside a real fit-to-page pair, and a real iScale alongside iFitWidth=iFitHeight=1), so reading both would report a scale and a page count that contradict each other.
+ * Two of BIFF8's own conditional rules are honoured rather than flattened. A Setup record whose fNoPls bit is set declares its own paper size and scale undefined ([MS-XLS] 2.4.257: "whether the iPaperSize, iScale, iRes, iVRes, iCopies, fNoOrient, and fPortrait data are undefined and ignored"), so neither is read from it — the page size falls back to the preset and no scalePercent is reported, rather than a paper code the file itself disowns being resolved into a confident page size. And WsBool's own fFitToPage decides which of Setup's two mutually exclusive scaling fields is live: iFitWidth/iFitHeight when set, iScale when clear. Real producers write both regardless (confirmed against LibreOffice-written BIFF8, which carries iScale=100 alongside a real fit-to-page pair, and a real iScale alongside iFitWidth=iFitHeight=1), so reading both would report a scale and a page count that contradict each other.
  */
 function mapPrintSettings(
   raw: RawPrintSettings,
@@ -156,7 +156,7 @@ function mapPrintSettings(
   };
 
   if (setup !== undefined && raw.fitToPage === true) {
-    // 0 is [MS-XLS] 2.4.257's own "use as many pages as necessary to print the columns/rows in the sheet", an auto setting ContentSheetPrintSettings.fitToPages cannot express -- both its counts are required and positive. A fit-to-page sheet with an auto axis therefore reports no fitToPages at all rather than a fabricated 1, which would claim the sheet is pinned to a single page along an axis the file left free.
+    // 0 is [MS-XLS] 2.4.257's own "use as many pages as necessary to print the columns/rows in the sheet", an auto setting ContentSheetPrintSettings.fitToPages cannot express — both its counts are required and positive. A fit-to-page sheet with an auto axis therefore reports no fitToPages at all rather than a fabricated 1, which would claim the sheet is pinned to a single page along an axis the file left free.
     if (setup.fitWidth > 0 && setup.fitHeight > 0) {
       settings.fitToPages = {
         width: setup.fitWidth,
@@ -193,14 +193,14 @@ function mapPrintSettings(
 /**
  * Reads a .xls file's bytes into a ContentDocument.
  *
- * The counterpart of ooxml.js's readXlsxContent, producing the same shape from the older format. `password` decrypts a workbook protected by [MS-XLS] 2.4.117's FilePass record, under either the [MS-OFFCRYPTO] 2.3.6.1 RC4 encryption header scheme or 2.3.7's XOR obfuscation -- see workbook/encryption.ts. It is ignored for an unencrypted workbook, and a missing or incorrect password against an encrypted one throws rather than returning a partial or garbled document.
+ * The counterpart of ooxml.js's readXlsxContent, producing the same shape from the older format. `password` decrypts a workbook protected by [MS-XLS] 2.4.117's FilePass record, under either the [MS-OFFCRYPTO] 2.3.6.1 RC4 encryption header scheme or 2.3.7's XOR obfuscation — see workbook/encryption.ts. It is ignored for an unencrypted workbook, and a missing or incorrect password against an encrypted one throws rather than returning a partial or garbled document.
  */
 export function readXlsContent(
   bytes: Uint8Array<ArrayBuffer>,
   password?: string,
 ): XlsContentDocument {
   const { workbook, metadata, embeddingStreams } = readWorkbookStreams(bytes);
-  // FilePass ([MS-XLS] 2.4.117) is looked for in the raw record list, before grouping or substream-splitting, because its own record type and size are never encrypted ([MS-XLS] 2.2.10) -- readRecords already parses correctly over the still-encrypted stream, so there is no need for a separate raw byte scan.
+  // FilePass ([MS-XLS] 2.4.117) is looked for in the raw record list, before grouping or substream-splitting, because its own record type and size are never encrypted ([MS-XLS] 2.2.10) — readRecords already parses correctly over the still-encrypted stream, so there is no need for a separate raw byte scan.
   const rawRecords = readRecords(workbook);
   const filePassRecord = rawRecords.find(
     (record) => record.type === RECORD_FILEPASS,
@@ -217,11 +217,11 @@ export function readXlsContent(
     );
   }
   const globals = readWorkbookGlobals(globalsSubstream.records);
-  // The Blip Store ([MS-ODRAW]'s own BstoreContainer) is workbook-wide, carried in the globals substream's own MsoDrawingGroup stream -- every worksheet's picture shapes reference it by index rather than each carrying its own copy. See drawing/blips.ts's own top comment.
+  // The Blip Store ([MS-ODRAW]'s own BstoreContainer) is workbook-wide, carried in the globals substream's own MsoDrawingGroup stream — every worksheet's picture shapes reference it by index rather than each carrying its own copy. See drawing/blips.ts's own top comment.
   const blipStore = readBlipStore(
     concatDrawingGroupBytes(globalsSubstream.records),
   );
-  // Absent when the container carries no "\x05SummaryInformation" stream at all -- a valid BIFF8 workbook need not have one -- and mapped from it through summaryInformationToLayoutMetadata (see src/metadata.ts) otherwise. Computed before the sheets, not after: a chart embedded in any sheet carries its own cached data as a small spreadsheet ContentDocument (see workbook/drawing.ts's own chartFromShape) that reuses this SAME document-level metadata, mirroring ooxml.js's own chart reading, which reuses the whole package's core properties for the identical synthetic sheet.
+  // Absent when the container carries no "\x05SummaryInformation" stream at all — a valid BIFF8 workbook need not have one — and mapped from it through summaryInformationToLayoutMetadata (see src/metadata.ts) otherwise. Computed before the sheets, not after: a chart embedded in any sheet carries its own cached data as a small spreadsheet ContentDocument (see workbook/drawing.ts's own chartFromShape) that reuses this SAME document-level metadata, mirroring ooxml.js's own chart reading, which reuses the whole package's core properties for the identical synthetic sheet.
   const documentMetadata: LayoutMetadata =
     metadata === undefined
       ? {}
@@ -250,9 +250,9 @@ export function readXlsContent(
 }
 
 /**
- * The document's own `names` array, from the workbook's Lbl records -- absent when the workbook declares no name this reader resolves, matching the schema's optional field.
+ * The document's own `names` array, from the workbook's Lbl records — absent when the workbook declares no name this reader resolves, matching the schema's optional field.
  *
- * A name's Lbl-scoped sheetIndex is a position in the FULL BoundSheet8 collection, while ContentDefinedNameSchema's scopeSheetIndex names a position in the document's own (worksheet-only) sheets array, so each one is translated through the same filter the sheets themselves went through. A name scoped to a sheet that did not survive the filter -- a chart or macro sheet -- has no scope the schema can express, and is dropped whole rather than re-scoped to a neighbouring index or silently promoted to workbook-global: a wrong scope changes which sheet the name belongs to, not just how it is displayed.
+ * A name's Lbl-scoped sheetIndex is a position in the FULL BoundSheet8 collection, while ContentDefinedNameSchema's scopeSheetIndex names a position in the document's own (worksheet-only) sheets array, so each one is translated through the same filter the sheets themselves went through. A name scoped to a sheet that did not survive the filter — a chart or macro sheet — has no scope the schema can express, and is dropped whole rather than re-scoped to a neighbouring index or silently promoted to workbook-global: a wrong scope changes which sheet the name belongs to, not just how it is displayed.
  */
 function mapDefinedNames(
   globalsRecords: Substream["records"],
@@ -286,11 +286,11 @@ function mapDefinedNames(
   return names.length > 0 ? { names } : {};
 }
 
-/** Every MsoDrawingGroup record's own data, in stream order, concatenated into one Escher byte stream -- the workbook-wide counterpart of a worksheet's own MsoDrawing concatenation (drawing/shapes.ts's own readSheetShapes), carrying the Blip Store rather than any one sheet's shape tree. */
+/** Every MsoDrawingGroup record's own data, in stream order, concatenated into one Escher byte stream — the workbook-wide counterpart of a worksheet's own MsoDrawing concatenation (drawing/shapes.ts's own readSheetShapes), carrying the Blip Store rather than any one sheet's shape tree. */
 function concatDrawingGroupBytes(
   records: Substream["records"],
 ): Uint8Array<ArrayBuffer> {
-  // record.blocks is the whole group -- the base MsoDrawingGroup record's own data plus every Continue record chained onto it ([MS-XLS] 2.4.179); the Blip Store this stream carries routinely exceeds one record's 8224-byte ceiling once a workbook holds more than a handful of images, so reading only blocks[0] would silently truncate it.
+  // record.blocks is the whole group — the base MsoDrawingGroup record's own data plus every Continue record chained onto it ([MS-XLS] 2.4.179); the Blip Store this stream carries routinely exceeds one record's 8224-byte ceiling once a workbook holds more than a handful of images, so reading only blocks[0] would silently truncate it.
   const chunks = records
     .filter((record) => record.type === RECORD_MSODRAWINGGROUP)
     .flatMap((record) => record.blocks);
@@ -308,7 +308,7 @@ export function readXls(
 /**
  * Locates a sheet's own substream and maps it.
  *
- * The substream is found by the byte offset BoundSheet8's lbPlyPos names, not by position: the order sheets appear in the workbook (which is BoundSheet8 order, and therefore the order of `globals.sheets`) is not required to match the order their substreams were written in. A sheet whose substream cannot be found still produces a ContentSheet, empty -- losing the sheet entirely would be a worse answer than losing its cells, since its name and position are real information the workbook did state.
+ * The substream is found by the byte offset BoundSheet8's lbPlyPos names, not by position: the order sheets appear in the workbook (which is BoundSheet8 order, and therefore the order of `globals.sheets`) is not required to match the order their substreams were written in. A sheet whose substream cannot be found still produces a ContentSheet, empty — losing the sheet entirely would be a worse answer than losing its cells, since its name and position are real information the workbook did state.
  */
 function readSheet(
   entry: SheetEntry,
@@ -361,7 +361,7 @@ function readSheet(
     ...mapConditionalFormats(raw.conditionalFormats, globals.palette),
     ...mapConditionalFormats12(raw.conditionalFormats12, globals.palette),
   ];
-  // Charts/drawings/images (ExaDev/documents.js#924): a sheet with no substream at all (its BOF's own lbPlyPos matched nothing) has no MsoDrawing bytes to read either, and drawing.ts's own contract already covers that -- an empty worksheetRecords list simply carries no MSODRAWING/Obj records, producing no images and no embeddedObjects.
+  // Charts/drawings/images (ExaDev/documents.js#924): a sheet with no substream at all (its BOF's own lbPlyPos matched nothing) has no MsoDrawing bytes to read either, and drawing.ts's own contract already covers that — an empty worksheetRecords list simply carries no MSODRAWING/Obj records, producing no images and no embeddedObjects.
   const drawing = readSheetDrawing(substream?.records ?? [], {
     blipStore,
     columns: raw.columns,
@@ -379,7 +379,7 @@ function readSheet(
     columns: mapColumns(raw),
     rows: mapRows(raw),
     images: [...drawing.images],
-    // The sheet index a print name is scoped to is its BoundSheet8 position -- the index into globals.sheets, before the worksheet-only filter readXlsContent applies -- not its position among the sheets that survive that filter.
+    // The sheet index a print name is scoped to is its BoundSheet8 position — the index into globals.sheets, before the worksheet-only filter readXlsContent applies — not its position among the sheets that survive that filter.
     printSettings: mapPrintSettings(
       raw.print,
       globals.printNames.get(sheetIndex),
@@ -515,7 +515,7 @@ function mapConditionalFormats12(
   return results;
 }
 
-// CFColor's own tint applies to whichever base colour xclrType named, indexed or RGB alike, so it is applied here, once, after resolving that base colour -- not inside conditional-format-12.ts's own readCfColor, which has no palette to resolve an indexed colour against in the first place.
+// CFColor's own tint applies to whichever base colour xclrType named, indexed or RGB alike, so it is applied here, once, after resolving that base colour — not inside conditional-format-12.ts's own readCfColor, which has no palette to resolve an indexed colour against in the first place.
 function mapCfColor(
   raw: RawCfColor,
   palette: readonly Color[] | undefined,
@@ -572,7 +572,7 @@ function mapConditionalFormatStyle(
   };
 }
 
-// ContentSheetDataValidationSchema's own optional fields all follow the same "true/present means state it, false/empty means omit" convention ooxml.js's own xlsx dataValidation reader established (ExaDev/documents.js#758) -- errorStyle additionally omits its default value ('stop') outright, matching that schema field's own "absent means stop" comment.
+// ContentSheetDataValidationSchema's own optional fields all follow the same "true/present means state it, false/empty means omit" convention ooxml.js's own xlsx dataValidation reader established (ExaDev/documents.js#758) — errorStyle additionally omits its default value ('stop') outright, matching that schema field's own "absent means stop" comment.
 function mapDataValidations(
   raw: readonly RawDataValidation[],
 ): ContentSheetDataValidation[] {
@@ -655,12 +655,12 @@ function mapCells(raw: RawSheet, globals: WorkbookGlobals): ContentSheetCell[] {
   return cells;
 }
 
-// Comments are read from their own Note/Obj/TxO records (workbook/comments.ts), entirely separate from the CELLTABLE cells above, so they attach after the fact -- the same "comments live in their own parts, attach after cells are read" ordering ooxml.js's own content.ts uses for xlsx's own comment mechanism. A comment anchored to a position no cell record ever occupied (a note pinned to an otherwise-empty cell) still carries real content worth keeping, materialised the same way an <f>-only formula cell or a decorated blank cell already is: an empty value with the annotation attached.
+// Comments are read from their own Note/Obj/TxO records (workbook/comments.ts), entirely separate from the CELLTABLE cells above, so they attach after the fact — the same "comments live in their own parts, attach after cells are read" ordering ooxml.js's own content.ts uses for xlsx's own comment mechanism. A comment anchored to a position no cell record ever occupied (a note pinned to an otherwise-empty cell) still carries real content worth keeping, materialised the same way an <f>-only formula cell or a decorated blank cell already is: an empty value with the annotation attached.
 function applyCellComments(
   comments: ReadonlyMap<string, SheetCellComment>,
   cells: ContentSheetCell[],
 ): void {
-  // No comments.size===0 early return: an empty comments map already makes the loop below a no-op on its own (nothing to iterate), so a dedicated guard here would only ever produce that identical no-op -- never a genuinely different result, just the same one reached by a shorter path.
+  // No comments.size===0 early return: an empty comments map already makes the loop below a no-op on its own (nothing to iterate), so a dedicated guard here would only ever produce that identical no-op — never a genuinely different result, just the same one reached by a shorter path.
   const byPosition = new Map<string, ContentSheetCell>();
   for (const cell of cells) {
     byPosition.set(`${cell.row}:${cell.column}`, cell);
@@ -671,7 +671,7 @@ function applyCellComments(
       existing.comment = comment;
       continue;
     }
-    // No byPosition.set(key, materialised) here: `comments` is a Map, so `key` can never recur across this same loop's own remaining iterations -- there is no later lookup this entry could ever be read back by.
+    // No byPosition.set(key, materialised) here: `comments` is a Map, so `key` can never recur across this same loop's own remaining iterations — there is no later lookup this entry could ever be read back by.
     cells.push({
       row,
       column,
@@ -685,15 +685,15 @@ function applyCellComments(
 /**
  * Maps one raw cell, or drops it.
  *
- * A blank cell showing nothing at all is dropped: ContentSheet's cell array is documented as sparse, holding only cells with something to show, and dropping the blanks keeps it honest rather than filling a sheet with thousands of empty entries -- applyMerges below re-materialises the few that anchor a merged range.
+ * A blank cell showing nothing at all is dropped: ContentSheet's cell array is documented as sparse, holding only cells with something to show, and dropping the blanks keeps it honest rather than filling a sheet with thousands of empty entries — applyMerges below re-materialises the few that anchor a merged range.
  *
- * A Blank or MulBlank record whose own XF carries a background or a border is not that case. Its formatting is the entire reason the record exists -- a producer writes one precisely to say "this cell is empty AND looks like this" -- so it becomes an `empty`-kind cell carrying that decoration, which is also what this package's own writer emits for one.
+ * A Blank or MulBlank record whose own XF carries a background or a border is not that case. Its formatting is the entire reason the record exists — a producer writes one precisely to say "this cell is empty AND looks like this" — so it becomes an `empty`-kind cell carrying that decoration, which is also what this package's own writer emits for one.
  */
 function mapCell(
   cell: RawCell,
   globals: WorkbookGlobals,
 ): ContentSheetCell | undefined {
-  // Resolved before the blank check, because whether a blank cell is worth carrying is exactly the question of whether any of these find anything. Resolved rather than read off the XF's raw fields, so a decoration this reader declines to express -- a fill pattern beyond solid, an unrecognised BorderStyle token, an icv with no fixed RGB value -- counts as none here too.
+  // Resolved before the blank check, because whether a blank cell is worth carrying is exactly the question of whether any of these find anything. Resolved rather than read off the XF's raw fields, so a decoration this reader declines to express — a fill pattern beyond solid, an unrecognised BorderStyle token, an icv with no fixed RGB value — counts as none here too.
   const background = backgroundOf(globals, cell.xfIndex);
   const borders = bordersOf(globals, cell.xfIndex);
   const { alignment, verticalAlignment } = alignmentOf(globals, cell.xfIndex);
@@ -743,7 +743,7 @@ function mapCell(
 /**
  * A cell's own resolved background fill (ExaDev/documents.js#951), or undefined for a genuinely unfilled cell and for a reserved/unrecognised FillPattern value.
  *
- * A solid fill resolves to a 'solid' ContentCellFill of its own foreground colour; every other named FillPattern -- the 50%/75%/25% gray shades, the stripe and crosshatch family -- resolves to a real 'pattern' fill via xf-colors.ts's own FILL_PATTERN_TO_PATTERN_TYPE, carrying whichever of the pattern's foreground/background colours actually resolve to a fixed RGB value. See xls-codec's README, "Cell decoration".
+ * A solid fill resolves to a 'solid' ContentCellFill of its own foreground colour; every other named FillPattern — the 50%/75%/25% gray shades, the stripe and crosshatch family — resolves to a real 'pattern' fill via xf-colors.ts's own FILL_PATTERN_TO_PATTERN_TYPE, carrying whichever of the pattern's foreground/background colours actually resolve to a fixed RGB value. See xls-codec's README, "Cell decoration".
  */
 function backgroundOf(
   globals: WorkbookGlobals,
@@ -761,7 +761,7 @@ function backgroundOf(
   );
 }
 
-/** A cell's own resolved horizontal/vertical alignment -- already the exact Alignment/verticalAlignment members (or undefined) globals.ts's readCellFormat resolved through xf-colors.ts's unpackXfAlignment, so this is a lookup rather than a further resolution step, mirroring backgroundOf/bordersOf's own shape. Both fields undefined for a cell whose XF resolves to no CellFormat at all (an out-of-range xfIndex), matching every other resolveXOf helper's behaviour in that case. */
+/** A cell's own resolved horizontal/vertical alignment — already the exact Alignment/verticalAlignment members (or undefined) globals.ts's readCellFormat resolved through xf-colors.ts's unpackXfAlignment, so this is a lookup rather than a further resolution step, mirroring backgroundOf/bordersOf's own shape. Both fields undefined for a cell whose XF resolves to no CellFormat at all (an out-of-range xfIndex), matching every other resolveXOf helper's behaviour in that case. */
 function alignmentOf(
   globals: WorkbookGlobals,
   xfIndex: number,
@@ -770,7 +770,7 @@ function alignmentOf(
   if (format === undefined) {
     return {};
   }
-  // Assigned unconditionally rather than each behind its own "if !== undefined" guard: mapCell, this function's only caller, already re-checks each field against undefined before ever copying it onto the ContentSheetCell it builds, so a guard here would only ever decide between two objects mapCell treats identically -- one whose own field is absent, and one whose own field holds undefined, both of which mapCell's own check reads the same way.
+  // Assigned unconditionally rather than each behind its own "if !== undefined" guard: mapCell, this function's only caller, already re-checks each field against undefined before ever copying it onto the ContentSheetCell it builds, so a guard here would only ever decide between two objects mapCell treats identically — one whose own field is absent, and one whose own field holds undefined, both of which mapCell's own check reads the same way.
   return {
     alignment: format.alignment.horizontal,
     verticalAlignment: format.alignment.vertical,
@@ -778,7 +778,7 @@ function alignmentOf(
 }
 
 /**
- * A cell's own font, or undefined when the cell states none of its own: the font its XF's ifnt names, diffed against the workbook's own first font (the Normal style's, entry 0 of the font table) so that only properties the cell genuinely differs in survive -- the same default-omission policy alignmentOf applies to ALCGEN/ALCVBOT and the fill reader to FLSNULL. A cell whose XF resolves to no CellFormat at all, or whose font index resolves past the end of the font table, carries no font, matching every other resolveXOf helper's behaviour for an out-of-range index.
+ * A cell's own font, or undefined when the cell states none of its own: the font its XF's ifnt names, diffed against the workbook's own first font (the Normal style's, entry 0 of the font table) so that only properties the cell genuinely differs in survive — the same default-omission policy alignmentOf applies to ALCGEN/ALCVBOT and the fill reader to FLSNULL. A cell whose XF resolves to no CellFormat at all, or whose font index resolves past the end of the font table, carries no font, matching every other resolveXOf helper's behaviour for an out-of-range index.
  */
 function fontOf(
   globals: WorkbookGlobals,
@@ -798,7 +798,7 @@ function fontOf(
   );
 }
 
-/** A cell's own resolved per-side borders, or undefined when none of its four sides carry a border this reader resolves (no border at all, or a reserved/unrecognised BorderStyle token, or a colour this package cannot express as a fixed RGB value -- see xf-colors.ts's own resolveBorderEdge). */
+/** A cell's own resolved per-side borders, or undefined when none of its four sides carry a border this reader resolves (no border at all, or a reserved/unrecognised BorderStyle token, or a colour this package cannot express as a fixed RGB value — see xf-colors.ts's own resolveBorderEdge). */
 function bordersOf(
   globals: WorkbookGlobals,
   xfIndex: number,
@@ -846,7 +846,7 @@ function resolveValue(
   formatCode: string | undefined,
   date1904: boolean,
 ): ContentCellValue {
-  // The two vocabularies name an absent value differently -- BIFF8's record family calls it blank, the schema calls it empty -- so the translation is spelled out rather than left to a structural coincidence. mapCell drops an undecorated blank before reaching here; this branch is what a decorated one, and a blank that survives as a merge anchor, resolve through.
+  // The two vocabularies name an absent value differently — BIFF8's record family calls it blank, the schema calls it empty — so the translation is spelled out rather than left to a structural coincidence. mapCell drops an undecorated blank before reaching here; this branch is what a decorated one, and a blank that survives as a merge anchor, resolve through.
   if (cell.value.kind === "blank") {
     return { kind: "empty" };
   }
@@ -907,14 +907,14 @@ function displayTextOf(value: ContentCellValue): string {
       return value.value;
     case "empty":
       return "";
-    // No default: ContentCellValueSchema's discriminated union has exactly these ten kinds, so every one is already handled above -- a default clause here would only ever be reached by a value outside that union, which the parameter's own type already rules out, and a hand-added "return the identical empty string" branch for that unreachable case is not a smaller version of a real fallback, it is a second, redundant copy of the "empty" case's own return.
+    // No default: ContentCellValueSchema's discriminated union has exactly these ten kinds, so every one is already handled above — a default clause here would only ever be reached by a value outside that union, which the parameter's own type already rules out, and a hand-added "return the identical empty string" branch for that unreachable case is not a smaller version of a real fallback, it is a second, redundant copy of the "empty" case's own return.
   }
 }
 
 /**
  * Stamps each merged range's span onto its anchor cell, materialising an empty anchor when the range's top-left cell had no value of its own.
  *
- * ContentSheetCell documents colSpan/rowSpan as belonging to the anchor cell alone, and only when greater than one. A merged range whose anchor is blank is common -- merging cells in Excel keeps only the top-left value, and a range merged over an empty cell has no value anywhere -- so the anchor is created here rather than left absent, which would lose the merge entirely.
+ * ContentSheetCell documents colSpan/rowSpan as belonging to the anchor cell alone, and only when greater than one. A merged range whose anchor is blank is common — merging cells in Excel keeps only the top-left value, and a range merged over an empty cell has no value anywhere — so the anchor is created here rather than left absent, which would lose the merge entirely.
  */
 function applyMerges(cells: ContentSheetCell[], raw: RawSheet): void {
   for (const range of raw.merges) {

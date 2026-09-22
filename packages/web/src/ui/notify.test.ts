@@ -45,7 +45,7 @@ describe("notifySuccess", () => {
     });
     expect(show).toHaveBeenCalledWith({
       color: "yellow",
-      title: "Converted -- 1 to review",
+      title: "Converted — 1 to review",
       message: "See the details below for what changed.",
       autoClose: false,
     });
@@ -60,7 +60,7 @@ describe("notifySuccess", () => {
       ],
     });
     expect(show).toHaveBeenCalledWith(
-      expect.objectContaining({ title: "Converted -- 3 to review" }),
+      expect.objectContaining({ title: "Converted — 3 to review" }),
     );
   });
 });

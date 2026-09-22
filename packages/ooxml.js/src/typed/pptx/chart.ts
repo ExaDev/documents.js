@@ -8,7 +8,7 @@ import type { XmlElement } from "../../model/node";
 import { buildXml } from "../../xml/build";
 import { attr, childrenWithTag, elementsWithTag, textContent } from "../util";
 
-// Reads a chart part (a c:chartSpace root) into the same ContentTable shape an a:tbl graphic frame produces, so a chart reaches consumers as the series/category data it carries rather than geometry with empty content. Only the chart part's own cached model is read (c:strCache/c:numCache, or the c:numLit/c:strLit literal forms) -- the linked workbook behind c:externalData is a separate embedded package and is not opened.
+// Reads a chart part (a c:chartSpace root) into the same ContentTable shape an a:tbl graphic frame produces, so a chart reaches consumers as the series/category data it carries rather than geometry with empty content. Only the chart part's own cached model is read (c:strCache/c:numCache, or the c:numLit/c:strLit literal forms) — the linked workbook behind c:externalData is a separate embedded package and is not opened.
 
 // Every point-carrying source in a chart series (c:tx's name reference, c:cat/c:xVal's category axis, c:val/c:yVal's value axis) holds its points in one of three shapes: a cached reference (c:numRef > c:numCache / c:strRef > c:strCache), a multi-level cached string reference whose deepest (last) c:lvl holds the leaf labels actually rendered on the axis tick, or inline literals (c:numLit/c:strLit, whose c:pt sit directly on the source element). Returns each uniformly as idx -> verbatim c:v text.
 function readCachedPoints(source: XmlElement): Map<number, string> {
@@ -83,7 +83,7 @@ function readSeries(ser: XmlElement): ChartSeries {
   };
 }
 
-// An absent or empty-text label/value reads as an empty cell -- ContentTable's own spelling for "nothing here" (the same shape a merged-away continuation cell produces).
+// An absent or empty-text label/value reads as an empty cell — ContentTable's own spelling for "nothing here" (the same shape a merged-away continuation cell produces).
 function labelCell(text: string | undefined): ContentTableCell {
   if (text === undefined || text === "") {
     return { blocks: [] };
@@ -91,7 +91,7 @@ function labelCell(text: string | undefined): ContentTableCell {
   return { blocks: [{ kind: "paragraph", runs: [{ text }] }] };
 }
 
-// The table layout: a header row of series names (empty corner cell over the category column), then one row per category index with each series' cached value at that index in its own column. Values stay verbatim c:v text -- chart caches carry no typed-cell concept to preserve beyond that. Returns undefined when the chart has no series at all, leaving the frame's geometry with empty content.
+// The table layout: a header row of series names (empty corner cell over the category column), then one row per category index with each series' cached value at that index in its own column. Values stay verbatim c:v text — chart caches carry no typed-cell concept to preserve beyond that. Returns undefined when the chart has no series at all, leaving the frame's geometry with empty content.
 export function readChartTable(
   chartRoot: XmlElement,
   frame: Box,
@@ -130,7 +130,7 @@ export function readChartTable(
   const columnWidthPt = frame.widthPt / (series.length + 1);
   return {
     kind: "table",
-    // origin names what this table's content IS: a chart's cached numbers, not an authored data table -- the fact that separates it from the identical-looking table a pasted screenshot of the same chart would produce, which no other field on the node carries (the schema's motivating case for the annotation channel).
+    // origin names what this table's content IS: a chart's cached numbers, not an authored data table — the fact that separates it from the identical-looking table a pasted screenshot of the same chart would produce, which no other field on the node carries (the schema's motivating case for the annotation channel).
     origin: "chart",
     rows,
     columnWidthsPt: Array.from(
@@ -140,7 +140,7 @@ export function readChartTable(
   };
 }
 
-// Quarantines a chart part's own presentation specifics -- chart type, axes, legend, colours, and every other c:chartSpace facet readChartTable itself does not read -- as opaque residue on whichever node the caller anchors it to (a pptx graphic frame's own ContentTable, an xlsx chart's ContentEmbeddedObject), per document-schema.js's stated ExaDev/documents.js#719 contract ("the chart's own serialised specifics riding the object's residue channel") and mirroring odf.js's readOdfChartContent, which already quarantines its own chart:chart element whole for the ODF side of the identical decision. The WHOLE chart root is kept, not just its c:chart child: unlike ODF's chart:chart (one element inside a shared content.xml), chartRoot is an entire standalone part existing for nothing but this one chart, so a same-format restorer re-emitting this residue verbatim reconstructs the whole part.
+// Quarantines a chart part's own presentation specifics — chart type, axes, legend, colours, and every other c:chartSpace facet readChartTable itself does not read — as opaque residue on whichever node the caller anchors it to (a pptx graphic frame's own ContentTable, an xlsx chart's ContentEmbeddedObject), per document-schema.js's stated ExaDev/documents.js#719 contract ("the chart's own serialised specifics riding the object's residue channel") and mirroring odf.js's readOdfChartContent, which already quarantines its own chart:chart element whole for the ODF side of the identical decision. The WHOLE chart root is kept, not just its c:chart child: unlike ODF's chart:chart (one element inside a shared content.xml), chartRoot is an entire standalone part existing for nothing but this one chart, so a same-format restorer re-emitting this residue verbatim reconstructs the whole part.
 //
 // Cached by chartRoot's own object identity: a package's relationship resolution parses each part once, so every graphic frame referencing the same chart relationship target hands this function the identical XmlElement instance. Without the cache, N frames sharing one M-byte chart part would re-serialise it N times (O(N*M) CPU and retained strings from a single hostile part), rather than once (O(N+M)).
 const chartResidueCache = new WeakMap<XmlElement, SourceResidue>();

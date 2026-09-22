@@ -4,12 +4,12 @@ import { type PptRecord, childRecords, findChild } from "../record/tree";
 import { RT_Drawing, RT_Notes, RT_NotesAtom } from "../record/types";
 import { readTextBody, splitParagraphs } from "../text/atoms";
 
-// A notes slide: the NotesContainer persist object holding one presentation slide's speaker notes, and the atom naming which slide those notes belong to. A notes slide is shaped exactly like a presentation slide -- an identifying atom, then a DrawingContainer of OfficeArt shapes -- which is why the whole drawing walk is reused here unchanged rather than reimplemented. [MS-PPT] 2.5.6 NotesContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/50bfc0f7-c101-4c32-8754-6ca59772b785 [MS-PPT] 2.5.7 NotesAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/9bb3e352-1014-477b-b286-cd43127c3b74 [MS-PPT] 3.5.3 Notes Slides, whose worked example states the association rule this module implements: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/0d430f90-17fc-4730-92c9-90198d19c13b
+// A notes slide: the NotesContainer persist object holding one presentation slide's speaker notes, and the atom naming which slide those notes belong to. A notes slide is shaped exactly like a presentation slide — an identifying atom, then a DrawingContainer of OfficeArt shapes — which is why the whole drawing walk is reused here unchanged rather than reimplemented. [MS-PPT] 2.5.6 NotesContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/50bfc0f7-c101-4c32-8754-6ca59772b785 [MS-PPT] 2.5.7 NotesAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/9bb3e352-1014-477b-b286-cd43127c3b74 [MS-PPT] 3.5.3 Notes Slides, whose worked example states the association rule this module implements: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/0d430f90-17fc-4730-92c9-90198d19c13b
 
 // [MS-PPT] 2.5.7: "rh.recLen MUST be 0x00000008."
 const NOTES_ATOM_LEN = 0x00000008;
 
-// The slideIdRef value reserved for a notes MASTER slide. [MS-PPT] 2.5.7: slideIdRef "MUST be 0x00000000 if the NotesContainer record that contains this NotesAtom record represents the notes master slide", and MUST NOT be for a notes slide -- so the same record type carries both, and only this field tells them apart.
+// The slideIdRef value reserved for a notes MASTER slide. [MS-PPT] 2.5.7: slideIdRef "MUST be 0x00000000 if the NotesContainer record that contains this NotesAtom record represents the notes master slide", and MUST NOT be for a notes slide — so the same record type carries both, and only this field tells them apart.
 export const NOTES_MASTER_SLIDE_ID_REF = 0x00000000;
 
 export interface NotesAtom {
@@ -58,7 +58,7 @@ export function readNotesContainerAtom(notesContainer: PptRecord): NotesAtom {
   return readNotesAtom(atom);
 }
 
-// One notes slide's speaker-notes text: every text body its drawing carries, in document order, paragraphs joined by newlines -- the plain-string shape ContentSlide.notes is, and the same joining ooxml.js's pptx reader and odf.js's odp reader produce for their own formats.
+// One notes slide's speaker-notes text: every text body its drawing carries, in document order, paragraphs joined by newlines — the plain-string shape ContentSlide.notes is, and the same joining ooxml.js's pptx reader and odf.js's odp reader produce for their own formats.
 //
 // Every text body counts, rather than only the one on a PT_NotesBody placeholder shape, because a real producer does not necessarily place the notes text on a placeholder at all: LibreOffice writes the notes body as a plain, un-placeholdered text box carrying a TextHeaderAtom of Tx_TYPE_OTHER (verified against real `soffice --convert-to ppt` output), and reserves the PT_NotesBody placeholder spelling for a notes page whose text is empty. Sweeping every body is also safe here in a way it would not be on a presentation slide: [MS-PPT] 2.13.21's date, slide-number, header and footer placeholder kinds are all defined as belonging to a notes MASTER slide, and the notes master is reached through DocumentAtom.notesMasterPersistIdRef rather than through the notes list, so it is never walked by this reader.
 //
@@ -70,7 +70,7 @@ export function readNotesText(notesContainer: PptRecord): string {
   }
   const bodies: string[] = [];
   for (const entry of readDrawingShapes(drawing)) {
-    // A table group on a notes page has no single text body to contribute -- and a real notes page carries none, so it is passed over rather than flattened.
+    // A table group on a notes page has no single text body to contribute — and a real notes page carries none, so it is passed over rather than flattened.
     if (!("clientTextbox" in entry)) {
       continue;
     }

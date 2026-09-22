@@ -2,16 +2,16 @@ import type { Color } from "document-schema.js";
 import { readUint8 } from "./bytes";
 import { DocFormatError } from "./errors";
 
-// The two colour encodings [MS-DOC] uses throughout, in one place: the fixed 17-entry Ico palette ([MS-DOC] 2.9.119) and the exact 4-byte COLORREF ([MS-DOC] 2.9.43). Neither belongs to any one property family -- a run's colour states one through sprmCIco/sprmCCv (prop/chp.ts, prop/chp-write.ts), a table cell's border and shading state the same two through Brc80.ico/Brc.cv and Shd80/Shd (table/decoration.ts) -- so both live here rather than in whichever module happened to need them first.
+// The two colour encodings [MS-DOC] uses throughout, in one place: the fixed 17-entry Ico palette ([MS-DOC] 2.9.119) and the exact 4-byte COLORREF ([MS-DOC] 2.9.43). Neither belongs to any one property family — a run's colour states one through sprmCIco/sprmCCv (prop/chp.ts, prop/chp-write.ts), a table cell's border and shading state the same two through Brc80.ico/Brc.cv and Shd80/Shd (table/decoration.ts) — so both live here rather than in whichever module happened to need them first.
 
 const COLOR_COMPONENT_MAX = 255;
 
-// The Ico palette, [MS-DOC] 2.9.119, reproduced exactly as published. Entry 0x00 is the one with fAuto set -- "the default color for the application" -- so it names no concrete colour, and a caller decides what an automatic colour means for the property it is reading rather than this table choosing on the format's behalf.
+// The Ico palette, [MS-DOC] 2.9.119, reproduced exactly as published. Entry 0x00 is the one with fAuto set — "the default color for the application" — so it names no concrete colour, and a caller decides what an automatic colour means for the property it is reading rather than this table choosing on the format's behalf.
 //
 // Entries 0x0C and 0x0D carry identical RGB values (0x80/0x00/0x80) in the published table, where the surrounding entries' pattern and every other palette of this shape would put dark red at 0x0D. That is reproduced rather than corrected: the table above is the normative statement of what the value means, and silently substituting a different colour would make this reader disagree with the specification it claims to implement on a point no test could catch. If a real-world corpus ever shows producers meaning dark red, that is the evidence to change it on.
 const ICO_PALETTE: readonly (readonly [number, number, number] | undefined)[] =
   [
-    undefined, // 0x00, fAuto -- automatic, no concrete colour.
+    undefined, // 0x00, fAuto — automatic, no concrete colour.
     [0x00, 0x00, 0x00], // 0x01
     [0x00, 0x00, 0xff], // 0x02
     [0x00, 0xff, 0xff], // 0x03
@@ -24,7 +24,7 @@ const ICO_PALETTE: readonly (readonly [number, number, number] | undefined)[] =
     [0x00, 0x80, 0x80], // 0x0A
     [0x00, 0x80, 0x00], // 0x0B
     [0x80, 0x00, 0x80], // 0x0C
-    [0x80, 0x00, 0x80], // 0x0D -- as published; see the note above.
+    [0x80, 0x00, 0x80], // 0x0D — as published; see the note above.
     [0x80, 0x80, 0x00], // 0x0E
     [0x80, 0x80, 0x80], // 0x0F
     [0xc0, 0xc0, 0xc0], // 0x10
@@ -47,7 +47,7 @@ export function icoColor(value: number): Color | undefined {
   };
 }
 
-/** icoColor's own decorative counterpart: an out-of-range Ico value resolves to undefined (the same "no concrete colour" spelling 0x00/cvAuto already carries) rather than throwing. icoColor's hard bound stays exactly as it is for a run's sprmCIco, where an out-of-range value states a specific, load-bearing colour this reader must not silently drop -- but Brc80.ico and Shd80's icoFore/icoBack (table/decoration.ts) are cosmetic fields already reached through a chain of automatic-colour fallbacks of their own (borderFrom's own AUTOMATIC_BORDER_COLOR, readShd80's own undefined return for an unrecognised pattern), so one out-of-range byte in a single cell's border or fill should not abort reading the entire document the way it correctly does for a run's own explicit, load-bearing colour. */
+/** icoColor's own decorative counterpart: an out-of-range Ico value resolves to undefined (the same "no concrete colour" spelling 0x00/cvAuto already carries) rather than throwing. icoColor's hard bound stays exactly as it is for a run's sprmCIco, where an out-of-range value states a specific, load-bearing colour this reader must not silently drop — but Brc80.ico and Shd80's icoFore/icoBack (table/decoration.ts) are cosmetic fields already reached through a chain of automatic-colour fallbacks of their own (borderFrom's own AUTOMATIC_BORDER_COLOR, readShd80's own undefined return for an unrecognised pattern), so one out-of-range byte in a single cell's border or fill should not abort reading the entire document the way it correctly does for a run's own explicit, load-bearing colour. */
 export function decorativeIcoColor(value: number): Color | undefined {
   return value >= ICO_PALETTE.length ? undefined : icoColor(value);
 }
@@ -57,7 +57,7 @@ interface NearestIcoMatch {
   readonly color: Color;
 }
 
-/** Every Ico value that names a concrete colour, pre-resolved to real Color components once rather than per lookup -- built from ICO_PALETTE.filter/.map, which is what lets this stay a plain non-empty array TypeScript can fold over with reduce()'s own no-initial-value overload (see nearestIcoMatch below), rather than a value the palette's own cvAuto hole (index 0x00) could ever make empty or require an absent-entry check to skip past again. */
+/** Every Ico value that names a concrete colour, pre-resolved to real Color components once rather than per lookup — built from ICO_PALETTE.filter/.map, which is what lets this stay a plain non-empty array TypeScript can fold over with reduce()'s own no-initial-value overload (see nearestIcoMatch below), rather than a value the palette's own cvAuto hole (index 0x00) could ever make empty or require an absent-entry check to skip past again. */
 const CONCRETE_ICO_ENTRIES: readonly NearestIcoMatch[] = ICO_PALETTE.flatMap(
   (entry, index): NearestIcoMatch[] =>
     entry === undefined
@@ -90,15 +90,15 @@ function nearestIcoMatch(color: Color): NearestIcoMatch {
 }
 
 /**
- * The Ico value whose own colour is closest to `color`, by squared distance in sRGB, over the sixteen entries that name a concrete colour -- 0x00 (cvAuto) is never returned, since it names none. Ties resolve to the lower Ico, which makes the answer depend only on the colour asked about and not on iteration order (it also settles 0x0C/0x0D, the one duplicated pair in the published palette, on 0x0C).
+ * The Ico value whose own colour is closest to `color`, by squared distance in sRGB, over the sixteen entries that name a concrete colour — 0x00 (cvAuto) is never returned, since it names none. Ties resolve to the lower Ico, which makes the answer depend only on the colour asked about and not on iteration order (it also settles 0x0C/0x0D, the one duplicated pair in the published palette, on 0x0C).
  *
- * This is a genuinely lossy quantisation and is only ever used where [MS-DOC] itself offers no better field: Brc80.ico, the border colour a TC80 can carry at all. Wherever the format has an exact spelling beside it -- Brc.cv, reached through sprmTSetBrc -- this package writes that too, so nothing downstream has to read the approximation back (see table/decoration.ts and the README's own Tables section).
+ * This is a genuinely lossy quantisation and is only ever used where [MS-DOC] itself offers no better field: Brc80.ico, the border colour a TC80 can carry at all. Wherever the format has an exact spelling beside it — Brc.cv, reached through sprmTSetBrc — this package writes that too, so nothing downstream has to read the approximation back (see table/decoration.ts and the README's own Tables section).
  */
 export function nearestIco(color: Color): number {
   return nearestIcoMatch(color).index;
 }
 
-/** The exact colour nearestIco's own chosen palette entry states -- always a real Color, never cvAuto's "no colour" case, since nearestIcoMatch only ever considers the sixteen entries that name one. Exists so a caller comparing against the palette's own approximation (table/decoration.ts's borderNeedsExactColor) never has to re-resolve nearestIco's own index back through icoColor, which types as `Color | undefined` for the sake of a cvAuto case this search can never actually return. */
+/** The exact colour nearestIco's own chosen palette entry states — always a real Color, never cvAuto's "no colour" case, since nearestIcoMatch only ever considers the sixteen entries that name one. Exists so a caller comparing against the palette's own approximation (table/decoration.ts's borderNeedsExactColor) never has to re-resolve nearestIco's own index back through icoColor, which types as `Color | undefined` for the sake of a cvAuto case this search can never actually return. */
 export function nearestIcoColor(color: Color): Color {
   return nearestIcoMatch(color).color;
 }
@@ -106,7 +106,7 @@ export function nearestIcoColor(color: Color): Color {
 /** COLORREF's fAuto, [MS-DOC] 2.9.43: "If fAuto is 0xFF, this COLORREF designates the default color for the application", which the specification names cvAuto. */
 const F_AUTO_SET = 0xff;
 
-/** COLORREF, [MS-DOC] 2.9.43: red, green and blue bytes followed by fAuto. Returns undefined for cvAuto (fAuto set), which designates the application's own default colour rather than the components beside it -- the caller decides what that means for the property it is reading. */
+/** COLORREF, [MS-DOC] 2.9.43: red, green and blue bytes followed by fAuto. Returns undefined for cvAuto (fAuto set), which designates the application's own default colour rather than the components beside it — the caller decides what that means for the property it is reading. */
 export function readColorRef(
   bytes: Uint8Array,
   offset: number,
@@ -126,7 +126,7 @@ export function colorRefBytes(color: Color): number[] {
   return [byte(color.r), byte(color.g), byte(color.b), 0x00];
 }
 
-/** cvAuto's own four bytes, [MS-DOC] 2.9.43: components zeroed with fAuto set. Written wherever a COLORREF field exists but this package has no colour to state for it -- a Shd's own cvFore under an ipatAuto pattern, for instance. */
+/** cvAuto's own four bytes, [MS-DOC] 2.9.43: components zeroed with fAuto set. Written wherever a COLORREF field exists but this package has no colour to state for it — a Shd's own cvFore under an ipatAuto pattern, for instance. */
 export function autoColorRefBytes(): number[] {
   return [0x00, 0x00, 0x00, F_AUTO_SET];
 }

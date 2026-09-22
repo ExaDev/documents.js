@@ -8,7 +8,7 @@ import {
   readPtgExpBase,
 } from "./ptg";
 
-// Every byte sequence here is built by hand from [MS-XLS] 2.5.198's own per-Ptg field layouts, matching this package's established convention (see test-support/biff.ts) -- and cross-checked against a real BIFF8 workbook that LibreOffice wrote for the identical formulas during development of this module (SUM/AVERAGE/IF/ROUND/ATAN2/SYD/REPLACE/SUMIF/CONCATENATE, a cross-sheet SUM, and a parenthesised `(A1+B1)*C1`), which produced byte-for-byte the same token streams these tests assert against.
+// Every byte sequence here is built by hand from [MS-XLS] 2.5.198's own per-Ptg field layouts, matching this package's established convention (see test-support/biff.ts) — and cross-checked against a real BIFF8 workbook that LibreOffice wrote for the identical formulas during development of this module (SUM/AVERAGE/IF/ROUND/ATAN2/SYD/REPLACE/SUMIF/CONCATENATE, a cross-sheet SUM, and a parenthesised `(A1+B1)*C1`), which produced byte-for-byte the same token streams these tests assert against.
 
 function bytes(...values: readonly number[]): Uint8Array<ArrayBuffer> {
   return new Uint8Array(values);
@@ -55,12 +55,12 @@ function relativeLoc(rowDelta: number, columnDelta: number): number[] {
   return [...u16(rowField), ...u16(columnField)];
 }
 
-/** PtgRefN (value class, [MS-XLS] bf3b872b): opcode 0x4C, then a fully-relative RgceLocRel -- legal only inside a shared formula's own SharedParsedFormula, and only resolvable when parseFormulaText is given a `relativeTo` cell. */
+/** PtgRefN (value class, [MS-XLS] bf3b872b): opcode 0x4C, then a fully-relative RgceLocRel — legal only inside a shared formula's own SharedParsedFormula, and only resolvable when parseFormulaText is given a `relativeTo` cell. */
 function ptgRefN(rowDelta: number, columnDelta: number): number[] {
   return [0x4c, ...relativeLoc(rowDelta, columnDelta)];
 }
 
-/** PtgAreaN (value class, [MS-XLS] f2c8529a): opcode 0x4D, then two fully-relative corners (RgceAreaRel, [MS-XLS] 75afd109) -- PtgRefN's area counterpart. */
+/** PtgAreaN (value class, [MS-XLS] f2c8529a): opcode 0x4D, then two fully-relative corners (RgceAreaRel, [MS-XLS] 75afd109) — PtgRefN's area counterpart. */
 function ptgAreaN(
   rowFirstDelta: number,
   rowLastDelta: number,
@@ -83,7 +83,7 @@ function ptgAreaN(
   ];
 }
 
-/** PtgArray (value class, [MS-XLS] 61167ac8): opcode 0x40, then seven bytes this reader never inspects -- the real values live in the RgbExtra trailer's own PtgExtraArray, at the same position-in-sequence as this token (see ptgExtraArray below). */
+/** PtgArray (value class, [MS-XLS] 61167ac8): opcode 0x40, then seven bytes this reader never inspects — the real values live in the RgbExtra trailer's own PtgExtraArray, at the same position-in-sequence as this token (see ptgExtraArray below). */
 function ptgArrayToken(): number[] {
   return [0x40, 0, 0, 0, 0, 0, 0, 0];
 }
@@ -108,12 +108,12 @@ function serErr(code: number): number[] {
   return [0x10, code, 0, 0, 0, 0, 0, 0, 0];
 }
 
-/** SerBool's Nil counterpart ([MS-XLS] 69ff31ac's own SerAr type table): reserved 0x00, then eight bytes of pure padding -- an array element left blank, e.g. the middle of `{1,,3}`. */
+/** SerBool's Nil counterpart ([MS-XLS] 69ff31ac's own SerAr type table): reserved 0x00, then eight bytes of pure padding — an array element left blank, e.g. the middle of `{1,,3}`. */
 function serNil(): number[] {
   return [0x00, 0, 0, 0, 0, 0, 0, 0, 0];
 }
 
-/** PtgExtraArray ([MS-XLS] edd64b46): one less than the column and row counts, then that many SerAr elements in row-major order. `rows` is given as-written -- an array of rows, each an array of already-encoded SerAr element byte sequences (serNum/serStr/serBool/serErr above). */
+/** PtgExtraArray ([MS-XLS] edd64b46): one less than the column and row counts, then that many SerAr elements in row-major order. `rows` is given as-written — an array of rows, each an array of already-encoded SerAr element byte sequences (serNum/serStr/serBool/serErr above). */
 function ptgExtraArray(rows: readonly (readonly number[])[][]): number[] {
   const columnCount = rows[0]?.length ?? 0;
   const elements = rows.flatMap((row) => row.flatMap((element) => element));
@@ -141,7 +141,7 @@ describe("parseFormulaText", () => {
   });
 
   it("wraps a lower-precedence child on the left of a higher-precedence operator", () => {
-    // (A1+B1)*C1 -- PtgParen explicitly restates the source's own parentheses, matching a real producer's output byte-for-byte.
+    // (A1+B1)*C1 — PtgParen explicitly restates the source's own parentheses, matching a real producer's output byte-for-byte.
     const rgce = bytes(
       ...ptgRef(0, 0),
       ...ptgRef(0, 1),
@@ -154,7 +154,7 @@ describe("parseFormulaText", () => {
   });
 
   it("wraps a lower-precedence left child through precedence comparison alone, with no PtgParen token involved", () => {
-    // (A1+B1)*C1 again, but genuinely built from precedence -- no PtgParen this time, so only wrapBelow's own left-operand comparison decides whether the addition needs parentheses before the multiply combines it.
+    // (A1+B1)*C1 again, but genuinely built from precedence — no PtgParen this time, so only wrapBelow's own left-operand comparison decides whether the addition needs parentheses before the multiply combines it.
     const rgce = bytes(
       ...ptgRef(0, 0),
       ...ptgRef(0, 1),
@@ -166,7 +166,7 @@ describe("parseFormulaText", () => {
   });
 
   it("wraps a same-precedence right child that division is not associative over", () => {
-    // A1/(B1/C1) -- the postfix nesting itself (right child built before being combined) is what requires the parenthesis, independent of any PtgParen token.
+    // A1/(B1/C1) — the postfix nesting itself (right child built before being combined) is what requires the parenthesis, independent of any PtgParen token.
     const rgce = bytes(
       ...ptgRef(0, 0),
       ...ptgRef(0, 1),
@@ -178,7 +178,7 @@ describe("parseFormulaText", () => {
   });
 
   it("does not wrap a left-nested chain of the same operator", () => {
-    // A1-B1-C1, postfix ((A1-B1)-C1) -- the ordinary left-associative reading, no parens needed.
+    // A1-B1-C1, postfix ((A1-B1)-C1) — the ordinary left-associative reading, no parens needed.
     const rgce = bytes(
       ...ptgRef(0, 0),
       ...ptgRef(0, 1),
@@ -190,7 +190,7 @@ describe("parseFormulaText", () => {
   });
 
   it("does not add a paren a lower-precedence multiply/add mix does not need", () => {
-    // A1+B1*C1 -- multiply binds tighter, so the addition's right child needs no wrapping.
+    // A1+B1*C1 — multiply binds tighter, so the addition's right child needs no wrapping.
     const rgce = bytes(
       ...ptgRef(0, 0),
       ...ptgRef(0, 1),
@@ -208,13 +208,13 @@ describe("parseFormulaText", () => {
     expect(parseFormulaText(bytes(...ptgRef(0, 0), 0x12), NO_SHEETS)).toBe(
       "+A1",
     );
-    // A1*10% -- PtgPercent binds to the literal immediately before it, then PtgMul combines.
+    // A1*10% — PtgPercent binds to the literal immediately before it, then PtgMul combines.
     const rgce = bytes(...ptgRef(0, 0), ...ptgInt(10), 0x14, 0x05);
     expect(parseFormulaText(rgce, NO_SHEETS)).toBe("A1*10%");
   });
 
   it("formats a range reference and the PtgAttrSum optimisation for a top-level SUM", () => {
-    // SUM(A1:A10) -- a real producer's own optimisation for a single-range SUM call, [MS-XLS] 2.5.198.41.
+    // SUM(A1:A10) — a real producer's own optimisation for a single-range SUM call, [MS-XLS] 2.5.198.41.
     const rgce = bytes(
       ...ptgArea(0, 9, 0, 0),
       0x19,
@@ -252,7 +252,7 @@ describe("parseFormulaText", () => {
   it("formats a boolean literal and an error literal", () => {
     expect(parseFormulaText(bytes(0x1d, 0x01), NO_SHEETS)).toBe("TRUE");
     expect(parseFormulaText(bytes(0x1d, 0x00), NO_SHEETS)).toBe("FALSE");
-    // PtgErr ([MS-XLS] 2.5.198.57): opcode 0x1C then a BErr byte -- 0x07 is #DIV/0!.
+    // PtgErr ([MS-XLS] 2.5.198.57): opcode 0x1C then a BErr byte — 0x07 is #DIV/0!.
     expect(parseFormulaText(bytes(0x1c, 0x07), NO_SHEETS)).toBe("#DIV/0!");
   });
 
@@ -265,25 +265,25 @@ describe("parseFormulaText", () => {
   });
 
   it("formats a fixed-arity PtgFunc call", () => {
-    // SIN(A1) -- iftab 0x000F, verified against real LibreOffice-written BIFF8 during development.
+    // SIN(A1) — iftab 0x000F, verified against real LibreOffice-written BIFF8 during development.
     const rgce = bytes(...ptgRef(0, 0), 0x41, ...u16(0x000f));
     expect(parseFormulaText(rgce, NO_SHEETS)).toBe("SIN(A1)");
   });
 
   it("formats a zero-argument PtgFunc call with empty parentheses", () => {
-    // PI() -- iftab 0x0013.
+    // PI() — iftab 0x0013.
     const rgce = bytes(0x41, ...u16(0x0013));
     expect(parseFormulaText(rgce, NO_SHEETS)).toBe("PI()");
   });
 
   it("aborts a fixed-arity PtgFunc call with too few operands on the stack", () => {
-    // SIN needs one operand; none is pushed, then a trailing A1 follows. applyFunctionCall's arity guard returns before ever touching the stack, so a mutant that inverts its return value doesn't produce a malformed "SIN()" entry -- it returns as if the call had succeeded while leaving the stack untouched, and the caller then carries straight on to the trailing token instead of aborting. Without that trailing token the mutant and the real code would coincidentally agree (both leave the stack empty, both yield undefined); with it, the real code still aborts before reaching A1 while the mutant reaches it and reports "A1" instead.
+    // SIN needs one operand; none is pushed, then a trailing A1 follows. applyFunctionCall's arity guard returns before ever touching the stack, so a mutant that inverts its return value doesn't produce a malformed "SIN()" entry — it returns as if the call had succeeded while leaving the stack untouched, and the caller then carries straight on to the trailing token instead of aborting. Without that trailing token the mutant and the real code would coincidentally agree (both leave the stack empty, both yield undefined); with it, the real code still aborts before reaching A1 while the mutant reaches it and reports "A1" instead.
     const rgce = bytes(0x41, ...u16(0x000f), ...ptgRef(0, 0));
     expect(parseFormulaText(rgce, NO_SHEETS)).toBeUndefined();
   });
 
   it("aborts a fixed-arity PtgFunc call with too few operands even when the guard's own abort is skipped rather than inverted", () => {
-    // The sibling of the test above, for a DIFFERENT way this same guard can be defeated: a mutant that turns the if-block into a no-op (or the condition itself into a constant false) doesn't skip the abort by returning early -- it falls straight through to the splice/push below with a starved stack, and splice on an empty array with a negative, clamped start index is a silent no-op, so this still produces a well-formed (if argument-less) "SIN()" entry rather than leaving the stack untouched. A bare trailing A1 would then just leave "SIN()" and "A1" as two un-combined stack entries, which the final stack.length===1 check turns back into undefined for both the real code and this mutant alike (the same masking the sibling test above exists to avoid, from the opposite direction) -- so the trailing token here has to be an operator (PtgConcat) that combines them into one operand, the only way this mutant's fabricated "SIN()" can surface as an observably different final result from the real code's genuine abort.
+    // The sibling of the test above, for a DIFFERENT way this same guard can be defeated: a mutant that turns the if-block into a no-op (or the condition itself into a constant false) doesn't skip the abort by returning early — it falls straight through to the splice/push below with a starved stack, and splice on an empty array with a negative, clamped start index is a silent no-op, so this still produces a well-formed (if argument-less) "SIN()" entry rather than leaving the stack untouched. A bare trailing A1 would then just leave "SIN()" and "A1" as two un-combined stack entries, which the final stack.length===1 check turns back into undefined for both the real code and this mutant alike (the same masking the sibling test above exists to avoid, from the opposite direction) — so the trailing token here has to be an operator (PtgConcat) that combines them into one operand, the only way this mutant's fabricated "SIN()" can surface as an observably different final result from the real code's genuine abort.
     const rgce = bytes(
       0x41,
       ...u16(0x000f),
@@ -294,7 +294,7 @@ describe("parseFormulaText", () => {
   });
 
   it("formats a variable-arity PtgFuncVar call, using its own on-disk cparams", () => {
-    // COUNT(A1:B1) -- cparams=1, iftab 0x0000.
+    // COUNT(A1:B1) — cparams=1, iftab 0x0000.
     const rgce = bytes(...ptgArea(0, 0, 0, 1), 0x42, 0x01, ...u16(0x0000));
     expect(parseFormulaText(rgce, NO_SHEETS)).toBe("COUNT(A1:B1)");
   });
@@ -310,7 +310,7 @@ describe("parseFormulaText", () => {
   });
 
   it("formats PtgMissArg as an empty operand, filling an omitted optional argument", () => {
-    // IF(A1>0,1,) -- the third argument omitted, present in the token stream as a real (empty) operand so PtgFuncVar's own cparams=3 still counts it, matching a real producer's own encoding of a trailing omitted argument.
+    // IF(A1>0,1,) — the third argument omitted, present in the token stream as a real (empty) operand so PtgFuncVar's own cparams=3 still counts it, matching a real producer's own encoding of a trailing omitted argument.
     const rgce = bytes(
       ...ptgRef(0, 0),
       ...ptgInt(0),
@@ -349,7 +349,7 @@ describe("parseFormulaText", () => {
   });
 
   it("treats every remaining PtgAttr no-op subtype (Semi/BaxcelA/BaxcelB/Space/SpaceSemi) as a pure no-op", () => {
-    // The mirror of the PtgAttrIf/PtgAttrGoto test above, for the rest of the subtype family that same else-if chain accepts unmodified -- each one alone with A1 on the stack, unaffected either way.
+    // The mirror of the PtgAttrIf/PtgAttrGoto test above, for the rest of the subtype family that same else-if chain accepts unmodified — each one alone with A1 on the stack, unaffected either way.
     const noopSubtypes = [0x01, 0x20, 0x21, 0x40, 0x41]; // Semi, BaxcelA, BaxcelB, Space, SpaceSemi
     for (const subtype of noopSubtypes) {
       const rgce = bytes(...ptgRef(0, 0), 0x19, subtype, ...u16(0));
@@ -362,7 +362,7 @@ describe("parseFormulaText", () => {
     expect(parseFormulaText(rgce, NO_SHEETS)).toBeUndefined();
   });
 
-  it("aborts on PtgAttrChoose, CHOOSE's own variable-length jump table -- not in this reader's vocabulary", () => {
+  it("aborts on PtgAttrChoose, CHOOSE's own variable-length jump table — not in this reader's vocabulary", () => {
     const rgce = bytes(...ptgRef(0, 0), 0x19, 0x04, ...u16(0));
     expect(parseFormulaText(rgce, NO_SHEETS)).toBeUndefined();
   });
@@ -387,7 +387,7 @@ describe("parseFormulaText", () => {
   });
 
   it("aborts a multi-sheet range whose last sheet index does not resolve, even though its first does", () => {
-    // first being genuinely resolvable here is what isolates the OR's own second operand (last===undefined) from its first: a mutant that drops the second operand doesn't fall back to an empty stack the way a stack-starved abort would -- resolveSheetLabel instead returns a real (if malformed, embedding the literal text "undefined") label string, which gets pushed as one atomic operand. A bare trailing B1 would then leave TWO un-combined operands on the stack, which the final stack.length===1 check turns back into undefined for both the real code and the mutant alike -- so the trailing token has to be an operator (PtgConcat) that actually combines the 3D reference with B1 into a single operand, the only way the mutant's malformed-but-defined text can surface as an observably different final result.
+    // first being genuinely resolvable here is what isolates the OR's own second operand (last===undefined) from its first: a mutant that drops the second operand doesn't fall back to an empty stack the way a stack-starved abort would — resolveSheetLabel instead returns a real (if malformed, embedding the literal text "undefined") label string, which gets pushed as one atomic operand. A bare trailing B1 would then leave TWO un-combined operands on the stack, which the final stack.length===1 check turns back into undefined for both the real code and the mutant alike — so the trailing token has to be an operator (PtgConcat) that actually combines the 3D reference with B1 into a single operand, the only way the mutant's malformed-but-defined text can surface as an observably different final result.
     const context: FormulaSheetContext = {
       sheets: [{ name: "Jan" }],
       sheetRanges: [{ firstSheetIndex: 0, lastSheetIndex: 5 }],
@@ -413,7 +413,7 @@ describe("parseFormulaText", () => {
   });
 
   it("aborts the whole parse when a 3D AREA reference's ixti does not resolve", () => {
-    // The PtgArea3d-specific twin of the PtgRef3d test below -- resolveSheetLabel's own undefined result is checked independently in each of the two call sites, so a mutant disabling only ONE of them survives unless both are exercised on their own opcode. A mutant that disables this check doesn't leave the stack starved the way a genuine abort-skip would: it pushes the literal text "undefined" spliced into the area reference as one atomic operand, so a bare trailing B1 would just leave that malformed operand and B1 as two un-combined stack entries, which the final stack.length===1 check turns back into undefined for both the real code and the mutant alike. The trailing token has to be an operator (PtgConcat) that actually combines them into a single operand for the mutant's malformed-but-defined text to surface as an observably different result.
+    // The PtgArea3d-specific twin of the PtgRef3d test below — resolveSheetLabel's own undefined result is checked independently in each of the two call sites, so a mutant disabling only ONE of them survives unless both are exercised on their own opcode. A mutant that disables this check doesn't leave the stack starved the way a genuine abort-skip would: it pushes the literal text "undefined" spliced into the area reference as one atomic operand, so a bare trailing B1 would just leave that malformed operand and B1 as two un-combined stack entries, which the final stack.length===1 check turns back into undefined for both the real code and the mutant alike. The trailing token has to be an operator (PtgConcat) that actually combines them into a single operand for the mutant's malformed-but-defined text to surface as an observably different result.
     const context: FormulaSheetContext = { sheets: [], sheetRanges: [] };
     const rgce = bytes(
       0x3b,
@@ -444,7 +444,7 @@ describe("parseFormulaText", () => {
   });
 
   it("aborts on a binary operator with too few operands rather than guessing", () => {
-    // A trailing PtgRef after the starved PtgAdd is what actually distinguishes this abort from merely falling through to the final stack-not-exactly-one-operand check: applyBinary already popped its own one available operand before discovering the second is missing, so a caller that failed to abort immediately would resume with an EMPTY stack and happily push the trailing B1 onto it, landing on the same "undefined" result via the unrelated fallthrough check instead of this guard -- appending B1 forces the two paths to diverge (undefined vs "B1").
+    // A trailing PtgRef after the starved PtgAdd is what actually distinguishes this abort from merely falling through to the final stack-not-exactly-one-operand check: applyBinary already popped its own one available operand before discovering the second is missing, so a caller that failed to abort immediately would resume with an EMPTY stack and happily push the trailing B1 onto it, landing on the same "undefined" result via the unrelated fallthrough check instead of this guard — appending B1 forces the two paths to diverge (undefined vs "B1").
     const rgce = bytes(...ptgRef(0, 0), 0x03, ...ptgRef(0, 1)); // PtgAdd with only one operand pushed, then a trailing B1
     expect(parseFormulaText(rgce, NO_SHEETS)).toBeUndefined();
   });
@@ -475,7 +475,7 @@ describe("parseFormulaText", () => {
   });
 
   it("resolves a 3D reference through a genuinely-recovered ExternalSheetLabel, quoting the whole bracketed label", () => {
-    // workbook/globals.ts hands this module an already-formatted label for a genuinely external workbook -- resolveSheetLabel's own quoting wraps it exactly as it would a plain sheet name.
+    // workbook/globals.ts hands this module an already-formatted label for a genuinely external workbook — resolveSheetLabel's own quoting wraps it exactly as it would a plain sheet name.
     const context: FormulaSheetContext = {
       sheets: [],
       sheetRanges: [{ label: "[Budget.xlsx]Sheet1", diagnostic: false }],
@@ -485,7 +485,7 @@ describe("parseFormulaText", () => {
   });
 
   it("drops the whole formula for a 3D reference through a diagnostic ExternalSheetLabel, rather than writing the placeholder as if it were real formula text", () => {
-    // A diagnostic label is this reader's own placeholder for something it could not resolve, not formula syntax a spreadsheet application would accept -- so this behaves exactly like meeting any other unsupported construct.
+    // A diagnostic label is this reader's own placeholder for something it could not resolve, not formula syntax a spreadsheet application would accept — so this behaves exactly like meeting any other unsupported construct.
     const context: FormulaSheetContext = {
       sheets: [],
       sheetRanges: [
@@ -499,7 +499,7 @@ describe("parseFormulaText", () => {
 
 describe("parseFormulaText shared-formula relative tokens (PtgRefN/PtgAreaN)", () => {
   it("expands a relative PtgRefN against the cell being evaluated, not the token's own literal bytes", () => {
-    // The ShrFmla's own rgce for a filled-down "=A<row>" column: a single relative reference one column to the left, same row (row delta 0, column delta -1) -- the same token stream regardless of which member cell it is later expanded for.
+    // The ShrFmla's own rgce for a filled-down "=A<row>" column: a single relative reference one column to the left, same row (row delta 0, column delta -1) — the same token stream regardless of which member cell it is later expanded for.
     const rgce = bytes(...ptgRefN(0, -1));
     expect(
       parseFormulaText(rgce, NO_SHEETS, { relativeTo: { row: 3, column: 1 } }),
@@ -519,7 +519,7 @@ describe("parseFormulaText shared-formula relative tokens (PtgRefN/PtgAreaN)", (
   });
 
   it("wraps a relative reference's column around the sheet edge exactly as the spec states", () => {
-    // One column to the left of column A (index 0) wraps to column 255 (IV), the format's own edge case -- [MS-XLS] 2db37ba7: "adjusted by 0x0100".
+    // One column to the left of column A (index 0) wraps to column 255 (IV), the format's own edge case — [MS-XLS] 2db37ba7: "adjusted by 0x0100".
     const rgce = bytes(...ptgRefN(0, -1));
     expect(
       parseFormulaText(rgce, NO_SHEETS, { relativeTo: { row: 0, column: 0 } }),
@@ -527,7 +527,7 @@ describe("parseFormulaText shared-formula relative tokens (PtgRefN/PtgAreaN)", (
   });
 
   it("wraps a relative reference's row around the sheet edge the same way", () => {
-    // One row above row 1 (index 0) wraps to row 65536 -- [MS-XLS] 2db37ba7: "adjusted by 0x00010000".
+    // One row above row 1 (index 0) wraps to row 65536 — [MS-XLS] 2db37ba7: "adjusted by 0x00010000".
     const rgce = bytes(...ptgRefN(-1, 0));
     expect(
       parseFormulaText(rgce, NO_SHEETS, { relativeTo: { row: 0, column: 0 } }),
@@ -535,7 +535,7 @@ describe("parseFormulaText shared-formula relative tokens (PtgRefN/PtgAreaN)", (
   });
 
   it("wraps a relative reference's row around the sheet's own OTHER edge, past its own top", () => {
-    // One row below the sheet's own last row (index 0xffff) wraps back to row 1 -- the mirror of the "above row 1" wrap already covered above, and the only way to distinguish row>0xffff from row>=0xffff.
+    // One row below the sheet's own last row (index 0xffff) wraps back to row 1 — the mirror of the "above row 1" wrap already covered above, and the only way to distinguish row>0xffff from row>=0xffff.
     const rgce = bytes(...ptgRefN(1, 0));
     expect(
       parseFormulaText(rgce, NO_SHEETS, {
@@ -554,7 +554,7 @@ describe("parseFormulaText shared-formula relative tokens (PtgRefN/PtgAreaN)", (
   });
 
   it("wraps a relative reference's column around the sheet's own OTHER edge, past its own last column", () => {
-    // One column past the sheet's own last column (index 0xff) wraps back to column A -- the mirror of the "left of column A" wrap already covered above, and the only way to distinguish column>0xff from column>=0xff.
+    // One column past the sheet's own last column (index 0xff) wraps back to column A — the mirror of the "left of column A" wrap already covered above, and the only way to distinguish column>0xff from column>=0xff.
     const rgce = bytes(...ptgRefN(0, 1));
     expect(
       parseFormulaText(rgce, NO_SHEETS, {
@@ -592,7 +592,7 @@ describe("parseFormulaText shared-formula relative tokens (PtgRefN/PtgAreaN)", (
 
 describe("parseFormulaText array constants (PtgArray/PtgExtraArray)", () => {
   it("formats a one-row numeric array constant from its PtgExtraArray trailer", () => {
-    // =SUM({1,2,3}) -- PtgArray's own seven bytes carry nothing; the real values are the RgbExtra trailer's PtgExtraArray, at the same position-in-sequence as this one PtgArray token. iftab 0x0004 is SUM.
+    // =SUM({1,2,3}) — PtgArray's own seven bytes carry nothing; the real values are the RgbExtra trailer's PtgExtraArray, at the same position-in-sequence as this one PtgArray token. iftab 0x0004 is SUM.
     const rgce = bytes(...ptgArrayToken(), 0x42, 0x01, ...u16(0x0004));
     const rgcb = bytes(...ptgExtraArray([[serNum(1), serNum(2), serNum(3)]]));
     expect(parseFormulaText(rgce, NO_SHEETS, { rgcb })).toBe("SUM({1,2,3})");
@@ -609,7 +609,7 @@ describe("parseFormulaText array constants (PtgArray/PtgExtraArray)", () => {
     expect(parseFormulaText(rgce, NO_SHEETS, { rgcb })).toBe("{1,2;3,4}");
   });
 
-  it("formats a mixed-type array constant -- string, boolean, and error elements", () => {
+  it("formats a mixed-type array constant — string, boolean, and error elements", () => {
     const rgce = bytes(...ptgArrayToken());
     const rgcb = bytes(
       ...ptgExtraArray([[serStr("hi"), serBool(true), serErr(0x07)]]),
@@ -626,7 +626,7 @@ describe("parseFormulaText array constants (PtgArray/PtgExtraArray)", () => {
   });
 
   it("reads two PtgArray tokens' worth of PtgExtraArray in sequence", () => {
-    // {1,2}+{3,4} -- proves rgcb is consumed left-to-right across multiple PtgArray tokens rather than re-read from the start for each one ([MS-XLS] 70f743b2: "the order of the structures MUST be the same").
+    // {1,2}+{3,4} — proves rgcb is consumed left-to-right across multiple PtgArray tokens rather than re-read from the start for each one ([MS-XLS] 70f743b2: "the order of the structures MUST be the same").
     const rgce = bytes(...ptgArrayToken(), ...ptgArrayToken(), 0x03);
     const rgcb = bytes(
       ...ptgExtraArray([[serNum(1), serNum(2)]]),
@@ -654,16 +654,16 @@ describe("parseFormulaText array constants (PtgArray/PtgExtraArray)", () => {
   });
 
   it("degrades to undefined, rather than throwing, when a PtgExtraArray's own row/column counts overrun the rgcb bytes actually supplied", () => {
-    // The trailer claims three rows of one column each (columns-1=0, rows-1=2) but only ONE SerNum's worth of bytes follows -- a malformed/truncated rgcb this reader must not let crash the caller over, since rgcb's own length is inferred by the caller rather than declared anywhere in the file (see biff/ptg.ts's own module comment).
+    // The trailer claims three rows of one column each (columns-1=0, rows-1=2) but only ONE SerNum's worth of bytes follows — a malformed/truncated rgcb this reader must not let crash the caller over, since rgcb's own length is inferred by the caller rather than declared anywhere in the file (see biff/ptg.ts's own module comment).
     const rgce = bytes(...ptgArrayToken());
     const rgcb = bytes(0, ...u16(2), ...serNum(1));
     expect(parseFormulaText(rgce, NO_SHEETS, { rgcb })).toBeUndefined();
   });
 
   it("propagates a genuine bug from readArrayLiteralText rather than absorbing it as a malformed rgcb", () => {
-    // BlockCursor.prototype.u8 is shared by both cursors parseFormulaText walks at once -- rgce's own opcode-reading cursor, and rgcb's -- so only the SECOND u8() call (readArrayLiteralText's own leading columns-count read) is made to fail; the first (the main loop's own opcode read) runs for real, so the PtgArray token is genuinely recognised before its own array-literal reader hits the injected bug.
+    // BlockCursor.prototype.u8 is shared by both cursors parseFormulaText walks at once — rgce's own opcode-reading cursor, and rgcb's — so only the SECOND u8() call (readArrayLiteralText's own leading columns-count read) is made to fail; the first (the main loop's own opcode read) runs for real, so the PtgArray token is genuinely recognised before its own array-literal reader hits the injected bug.
     const bug = new TypeError("a genuine bug, not a malformed record");
-    // Read through Object.getOwnPropertyDescriptor, not a plain BlockCursor.prototype.u8 property access: the latter is exactly the "unbound method reference" shape @typescript-eslint/unbound-method exists to catch, even though it is in fact rebound immediately via .call() below -- the descriptor lookup carries the identical function value through a shape the rule does not pattern-match on.
+    // Read through Object.getOwnPropertyDescriptor, not a plain BlockCursor.prototype.u8 property access: the latter is exactly the "unbound method reference" shape @typescript-eslint/unbound-method exists to catch, even though it is in fact rebound immediately via .call() below — the descriptor lookup carries the identical function value through a shape the rule does not pattern-match on.
     const originalU8 = Object.getOwnPropertyDescriptor(
       BlockCursor.prototype,
       "u8",

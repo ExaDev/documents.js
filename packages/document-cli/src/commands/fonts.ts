@@ -14,7 +14,7 @@ interface FontsCliOptions {
   readonly json: boolean;
 }
 
-// ProvidedFont (pdf-codec, re-exported by documents.js) carries `bytes` directly, with no `byteLength` field of its own -- computed here rather than exposing the raw font bytes themselves, which no caller of this command's summary output has asked for and which would bloat --json output by however large the embedded face is.
+// ProvidedFont (pdf-codec, re-exported by documents.js) carries `bytes` directly, with no `byteLength` field of its own — computed here rather than exposing the raw font bytes themselves, which no caller of this command's summary output has asked for and which would bloat --json output by however large the embedded face is.
 interface FontFaceSummary {
   readonly family: string;
   readonly bold: boolean;
@@ -39,7 +39,7 @@ async function runFonts(
     }
 
     const inputBytes = await readInput(input, { signal });
-    // extractSourceFontsForFormat itself rejects a format with no source-embedded font concept (xlsx, pdf, markdown, odf), naming the six it supports -- no separate isFontSourceFormat guard needed here any more.
+    // extractSourceFontsForFormat itself rejects a format with no source-embedded font concept (xlsx, pdf, markdown, odf), naming the six it supports — no separate isFontSourceFormat guard needed here any more.
     const faces = extractSourceFontsForFormat(
       format,
       new Uint8Array(inputBytes),
@@ -68,7 +68,7 @@ async function runFonts(
         .filter((value) => value !== undefined)
         .join(" ");
       process.stdout.write(
-        `${face.family}${style === "" ? "" : ` (${style})`} -- ${face.byteLength} bytes\n`,
+        `${face.family}${style === "" ? "" : ` (${style})`} — ${face.byteLength} bytes\n`,
       );
     }
     return EXIT_SUCCESS;

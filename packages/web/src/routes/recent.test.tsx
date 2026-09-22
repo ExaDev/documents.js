@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { mountWithMantine } from "../test/mountComponent";
 
-// Stands in for the real RecentFilesPanel (already covered by its own dedicated test suite): RecentPage's own logic -- the page heading and layout wrapper around the panel -- is what this file exercises.
+// Stands in for the real RecentFilesPanel (already covered by its own dedicated test suite): RecentPage's own logic — the page heading and layout wrapper around the panel — is what this file exercises.
 vi.mock("../ui/RecentFilesPanel", () => ({
   RecentFilesPanel: () => <div data-testid="recent-files-panel" />,
 }));

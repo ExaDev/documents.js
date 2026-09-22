@@ -9,7 +9,7 @@ import { CARLITO_BOLDITALIC_FONT_DEFLATED_BASE64 } from "./carlito-bolditalic";
 import { CARLITO_ITALIC_FONT_DEFLATED_BASE64 } from "./carlito-italic";
 import { CARLITO_REGULAR_FONT_DEFLATED_BASE64 } from "./carlito-regular";
 
-// Each asset below is a real, vendored TrueType font (see assets/fonts/{carlito,caladea}/NOTICE.md for source and licence), DEFLATE-compressed and base64-encoded by scripts/generate-text-font-assets.mjs. This test proves the round trip end to end -- base64-decode, inflate, and check the result is a genuine sfnt with a sane table directory -- rather than merely asserting the exported string is non-empty.
+// Each asset below is a real, vendored TrueType font (see assets/fonts/{carlito,caladea}/NOTICE.md for source and licence), DEFLATE-compressed and base64-encoded by scripts/generate-text-font-assets.mjs. This test proves the round trip end to end — base64-decode, inflate, and check the result is a genuine sfnt with a sane table directory — rather than merely asserting the exported string is non-empty.
 const ASSETS = [
   { name: "Carlito Regular", base64: CARLITO_REGULAR_FONT_DEFLATED_BASE64 },
   { name: "Carlito Bold", base64: CARLITO_BOLD_FONT_DEFLATED_BASE64 },

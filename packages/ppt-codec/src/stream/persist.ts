@@ -4,7 +4,7 @@ import { RT_PersistDirectoryAtom, RT_UserEditAtom } from "../record/types";
 
 // The incremental-save layer: a .ppt file's PowerPoint Document stream is a sequence of appended user edits, each one a persist directory plus whatever persist objects that edit rewrote, and the newest edit's directory decides where every live object actually is. Nothing else in this package can find a single record until this resolves, which is why the persist directory is built before any content is read rather than lazily on first reference. [MS-PPT] 2.3.3 UserEditAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/3ffb3fab-95de-4873-98aa-d508fbbac981 [MS-PPT] 2.3.4 PersistDirectoryAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/d10a093d-860f-409c-b065-aeb24b830505 [MS-PPT] 2.3.5 PersistDirectoryEntry: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/6214b5a6-7ca2-4a86-8a0e-5fd3d3eff1c9 [MS-PPT] 2.1.2 PowerPoint Document Stream, whose "live record" process this file implements Part 1 and half of Part 2 of: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/1fc22d56-28f9-4818-bd45-67c2bf721ccf
 
-// [MS-PPT] 2.3.3: "rh.recLen MUST be 0x0000001C or 0x00000020" -- the shorter form omits encryptSessionPersistIdRef, and the record's own length is the only thing that says which form it is. There is no flag bit.
+// [MS-PPT] 2.3.3: "rh.recLen MUST be 0x0000001C or 0x00000020" — the shorter form omits encryptSessionPersistIdRef, and the record's own length is the only thing that says which form it is. There is no flag bit.
 const USER_EDIT_LEN_WITHOUT_ENCRYPT_SESSION = 0x0000001c;
 const USER_EDIT_LEN_WITH_ENCRYPT_SESSION = 0x00000020;
 
@@ -96,11 +96,11 @@ export function readPersistDirectoryAtom(
 export interface PersistDirectory {
   // Every live persist identifier mapped to its offset in the PowerPoint Document stream.
   readonly directory: ReadonlyMap<number, number>;
-  // The newest user edit -- the one CurrentUserAtom pointed at, whose docPersistIdRef names the live DocumentContainer.
+  // The newest user edit — the one CurrentUserAtom pointed at, whose docPersistIdRef names the live DocumentContainer.
   readonly currentEdit: UserEdit;
 }
 
-// Implements [MS-PPT] 2.1.2's Part 1 verbatim: walk the UserEditAtom chain back from the current edit collecting each edit's PersistDirectoryAtom, then apply those directories oldest-first so a newer edit's entry replaces an older one's for the same persist identifier. Applying them in the order they were found -- newest first -- would invert that and resurrect superseded objects.
+// Implements [MS-PPT] 2.1.2's Part 1 verbatim: walk the UserEditAtom chain back from the current edit collecting each edit's PersistDirectoryAtom, then apply those directories oldest-first so a newer edit's entry replaces an older one's for the same persist identifier. Applying them in the order they were found — newest first — would invert that and resurrect superseded objects.
 export function buildPersistDirectory(
   streamBytes: Uint8Array<ArrayBuffer>,
   offsetToCurrentEdit: number,

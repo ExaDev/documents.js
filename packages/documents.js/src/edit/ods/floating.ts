@@ -26,10 +26,10 @@ import {
   ROW_TAG,
 } from "../odf-repeated-runs";
 
-// A floating draw:frame in a spreadsheet (an image, or an embedded OLE sub-object) is a direct child of table:table's own table:shapes wrapper -- NOT of office:spreadsheet, and NOT anchored inline in any cell's own text:p the way a docx/odt drawing can be. Confirmed against the OASIS ODF 1.3 RelaxNG content model for table:table: table:shapes (when present) precedes every table:table-column/table:table-header-columns/table:table-row/table:table-header-rows group -- this editor never writes table:table-source/office:dde-source/table:scenario (the only elements that could precede table:shapes), so table:shapes is always tableElement's own first child. svg:x/svg:y/svg:width/svg:height inside are absolute, relative to the table's own top-left origin -- the same convention src/edit/odp/shape.ts's buildImageFrame already uses for a slide, just resolved here from a ContentSheetImage's own anchorRow/anchorColumn/offsetXPt/offsetYPt rather than accepted as an already-absolute Box, since that is the shape document-schema.js's ContentSheetImage models a spreadsheet anchor with (a Box has no ROW/COLUMN concept at all).
+// A floating draw:frame in a spreadsheet (an image, or an embedded OLE sub-object) is a direct child of table:table's own table:shapes wrapper — NOT of office:spreadsheet, and NOT anchored inline in any cell's own text:p the way a docx/odt drawing can be. Confirmed against the OASIS ODF 1.3 RelaxNG content model for table:table: table:shapes (when present) precedes every table:table-column/table:table-header-columns/table:table-row/table:table-header-rows group — this editor never writes table:table-source/office:dde-source/table:scenario (the only elements that could precede table:shapes), so table:shapes is always tableElement's own first child. svg:x/svg:y/svg:width/svg:height inside are absolute, relative to the table's own top-left origin — the same convention src/edit/odp/shape.ts's buildImageFrame already uses for a slide, just resolved here from a ContentSheetImage's own anchorRow/anchorColumn/offsetXPt/offsetYPt rather than accepted as an already-absolute Box, since that is the shape document-schema.js's ContentSheetImage models a spreadsheet anchor with (a Box has no ROW/COLUMN concept at all).
 const SHAPES_TAG = "table:shapes";
 
-// LibreOffice Calc's own default new-column-width/new-row-height, matching src/layout/sheets.ts's own DEFAULT_COLUMN_WIDTH_PT/DEFAULT_ROW_HEIGHT_PT exactly (duplicated here rather than imported: src/layout/* is a strictly outward/upward dependency from src/edit/*, per this package's own layered-architecture convention -- see the README's own dependency-direction note -- so a layout-engine constant is mirrored locally, the same choice print-settings.ts's own DEFAULT_MARGIN_PT already makes for scaffold.ts's identical value). Used only for a column/row index beyond every table:table-column/table:table-row this sheet has declared -- real Calc falls back to its own default width/height for exactly that case too.
+// LibreOffice Calc's own default new-column-width/new-row-height, matching src/layout/sheets.ts's own DEFAULT_COLUMN_WIDTH_PT/DEFAULT_ROW_HEIGHT_PT exactly (duplicated here rather than imported: src/layout/* is a strictly outward/upward dependency from src/edit/*, per this package's own layered-architecture convention — see the README's own dependency-direction note — so a layout-engine constant is mirrored locally, the same choice print-settings.ts's own DEFAULT_MARGIN_PT already makes for scaffold.ts's identical value). Used only for a column/row index beyond every table:table-column/table:table-row this sheet has declared — real Calc falls back to its own default width/height for exactly that case too.
 const DEFAULT_COLUMN_WIDTH_PT = 64;
 const DEFAULT_ROW_HEIGHT_PT = 15;
 
@@ -50,7 +50,7 @@ function isHiddenElement(node: XmlElement): boolean {
   return attr(node, "table:visibility") === "collapse";
 }
 
-// Reads a table:table-column element's own resolved width -- mirroring odf.js's own private readColumnLayout (typed/ods/read.ts) exactly: 0 for a column that carries a table:style-name but no style:column-width (or none at all), never a fabricated default. A hidden column (table:visibility="collapse") always contributes 0 regardless of its own declared width, matching how a real spreadsheet application visually collapses a hidden column's own space when positioning anything anchored past it.
+// Reads a table:table-column element's own resolved width — mirroring odf.js's own private readColumnLayout (typed/ods/read.ts) exactly: 0 for a column that carries a table:style-name but no style:column-width (or none at all), never a fabricated default. A hidden column (table:visibility="collapse") always contributes 0 regardless of its own declared width, matching how a real spreadsheet application visually collapses a hidden column's own space when positioning anything anchored past it.
 function resolvedColumnWidthPt(
   pkg: Package,
   columnElement: XmlElement,
@@ -93,7 +93,7 @@ function resolvedRowHeightPt(pkg: Package, rowElement: XmlElement): number {
   return heightValue === undefined ? 0 : (parseOdfLength(heightValue) ?? 0);
 }
 
-// Sums the resolved width of every declared column strictly before `anchorColumn` (header-wrapper-aware, so a repeatColumns-wrapped column still counts), falling back to DEFAULT_COLUMN_WIDTH_PT per position once the walk runs past every column this sheet has declared -- the absolute x-origin a ContentSheetImage/embeddedObject's own anchorColumn + offsetXPt is resolved against.
+// Sums the resolved width of every declared column strictly before `anchorColumn` (header-wrapper-aware, so a repeatColumns-wrapped column still counts), falling back to DEFAULT_COLUMN_WIDTH_PT per position once the walk runs past every column this sheet has declared — the absolute x-origin a ContentSheetImage/embeddedObject's own anchorColumn + offsetXPt is resolved against.
 function cumulativeColumnOffsetPt(
   pkg: Package,
   tableElement: XmlElement,
@@ -166,7 +166,7 @@ function buildAbsoluteFrame(
   );
 }
 
-// Adds a raster image to `tableElement`, anchored at (image.anchorRow, image.anchorColumn) plus (image.offsetXPt, image.offsetYPt) -- resolving that anchor to an absolute svg:x/svg:y via cumulativeColumnOffsetPt/cumulativeRowOffsetPt above, since a spreadsheet's own floating draw:frame has no cell-relative anchoring attribute of its own the way an OOXML worksheet's xdr:twoCellAnchor does (see this file's own top-of-file note). Reuses addImageMedia (src/odf-package/media.ts) for the binary part + manifest entry, exactly as src/edit/odp/image.ts's insertImageFrameMedia does for a slide.
+// Adds a raster image to `tableElement`, anchored at (image.anchorRow, image.anchorColumn) plus (image.offsetXPt, image.offsetYPt) — resolving that anchor to an absolute svg:x/svg:y via cumulativeColumnOffsetPt/cumulativeRowOffsetPt above, since a spreadsheet's own floating draw:frame has no cell-relative anchoring attribute of its own the way an OOXML worksheet's xdr:twoCellAnchor does (see this file's own top-of-file note). Reuses addImageMedia (src/odf-package/media.ts) for the binary part + manifest entry, exactly as src/edit/odp/image.ts's insertImageFrameMedia does for a slide.
 export function insertSheetImage(
   pkg: Package,
   tableElement: XmlElement,
@@ -193,7 +193,7 @@ export function insertSheetImage(
   ensureTableShapes(tableElement).children.push(frame);
 }
 
-// Adds a real embedded ODF sub-object to `tableElement`, at object.frame's own already-absolute position (unlike ContentSheetImage, ContentEmbeddedObject.frame is a Box -- see document-schema.js's own ContentEmbeddedObjectSchema -- so no anchor resolution is needed here). A formula reuses addFormulaObject (src/odf-package/formula.ts) exactly as src/edit/odt/formula.ts's insertFormulaFrameMedia does for an odt paragraph; every other non-chart kind serialises through odf.js's own writeEmbeddedObject (typed/draw/embedded-write.ts, ExaDev/documents.js#972), which builds the nested "Object N/" package and returns the draw:object element keyed to it. The chart kind alone stays a documented gap: a chart sub-document is quarantined residue by the family's own #719 decision, and odf.js's writer refuses to fabricate one.
+// Adds a real embedded ODF sub-object to `tableElement`, at object.frame's own already-absolute position (unlike ContentSheetImage, ContentEmbeddedObject.frame is a Box — see document-schema.js's own ContentEmbeddedObjectSchema — so no anchor resolution is needed here). A formula reuses addFormulaObject (src/odf-package/formula.ts) exactly as src/edit/odt/formula.ts's insertFormulaFrameMedia does for an odt paragraph; every other non-chart kind serialises through odf.js's own writeEmbeddedObject (typed/draw/embedded-write.ts, ExaDev/documents.js#972), which builds the nested "Object N/" package and returns the draw:object element keyed to it. The chart kind alone stays a documented gap: a chart sub-document is quarantined residue by the family's own #719 decision, and odf.js's writer refuses to fabricate one.
 export function insertSheetEmbeddedObject(
   pkg: Package,
   tableElement: XmlElement,

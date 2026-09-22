@@ -23,7 +23,7 @@ import { parsePackage } from "../../package-io/read";
 import { readOds, readOdsContent } from "./read";
 import { normaliseOdsContent, writeOds, writeOdsContent } from "./write";
 
-// The write side's correctness suite: what writeOdsContent produces reads back as the document it was given, mirroring typed/odt/write-round-trip.test.ts's own discipline exactly. THE LAW: normaliseOdsContent(readOdsContent(writeOdsContent(document))) equals normaliseOdsContent(document), for every document the writer accepts -- normalisation applied to BOTH sides, so it is a genuine equivalence rather than a licence to discard whatever the writer happened to lose. The sibling suite (write.test.ts) pins the actual XML shapes this one cannot see through its own reader's own eyes.
+// The write side's correctness suite: what writeOdsContent produces reads back as the document it was given, mirroring typed/odt/write-round-trip.test.ts's own discipline exactly. THE LAW: normaliseOdsContent(readOdsContent(writeOdsContent(document))) equals normaliseOdsContent(document), for every document the writer accepts — normalisation applied to BOTH sides, so it is a genuine equivalence rather than a licence to discard whatever the writer happened to lose. The sibling suite (write.test.ts) pins the actual XML shapes this one cannot see through its own reader's own eyes.
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 
@@ -142,7 +142,7 @@ describe("writeOdsContent round trip", () => {
     });
   });
 
-  it("refuses a 'dateTime' cell by name -- readOdsContent can never produce this kind", () => {
+  it("refuses a 'dateTime' cell by name — readOdsContent can never produce this kind", () => {
     const cells: ContentSheetCell[] = [
       {
         row: 0,
@@ -156,7 +156,7 @@ describe("writeOdsContent round trip", () => {
     ).toThrow(/dateTime/);
   });
 
-  it("refuses an 'error' cell by name -- readOdsContent can never produce this kind", () => {
+  it("refuses an 'error' cell by name — readOdsContent can never produce this kind", () => {
     const cells: ContentSheetCell[] = [
       {
         row: 0,
@@ -933,7 +933,7 @@ describe("writeOdsContent round trip: cell comments (ExaDev/documents.js#949)", 
     expectRoundTrip(documentOf([sheetOf("Sheet1", cells)]));
   });
 
-  it("round-trips a comment on an otherwise genuinely empty cell -- a note pinned to a cell with no value, formula, or text of its own", () => {
+  it("round-trips a comment on an otherwise genuinely empty cell — a note pinned to a cell with no value, formula, or text of its own", () => {
     const cells: ContentSheetCell[] = [
       {
         row: 3,

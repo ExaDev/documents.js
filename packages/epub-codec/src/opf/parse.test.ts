@@ -211,7 +211,7 @@ describe("parseOpf", () => {
         <spine/>
       </package>`,
     );
-    // toEqual alone would not catch a title/language/createdIso key present with an undefined value (it ignores undefined properties on both sides) -- hasOwn checks the key's actual presence.
+    // toEqual alone would not catch a title/language/createdIso key present with an undefined value (it ignores undefined properties on both sides) — hasOwn checks the key's actual presence.
     expect(Object.hasOwn(metadata, "title")).toBe(false);
     expect(Object.hasOwn(metadata, "language")).toBe(false);
     expect(Object.hasOwn(metadata, "createdIso")).toBe(false);

@@ -13,13 +13,13 @@ export default packageLintConfig({
     "tsdoc/syntax",
   ],
   isomorphic: true,
-  // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why -- this package's own BIFF8 record readers/writers genuinely mutate a large number of array/object parameters in place. Tracked for burn-down.
+  // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why — this package's own BIFF8 record readers/writers genuinely mutate a large number of array/object parameters in place. Tracked for burn-down.
   preferReadonlyParams: "off",
   additionalRestrictedImportPatterns: [
     {
       group: ["xlsx", "xlsx/**", "node-xlsx", "exceljs", "cfb", "cfb/**"],
       message:
-        "Hand-write the BIFF8 record parsing against [MS-XLS] instead of depending on a spreadsheet library -- see README Architecture. The compound-file layer comes from archive-codec.",
+        "Hand-write the BIFF8 record parsing against [MS-XLS] instead of depending on a spreadsheet library — see README Architecture. The compound-file layer comes from archive-codec.",
     },
   ],
 });

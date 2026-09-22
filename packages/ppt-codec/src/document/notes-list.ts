@@ -2,7 +2,7 @@ import { PptFormatError } from "../errors";
 import { type PptRecord, childRecords } from "../record/tree";
 import { RT_SlideListWithText, RT_SlidePersistAtom } from "../record/types";
 
-// NotesListWithTextContainer: the document's list of notes slides. Structurally the notes-side twin of document/slide-list.ts, but with two differences that make it its own module rather than a parameter of that one. The container carries nothing but NotesPersistAtom records -- unlike SlideListWithTextContainer, whose grammar interleaves the placeholder texts a slide's own OutlineTextRefAtom points back into -- so there is no text-grouping pass here, and a notes slide's text is therefore always stored on its own shapes rather than in this list. And the atom's own fields differ from SlidePersistAtom's despite sharing RT_SlidePersistAtom and its 0x14 length: the field SlidePersistAtom spends on cTexts is reserved here, and the identifier at offset 12 is a NotesId rather than a SlideId. [MS-PPT] 2.4.14.6 NotesListWithTextContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/55453e37-0674-4703-bd8d-fcaba335f840 [MS-PPT] 2.4.14.7 NotesPersistAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/b595ad14-a46c-4fcc-b4bd-7298712043a4
+// NotesListWithTextContainer: the document's list of notes slides. Structurally the notes-side twin of document/slide-list.ts, but with two differences that make it its own module rather than a parameter of that one. The container carries nothing but NotesPersistAtom records — unlike SlideListWithTextContainer, whose grammar interleaves the placeholder texts a slide's own OutlineTextRefAtom points back into — so there is no text-grouping pass here, and a notes slide's text is therefore always stored on its own shapes rather than in this list. And the atom's own fields differ from SlidePersistAtom's despite sharing RT_SlidePersistAtom and its 0x14 length: the field SlidePersistAtom spends on cTexts is reserved here, and the identifier at offset 12 is a NotesId rather than a SlideId. [MS-PPT] 2.4.14.6 NotesListWithTextContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/55453e37-0674-4703-bd8d-fcaba335f840 [MS-PPT] 2.4.14.7 NotesPersistAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/b595ad14-a46c-4fcc-b4bd-7298712043a4
 
 // [MS-PPT] 2.4.14.7: "rh.recLen MUST be 0x00000014."
 const NOTES_PERSIST_ATOM_LEN = 0x00000014;
@@ -14,7 +14,7 @@ export interface NotesPersist {
   readonly notesId: number;
 }
 
-// Reads the notes list's entries. [MS-PPT] 3.5.3's own worked example states that, unlike the slide list, "the order of the NotesPersistAtom records is not meaningful" -- a notes slide is associated with its presentation slide by the slideIdRef field of its own NotesContainer, never by its position here -- so this returns the entries as stated and leaves the association to document/notes.ts.
+// Reads the notes list's entries. [MS-PPT] 3.5.3's own worked example states that, unlike the slide list, "the order of the NotesPersistAtom records is not meaningful" — a notes slide is associated with its presentation slide by the slideIdRef field of its own NotesContainer, never by its position here — so this returns the entries as stated and leaves the association to document/notes.ts.
 export function readNotesListWithText(
   listContainer: PptRecord,
 ): NotesPersist[] {

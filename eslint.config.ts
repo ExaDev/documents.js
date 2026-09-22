@@ -8,7 +8,7 @@ import { dataFileLintConfig } from "./eslint.shared.ts";
 /**
  * Lints the workspace root's own files: its TypeScript tooling (this config, eslint.shared.ts, prettier.config.ts, commitlint.config.ts, lint-staged.config.ts) and its data and prose (turbo.json, pnpm-workspace.yaml, the CI workflows, README.md).
  *
- * packages/** stays ignored here. Every package keeps its own eslint.config.ts, because file scoping, tsconfig wiring, and the Worker-isomorphism import bans are genuinely per-package. The JSON, Markdown, and YAML rules are shared rather than duplicated -- eslint.shared.ts exports one definition that both this config and every package's config call -- so a package's data files are linted by that package's own run, from inside its own directory, rather than by a root run that would have to walk the whole tree to find them.
+ * packages/** stays ignored here. Every package keeps its own eslint.config.ts, because file scoping, tsconfig wiring, and the Worker-isomorphism import bans are genuinely per-package. The JSON, Markdown, and YAML rules are shared rather than duplicated — eslint.shared.ts exports one definition that both this config and every package's config call — so a package's data files are linted by that package's own run, from inside its own directory, rather than by a root run that would have to walk the whole tree to find them.
  */
 export default tseslint.config(
   {
@@ -17,7 +17,7 @@ export default tseslint.config(
       "packages/**",
       "node_modules",
       ".turbo",
-      // Claude Code's own per-agent worktrees, each a full checkout of this repository nested under here. Git only knows to skip them via the user's global gitignore (~/.gitignore_global), which flat-config ESLint never consults, so without this entry a root run walks every worktree's own copy of packages/** too -- confirmed directly: dozens of stale worktrees under here turned a root `pnpm lint` into a multi-gigabyte type-aware parse that crashed Node outright under concurrent load.
+      // Claude Code's own per-agent worktrees, each a full checkout of this repository nested under here. Git only knows to skip them via the user's global gitignore (~/.gitignore_global), which flat-config ESLint never consults, so without this entry a root run walks every worktree's own copy of packages/** too — confirmed directly: dozens of stale worktrees under here turned a root `pnpm lint` into a multi-gigabyte type-aware parse that crashed Node outright under concurrent load.
       ".claude",
       "CHANGELOG.md",
       "AGENTS.md",
@@ -49,13 +49,13 @@ export default tseslint.config(
         "error",
         { fixStyle: "inline-type-imports" },
       ],
-      // Off: 39 sites across this workspace root's own tooling files are debt from the @exadev/eslint-config 2.1.2->2.12.1 bump (ExaDev/documents.js#1275) that this bump's own PR does not fix -- @typescript-eslint/no-magic-numbers (34, enabled in 2.4.0, never previously enforced here) and @typescript-eslint/strict-boolean-expressions (5, enabled in 2.9.0). See PackageLintOptions.magicNumbers and .newRuleDebt in eslint.shared.ts for the equivalent per-package mechanism; the root config has no such options since it is not built via packageLintConfig, so the same two rules are switched off directly here instead.
+      // Off: 39 sites across this workspace root's own tooling files are debt from the @exadev/eslint-config 2.1.2->2.12.1 bump (ExaDev/documents.js#1275) that this bump's own PR does not fix — @typescript-eslint/no-magic-numbers (34, enabled in 2.4.0, never previously enforced here) and @typescript-eslint/strict-boolean-expressions (5, enabled in 2.9.0). See PackageLintOptions.magicNumbers and .newRuleDebt in eslint.shared.ts for the equivalent per-package mechanism; the root config has no such options since it is not built via packageLintConfig, so the same two rules are switched off directly here instead.
       "@typescript-eslint/no-magic-numbers": "off",
       "@typescript-eslint/strict-boolean-expressions": "off",
     },
   },
   {
-    // The config files themselves call `tseslint.config()`, which typescript-eslint deprecated in favour of ESLint core's `defineConfig()`. Migrating is blocked upstream rather than by choice: `defineConfig`'s stricter `Plugin` type rejects eslint-plugin-react-hooks@7, whose `configs.flat` is a nested record of configs where ESLint's own index signature admits only a config or an array of them. packageLintConfig in eslint.shared.ts is called by the web UI's own eslint.config.ts, which registers that plugin, so `defineConfig` there fails `tsc` outright -- and the only way through is a type assertion this workspace bans. Scoped to the two config files alone, so a deprecated API anywhere in real source still reports. Revisit when eslint-plugin-react-hooks' types satisfy ESLint's `Plugin`.
+    // The config files themselves call `tseslint.config()`, which typescript-eslint deprecated in favour of ESLint core's `defineConfig()`. Migrating is blocked upstream rather than by choice: `defineConfig`'s stricter `Plugin` type rejects eslint-plugin-react-hooks@7, whose `configs.flat` is a nested record of configs where ESLint's own index signature admits only a config or an array of them. packageLintConfig in eslint.shared.ts is called by the web UI's own eslint.config.ts, which registers that plugin, so `defineConfig` there fails `tsc` outright — and the only way through is a type assertion this workspace bans. Scoped to the two config files alone, so a deprecated API anywhere in real source still reports. Revisit when eslint-plugin-react-hooks' types satisfy ESLint's `Plugin`.
     files: ["eslint.config.ts", "eslint.shared.ts"],
     rules: { "@typescript-eslint/no-deprecated": "off" },
   },
@@ -64,7 +64,7 @@ export default tseslint.config(
 
   // LAST, for the same reason as in eslint.shared.ts: this bundles eslint-config-prettier, which switches off the stylistic rules that would otherwise fight the formatter.
   //
-  // The `files` list is not cosmetic. eslint-plugin-prettier's recommended config sets no `files` of its own, which makes every path in scope a lint target -- including, in a workspace like this one, binary document fixtures and megabyte base64 font modules that ESLint would then read as text. Naming the extensions actually formatted keeps it to files a formatter has an opinion about.
+  // The `files` list is not cosmetic. eslint-plugin-prettier's recommended config sets no `files` of its own, which makes every path in scope a lint target — including, in a workspace like this one, binary document fixtures and megabyte base64 font modules that ESLint would then read as text. Naming the extensions actually formatted keeps it to files a formatter has an opinion about.
   {
     ...prettierRecommended,
     files: ["**/*.{ts,tsx,js,jsx,mjs,cjs,json,jsonc,md,yml,yaml}"],

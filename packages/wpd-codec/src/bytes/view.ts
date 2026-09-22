@@ -4,7 +4,7 @@ import { WpdFormatError } from "../errors";
 //
 // WordPerfect's own convention, stated once in the SDK's glossary and true of every field in the format: "The byte sequence of all multi-byte data types that are larger than a byte follows the Intel convention of placing the least-significant byte first." Sizes are byte (<>), short/16-bit ([]), and long/32-bit ({}), all unsigned unless a field says otherwise. Source: WPFF Document Structure, "Size Definitions".
 //
-// Deliberately not byte-codec's ByteReader: that is a purely sequential cursor built for PDF tokenising (peek/next/mark/reset) with no little-endian integer reads at all, whereas a WordPerfect prefix is random-access -- the header points at an index area, each index points at a packet elsewhere in the file, and the header points past both at the document area. Three named helpers over a DataView is the whole need; wrapping a sequential cursor to fake random access would be the larger thing, not the smaller one.
+// Deliberately not byte-codec's ByteReader: that is a purely sequential cursor built for PDF tokenising (peek/next/mark/reset) with no little-endian integer reads at all, whereas a WordPerfect prefix is random-access — the header points at an index area, each index points at a packet elsewhere in the file, and the header points past both at the document area. Three named helpers over a DataView is the whole need; wrapping a sequential cursor to fake random access would be the larger thing, not the smaller one.
 
 export function byteAt(bytes: Uint8Array, offset: number): number {
   const value = bytes[offset];

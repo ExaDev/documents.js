@@ -12,7 +12,7 @@ import { metadataFor } from "../../format/read-metadata.js";
 import { useAppDispatch, useAppState } from "../../state/context.js";
 import { anyOverlayOpen, isEditableDocument } from "../../state/types.js";
 
-// The four fields MetadataOverrides (documents.js) actually accepts -- creator/producer/createdIso/modifiedIso are real LayoutMetadata fields this screen still DISPLAYS (formatMetadataLines below, unchanged from before this screen gained write support), but they are derived/producer-stamped rather than user-authored, so editor.metadata's own setter has no field for them and this screen offers no row to edit them through.
+// The four fields MetadataOverrides (documents.js) actually accepts — creator/producer/createdIso/modifiedIso are real LayoutMetadata fields this screen still DISPLAYS (formatMetadataLines below, unchanged from before this screen gained write support), but they are derived/producer-stamped rather than user-authored, so editor.metadata's own setter has no field for them and this screen offers no row to edit them through.
 interface MetadataField {
   readonly key: "title" | "author" | "subject" | "keywords";
   readonly label: string;
@@ -25,7 +25,7 @@ const EDITABLE_FIELDS: readonly MetadataField[] = [
   { key: "keywords", label: "keywords" },
 ];
 
-// Splits a comma-separated field edit into MetadataOverrides' own keywords: string[] shape: trims each entry and drops empty ones, so "a, , b," reads back as ["a", "b"] rather than carrying stray blanks from trailing/doubled commas -- the same forgiving parse a human typing a quick comma list expects, not a strict CSV reader.
+// Splits a comma-separated field edit into MetadataOverrides' own keywords: string[] shape: trims each entry and drops empty ones, so "a, , b," reads back as ["a", "b"] rather than carrying stray blanks from trailing/doubled commas — the same forgiving parse a human typing a quick comma list expects, not a strict CSV reader.
 function parseKeywords(text: string): string[] {
   return text
     .split(",")
@@ -33,7 +33,7 @@ function parseKeywords(text: string): string[] {
     .filter((entry) => entry.length > 0);
 }
 
-// Builds the one-field MetadataOverrides a field edit commits -- an explicit switch rather than a computed { [field]: text } property, since editor.metadata's own partial-merge semantics (documents.js's mergeMetadata) mean only the field actually named here changes; every other field, edited or not, is left exactly as the document already had it.
+// Builds the one-field MetadataOverrides a field edit commits — an explicit switch rather than a computed { [field]: text } property, since editor.metadata's own partial-merge semantics (documents.js's mergeMetadata) mean only the field actually named here changes; every other field, edited or not, is left exactly as the document already had it.
 function overridesFor(
   field: MetadataField["key"],
   text: string,
@@ -50,7 +50,7 @@ function overridesFor(
   }
 }
 
-// A real edit flow over editor.metadata's own setter (ExaDev/documents.js#933), reachable for any open document ('m' from app.tsx's own shell-level global useInput). Only EditableOpenDocument formats (docx/pptx/odt/odp/ods/odg/pdf) carry that setter -- markdown and every read-only preview format (odb, xlsx, csv, svg, rtf, wpd, doc, xls, ppt) still show their current metadata, just with no way to change it here, exactly as before this screen gained write support.
+// A real edit flow over editor.metadata's own setter (ExaDev/documents.js#933), reachable for any open document ('m' from app.tsx's own shell-level global useInput). Only EditableOpenDocument formats (docx/pptx/odt/odp/ods/odg/pdf) carry that setter — markdown and every read-only preview format (odb, xlsx, csv, svg, rtf, wpd, doc, xls, ppt) still show their current metadata, just with no way to change it here, exactly as before this screen gained write support.
 export function MetadataScreen(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();

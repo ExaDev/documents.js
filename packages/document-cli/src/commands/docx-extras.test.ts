@@ -19,7 +19,7 @@ import {
   DOCX_EXTRAS_FIXTURE,
 } from "../test-support/docx-extras-fixture";
 
-// Drives the real assembled commander program against a real docx fixture (test-support/docx-extras-fixture.ts), not formatDocxExtrasLines in isolation -- that half is covered by src/docx-extras-format.test.ts. What this file proves is the wiring: that `docx-extras` is registered under that name, that it reads and decodes a genuine docx through ooxml.js's decodePackage (re-exported from documents.js) rather than odf.js's same-named function, that the structure reaches stdout, and that `--json` emits the bare DocxExtras object verbatim.
+// Drives the real assembled commander program against a real docx fixture (test-support/docx-extras-fixture.ts), not formatDocxExtrasLines in isolation — that half is covered by src/docx-extras-format.test.ts. What this file proves is the wiring: that `docx-extras` is registered under that name, that it reads and decodes a genuine docx through ooxml.js's decodePackage (re-exported from documents.js) rather than odf.js's same-named function, that the structure reaches stdout, and that `--json` emits the bare DocxExtras object verbatim.
 
 let savedExitCode: typeof process.exitCode;
 let workspace: string;
@@ -127,7 +127,7 @@ describe("docx-extras", () => {
         { id: "1", text: DOCX_EXTRAS_FIXTURE.commentWithoutAuthorText },
       ],
       footnotes: [{ id: "1", text: DOCX_EXTRAS_FIXTURE.footnoteText }],
-      // The fixture writes word/header1.xml/word/footer1.xml with no relationships at all, so these parts surface through the unreferenced-part walk; its scaffold styles.xml has no docDefaults, so the part runs resolve bare. sectionHeaderFooters is positional -- createDocx's single sectPr spells no references, hence [{}].
+      // The fixture writes word/header1.xml/word/footer1.xml with no relationships at all, so these parts surface through the unreferenced-part walk; its scaffold styles.xml has no docDefaults, so the part runs resolve bare. sectionHeaderFooters is positional — createDocx's single sectPr spells no references, hence [{}].
       headerFooterParts: [
         {
           path: "word/footer1.xml",

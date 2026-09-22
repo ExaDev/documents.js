@@ -2,7 +2,7 @@ import { parseCoverage } from "./ot-layout-common";
 import type { SfntFont } from "./sfnt";
 import { i16, sfntTableBytes, u16 } from "./sfnt";
 
-// Parses the OpenType 'MATH' table (Microsoft's own spec: https://learn.microsoft.com/en-us/typography/opentype/spec/math) -- the MathConstants subtable in full (every named field, even the handful this package's own MathFontMetrics interface doesn't currently expose, since reading them all costs nothing extra once the table is being walked), the MathGlyphInfo subtable's two per-glyph maps this package needs (MathItalicsCorrectionInfo and MathTopAccentAttachment), and the MathVariants subtable in full: both per-axis glyph-construction lists (the pre-built larger-variant sequences) and their GlyphAssembly part recipes. Table offsets below were derived from and cross-checked against the actual vendored STIXTwoMath-Regular.otf's own bytes while building this module, not transcribed from the spec alone.
+// Parses the OpenType 'MATH' table (Microsoft's own spec: https://learn.microsoft.com/en-us/typography/opentype/spec/math) — the MathConstants subtable in full (every named field, even the handful this package's own MathFontMetrics interface doesn't currently expose, since reading them all costs nothing extra once the table is being walked), the MathGlyphInfo subtable's two per-glyph maps this package needs (MathItalicsCorrectionInfo and MathTopAccentAttachment), and the MathVariants subtable in full: both per-axis glyph-construction lists (the pre-built larger-variant sequences) and their GlyphAssembly part recipes. Table offsets below were derived from and cross-checked against the actual vendored STIXTwoMath-Regular.otf's own bytes while building this module, not transcribed from the spec alone.
 
 export interface MathConstants {
   readonly scriptPercentScaleDown: number; // already divided by 100 (0..1)
@@ -37,7 +37,7 @@ export interface MathConstants {
   readonly radicalDegreeBottomRaisePercent: number; // 0..100, NOT pre-divided (see MathFontMetrics.radicalDegreeBottomRaisePercent's own comment)
 }
 
-// The MathConstants subtable's own field order (Microsoft OpenType MATH spec, "MathConstants Table"): four leading int16/UFWORD scalars, then 51 MathValueRecords (each a 2-byte signed value plus a 2-byte device-table offset this module ignores -- STIX Two Math, like the overwhelming majority of static, non-variable math fonts, sets every one of these to 0), then one trailing int16 percentage. MATH_VALUE_RECORD_INDEX names every MathValueRecord this module reads by its own position in that sequence (0-based, immediately after the four leading scalars) -- verified against the real vendored font while this module was built, not transcribed from the spec alone.
+// The MathConstants subtable's own field order (Microsoft OpenType MATH spec, "MathConstants Table"): four leading int16/UFWORD scalars, then 51 MathValueRecords (each a 2-byte signed value plus a 2-byte device-table offset this module ignores — STIX Two Math, like the overwhelming majority of static, non-variable math fonts, sets every one of these to 0), then one trailing int16 percentage. MATH_VALUE_RECORD_INDEX names every MathValueRecord this module reads by its own position in that sequence (0-based, immediately after the four leading scalars) — verified against the real vendored font while this module was built, not transcribed from the spec alone.
 const MATH_VALUE_RECORD_INDEX = {
   axisHeight: 1,
   subscriptShiftDown: 4,
@@ -195,13 +195,13 @@ function parseMathGlyphInfo(
   };
 }
 
-// One pre-built, fixed-size larger form of a stretchy glyph (a MathGlyphVariantRecord): the glyph to draw, plus how far it extends along the stretch axis -- its own height for a vertical construction (a tall parenthesis, brace, or radical sign), its own width for a horizontal one (an over/under-brace). `advanceMeasurement` is in font design units, and is the value a variant-selection pass compares against its target size; it is NOT the glyph's hmtx advance width unless the axis happens to be horizontal.
+// One pre-built, fixed-size larger form of a stretchy glyph (a MathGlyphVariantRecord): the glyph to draw, plus how far it extends along the stretch axis — its own height for a vertical construction (a tall parenthesis, brace, or radical sign), its own width for a horizontal one (an over/under-brace). `advanceMeasurement` is in font design units, and is the value a variant-selection pass compares against its target size; it is NOT the glyph's hmtx advance width unless the axis happens to be horizontal.
 export interface MathGlyphVariant {
   readonly glyphId: number;
   readonly advanceMeasurement: number; // design units, along the construction's own stretch axis
 }
 
-// One reusable piece of a GlyphAssembly recipe (a GlyphPartRecord). `startConnectorLength`/`endConnectorLength` are how much of this part's own extent, at each end, is flat connecting material that may be overlapped with a neighbouring part without changing the drawn shape -- the metadata that makes a seamless join possible. `fullAdvance` is the part's own full extent along the stretch axis. An extender part is the one repeated as many times as needed to reach an arbitrary size; every other part is placed exactly once.
+// One reusable piece of a GlyphAssembly recipe (a GlyphPartRecord). `startConnectorLength`/`endConnectorLength` are how much of this part's own extent, at each end, is flat connecting material that may be overlapped with a neighbouring part without changing the drawn shape — the metadata that makes a seamless join possible. `fullAdvance` is the part's own full extent along the stretch axis. An extender part is the one repeated as many times as needed to reach an arbitrary size; every other part is placed exactly once.
 export interface MathGlyphPart {
   readonly glyphId: number;
   readonly startConnectorLength: number; // design units
@@ -210,7 +210,7 @@ export interface MathGlyphPart {
   readonly isExtender: boolean;
 }
 
-// A GlyphAssembly table: the recipe for building an arbitrarily large form of a stretchy glyph out of repeatable parts, used when no pre-built variant is large enough. Parts are listed in the order they are laid down along the stretch axis -- bottom to top for a vertical assembly, left to right for a horizontal one (spec, "GlyphAssembly Table") -- which is exactly the order assembleStretchyGlyph (math-stretch.ts) places them in.
+// A GlyphAssembly table: the recipe for building an arbitrarily large form of a stretchy glyph out of repeatable parts, used when no pre-built variant is large enough. Parts are listed in the order they are laid down along the stretch axis — bottom to top for a vertical assembly, left to right for a horizontal one (spec, "GlyphAssembly Table") — which is exactly the order assembleStretchyGlyph (math-stretch.ts) places them in.
 export interface MathGlyphAssembly {
   readonly italicsCorrection: number; // design units
   readonly parts: readonly MathGlyphPart[];
@@ -222,7 +222,7 @@ export interface MathGlyphConstruction {
   readonly assembly?: MathGlyphAssembly;
 }
 
-// The MathVariants subtable: per-axis stretchy-glyph constructions, keyed by the base glyph ID they stretch. `minConnectorOverlap` is the font's own floor on how much two adjacent assembly parts must overlap -- overlapping by less leaves a visible seam where the two outlines fail to meet, so it is a lower bound on the overlap an assembly may use, never a target.
+// The MathVariants subtable: per-axis stretchy-glyph constructions, keyed by the base glyph ID they stretch. `minConnectorOverlap` is the font's own floor on how much two adjacent assembly parts must overlap — overlapping by less leaves a visible seam where the two outlines fail to meet, so it is a lower bound on the overlap an assembly may use, never a target.
 export interface MathVariants {
   readonly minConnectorOverlap: number; // design units
   readonly vertical: ReadonlyMap<number, MathGlyphConstruction>;

@@ -1,11 +1,11 @@
-// Pure dispatch logic for the documents.js launcher bin (src/bin.ts), split out so it is testable in isolation and free of any Node-only API -- the bin itself reads process.argv / process.env and spawns the child process, this module only decides which companion package and arguments to hand the runner. `userAgent` is injected rather than read from `process.env` here because `process` is not in the WebWorker lib this package's runtime src is typechecked against; the bin (typechecked under tsconfig.node.json) owns the one read.
+// Pure dispatch logic for the documents.js launcher bin (src/bin.ts), split out so it is testable in isolation and free of any Node-only API — the bin itself reads process.argv / process.env and spawns the child process, this module only decides which companion package and arguments to hand the runner. `userAgent` is injected rather than read from `process.env` here because `process` is not in the WebWorker lib this package's runtime src is typechecked against; the bin (typechecked under tsconfig.node.json) owns the one read.
 
 export interface BinDispatch {
   /** The npm package the launcher resolves and invokes. */
   readonly pkg: "document-cli" | "document-mcp";
-  /** The executable to spawn -- each JS package manager's own download-and-run command. */
+  /** The executable to spawn — each JS package manager's own download-and-run command. */
   readonly command: "npx" | "pnpm" | "yarn" | "bunx";
-  /** Arguments after the command itself -- begins with the manager's fetch flags, then the package name, then the passthrough args. */
+  /** Arguments after the command itself — begins with the manager's fetch flags, then the package name, then the passthrough args. */
   readonly runnerArgs: readonly string[];
 }
 
@@ -26,11 +26,11 @@ const RUNNERS: Readonly<Record<PackageManager, RunnerSpec>> = {
 };
 
 function detectPackageManager(userAgent: string | undefined): PackageManager {
-  // No npm_config_user_agent at all (Deno never sets it; running the bin via bare `node` sets nothing) falls back to npm exactly like every other unrecognised value below -- handled as its own branch, rather than defaulting `userAgent` to an empty string first, so there is no fallback string literal whose own value is unobservable (every one of the startsWith checks below is false for it) and therefore untestable.
+  // No npm_config_user_agent at all (Deno never sets it; running the bin via bare `node` sets nothing) falls back to npm exactly like every other unrecognised value below — handled as its own branch, rather than defaulting `userAgent` to an empty string first, so there is no fallback string literal whose own value is unobservable (every one of the startsWith checks below is false for it) and therefore untestable.
   if (userAgent === undefined) return "npm";
 
   if (userAgent.startsWith("yarn/")) {
-    // Yarn classic (1.x) has no `dlx` subcommand -- it is Yarn Berry (2+) only -- so classic is treated as npm and runs through npx rather than a command that fails.
+    // Yarn classic (1.x) has no `dlx` subcommand — it is Yarn Berry (2+) only — so classic is treated as npm and runs through npx rather than a command that fails.
     return userAgent.startsWith("yarn/1.") ? "npm" : "yarn";
   }
   if (userAgent.startsWith("pnpm/")) return "pnpm";
@@ -40,7 +40,7 @@ function detectPackageManager(userAgent: string | undefined): PackageManager {
 }
 
 /**
- * Resolves a launcher invocation into the companion package to run and the runner argument list to spawn it with. A bare invocation or any args that are not the `mcp` dispatch token run the interactive CLI; `mcp` launches the server. `cli` is the explicit escape hatch for the one collision a dispatcher that reserves a subcommand name necessarily has: a leading bare `mcp` is intercepted as "launch the server", so targeting a CLI command on a file literally named `mcp` needs `documents.js cli mcp`. document-cli's own commands never start with `mcp`, so the collision is narrow in practice -- the same "dispatcher reserves a subcommand name" model `git` uses.
+ * Resolves a launcher invocation into the companion package to run and the runner argument list to spawn it with. A bare invocation or any args that are not the `mcp` dispatch token run the interactive CLI; `mcp` launches the server. `cli` is the explicit escape hatch for the one collision a dispatcher that reserves a subcommand name necessarily has: a leading bare `mcp` is intercepted as "launch the server", so targeting a CLI command on a file literally named `mcp` needs `documents.js cli mcp`. document-cli's own commands never start with `mcp`, so the collision is narrow in practice — the same "dispatcher reserves a subcommand name" model `git` uses.
  */
 export function resolveBinDispatch(
   argv: readonly string[],

@@ -17,7 +17,7 @@ function subpath(
   return { points, closed };
 }
 
-// These three functions each decide one join-wedge boundary from an already-reduced numeric input (a cross product, a miter denominator, a polygon) rather than from n1/n2 or a real corner, exactly so the boundary itself -- not just a value near it -- can be driven with a literal: a cross product from real unit-vector arithmetic gets arbitrarily close to 0 but next to never lands on it exactly, and a miter denominator landing on the sqrt-based ratio's own exact limit is analytically almost unreachable in double precision (see stroke.ts's own comment on takesMiterBranch).
+// These three functions each decide one join-wedge boundary from an already-reduced numeric input (a cross product, a miter denominator, a polygon) rather than from n1/n2 or a real corner, exactly so the boundary itself — not just a value near it — can be driven with a literal: a cross product from real unit-vector arithmetic gets arbitrarily close to 0 but next to never lands on it exactly, and a miter denominator landing on the sqrt-based ratio's own exact limit is analytically almost unreachable in double precision (see stroke.ts's own comment on takesMiterBranch).
 describe("join-wedge boundary decisions", () => {
   it("names the wedge's outward side positive only when cross is strictly greater than zero", () => {
     expect(turnsOutwardPositive(0)).toBe(false);
@@ -182,7 +182,7 @@ describe("strokeOutlinePolygons: joins", () => {
       throw new Error("fixture setup: wedge count already asserted above");
     }
     expect(wedge).toHaveLength(4);
-    // The wedge is [a1, miter, a2, vertex] or its reverse, whichever carries the same winding orientation as the offset quads -- this corner's own geometry picks the reversed order, [vertex, a2, miter, a1].
+    // The wedge is [a1, miter, a2, vertex] or its reverse, whichever carries the same winding orientation as the offset quads — this corner's own geometry picks the reversed order, [vertex, a2, miter, a1].
     const [vertex, a2, miter, a1] = wedge;
     expect(vertex).toEqual({ x: 10, y: 4 });
     expect(a2?.x).toBeCloseTo(11.265492, 5);
@@ -194,7 +194,7 @@ describe("strokeOutlinePolygons: joins", () => {
   });
 
   it("miters a generic corner turning the other way, exercising the wedge's own opposite-sign normal branch", () => {
-    // before=(0,0), vertex=(10,4), after=(25,2): the same vertex as the left-turning corner above, but after sits on the other side of the d1-d2 line, giving a negative cross product (a right turn) and taking the opposite branch of the outward-normal choice -- the one an axis-aligned right-angle corner's own zero y-component leaves untested.
+    // before=(0,0), vertex=(10,4), after=(25,2): the same vertex as the left-turning corner above, but after sits on the other side of the d1-d2 line, giving a negative cross product (a right turn) and taking the opposite branch of the outward-normal choice — the one an axis-aligned right-angle corner's own zero y-component leaves untested.
     const polys = strokeOutlinePolygons(
       [
         subpath(
@@ -242,12 +242,12 @@ describe("strokeOutlinePolygons: joins", () => {
     );
     expect(polys).toHaveLength(3);
     const wedge = polys[2];
-    // A bevel wedge is the flat triangle [a1, vertex, a2] -- three points, never four.
+    // A bevel wedge is the flat triangle [a1, vertex, a2] — three points, never four.
     expect(wedge).toHaveLength(3);
   });
 
   it("still takes the miter branch right at the default miter limit, where the ratio's own sign convention matters", () => {
-    // Constructed so the two directions' dot product is exactly -0.98, the mathematical solution of sqrt(2 + 2 * dot) / (1 + dot) = DEFAULT_MITER_LIMIT (a floating-point evaluation of it lands at 9.999999999999996, a hair under the limit rather than exactly on it, since -0.98 has no exact binary representation) -- comfortably inside the miter branch under the real formula, but the mirror-image formula sqrt(2 - 2 * dot) / (1 + dot) evaluates to roughly 99.5 at this same dot, which would wrongly force a bevel instead.
+    // Constructed so the two directions' dot product is exactly -0.98, the mathematical solution of sqrt(2 + 2 * dot) / (1 + dot) = DEFAULT_MITER_LIMIT (a floating-point evaluation of it lands at 9.999999999999996, a hair under the limit rather than exactly on it, since -0.98 has no exact binary representation) — comfortably inside the miter branch under the real formula, but the mirror-image formula sqrt(2 - 2 * dot) / (1 + dot) evaluates to roughly 99.5 at this same dot, which would wrongly force a bevel instead.
     const before = { x: 0, y: 0 };
     const vertex = { x: 10, y: 0 };
     const after = { x: 0.2, y: 1.989974874213242 };
@@ -275,12 +275,12 @@ describe("strokeOutlinePolygons: joins", () => {
       4,
       undefined,
     );
-    // Only the two segment quads -- no third, wedge-shaped polygon.
+    // Only the two segment quads — no third, wedge-shaped polygon.
     expect(polys).toHaveLength(2);
   });
 
   it("still emits a join wedge exactly at the straight-continuation tolerance boundary, not just strictly past it", () => {
-    // d1 = (1, 0) exactly (a horizontal run of length 10, which normalises with no rounding at all); d2 normalises to exactly (1, 1e-12), since hypot(1, 1e-12) itself rounds to exactly 1 at double precision. The resulting cross product, d1.x * d2.y - d1.y * d2.x, reduces to exactly 1e-12 -- the literal value the straight-continuation guard compares against with a strict `<`, so a value sitting exactly on that boundary must still be treated as a real (if vanishingly small) corner, not folded into "straight" the way a `<=` would.
+    // d1 = (1, 0) exactly (a horizontal run of length 10, which normalises with no rounding at all); d2 normalises to exactly (1, 1e-12), since hypot(1, 1e-12) itself rounds to exactly 1 at double precision. The resulting cross product, d1.x * d2.y - d1.y * d2.x, reduces to exactly 1e-12 — the literal value the straight-continuation guard compares against with a strict `<`, so a value sitting exactly on that boundary must still be treated as a real (if vanishingly small) corner, not folded into "straight" the way a `<=` would.
     const polys = strokeOutlinePolygons(
       [
         subpath(
@@ -318,7 +318,7 @@ describe("strokeOutlinePolygons: joins", () => {
   });
 
   it("closes a two-point subpath as a safe no-op rather than a degenerate wedge", () => {
-    // The piece walked is [P0, P1, P0] (closed, so the start point is appended again): two quads, one out and one back along the identical line. Both the interior-vertex join at P1 and the separate closure join at P0 see a direction and its own exact reverse -- the cross-product-near-zero guard rejects each as a straight (fully reversed) continuation, so neither contributes a wedge. This is what the simplified closure check (no separate points.length >= 3 test) relies on for a subpath this short.
+    // The piece walked is [P0, P1, P0] (closed, so the start point is appended again): two quads, one out and one back along the identical line. Both the interior-vertex join at P1 and the separate closure join at P0 see a direction and its own exact reverse — the cross-product-near-zero guard rejects each as a straight (fully reversed) continuation, so neither contributes a wedge. This is what the simplified closure check (no separate points.length >= 3 test) relies on for a subpath this short.
     const polys = strokeOutlinePolygons(
       [
         subpath(
@@ -347,7 +347,7 @@ describe("strokeOutlinePolygons: joins", () => {
   });
 });
 
-// --- Dashing: dashPolyline is exercised only through strokeOutlinePolygons's own dashPx parameter (it is not itself exported), so each test drives a dash pattern over a plain horizontal centreline and reads the resulting quad count and endpoints back off the emitted polygons -- each dash "on" piece becomes exactly one offset quad here, so a piece's own start/end x-coordinates are recoverable from its quad's own corners.
+// --- Dashing: dashPolyline is exercised only through strokeOutlinePolygons's own dashPx parameter (it is not itself exported), so each test drives a dash pattern over a plain horizontal centreline and reads the resulting quad count and endpoints back off the emitted polygons — each dash "on" piece becomes exactly one offset quad here, so a piece's own start/end x-coordinates are recoverable from its quad's own corners.
 
 function dashedQuadSpans(
   polys: readonly (readonly { readonly x: number; readonly y: number }[])[],
@@ -402,7 +402,7 @@ describe("strokeOutlinePolygons: dashing", () => {
   });
 
   it("skips a zero-length entry in the pattern rather than pausing on it", () => {
-    // [5, 0, 3, 4]: on 5, an instantaneous (zero-length) off, on 3, off 4 -- the zero entry must be passed over in the same boundary transition as the on-run that precedes it, landing directly on the next real "on" length (3) rather than getting stuck unable to advance.
+    // [5, 0, 3, 4]: on 5, an instantaneous (zero-length) off, on 3, off 4 — the zero entry must be passed over in the same boundary transition as the on-run that precedes it, landing directly on the next real "on" length (3) rather than getting stuck unable to advance.
     const polys = strokeOutlinePolygons(
       [
         subpath(
@@ -479,7 +479,7 @@ describe("strokeOutlinePolygons: dashing", () => {
   });
 
   it("discards a one-point dash piece rather than emitting a zero-length quad", () => {
-    // A single-point subpath seeds an "on" run (current = [start]) that the main walk never advances, since there is no second point to form a segment from -- the trailing piece this leaves behind has just the one seed point, which must be dropped rather than treated as a real piece.
+    // A single-point subpath seeds an "on" run (current = [start]) that the main walk never advances, since there is no second point to form a segment from — the trailing piece this leaves behind has just the one seed point, which must be dropped rather than treated as a real piece.
     const polys = strokeOutlinePolygons(
       [subpath([{ x: 5, y: 5 }], false)],
       2,
@@ -489,7 +489,7 @@ describe("strokeOutlinePolygons: dashing", () => {
   });
 
   it("skips a zero-length first entry as a boundary transition, not as a spurious zero-duration on-phase", () => {
-    // dashPolyline tested directly: a zero-length first entry must run through the same atBoundary transition as any other exhausted entry (landing on index 1, an off phase, then advancing past it to the real on-phase at index 2) -- not be treated as a valid (if empty) on-phase seeded at the very start.
+    // dashPolyline tested directly: a zero-length first entry must run through the same atBoundary transition as any other exhausted entry (landing on index 1, an off phase, then advancing past it to the real on-phase at index 2) — not be treated as a valid (if empty) on-phase seeded at the very start.
     const pieces = dashPolyline(
       subpath(
         [
@@ -536,7 +536,7 @@ describe("strokeOutlinePolygons: dashing", () => {
   });
 
   it("never accumulates points into a piece while off, even across several segments of an off phase that outlasts the centreline", () => {
-    // [3, 20]: on for 3, then off for 20 -- far longer than the remaining 9 units of this 3-segment, 12-unit centreline, so the walk ends mid-off-phase, having stepped through the boundary between every one of the three segments while off. Each of those steps must leave the accumulator empty rather than silently collecting points nobody asked for; if it didn't, the trailing "flush what's left" check would wrongly surface an off-phase run as a genuine second piece.
+    // [3, 20]: on for 3, then off for 20 — far longer than the remaining 9 units of this 3-segment, 12-unit centreline, so the walk ends mid-off-phase, having stepped through the boundary between every one of the three segments while off. Each of those steps must leave the accumulator empty rather than silently collecting points nobody asked for; if it didn't, the trailing "flush what's left" check would wrongly surface an off-phase run as a genuine second piece.
     const pieces = dashPolyline(
       subpath(
         [
@@ -558,7 +558,7 @@ describe("strokeOutlinePolygons: dashing", () => {
   });
 
   it("emits a piece's own trailing partial run when the centreline ends mid-dash", () => {
-    // 18 units of centreline against an [8, 4] pattern: on 0-8, off 8-12, on 12-20 -- but the line ends at 18, six units into that final on-run, which must still surface as a (shorter) piece rather than being dropped for never reaching its own full on-length.
+    // 18 units of centreline against an [8, 4] pattern: on 0-8, off 8-12, on 12-20 — but the line ends at 18, six units into that final on-run, which must still surface as a (shorter) piece rather than being dropped for never reaching its own full on-length.
     const polys = strokeOutlinePolygons(
       [
         subpath(

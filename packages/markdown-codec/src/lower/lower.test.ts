@@ -192,7 +192,7 @@ describe("code spans and code blocks", () => {
     expect(indented.source).toBeUndefined();
   });
 
-  it("sets preformatted: true unconditionally -- document-schema.js's own cross-format verbatim-whitespace signal, matching epub-codec's own readPre (ExaDev/documents.js#1020)", () => {
+  it("sets preformatted: true unconditionally — document-schema.js's own cross-format verbatim-whitespace signal, matching epub-codec's own readPre (ExaDev/documents.js#1020)", () => {
     const fenced = paragraph(blocks("```\nfoo\n```")[0]);
     expect(fenced.preformatted).toBe(true);
     const indented = paragraph(blocks("    foo")[0]);
@@ -279,7 +279,7 @@ describe("blockquotes", () => {
     expect(end?.kind).toBe("constructEnd");
   });
 
-  it("wraps one quote containing several blocks in ONE pair -- the container boundary the indent alone never carried", () => {
+  it("wraps one quote containing several blocks in ONE pair — the container boundary the indent alone never carried", () => {
     const kinds = blocks("> a\n>\n> b").map((block) => block.kind);
     expect(kinds).toEqual([
       "constructStart",
@@ -414,7 +414,7 @@ describe("lists", () => {
     expect(paragraph(placeholder).runs).toEqual([]);
   });
 
-  // ExaDev/documents.js#1012: the same placeholder mechanism the test above pins for a nested-list-only item, extended to a construct-only item (most commonly a blockquote's division pair). Without it, the item's own membership had nowhere to attach except the construct's own dual-carried interior paragraph -- which src/emit/emit.ts's renderItems cannot read back before it has already decided how to open the region, indistinguishably from a genuinely unrelated construct that merely wraps a fresh list of its own.
+  // ExaDev/documents.js#1012: the same placeholder mechanism the test above pins for a nested-list-only item, extended to a construct-only item (most commonly a blockquote's division pair). Without it, the item's own membership had nowhere to attach except the construct's own dual-carried interior paragraph — which src/emit/emit.ts's renderItems cannot read back before it has already decided how to open the region, indistinguishably from a genuinely unrelated construct that merely wraps a fresh list of its own.
   it("carries itemId on an empty placeholder too, when the item's only content is a construct", () => {
     const result = blocks("* > quote");
     const [placeholder, constructStart] = result;
@@ -746,7 +746,7 @@ describe("raw HTML", () => {
     ).toBe(false);
   });
 
-  it("quarantines inline raw HTML verbatim as markdown residue on each tag's own run -- the parser emits one rawHtml node per tag, so the residue is per tag", () => {
+  it("quarantines inline raw HTML verbatim as markdown residue on each tag's own run — the parser emits one rawHtml node per tag, so the residue is per tag", () => {
     const runs = paragraph(blocks("before <em>raw</em> after")[0]).runs;
     expect(runs[1]?.source).toEqual({ format: "markdown", xml: "<em>" });
     expect(runs[3]?.source).toEqual({ format: "markdown", xml: "</em>" });
@@ -770,7 +770,7 @@ describe("raw HTML", () => {
     expect(block.rows[1]?.cells[0]?.colSpan).toBe(2);
   });
 
-  it("does not recognise an HTML table when gfmTables is disabled, matching plain GFM pipe-table promotion's own gate -- it stays opaque preserved text instead", () => {
+  it("does not recognise an HTML table when gfmTables is disabled, matching plain GFM pipe-table promotion's own gate — it stays opaque preserved text instead", () => {
     const source = "<table>\n<tr><td>x</td></tr>\n</table>";
     const collector = createDiagnosticCollector();
     const result = blocks(source, {
@@ -897,7 +897,7 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
     });
   });
 
-  it("LINK_TITLE_DROPPED fires for the one titled shape left with nowhere to ride -- a nested image inside a link", () => {
+  it("LINK_TITLE_DROPPED fires for the one titled shape left with nowhere to ride — a nested image inside a link", () => {
     const collector = createDiagnosticCollector();
     blocks('[![alt](/img.png "t")](/page)', { sink: collector.sink });
     expect(collector.has(MarkdownDiagnosticCodes.LINK_TITLE_DROPPED)).toBe(

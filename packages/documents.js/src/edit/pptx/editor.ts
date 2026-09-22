@@ -34,7 +34,7 @@ const SLIDE_CONTENT_TYPE =
 const SLIDE_RELATIONSHIP_TYPE =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
 
-// The ECMA-376 minimum value for a p:sldId/@id -- ids 0..255 are reserved.
+// The ECMA-376 minimum value for a p:sldId/@id — ids 0..255 are reserved.
 const MIN_SLIDE_ID = 256;
 
 function directChild(parent: XmlElement, tag: string): XmlElement | undefined {
@@ -106,7 +106,7 @@ function nextSlideId(sldIdLst: XmlElement): number {
   return max + 1;
 }
 
-// The next free slideN.xml index within `slidesDir`, which is wherever this package keeps its slides rather than a fixed ppt/slides -- the directory is derived from the presentation part's own location (./parts.ts).
+// The next free slideN.xml index within `slidesDir`, which is wherever this package keeps its slides rather than a fixed ppt/slides — the directory is derived from the presentation part's own location (./parts.ts).
 function nextSlidePartIndex(pkg: Package, slidesDir: string): number {
   const pattern = new RegExp(`^${escapeRegExp(slidesDir)}/slide(\\d+)\\.xml$`);
   let max = 0;
@@ -127,7 +127,7 @@ function nextSlidePartIndex(pkg: Package, slidesDir: string): number {
   return max + 1;
 }
 
-// xmlns:p/xmlns:a/xmlns:r are mandatory on this root element -- each OOXML part is its own independent XML document, so a slide part declares its own namespace prefixes regardless of what ppt/presentation.xml declares. Their absence (this function's previous form) is invalid XML-namespaces and is rejected by any namespace-aware parser; this package's own reader tolerates it only because ooxml.js's XmlElement model matches tag strings literally rather than resolving namespace URIs. Confirmed against real Keynote, which rejected a slide built without them.
+// xmlns:p/xmlns:a/xmlns:r are mandatory on this root element — each OOXML part is its own independent XML document, so a slide part declares its own namespace prefixes regardless of what ppt/presentation.xml declares. Their absence (this function's previous form) is invalid XML-namespaces and is rejected by any namespace-aware parser; this package's own reader tolerates it only because ooxml.js's XmlElement model matches tag strings literally rather than resolving namespace URIs. Confirmed against real Keynote, which rejected a slide built without them.
 function buildEmptySlideRoot(): XmlElement {
   return el(
     "p:sld",
@@ -150,7 +150,7 @@ export class PptxEditor {
     this.slidesDir = pptxSlidesDir(this.presentationPartPath);
   }
 
-  // Reads/patches docProps/core.xml directly on the live package -- ExaDev/documents.js#933's own "editor.metadata = {...}" gap, mirroring DocxEditor's own identical getter/setter exactly (src/edit/docx/editor.ts's own comment states the full title/author/subject/keywords-only rationale). setDocumentMetadata's own bytes-level API rebuilds a whole fresh pptx from its ContentDocument for a pptx/pptx pair (src/metadata/write.ts's own REBUILD_FORMATS) -- wrong for a LIVE editor, which would discard every other pending edit the caller made through this same editor instance -- so this patches docProps/core.xml in place instead, via the identical pkg-level primitive DocxEditor uses.
+  // Reads/patches docProps/core.xml directly on the live package — ExaDev/documents.js#933's own "editor.metadata = {...}" gap, mirroring DocxEditor's own identical getter/setter exactly (src/edit/docx/editor.ts's own comment states the full title/author/subject/keywords-only rationale). setDocumentMetadata's own bytes-level API rebuilds a whole fresh pptx from its ContentDocument for a pptx/pptx pair (src/metadata/write.ts's own REBUILD_FORMATS) — wrong for a LIVE editor, which would discard every other pending edit the caller made through this same editor instance — so this patches docProps/core.xml in place instead, via the identical pkg-level primitive DocxEditor uses.
   get metadata(): LayoutMetadata {
     return readCoreProperties(this.pkg);
   }
@@ -217,7 +217,7 @@ export class PptxEditor {
         target: buildRelativeTarget(this.presentationPartPath, slidePartPath),
       },
     );
-    // Every real p:sld must relate to a slideLayout (CT_Slide's own mandatory chain) -- createEmptyPptxPackage's own single blank layout, referenced here by every slide this editor creates.
+    // Every real p:sld must relate to a slideLayout (CT_Slide's own mandatory chain) — createEmptyPptxPackage's own single blank layout, referenced here by every slide this editor creates.
     addRelationship(this.pkg, slidePartPath, {
       type: SLIDE_LAYOUT_REL_TYPE,
       target: buildRelativeTarget(slidePartPath, SLIDE_LAYOUT_PART_PATH),
@@ -296,7 +296,7 @@ export class PptxEditor {
     sldIdLst.children.splice(insertAt, 0, moved);
   }
 
-  // p:sldSz is presentation-wide, not per-slide (unlike ContentSlide.size, which PDF-reconstructed content sets per page) -- a caller building a deck from content whose pages share one size sets this once; createEmptyPptxPackage's own scaffold default is PowerPoint's standard 16:9 widescreen.
+  // p:sldSz is presentation-wide, not per-slide (unlike ContentSlide.size, which PDF-reconstructed content sets per page) — a caller building a deck from content whose pages share one size sets this once; createEmptyPptxPackage's own scaffold default is PowerPoint's standard 16:9 widescreen.
   get slideSize(): PageSize {
     const sldSz = findSldSz(
       findPresentationRoot(this.pkg, this.presentationPartPath),
@@ -338,7 +338,7 @@ export interface CreatePptxOptions {
   readonly clock?: ClockPort;
 }
 
-// Creates a fresh pptx with real docProps/core.xml creation/modification timestamps -- mirrors createDocx's own default-on clock behaviour exactly (src/edit/docx/editor.ts).
+// Creates a fresh pptx with real docProps/core.xml creation/modification timestamps — mirrors createDocx's own default-on clock behaviour exactly (src/edit/docx/editor.ts).
 export function createPptx(options?: CreatePptxOptions): PptxEditor {
   const clock = options?.clock ?? systemClock;
   const metadata = resolveMetadataTimestamps({}, clock);

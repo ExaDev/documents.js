@@ -11,7 +11,7 @@ async function settle(): Promise<void> {
   });
 }
 
-// From the odg root (pageList), add a page and drill into it -- a real user's own interaction path, not a pre-seeded stack.
+// From the odg root (pageList), add a page and drill into it — a real user's own interaction path, not a pre-seeded stack.
 async function navigateToPageDetail(
   stdin: { readonly write: (data: string) => void },
   lastFrame: () => string | undefined,

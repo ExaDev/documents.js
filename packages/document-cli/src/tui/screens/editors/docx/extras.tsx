@@ -7,19 +7,19 @@ import { useNavigationInput } from "../../../keybindings/use-navigation-input.js
 import { useAppDispatch, useAppState } from "../../../state/context.js";
 import { anyOverlayOpen } from "../../../state/types.js";
 
-// The title line, the hint line beneath the list, and the status line at the bottom -- one more row of chrome than ListView's own default reserves, matching odb/form-detail.tsx's own reasoning for the identical read-only-flat-lines shape.
+// The title line, the hint line beneath the list, and the status line at the bottom — one more row of chrome than ListView's own default reserves, matching odb/form-detail.tsx's own reasoning for the identical read-only-flat-lines shape.
 const DOCX_EXTRAS_RESERVED_ROWS = 5;
 
-// A docx's own comments, footnotes, headers, footers, and numbering definitions -- data `ContentDocument`'s section/block shape has nowhere to carry, so `readDocxExtras` (documents.js) is a second, independent read of the same package, reached here with 'x' from `DocxBodyListScreen`. Whole-document, no params: unlike `paragraphDetail`/`tableView` there is no per-item drill-down, everything renders as one flat, searchable line list, exactly like `odb/form-detail.tsx`'s own control tree.
+// A docx's own comments, footnotes, headers, footers, and numbering definitions — data `ContentDocument`'s section/block shape has nowhere to carry, so `readDocxExtras` (documents.js) is a second, independent read of the same package, reached here with 'x' from `DocxBodyListScreen`. Whole-document, no params: unlike `paragraphDetail`/`tableView` there is no per-item drill-down, everything renders as one flat, searchable line list, exactly like `odb/form-detail.tsx`'s own control tree.
 //
-// `readDocxExtras(doc.editor.toPackage())` is called fresh on every render, never cached in state/useMemo -- the RULE at the top of state/types.ts: `DocxEditor`'s own live-view accessors (and everything built from `toPackage()`) can be silently invalidated by a mutation from any other screen, so caching this across renders risks showing stale comments/footnotes after an edit made elsewhere in the same session.
+// `readDocxExtras(doc.editor.toPackage())` is called fresh on every render, never cached in state/useMemo — the RULE at the top of state/types.ts: `DocxEditor`'s own live-view accessors (and everything built from `toPackage()`) can be silently invalidated by a mutation from any other screen, so caching this across renders risks showing stale comments/footnotes after an edit made elsewhere in the same session.
 export function DocxExtrasScreen(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();
   const doc = state.openDocument;
   const isDocx = doc?.format === "docx";
 
-  // Computed unconditionally, ahead of the `useNavigationInput` hook below, so every hook in this component runs on every render regardless of `doc`'s format -- an early return before a hook call would violate React's own rules-of-hooks the moment this screen is ever reached with a non-docx document open.
+  // Computed unconditionally, ahead of the `useNavigationInput` hook below, so every hook in this component runs on every render regardless of `doc`'s format — an early return before a hook call would violate React's own rules-of-hooks the moment this screen is ever reached with a non-docx document open.
   const extras =
     doc?.format === "docx" ? readDocxExtras(doc.editor.toPackage()) : undefined;
   const allLines = extras === undefined ? [] : formatDocxExtrasLines(extras);

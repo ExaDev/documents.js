@@ -2,7 +2,7 @@ import { Jpeg2000ParseError } from "./jpeg2000-errors";
 
 // The two bit-level primitives a JPEG 2000 packet header is built from: the stuffed-bit reader of ISO/IEC 15444-1 B.10.1 and the tag tree of B.10.2. Both are pure bitstream mechanics with no knowledge of what the values mean, which is why they sit below jpeg2000-t2.ts rather than inside it.
 
-// B.10.1: packet header bits are read most-significant first, and a byte that follows a 0xFF byte carries only seven bits -- its most significant bit is a stuffed zero, there so no 0xFF 0x90-or-above marker sequence can ever appear inside a packet header.
+// B.10.1: packet header bits are read most-significant first, and a byte that follows a 0xFF byte carries only seven bits — its most significant bit is a stuffed zero, there so no 0xFF 0x90-or-above marker sequence can ever appear inside a packet header.
 export class PacketBitReader {
   private position: number;
   private buffer = 0;
@@ -99,7 +99,7 @@ export class TagTree {
     this.low = new Int32Array(total);
   }
 
-  // Decodes whether the leaf at (x, y) holds a value strictly below `threshold`, consuming exactly as many bits as the encoder wrote for that question. Returning false leaves the leaf undetermined -- a later call with a higher threshold resumes from the same partial state, which is how inclusion information is spread across quality layers.
+  // Decodes whether the leaf at (x, y) holds a value strictly below `threshold`, consuming exactly as many bits as the encoder wrote for that question. Returning false leaves the leaf undetermined — a later call with a higher threshold resumes from the same partial state, which is how inclusion information is spread across quality layers.
   decode(
     reader: PacketBitReader,
     x: number,

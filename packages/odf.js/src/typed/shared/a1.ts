@@ -1,6 +1,6 @@
-// A1-style cell reference computation for ODF spreadsheet reading. The pure algorithms (columnIndexToLetters, columnLettersToIndex, parseCellReference, cellReference) now live in document-schema.js's canonical, format-agnostic, row-first a1 module -- this file preserves odf.js's own column-first public API and its stricter validation (throws on negative indices, uppercase-only parsing) as thin back-compat shims that delegate to the schema. TableCursor stays here: it is an ODF-reader concern (tracking position across table:number-columns-repeated/table:number-rows-repeated), not a model-level utility.
+// A1-style cell reference computation for ODF spreadsheet reading. The pure algorithms (columnIndexToLetters, columnLettersToIndex, parseCellReference, cellReference) now live in document-schema.js's canonical, format-agnostic, row-first a1 module — this file preserves odf.js's own column-first public API and its stricter validation (throws on negative indices, uppercase-only parsing) as thin back-compat shims that delegate to the schema. TableCursor stays here: it is an ODF-reader concern (tracking position across table:number-columns-repeated/table:number-rows-repeated), not a model-level utility.
 //
-// For why TableCursor exists at all: unlike xlsx, where every c (cell) element carries its own explicit r="B7" attribute, an ODF table:table-cell carries NO cell-reference attribute -- a reader computes "B7" from a running cursor. A real ODF spreadsheet compresses long runs of identical trailing cells (table:number-columns-repeated, confirmed against real LibreOffice .ots templates: a single row+cell pair standing in for over a million empty rows), and TableCursor advances PAST a repeat count in O(1), reading off only the reference(s) it needs, never materializing the cells in between.
+// For why TableCursor exists at all: unlike xlsx, where every c (cell) element carries its own explicit r="B7" attribute, an ODF table:table-cell carries NO cell-reference attribute — a reader computes "B7" from a running cursor. A real ODF spreadsheet compresses long runs of identical trailing cells (table:number-columns-repeated, confirmed against real LibreOffice .ots templates: a single row+cell pair standing in for over a million empty rows), and TableCursor advances PAST a repeat count in O(1), reading off only the reference(s) it needs, never materializing the cells in between.
 
 import {
   columnIndexToLetters as schemaColumnIndexToLetters,
@@ -24,7 +24,7 @@ export function cellReference(columnIndex: number, rowIndex: number): string {
       `cellReference: rowIndex must be a non-negative integer, got ${rowIndex}`,
     );
   }
-  // document-schema.js's canonical cellReference is row-first (row, column); odf.js's public API is column-first (columnIndex, rowIndex) -- swap the args.
+  // document-schema.js's canonical cellReference is row-first (row, column); odf.js's public API is column-first (columnIndex, rowIndex) — swap the args.
   return schemaCellReference(rowIndex, columnIndex);
 }
 

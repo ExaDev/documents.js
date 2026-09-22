@@ -15,7 +15,7 @@ describe("readMarkdownContent", () => {
   });
 
   it("throws if markdown-codec's own reader ever produced a non-wordprocessing ContentDocument", async () => {
-    // Not a shape markdown-codec's real readMarkdownContent can ever produce (markdown has no presentation/spreadsheet/drawing/formula equivalent to lower into, per this module's own comment) -- this exercises the defensive guard directly via a mocked reader, since no real markdown text can trigger it.
+    // Not a shape markdown-codec's real readMarkdownContent can ever produce (markdown has no presentation/spreadsheet/drawing/formula equivalent to lower into, per this module's own comment) — this exercises the defensive guard directly via a mocked reader, since no real markdown text can trigger it.
     vi.resetModules();
     vi.doMock("markdown-codec", async () => {
       const actual =
@@ -35,7 +35,7 @@ describe("readMarkdownContent", () => {
     vi.resetModules();
   });
 
-  // The read-side inverse of src/markdown/write.ts's page-break marker: an `<!-- page break -->` HTML comment lowers (via markdown-codec's own HTML block arm) to an HTMLPreformatted paragraph carrying that literal text, and this pass promotes exactly that paragraph to a pageBreak block -- so markdownToPdf re-renders a real page boundary and a pdfToMarkdown -> markdownToPdf round trip regenerates markers from real boundaries instead of accumulating them as visible literal text.
+  // The read-side inverse of src/markdown/write.ts's page-break marker: an `<!-- page break -->` HTML comment lowers (via markdown-codec's own HTML block arm) to an HTMLPreformatted paragraph carrying that literal text, and this pass promotes exactly that paragraph to a pageBreak block — so markdownToPdf re-renders a real page boundary and a pdfToMarkdown -> markdownToPdf round trip regenerates markers from real boundaries instead of accumulating them as visible literal text.
   it("reads a page-break marker back as a pageBreak block", () => {
     const content = readMarkdownContent(
       "Before\n\n<!-- page break -->\n\nAfter\n",
@@ -146,7 +146,7 @@ describe("readMarkdownContent", () => {
 
 describe("promoteBlock", () => {
   it("does not promote a paragraph carrying the exact marker text if it isn't HTML-preformatted styled", () => {
-    // markdown-codec's own HTML-block lowering never produces this exact combination for real input, but the gate is still styleId AND text, not text alone -- pinned directly.
+    // markdown-codec's own HTML-block lowering never produces this exact combination for real input, but the gate is still styleId AND text, not text alone — pinned directly.
     const block = promoteBlock({
       kind: "paragraph",
       runs: [{ text: PAGE_BREAK_MARKER }],

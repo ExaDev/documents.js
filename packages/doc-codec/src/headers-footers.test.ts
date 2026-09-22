@@ -4,7 +4,7 @@ import { readDocContent, readDocStreams } from "./read";
 import { compoundFile } from "./test-support/cfb";
 import { buildDoc } from "./test-support/doc";
 
-// Six fixed separator stories, then one entry per (section, slot) pair -- headers-footers.ts's own SLOT_ORDER -- built as a flat helper so each test only has to name the slots it actually cares about.
+// Six fixed separator stories, then one entry per (section, slot) pair — headers-footers.ts's own SLOT_ORDER — built as a flat helper so each test only has to name the slots it actually cares about.
 function headerFooterStories(
   sectionCount: number,
   populated: Partial<
@@ -111,7 +111,7 @@ describe("readHeaderFooterStories", () => {
   });
 
   it("stops at the document's own last section rather than reading a header story group beyond it", () => {
-    // The document declares one section (sectionGrpprl: []) but Plcfhdd carries a second section's worth of stories anyway -- section index 1 must never surface, even though its own story is genuinely non-empty.
+    // The document declares one section (sectionGrpprl: []) but Plcfhdd carries a second section's worth of stories anyway — section index 1 must never surface, even though its own story is genuinely non-empty.
     const bytes = buildDoc({
       paragraphs: [{ runs: [{ text: "Body" }] }],
       sectionGrpprl: [],

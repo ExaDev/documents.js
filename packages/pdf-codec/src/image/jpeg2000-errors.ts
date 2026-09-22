@@ -8,7 +8,7 @@ export class Jpeg2000ParseError extends Error {
   }
 }
 
-// The codestream is well-formed but uses a part of ISO/IEC 15444-1 this decoder does not implement. Always names the feature -- see this package's README for the full list of what the JPEG 2000 decoder does and does not decode.
+// The codestream is well-formed but uses a part of ISO/IEC 15444-1 this decoder does not implement. Always names the feature — see this package's README for the full list of what the JPEG 2000 decoder does and does not decode.
 export class Jpeg2000UnsupportedError extends Error {
   constructor(message: string) {
     super(message);

@@ -40,7 +40,7 @@ describe("OdbHarness", () => {
         path="second.odb"
       />,
     );
-    // A dropped effect dependency array would only ever open 'first.odb' with no tables -- the table-list screen would never show WIDGETS at all.
+    // A dropped effect dependency array would only ever open 'first.odb' with no tables — the table-list screen would never show WIDGETS at all.
     const frame = await waitForFrame(lastFrame, (candidate) =>
       candidate.includes("WIDGETS"),
     );

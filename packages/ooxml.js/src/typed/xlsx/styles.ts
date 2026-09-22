@@ -24,14 +24,14 @@ import { attr, childrenWithTag, decodeEntities, rootElement } from "../util";
 import { BUILTIN_NUMBER_FORMATS } from "excel-number-format";
 import { stylesPartPath } from "./parts";
 
-// Resolves xl/styles.xml for typed/xlsx/content.ts (read) and typed/xlsx/build.ts (write). The read side produces one entry per <cellXfs><xf> -- the array index IS the value of a cell's own s attribute -- carrying everything ContentSheetCellSchema models that lives in a cell format: the number-format CODE STRING (resolved through <numFmts>, classified by typed/xlsx/number-format.ts upstream), the cell DECORATION (background fill, per-edge borders, horizontal/vertical alignment), and the cell FONT (resolved through the xf's own fontId into <fonts>, diffed against that table's entry 0 -- see contentFontOf below). The write side is the same relationship in reverse: CellFormatTable interns the (number format, font, decoration) tuples a written workbook needs, ready to serialize as <numFmts>/<fonts>/<fills>/<borders>/<cellXfs>.
+// Resolves xl/styles.xml for typed/xlsx/content.ts (read) and typed/xlsx/build.ts (write). The read side produces one entry per <cellXfs><xf> — the array index IS the value of a cell's own s attribute — carrying everything ContentSheetCellSchema models that lives in a cell format: the number-format CODE STRING (resolved through <numFmts>, classified by typed/xlsx/number-format.ts upstream), the cell DECORATION (background fill, per-edge borders, horizontal/vertical alignment), and the cell FONT (resolved through the xf's own fontId into <fonts>, diffed against that table's entry 0 — see contentFontOf below). The write side is the same relationship in reverse: CellFormatTable interns the (number format, font, decoration) tuples a written workbook needs, ready to serialize as <numFmts>/<fonts>/<fills>/<borders>/<cellXfs>.
 
 // The styles part is resolved per call through typed/xlsx/parts.ts: the workbook names it through its own styles relationship, and xl/styles.xml is only the convention.
 
-// numFmtId 0, 'General' -- CT_Xf/@numFmtId's own schema default, so an <xf> with no numFmtId attribute at all is General, not "unformatted". Shared by both directions: what the reader falls back to for an undeclared id, and what the writer's own default cell format carries.
+// numFmtId 0, 'General' — CT_Xf/@numFmtId's own schema default, so an <xf> with no numFmtId attribute at all is General, not "unformatted". Shared by both directions: what the reader falls back to for an undeclared id, and what the writer's own default cell format carries.
 export const GENERAL_NUM_FMT_ID = 0;
 
-// numFmtId -> format code, built in exactly two feeds: ECMA-376's own built-in table first, then the file's own <numFmts> overlaid UNCONDITIONALLY. The overlay is unconditional rather than fill-the-gaps because a producer-declared code always wins over an implied one -- confirmed necessary against real LibreOffice output, whose kitchen-sink export declares id 164 as "General" and then points its plain numeric cells at it; a fill-the-gaps overlay would still be correct there, but nothing in the format stops a producer redeclaring an id inside the built-in range, and the spec's own table is the FALLBACK for ids a file leaves undeclared, not an authority over ids it declares.
+// numFmtId -> format code, built in exactly two feeds: ECMA-376's own built-in table first, then the file's own <numFmts> overlaid UNCONDITIONALLY. The overlay is unconditional rather than fill-the-gaps because a producer-declared code always wins over an implied one — confirmed necessary against real LibreOffice output, whose kitchen-sink export declares id 164 as "General" and then points its plain numeric cells at it; a fill-the-gaps overlay would still be correct there, but nothing in the format stops a producer redeclaring an id inside the built-in range, and the spec's own table is the FALLBACK for ids a file leaves undeclared, not an authority over ids it declares.
 function readNumberFormatCodesById(
   styleSheet: XmlElement,
 ): Map<number, string> {
@@ -47,9 +47,9 @@ function readNumberFormatCodesById(
       continue;
     }
     const id = Number.parseInt(idRaw, 10);
-    // Genuinely irreducible, not merely untested, given every real caller: readCellStyles' own numFmtId lookup below applies the identical Number.isInteger guard before ever calling codes.get, so a non-integer id here can only ever register a Map entry keyed by NaN that no real call site can ever look up (a genuine cell xf's own numFmtId is gated by that same guard first) -- this function's only observable effect, through readCellFormatCodes/readCellStyles, is unchanged whether or not this check runs.
+    // Genuinely irreducible, not merely untested, given every real caller: readCellStyles' own numFmtId lookup below applies the identical Number.isInteger guard before ever calling codes.get, so a non-integer id here can only ever register a Map entry keyed by NaN that no real call site can ever look up (a genuine cell xf's own numFmtId is gated by that same guard first) — this function's only observable effect, through readCellFormatCodes/readCellStyles, is unchanged whether or not this check runs.
     if (Number.isInteger(id)) {
-      // decodeEntities is load-bearing here, not defensive: this package's lossless layer keeps attribute values exactly as written, and a real format code routinely contains quoted literals -- LibreOffice's own boolean format arrives as `&quot;TRUE&quot;;&quot;TRUE&quot;;&quot;FALSE&quot;`, which would tokenize as bare code characters rather than as quoted text if fed through raw.
+      // decodeEntities is load-bearing here, not defensive: this package's lossless layer keeps attribute values exactly as written, and a real format code routinely contains quoted literals — LibreOffice's own boolean format arrives as `&quot;TRUE&quot;;&quot;TRUE&quot;;&quot;FALSE&quot;`, which would tokenize as bare code characters rather than as quoted text if fed through raw.
       codes.set(id, decodeEntities(formatCode));
     }
   }
@@ -58,7 +58,7 @@ function readNumberFormatCodesById(
 
 // --- the read side: per-cellXfs number format + font + decoration ------------------------------------------------
 
-// Everything this reader resolves for one <cellXfs><xf> entry. numberFormatCode is the numFmt code string that xf displays its value through (undefined when the xf points at a numFmtId no code anywhere supplies); font is the cell's own font as ContentSheetCell.font carries it (only the properties genuinely differing from the workbook's default font -- see contentFontOf below); the four decoration fields mirror document-schema.js's own ContentSheetCellSchema fields of the same names, and are each undefined when the xf carries no real value for them -- matching the schema's own "absent means default" semantics for every one.
+// Everything this reader resolves for one <cellXfs><xf> entry. numberFormatCode is the numFmt code string that xf displays its value through (undefined when the xf points at a numFmtId no code anywhere supplies); font is the cell's own font as ContentSheetCell.font carries it (only the properties genuinely differing from the workbook's default font — see contentFontOf below); the four decoration fields mirror document-schema.js's own ContentSheetCellSchema fields of the same names, and are each undefined when the xf carries no real value for them — matching the schema's own "absent means default" semantics for every one.
 export interface CellStyleEntry {
   numberFormatCode?: string;
   font?: ContentFont;
@@ -68,7 +68,7 @@ export interface CellStyleEntry {
   verticalAlignment?: "top" | "middle" | "bottom";
 }
 
-// One <fonts><font> entry (CT_Font, ECMA-376 Part 1 SS18.8.22) in the fields ContentFont can express, read per property with its absence spelled as that property's "not stated" value: the four boolean members are false when their element is absent or carries an explicit off value, fontFamily/sizePt undefined when <name>/<sz> state nothing resolvable, and colour undefined for a <color> this reader cannot resolve (a theme/indexed/auto colour -- the identical resolution colorFromElement already applies to a fill's or border's colour, shared here through readColorRgb). What CT_Font states that ContentFont has no member for (vertAlign's superscript/subscript, outline, shadow, condense, extend, family, charset, scheme) is read past rather than half-modelled, the identical scope limit xls-codec's own Font-record reader applies to the same vocabulary's BIFF8 spelling.
+// One <fonts><font> entry (CT_Font, ECMA-376 Part 1 SS18.8.22) in the fields ContentFont can express, read per property with its absence spelled as that property's "not stated" value: the four boolean members are false when their element is absent or carries an explicit off value, fontFamily/sizePt undefined when <name>/<sz> state nothing resolvable, and colour undefined for a <color> this reader cannot resolve (a theme/indexed/auto colour — the identical resolution colorFromElement already applies to a fill's or border's colour, shared here through readColorRgb). What CT_Font states that ContentFont has no member for (vertAlign's superscript/subscript, outline, shadow, condense, extend, family, charset, scheme) is read past rather than half-modelled, the identical scope limit xls-codec's own Font-record reader applies to the same vocabulary's BIFF8 spelling.
 export interface FontTableEntry {
   readonly bold: boolean;
   readonly italic: boolean;
@@ -79,7 +79,7 @@ export interface FontTableEntry {
   readonly color: Color | undefined;
 }
 
-// CT_Boolean/@w:val... CT_Font's toggle children (b/i/strike) are on by bare presence, with an optional val attribute ("0"/"false" per xsd:boolean, whose absent form means on -- the same convention typed/docx/styles.ts's own readToggle states for WordprocessingML's identical boolean-property shape). An absent element is "not bold", not "unknown": a font-table entry states every font absolutely, unlike a cascade layer.
+// CT_Boolean/@w:val... CT_Font's toggle children (b/i/strike) are on by bare presence, with an optional val attribute ("0"/"false" per xsd:boolean, whose absent form means on — the same convention typed/docx/styles.ts's own readToggle states for WordprocessingML's identical boolean-property shape). An absent element is "not bold", not "unknown": a font-table entry states every font absolutely, unlike a cascade layer.
 function readFontToggle(el: XmlElement | undefined): boolean {
   if (el === undefined) {
     return false;
@@ -88,7 +88,7 @@ function readFontToggle(el: XmlElement | undefined): boolean {
   return val !== "0" && val !== "false";
 }
 
-// <u> (CT_UnderlineProperty) carries @val from ST_UnderlineValues with "single" as its schema default; "none" is the one value that means off, so a bare <u/> or any named style (single/double/the two accounting spellings) all state underline=true -- the boolean collapse ContentFont's own single underline member demands, the same one the border reader applies to the dash-family tokens.
+// <u> (CT_UnderlineProperty) carries @val from ST_UnderlineValues with "single" as its schema default; "none" is the one value that means off, so a bare <u/> or any named style (single/double/the two accounting spellings) all state underline=true — the boolean collapse ContentFont's own single underline member demands, the same one the border reader applies to the dash-family tokens.
 function readFontUnderline(u: XmlElement | undefined): boolean {
   if (u === undefined) {
     return false;
@@ -122,7 +122,7 @@ function readFontTable(styleSheet: XmlElement): readonly FontTableEntry[] {
   return childrenWithTag(fontsEl, "font").map(readFontTableEntry);
 }
 
-// The cell-level font one font-table entry resolves to, as ContentSheetCell.font carries it: only the properties that DIFFER from the workbook's own first font, or undefined when the entry is that font outright -- the format's default, which the schema models as the field being absent rather than an explicitly restated copy of it. xlsx mirrors BIFF8 here (xls-codec's own contentFontOf, its per-cell-fonts PR): the format gives a cell no way to say "no font", only an index into the table, so entry 0 is what "the format's default" concretely means for a given file. The diff is per property, since a real cell font usually differs from the default in one or two respects and agrees in the rest: a Courier-bold cell font against an Arial default yields { fontFamily: "Courier", bold: true } and says nothing about size, which the default already settles. A colour equal to the default's own resolved colour states nothing even where the two spellings differed (rgb black against an indexed system black): the cell said "the same colour as the default", not a colour that happens to coincide.
+// The cell-level font one font-table entry resolves to, as ContentSheetCell.font carries it: only the properties that DIFFER from the workbook's own first font, or undefined when the entry is that font outright — the format's default, which the schema models as the field being absent rather than an explicitly restated copy of it. xlsx mirrors BIFF8 here (xls-codec's own contentFontOf, its per-cell-fonts PR): the format gives a cell no way to say "no font", only an index into the table, so entry 0 is what "the format's default" concretely means for a given file. The diff is per property, since a real cell font usually differs from the default in one or two respects and agrees in the rest: a Courier-bold cell font against an Arial default yields { fontFamily: "Courier", bold: true } and says nothing about size, which the default already settles. A colour equal to the default's own resolved colour states nothing even where the two spellings differed (rgb black against an indexed system black): the cell said "the same colour as the default", not a colour that happens to coincide.
 export function contentFontOf(
   font: FontTableEntry,
   baseline: FontTableEntry,
@@ -160,7 +160,7 @@ export function contentFontOf(
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
-// ST_PatternType's own seventeen non-solid, non-none members (ECMA-376 Part 1 SS18.18.55) -- the SpreadsheetML half of ContentCellPatternType's shared vocabulary, and (ExaDev/documents.js#951) the exact string spelling <patternFill patternType="..."/> already uses, so no translation table is needed the way doc-codec's Ipat and ooxml.js's own docx w:shd each need one: the attribute value IS the schema's own member name. Named as its own narrow type (rather than typing the guard below `value is ContentCellPatternType`) so a caller already holding a full ContentCellPatternType -- the write side, validating a real cell's own pattern name -- narrows its negative branch to the WordprocessingML-only remainder instead of `never`.
+// ST_PatternType's own seventeen non-solid, non-none members (ECMA-376 Part 1 SS18.18.55) — the SpreadsheetML half of ContentCellPatternType's shared vocabulary, and (ExaDev/documents.js#951) the exact string spelling <patternFill patternType="..."/> already uses, so no translation table is needed the way doc-codec's Ipat and ooxml.js's own docx w:shd each need one: the attribute value IS the schema's own member name. Named as its own narrow type (rather than typing the guard below `value is ContentCellPatternType`) so a caller already holding a full ContentCellPatternType — the write side, validating a real cell's own pattern name — narrows its negative branch to the WordprocessingML-only remainder instead of `never`.
 type XlsxPatternType = Extract<
   ContentCellPatternType,
   | "mediumGray"
@@ -203,14 +203,14 @@ const SPREADSHEETML_PATTERN_TYPES: ReadonlySet<string> =
     "gray0625",
   ]);
 
-/** Whether `value` is one of ST_PatternType's own seventeen non-solid, non-none members -- the only ContentCellPatternType members a `<patternFill>` can ever name, so a value this returns true for can be used as a ContentCellPatternType directly with no further mapping. */
+/** Whether `value` is one of ST_PatternType's own seventeen non-solid, non-none members — the only ContentCellPatternType members a `<patternFill>` can ever name, so a value this returns true for can be used as a ContentCellPatternType directly with no further mapping. */
 function isXlsxPatternType(value: string): value is XlsxPatternType {
   return SPREADSHEETML_PATTERN_TYPES.has(value);
 }
 
-// xlsx's border style attribute (CT_BorderStyle, ECMA-376 Part 1 SS18.18.3) conflates a stroke's PATTERN (solid/dashed/dotted/double) with its WEIGHT (hair/thin/medium/thick), unlike ODF's separate fo:border "<length> <style> <color>" shorthand or ContentBorderSchema's own widthPt+style pair. The weight half of that -- the named weights, their derived point widths, and the bucketing back from a widthPt to a name -- is document-schema.js's own border-weight module, imported above: BIFF8 quantises to the identical four weights, so xls-codec needs the same mapping and the two must not drift. What stays here is xlsx's own token vocabulary, which is genuinely format-specific.
+// xlsx's border style attribute (CT_BorderStyle, ECMA-376 Part 1 SS18.18.3) conflates a stroke's PATTERN (solid/dashed/dotted/double) with its WEIGHT (hair/thin/medium/thick), unlike ODF's separate fo:border "<length> <style> <color>" shorthand or ContentBorderSchema's own widthPt+style pair. The weight half of that — the named weights, their derived point widths, and the bucketing back from a widthPt to a name — is document-schema.js's own border-weight module, imported above: BIFF8 quantises to the identical four weights, so xls-codec needs the same mapping and the two must not drift. What stays here is xlsx's own token vocabulary, which is genuinely format-specific.
 
-// Each xlsx border-style token resolves to one weight (for widthPt) and one ContentStrokeStyle pattern. The dash-family tokens (dashDot/dashDotDot and their medium/slant variants) have no ContentStrokeStyle member that distinguishes them from a plain dashed line, so they collapse to 'dashed' rather than being dropped -- the closest faithful mapping, preserving "this edge is dashed" instead of degrading to solid. 'none' is handled by the caller (it means the edge carries no border at all) and has no entry here.
+// Each xlsx border-style token resolves to one weight (for widthPt) and one ContentStrokeStyle pattern. The dash-family tokens (dashDot/dashDotDot and their medium/slant variants) have no ContentStrokeStyle member that distinguishes them from a plain dashed line, so they collapse to 'dashed' rather than being dropped — the closest faithful mapping, preserving "this edge is dashed" instead of degrading to solid. 'none' is handled by the caller (it means the edge carries no border at all) and has no entry here.
 const XLSX_BORDER_STYLE: Readonly<
   Record<string, { weight: BorderWeight; pattern: ContentStrokeStyle }>
 > = {
@@ -229,7 +229,7 @@ const XLSX_BORDER_STYLE: Readonly<
   slantDashDot: { weight: "medium", pattern: "dashed" },
 };
 
-// A <color> element already located by its caller (one of a <border> edge's own colour, a <patternFill>'s <fgColor>/<bgColor>, or one of a colorScale's own several <color> siblings, which readColorRgb below cannot reach since it only ever takes the FIRST child of a given tag): only the rgb attribute is mapped (8 hex digits "AARRGGBB" with a leading alpha prefix, or 6 "RRGGBB" -- the last 6 digits are the real RGB in both forms). theme/indexed/tint/auto carry real colours this reader deliberately does not resolve: theme and indexed require a separate workbook-theme/table resolution this package does not model, and silently substituting black or any other fixed colour would misreport them, so the edge/fill reads as carrying no colour instead.
+// A <color> element already located by its caller (one of a <border> edge's own colour, a <patternFill>'s <fgColor>/<bgColor>, or one of a colorScale's own several <color> siblings, which readColorRgb below cannot reach since it only ever takes the FIRST child of a given tag): only the rgb attribute is mapped (8 hex digits "AARRGGBB" with a leading alpha prefix, or 6 "RRGGBB" — the last 6 digits are the real RGB in both forms). theme/indexed/tint/auto carry real colours this reader deliberately does not resolve: theme and indexed require a separate workbook-theme/table resolution this package does not model, and silently substituting black or any other fixed colour would misreport them, so the edge/fill reads as carrying no colour instead.
 export function colorFromElement(
   colorEl: XmlElement | undefined,
 ): Color | undefined {
@@ -240,9 +240,9 @@ export function colorFromElement(
   if (raw === undefined) {
     return undefined;
   }
-  // Excel writes "FFRRGGBB" (alpha + RGB); a 6-digit "RRGGBB" is also spec-legal. Take the LAST six hex digits in both cases, since the alpha channel has no ContentSheetCell.background representation and a leading "FF" is the only prefix real producers emit. The boundary here (">=" rather than ">") is a genuinely irreducible equivalent mutation opportunity: at raw.length exactly 6, slice(-6) returns the whole, unchanged string -- identical to what the ">" branch's bare `raw` would have returned directly -- so the two operators can never be told apart by this result for any input.
+  // Excel writes "FFRRGGBB" (alpha + RGB); a 6-digit "RRGGBB" is also spec-legal. Take the LAST six hex digits in both cases, since the alpha channel has no ContentSheetCell.background representation and a leading "FF" is the only prefix real producers emit. The boundary here (">=" rather than ">") is a genuinely irreducible equivalent mutation opportunity: at raw.length exactly 6, slice(-6) returns the whole, unchanged string — identical to what the ">" branch's bare `raw` would have returned directly — so the two operators can never be told apart by this result for any input.
   const hex = raw.length >= 6 ? raw.slice(-6) : raw;
-  // The regex's own "^"/"$" anchors are equally irreducible: `hex` is always either exactly 6 characters (the slice above) or fewer (raw itself, when shorter) -- never more. A {6}-quantified pattern can only ever match a 6-character string across its entire length regardless of anchors, and can never match a shorter one at all, so no possible `hex` value can tell an anchored and an unanchored match apart here.
+  // The regex's own "^"/"$" anchors are equally irreducible: `hex` is always either exactly 6 characters (the slice above) or fewer (raw itself, when shorter) — never more. A {6}-quantified pattern can only ever match a 6-character string across its entire length regardless of anchors, and can never match a shorter one at all, so no possible `hex` value can tell an anchored and an unanchored match apart here.
   if (!/^[0-9a-fA-F]{6}$/.test(hex)) {
     return undefined;
   }
@@ -261,7 +261,7 @@ export function readColorRgb(
   return colorFromElement(childrenWithTag(container, colorTag)[0]);
 }
 
-// One <fill> -> a ContentCellFill (ExaDev/documents.js#951), or undefined for patternType="none" (or an absent/unrecognised patternType). For patternType="solid" the cell's visible background is the pattern's FOREGROUND colour (<fgColor>) per OOXML's solid-pattern semantics -- the whole cell is painted with the pattern's fg colour -- with <bgColor> as a fallback only when a producer left fgColor unset. This is the documented Excel/LibreOffice convention and what every real file's solid fill carries; reading bgColor first (the literal pattern-background) would return the wrong colour for the common case. Every other named ST_PatternType value (isXlsxPatternType above) resolves to a real 'pattern' fill, carrying whichever of <fgColor>/<bgColor> states a concrete colour -- either may be a theme/indexed/auto colour this reader does not resolve (colorFromElement's own note) and is then left unstated, matching ContentCellFillSchema's own "a colour can defer instead of asserting" convention.
+// One <fill> -> a ContentCellFill (ExaDev/documents.js#951), or undefined for patternType="none" (or an absent/unrecognised patternType). For patternType="solid" the cell's visible background is the pattern's FOREGROUND colour (<fgColor>) per OOXML's solid-pattern semantics — the whole cell is painted with the pattern's fg colour — with <bgColor> as a fallback only when a producer left fgColor unset. This is the documented Excel/LibreOffice convention and what every real file's solid fill carries; reading bgColor first (the literal pattern-background) would return the wrong colour for the common case. Every other named ST_PatternType value (isXlsxPatternType above) resolves to a real 'pattern' fill, carrying whichever of <fgColor>/<bgColor> states a concrete colour — either may be a theme/indexed/auto colour this reader does not resolve (colorFromElement's own note) and is then left unstated, matching ContentCellFillSchema's own "a colour can defer instead of asserting" convention.
 function readFillBackground(fill: XmlElement): ContentCellFill | undefined {
   const patternFill = childrenWithTag(fill, "patternFill")[0];
   if (patternFill === undefined) {
@@ -297,7 +297,7 @@ function readFills(
   return childrenWithTag(fillsEl, "fill").map(readFillBackground);
 }
 
-// One <border> edge -> a ContentBorder, or undefined when the edge has no style, style="none", or no resolvable colour. An absent style attribute means the edge genuinely carries no border (distinct from an absent <left> element, which means "say nothing about this edge" -- but a present <left/> with no style and no colour is how real producers spell "no left border", so both shapes collapse to undefined here, matching how readCellStyleDecoration in odf.js treats an explicit "none" token).
+// One <border> edge -> a ContentBorder, or undefined when the edge has no style, style="none", or no resolvable colour. An absent style attribute means the edge genuinely carries no border (distinct from an absent <left> element, which means "say nothing about this edge" — but a present <left/> with no style and no colour is how real producers spell "no left border", so both shapes collapse to undefined here, matching how readCellStyleDecoration in odf.js treats an explicit "none" token).
 function readBorderEdge(
   border: XmlElement,
   edge: "left" | "right" | "top" | "bottom",
@@ -366,7 +366,7 @@ function readBorders(
   });
 }
 
-// horizontal="general" is xlsx's own "use the value-kind default" (numeric right, text left) -- the IDENTICAL semantics to ContentSheetCell.alignment being absent -- so it is left unread rather than mapped to a literal Alignment member that would override the default it is meant to request. start/end/distributed/fill have no Alignment member (the schema is left/center/right/justify), so they are left unread too, matching odf.js's readCellStyleDecoration policy of not guessing a value the schema has no member for. Only the four direct members survive.
+// horizontal="general" is xlsx's own "use the value-kind default" (numeric right, text left) — the IDENTICAL semantics to ContentSheetCell.alignment being absent — so it is left unread rather than mapped to a literal Alignment member that would override the default it is meant to request. start/end/distributed/fill have no Alignment member (the schema is left/center/right/justify), so they are left unread too, matching odf.js's readCellStyleDecoration policy of not guessing a value the schema has no member for. Only the four direct members survive.
 function readHorizontalAlignment(alignment: XmlElement): Alignment | undefined {
   const value = attr(alignment, "horizontal");
   if (
@@ -408,7 +408,7 @@ function readAlignment(xf: XmlElement): {
   };
 }
 
-// One entry per <cellXfs><xf>, in document order, so the array index IS the value of a cell's own s attribute. numberFormatCode is read directly off the cellXf's numFmtId (not chased through xfId into <cellStyleXfs>: real producers write the resolved numFmtId onto the cellXf itself -- see the note on readCellFormatCodes below -- and the same holds for fontId/fillId/borderId/alignment, which this reader also reads off the cellXf directly). fontId resolves through the <fonts> table and contentFontOf's diff against that table's entry 0; fillId/borderId resolve through the <fills>/<borders> tables; alignment is the inline <alignment> child. A cell whose xf carries applyAlignment="0" still reads its inline alignment here, matching the numFmtId policy and real producer output.
+// One entry per <cellXfs><xf>, in document order, so the array index IS the value of a cell's own s attribute. numberFormatCode is read directly off the cellXf's numFmtId (not chased through xfId into <cellStyleXfs>: real producers write the resolved numFmtId onto the cellXf itself — see the note on readCellFormatCodes below — and the same holds for fontId/fillId/borderId/alignment, which this reader also reads off the cellXf directly). fontId resolves through the <fonts> table and contentFontOf's diff against that table's entry 0; fillId/borderId resolve through the <fills>/<borders> tables; alignment is the inline <alignment> child. A cell whose xf carries applyAlignment="0" still reads its inline alignment here, matching the numFmtId policy and real producer output.
 export function readCellStyles(pkg: Package): readonly CellStyleEntry[] {
   const styleSheet = rootElement(pkg.parts[stylesPartPath(pkg)]);
   if (styleSheet === undefined) {
@@ -429,7 +429,7 @@ export function readCellStyles(pkg: Package): readonly CellStyleEntry[] {
         ? GENERAL_NUM_FMT_ID
         : Number.parseInt(numFmtRaw, 10);
     const entry: CellStyleEntry = {};
-    // Genuinely irreducible, not merely untested: readNumberFormatCodesById above applies this identical guard before ever writing a Map entry, so `codes` can never actually hold a NaN key -- codes.get(NaN) already returns undefined on its own (a Map lookup miss, not a throw), the same outcome this guard would have skipped to directly for a non-integer numFmtId.
+    // Genuinely irreducible, not merely untested: readNumberFormatCodesById above applies this identical guard before ever writing a Map entry, so `codes` can never actually hold a NaN key — codes.get(NaN) already returns undefined on its own (a Map lookup miss, not a throw), the same outcome this guard would have skipped to directly for a non-integer numFmtId.
     if (Number.isInteger(numFmtId)) {
       const code = codes.get(numFmtId);
       if (code !== undefined) {
@@ -460,7 +460,7 @@ export function readCellStyles(pkg: Package): readonly CellStyleEntry[] {
   });
 }
 
-// One raw <dxf> element per <dxfs><dxf>, in document order -- the array index IS a cfRule's own dxfId attribute. Unlike <cellXfs> (interned across every CELL a workbook has, decoration and number format both), a <dxfs> entry exists only to serve conditionalFormatting rules and carries a genuinely different shape (font/fill/alignment/border/numFmt/protection as full override elements, not indices into shared tables), so this is a thin positional list handed to typed/xlsx/conditional-format.ts to resolve into ContentSheetConditionalFormatStyle, not another decoration cascade of this module's own.
+// One raw <dxf> element per <dxfs><dxf>, in document order — the array index IS a cfRule's own dxfId attribute. Unlike <cellXfs> (interned across every CELL a workbook has, decoration and number format both), a <dxfs> entry exists only to serve conditionalFormatting rules and carries a genuinely different shape (font/fill/alignment/border/numFmt/protection as full override elements, not indices into shared tables), so this is a thin positional list handed to typed/xlsx/conditional-format.ts to resolve into ContentSheetConditionalFormatStyle, not another decoration cascade of this module's own.
 export function readDxfElements(pkg: Package): readonly XmlElement[] {
   const styleSheet = rootElement(pkg.parts[stylesPartPath(pkg)]);
   if (styleSheet === undefined) {
@@ -482,7 +482,7 @@ function parseChildIndex(value: string | undefined): number | undefined {
   return Number.isInteger(n) ? n : undefined;
 }
 
-// The number-format-code-only projection of readCellStyles, kept for callers (and tests) that consumed the original per-cellXfs numFmt-code array. Each entry's numberFormatCode is the code string that cell's value is displayed through; everything else a styleSheet carries -- fonts, fills, borders, alignment, protection -- was outside this function's original return shape, and widening it now would break those callers, so readCellStyles is the richer entry point and this is its numFmt-only view.
+// The number-format-code-only projection of readCellStyles, kept for callers (and tests) that consumed the original per-cellXfs numFmt-code array. Each entry's numberFormatCode is the code string that cell's value is displayed through; everything else a styleSheet carries — fonts, fills, borders, alignment, protection — was outside this function's original return shape, and widening it now would break those callers, so readCellStyles is the richer entry point and this is its numFmt-only view.
 export function readCellFormatCodes(
   pkg: Package,
 ): readonly (string | undefined)[] {
@@ -491,16 +491,16 @@ export function readCellFormatCodes(
 
 // --- the write side: interning the cell formats a written workbook needs -------------------------------------------
 
-// Where a file's own custom format ids start. ECMA-376 implies ids 0-49 (BUILTIN_NUMBER_FORMATS above) and reserves everything up to 163 for locale-specific built-ins a producer must not redefine; 164 is the first id a file may declare for itself, and is where every real producer starts -- this directory's own kitchen-sink.xlsx fixture declares its six formats as 164-169.
+// Where a file's own custom format ids start. ECMA-376 implies ids 0-49 (BUILTIN_NUMBER_FORMATS above) and reserves everything up to 163 for locale-specific built-ins a producer must not redefine; 164 is the first id a file may declare for itself, and is where every real producer starts — this directory's own kitchen-sink.xlsx fixture declares its six formats as 164-169.
 const FIRST_CUSTOM_NUM_FMT_ID = 164;
 
 // The cell-format index every cell with nothing but General formatting and no decoration carries, and the one entry this table always starts with, so a workbook that needs no formats at all still writes exactly the single-<xf> cellXfs it did before this table existed.
 export const DEFAULT_CELL_FORMAT_INDEX = 0;
 
-// The <fonts> index every cell carrying no font of its own references, and the one font entry this table always starts with -- the reserved scaffolding slot a real producer's font table also gives its workbook default.
+// The <fonts> index every cell carrying no font of its own references, and the one font entry this table always starts with — the reserved scaffolding slot a real producer's font table also gives its workbook default.
 export const DEFAULT_FONT_INDEX = 0;
 
-// A custom format as it must be declared in <numFmts>: the id this table assigned it, and the code itself (raw, NOT XML-encoded -- the caller encodes when it writes the formatCode attribute, matching how every other string this package writes is handled).
+// A custom format as it must be declared in <numFmts>: the id this table assigned it, and the code itself (raw, NOT XML-encoded — the caller encodes when it writes the formatCode attribute, matching how every other string this package writes is handled).
 export interface DeclaredNumberFormat {
   id: number;
   code: string;
@@ -533,7 +533,7 @@ export interface CellFormatDecoration {
 
 const EMPTY_DECORATION: CellFormatDecoration = {};
 
-// The workbook-default font every <fonts> table this writer emits carries at index 0, and the value every absent ContentFont member normalises back to on write: Calibri 11pt with no flags and no stated colour -- this writer's own long-established single font, unchanged, now simply the baseline other entries are interned against. The write-side mirror of the read side's diff against a file's own entry 0: a cell whose ContentFont normalises back to these fields references font 0 and mints no entry of its own, exactly as a read-back cell carrying no font field does.
+// The workbook-default font every <fonts> table this writer emits carries at index 0, and the value every absent ContentFont member normalises back to on write: Calibri 11pt with no flags and no stated colour — this writer's own long-established single font, unchanged, now simply the baseline other entries are interned against. The write-side mirror of the read side's diff against a file's own entry 0: a cell whose ContentFont normalises back to these fields references font 0 and mints no entry of its own, exactly as a read-back cell carrying no font field does.
 export const DEFAULT_FONT: DeclaredFont = { sz: "11", name: "Calibri" };
 
 // One declared <font> as the writer must emit it: the four boolean flags (absent means off), an optional colour as its 6-hex RGB, and the size/name pair every entry states in full because a font-table entry is absolute, never a delta. Child emission order follows CT_Font's own listing (ECMA-376 Part 1 SS18.8.22's b/i/strike/u/sz/color/name members).
@@ -547,7 +547,7 @@ export interface DeclaredFont {
   readonly name: string;
 }
 
-// The normalisation every ContentFont member passes through before interning: absent or false booleans are off (an explicit false from a file whose own default was bold states nothing against THIS writer's not-bold entry 0), and absent size/family take the default font's own values -- so a font that restates only defaults collides with entry 0's signature and references it.
+// The normalisation every ContentFont member passes through before interning: absent or false booleans are off (an explicit false from a file whose own default was bold states nothing against THIS writer's not-bold entry 0), and absent size/family take the default font's own values — so a font that restates only defaults collides with entry 0's signature and references it.
 function normalisedFontOf(font: ContentFont | undefined): DeclaredFont {
   if (font === undefined) {
     return DEFAULT_FONT;
@@ -563,7 +563,7 @@ function normalisedFontOf(font: ContentFont | undefined): DeclaredFont {
   };
 }
 
-// Every "=== true" comparison and the "?? ''" colour fallback below are genuinely irreducible equivalent mutation opportunities, not merely untested ones: this signature is consumed ONLY as an internal Map key (fontIndexBySignature), never exposed, so what matters is solely whether two DIFFERENT DeclaredFont values ever produce equal strings (a wrong collision) or two IDENTICAL values ever produce different ones (a wrong split) -- never which literal characters a given input maps to. Flipping "=== true" to "!== true" for one boolean field relabels that field's two segment values (swapping which string means "on" and which means "off") but stays a bijection over {true, non-true}, so it still correctly distinguishes every bold=true font from every bold=false one and still collides every bold=true font with every other bold=true font -- the equivalence classes this signature partitions inputs into are unchanged. The colour fallback is the same shape: no valid 6-hex-digit colorRgb string can ever equal the empty string (or any other fixed placeholder a mutant substitutes), so the "no colour" case can never collide with a real one regardless of which placeholder marks it.
+// Every "=== true" comparison and the "?? ''" colour fallback below are genuinely irreducible equivalent mutation opportunities, not merely untested ones: this signature is consumed ONLY as an internal Map key (fontIndexBySignature), never exposed, so what matters is solely whether two DIFFERENT DeclaredFont values ever produce equal strings (a wrong collision) or two IDENTICAL values ever produce different ones (a wrong split) — never which literal characters a given input maps to. Flipping "=== true" to "!== true" for one boolean field relabels that field's two segment values (swapping which string means "on" and which means "off") but stays a bijection over {true, non-true}, so it still correctly distinguishes every bold=true font from every bold=false one and still collides every bold=true font with every other bold=true font — the equivalence classes this signature partitions inputs into are unchanged. The colour fallback is the same shape: no valid 6-hex-digit colorRgb string can ever equal the empty string (or any other fixed placeholder a mutant substitutes), so the "no colour" case can never collide with a real one regardless of which placeholder marks it.
 function signatureOfFont(font: ContentFont | undefined): string {
   const declared = normalisedFontOf(font);
   let sig = `b:${declared.bold === true}`;
@@ -599,7 +599,7 @@ function signatureOfDecoration(decoration: CellFormatDecoration): string {
       }
     }
   }
-  // Both presence guards below are genuinely irreducible equivalent mutation opportunities, not merely untested ones: Alignment and its vertical counterpart are closed string-literal unions (left/center/right/justify, top/middle/bottom) that can never hold the literal string "undefined" a forced-true mutant would interpolate here for an actually-absent value -- so an alignment-less decoration can never collide with one genuinely stating a real alignment value, regardless of whether this guard runs.
+  // Both presence guards below are genuinely irreducible equivalent mutation opportunities, not merely untested ones: Alignment and its vertical counterpart are closed string-literal unions (left/center/right/justify, top/middle/bottom) that can never hold the literal string "undefined" a forced-true mutant would interpolate here for an actually-absent value — so an alignment-less decoration can never collide with one genuinely stating a real alignment value, regardless of whether this guard runs.
   if (decoration.alignment !== undefined) {
     sig += `|h:${decoration.alignment}`;
   }
@@ -626,7 +626,7 @@ function borderToXlsxStyle(border: ContentBorder): string {
   }
 }
 
-// One declared <fill> as the writer must emit it. 'none'/'gray125' are the two reserved scaffolding entries every real workbook declares regardless of content, carrying no colour; 'solid' carries its colour plus the indexed="64" bgColor that is Excel's own convention for "no separate background" on a solid pattern; 'pattern' is a genuine ContentCellPatternType fill a real cell asked for, carrying whichever of fgRgb/bgRgb its own foreground/background colours resolved to (ExaDev/documents.js#951) -- discriminated by `kind` rather than by `patternType` alone, since a real cell fill can itself name patternType "gray125" (or any other SpreadsheetML member), which is a wholly different, independently-coloured <fill> entry from the reserved scaffolding one of the identical name.
+// One declared <fill> as the writer must emit it. 'none'/'gray125' are the two reserved scaffolding entries every real workbook declares regardless of content, carrying no colour; 'solid' carries its colour plus the indexed="64" bgColor that is Excel's own convention for "no separate background" on a solid pattern; 'pattern' is a genuine ContentCellPatternType fill a real cell asked for, carrying whichever of fgRgb/bgRgb its own foreground/background colours resolved to (ExaDev/documents.js#951) — discriminated by `kind` rather than by `patternType` alone, since a real cell fill can itself name patternType "gray125" (or any other SpreadsheetML member), which is a wholly different, independently-coloured <fill> entry from the reserved scaffolding one of the identical name.
 export type DeclaredFill =
   | { kind: "none" }
   | { kind: "gray125" }
@@ -660,7 +660,7 @@ export interface CellFormatRecord {
   };
 }
 
-// The write-side counterpart to readCellStyles above, and a direct mirror of shared-strings.ts's own SharedStringTable: typed/xlsx/build.ts fills it on demand while it walks cells, and it hands back a stable index each time -- the value of that cell's own `s` attribute, an index into <cellXfs>. What is deduplicated is the cell FORMAT as a whole: two cells wanting the same number format, font, AND decoration share one xf entry, and two cells wanting the same custom CODE, the same font, or the same fill share one <numFmt>/<font>/<fill> declaration too, exactly as a real producer's own output does. The font table always carries the DEFAULT_FONT at index 0, so a cell whose font normalises back to it references entry 0 -- the write-side mirror of the read side diffing every cell font against a file's own entry 0.
+// The write-side counterpart to readCellStyles above, and a direct mirror of shared-strings.ts's own SharedStringTable: typed/xlsx/build.ts fills it on demand while it walks cells, and it hands back a stable index each time — the value of that cell's own `s` attribute, an index into <cellXfs>. What is deduplicated is the cell FORMAT as a whole: two cells wanting the same number format, font, AND decoration share one xf entry, and two cells wanting the same custom CODE, the same font, or the same fill share one <numFmt>/<font>/<fill> declaration too, exactly as a real producer's own output does. The font table always carries the DEFAULT_FONT at index 0, so a cell whose font normalises back to it references entry 0 — the write-side mirror of the read side diffing every cell font against a file's own entry 0.
 export class CellFormatTable {
   private readonly indexBySignature = new Map<string, number>([
     [
@@ -690,7 +690,7 @@ export class CellFormatTable {
   private readonly borderIndexBySignature = new Map<string, number>();
   private readonly borders: DeclaredBorder[] = [{ edges: {} }];
 
-  // Returns the (possibly newly assigned) cellXfs index that displays a value through `format` with `decoration` applied. A call with no decoration (the default) behaves exactly as this method did before decoration existed -- the default xf at index 0 for General, and one xf per distinct number format beyond that -- so existing callers and tests are unaffected.
+  // Returns the (possibly newly assigned) cellXfs index that displays a value through `format` with `decoration` applied. A call with no decoration (the default) behaves exactly as this method did before decoration existed — the default xf at index 0 for General, and one xf per distinct number format beyond that — so existing callers and tests are unaffected.
   intern(
     format: CellNumberFormat,
     decoration: CellFormatDecoration = EMPTY_DECORATION,
@@ -730,7 +730,7 @@ export class CellFormatTable {
     return index;
   }
 
-  // Every custom format code this table assigned an id to, in id order -- one <numFmt> element each, and empty whenever nothing beyond the built-ins was ever interned.
+  // Every custom format code this table assigned an id to, in id order — one <numFmt> element each, and empty whenever nothing beyond the built-ins was ever interned.
   declarations(): readonly DeclaredNumberFormat[] {
     return this.declared;
   }
@@ -750,7 +750,7 @@ export class CellFormatTable {
     return this.records;
   }
 
-  // The <fills> section: the two reserved entries first (none at 0, gray125 at 1), then one fill per distinct background a cell actually asked for -- solid or pattern alike -- in first-intern order.
+  // The <fills> section: the two reserved entries first (none at 0, gray125 at 1), then one fill per distinct background a cell actually asked for — solid or pattern alike — in first-intern order.
   fillDeclarations(): readonly DeclaredFill[] {
     return this.fills;
   }
@@ -766,7 +766,7 @@ export class CellFormatTable {
     return id;
   }
 
-  // Interns one cell font against the normalisation signatureOfFont builds, so a ContentFont normalising back to the DEFAULT_FONT's own fields returns entry 0 and mints nothing -- the identical dedup discipline internFill/internBorder apply to their own tables.
+  // Interns one cell font against the normalisation signatureOfFont builds, so a ContentFont normalising back to the DEFAULT_FONT's own fields returns entry 0 and mints nothing — the identical dedup discipline internFill/internBorder apply to their own tables.
   private internFont(font: ContentFont | undefined): number {
     const signature = signatureOfFont(font);
     const existing = this.fontIndexBySignature.get(signature);
@@ -823,7 +823,7 @@ export class CellFormatTable {
 
   private internBorder(borders: ContentCellBorders): number {
     const edges: DeclaredBorder["edges"] = {};
-    // The initial value here is a genuinely irreducible equivalent mutation opportunity, not merely an untested one: borderIndexBySignature starts genuinely empty (no pre-seeded entry, unlike fontIndexBySignature's own DEFAULT_FONT seed), so this string is never compared against a fixed external constant -- only ever against itself, built the identical way, on a later call. Any fixed starting string works identically as a dedup key, as long as it is used consistently, which it is.
+    // The initial value here is a genuinely irreducible equivalent mutation opportunity, not merely an untested one: borderIndexBySignature starts genuinely empty (no pre-seeded entry, unlike fontIndexBySignature's own DEFAULT_FONT seed), so this string is never compared against a fixed external constant — only ever against itself, built the identical way, on a later call. Any fixed starting string works identically as a dedup key, as long as it is used consistently, which it is.
     let signature = "";
     for (const edge of ["left", "right", "top", "bottom"] as const) {
       const border = borders[edge];

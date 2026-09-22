@@ -1,7 +1,7 @@
 import type { SfntFont } from "./sfnt";
 import { hasBytes, sfntTableBytes, u8, u16, u32 } from "./sfnt";
 
-// A Unicode code point -> glyph ID lookup built from a font's own 'cmap' table (ISO/IEC 14496-22 clause 5.1). Three subtable formats are parsed: 4 (segmented, BMP-only, uint16 glyph IDs), 12 (segmented coverage, full Unicode range, uint32 glyph IDs), and 6 (a single contiguous trimmed range) -- the two formats every mainstream font tool emits for a font meant to cover the supplementary-plane Mathematical Alphanumeric Symbols block, plus the small trimmed format some subsetting tools emit for a font reduced to one narrow character range, which a font extracted from a source document may well be. Format 12 is preferred whenever present (it alone can map a code point above U+FFFF, which most of this package's own mathvariant-mapped characters are); format 4 is the fallback for a font that only ships BMP coverage, and format 6 the last resort.
+// A Unicode code point -> glyph ID lookup built from a font's own 'cmap' table (ISO/IEC 14496-22 clause 5.1). Three subtable formats are parsed: 4 (segmented, BMP-only, uint16 glyph IDs), 12 (segmented coverage, full Unicode range, uint32 glyph IDs), and 6 (a single contiguous trimmed range) — the two formats every mainstream font tool emits for a font meant to cover the supplementary-plane Mathematical Alphanumeric Symbols block, plus the small trimmed format some subsetting tools emit for a font reduced to one narrow character range, which a font extracted from a source document may well be. Format 12 is preferred whenever present (it alone can map a code point above U+FFFF, which most of this package's own mathvariant-mapped characters are); format 4 is the fallback for a font that only ships BMP coverage, and format 6 the last resort.
 //
 // Every structural read below is bounds-checked, and any font whose 'cmap' is missing, truncated, or carries no subtable in a format this module reads yields `undefined` rather than throwing: this module's input is no longer only the one trusted vendored math font it was written for, and a font embedded in an arbitrary source document must degrade to "no glyph mapping available" rather than abort the conversion around it.
 export type CmapLookup = (codePoint: number) => number | undefined;
@@ -312,7 +312,7 @@ export function readCmapSubtables(font: SfntFont): readonly CmapSubtable[] {
   return subtables;
 }
 
-// Picks the best available Unicode-keyed cmap subtable and returns a lookup function, or `undefined` if the font has no readable 'cmap' at all -- a font with no usable character-to-glyph mapping is one the caller must degrade around (skip the glyph, substitute another font), not one worth aborting a whole conversion over.
+// Picks the best available Unicode-keyed cmap subtable and returns a lookup function, or `undefined` if the font has no readable 'cmap' at all — a font with no usable character-to-glyph mapping is one the caller must degrade around (skip the glyph, substitute another font), not one worth aborting a whole conversion over.
 export function buildCmapLookup(font: SfntFont): CmapLookup | undefined {
   const candidates = readCmapSubtables(font)
     .filter((s) => s.format === 4 || s.format === 6 || s.format === 12)

@@ -9,16 +9,16 @@ export const SCHEMA_FILE_NAMES: Record<DocumentSchemaKind, string> = {
   ContentDocument: "content-document.schema.json",
 };
 
-// __PACKAGE_VERSION__ is a literal string constant, not a runtime read -- see src/global.d.ts, tsdown.config.ts, and vitest.config.ts.
+// __PACKAGE_VERSION__ is a literal string constant, not a runtime read — see src/global.d.ts, tsdown.config.ts, and vitest.config.ts.
 export function schemaUriFor(kind: DocumentSchemaKind): string {
   return `https://cdn.jsdelivr.net/npm/document-schema.js@${__PACKAGE_VERSION__}/schemas/${SCHEMA_FILE_NAMES[kind]}`;
 }
 
-// THE VERSIONING CONTRACT (ExaDev/document-schema.js#20's errata): the $schema URI a dumper stamps is the artefact's version, and it is release-pinned -- the @version segment names the exact npm release whose schema validates the value. It replaces the formatVersion integers releases 1.x-3.x carried (DocumentTree's own and ContentDocument's per-arm literals), which were a second, hand-kept source of truth alongside URIs that already named the release. There is no version field anywhere in a dumped value any more.
+// THE VERSIONING CONTRACT (ExaDev/document-schema.js#20's errata): the $schema URI a dumper stamps is the artefact's version, and it is release-pinned — the @version segment names the exact npm release whose schema validates the value. It replaces the formatVersion integers releases 1.x-3.x carried (DocumentTree's own and ContentDocument's per-arm literals), which were a second, hand-kept source of truth alongside URIs that already named the release. There is no version field anywhere in a dumped value any more.
 //
-// That makes documentFromJson the enforcement point for untrusted input: it reads the URI's version segment and refuses anything this installed release cannot faithfully validate (see the version gate in documentFromJson below -- a different MAJOR never parses, because a major is exactly a schema generation this release may not describe). A bare DocumentTreeSchema.parse() does not version-discriminate at all -- it structurally validates whatever it is handed against the installed schema, full stop -- so a caller ingesting a dump from anywhere it did not itself produce must go through documentFromJson, not a direct parse. Callers that already trust the value's provenance may keep parsing directly, exactly as before.
+// That makes documentFromJson the enforcement point for untrusted input: it reads the URI's version segment and refuses anything this installed release cannot faithfully validate (see the version gate in documentFromJson below — a different MAJOR never parses, because a major is exactly a schema generation this release may not describe). A bare DocumentTreeSchema.parse() does not version-discriminate at all — it structurally validates whatever it is handed against the installed schema, full stop — so a caller ingesting a dump from anywhere it did not itself produce must go through documentFromJson, not a direct parse. Callers that already trust the value's provenance may keep parsing directly, exactly as before.
 
-// The layout-document stem stays in this pattern on purpose: this package no longer defines that schema (the whole LayoutDocument family moved to pdf-codec in the 4.0.0 major, ExaDev/pdf-codec#65), but values stamped with its URI are still recognised -- by documentFromJson's tombstone branch, which names where the schema went instead of failing as if the value were unrelated. The document-package stem gets the identical treatment for the identical reason: DocumentPackage was renamed to DocumentTree in this major (ExaDev/documents.js#661), so a dump stamped with the old stem is still recognised here and answered with its own tombstone rather than an opaque "unrecognized $schema".
+// The layout-document stem stays in this pattern on purpose: this package no longer defines that schema (the whole LayoutDocument family moved to pdf-codec in the 4.0.0 major, ExaDev/pdf-codec#65), but values stamped with its URI are still recognised — by documentFromJson's tombstone branch, which names where the schema went instead of failing as if the value were unrelated. The document-package stem gets the identical treatment for the identical reason: DocumentPackage was renamed to DocumentTree in this major (ExaDev/documents.js#661), so a dump stamped with the old stem is still recognised here and answered with its own tombstone rather than an opaque "unrecognized $schema".
 const SCHEMA_URI_PATTERN =
   /^https:\/\/cdn\.jsdelivr\.net\/npm\/document-schema\.js@([^/]+)\/schemas\/(document-tree|document-package|content-document|layout-document)\.schema\.json$/;
 
@@ -48,7 +48,7 @@ function kindForFileStem(stem: string): DocumentSchemaKind | undefined {
   }
 }
 
-// The major of a release-pinned version string, or undefined when it does not start with one (which no real URI does -- a mismatch, never a parse).
+// The major of a release-pinned version string, or undefined when it does not start with one (which no real URI does — a mismatch, never a parse).
 function majorVersionOf(version: string): number | undefined {
   const match = /^(\d+)/.exec(version);
   if (match?.[1] === undefined) return undefined;
@@ -59,7 +59,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// The one place a raw, unvalidated $schema value is read back out of an unknown input -- used by documentFromJson below, and exported on its own for a caller that only wants to know "what kind of document is this, if any" without also parsing the rest of the value. Version-agnostic on purpose: it answers "which kind does this URI name", not "may this installed release parse it" -- a value tagged by an older or newer release is still recognisable as "a DocumentTree" from its file stem alone, and only documentFromJson applies the version gate. A layout-document URI returns undefined here because this package no longer defines that kind, and a document-package URI returns undefined here too because that stem was renamed away in this major; documentFromJson recognises both separately and answers each with its own tombstone.
+// The one place a raw, unvalidated $schema value is read back out of an unknown input — used by documentFromJson below, and exported on its own for a caller that only wants to know "what kind of document is this, if any" without also parsing the rest of the value. Version-agnostic on purpose: it answers "which kind does this URI name", not "may this installed release parse it" — a value tagged by an older or newer release is still recognisable as "a DocumentTree" from its file stem alone, and only documentFromJson applies the version gate. A layout-document URI returns undefined here because this package no longer defines that kind, and a document-package URI returns undefined here too because that stem was renamed away in this major; documentFromJson recognises both separately and answers each with its own tombstone.
 export function documentSchemaKindOf(
   value: unknown,
 ): DocumentSchemaKind | undefined {
@@ -78,7 +78,7 @@ export type ContentDocumentJson = ContentDocument & {
 
 // No re-validation here: the parameter type already guarantees a real DocumentTree at the call site, so re-parsing it would be defensive code for a case that can't happen. $schema is spread first so it's also the first enumerable/JSON key.
 //
-// $schema is envelope metadata, not content: a content hash or structural comparison computed over a serialised dump must exclude it (document-outline.js's leafContentHash recipe -- canonicalise, stringify, SHA-256 -- is the family's stated canonicaliser, and the $schema key is stripped before that canonicalisation runs, never hashed alongside the content it merely labels). Two dumps of one document by two different installed releases hash equal once $schema is excluded; hashing it in would make the digest name the dumper, not the document.
+// $schema is envelope metadata, not content: a content hash or structural comparison computed over a serialised dump must exclude it (document-outline.js's leafContentHash recipe — canonicalise, stringify, SHA-256 — is the family's stated canonicaliser, and the $schema key is stripped before that canonicalisation runs, never hashed alongside the content it merely labels). Two dumps of one document by two different installed releases hash equal once $schema is excluded; hashing it in would make the digest name the dumper, not the document.
 export function documentTreeWithSchema(value: DocumentTree): DocumentTreeJson {
   return { $schema: schemaUriFor("DocumentTree"), ...value };
 }
@@ -101,7 +101,7 @@ export class UnrecognizedDocumentSchemaError extends Error {
   }
 }
 
-// The demotion tombstone: a value stamped with the layout-document schema's URI was written by document-schema.js 3.x or earlier, and the schema it names now lives in pdf-codec. The pointer is the entire answer -- this release cannot validate the value, and pretending not to recognise the URI would hide the one fact the reader needs.
+// The demotion tombstone: a value stamped with the layout-document schema's URI was written by document-schema.js 3.x or earlier, and the schema it names now lives in pdf-codec. The pointer is the entire answer — this release cannot validate the value, and pretending not to recognise the URI would hide the one fact the reader needs.
 export class LayoutSchemaDemotedError extends Error {
   readonly schema: string;
 
@@ -114,7 +114,7 @@ export class LayoutSchemaDemotedError extends Error {
   }
 }
 
-// The rename tombstone: a value stamped with the document-package schema's URI was written by document-schema.js 4.x or earlier, before ExaDev/documents.js#661 renamed DocumentPackage (and the $schema stem naming it) to DocumentTree. Same shape as the demotion tombstone above -- this release cannot validate the value under its old name, and the pointer is the entire answer.
+// The rename tombstone: a value stamped with the document-package schema's URI was written by document-schema.js 4.x or earlier, before ExaDev/documents.js#661 renamed DocumentPackage (and the $schema stem naming it) to DocumentTree. Same shape as the demotion tombstone above — this release cannot validate the value under its old name, and the pointer is the entire answer.
 export class DocumentPackageRenamedError extends Error {
   readonly schema: string;
 
@@ -157,7 +157,7 @@ export type DocumentJsonResult =
   | { kind: "DocumentTree"; value: DocumentTree }
   | { kind: "ContentDocument"; value: ContentDocument };
 
-// The ingest entry point for a value of unknown provenance. $schema selects which schema to run and the version gate decides whether this release may run it; the schema itself still does the real structural validation (a recognized $schema with a structurally invalid body throws the underlying ZodError, not one of this module's errors). Within one major the installed schema validates the dump -- patch and minor releases are semver-compatible with the major's schema generation -- and across majors it refuses, because a major boundary is exactly where the schema's shape may have changed incompatibly (4.0.0's tree-form envelope being the live example). A caller that already knows the kind and trusts the value's provenance can keep calling DocumentTreeSchema.parse(value) (etc.) directly, unchanged -- these schemas are plain (non-strict) z.object()s, so they already tolerate and silently strip an incoming $schema property with zero new code -- but such a caller is validating structure only, not version: that is the documented difference between a direct parse and this dispatch.
+// The ingest entry point for a value of unknown provenance. $schema selects which schema to run and the version gate decides whether this release may run it; the schema itself still does the real structural validation (a recognized $schema with a structurally invalid body throws the underlying ZodError, not one of this module's errors). Within one major the installed schema validates the dump — patch and minor releases are semver-compatible with the major's schema generation — and across majors it refuses, because a major boundary is exactly where the schema's shape may have changed incompatibly (4.0.0's tree-form envelope being the live example). A caller that already knows the kind and trusts the value's provenance can keep calling DocumentTreeSchema.parse(value) (etc.) directly, unchanged — these schemas are plain (non-strict) z.object()s, so they already tolerate and silently strip an incoming $schema property with zero new code — but such a caller is validating structure only, not version: that is the documented difference between a direct parse and this dispatch.
 export function documentFromJson(value: unknown): DocumentJsonResult {
   if (!isRecord(value) || typeof value.$schema !== "string") {
     throw new UnrecognizedDocumentSchemaError(

@@ -1,7 +1,7 @@
 import type { Package } from "../../model/package";
 import { findMainPartPath, findRelatedPartPath } from "../opc";
 
-// Where a workbook's parts actually live. OPC names the workbook part through the package root's own officeDocument relationship and each of its companion parts through the workbook's own relationships, so nothing here reads a conventional path unless the package declares no usable relationship for it -- see typed/opc.ts for why a conventional name is never authoritative.
+// Where a workbook's parts actually live. OPC names the workbook part through the package root's own officeDocument relationship and each of its companion parts through the workbook's own relationships, so nothing here reads a conventional path unless the package declares no usable relationship for it — see typed/opc.ts for why a conventional name is never authoritative.
 
 const CONVENTIONAL_WORKBOOK_PATH = "xl/workbook.xml";
 const CONVENTIONAL_STYLES_PATH = "xl/styles.xml";

@@ -12,10 +12,10 @@ import {
   textContent,
 } from "../util";
 
-// xlsx's two cell-comment mechanisms, read into ContentSheetCell's own comment field. Both store the comment text in parts SEPARATE from the worksheet part, addressed not by part name but through the worksheet part's own relationships -- the same "never trust filename order" rule resolveSheetEntries (typed/xlsx/content.ts) applies to the sheets themselves:
+// xlsx's two cell-comment mechanisms, read into ContentSheetCell's own comment field. Both store the comment text in parts SEPARATE from the worksheet part, addressed not by part name but through the worksheet part's own relationships — the same "never trust filename order" rule resolveSheetEntries (typed/xlsx/content.ts) applies to the sheets themselves:
 //  - Legacy notes (Excel 97-2016, still written today for down-level readers): one xl/comments{N}.xml part per sheet, carrying <commentList><comment ref authorId><text> entries. The note's on-screen shape lives in a separate VML drawing part (the sheet's <legacyDrawing>); that part holds geometry only, never comment text, so it is not read here.
 //  - Threaded comments (Office 365, the Microsoft extension documented in [MS-XLSX] "Threaded Comments"): one xl/threadedComments/threadedComment{N}.xml part per sheet, whose threadedComment elements form one thread per cell via parentId and name their authors through a shared xl/persons/person{N}.xml part.
-// A cell carrying both (Excel 365 writes a legacy copy of every thread for down-level readers) reads as the THREAD: the strictly richer of the two -- replies, timestamps -- and the one Excel itself displays when both are present. The [MS-XLSX] vocabulary has one genuine older spelling in real files (attributes dCreation/displayName/parent/dId instead of dT/personId/parentId/id); producers of both eras exist, so both spellings are read.
+// A cell carrying both (Excel 365 writes a legacy copy of every thread for down-level readers) reads as the THREAD: the strictly richer of the two — replies, timestamps — and the one Excel itself displays when both are present. The [MS-XLSX] vocabulary has one genuine older spelling in real files (attributes dCreation/displayName/parent/dId instead of dT/personId/parentId/id); producers of both eras exist, so both spellings are read.
 
 const REL_COMMENTS =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments";
@@ -31,9 +31,9 @@ export interface SheetCellComment {
   comment: ContentSheetCellComment;
 }
 
-// The threaded-comments vocabulary is a Microsoft extension, not ECMA-376, so unlike every ECMA-376 part this package reads -- whose producers all bind the schema namespace as the DEFAULT namespace, leaving element names unprefixed -- these elements arrive under whatever prefix the producer chose: Excel writes the part unprefixed, other producers bind one (conventionally tc:). The local name, the part after the last ':', is the only spelling-agnostic address for these elements.
+// The threaded-comments vocabulary is a Microsoft extension, not ECMA-376, so unlike every ECMA-376 part this package reads — whose producers all bind the schema namespace as the DEFAULT namespace, leaving element names unprefixed — these elements arrive under whatever prefix the producer chose: Excel writes the part unprefixed, other producers bind one (conventionally tc:). The local name, the part after the last ':', is the only spelling-agnostic address for these elements.
 function localName(tag: string): string {
-  // No "no colon" branch: String.prototype.lastIndexOf returns -1 for an unprefixed tag, and tag.slice(-1 + 1) === tag.slice(0) is the whole string unchanged -- exactly the un-sliced value the branch existed to return, for every possible tag, not merely the ones this file happens to see. The ternary's own comparison is therefore never actually reachable as a distinct outcome.
+  // No "no colon" branch: String.prototype.lastIndexOf returns -1 for an unprefixed tag, and tag.slice(-1 + 1) === tag.slice(0) is the whole string unchanged — exactly the un-sliced value the branch existed to return, for every possible tag, not merely the ones this file happens to see. The ternary's own comparison is therefore never actually reachable as a distinct outcome.
   const colon = tag.lastIndexOf(":");
   return tag.slice(colon + 1);
 }
@@ -51,7 +51,7 @@ function childrenWithLocalName(
   return out;
 }
 
-// ST_Guid as written in these parts is braced and upper case, but the brace spelling varies across producers, so both sides of every guid comparison (personId -> person/@id) go through this normaliser. The specific choice of toLowerCase over toUpperCase here is a genuinely irreducible equivalent mutation opportunity, not merely an untested one: this normaliser's only observable effect anywhere in this file is whether two guid spellings compare equal (a Map key match in readPersons/readThreadedAuthor) -- and folding every input to the SAME case, in either direction, produces that identical equality relation for every possible pair of inputs. No test built on this function's own observable contract (guid equality, never the normalised string's own case) can ever tell toLowerCase and toUpperCase apart here, any more than a test could tell +180 from -180 apart in a value that is always later reduced modulo 360 (see canonicalizeGroupRotation's own doc comment in shared/drawingml.ts for the general shape of this argument).
+// ST_Guid as written in these parts is braced and upper case, but the brace spelling varies across producers, so both sides of every guid comparison (personId -> person/@id) go through this normaliser. The specific choice of toLowerCase over toUpperCase here is a genuinely irreducible equivalent mutation opportunity, not merely an untested one: this normaliser's only observable effect anywhere in this file is whether two guid spellings compare equal (a Map key match in readPersons/readThreadedAuthor) — and folding every input to the SAME case, in either direction, produces that identical equality relation for every possible pair of inputs. No test built on this function's own observable contract (guid equality, never the normalised string's own case) can ever tell toLowerCase and toUpperCase apart here, any more than a test could tell +180 from -180 apart in a value that is always later reduced modulo 360 (see canonicalizeGroupRotation's own doc comment in shared/drawingml.ts for the general shape of this argument).
 function normalizeGuid(value: string): string {
   return value.replaceAll("{", "").replaceAll("}", "").toLowerCase();
 }
@@ -182,13 +182,13 @@ function readThreadedCreatedAt(element: XmlElement): string | undefined {
   return Number.isFinite(ms) ? new Date(ms).toISOString() : undefined;
 }
 
-// One thread per cell: the entry carrying no parentId is the thread's root, every other entry for the same cell is one of its replies in document order -- the flat one-level shape ContentSheetCellComment itself holds, regardless of whether the file's parentId chain nests replies under replies. A group whose every entry claims a parent (a producer bug, or a parent trimmed from the part) still keeps its content: the first entry becomes the root, matching how every real producer writes a thread -- contiguously, root first.
+// One thread per cell: the entry carrying no parentId is the thread's root, every other entry for the same cell is one of its replies in document order — the flat one-level shape ContentSheetCellComment itself holds, regardless of whether the file's parentId chain nests replies under replies. A group whose every entry claims a parent (a producer bug, or a parent trimmed from the part) still keeps its content: the first entry becomes the root, matching how every real producer writes a thread — contiguously, root first.
 function readThreadedComments(
   pkg: Package,
   sheetPath: string,
   into: Map<string, SheetCellComment>,
 ): void {
-  // No "partPaths.length === 0" early return: with no threaded-comment parts, the loop below simply never runs, and readPersons on a sheet with no person relationships either just returns an empty, unused map -- an early return here would only ever skip work whose absence is already unobservable.
+  // No "partPaths.length === 0" early return: with no threaded-comment parts, the loop below simply never runs, and readPersons on a sheet with no person relationships either just returns an empty, unused map — an early return here would only ever skip work whose absence is already unobservable.
   const partPaths = relatedPartPaths(pkg, sheetPath, REL_THREADED_COMMENTS);
   const persons = readPersons(pkg, sheetPath);
   for (const path of partPaths) {
@@ -245,7 +245,7 @@ function readThreadedComments(
   }
 }
 
-// Every comment of one worksheet, at most one per cell, keyed `${row}:${column}` -- legacy notes first, threads overwriting them where a cell carries both.
+// Every comment of one worksheet, at most one per cell, keyed `${row}:${column}` — legacy notes first, threads overwriting them where a cell carries both.
 export function readSheetCellComments(
   pkg: Package,
   sheetPath: string,

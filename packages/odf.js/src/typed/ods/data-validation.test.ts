@@ -7,7 +7,7 @@ import {
   synthesiseContentValidationCondition,
 } from "./data-validation";
 
-// table:condition's own grammar is transcribed from LibreOffice's real reader (sc/source/filter/xml/xmlcvali.cxx, XMLConverter.cxx) -- see data-validation.ts's own top-of-file note. Every example here is either lifted verbatim from a real LibreOffice-produced .fods fixture (sc/qa/unit/data/functions/logical/fods/if.fods) or hand-built to the identical grammar that source establishes.
+// table:condition's own grammar is transcribed from LibreOffice's real reader (sc/source/filter/xml/xmlcvali.cxx, XMLConverter.cxx) — see data-validation.ts's own top-of-file note. Every example here is either lifted verbatim from a real LibreOffice-produced .fods fixture (sc/qa/unit/data/functions/logical/fods/if.fods) or hand-built to the identical grammar that source establishes.
 
 describe("parseContentValidationCondition", () => {
   it("parses cell-content-is-in-list with a nested-parens/quoted-string operand (verbatim from a real LibreOffice .fods fixture)", () => {
@@ -118,7 +118,7 @@ describe("parseContentValidationCondition", () => {
     ).toBeUndefined();
   });
 
-  it("falls back to the bare type, with no operator, when the secondary clause's own comparison identifier has no parentheses -- rather than treating two arbitrary non-'()' characters as the missing pair and mis-parsing whatever operator happens to follow them", () => {
+  it("falls back to the bare type, with no operator, when the secondary clause's own comparison identifier has no parentheses — rather than treating two arbitrary non-'()' characters as the missing pair and mis-parsing whatever operator happens to follow them", () => {
     expect(
       parseContentValidationCondition(
         "of:cell-content-is-whole-number() and cell-contentAB>=5",
@@ -150,7 +150,7 @@ describe("parseContentValidationCondition", () => {
     ).toEqual({ type: "whole", operator: "greaterThanOrEqual", formula1: "5" });
   });
 
-  it("falls back to the bare type when the token after 'and' is a function1 (an is-true-formula, its own operand carried on formula1) rather than a comparison or function2 -- not just any wrong-kind token, one whose own parsed fields could otherwise leak through", () => {
+  it("falls back to the bare type when the token after 'and' is a function1 (an is-true-formula, its own operand carried on formula1) rather than a comparison or function2 — not just any wrong-kind token, one whose own parsed fields could otherwise leak through", () => {
     expect(
       parseContentValidationCondition(
         "of:cell-content-is-whole-number() and is-true-formula(X)",
@@ -164,7 +164,7 @@ describe("parseContentValidationCondition", () => {
     ).toBeUndefined();
   });
 
-  it("returns undefined for is-true-formula whose character right after the identifier isn't '(' -- rather than treating whatever follows that character as the parenthesised operand", () => {
+  it("returns undefined for is-true-formula whose character right after the identifier isn't '(' — rather than treating whatever follows that character as the parenthesised operand", () => {
     expect(
       parseContentValidationCondition("of:is-true-formulaXFOO)"),
     ).toBeUndefined();
@@ -194,7 +194,7 @@ describe("parseContentValidationCondition", () => {
     ).toBeUndefined();
   });
 
-  it("falls back to the bare type, as a secondary clause, when cell-content-is-between has no opening parenthesis -- rather than treating the character right after the identifier as consumed and re-parsing whatever comes after it as the two operands", () => {
+  it("falls back to the bare type, as a secondary clause, when cell-content-is-between has no opening parenthesis — rather than treating the character right after the identifier as consumed and re-parsing whatever comes after it as the two operands", () => {
     expect(
       parseContentValidationCondition(
         "of:cell-content-is-whole-number() and cell-content-is-between1FOO,BAR)",
@@ -202,7 +202,7 @@ describe("parseContentValidationCondition", () => {
     ).toEqual({ type: "whole" });
   });
 
-  it("falls back to the bare type, as a secondary clause, when cell-content-is-between's first operand is empty -- rather than accepting the second operand alone", () => {
+  it("falls back to the bare type, as a secondary clause, when cell-content-is-between's first operand is empty — rather than accepting the second operand alone", () => {
     expect(
       parseContentValidationCondition(
         "of:cell-content-is-whole-number() and cell-content-is-between(,10)",
@@ -210,7 +210,7 @@ describe("parseContentValidationCondition", () => {
     ).toEqual({ type: "whole" });
   });
 
-  it("falls back to the bare type, as a secondary clause, when cell-content-is-between's second operand is empty -- rather than accepting the first operand alone", () => {
+  it("falls back to the bare type, as a secondary clause, when cell-content-is-between's second operand is empty — rather than accepting the first operand alone", () => {
     expect(
       parseContentValidationCondition(
         "of:cell-content-is-whole-number() and cell-content-is-between(10,)",
@@ -245,7 +245,7 @@ describe("readContentValidationDefinitions", () => {
     });
   });
 
-  it("decodes an XML-escaped comparison operator in table:condition (this package parses with processEntities:false, so a producer that escapes '>' as '&gt;' -- confirmed real behaviour, see conditional-format.ts's own sibling fix -- must be undone before the mini-language parser ever sees the string)", () => {
+  it("decodes an XML-escaped comparison operator in table:condition (this package parses with processEntities:false, so a producer that escapes '>' as '&gt;' — confirmed real behaviour, see conditional-format.ts's own sibling fix — must be undone before the mini-language parser ever sees the string)", () => {
     const definitions = readContentValidationDefinitions(
       contentValidationsElement(
         el("table:content-validation", {
@@ -339,7 +339,7 @@ describe("readContentValidationDefinitions", () => {
     const rule = definitions.get("val1");
     expect(rule?.showInputMessage).toBeUndefined();
     expect(rule?.showErrorMessage).toBeUndefined();
-    // Presence, not just value: readContentValidation only ever assigns promptTitle/errorTitle when table:title is actually present, so an absent title must leave the key itself unset -- not merely holding an explicit `undefined` -- which `?.` equality can't tell apart from a genuinely missing key.
+    // Presence, not just value: readContentValidation only ever assigns promptTitle/errorTitle when table:title is actually present, so an absent title must leave the key itself unset — not merely holding an explicit `undefined` — which `?.` equality can't tell apart from a genuinely missing key.
     expect(Object.hasOwn(rule ?? {}, "promptTitle")).toBe(false);
     expect(Object.hasOwn(rule ?? {}, "errorTitle")).toBe(false);
   });

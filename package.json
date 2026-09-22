@@ -1,7 +1,7 @@
 {
   "name": "documents-js-monorepo",
   "private": true,
-  "description": "Workspace root for the documents.js ecosystem: the shared schema layer, the format codecs, the conversion engine, and the CLI, MCP server, and web UI built on them. Never published -- it exists to hold the workspace, the task pipeline, and the release orchestration.",
+  "description": "Workspace root for the documents.js ecosystem: the shared schema layer, the format codecs, the conversion engine, and the CLI, MCP server, and web UI built on them. Never published — it exists to hold the workspace, the task pipeline, and the release orchestration.",
   "type": "module",
   "license": "MIT",
   "repository": {

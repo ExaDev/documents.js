@@ -55,13 +55,13 @@ import {
   parseTextProperties,
 } from "../../styles/properties";
 
-// Reads a text:p (any inline-text container ODF shapes this document sits in -- odt is a later task, but a draw:text-box's own text:p is content-model-identical) into document-schema.js's ContentParagraph/ContentRun, the read-and-write counterpart to text.ts's own decodeOdfText: where that module projects a container's children to a plain string, this module projects the SAME node shapes (text, text:s, text:tab, text:line-break, text:span) to per-run objects carrying resolved formatting, dispatching on the identical node shapes text.ts's own top-of-file note establishes -- see that module for why text:s/text:tab/text:line-break must never be treated as zero-length whitespace.
+// Reads a text:p (any inline-text container ODF shapes this document sits in — odt is a later task, but a draw:text-box's own text:p is content-model-identical) into document-schema.js's ContentParagraph/ContentRun, the read-and-write counterpart to text.ts's own decodeOdfText: where that module projects a container's children to a plain string, this module projects the SAME node shapes (text, text:s, text:tab, text:line-break, text:span) to per-run objects carrying resolved formatting, dispatching on the identical node shapes text.ts's own top-of-file note establishes — see that module for why text:s/text:tab/text:line-break must never be treated as zero-length whitespace.
 //
-// A single text:span's own resolved properties (via the 'text' family cascade) are layered ON TOP of the enclosing paragraph's own resolved properties (via the 'paragraph' family cascade, which itself may carry style:text-properties as the paragraph's own default run formatting) as a base -- mirroring how ooxml.js's own pptx paragraph reader merges a paragraph-level cascade base with each run's own explicit override (see readParagraph/mergeRunProperties in ooxml.js's src/typed/pptx/read.ts). This merge is NOT something cascade.ts's own resolveStyle does for you: resolveStyle only ever resolves ONE style-name reference within ONE family's own default-style + parent-chain (ODF's genuinely two-layer cascade, per cascade.ts's own top-of-file note) -- how a SPAN's resolved properties compose with its ENCLOSING PARAGRAPH's own resolved properties is a separate, consuming-layer concern this module owns.
+// A single text:span's own resolved properties (via the 'text' family cascade) are layered ON TOP of the enclosing paragraph's own resolved properties (via the 'paragraph' family cascade, which itself may carry style:text-properties as the paragraph's own default run formatting) as a base — mirroring how ooxml.js's own pptx paragraph reader merges a paragraph-level cascade base with each run's own explicit override (see readParagraph/mergeRunProperties in ooxml.js's src/typed/pptx/read.ts). This merge is NOT something cascade.ts's own resolveStyle does for you: resolveStyle only ever resolves ONE style-name reference within ONE family's own default-style + parent-chain (ODF's genuinely two-layer cascade, per cascade.ts's own top-of-file note) — how a SPAN's resolved properties compose with its ENCLOSING PARAGRAPH's own resolved properties is a separate, consuming-layer concern this module owns.
 //
-// INLINE CONSTRUCTS: a field element reads as a run carrying its cached text plus a run-level field extent covering exactly that run (the *-ref cross-reference displays are fields, per the tag set in text.ts); a text:bookmark or text:reference-mark reads as a point anchor extent; bookmark and reference-mark range halves pairing inside one paragraph become run extents, each within its own pairing family (typed/shared/constructs.ts owns the descriptor shapes and the scope rules). Every reader that uses this module gets the same treatment -- an odt paragraph, an ods cell, and an odp text frame all carry their fields as paragraph constructs.
+// INLINE CONSTRUCTS: a field element reads as a run carrying its cached text plus a run-level field extent covering exactly that run (the *-ref cross-reference displays are fields, per the tag set in text.ts); a text:bookmark or text:reference-mark reads as a point anchor extent; bookmark and reference-mark range halves pairing inside one paragraph become run extents, each within its own pairing family (typed/shared/constructs.ts owns the descriptor shapes and the scope rules). Every reader that uses this module gets the same treatment — an odt paragraph, an ods cell, and an odp text frame all carry their fields as paragraph constructs.
 
-// The mutable walk state one paragraph's run collection threads: the run-level extents discovered so far, the paired-marker halves at their run positions, the document-order counter that keeps discovery order deterministic, the tracked-change region map, the definitions sink note and annotation bodies mint into, and the list-identity counter note and annotation bodies mint their own text:list numIds from -- the document-wide state when the caller supplied one (every list in one document walk shares one identity space, the numId-as-identity contract list.ts's own header states), a fresh local counter otherwise.
+// The mutable walk state one paragraph's run collection threads: the run-level extents discovered so far, the paired-marker halves at their run positions, the document-order counter that keeps discovery order deterministic, the tracked-change region map, the definitions sink note and annotation bodies mint into, and the list-identity counter note and annotation bodies mint their own text:list numIds from — the document-wide state when the caller supplied one (every list in one document walk shares one identity space, the numId-as-identity contract list.ts's own header states), a fresh local counter otherwise.
 interface RunWalkState {
   readonly extents: RunConstructExtent[];
   readonly halves: OdfMarkerHalf[];
@@ -74,7 +74,7 @@ interface RunWalkState {
   readonly listIdState: OdfListIdState;
 }
 
-// What a caller reading a paragraph in a document-level context supplies: the tracked-change regions a text:change/text:change-start/text:change-end marker resolves its id against, the out-array every marker half is reported to for block-scope pairing by the reader that owns the block flow, the definitions sink note and annotation bodies mint into, and the list-identity counter those bodies mint their own text:list numIds from -- one document-wide state so no two lists anywhere in one document share a numId. All absent when the caller has no document context -- a bare readOdfParagraph call reads runs and run-level extents; change markers with no region map contribute nothing (their id names a region the caller never collected), and notes read only their citation run, since an anchor naming a definition key no table holds would be malformed.
+// What a caller reading a paragraph in a document-level context supplies: the tracked-change regions a text:change/text:change-start/text:change-end marker resolves its id against, the out-array every marker half is reported to for block-scope pairing by the reader that owns the block flow, the definitions sink note and annotation bodies mint into, and the list-identity counter those bodies mint their own text:list numIds from — one document-wide state so no two lists anywhere in one document share a numId. All absent when the caller has no document context — a bare readOdfParagraph call reads runs and run-level extents; change markers with no region map contribute nothing (their id names a region the caller never collected), and notes read only their citation run, since an anchor naming a definition key no table holds would be malformed.
 export interface OdfParagraphContext {
   readonly provenanceRegions?: ReadonlyMap<string, ProvenanceDescriptor>;
   readonly markersOut?: OdfMarkerHalf[];
@@ -83,7 +83,7 @@ export interface OdfParagraphContext {
   readonly format?: OdfResidueFormat;
 }
 
-// One note or annotation body's own block flow (and a master page's header/footer body's -- the same shape ODF reuses for every detached block container that is not the document body itself): text:p paragraphs and text:list lists, read through the same shared walkers the main body uses, in the body's own document order. Anything else in a body contributes nothing, exactly as readBlocks treats unknown block-level elements -- an annotation's dc:creator/dc:date children land here and are skipped, having already been read into the entry's own fields.
+// One note or annotation body's own block flow (and a master page's header/footer body's — the same shape ODF reuses for every detached block container that is not the document body itself): text:p paragraphs and text:list lists, read through the same shared walkers the main body uses, in the body's own document order. Anything else in a body contributes nothing, exactly as readBlocks treats unknown block-level elements — an annotation's dc:creator/dc:date children land here and are skipped, having already been read into the entry's own fields.
 export function readOdfConstructBodyBlocks(
   body: XmlElement,
   pkg: Package,
@@ -150,7 +150,7 @@ function collectRuns(
       };
       collectRuns(node, spanProperties, pkg, out, walk, hyperlinkTarget);
     } else if (node.tag === "text:a") {
-      // A text:a is an inline hyperlink: its xlink:href is the link target, its children (text, text:span, text:s/tab/line-break, even a nested text:a) are the link's visible content. Threading the href as hyperlinkTarget through the recursion lets a text:span inside the link still resolve its own "text"-family formatting AND carry the hyperlink on every run it emits -- mirroring ooxml.js's own docx reader, which threads the resolved w:hyperlink target through w:ins/w:fldSimple recursion and stamps { ...run, hyperlink: target } on every leaf run. A text:a with no xlink:href is malformed (ODF makes href mandatory) but its visible text still reads; an enclosing text:a's own target is inherited in that case so an inner link's text is not lost.
+      // A text:a is an inline hyperlink: its xlink:href is the link target, its children (text, text:span, text:s/tab/line-break, even a nested text:a) are the link's visible content. Threading the href as hyperlinkTarget through the recursion lets a text:span inside the link still resolve its own "text"-family formatting AND carry the hyperlink on every run it emits — mirroring ooxml.js's own docx reader, which threads the resolved w:hyperlink target through w:ins/w:fldSimple recursion and stamps { ...run, hyperlink: target } on every leaf run. A text:a with no xlink:href is malformed (ODF makes href mandatory) but its visible text still reads; an enclosing text:a's own target is inherited in that case so an inner link's text is not lost.
       // Entity-decoded, like every other text this reader projects out of the lossless model: a real href routinely carries an ampersand between query parameters, which the source XML spells &amp;. ContentRun.hyperlink is a resolved URI, not a fragment of XML, and leaving it encoded would also make the write direction double-encode it on every cycle.
       const rawHref = attrValue(node, "xlink:href");
       const href = rawHref === undefined ? undefined : decodeXmlText(rawHref);
@@ -163,7 +163,7 @@ function collectRuns(
         href ?? hyperlinkTarget,
       );
     } else if (isOdfFieldElement(node)) {
-      // An inline field's own children are its cached display content, so they read as ordinary runs at the field's position with the field's base formatting -- this is the fix for the long-standing drop where a field's cached text vanished along with its field-ness. The extent covers exactly the runs the field contributed: startRun === endRun when the producer cached nothing, which is the point-anchor spelling of an uncached field.
+      // An inline field's own children are its cached display content, so they read as ordinary runs at the field's position with the field's base formatting — this is the fix for the long-standing drop where a field's cached text vanished along with its field-ness. The extent covers exactly the runs the field contributed: startRun === endRun when the producer cached nothing, which is the point-anchor spelling of an uncached field.
       const startRun = out.length;
       collectRuns(node, baseProperties, pkg, out, walk, hyperlinkTarget);
       walk.extents.push({
@@ -175,7 +175,7 @@ function collectRuns(
       node.tag === "text:bookmark" ||
       node.tag === "text:reference-mark"
     ) {
-      // A point bookmark: zero-width, named, addressed -- a point anchor extent at its run position. text:reference-mark is ODF's second point-target spelling (the target a text:reference-ref display names) and reads identically: the harmonised anchor vocabulary has one bookmark anchorType for both (document-schema.js's AnchorTypeSchema names them together). text:name is required by the ODF schema; a mark without one is malformed and skipped, matching this reader's general salvage posture.
+      // A point bookmark: zero-width, named, addressed — a point anchor extent at its run position. text:reference-mark is ODF's second point-target spelling (the target a text:reference-ref display names) and reads identically: the harmonised anchor vocabulary has one bookmark anchorType for both (document-schema.js's AnchorTypeSchema names them together). text:name is required by the ODF schema; a mark without one is malformed and skipped, matching this reader's general salvage posture.
       const name = attrValue(node, "text:name");
       if (name !== undefined) {
         const runPosition = out.length;
@@ -189,7 +189,7 @@ function collectRuns(
       node.tag === "text:reference-mark-start" ||
       node.tag === "text:reference-mark-end"
     ) {
-      // A reference-mark range half: the target half of ODF's cross-reference system, paired by text:name exactly the way a bookmark half pairs -- in-paragraph into a run-level anchor extent, at paragraph edges into the block-scope pair -- but as its OWN pairing family, since ODF keeps reference-mark names and bookmark names in separate namespaces and a same-named bookmark and reference-mark must each pair with their own spelling.
+      // A reference-mark range half: the target half of ODF's cross-reference system, paired by text:name exactly the way a bookmark half pairs — in-paragraph into a run-level anchor extent, at paragraph edges into the block-scope pair — but as its OWN pairing family, since ODF keeps reference-mark names and bookmark names in separate namespaces and a same-named bookmark and reference-mark must each pair with their own spelling.
       const name = attrValue(node, "text:name");
       if (name !== undefined) {
         walk.halves.push({
@@ -256,7 +256,7 @@ function collectRuns(
         });
       }
     } else if (node.tag === "text:note") {
-      // A footnote/endnote: ODF carries the body INLINE inside the note element, so this is local reading -- the citation mark becomes a run at the note's position, the body mints a definitions entry, and an anchor extent covers the citation run naming that entry's key. Without a definitions sink (or a name to hang either on: text:id absent, nothing to mint with) only the citation run reads -- an anchor naming a definition key no table holds would be malformed. A note with no readable text:note-class is malformed and contributes nothing at all.
+      // A footnote/endnote: ODF carries the body INLINE inside the note element, so this is local reading — the citation mark becomes a run at the note's position, the body mints a definitions entry, and an anchor extent covers the citation run naming that entry's key. Without a definitions sink (or a name to hang either on: text:id absent, nothing to mint with) only the citation run reads — an anchor naming a definition key no table holds would be malformed. A note with no readable text:note-class is malformed and contributes nothing at all.
       const noteClass = attrValue(node, "text:note-class");
       if (noteClass === "footnote" || noteClass === "endnote") {
         const rawId = attrValue(node, "text:id");
@@ -312,7 +312,7 @@ function collectRuns(
         }
       }
     } else if (node.tag === "office:annotation") {
-      // A comment anchor: its body and author mint a definitions entry (office:annotation carries its body inline, dc:creator and dc:date beside text:p content), and the anchor itself is a marker HALF rather than an immediate extent -- a named annotation pairs with its office:annotation-end over a range, and only an unpaired one falls back to a point anchor (the pairing and that fallback happen after the walk, in readOdfParagraph). An annotation with no definitions sink reads nothing but leaves the text flow untouched, the same sink-less degrade a note takes.
+      // A comment anchor: its body and author mint a definitions entry (office:annotation carries its body inline, dc:creator and dc:date beside text:p content), and the anchor itself is a marker HALF rather than an immediate extent — a named annotation pairs with its office:annotation-end over a range, and only an unpaired one falls back to a point anchor (the pairing and that fallback happen after the walk, in readOdfParagraph). An annotation with no definitions sink reads nothing but leaves the text flow untouched, the same sink-less degrade a note takes.
       if (walk.definitions !== undefined) {
         const rawName = attrValue(node, "office:name");
         const name =
@@ -357,7 +357,7 @@ function collectRuns(
         });
       }
     } else if (node.tag === "office:annotation-end") {
-      // The closing half of a ranged comment, keyed by office:name -- the pairing attribute ODF 1.2 added; an unnamed end has nothing to pair with and is ignored.
+      // The closing half of a ranged comment, keyed by office:name — the pairing attribute ODF 1.2 added; an unnamed end has nothing to pair with and is ignored.
       const rawName = attrValue(node, "office:name");
       if (rawName !== undefined) {
         walk.halves.push({
@@ -376,7 +376,7 @@ function collectRuns(
       node.tag === "text:meta" ||
       isOdfExtensionElement(node)
     ) {
-      // Inline vocabulary with no cross-format analogue: a phonetic-annotation ruby pair, an RDF metadata anchor, a producer-private extension element. What renders as flow text reads as ordinary runs while the element itself quarantines, so nothing is lost on either side -- the residue half carries what the construct WAS, the runs carry what it SAID. A ruby's rendered text is its ruby-base ALONE (the ruby-text is the small gloss above it, not flow content -- recursing into the whole ruby would inline the annotation as if it were body text); a text:meta wraps ordinary content, so the whole element recurses.
+      // Inline vocabulary with no cross-format analogue: a phonetic-annotation ruby pair, an RDF metadata anchor, a producer-private extension element. What renders as flow text reads as ordinary runs while the element itself quarantines, so nothing is lost on either side — the residue half carries what the construct WAS, the runs carry what it SAID. A ruby's rendered text is its ruby-base ALONE (the ruby-text is the small gloss above it, not flow content — recursing into the whole ruby would inline the annotation as if it were body text); a text:meta wraps ordinary content, so the whole element recurses.
       if (node.tag === "text:ruby") {
         for (const base of childrenWithTag(node, "text:ruby-base")) {
           collectRuns(base, baseProperties, pkg, out, walk, hyperlinkTarget);
@@ -386,7 +386,7 @@ function collectRuns(
       }
       walk.residueElements.push(node);
     }
-    // Any other child (change-tracking markup, an anchored draw:frame) contributes no run at all -- matching text.ts's own established zero-length treatment of the same node shapes, not a new gap introduced here.
+    // Any other child (change-tracking markup, an anchored draw:frame) contributes no run at all — matching text.ts's own established zero-length treatment of the same node shapes, not a new gap introduced here.
   }
 }
 
@@ -415,10 +415,10 @@ function runFromText(text: string, properties: StyleProperties): ContentRun {
   };
 }
 
-// ODF's predefined "Preformatted Text" paragraph style, spelled the way LibreOffice actually writes it: a predefined common-style name with a space in its display name is serialised with the space encoded as "_20_", never a literal space or underscore -- confirmed against this package's own odt fixtures, whose styles.xml carries "Heading_20_1" for "Heading 1", "Text_20_body" for "Text body", and "Table_20_Contents" for "Table Contents", all the identical convention. "Preformatted_Text" (the spelling ExaDev/documents.js#1020 guessed at) is not real ODF output.
+// ODF's predefined "Preformatted Text" paragraph style, spelled the way LibreOffice actually writes it: a predefined common-style name with a space in its display name is serialised with the space encoded as "_20_", never a literal space or underscore — confirmed against this package's own odt fixtures, whose styles.xml carries "Heading_20_1" for "Heading 1", "Text_20_body" for "Text body", and "Table_20_Contents" for "Table Contents", all the identical convention. "Preformatted_Text" (the spelling ExaDev/documents.js#1020 guessed at) is not real ODF output.
 const PREFORMATTED_STYLE_NAME = "Preformatted_20_Text";
 
-// A bare marker element for PREFORMATTED_STYLE_NAME: no properties of its own, matching this package's own established minimal-infra-style convention (typed/odt/write.ts's sectionBreakStyleElement carries nothing but the one attribute it exists to trigger) -- visual formatting for a preformatted paragraph still comes entirely from its own runs and its own interned automatic style, never from this marker's own defaults. Exists purely so resolveStyleElementChain's by-name lookup succeeds when a written paragraph's own style (or an ancestor of it) names PREFORMATTED_STYLE_NAME as its parent -- without a real element here, the chain walk stops at the missing name and readOdfParagraph's own preformatted check never sees it. A caller of writeOdfParagraph is responsible for pushing this into its own document's office:styles exactly once (idempotently or not -- ODF tolerates a style:name appearing only once per family regardless, so a caller that already knows it writes at most once per document, as typed/odt/write.ts's own top-level setup does, needs no existence check of its own).
+// A bare marker element for PREFORMATTED_STYLE_NAME: no properties of its own, matching this package's own established minimal-infra-style convention (typed/odt/write.ts's sectionBreakStyleElement carries nothing but the one attribute it exists to trigger) — visual formatting for a preformatted paragraph still comes entirely from its own runs and its own interned automatic style, never from this marker's own defaults. Exists purely so resolveStyleElementChain's by-name lookup succeeds when a written paragraph's own style (or an ancestor of it) names PREFORMATTED_STYLE_NAME as its parent — without a real element here, the chain walk stops at the missing name and readOdfParagraph's own preformatted check never sees it. A caller of writeOdfParagraph is responsible for pushing this into its own document's office:styles exactly once (idempotently or not — ODF tolerates a style:name appearing only once per family regardless, so a caller that already knows it writes at most once per document, as typed/odt/write.ts's own top-level setup does, needs no existence check of its own).
 export function preformattedStyleElement(): XmlElement {
   return el("style:style", {
     "style:name": PREFORMATTED_STYLE_NAME,
@@ -426,7 +426,7 @@ export function preformattedStyleElement(): XmlElement {
   });
 }
 
-// Reads one text:p element (the caller is responsible for confirming it IS a text:p before calling -- this module has no opinion on where in a document's tree that element sits). Paragraph-level fields (alignment, spacing, indents) come only from the paragraph's OWN resolved 'paragraph'-family properties, never from a span: a text:span's style-name always resolves against the 'text' family, which style.ts/registry.ts's own STYLE_FAMILIES never lets carry paragraph-level properties in practice. The optional context supplies the document-level facts a paragraph cannot know on its own -- the tracked-change regions its change markers resolve against, and the out-array its block-edge marker halves are reported to for the reader that owns the block flow to pair.
+// Reads one text:p element (the caller is responsible for confirming it IS a text:p before calling — this module has no opinion on where in a document's tree that element sits). Paragraph-level fields (alignment, spacing, indents) come only from the paragraph's OWN resolved 'paragraph'-family properties, never from a span: a text:span's style-name always resolves against the 'text' family, which style.ts/registry.ts's own STYLE_FAMILIES never lets carry paragraph-level properties in practice. The optional context supplies the document-level facts a paragraph cannot know on its own — the tracked-change regions its change markers resolve against, and the out-array its block-edge marker halves are reported to for the reader that owns the block flow to pair.
 export function readOdfParagraph(
   pElement: XmlElement,
   pkg: Package,
@@ -460,7 +460,7 @@ export function readOdfParagraph(
   };
   collectRuns(pElement, paragraphProperties, pkg, runs, walk);
 
-  // The paragraph's own residue, one value for everything this format carries that the run/paragraph vocabulary does not model: the unmodellable half of its own style chain (every style:paragraph-properties/style:text-properties element in the resolved chain that properties.ts cannot fully model -- hasUnknown -- fo:keep-with-next, a style:map child, anything StyleProperties carries no field for), the inline no-analogue elements the run walk quarantined (text:ruby, text:meta, vendor extensions), and the element's own text:is-list-header flag (a heading-is-a-list-header marker with no cross-format analogue, carried as a children-stripped element spelling its own tag). Only when the context names the reading format -- residue's format member states which reader produced it, and this shared reader serves seven of them. Span-run and table/graphic-style unknowns stay dropped (documented): the run- and table-level channels exist, but the resolved-styles fact this row lands is the paragraph's own chain.
+  // The paragraph's own residue, one value for everything this format carries that the run/paragraph vocabulary does not model: the unmodellable half of its own style chain (every style:paragraph-properties/style:text-properties element in the resolved chain that properties.ts cannot fully model — hasUnknown — fo:keep-with-next, a style:map child, anything StyleProperties carries no field for), the inline no-analogue elements the run walk quarantined (text:ruby, text:meta, vendor extensions), and the element's own text:is-list-header flag (a heading-is-a-list-header marker with no cross-format analogue, carried as a children-stripped element spelling its own tag). Only when the context names the reading format — residue's format member states which reader produced it, and this shared reader serves seven of them. Span-run and table/graphic-style unknowns stay dropped (documented): the run- and table-level channels exist, but the resolved-styles fact this row lands is the paragraph's own chain.
   let source: ContentParagraph["source"];
   if (context.format !== undefined) {
     const residueElements: XmlElement[] = [];
@@ -492,7 +492,7 @@ export function readOdfParagraph(
     pElement,
   );
   walk.extents.push(...pairedExtents);
-  // An annotation whose office:annotation-end never arrived (the end element is optional -- a single-position comment needs none) falls back to the point anchor at its run position, unless it sat at a paragraph edge -- an edge half is the block-scope reader's, and that reader makes the same fallback itself against the whole flow.
+  // An annotation whose office:annotation-end never arrived (the end element is optional — a single-position comment needs none) falls back to the point anchor at its run position, unless it sat at a paragraph edge — an edge half is the block-scope reader's, and that reader makes the same fallback itself against the whole flow.
   for (const half of walk.halves) {
     if (
       half.kind === "annotation" &&
@@ -514,7 +514,7 @@ export function readOdfParagraph(
     context.markersOut.push(...walk.halves);
   }
 
-  // Assembled from the four flat borderLeft/Right/Top/Bottom StyleProperties fields (properties.ts's own top-of-file note on why they stay flat through cascade resolution rather than living as one nested object) into document-schema.js's own nested ContentParagraphBordersSchema shape -- only once, here, after resolveStyle has already folded the whole style chain down to one final, effective set of edges. Omitted entirely (not `borders: {}`) when no edge survived resolution, matching source/constructs' own conditional-spread convention just above.
+  // Assembled from the four flat borderLeft/Right/Top/Bottom StyleProperties fields (properties.ts's own top-of-file note on why they stay flat through cascade resolution rather than living as one nested object) into document-schema.js's own nested ContentParagraphBordersSchema shape — only once, here, after resolveStyle has already folded the whole style chain down to one final, effective set of edges. Omitted entirely (not `borders: {}`) when no edge survived resolution, matching source/constructs' own conditional-spread convention just above.
   const borders =
     paragraphProperties.borderLeft !== undefined ||
     paragraphProperties.borderRight !== undefined ||
@@ -565,7 +565,7 @@ function readOutlineLevel(headingElement: XmlElement): number {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
 }
 
-// The heading-identity step every text:h-reading walk applies over the tag-agnostic readOdfParagraph: the shared reader reads a text:h's style/run content exactly as it would a text:p's, but a heading's real @text:style-name (e.g. "Heading_20_1") is a producer-chosen ODF string with no cross-format meaning, so this function overrides ONLY the heading identity for a text:h, synthesising the same "Heading1"/"Heading2" shape docx's own real w:pStyle values already use for its built-in heading styles -- giving downstream consumers one consistent heading convention across both formats -- while the parsed text:outline-level number itself is kept as headingLevel, document-schema.js's canonical numeric heading field, so numeric consumers never have to parse it back out of the styleId string. Lives here in typed/shared rather than in the odt reader (its original home) because a table:table-cell carries text:h under the identical convention (typed/shared/table.ts's cell walk is this function's second caller): office:text's body, a text:list-item, and a table cell are the three ODF containers whose content models carry text:h at all.
+// The heading-identity step every text:h-reading walk applies over the tag-agnostic readOdfParagraph: the shared reader reads a text:h's style/run content exactly as it would a text:p's, but a heading's real @text:style-name (e.g. "Heading_20_1") is a producer-chosen ODF string with no cross-format meaning, so this function overrides ONLY the heading identity for a text:h, synthesising the same "Heading1"/"Heading2" shape docx's own real w:pStyle values already use for its built-in heading styles — giving downstream consumers one consistent heading convention across both formats — while the parsed text:outline-level number itself is kept as headingLevel, document-schema.js's canonical numeric heading field, so numeric consumers never have to parse it back out of the styleId string. Lives here in typed/shared rather than in the odt reader (its original home) because a table:table-cell carries text:h under the identical convention (typed/shared/table.ts's cell walk is this function's second caller): office:text's body, a text:list-item, and a table cell are the three ODF containers whose content models carry text:h at all.
 export function readParagraphOrHeading(
   element: XmlElement,
   paragraph: ContentParagraph,
@@ -581,7 +581,7 @@ export function readParagraphOrHeading(
 
 // --- the write direction: a ContentParagraph -> the text:p/text:h element readOdfParagraph reads back ---
 //
-// The inverse of everything above, and deliberately its module neighbour for the same reason text.ts carries both directions of the inline content model: the two halves have to agree about which ODF spelling carries which pivot fact, and that agreement is easiest to keep when one module states both. ODF has no direct formatting at all, so where the reader resolves a style-name reference through the cascade, the writer INTERNS the formatting it finds into a named automatic style (styles/registry.ts) and references that -- the same StyleRegistry the read side's adoption rules are written against, never a second minting mechanism beside it.
+// The inverse of everything above, and deliberately its module neighbour for the same reason text.ts carries both directions of the inline content model: the two halves have to agree about which ODF spelling carries which pivot fact, and that agreement is easiest to keep when one module states both. ODF has no direct formatting at all, so where the reader resolves a style-name reference through the cascade, the writer INTERNS the formatting it finds into a named automatic style (styles/registry.ts) and references that — the same StyleRegistry the read side's adoption rules are written against, never a second minting mechanism beside it.
 
 // A ContentRun's own formatting as the property bag StyleRegistry interns. hyperlink is not part of it: a hyperlink is a text:a wrapper element in ODF, never a style property (see writeOdfParagraphChildren below).
 export function odfRunProperties(run: ContentRun): StyleProperties {
@@ -610,7 +610,7 @@ export function odfRunProperties(run: ContentRun): StyleProperties {
   return properties;
 }
 
-// A ContentParagraph's own paragraph-level formatting as the same property bag. The heading identity (headingLevel) is deliberately absent: it is structural in ODF -- a text:h element carrying text:outline-level -- not a style property, which is exactly why a heading's styleId survives a write/read round trip when nothing else's does.
+// A ContentParagraph's own paragraph-level formatting as the same property bag. The heading identity (headingLevel) is deliberately absent: it is structural in ODF — a text:h element carrying text:outline-level — not a style property, which is exactly why a heading's styleId survives a write/read round trip when nothing else's does.
 export function odfParagraphProperties(
   paragraph: ContentParagraph,
 ): StyleProperties {
@@ -642,16 +642,16 @@ export function odfParagraphProperties(
   return properties;
 }
 
-const KEY_SEPARATOR = " "; // NUL -- forbidden outright in well-formed XML 1.0 content, so it can never appear inside a canonical property string or a real hyperlink target (registry.ts's own fingerprint separator makes the same choice for the same reason).
+const KEY_SEPARATOR = " "; // NUL — forbidden outright in well-formed XML 1.0 content, so it can never appear inside a canonical property string or a real hyperlink target (registry.ts's own fingerprint separator makes the same choice for the same reason).
 
-// Two runs share a formatting key exactly when a single text:span (or a single bare text node) can carry both -- identical resolved formatting AND identical hyperlink target. Built from styles/serialize.ts's own canonical property string rather than JSON.stringify, so key equality means exactly what style interning means by it.
+// Two runs share a formatting key exactly when a single text:span (or a single bare text node) can carry both — identical resolved formatting AND identical hyperlink target. Built from styles/serialize.ts's own canonical property string rather than JSON.stringify, so key equality means exactly what style interning means by it.
 function runFormattingKey(run: ContentRun): string {
   const hyperlink =
     run.hyperlink === undefined ? "" : `link${KEY_SEPARATOR}${run.hyperlink}`;
   return `${canonicalPropertiesString(odfRunProperties(run))}${KEY_SEPARATOR}${hyperlink}`;
 }
 
-// The construct-aware generalisation of paragraph run canonicalisation: identical to the degenerate no-constructs case below in every respect, but additionally refuses to let two adjacent ORIGINAL runs merge, or a single run's own text-segmentation swallow one, across any boundary the caller has protected -- which a run-level construct's own startRun/endRun always is (see writeOdfParagraphChildren below). This is sound because RunConstructExtent's bounds are themselves defined as gaps BETWEEN whole original runs, never a position inside one (document-schema.js's own RunConstructExtentSchema doc comment): a protected boundary therefore always coincides with the start of a genuinely new merge-group once merging across it is disabled, so `boundaryMap` can report, for every protected boundary, exactly which canonical run index that gap maps to once segmentation has run, with no approximation. A protected boundary that happened to sit on a dropped (zero-length) run resolves to wherever the next surviving group begins (or to the canonical run count, if none survives after it) -- the same "nothing there to split" fact a zero-width construct at that position would want anyway.
+// The construct-aware generalisation of paragraph run canonicalisation: identical to the degenerate no-constructs case below in every respect, but additionally refuses to let two adjacent ORIGINAL runs merge, or a single run's own text-segmentation swallow one, across any boundary the caller has protected — which a run-level construct's own startRun/endRun always is (see writeOdfParagraphChildren below). This is sound because RunConstructExtent's bounds are themselves defined as gaps BETWEEN whole original runs, never a position inside one (document-schema.js's own RunConstructExtentSchema doc comment): a protected boundary therefore always coincides with the start of a genuinely new merge-group once merging across it is disabled, so `boundaryMap` can report, for every protected boundary, exactly which canonical run index that gap maps to once segmentation has run, with no approximation. A protected boundary that happened to sit on a dropped (zero-length) run resolves to wherever the next surviving group begins (or to the canonical run count, if none survives after it) — the same "nothing there to split" fact a zero-width construct at that position would want anyway.
 export interface OdfSegmentedParagraphRuns {
   readonly canonical: ContentRun[];
   readonly boundaryMap: ReadonlyMap<number, number>;
@@ -661,7 +661,7 @@ export function segmentOdfParagraphRunsMapped(
   runs: readonly ContentRun[],
   protectedBoundaries: ReadonlySet<number>,
 ): OdfSegmentedParagraphRuns {
-  // Pass 1: merge adjacent original runs sharing identical formatting into groups, never crossing a protected boundary. Zero-length runs are dropped outright -- there is no empty text node in a serialized document -- so they contribute no group of their own.
+  // Pass 1: merge adjacent original runs sharing identical formatting into groups, never crossing a protected boundary. Zero-length runs are dropped outright — there is no empty text node in a serialized document — so they contribute no group of their own.
   const groups: ContentRun[] = [];
   const groupStartBoundary: number[] = [];
   for (let index = 0; index < runs.length; index += 1) {
@@ -685,7 +685,7 @@ export function segmentOdfParagraphRunsMapped(
     }
   }
 
-  // Pass 2: segment each group's own text into the pieces ODF's inline content model can carry (a tab, a hard line break, and a collapsing space run are ELEMENTS, so a run whose text contains one splits at it) -- identical to the original segmentOdfParagraphRuns algorithm, just walking groups instead of the flat merged list it used to build inline.
+  // Pass 2: segment each group's own text into the pieces ODF's inline content model can carry (a tab, a hard line break, and a collapsing space run are ELEMENTS, so a run whose text contains one splits at it) — identical to the original segmentOdfParagraphRuns algorithm, just walking groups instead of the flat merged list it used to build inline.
   const canonical: ContentRun[] = [];
   const groupCanonicalStart: number[] = [];
   for (const [index, run] of groups.entries()) {
@@ -733,7 +733,7 @@ export function segmentOdfParagraphRunsMapped(
   return { canonical, boundaryMap };
 }
 
-// The canonical run list an ODF paragraph can actually carry, and therefore exactly what reading a written paragraph back produces -- the no-constructs degenerate case of segmentOdfParagraphRunsMapped above (protecting only the paragraph's own two outer edges, which never changes the merge/segment result since every interior boundary stays free to merge exactly as it always did). Exported because the write path's own round-trip law is stated against it: reading back what writeOdt produced yields this list, not the caller's original one, whenever the original was not already canonical.
+// The canonical run list an ODF paragraph can actually carry, and therefore exactly what reading a written paragraph back produces — the no-constructs degenerate case of segmentOdfParagraphRunsMapped above (protecting only the paragraph's own two outer edges, which never changes the merge/segment result since every interior boundary stays free to merge exactly as it always did). Exported because the write path's own round-trip law is stated against it: reading back what writeOdt produced yields this list, not the caller's original one, whenever the original was not already canonical.
 export function segmentOdfParagraphRuns(
   runs: readonly ContentRun[],
 ): ContentRun[] {
@@ -743,7 +743,7 @@ export function segmentOdfParagraphRuns(
 
 // --- run-level constructs: splicing fields and bookmarks into the run-writing pipeline --------------------------
 //
-// A field CONSUMES a contiguous run of canonical runs as one opaque element (the reconstructed field itself, wrapping the runs its own extent covers); a bookmark is a zero-width marker that has to land as a genuine sibling at an exact position among the paragraph's own children, splitting whatever formatting/hyperlink group would otherwise have run straight through it. Both need the run-grouping walk below to never merge or wrap across the boundary they sit at, which is why every function from here down threads a `protected boundary` set the way segmentOdfParagraphRunsMapped already does at the run level -- this is that same discipline one level up, over ITEMS (a run, or one already-built field element standing in for the runs it consumed) rather than over runs directly.
+// A field CONSUMES a contiguous run of canonical runs as one opaque element (the reconstructed field itself, wrapping the runs its own extent covers); a bookmark is a zero-width marker that has to land as a genuine sibling at an exact position among the paragraph's own children, splitting whatever formatting/hyperlink group would otherwise have run straight through it. Both need the run-grouping walk below to never merge or wrap across the boundary they sit at, which is why every function from here down threads a `protected boundary` set the way segmentOdfParagraphRunsMapped already does at the run level — this is that same discipline one level up, over ITEMS (a run, or one already-built field element standing in for the runs it consumed) rather than over runs directly.
 
 interface OdfParagraphRunItem {
   readonly kind: "run";
@@ -783,7 +783,7 @@ interface OdfParagraphConstructPlan {
   readonly changeMarkersAt: ReadonlyMap<number, readonly OdfChangeMarker[]>;
 }
 
-// Resolves a paragraph's own constructs field against the canonical run list segmentOdfParagraphRunsMapped's boundaryMap already mapped every extent's startRun/endRun onto, splitting the field extents (which consume their own run range) from the bookmark point/range markers (which are zero-width events at a boundary). Every entry here has already passed odfRunConstructWriteKind -- the caller (writeOdfParagraphChildren) is responsible for refusing a paragraph carrying anything this function does not resolve, exactly as assertWritableParagraph does before this ever runs.
+// Resolves a paragraph's own constructs field against the canonical run list segmentOdfParagraphRunsMapped's boundaryMap already mapped every extent's startRun/endRun onto, splitting the field extents (which consume their own run range) from the bookmark point/range markers (which are zero-width events at a boundary). Every entry here has already passed odfRunConstructWriteKind — the caller (writeOdfParagraphChildren) is responsible for refusing a paragraph carrying anything this function does not resolve, exactly as assertWritableParagraph does before this ever runs.
 function planOdfParagraphConstructs(
   extents: readonly RunConstructExtent[],
   boundaryMap: ReadonlyMap<number, number>,
@@ -872,7 +872,7 @@ function planOdfParagraphConstructs(
   return { fieldRanges, noteRanges, markersAt, changeMarkersAt };
 }
 
-// Field runs, formatted with the same span-grouping the top-level paragraph uses (never hyperlink-wrapped: a hyperlink carried by a run strictly inside a field's own cached text has no ODF spelling this writer produces, a narrow and documented gap rather than a silent drop -- ContentRun.hyperlink on such a run is simply not honoured).
+// Field runs, formatted with the same span-grouping the top-level paragraph uses (never hyperlink-wrapped: a hyperlink carried by a run strictly inside a field's own cached text has no ODF spelling this writer produces, a narrow and documented gap rather than a silent drop — ContentRun.hyperlink on such a run is simply not honoured).
 function writeOdfFieldElement(
   descriptor: FieldDescriptor,
   runs: readonly ContentRun[],
@@ -899,7 +899,7 @@ function buildOdfParagraphItems(
   definitions: Readonly<Record<string, DefinitionEntry>> | undefined,
   definitionsOpenNoteKeys: Set<string> | undefined,
 ): OdfParagraphItem[] {
-  // Fields and notes are both range-CONSUMING constructs -- each swallows the canonical runs its extent covers and emits one opaque element in their place -- so they walk one merged, start-sorted stream: two ranges can never overlap (a protected boundary always coincides with the start of a genuinely non-overlapping extent), and interleaving them in one cursor loop keeps the consumption arithmetic single-sourced.
+  // Fields and notes are both range-CONSUMING constructs — each swallows the canonical runs its extent covers and emits one opaque element in their place — so they walk one merged, start-sorted stream: two ranges can never overlap (a protected boundary always coincides with the start of a genuinely non-overlapping extent), and interleaving them in one cursor loop keeps the consumption arithmetic single-sourced.
   const consumed: (
     | {
         kind: "field";
@@ -962,7 +962,7 @@ function buildOdfParagraphItems(
   return items;
 }
 
-// DefinitionEntry's body is deliberately loose (document-schema.js's own tenant-generic shape -- this package does not enumerate another tenant's fields), so a type guard narrows it rather than a cast: an entry the reader minted always carries ContentBlock[] here, and anything else is not a paragraph this writer can place.
+// DefinitionEntry's body is deliberately loose (document-schema.js's own tenant-generic shape — this package does not enumerate another tenant's fields), so a type guard narrows it rather than a cast: an entry the reader minted always carries ContentBlock[] here, and anything else is not a paragraph this writer can place.
 function isNoteBodyParagraph(value: unknown): value is ContentParagraph {
   if (typeof value !== "object" || value === null) {
     return false;
@@ -973,7 +973,7 @@ function isNoteBodyParagraph(value: unknown): value is ContentParagraph {
   return Array.isArray((value as ContentParagraph).runs);
 }
 
-// The write-side inverse of the text:note reading in this module's own run walk: the note element carries its class and id, a citation rebuilt from the definitions entry (falling back to the covered runs' own text -- the reader pushed the citation text as the extent's run, so the two agree on everything this reader produces), and a body written from the entry's own blocks. Body blocks are written with the same paragraph writer that builds the containing paragraph -- a note body is ordinary block flow, not a special container.
+// The write-side inverse of the text:note reading in this module's own run walk: the note element carries its class and id, a citation rebuilt from the definitions entry (falling back to the covered runs' own text — the reader pushed the citation text as the extent's run, so the two agree on everything this reader produces), and a body written from the entry's own blocks. Body blocks are written with the same paragraph writer that builds the containing paragraph — a note body is ordinary block flow, not a special container.
 function writeOdfNoteElement(
   descriptor: AnchorDescriptor,
   entry: DefinitionEntry,
@@ -986,7 +986,7 @@ function writeOdfNoteElement(
   if (openNoteKeys?.has(key)) {
     // A hostile or corrupt document can reuse a text:id inside its own note body: the reader assigns the outer entry AFTER parsing the body, so the inner anchor resolves to the same entry and the write would recurse until the stack is exhausted. Refusing by name beats either crashing or silently dropping the cycle.
     throw new Error(
-      `writeOdt: a cyclic note definition -- note "${descriptor.name}" whose body refers back to the entry still being written`,
+      `writeOdt: a cyclic note definition—note "${descriptor.name}" whose body refers back to the entry still being written`,
     );
   }
   const citation =
@@ -1014,7 +1014,7 @@ function writeOdfNoteElement(
     }
   }
   if (descriptor.anchorType === "comment") {
-    // A comment anchor: office:annotation carries its body INLINE (text:p children beside the dc:creator/dc:date the reader lifts into the entry), and office:name keys its pairing half -- the reader's own annotation-half walk reads exactly this shape back.
+    // A comment anchor: office:annotation carries its body INLINE (text:p children beside the dc:creator/dc:date the reader lifts into the entry), and office:name keys its pairing half — the reader's own annotation-half walk reads exactly this shape back.
     const commentAttributes: Record<string, string> = {
       "office:name": encodeXmlText(descriptor.name),
     };
@@ -1041,7 +1041,7 @@ function writeOdfNoteElement(
   );
 }
 
-// Maps a canonical RUN boundary onto the corresponding ITEM boundary in the sequence buildOdfParagraphItems produced: a boundary strictly inside a field's own consumed range has no item position of its own to land on (the field is one opaque unit by the time a bookmark marker would need to split it), so it clamps to the item boundary immediately after that field -- a narrow, documented simplification for the rare case of a bookmark nested inside a field's own cached text, rather than an attempt to split the reconstructed field element apart.
+// Maps a canonical RUN boundary onto the corresponding ITEM boundary in the sequence buildOdfParagraphItems produced: a boundary strictly inside a field's own consumed range has no item position of its own to land on (the field is one opaque unit by the time a bookmark marker would need to split it), so it clamps to the item boundary immediately after that field — a narrow, documented simplification for the rare case of a bookmark nested inside a field's own cached text, rather than an attempt to split the reconstructed field element apart.
 function odfParagraphItemBoundary(
   canonicalBoundary: number,
   fieldRanges: OdfParagraphConstructPlan["fieldRanges"],
@@ -1077,7 +1077,7 @@ function odfItemHyperlink(item: OdfParagraphItem): string | undefined {
   return item.kind === "run" ? item.run.hyperlink : undefined;
 }
 
-// The inline nodes for items [from, to), grouped so each maximal stretch of consecutive RUN items sharing one resolved formatting is ONE text:span rather than one per run -- a field item is never merged into a surrounding span (it is already its own element) and never lets a group straddle a protected boundary (where a bookmark marker needs to land). Whitespace protection is computed against each run's true neighbours in the WHOLE item sequence (a neighbouring field, or the paragraph's own edge, both count as "no neighbouring text" and are protected accordingly), never against the group's own edges, mirroring the original algorithm this generalises.
+// The inline nodes for items [from, to), grouped so each maximal stretch of consecutive RUN items sharing one resolved formatting is ONE text:span rather than one per run — a field item is never merged into a surrounding span (it is already its own element) and never lets a group straddle a protected boundary (where a bookmark marker needs to land). Whitespace protection is computed against each run's true neighbours in the WHOLE item sequence (a neighbouring field, or the paragraph's own edge, both count as "no neighbouring text" and are protected accordingly), never against the group's own edges, mirroring the original algorithm this generalises.
 function writeOdfItemFormattedNodes(
   items: readonly OdfParagraphItem[],
   from: number,
@@ -1156,7 +1156,7 @@ function writeOdfBookmarkMarker(marker: OdfBookmarkMarker): XmlElement {
   }
 }
 
-// A paragraph's own inline children: each maximal stretch of consecutive items sharing one hyperlink target wrapped in a single text:a (a field item never carries a hyperlink of its own, so it always breaks a hyperlink group open around it), with the formatting grouping above running inside it, and every run-level construct the paragraph carries spliced in at its own exact boundary -- a field consuming its own run range as one element (buildOdfParagraphItems), a bookmark point/start/end sitting as a bare sibling exactly where its extent's boundary maps to. Refusing a construct this function does not resolve is assertWritableParagraph's job (typed/odt/write.ts), called before this ever runs; every extent reaching here has already passed odfRunConstructWriteKind.
+// A paragraph's own inline children: each maximal stretch of consecutive items sharing one hyperlink target wrapped in a single text:a (a field item never carries a hyperlink of its own, so it always breaks a hyperlink group open around it), with the formatting grouping above running inside it, and every run-level construct the paragraph carries spliced in at its own exact boundary — a field consuming its own run range as one element (buildOdfParagraphItems), a bookmark point/start/end sitting as a bare sibling exactly where its extent's boundary maps to. Refusing a construct this function does not resolve is assertWritableParagraph's job (typed/odt/write.ts), called before this ever runs; every extent reaching here has already passed odfRunConstructWriteKind.
 export function writeOdfChangeMarker(marker: OdfChangeMarker): XmlElement {
   if (marker.side === "point") {
     return writeOdfChangePoint(marker.id);
@@ -1267,13 +1267,13 @@ function writeOdfParagraphChildren(
 }
 
 export interface OdfParagraphWriteOptions {
-  // The named style this paragraph's formatting hangs off: written as style:parent-style-name on the minted automatic style, or -- when the paragraph carries no direct formatting for an automatic style to hold -- as the paragraph's own text:style-name. The odt writer uses it for a section's page-style switch, which ODF states as a style:master-page-name on a paragraph style and nowhere else.
+  // The named style this paragraph's formatting hangs off: written as style:parent-style-name on the minted automatic style, or — when the paragraph carries no direct formatting for an automatic style to hold — as the paragraph's own text:style-name. The odt writer uses it for a section's page-style switch, which ODF states as a style:master-page-name on a paragraph style and nowhere else.
   readonly parentStyleName?: string;
-  // Nodes appended after the paragraph's own inline content -- the anchored draw:frame elements an image block contributes, which ODF anchors inside a paragraph rather than beside one.
+  // Nodes appended after the paragraph's own inline content — the anchored draw:frame elements an image block contributes, which ODF anchors inside a paragraph rather than beside one.
   readonly trailingNodes?: readonly XmlNode[];
   // The definitions table note anchors resolve against: a footnote/endnote anchor writes its inline text:note (citation plus body) only when the entry its descriptor names is present here. Absent means the caller has no bodies to write (the flat writeOdtContent path) and note anchors were already refused upstream.
   readonly definitions?: Readonly<Record<string, DefinitionEntry>>;
-  // The note-definition keys on the write stack RIGHT NOW: a cyclic definition (a note body whose own anchor resolves back to an entry still being written) would recurse until the stack is exhausted, so the writer refuses one by name instead. Internal to the note write path -- never set by a caller.
+  // The note-definition keys on the write stack RIGHT NOW: a cyclic definition (a note body whose own anchor resolves back to an entry still being written) would recurse until the stack is exhausted, so the writer refuses one by name instead. Internal to the note write path — never set by a caller.
   readonly openNoteKeys?: Set<string>;
   // The tracked-change descriptor -> minted text:changed-region id map: a provenance extent writes its inline markers only when its descriptor has a region id here. The odt writer mints the ids document-wide and emits the matching text:tracked-changes container.
   readonly changeIds?: ReadonlyMap<ProvenanceDescriptor, string>;
@@ -1287,7 +1287,7 @@ export function writeOdfParagraph(
 ): XmlElement {
   const properties = odfParagraphProperties(paragraph);
   const attributes: Record<string, string> = {};
-  // A preformatted paragraph from a foreign producer (markdown-codec's fenced code block, an EPUB <pre>, ...) has no ODF attribute of its own to carry the fact forward -- the only way readOdfParagraph recognises it on the way back in is by finding PREFORMATTED_STYLE_NAME somewhere in the resolved style chain, so it is referenced here as this paragraph's own parent style, exactly like any other parentStyleName request. options.parentStyleName -- the odt writer's own page-style-switch mechanism, whose style:master-page-name is reachable only through one specific shared, per-section named style -- wins when both are requested on the identical paragraph: ODF's style:parent-style-name is single-valued, so the two facts cannot both be encoded through this one slot at once, and losing a section's own page geometry is the more damaging loss of the two. That collision is narrow (only the very FIRST paragraph of a second-or-later section can ever carry a page-style-switch request at all) and is a documented, non-silent trade-off, not a bug -- every other preformatted paragraph in the document still round-trips normally. Actually resolving PREFORMATTED_STYLE_NAME back on read depends on that style existing as a real element in the target part's own office:styles -- see preformattedStyleElement below; a caller of this shared function is responsible for ensuring one is present exactly once wherever it mints its own document-level named styles.
+  // A preformatted paragraph from a foreign producer (markdown-codec's fenced code block, an EPUB <pre>, ...) has no ODF attribute of its own to carry the fact forward — the only way readOdfParagraph recognises it on the way back in is by finding PREFORMATTED_STYLE_NAME somewhere in the resolved style chain, so it is referenced here as this paragraph's own parent style, exactly like any other parentStyleName request. options.parentStyleName — the odt writer's own page-style-switch mechanism, whose style:master-page-name is reachable only through one specific shared, per-section named style — wins when both are requested on the identical paragraph: ODF's style:parent-style-name is single-valued, so the two facts cannot both be encoded through this one slot at once, and losing a section's own page geometry is the more damaging loss of the two. That collision is narrow (only the very FIRST paragraph of a second-or-later section can ever carry a page-style-switch request at all) and is a documented, non-silent trade-off, not a bug — every other preformatted paragraph in the document still round-trips normally. Actually resolving PREFORMATTED_STYLE_NAME back on read depends on that style existing as a real element in the target part's own office:styles — see preformattedStyleElement below; a caller of this shared function is responsible for ensuring one is present exactly once wherever it mints its own document-level named styles.
   const parentStyleName =
     options.parentStyleName ??
     (paragraph.preformatted === true ? PREFORMATTED_STYLE_NAME : undefined);

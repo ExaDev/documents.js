@@ -54,7 +54,7 @@ Reading and writing EPUB bytes, at the tree level (the primary API — [document
 import { readEpub, writeEpub } from "epub-codec";
 
 const tree = readEpub(epubBytes); // -> DocumentTree, kind: 'wordprocessing'
-// tree.children is one section group per spine itemref, in spine order -- headings, lists, and
+// tree.children is one section group per spine itemref, in spine order — headings, lists, and
 // footnote/blockquote constructs already promoted into their own groups by document-schema.js's assembleTree.
 const bytes = writeEpub(tree); // a fresh, minimal, spec-valid EPUB 3
 ```

@@ -167,13 +167,13 @@ const pdfFromOdg = odgToPdf(odgBytes);
 const odgBytes2 = pdfToOdg(pdfFromOdg);
 
 const pdfFromOds = odsToPdf(odsBytes);
-const odsBytes2 = pdfToOds(pdfFromOds); // recovers what was printed, then heuristically re-types it -- see Fidelity
+const odsBytes2 = pdfToOds(pdfFromOds); // recovers what was printed, then heuristically re-types it — see Fidelity
 
 const pdfFromXlsx = xlsxToPdf(xlsxBytes); // composes xlsxToOds -> odsToPdf internally
 const xlsxBytes2 = pdfToXlsx(pdfFromXlsx); // composes pdfToOds -> odsToXlsx internally
 
 const pdfFromMarkdown = markdownToPdf(markdownBytes);
-const markdownBytes2 = pdfToMarkdown(pdfFromMarkdown); // the lossiest conversion in the whole package -- see Fidelity; it does carry page boundaries (one '<!-- page break -->' marker per page) and rank-inferred heading levels
+const markdownBytes2 = pdfToMarkdown(pdfFromMarkdown); // the lossiest conversion in the whole package — see Fidelity; it does carry page boundaries (one '<!-- page break -->' marker per page) and rank-inferred heading levels
 
 const pdfFromCsv = csvToPdf(csvBytes); // composes csvToOds -> odsToPdf internally
 const csvBytes2 = pdfToCsv(pdfFromCsv); // composes pdfToOds -> odsToCsv internally; recovers what was printed, then heuristically re-types it
@@ -214,7 +214,7 @@ const docxBytes = odtToDocx(odtBytes);
 const odtBytes2 = docxToOdt(docxBytes);
 
 const docxFromMarkdown = markdownToDocx(markdownBytes);
-const markdownBytes3 = docxToMarkdown(docxFromMarkdown); // colour, font family/size, and explicit alignment have no markdown source construct -- dropped on this hop
+const markdownBytes3 = docxToMarkdown(docxFromMarkdown); // colour, font family/size, and explicit alignment have no markdown source construct — dropped on this hop
 ```
 
 Each takes an optional `{ signal }` — no `onSubstitution`/`sink`, since there is no font substitution or PDF-parse degradation. `odtToDocx`/`markdownToDocx`/`docxToOdt`/`docxToMarkdown` additionally take `onMathDiagnostic`, called per formula construct that degraded crossing the bridge. The csv-sourced bridges (`csvToOds`, `csvToXlsx`, `csvToMarkdown`, `csvToPdf`) take `{ delimiter }` — `'\t'` parses the same format as TSV, since a delimiter is a parse option, not a different document format — and `onCellTypeInference`, the per-decision audit channel the read shares with `pdfToOds`. The csv-target bridges (`odsToCsv`, `xlsxToCsv`, `markdownToCsv`, `pdfToCsv`) take `{ delimiter, sheet }`: csv has no second sheet, so writing a multi-sheet source refuses with `CsvSheetNotSpecifiedError` naming every sheet until a caller selects one. The svg-sourced bridges (`svgToOdg`, `svgToPdf`) take `onSvgDiagnostic`, the reader's per-scope-limit channel; the svg-target bridges (`odgToSvg`, `pdfToSvg`) take `{ page, onSvgDiagnostic }`: an svg is a single drawing, so writing a multi-page source refuses with `SvgMultiPageNotSpecifiedError` naming the page count until `{ page }` selects one (an index, because drawing pages are anonymous where sheets are named).
@@ -254,7 +254,7 @@ import { docxToPdf } from "documents.js";
 
 const pdfBytes = docxToPdf(docxBytes, {
   onDocument: (pkg) => {
-    console.log(pkg.kind); // 'wordprocessing' -- the document kind rides the tree's root
+    console.log(pkg.kind); // 'wordprocessing' — the document kind rides the tree's root
     console.log(pkg.pages?.length); // populated for every X-to-PDF/PDF-to-X conversion
     const content = flattenTree(pkg); // the flat ContentDocument, fully materialised
     const block =
@@ -358,7 +358,7 @@ const patchedBytes = setDocumentMetadata("docx", "docx", docxBytes, {
 import { readNativeDocumentTree } from "documents.js";
 
 const tree = readNativeDocumentTree("xlsx", xlsxBytes);
-console.log(tree.kind); // 'spreadsheet' -- the workbook's own shape, never a projection through some other target
+console.log(tree.kind); // 'spreadsheet' — the workbook's own shape, never a projection through some other target
 ```
 
 Every module under `src/` is deep-importable by package-relative path:
@@ -525,7 +525,7 @@ page.addPath({
     },
   ],
   fill: { r: 1, g: 1, b: 0 },
-}); // a genuine Bezier curve -- writes a real svg:d/svg:viewBox pair, not a polygon approximation
+}); // a genuine Bezier curve — writes a real svg:d/svg:viewBox pair, not a polygon approximation
 page.addTextBox({
   frame: { xPt: 20, yPt: 200, widthPt: 300, heightPt: 30 },
   text: "A label on top",
@@ -802,7 +802,7 @@ The package is layered from generic primitives outward to the two conversion dir
 - **`src/omml/`** — the MathML ⇄ OMML structural translator, both directions. `write.ts` covers the identical construct set `src/mathml/layout.ts` typesets; `read.ts` covers strictly more (reads what Word authored, not just what this package writes). Lives outside `src/mathml/` because its I/O type is `ooxml.js`'s `XmlElement` and `src/mathml/` imports no package.
 - **`src/ooxml/`** — thin adapters over `ooxml.js`'s own flat `readDocxContent`/`readPptxContent` readers, wrapping results into `ContentDocument`. `docx/formula.ts` is the one local reading pass (splicing OOXML math equations). `docx/extras.ts`'s `readDocxExtras` returns comments/footnotes/header-footer parts, section header/footer references, and numbering.
 - **`src/odf/`** — ODF-side counterparts: `readOdtContent`/`readOdpContent`/`readOdsContent`/`readOdgContent` are thin adapters over `odf.js`. `formula/read.ts`/`formula/detect.ts` handle embedded formula detection (genuinely new work with no `odf.js`-side equivalent).
-- **`src/ppt/`** — the one legacy-binary-format adapter with a genuine wrap of its own: `ppt-codec`'s `readPptContent`/`writePptContent` operate on the flat `{ metadata, slides }` shape (mirroring `ooxml.js`'s/`odf.js`'s own upstream flat readers), not a full `'presentation'`-kind `ContentDocument` directly, so `read.ts`/`write.ts` do the envelope wrap/unwrap `src/ooxml/pptx/read.ts`/`src/odf/odp/read.ts` also do for their own formats -- minus the formula/vector-recovery passes those two run, since `ppt-codec` has no upstream equivalent to splice in. `doc` and `xls` need no equivalent module: `doc-codec`'s `readDocContent`/`writeDocContent` and `xls-codec`'s `readXlsContent`/`writeXlsContent` already read/write a real `ContentDocument` directly (the latter over `XlsContentDocument`, a plain narrowed alias), so both are called straight from `src/codecs/read.ts`/`src/codecs/registry.ts`/`src/convert/composition.ts`, exactly like `rtf-codec`'s own pair.
+- **`src/ppt/`** — the one legacy-binary-format adapter with a genuine wrap of its own: `ppt-codec`'s `readPptContent`/`writePptContent` operate on the flat `{ metadata, slides }` shape (mirroring `ooxml.js`'s/`odf.js`'s own upstream flat readers), not a full `'presentation'`-kind `ContentDocument` directly, so `read.ts`/`write.ts` do the envelope wrap/unwrap `src/ooxml/pptx/read.ts`/`src/odf/odp/read.ts` also do for their own formats — minus the formula/vector-recovery passes those two run, since `ppt-codec` has no upstream equivalent to splice in. `doc` and `xls` need no equivalent module: `doc-codec`'s `readDocContent`/`writeDocContent` and `xls-codec`'s `readXlsContent`/`writeXlsContent` already read/write a real `ContentDocument` directly (the latter over `XlsContentDocument`, a plain narrowed alias), so both are called straight from `src/codecs/read.ts`/`src/codecs/registry.ts`/`src/convert/composition.ts`, exactly like `rtf-codec`'s own pair.
 - **`src/latex/`** — the LaTeX presentation → `MathExpression` lowering: `temml.ts` is the pinned-parser boundary (exact-version temml, its internal parse API guarded behind structural type guards), `lower.ts` the mechanical rules and their degradations, `symbols.ts` the glyph/command map and the prose definition scanner, `rational.ts` the exact-rational helpers, `lint.ts` the coherence lint. See [LaTeX lowering into the semantic core](#latex-lowering-into-the-semantic-core).
 - **`src/markdown/`** — third adapter family, via `markdown-codec`. `readMarkdownContent` passes `readMarkdownContent`'s (markdown-codec's flat reader, so named since that package's 4.0.0; the bare `readMarkdown` name is now its tree-form `DocumentTree` reader) result through the math-lowering pass (`math.ts` — markdown-codec's preserved `$$` display blocks and `\( \)` inline spans become two-layer formula blocks, with the document's symbol table seeded from its own prose). `buildMarkdownText` wraps `writeMarkdownContent`, reconstructing markdown math syntax from formula blocks carrying a presentation layer. `text.ts` is the byte↔text boundary. `MarkdownEditor` holds a mutable in-memory `ContentDocument`.
 - **`src/csv/`** — fourth adapter family, sharing the spreadsheet variant with xlsx/ods. `records.ts` is the RFC 4180 record parser/writer (one shared `quoteCsvField`, also used by the `.odb` CSV exporter); `text.ts` is the byte↔text boundary, working the character encoding out from the bytes through [byte-codec](../byte-codec/README.md#text-decoding) rather than assuming UTF-8, so Excel's own windows-1252 export reads, and refusing bytes that are not text at all; `read.ts` turns records into a spreadsheet `ContentDocument` (first record as verbatim string header, data cells through the same cell-typing heuristic `pdfToOds` uses); `write.ts` turns one sheet of a spreadsheet `ContentDocument` back into records via each cell's `displayText`. TSV is the same format with `{ delimiter: '\t' }` on either side.
@@ -825,7 +825,7 @@ pnpm build         # turbo run _build (tsdown -> dist/ (ESM + CJS + .d.ts))
 pnpm typecheck     # turbo run _typecheck _typecheck:node
 pnpm lint          # turbo run _lint (eslint . --fix --cache --max-warnings 0)
 pnpm test          # turbo run _test (vitest run --project unit)
-pnpm test:workers  # turbo run _test:workers (vitest run --config vitest.workers.config.ts -- Cloudflare Workers runtime)
+pnpm test:workers  # turbo run _test:workers (vitest run --config vitest.workers.config.ts — Cloudflare Workers runtime)
 pnpm test:watch    # vitest --project unit
 pnpm test:smoke    # turbo run _test:smoke (rebuilds dist/, verifies ESM/CJS parity, real round trips across all conversions, font resolution, from the built CJS bundle)
 ```

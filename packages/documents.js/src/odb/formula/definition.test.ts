@@ -79,7 +79,7 @@ describe("rptDefinitionFromReport over the real fixture report", () => {
       );
     }
 
-    // The fixture really does declare both, and neither carries an rpt:formula -- so dropping them here loses nothing evaluable.
+    // The fixture really does declare both, and neither carries an rpt:formula — so dropping them here loses nothing evaluable.
     expect(report.pageHeader).toBeDefined();
     expect(report.pageFooter).toBeDefined();
     expect(
@@ -109,7 +109,7 @@ describe("rptDefinitionFromReport refusals", () => {
   });
 
   it("refuses a single-length group level whose one slot holds no group", () => {
-    // Not a shape odf.js's own reader can ever produce (its groups array is always populated element-for-element) -- this exercises the defensive guard directly, since a length-1 array with a hole is otherwise unreachable through any real .odb fixture.
+    // Not a shape odf.js's own reader can ever produce (its groups array is always populated element-for-element) — this exercises the defensive guard directly, since a length-1 array with a hole is otherwise unreachable through any real .odb fixture.
     const holed = emptyReport({
       groups: [undefined] as unknown as OdbReportGroup[],
     });

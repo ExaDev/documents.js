@@ -1,6 +1,6 @@
-// The shared RFC 4180 record layer for csv: one parser (parseCsvRecords) and one quoting writer (quoteCsvField), used by the read path (src/csv/read.ts), the write path (src/csv/write.ts), and src/odb/csv.ts's odbToCsv alike. Before this module existed the quoting lived privately in odb/csv.ts as csvField/CSV_QUOTE_NEEDED_RE; generalising it to also carry the active delimiter (a tab, for TSV) and moving it here means every csv emitter in the package writes the identical dialect by construction -- one implementation, no drift.
+// The shared RFC 4180 record layer for csv: one parser (parseCsvRecords) and one quoting writer (quoteCsvField), used by the read path (src/csv/read.ts), the write path (src/csv/write.ts), and src/odb/csv.ts's odbToCsv alike. Before this module existed the quoting lived privately in odb/csv.ts as csvField/CSV_QUOTE_NEEDED_RE; generalising it to also carry the active delimiter (a tab, for TSV) and moving it here means every csv emitter in the package writes the identical dialect by construction — one implementation, no drift.
 //
-// The dialect, RFC 4180 (https://www.rfc-editor.org/rfc/rfc4180) with two deliberate tolerances: a field containing the delimiter, a double quote, CR, or LF is wrapped in double quotes with embedded double quotes doubled; records are joined with CRLF. Tolerance one: RFC 4180 mandates CRLF record breaks, but real-world files arrive LF-only (and classic Mac exports arrive CR-only), so the parser accepts all three as a break while the writer always emits CRLF -- accepting a lone break never mis-parses a conforming file. Tolerance two: RFC 4180 allows a quote only immediately after a record break or delimiter; a quote appearing mid-field is taken as a literal character rather than a parse error, matching what spreadsheet exporters actually emit for text like {5" drive}.
+// The dialect, RFC 4180 (https://www.rfc-editor.org/rfc/rfc4180) with two deliberate tolerances: a field containing the delimiter, a double quote, CR, or LF is wrapped in double quotes with embedded double quotes doubled; records are joined with CRLF. Tolerance one: RFC 4180 mandates CRLF record breaks, but real-world files arrive LF-only (and classic Mac exports arrive CR-only), so the parser accepts all three as a break while the writer always emits CRLF — accepting a lone break never mis-parses a conforming file. Tolerance two: RFC 4180 allows a quote only immediately after a record break or delimiter; a quote appearing mid-field is taken as a literal character rather than a parse error, matching what spreadsheet exporters actually emit for text like {5" drive}.
 
 export const DEFAULT_CSV_DELIMITER = ",";
 export const TSV_DELIMITER = "\t";
@@ -12,7 +12,7 @@ export class CsvParseError extends Error {
   }
 }
 
-// A delimiter other than exactly one character can never match the scanner's per-character comparison, so a multi-character or empty delimiter would silently parse the whole file as one giant field per line -- rejected here, at the boundary, instead.
+// A delimiter other than exactly one character can never match the scanner's per-character comparison, so a multi-character or empty delimiter would silently parse the whole file as one giant field per line — rejected here, at the boundary, instead.
 function requireSingleCharacterDelimiter(delimiter: string): void {
   if (delimiter.length !== 1) {
     throw new CsvParseError(
@@ -21,7 +21,7 @@ function requireSingleCharacterDelimiter(delimiter: string): void {
   }
 }
 
-// A record consisting of exactly one empty field is a blank line -- RFC 4180 gives it no meaning, and every spreadsheet importer drops it. Filtered after parsing so the reader never sees phantom rows.
+// A record consisting of exactly one empty field is a blank line — RFC 4180 gives it no meaning, and every spreadsheet importer drops it. Filtered after parsing so the reader never sees phantom rows.
 function isBlankRecord(record: readonly string[]): boolean {
   return record.length === 1 && record[0] === "";
 }

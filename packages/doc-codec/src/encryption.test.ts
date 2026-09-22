@@ -11,7 +11,7 @@ function fromHex(hex: string): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
-// The same password/salt/EncryptedVerifier/EncryptedVerifierHash as nolze/msoffcrypto-tool's own doctested vector already verified in archive-codec's own office-rc4.test.ts (msoffcrypto/method/rc4.py's _makekey/verifypw doctests) -- block 0's own key is therefore already independently confirmed byte for byte. The WordDocument/Table ciphertext bytes here are independently recomputed via a from-scratch Python port of the (now-corrected) algorithm, not derived from this module's own code.
+// The same password/salt/EncryptedVerifier/EncryptedVerifierHash as nolze/msoffcrypto-tool's own doctested vector already verified in archive-codec's own office-rc4.test.ts (msoffcrypto/method/rc4.py's _makekey/verifypw doctests) — block 0's own key is therefore already independently confirmed byte for byte. The WordDocument/Table ciphertext bytes here are independently recomputed via a from-scratch Python port of the (now-corrected) algorithm, not derived from this module's own code.
 const PASSWORD = "password1";
 const SALT = fromHex("e8772c1d91c56a37964761b280183217");
 const ENCRYPTED_VERIFIER = fromHex("c9e997d454973d310bb1ba701426837e");
@@ -70,7 +70,7 @@ describe("decryptDocStreams (RC4)", () => {
   });
 
   it("throws given a wrong password whose own computed hash happens to share one byte with the real verifier hash", () => {
-    // "the wrong password" above produces a computed hash with zero bytes in common with the real one at any position, which cannot tell a byte-by-byte comparison (.every) apart from an any-byte-matches one (.some) -- "wrong1656" does share exactly one byte position, found by brute-force search over candidate wrong passwords against this fixed salt/verifier/hash.
+    // "the wrong password" above produces a computed hash with zero bytes in common with the real one at any position, which cannot tell a byte-by-byte comparison (.every) apart from an any-byte-matches one (.some) — "wrong1656" does share exactly one byte position, found by brute-force search over candidate wrong passwords against this fixed salt/verifier/hash.
     expect(() =>
       decryptDocStreams(buildWordDocument(), buildTable(), "wrong1656", false),
     ).toThrow(DocUnsupportedError);
@@ -137,7 +137,7 @@ describe("decryptDocStreams (RC4)", () => {
   });
 
   it("accepts a Table stream that is exactly the EncryptionHeader's own size, not one byte short", () => {
-    // LKEY (52) is exactly RC4_HEADER_SIZE -- a Table stream of precisely this length must not trip the same "runs past the end" check the previous test relies on, distinguishing the boundary's own > from a >=.
+    // LKEY (52) is exactly RC4_HEADER_SIZE — a Table stream of precisely this length must not trip the same "runs past the end" check the previous test relies on, distinguishing the boundary's own > from a >=.
     const exactTable = buildTable().subarray(0, LKEY);
     expect(() =>
       decryptDocStreams(
@@ -151,7 +151,7 @@ describe("decryptDocStreams (RC4)", () => {
 });
 
 describe("decryptDocStreams (XOR obfuscation)", () => {
-  // Independently computed (Python port of the POI/LibreOffice-validated Method 1 algorithm archive-codec's own crypto/xor-obfuscation.ts implements, adapted to Method 2's own rotate distance (7) and data transform (plain XOR with a zero-byte exception, no rotation), matching [MS-OFFCRYPTO] 2.3.7.6's own published spec text and LibreOffice's MSCodec_XorWord95::Decode exactly -- not derived from this module's own code) -- see also archive-codec's own xor-obfuscation.test.ts "decryptXorObfuscationMethod2" suite for the same vectors' own primitive-level derivation.
+  // Independently computed (Python port of the POI/LibreOffice-validated Method 1 algorithm archive-codec's own crypto/xor-obfuscation.ts implements, adapted to Method 2's own rotate distance (7) and data transform (plain XOR with a zero-byte exception, no rotation), matching [MS-OFFCRYPTO] 2.3.7.6's own published spec text and LibreOffice's MSCodec_XorWord95::Decode exactly — not derived from this module's own code) — see also archive-codec's own xor-obfuscation.test.ts "decryptXorObfuscationMethod2" suite for the same vectors' own primitive-level derivation.
   const XOR_PASSWORD = "Test1234";
   const XOR_KEY = 0xf7ff; // createXorObfuscationKey("Test1234")
   const XOR_VERIFIER1 = 0xec87; // createXorObfuscationPasswordVerifier("Test1234")
@@ -162,7 +162,7 @@ describe("decryptDocStreams (XOR obfuscation)", () => {
     const view = new DataView(bytes.buffer);
     view.setUint16(10, 0x8100, true); // fEncrypted (0x0100) and fObfuscated (0x8000), per FIB_BASE_FLAG.
     view.setUint32(FIB_LKEY_OFFSET, XOR_LKEY, true);
-    // Plaintext "Hello, XOR Method 2 test vector!" XOR-obfuscated at initial index 68 % 16 = 4 -- see archive-codec's own xor-obfuscation.test.ts "decryptXorObfuscationMethod2" suite, password "Test1234", for the underlying per-byte derivation this vector reuses at a different starting index.
+    // Plaintext "Hello, XOR Method 2 test vector!" XOR-obfuscated at initial index 68 % 16 = 4 — see archive-codec's own xor-obfuscation.test.ts "decryptXorObfuscationMethod2" suite, password "Test1234", for the underlying per-byte derivation this vector reuses at a different starting index.
     bytes.set(
       fromHex(
         "2f870a8d4d2820fe4f5603f6b03d2eae03c254c1566173d2207246d8a12634e0",
@@ -173,7 +173,7 @@ describe("decryptDocStreams (XOR obfuscation)", () => {
   }
 
   function buildXorTable(): Uint8Array<ArrayBuffer> {
-    // The Table stream carries no unencrypted prefix under XOR obfuscation -- obfuscated in full from byte 0, initial index 0.
+    // The Table stream carries no unencrypted prefix under XOR obfuscation — obfuscated in full from byte 0, initial index 0.
     return fromHex(
       "9d2c2aad08ce46b96d5620eb65704bd4b16974e113871595027265c5746b519a",
     );
@@ -216,7 +216,7 @@ describe("decryptDocStreams (XOR obfuscation)", () => {
   });
 
   it("throws given a wrong password whose own XOR key happens to match the header's, but whose verifier does not", () => {
-    // "cand124835" was found by brute-force search over candidate passwords against XOR_KEY/XOR_VERIFIER1: its own createXorObfuscationKey output equals the real header key, while its createXorObfuscationPasswordVerifier output does not equal the real header verifier -- key-matches-but-verifier-doesn't is exactly the case an && in place of || would wrongly accept.
+    // "cand124835" was found by brute-force search over candidate passwords against XOR_KEY/XOR_VERIFIER1: its own createXorObfuscationKey output equals the real header key, while its createXorObfuscationPasswordVerifier output does not equal the real header verifier — key-matches-but-verifier-doesn't is exactly the case an && in place of || would wrongly accept.
     expect(() =>
       decryptDocStreams(
         buildXorWordDocument(),

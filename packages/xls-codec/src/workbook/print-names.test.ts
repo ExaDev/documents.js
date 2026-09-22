@@ -15,13 +15,13 @@ import {
 /** [MS-XLS] 2.4.150's own built-in name table: Print_Area. */
 const BUILTIN_PRINT_AREA = 0x06;
 
-/** A single-cell PtgArea3d ([MS-XLS] 2.5.198.28), reference class (0x3b): ixti 0, then RgceArea B2 (row 1, column 1) through D6 (row 5, column 3) -- the same rectangle LIBREOFFICE_PRINT_AREA below carries, used here as a well-formed "the rest of the rgce parses fine" payload for tests that are really probing an earlier field. */
+/** A single-cell PtgArea3d ([MS-XLS] 2.5.198.28), reference class (0x3b): ixti 0, then RgceArea B2 (row 1, column 1) through D6 (row 5, column 3) — the same rectangle LIBREOFFICE_PRINT_AREA below carries, used here as a well-formed "the rest of the rgce parses fine" payload for tests that are really probing an earlier field. */
 const VALID_AREA3D_REF_TOKEN = new Uint8Array([
   0x3b, 0x00, 0x00, 0x01, 0x00, 0x05, 0x00, 0x01, 0x00, 0x03, 0x00,
 ]);
 
 /**
- * Assembles a raw Lbl record ([MS-XLS] 2.4.150) field by field, independent of this package's own writer -- so a test can put the record's EARLIER fields into a shape the real writer never produces (a mismatched cch, an uncompressed built-in-name flag) while keeping every later field well-formed, to prove the reader's own guard on the earlier field is what actually stops it, not an accident of the later bytes being absent or malformed too.
+ * Assembles a raw Lbl record ([MS-XLS] 2.4.150) field by field, independent of this package's own writer — so a test can put the record's EARLIER fields into a shape the real writer never produces (a mismatched cch, an uncompressed built-in-name flag) while keeping every later field well-formed, to prove the reader's own guard on the earlier field is what actually stops it, not an accident of the later bytes being absent or malformed too.
  */
 function lblRecord(options: {
   readonly cch?: number;
@@ -61,7 +61,7 @@ const LIBREOFFICE_PRINT_AREA = new Uint8Array([
   0x00, 0x01, 0x00, 0x03, 0x00,
 ]);
 
-/** Lbl for Print_Titles: the same prefix with name character 0x07 and cce 27, whose rgce is a PtgMemFunc wrapping a column band ($A:$A -- every row, column 0) and a row band ($1:$2 -- rows 0-1, every column) joined by PtgUnion, with a trailing PtgParen. */
+/** Lbl for Print_Titles: the same prefix with name character 0x07 and cce 27, whose rgce is a PtgMemFunc wrapping a column band ($A:$A — every row, column 0) and a row band ($1:$2 — rows 0-1, every column) joined by PtgUnion, with a trailing PtgParen. */
 const LIBREOFFICE_PRINT_TITLES = new Uint8Array([
   0x18, 0x00, 0x2b, 0x00, 0x20, 0x00, 0x00, 0x01, 0x1b, 0x00, 0x00, 0x00, 0x01,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x29, 0x17, 0x00, 0x3b, 0x00, 0x00,
@@ -161,7 +161,7 @@ describe("readPrintNames", () => {
     expect(readPrintNames(groupsOf(withPtgInt)).size).toBe(0);
   });
 
-  it("abandons the whole name -- discarding an area already parsed before the unrecognised token -- rather than keeping a partial result", () => {
+  it("abandons the whole name — discarding an area already parsed before the unrecognised token — rather than keeping a partial result", () => {
     // The sibling test above replaces the very FIRST opcode, so the unrecognised construct is also the only thing parsePrintAreas ever sees: an implementation that silently stopped (rather than aborted) on an unknown opcode would look identical, because there was never a valid area parsed first to keep or discard. Putting the unrecognised token AFTER one genuinely valid area is what tells the two apart.
     const areaThenUnknownOpcode = lblRecord({
       rgce: concat(VALID_AREA3D_REF_TOKEN, new Uint8Array([0x1e])),
@@ -170,7 +170,7 @@ describe("readPrintNames", () => {
   });
 
   it("adds no print range at all for a Print_Area name whose token stream names zero areas", () => {
-    // printRangeOf([]) is undefined for an empty area list, and the caller's own "if (range !== undefined)" guard must genuinely gate on that -- an empty rgce (a Print_Area name declaring nothing) is the one input that produces it.
+    // printRangeOf([]) is undefined for an empty area list, and the caller's own "if (range !== undefined)" guard must genuinely gate on that — an empty rgce (a Print_Area name declaring nothing) is the one input that produces it.
     const emptyPrintArea = lblRecord({ rgce: new Uint8Array(0) });
     expect(readPrintNames(groupsOf(emptyPrintArea)).size).toBe(0);
   });
@@ -192,7 +192,7 @@ describe("readPrintNames", () => {
   });
 
   it("reads a single-cell reference written in PtgRef3d's array class the same as its reference class", () => {
-    // [MS-XLS] 2.5.198.25: a reference-class token's array-class spelling (opcode + 0x40) shares its own layout exactly -- this is the array-class Ptg family this reader admits alongside the reference class every other test above exercises.
+    // [MS-XLS] 2.5.198.25: a reference-class token's array-class spelling (opcode + 0x40) shares its own layout exactly — this is the array-class Ptg family this reader admits alongside the reference class every other test above exercises.
     const ptgRef3dArray = lblRecord({
       rgce: new Uint8Array([
         0x7a, // PtgRef3d, array class
@@ -217,9 +217,9 @@ describe("readPrintNames", () => {
           0xaa,
           0xbb,
           0xcc,
-          0xdd, // 4 unused bytes -- never read, only skipped
+          0xdd, // 4 unused bytes — never read, only skipped
           0xff,
-          0xff, // cce -- also skipped, not used to bound the parse
+          0xff, // cce — also skipped, not used to bound the parse
         ]),
         VALID_AREA3D_REF_TOKEN,
       ),
@@ -276,7 +276,7 @@ describe("printNameEntriesFor and writePrintNameRecords", () => {
   });
 
   it("classifies neither axis for a Print_Titles area spanning the whole sheet, rather than the first branch a looser check would still match", () => {
-    // A band spanning every row AND every column makes BOTH spansEveryRow and spansEveryColumn true, so `spansEveryColumn && !spansEveryRow` and `spansEveryRow && !spansEveryColumn` are each `true && false`, correctly false either way -- but replacing either `&&` with `||` (or replacing the whole condition with `true`) would make one of them match anyway, wrongly turning "the whole sheet" into "a repeated row band" or "a repeated column band". This is the one area shape that tells `&&` and `||` apart here: every other test above uses an area where only one of the two spans is ever true, which cannot distinguish the two operators.
+    // A band spanning every row AND every column makes BOTH spansEveryRow and spansEveryColumn true, so `spansEveryColumn && !spansEveryRow` and `spansEveryRow && !spansEveryColumn` are each `true && false`, correctly false either way — but replacing either `&&` with `||` (or replacing the whole condition with `true`) would make one of them match anyway, wrongly turning "the whole sheet" into "a repeated row band" or "a repeated column band". This is the one area shape that tells `&&` and `||` apart here: every other test above uses an area where only one of the two spans is ever true, which cannot distinguish the two operators.
     const wholeSheet = lblRecord({
       builtinName: 0x07, // Print_Titles
       rgce: new Uint8Array([
@@ -286,11 +286,11 @@ describe("printNameEntriesFor and writePrintNameRecords", () => {
         0x00,
         0x00, // rowFirst 0
         0xff,
-        0xff, // rowLast 0xffff -- every row
+        0xff, // rowLast 0xffff — every row
         0x00,
         0x00, // columnFirst 0
         0xff,
-        0x00, // columnLast 0x00ff -- every column
+        0x00, // columnLast 0x00ff — every column
       ]),
     });
     expect(readPrintNames(groupsOf(wholeSheet)).get(0)).toStrictEqual({});

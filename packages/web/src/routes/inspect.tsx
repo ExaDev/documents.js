@@ -37,7 +37,7 @@ function InspectPage() {
   // useMutation's own "pending" dispatch already clears the previous data/error before a new mutate() call's result settles, so handleFile needs no reset() of its own before calling runInspect.
   const handleFile = (opened: OpenedFile) => {
     setFile(opened);
-    // Auto-detected format starts inspection immediately, same as pdf-inspect's old PDF-only behaviour -- an undetected extension falls through to the Select below instead of dead-ending, mirroring Convert's own "From" format picker.
+    // Auto-detected format starts inspection immediately, same as pdf-inspect's old PDF-only behaviour — an undetected extension falls through to the Select below instead of dead-ending, mirroring Convert's own "From" format picker.
     const detected = inferFormatFromFilename(opened.name);
     setFormat(detected);
     if (detected !== undefined) runInspect(opened, detected);
@@ -45,7 +45,7 @@ function InspectPage() {
 
   const handleFormatChange = (value: string | null) => {
     if (file === undefined) return;
-    // Mantine's Select works in plain strings, so `value` needs re-narrowing to DocumentFormat here rather than a cast -- it can only ever hold a value drawn from formats.data, which are themselves real DocumentFormat values, so this parse cannot practically fail. safeParse's own enum check already rejects a `null` clear the same way it would reject any other non-member string, so there is no separate `value === null` case to test for.
+    // Mantine's Select works in plain strings, so `value` needs re-narrowing to DocumentFormat here rather than a cast — it can only ever hold a value drawn from formats.data, which are themselves real DocumentFormat values, so this parse cannot practically fail. safeParse's own enum check already rejects a `null` clear the same way it would reject any other non-member string, so there is no separate `value === null` case to test for.
     const parsed = DocumentFormatSchema.safeParse(value);
     if (!parsed.success) return;
     setFormat(parsed.data);

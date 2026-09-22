@@ -15,7 +15,7 @@ describe("parseSvgLengthPt", () => {
     expect(parseSvgLengthPt("25.4mm")).toBeCloseTo(72, 9);
     expect(parseSvgLengthPt("2.54cm")).toBeCloseTo(72, 9);
     expect(parseSvgLengthPt("1pc")).toBe(12);
-    // One q is a quarter millimetre, so 40q is 10mm -- not the 72pt of an inch.
+    // One q is a quarter millimetre, so 40q is 10mm — not the 72pt of an inch.
     expect(parseSvgLengthPt("40q")).toBeCloseTo((10 / 25.4) * 72, 9);
   });
 

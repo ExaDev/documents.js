@@ -6,7 +6,7 @@ import { buildMarkdownText } from "./write";
 import { lowerMarkdownMath } from "./math";
 import { readMarkdownContent } from "./read";
 
-// The markdown math-lowering pass end to end: markdown-codec's preserved raw LaTeX ($$ display blocks, \( \) inline spans) becomes the two-layer ContentFormula every format in this family shares, the document's own prose seeds the symbol table, and the write side reconstructs the same markdown math syntax from the presentation layer. These tests pin the whole pipeline the issue describes -- "parse at the format edge, lower at the model level, so every input format that can carry LaTeX benefits from one lowering implementation".
+// The markdown math-lowering pass end to end: markdown-codec's preserved raw LaTeX ($$ display blocks, \( \) inline spans) becomes the two-layer ContentFormula every format in this family shares, the document's own prose seeds the symbol table, and the write side reconstructs the same markdown math syntax from the presentation layer. These tests pin the whole pipeline the issue describes — "parse at the format edge, lower at the model level, so every input format that can carry LaTeX benefits from one lowering implementation".
 
 const MATH_MARKDOWN = [
   "# Math document",
@@ -185,7 +185,7 @@ describe("readMarkdownContent math lowering", () => {
     ).toBe(true);
   });
 
-  it("an unparseable $$ block still becomes a formula carrying the verbatim presentation and an unparsed root -- the text is never lost", () => {
+  it("an unparseable $$ block still becomes a formula carrying the verbatim presentation and an unparsed root — the text is never lost", () => {
     const content = readMarkdownContent("$$\n\\notacommand{x}\n$$\n");
     if (content.kind !== "wordprocessing") {
       throw new Error("expected a wordprocessing ContentDocument");
@@ -208,7 +208,7 @@ describe("readMarkdownContent math lowering", () => {
   });
 
   it("math inside a table cell is lowered too", () => {
-    // Inline math, not a $$ block -- markdown-codec's block-math syntax needs its own delimiter lines, which cannot occur inside a single-line table cell, so the in-cell shape is the \\( \\) span.
+    // Inline math, not a $$ block — markdown-codec's block-math syntax needs its own delimiter lines, which cannot occur inside a single-line table cell, so the in-cell shape is the \\( \\) span.
     const content = readMarkdownContent(
       "| head |\n| --- |\n| cell \\(a + b\\) text |\n",
     );
@@ -234,7 +234,7 @@ describe("buildMarkdownText math reconstruction", () => {
     expect(text).toContain("$$\n\\sum_{i=1}^{n} \\frac{1}{i^2}\n$$");
     expect(text).toContain("\\(x^2 + 1\\)");
     expect(text).toContain("$$\n2x\n$$");
-    // The re-read document lowers the identical presentation strings again -- the two-layer model round-trips through markdown without touching the semantic layer.
+    // The re-read document lowers the identical presentation strings again — the two-layer model round-trips through markdown without touching the semantic layer.
     const reread = readMarkdownContent(text);
     expect(lintMathCoherence(assembleTree(reread))).toEqual([]);
   });

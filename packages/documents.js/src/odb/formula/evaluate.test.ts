@@ -13,7 +13,7 @@ import type {
 } from "./evaluate";
 import { runRptReport } from "./evaluate";
 
-// Unit coverage for the scoping rule and the failure policy, over synthetic data chosen to isolate one behaviour at a time. The real report's own formulas over the real fixture's own rows are in src/odb/formula/report.test.ts; this file exists to pin down the cases that fixture happens not to contain -- three levels of nesting rather than two, NULLs, an empty result set, an aggregate declared on a group rather than on the report, and every error path.
+// Unit coverage for the scoping rule and the failure policy, over synthetic data chosen to isolate one behaviour at a time. The real report's own formulas over the real fixture's own rows are in src/odb/formula/report.test.ts; this file exists to pin down the cases that fixture happens not to contain — three levels of nesting rather than two, NULLs, an empty result set, an aggregate declared on a group rather than on the report, and every error path.
 
 function text(value: string): ContentCellValue {
   return { kind: "string", value };
@@ -80,7 +80,7 @@ function totalsOf(
     .map((instance) => numberAt(instance, 0));
 }
 
-// Three nested groups over five rows, arranged so that the last row breaks the OUTERMOST group while both inner group expressions are unchanged across that same transition -- the cascade has to propagate two levels deep, not one.
+// Three nested groups over five rows, arranged so that the last row breaks the OUTERMOST group while both inner group expressions are unchanged across that same transition — the cascade has to propagate two levels deep, not one.
 const THREE_LEVEL_ROWS = resultSet(
   ["A", "B", "C", "V"],
   [
@@ -106,7 +106,7 @@ describe("group scoping", () => {
   it("cascades an enclosing break through every level beneath it", () => {
     const { bands } = runRptReport(THREE_LEVEL_REPORT, THREE_LEVEL_ROWS);
 
-    // Row 4 changes only A. B is "q" and C is "2" on both rows 3 and 4, so neither inner group expression fires there -- yet both inner groups must still start a new instance, which is what splits 40 and 50 rather than totalling them together.
+    // Row 4 changes only A. B is "q" and C is "2" on both rows 3 and 4, so neither inner group expression fires there — yet both inner groups must still start a new instance, which is what splits 40 and 50 rather than totalling them together.
     expect(totalsOf(bands, "group-footer", 2)).toEqual([30, 30, 40, 50]);
     expect(totalsOf(bands, "group-footer", 1)).toEqual([60, 40, 50]);
     expect(totalsOf(bands, "group-footer", 0)).toEqual([100, 50]);

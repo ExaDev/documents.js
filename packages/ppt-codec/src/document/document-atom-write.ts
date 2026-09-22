@@ -14,11 +14,11 @@ export function writeDocumentAtom(size: PageSize): Uint8Array<ArrayBuffer> {
       i32le(width),
       i32le(height), // slideSize
       i32le(width),
-      i32le(height), // notesSize -- this writer has no separate notes geometry to state (see the README's write-scope note on speaker notes), so it mirrors the slide size rather than stating a value nothing produced
+      i32le(height), // notesSize — this writer has no separate notes geometry to state (see the README's write-scope note on speaker notes), so it mirrors the slide size rather than stating a value nothing produced
       i32le(1),
-      i32le(2), // serverZoom RatioStruct -- an OLE presentation zoom hint read.ts's DocumentAtom interface carries but never projects into anything this writer's own output depends on
-      u32le(0), // notesMasterPersistIdRef -- no master is written (see README write-scope note)
-      u32le(0), // handoutMasterPersistIdRef -- likewise
+      i32le(2), // serverZoom RatioStruct — an OLE presentation zoom hint read.ts's DocumentAtom interface carries but never projects into anything this writer's own output depends on
+      u32le(0), // notesMasterPersistIdRef — no master is written (see README write-scope note)
+      u32le(0), // handoutMasterPersistIdRef — likewise
       u16le(1), // firstSlideNumber
       u16le(0), // slideSizeType: 0 = on-screen show, [MS-PPT] 2.13.28 SlideSizeTypeEnum
       new Uint8Array(4), // fSaveWithFonts/fOmitTitlePlace/fRightToLeft/fShowComments bool1 flags, all false

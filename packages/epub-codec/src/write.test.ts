@@ -270,7 +270,7 @@ describe("writeEpub: a non-wordprocessing DocumentTree", () => {
 });
 
 describe("writeEpub: a wordprocessing DocumentTree", () => {
-  it("does not throw EpubUnsupportedDocumentKindError -- the kind check only ever rejects a non-wordprocessing tree", () => {
+  it("does not throw EpubUnsupportedDocumentKindError — the kind check only ever rejects a non-wordprocessing tree", () => {
     const tree = documentSchema.assembleTree(
       doc([section([{ kind: "paragraph", runs: [{ text: "Hello." }] }])]),
     );

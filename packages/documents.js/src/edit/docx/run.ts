@@ -19,7 +19,7 @@ import {
   setToggle,
 } from "./props";
 
-// WordprocessingML text is the content of w:t elements and nothing else -- never a raw text-node concatenation of the whole subtree, which is what ooxml.js's own textContent (deliberately format-agnostic) performs. A w:r can also carry a w:drawing, and an anchored shape inside one holds real element text of its own that is not text at all: wp:posOffset's content is an EMU coordinate (see src/edit/docx/vector.ts). A w:p can further carry an m:oMathPara equation, whose glyphs live in m:t. Concatenating either into a paragraph's or run's reported text would report markup as prose.
+// WordprocessingML text is the content of w:t elements and nothing else — never a raw text-node concatenation of the whole subtree, which is what ooxml.js's own textContent (deliberately format-agnostic) performs. A w:r can also carry a w:drawing, and an anchored shape inside one holds real element text of its own that is not text at all: wp:posOffset's content is an EMU coordinate (see src/edit/docx/vector.ts). A w:p can further carry an m:oMathPara equation, whose glyphs live in m:t. Concatenating either into a paragraph's or run's reported text would report markup as prose.
 export function wordprocessingText(element: XmlElement): string {
   let out = "";
   for (const cursor of walkElements([element])) {
@@ -50,7 +50,7 @@ function directChild(parent: XmlElement, tag: string): XmlElement | undefined {
   return undefined;
 }
 
-// w:u sits after w:szCs in CT_RPr -- after everything RPR_ORDER already tracks -- so appending is always correct without needing w:u in RPR_ORDER itself.
+// w:u sits after w:szCs in CT_RPr — after everything RPR_ORDER already tracks — so appending is always correct without needing w:u in RPR_ORDER itself.
 function appendUElement(rPr: XmlElement, value: boolean): XmlElement {
   const created = el("w:u", { "w:val": value ? "single" : "none" });
   rPr.children.push(created);
@@ -67,7 +67,7 @@ function findOrCreateT(run: XmlElement): XmlElement {
   return created;
 }
 
-// A live view over a w:r element: every getter/setter reads or mutates the actual node inside the decoded Package, so saving is nothing more than encodePackage(pkg) -- see the plan's Step 6 for why this (rather than an independent object model regenerated on save) is the load-bearing design.
+// A live view over a w:r element: every getter/setter reads or mutates the actual node inside the decoded Package, so saving is nothing more than encodePackage(pkg) — see the plan's Step 6 for why this (rather than an independent object model regenerated on save) is the load-bearing design.
 export class DocxRun {
   private readonly container: XmlNode[];
   private readonly node: XmlElement;
@@ -206,7 +206,7 @@ function insertRPrChildInOrder(rPr: XmlElement, child: XmlElement): void {
   rPr.children.push(child);
 }
 
-// Builds a fresh w:r element from scratch (not a live view -- for constructing new runs to append or insert, whose properties are then read back through DocxRun once inserted into the tree).
+// Builds a fresh w:r element from scratch (not a live view — for constructing new runs to append or insert, whose properties are then read back through DocxRun once inserted into the tree).
 export function buildRun(init: RunInit = {}): XmlElement {
   const rPrChildren: XmlElement[] = [];
   if (init.bold === true) {

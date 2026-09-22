@@ -7,7 +7,7 @@ import { useAppDispatch, useAppState } from "../../../state/context.js";
 import { anyOverlayOpen } from "../../../state/types.js";
 import { requireOdbDocument } from "./shared.js";
 
-// One row per form the database declares, reached from the table list with `f`. A form is a static ODF sub-document rather than database content, so this list is populated whether or not the `.odb` has an embedded engine at all -- see format/open-document.ts.
+// One row per form the database declares, reached from the table list with `f`. A form is a static ODF sub-document rather than database content, so this list is populated whether or not the `.odb` has an embedded engine at all — see format/open-document.ts.
 export function OdbFormListScreen(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();

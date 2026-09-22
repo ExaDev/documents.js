@@ -19,7 +19,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// Walks the dumped DocumentTree's tree for any image block -- a narrowing guard rather than a typed parse, so this test never needs a type assertion over the raw JSON shape. The tree's own rule does the work: every node is either a group ({ node, children }) or a bare leaf carrying kind, so recursing over children from the package root reaches every block wherever the grouping nested it.
+// Walks the dumped DocumentTree's tree for any image block — a narrowing guard rather than a typed parse, so this test never needs a type assertion over the raw JSON shape. The tree's own rule does the work: every node is either a group ({ node, children }) or a bare leaf carrying kind, so recursing over children from the package root reaches every block wherever the grouping nested it.
 function dumpHasImageBlock(node: unknown): boolean {
   if (!isRecord(node)) {
     return false;
@@ -34,7 +34,7 @@ function dumpHasImageBlock(node: unknown): boolean {
   return children.some(dumpHasImageBlock);
 }
 
-// A CLI `convert notes.md` resolves a relative-path image against notes.md's own directory and embeds it, rather than degrading it to alt text -- the end-to-end proof that the filesystem MarkdownImageResolver wired into buildConversionAction (commands/shared.ts) reaches documents.js's port and through it markdown-codec's resolver.
+// A CLI `convert notes.md` resolves a relative-path image against notes.md's own directory and embeds it, rather than degrading it to alt text — the end-to-end proof that the filesystem MarkdownImageResolver wired into buildConversionAction (commands/shared.ts) reaches documents.js's port and through it markdown-codec's resolver.
 
 // A real 1x1 PNG (the same one markdown-codec's own test suite uses), decoded from base64.
 const ONE_PIXEL_PNG = Uint8Array.from(

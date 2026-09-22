@@ -152,7 +152,7 @@ describe("writeSheetComments", () => {
   });
 
   it("accepts exactly as many comments as a 16-bit FtCmo.id can distinguish, not one fewer", () => {
-    // 0xffff (65535) is the largest object id FtCmo.id's own 16-bit field can hold, so a sheet with exactly that many comments is still writable -- only one more should be refused.
+    // 0xffff (65535) is the largest object id FtCmo.id's own 16-bit field can hold, so a sheet with exactly that many comments is still writable — only one more should be refused.
     const cells = Array.from({ length: 0xffff }, (_, index) =>
       commentedCell(0, index, "x"),
     );

@@ -16,11 +16,11 @@ import { errorTextOf } from "../biff/errors";
 import { readShortXLUnicodeString, readXLUnicodeString } from "../biff/strings";
 import type { RecordGroup } from "../biff/substreams";
 
-// A chart's own substream ([MS-XLS] "Chart Sheet Substream", https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/732ff614-d939-416b-b7c7-6d983471ff11), read only as far as document-schema.js's own chart representation needs: a flattened series/category table (ExaDev/documents.js#719 -- 'chart' is a ContentEmbeddedObject naming a chart frame's cached data as a small spreadsheet ContentDocument, the identical shape ooxml.js's own xlsx/pptx chart readers already produce via readChartTable), not a typed chart-type/axis/legend object model. So this reader walks only Series/AI(BRAI)/SeriesText -- a series' own name and its category/value data links -- and the SERIESDATA cache those links can resolve through, and reads nothing about chart type, axes, or presentation.
+// A chart's own substream ([MS-XLS] "Chart Sheet Substream", https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/732ff614-d939-416b-b7c7-6d983471ff11), read only as far as document-schema.js's own chart representation needs: a flattened series/category table (ExaDev/documents.js#719 — 'chart' is a ContentEmbeddedObject naming a chart frame's cached data as a small spreadsheet ContentDocument, the identical shape ooxml.js's own xlsx/pptx chart readers already produce via readChartTable), not a typed chart-type/axis/legend object model. So this reader walks only Series/AI(BRAI)/SeriesText — a series' own name and its category/value data links — and the SERIESDATA cache those links can resolve through, and reads nothing about chart type, axes, or presentation.
 //
-// A data-role link's own value comes from one of two places, per [MS-XLS] "Chart Data Cache" (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/e21d24e4-e71f-4fdc-8107-7f0d6a6efa6a): "the chart data cache MUST NOT contain data ... if the corresponding data is specified in the chart or on the same sheet as the chart" -- so an embedded chart plotting its OWN sheet's cells (the overwhelmingly common case) carries no on-disk cache at all, and this reader resolves it instead by reading the AI's own formula reference (a PtgArea3d/PtgRef3d range, the same reference-token family biff/ptg.ts already resolves for a worksheet cell's own Formula record, restricted here to a single already-parsed range rather than that module's full expression grammar) and looking the referenced cells straight up in the OWNING sheet's own already-mapped cells. A chart plotting data from ANOTHER sheet, or genuinely external data, has no such shortcut available and instead carries the real on-disk SERIESDATA cache this reader also reads (`SERIESDATA = Dimensions 3(SIIndex *(Number/BoolErr/Blank/Label))`) -- one shared cache block per data role (values/categories/bubble sizes), each cached record's own `col` field naming which SERIES (0-based, into the Series-record collection) the value belongs to and its own `row` field naming the point's own 0-based position within that series. The cache is consulted FIRST and the same-sheet range fallback only when no cached entry exists for that exact (role, series, point) -- which is never both at once for a real file, per the spec's own "MUST NOT" above, but resolves the same either way if it were.
+// A data-role link's own value comes from one of two places, per [MS-XLS] "Chart Data Cache" (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/e21d24e4-e71f-4fdc-8107-7f0d6a6efa6a): "the chart data cache MUST NOT contain data ... if the corresponding data is specified in the chart or on the same sheet as the chart" — so an embedded chart plotting its OWN sheet's cells (the overwhelmingly common case) carries no on-disk cache at all, and this reader resolves it instead by reading the AI's own formula reference (a PtgArea3d/PtgRef3d range, the same reference-token family biff/ptg.ts already resolves for a worksheet cell's own Formula record, restricted here to a single already-parsed range rather than that module's full expression grammar) and looking the referenced cells straight up in the OWNING sheet's own already-mapped cells. A chart plotting data from ANOTHER sheet, or genuinely external data, has no such shortcut available and instead carries the real on-disk SERIESDATA cache this reader also reads (`SERIESDATA = Dimensions 3(SIIndex *(Number/BoolErr/Blank/Label))`) — one shared cache block per data role (values/categories/bubble sizes), each cached record's own `col` field naming which SERIES (0-based, into the Series-record collection) the value belongs to and its own `row` field naming the point's own 0-based position within that series. The cache is consulted FIRST and the same-sheet range fallback only when no cached entry exists for that exact (role, series, point) — which is never both at once for a real file, per the spec's own "MUST NOT" above, but resolves the same either way if it were.
 
-/** One resolved series: its own name (undefined when neither a SeriesText cache nor a literal/same-sheet-resolvable AI id=0 named it) and its category/value points, in point order, verbatim source text (a cache or a resolved cell's own displayText) -- exactly what readChartTable's own ChartSeries carries for the xlsx/pptx case, so chartCells below can build the identical flattened-table shape. A point this reader cannot resolve at all -- a cross-sheet or external reference with no cache entry, an unsupported AI token -- is an empty string, matching readChartTable's own "absent or empty-text label/value reads as an empty cell" convention. */
+/** One resolved series: its own name (undefined when neither a SeriesText cache nor a literal/same-sheet-resolvable AI id=0 named it) and its category/value points, in point order, verbatim source text (a cache or a resolved cell's own displayText) — exactly what readChartTable's own ChartSeries carries for the xlsx/pptx case, so chartCells below can build the identical flattened-table shape. A point this reader cannot resolve at all — a cross-sheet or external reference with no cache entry, an unsupported AI token — is an empty string, matching readChartTable's own "absent or empty-text label/value reads as an empty cell" convention. */
 export interface ChartSeries {
   readonly name: string | undefined;
   readonly categories: readonly string[];
@@ -48,7 +48,7 @@ const SIINDEX_CATEGORIES = 0x0002;
 
 type CacheRole = "values" | "categories";
 
-/** A single-cell or rectangular range this reader resolved from an AI's own PtgRef3d/PtgArea3d token, restricted to the OWN sheet a chart is embedded in -- see this module's own top comment for why a cross-sheet reference has no shortcut here and falls back to the on-disk cache instead. No endRow field: pointInRange's own row-major walk (startRow plus however many whole rows the point's own index advances) never needs the range's last row at all -- a well-formed chart's own point count already stays within the range's real extent, so nothing here ever needs to check where the range stops. */
+/** A single-cell or rectangular range this reader resolved from an AI's own PtgRef3d/PtgArea3d token, restricted to the OWN sheet a chart is embedded in — see this module's own top comment for why a cross-sheet reference has no shortcut here and falls back to the on-disk cache instead. No endRow field: pointInRange's own row-major walk (startRow plus however many whole rows the point's own index advances) never needs the range's last row at all — a well-formed chart's own point count already stays within the range's real extent, so nothing here ever needs to check where the range stops. */
 interface OwnSheetRange {
   readonly startRow: number;
   readonly startColumn: number;
@@ -188,7 +188,7 @@ function readAiRecord(
   }
 }
 
-/** [MS-XLS] "SeriesText": a reserved word then a ShortXLUnicodeString (one-byte length prefix -- unlike the double-byte-length XLUnicodeString most other BIFF8 strings use). */
+/** [MS-XLS] "SeriesText": a reserved word then a ShortXLUnicodeString (one-byte length prefix — unlike the double-byte-length XLUnicodeString most other BIFF8 strings use). */
 function readSeriesText(record: RecordGroup): string {
   const cursor = new BlockCursor(record.blocks);
   cursor.skip(2); // reserved
@@ -206,7 +206,7 @@ function readCacheRole(record: RecordGroup): CacheRole | undefined {
   return undefined;
 }
 
-/** A cached Number/BoolErr/Blank/Label record ([MS-XLS] 2.4.180/2.4.24/2.4.20/2.4.148 -- the identical worksheet cell-record layout, reinterpreted here per "Chart Data Cache": `row` is the point's own 0-based position within its series, `col` the 0-based Series-record index it belongs to, rather than a worksheet cell address). A Blank adds nothing to the cache -- an explicit "no cached value at this point" the same way an absent cache entry already reads. */
+/** A cached Number/BoolErr/Blank/Label record ([MS-XLS] 2.4.180/2.4.24/2.4.20/2.4.148 — the identical worksheet cell-record layout, reinterpreted here per "Chart Data Cache": `row` is the point's own 0-based position within its series, `col` the 0-based Series-record index it belongs to, rather than a worksheet cell address). A Blank adds nothing to the cache — an explicit "no cached value at this point" the same way an absent cache entry already reads. */
 function addCacheEntry(
   cache: Map<CacheRole, Map<number, Map<number, string>>>,
   role: CacheRole,
@@ -231,7 +231,7 @@ function addCacheEntry(
       break;
     }
   }
-  // Anything else (a cached Blank, chiefly) leaves text at its own initial undefined -- the check right below already treats that identically to an explicit "this record type carries no value" return, so a default case restating the same return would say nothing this check doesn't already say on its own.
+  // Anything else (a cached Blank, chiefly) leaves text at its own initial undefined — the check right below already treats that identically to an explicit "this record type carries no value" return, so a default case restating the same return would say nothing this check doesn't already say on its own.
   if (text === undefined) {
     return;
   }
@@ -273,7 +273,7 @@ function resolvePoints(
   return points;
 }
 
-/** The Nth cell of a range, in reading order -- row-major: a single row walks across its columns, a single column (the common vertical-series case) walks down its rows, and a genuine rectangular box walks a full row before moving to the next, all through the identical formula below. A single-row or single-column range needs no case of its own: with width the range's own total column count, index (always < the range's own cell count for a well-formed chart) never reaches a second row when the range is one row tall (Math.floor(index / width) stays 0 throughout, since index < width), and never advances past column zero when the range is one column wide (index % 1 is always 0) -- the general formula already reduces to exactly the row-only or column-only walk each of those shapes needs. */
+/** The Nth cell of a range, in reading order — row-major: a single row walks across its columns, a single column (the common vertical-series case) walks down its rows, and a genuine rectangular box walks a full row before moving to the next, all through the identical formula below. A single-row or single-column range needs no case of its own: with width the range's own total column count, index (always < the range's own cell count for a well-formed chart) never reaches a second row when the range is one row tall (Math.floor(index / width) stays 0 throughout, since index < width), and never advances past column zero when the range is one column wide (index % 1 is always 0) — the general formula already reduces to exactly the row-only or column-only walk each of those shapes needs. */
 function pointInRange(
   range: OwnSheetRange,
   index: number,
@@ -295,7 +295,7 @@ function cellText(
   )?.displayText;
 }
 
-/** A literal AI value/text -- id=0 (name) only meets this in practice, real files always resolving categories/values through a real range. Reads exactly one leading token (skipping a PtgParen display wrapper first, since a literal is sometimes wrapped in one), and only the literal-operand family: PtgInt/PtgNum/PtgStr. Anything else is a construct this reader does not resolve, exactly like a formula token this package's own biff/ptg.ts declines to resolve elsewhere. */
+/** A literal AI value/text — id=0 (name) only meets this in practice, real files always resolving categories/values through a real range. Reads exactly one leading token (skipping a PtgParen display wrapper first, since a literal is sometimes wrapped in one), and only the literal-operand family: PtgInt/PtgNum/PtgStr. Anything else is a construct this reader does not resolve, exactly like a formula token this package's own biff/ptg.ts declines to resolve elsewhere. */
 function readLiteralToken(rgce: Uint8Array<ArrayBuffer>): string | undefined {
   const cursor = new BlockCursor([rgce]);
   if (!cursor.hasMore()) {
@@ -303,7 +303,7 @@ function readLiteralToken(rgce: Uint8Array<ArrayBuffer>): string | undefined {
   }
   let opcode = cursor.u8();
   if (opcode === 0x15 && cursor.hasMore()) {
-    // PtgParen -- a display-only wrapper carrying no bytes of its own.
+    // PtgParen — a display-only wrapper carrying no bytes of its own.
     opcode = cursor.u8();
   }
   switch (opcode) {
@@ -318,7 +318,7 @@ function readLiteralToken(rgce: Uint8Array<ArrayBuffer>): string | undefined {
   }
 }
 
-/** A range-reference AI value: PtgRef3d/PtgArea3d only, restricted to a reference INTO THE CHART'S OWN OWNING SHEET (see this module's own top comment for why a cross-sheet reference has no shortcut here) -- every other token this restricted BRAI grammar permits (PtgUnion, PtgNameX, PtgMemFunc, the RefErr/AreaErr variants) is a construct this reader does not resolve, matching biff/ptg.ts's own "unsupported construct -> absent" convention for a worksheet cell's ordinary Formula record. */
+/** A range-reference AI value: PtgRef3d/PtgArea3d only, restricted to a reference INTO THE CHART'S OWN OWNING SHEET (see this module's own top comment for why a cross-sheet reference has no shortcut here) — every other token this restricted BRAI grammar permits (PtgUnion, PtgNameX, PtgMemFunc, the RefErr/AreaErr variants) is a construct this reader does not resolve, matching biff/ptg.ts's own "unsupported construct -> absent" convention for a worksheet cell's ordinary Formula record. */
 function readRangeToken(
   rgce: Uint8Array<ArrayBuffer>,
   context: ChartRangeContext,
@@ -365,7 +365,7 @@ function readRangeToken(
   return undefined;
 }
 
-/** Whether ixti resolves (through EXTERNSHEET/SupBook -- the identical resolution biff/ptg.ts's resolveSheetLabel performs for a worksheet formula's own 3D references) to a single-sheet range naming exactly the chart's own owning sheet -- the only case this reader has a cell table to resolve against at all. */
+/** Whether ixti resolves (through EXTERNSHEET/SupBook — the identical resolution biff/ptg.ts's resolveSheetLabel performs for a worksheet formula's own 3D references) to a single-sheet range naming exactly the chart's own owning sheet — the only case this reader has a cell table to resolve against at all. */
 function isOwnSheetRef(ixti: number, context: ChartRangeContext): boolean {
   const range = context.formulaSheets.sheetRanges[ixti];
   if (range === undefined || "label" in range) {

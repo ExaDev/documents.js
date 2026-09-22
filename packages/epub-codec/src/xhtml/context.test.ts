@@ -45,7 +45,7 @@ describe("reportInertElementSkip", () => {
     expect(diagnostics[0]?.message).toContain("noscript");
   });
 
-  it("reports nothing for script, template, or style -- only noscript's loss is worth naming", () => {
+  it("reports nothing for script, template, or style — only noscript's loss is worth naming", () => {
     const diagnostics: EpubDiagnostic[] = [];
     const context = fakeContext((d) => diagnostics.push(d));
     reportInertElementSkip("script", context);

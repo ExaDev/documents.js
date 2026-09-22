@@ -21,14 +21,14 @@ export const Route = createFileRoute("/odb")({
   component: OdbPage,
 });
 
-// The .odb browsing tool: a database front-end package's inventory (connection, table/query/form/report names) alongside its embedded engine's actual table data, read through the tier-dispatching decoder the conversions use and previewed as a spreadsheet -- one sheet per table.
+// The .odb browsing tool: a database front-end package's inventory (connection, table/query/form/report names) alongside its embedded engine's actual table data, read through the tier-dispatching decoder the conversions use and previewed as a spreadsheet — one sheet per table.
 function OdbPage() {
   const [fileName, setFileName] = useState<string>();
   const readOdb = useReadOdb();
 
   const handleFile = (opened: OpenedFile) => {
     setFileName(opened.name);
-    // useMutation's own "pending" dispatch already clears the previous data/error before this call's result settles -- a separate reset() call immediately beforehand would only repeat that, never add a state transition of its own.
+    // useMutation's own "pending" dispatch already clears the previous data/error before this call's result settles — a separate reset() call immediately beforehand would only repeat that, never add a state transition of its own.
     readOdb.mutate(
       { bytes: opened.bytes },
       {
@@ -39,7 +39,7 @@ function OdbPage() {
     );
   };
 
-  // readOdb.data's own output schema requires `inventory`, so once data is present its inventory is too -- a separate `inventory !== undefined` guard alongside `data !== undefined` would be checking a fact the type already guarantees, never a real second condition.
+  // readOdb.data's own output schema requires `inventory`, so once data is present its inventory is too — a separate `inventory !== undefined` guard alongside `data !== undefined` would be checking a fact the type already guarantees, never a real second condition.
   const data = readOdb.data;
 
   return (

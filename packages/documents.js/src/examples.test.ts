@@ -99,7 +99,7 @@ const DOCX_PACKAGE = capturePackage((onDocument) =>
 );
 
 describe("examples", () => {
-  // wordprocessing covers docx, odt, and markdown -- they all read into the identical wordprocessing-variant ContentDocument (the README documents this shared pivot). docx is the representative source here.
+  // wordprocessing covers docx, odt, and markdown — they all read into the identical wordprocessing-variant ContentDocument (the README documents this shared pivot). docx is the representative source here.
   it("wordprocessing.content.json (from docx)", () => {
     assertContentExample(
       "wordprocessing.content.json",
@@ -176,7 +176,7 @@ describe("examples", () => {
     );
   });
 
-  // odp reads into the same presentation variant as pptx and is not one of the five committed examples, but exercising it here confirms the second source format still resolves -- guarding against an odp reader regression that the pptx-sourced example alone would not surface.
+  // odp reads into the same presentation variant as pptx and is not one of the five committed examples, but exercising it here confirms the second source format still resolves — guarding against an odp reader regression that the pptx-sourced example alone would not surface.
   it("odp still reads into the presentation variant", () => {
     expect(readOdpContent(decodeOdfPackage(minimalOdpBytes())).kind).toBe(
       "presentation",

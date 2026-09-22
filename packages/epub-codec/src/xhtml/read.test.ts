@@ -186,7 +186,7 @@ describe("paragraphs and inline styling", () => {
     ]);
   });
 
-  // ExaDev/documents.js#994's round-8 systemic gap: every text-bearing walk in this package used to dispatch on node.type === "text" alone, silently dropping a CDATA section -- the standard idiom a producer reaches for when its own literal text needs a raw `<`/`&` it would otherwise have to escape. xml/node.ts's isTextLikeNode is now the one shared predicate buildInlineRuns itself dispatches on.
+  // ExaDev/documents.js#994's round-8 systemic gap: every text-bearing walk in this package used to dispatch on node.type === "text" alone, silently dropping a CDATA section — the standard idiom a producer reaches for when its own literal text needs a raw `<`/`&` it would otherwise have to escape. xml/node.ts's isTextLikeNode is now the one shared predicate buildInlineRuns itself dispatches on.
   it("reads a CDATA section exactly like an ordinary text node, including its own literal < and &", () => {
     const blocks = read(body("<p>before <![CDATA[A & B < C]]> after</p>"));
     expect(blocks).toEqual([
@@ -354,7 +354,7 @@ describe("lists", () => {
     );
   });
 
-  it("recovers a <ul> nested directly before the very first <li> as its own separate top-level list, rather than losing it -- issue #994's own headline repro", () => {
+  it("recovers a <ul> nested directly before the very first <li> as its own separate top-level list, rather than losing it — issue #994's own headline repro", () => {
     const sink = vi.fn();
     const blocks = read(body("<ul><ul><li>b</li></ul><li>a</li></ul>"), sink);
     expect(blocks).toEqual([
@@ -374,7 +374,7 @@ describe("lists", () => {
     );
   });
 
-  it("mints a numId for a nested empty <ul> that is itself discarded as stray content, skipping a value in the outer numbering sequence -- cosmetic, since a numId is opaque", () => {
+  it("mints a numId for a nested empty <ul> that is itself discarded as stray content, skipping a value in the outer numbering sequence — cosmetic, since a numId is opaque", () => {
     const blocks = read(
       body("<ul><ul></ul><li>a</li></ul><ul><li>b</li></ul>"),
     );
@@ -419,7 +419,7 @@ describe("lists", () => {
       body('<ul><img src="before.png" alt="before"/><li>a</li><li>b</li></ul>'),
       sink,
     );
-    // "before" carries no list membership (recovered ahead of the first real <li>); "a" and "b" are item1/item2 in document order, with no gap -- an itemId is minted only for a genuine <li>, and this discarded stray content contains none (contrast a discarded stray *list* with no <li> of its own, which mints and then discards a numId; see flushListStrayContent's own comment).
+    // "before" carries no list membership (recovered ahead of the first real <li>); "a" and "b" are item1/item2 in document order, with no gap — an itemId is minted only for a genuine <li>, and this discarded stray content contains none (contrast a discarded stray *list* with no <li> of its own, which mints and then discards a numId; see flushListStrayContent's own comment).
     expect(blocks).toEqual([
       { kind: "paragraph", runs: [{ text: "before" }] },
       {
@@ -576,7 +576,7 @@ describe("lists", () => {
     ]);
   });
 
-  // Regression coverage for the emptiness-probe defect: flushListStrayContent used to decide whether to recover its collected stray nodes by building their inline runs (buildInlineRuns, which only ever produces TEXT) and checking whether that text was blank -- so any stray block-level content whose text projection happens to be empty (a resolved image with no alt text, an <hr>, a table or nested list whose only content is such an image) was misjudged as "whitespace-only" and silently dropped, with no diagnostic, exactly like real pretty-printed whitespace. The fix asks the real question instead: does readContainerChildren's own result carry any blocks at all. Each case below recovers a resolved image inline PNG (fakePng, defined further down this file -- a function declaration, hoisted) so the stray content's own text projection is genuinely empty while its block projection is not.
+  // Regression coverage for the emptiness-probe defect: flushListStrayContent used to decide whether to recover its collected stray nodes by building their inline runs (buildInlineRuns, which only ever produces TEXT) and checking whether that text was blank — so any stray block-level content whose text projection happens to be empty (a resolved image with no alt text, an <hr>, a table or nested list whose only content is such an image) was misjudged as "whitespace-only" and silently dropped, with no diagnostic, exactly like real pretty-printed whitespace. The fix asks the real question instead: does readContainerChildren's own result carry any blocks at all. Each case below recovers a resolved image inline PNG (fakePng, defined further down this file — a function declaration, hoisted) so the stray content's own text projection is genuinely empty while its block projection is not.
   it("recovers a stray, resolved <img> with no alt attribute as a real image block, not judging it whitespace-only by its absent text projection", () => {
     const bytes = fakePng(96, 96);
     const sink = vi.fn();
@@ -615,7 +615,7 @@ describe("lists", () => {
     );
   });
 
-  it("recovers a nested <ul> stray sibling whose only <li> content is a resolved image with no text -- issue #994's own headline shape, which the emptiness-probe regression defeated", () => {
+  it("recovers a nested <ul> stray sibling whose only <li> content is a resolved image with no text — issue #994's own headline shape, which the emptiness-probe regression defeated", () => {
     const bytes = fakePng(96, 96);
     const sink = vi.fn();
     const { blocks } = readXhtmlBody(
@@ -659,7 +659,7 @@ describe("lists", () => {
     );
   });
 
-  it("recovers a stray <table> whose only cell content is a resolved image with no alt text -- readTable always yields a real table block regardless of its cells' own text", () => {
+  it("recovers a stray <table> whose only cell content is a resolved image with no alt text — readTable always yields a real table block regardless of its cells' own text", () => {
     const bytes = fakePng(96, 96);
     const sink = vi.fn();
     const { blocks } = readXhtmlBody(
@@ -709,7 +709,7 @@ describe("lists", () => {
       body("<ul><li>outer<ul>stray<li>inner</li></ul></li></ul>"),
       sink,
     );
-    // "stray" sits before the inner <ul>'s own first <li>, so it has no preceding item WITHIN that inner list to attach to -- but the inner <ul> is itself nested inside the outer <li>, so the recovered content inherits THAT membership rather than carrying none of its own, exactly as the diagnostic message now states.
+    // "stray" sits before the inner <ul>'s own first <li>, so it has no preceding item WITHIN that inner list to attach to — but the inner <ul> is itself nested inside the outer <li>, so the recovered content inherits THAT membership rather than carrying none of its own, exactly as the diagnostic message now states.
     expect(blocks).toEqual([
       {
         kind: "paragraph",
@@ -759,7 +759,7 @@ describe("inert elements outside lists (script/template/style/noscript)", () => 
     expect(sink).not.toHaveBeenCalled();
   });
 
-  // Unlike <script>/<template>/<style> (never legitimate content regardless of where reached), a <noscript>'s own children CAN be ordinary, genuinely renderable markup -- this package cannot tell that case apart from a producer's own "please enable JavaScript" placeholder from the markup alone, so it fires its own dedicated diagnostic naming the drop rather than staying silent about it the way the other three do.
+  // Unlike <script>/<template>/<style> (never legitimate content regardless of where reached), a <noscript>'s own children CAN be ordinary, genuinely renderable markup — this package cannot tell that case apart from a producer's own "please enable JavaScript" placeholder from the markup alone, so it fires its own dedicated diagnostic naming the drop rather than staying silent about it the way the other three do.
   it("never leaks a <noscript>'s fallback markup as document prose when it sits directly inside a <p>, but reports the drop unlike script/template/style", () => {
     const sink = vi.fn();
     const blocks = read(
@@ -1002,7 +1002,7 @@ describe("definition lists", () => {
       expect.objectContaining({
         code: "epub/definition-list-content-outside-entry",
         message:
-          "content sits directly inside a <dl> (or one of its <div> wrappers) outside any dt/dd (not valid HTML5); recovered as ordinary content -- a non-conformant wrapper's own dt/dd children, if any, lose their distinct term/definition treatment and degrade to plain concatenated text",
+          "content sits directly inside a <dl> (or one of its <div> wrappers) outside any dt/dd (not valid HTML5); recovered as ordinary content — a non-conformant wrapper's own dt/dd children, if any, lose their distinct term/definition treatment and degrade to plain concatenated text",
       }),
     );
   });
@@ -1107,13 +1107,13 @@ describe("definition lists", () => {
     expect(sink).not.toHaveBeenCalled();
   });
 
-  it("recovers a <section> wrapping a dt/dd pair as degraded, concatenated plain text, with a diagnostic -- <div> is the only wrapper HTML5's own <dl> content model actually names as legal", () => {
+  it("recovers a <section> wrapping a dt/dd pair as degraded, concatenated plain text, with a diagnostic — <div> is the only wrapper HTML5's own <dl> content model actually names as legal", () => {
     const sink = vi.fn();
     const blocks = read(
       body("<dl><section><dt>Term</dt><dd>Definition</dd></section></dl>"),
       sink,
     );
-    // The section's own dt/dd children lose their distinct term/definition treatment once routed through readContainerChildren, which has no notion of dt/dd -- a real, documented fidelity cost, but a text-preserving one.
+    // The section's own dt/dd children lose their distinct term/definition treatment once routed through readContainerChildren, which has no notion of dt/dd — a real, documented fidelity cost, but a text-preserving one.
     expect(blocks).toEqual([
       {
         kind: "paragraph",
@@ -1283,7 +1283,7 @@ describe("tables", () => {
   });
 
   it("recovers a stray <ul> sitting directly inside a <table> (not inside any row group) as a genuinely nested list, not as if it were itself a row group", () => {
-    // Only tr/thead/tbody/tfoot are ever treated as row-group-shaped -- a <ul> here must be routed through readContainerChildren's own block-level dispatch (readList, producing a real `list` membership) rather than through collectRowGroupRows, which would instead flatten straight to the <li>'s own bare content with no list membership at all.
+    // Only tr/thead/tbody/tfoot are ever treated as row-group-shaped — a <ul> here must be routed through readContainerChildren's own block-level dispatch (readList, producing a real `list` membership) rather than through collectRowGroupRows, which would instead flatten straight to the <li>'s own bare content with no list membership at all.
     const blocks = read(
       body("<table><ul><li>item</li></ul><tr><td>x</td></tr></table>"),
     );
@@ -1932,7 +1932,7 @@ describe("tables", () => {
   });
 
   it("skips a <noscript> sitting directly inside a <table>, reporting the drop exactly once, alongside a stray <p> that alone triggers the unrecognized-content diagnostic", () => {
-    // If a <noscript> sitting directly inside a <table> ever fell through this guard un-skipped, it would still eventually be skipped by buildInlineRuns' own universal inert-element safety net once fed through the stray-content recovery path -- so the ONLY observable trace of the guard being bypassed is the drop being reported TWICE (once from each guard) rather than once.
+    // If a <noscript> sitting directly inside a <table> ever fell through this guard un-skipped, it would still eventually be skipped by buildInlineRuns' own universal inert-element safety net once fed through the stray-content recovery path — so the ONLY observable trace of the guard being bypassed is the drop being reported TWICE (once from each guard) rather than once.
     const sink = vi.fn<(d: EpubDiagnostic) => void>();
     const blocks = read(
       body(
@@ -1967,7 +1967,7 @@ describe("tables", () => {
     const sink = vi.fn<(d: EpubDiagnostic) => void>();
     const blocks = read(
       body(
-        // <col> carries no legal children of its own -- a stray text node here is a synthetic probe, not real markup, checking that a genuinely recognised <col> is silently skipped WHOLESALE (its own content never even reaches the recovery path at all) rather than merely having its outer tag treated like any other unrecognised stray element.
+        // <col> carries no legal children of its own — a stray text node here is a synthetic probe, not real markup, checking that a genuinely recognised <col> is silently skipped WHOLESALE (its own content never even reaches the recovery path at all) rather than merely having its outer tag treated like any other unrecognised stray element.
         "<table><colgroup><col>faketext</col><noscript>Enable JS</noscript><p>stray</p></colgroup><tr><td>a</td></tr></table>",
       ),
       sink,
@@ -2056,7 +2056,7 @@ describe("tables", () => {
       ([diagnostic]) => diagnostic.code === "epub/table-caption-unsupported",
     );
     expect(captionUnsupportedCalls).toHaveLength(2);
-    // The very first sink call, for the first <caption>, must never be the duplicate-caption diagnostic -- only a second or later caption is a duplicate.
+    // The very first sink call, for the first <caption>, must never be the duplicate-caption diagnostic — only a second or later caption is a duplicate.
     expect(sink.mock.calls[0]?.[0]?.code).toBe(
       "epub/table-caption-unsupported",
     );
@@ -2087,7 +2087,7 @@ describe("blockquote", () => {
   });
 
   it("adds a <dd>'s own extra indent to (not in place of) the blockquote's own quote indent", () => {
-    // Distinguishes the two contributions being summed (the correct behaviour) from being subtracted or otherwise combined -- a quote depth of 1 (36pt) plus one dd's own DEFINITION_BODY_INDENT_PT (36pt) must read back as 72pt, not 0pt.
+    // Distinguishes the two contributions being summed (the correct behaviour) from being subtracted or otherwise combined — a quote depth of 1 (36pt) plus one dd's own DEFINITION_BODY_INDENT_PT (36pt) must read back as 72pt, not 0pt.
     const blocks = read(
       body("<blockquote><dl><dd>text</dd></dl></blockquote>"),
     );
@@ -2223,7 +2223,7 @@ describe("pre / code blocks", () => {
     );
   });
 
-  // readPreText is its own separate recursive walk over a <pre>'s children, not a call into src/xhtml/inline.ts's appendElement -- so the script/template guard that file's own comment calls "universal" needed its own identical guard here too, since <script>/<template> are both legal children of <pre> per the HTML content model and neither's content is ever legitimate document text.
+  // readPreText is its own separate recursive walk over a <pre>'s children, not a call into src/xhtml/inline.ts's appendElement — so the script/template guard that file's own comment calls "universal" needed its own identical guard here too, since <script>/<template> are both legal children of <pre> per the HTML content model and neither's content is ever legitimate document text.
   it("skips a <script>'s raw source when it sits directly inside a <pre>, never leaking it into the extracted text", () => {
     const blocks = read(
       body("<pre>before<script>var x = 1;</script>after</pre>"),
@@ -2470,7 +2470,7 @@ describe("pre / code blocks", () => {
   });
 
   it("does not mistake a non-<a> element's own href for a footnote reference, even when that href happens to resolve to a real footnote target elsewhere in the document", () => {
-    // Only a genuine <a> can carry a footnote reference (preFootnoteReferenceName/containsFootnoteReference both gate on node.tag === "a" before ever checking where the href resolves) -- a <span href> pointing at the identical fragment must still take the flat, single-run readPreFlatRuns path, not the run-splitting readPreRuns path a real footnote reference would trigger.
+    // Only a genuine <a> can carry a footnote reference (preFootnoteReferenceName/containsFootnoteReference both gate on node.tag === "a" before ever checking where the href resolves) — a <span href> pointing at the identical fragment must still take the flat, single-run readPreFlatRuns path, not the run-splitting readPreRuns path a real footnote reference would trigger.
     const blocks = read(
       body(
         '<p><a epub:type="noteref" href="#fn1">1</a></p>' +
@@ -2685,7 +2685,7 @@ describe("figure/figcaption", () => {
         contentWidthPt: CONTENT_WIDTH_PT,
       },
     );
-    // The fake single-byte image is neither a real PNG nor JPEG, so it degrades to its alt text -- this test is about figure/figcaption structure, not image decoding (covered separately).
+    // The fake single-byte image is neither a real PNG nor JPEG, so it degrades to its alt text — this test is about figure/figcaption structure, not image decoding (covered separately).
     expect(blocks).toEqual([
       { kind: "paragraph", runs: [{ text: "alt text" }] },
       { kind: "paragraph", runs: [{ text: "Caption text" }] },
@@ -2791,7 +2791,7 @@ describe("text direction (the dir attribute)", () => {
   });
 
   it('leaves dir="auto" unmapped rather than guessing a direction for it', () => {
-    // dir="auto" resolves at render time from the content's own first strong character -- a fact ContentParagraph.direction's closed ltr/rtl vocabulary has no member for.
+    // dir="auto" resolves at render time from the content's own first strong character — a fact ContentParagraph.direction's closed ltr/rtl vocabulary has no member for.
     const blocks = read(body('<p dir="auto">words</p>'));
     expect(blocks[0]).toEqual({ kind: "paragraph", runs: [{ text: "words" }] });
   });
@@ -2859,7 +2859,7 @@ describe("footnotes: EPUB 3 aside + noteref", () => {
     ]);
   });
 
-  // ExaDev/documents.js#1038's own repro: a footnote-reference anchor nested inside a <strong> (appendNested's own recursive buildInlineRuns call) at a point where the OUTER runs array already holds a preceding text run. The nested call counts its own runs from zero ("world" at 0, "1" at 1), so its own construct comes back as {startRun: 1, endRun: 2} relative to itself -- rebasing that onto the outer array's own length (1, for "hello ") is what turns it into the correct {startRun: 2, endRun: 3} bracketing "1", not the unrebased {startRun: 1, endRun: 2} that would incorrectly bracket "world" instead.
+  // ExaDev/documents.js#1038's own repro: a footnote-reference anchor nested inside a <strong> (appendNested's own recursive buildInlineRuns call) at a point where the OUTER runs array already holds a preceding text run. The nested call counts its own runs from zero ("world" at 0, "1" at 1), so its own construct comes back as {startRun: 1, endRun: 2} relative to itself — rebasing that onto the outer array's own length (1, for "hello ") is what turns it into the correct {startRun: 2, endRun: 3} bracketing "1", not the unrebased {startRun: 1, endRun: 2} that would incorrectly bracket "world" instead.
   it("rebases a footnote-reference construct nested inside a <strong> onto the outer run array's own length, rather than leaving it relative to the nested call's zero-based count", () => {
     const blocks = read(
       body(
@@ -2983,7 +2983,7 @@ describe("footnotes: EPUB 2 linked-anchor idiom", () => {
   });
 });
 
-// A <caption>/<dt>/<dd>/<figcaption>/<td>/<th> is Flow content per the HTML Standard, so a <pre>, a nested list, or more than one paragraph inside one is real, conformant markup -- these six containers used to build their content via one bare buildInlineRuns call each, flattening any of that block structure into a single paragraph (or, worse, fusing sibling paragraphs into one undelimited run with the word boundary between them lost). ExaDev/documents.js#1023's own two minimal repros, run against every one of the six containers it names.
+// A <caption>/<dt>/<dd>/<figcaption>/<td>/<th> is Flow content per the HTML Standard, so a <pre>, a nested list, or more than one paragraph inside one is real, conformant markup — these six containers used to build their content via one bare buildInlineRuns call each, flattening any of that block structure into a single paragraph (or, worse, fusing sibling paragraphs into one undelimited run with the word boundary between them lost). ExaDev/documents.js#1023's own two minimal repros, run against every one of the six containers it names.
 describe("block content inside table cells, captions, dt/dd, figcaption (#1023)", () => {
   it("keeps a <pre> inside a table cell preformatted, rather than flattening it to a plain paragraph with its internal newline collapsed", () => {
     const blocks = read(

@@ -9,21 +9,21 @@ import { applyPredictor, readPredictorParams } from "./predictors";
 
 export interface DecodedStream {
   readonly bytes: Uint8Array<ArrayBuffer>;
-  // Set when decoding stopped before exhausting the /Filter chain: DCTDecode's deliberate JPEG passthrough (the encoded bytes ARE the deliverable -- see src/image/*'s own module docs), JPXDecode's own passthrough (a JPEG 2000 codestream carries its own component count and sample depth, which no plain byte array can express -- src/images-read.ts decodes it where those are meaningful), a filter this codec doesn't implement (Crypt), or a JBIG2Decode stream using a JBIG2 feature src/image/jbig2.ts does not decode. `bytes` is still encoded per this filter name either way.
+  // Set when decoding stopped before exhausting the /Filter chain: DCTDecode's deliberate JPEG passthrough (the encoded bytes ARE the deliverable — see src/image/*'s own module docs), JPXDecode's own passthrough (a JPEG 2000 codestream carries its own component count and sample depth, which no plain byte array can express — src/images-read.ts decodes it where those are meaningful), a filter this codec doesn't implement (Crypt), or a JBIG2Decode stream using a JBIG2 feature src/image/jbig2.ts does not decode. `bytes` is still encoded per this filter name either way.
   readonly remainingFilter?: string;
-  // Set when a JBIG2Decode filter decoded successfully: the stream's own JBIG2-encoded bytes as they entered that filter (any outer transport filter such as a wrapping FlateDecode already peeled), plus the decoded /JBIG2Globals segments when the stream declared them. This package has no JBIG2 encoder (a hand-written one is research-grade symbol-dictionary design), so these bytes are the only lossless spelling of the image a writer can re-emit -- the image layer lifts them onto the asset's `original` for verbatim re-embedding, exactly as DCTDecode's own bytes ride through `format: 'jpeg'`.
+  // Set when a JBIG2Decode filter decoded successfully: the stream's own JBIG2-encoded bytes as they entered that filter (any outer transport filter such as a wrapping FlateDecode already peeled), plus the decoded /JBIG2Globals segments when the stream declared them. This package has no JBIG2 encoder (a hand-written one is research-grade symbol-dictionary design), so these bytes are the only lossless spelling of the image a writer can re-emit — the image layer lifts them onto the asset's `original` for verbatim re-embedding, exactly as DCTDecode's own bytes ride through `format: 'jpeg'`.
   readonly jbig2?: {
     readonly encoded: Uint8Array<ArrayBuffer>;
     readonly globals?: Uint8Array<ArrayBuffer>;
   };
 }
 
-// Follows one indirect reference. Only /DecodeParms entries that are themselves whole objects need this -- in practice just JBIG2Decode's /JBIG2Globals stream, which a producer essentially always writes as a reference since several images share it. Declared as a bare callback rather than taking src/interpret.ts's PdfObjectResolver so this module keeps no dependency on the interpreter.
+// Follows one indirect reference. Only /DecodeParms entries that are themselves whole objects need this — in practice just JBIG2Decode's /JBIG2Globals stream, which a producer essentially always writes as a reference since several images share it. Declared as a bare callback rather than taking src/interpret.ts's PdfObjectResolver so this module keeps no dependency on the interpreter.
 export type PdfIndirectResolver = (
   obj: PdfObject | undefined,
 ) => PdfObject | undefined;
 
-// Runs a stream's raw bytes through its /Filter chain (a single name or an array of names, with /DecodeParms supplying per-filter parameters in the same single-or-array shape). Recoverable per-filter issues (an unresolvable /Predictor, an unimplemented filter) degrade with a diagnostic and stop the chain rather than throwing -- the caller decides whether the partially- or un-decoded result is still useful (e.g. a DCTDecode image's bytes are perfectly usable as-is).
+// Runs a stream's raw bytes through its /Filter chain (a single name or an array of names, with /DecodeParms supplying per-filter parameters in the same single-or-array shape). Recoverable per-filter issues (an unresolvable /Predictor, an unimplemented filter) degrade with a diagnostic and stop the chain rather than throwing — the caller decides whether the partially- or un-decoded result is still useful (e.g. a DCTDecode image's bytes are perfectly usable as-is).
 export function decodeStream(
   raw: Uint8Array<ArrayBuffer>,
   dict: PdfDict,
@@ -89,7 +89,7 @@ function applyPredictorIfPresent(
 
 // CCITTFaxDecode (ISO 32000-1 7.4.6): the /DecodeParms entries in Table 11 map one-to-one onto src/image/ccitt.ts's own options, which is the whole of this codec's PDF knowledge about fax coding.
 //
-// /Rows falls back to the stream dictionary's own /Height because Table 11 defaults /Rows to 0 ("decode until the data runs out"), and a real producer very often leaves it there and lets the image dictionary carry the row count -- resolving it here means the decoder gets a definite row count and stops on it rather than reading whatever trailing bits an encoder left behind.
+// /Rows falls back to the stream dictionary's own /Height because Table 11 defaults /Rows to 0 ("decode until the data runs out"), and a real producer very often leaves it there and lets the image dictionary carry the row count — resolving it here means the decoder gets a definite row count and stops on it rather than reading whatever trailing bits an encoder left behind.
 //
 // /EndOfLine, /EndOfBlock, and /DamagedRowsBeforeError are deliberately not consulted: the decoder handles an EOL wherever one actually appears rather than being told in advance whether to expect one, stops at an end-of-block marker or at the declared row count whichever comes first, and reports damage through the diagnostic sink rather than switching between "throw" and "keep going" on a per-document count.
 function ccittFaxDecode(
@@ -115,9 +115,9 @@ function ccittFaxDecode(
   }).bytes;
 }
 
-// JBIG2Decode (ISO 32000-1 7.4.7). The filter has exactly one /DecodeParms entry, /JBIG2Globals: a stream of segments -- typically a symbol dictionary -- shared by every page of the document that was embedded, which a page's own segments refer to by segment number.
+// JBIG2Decode (ISO 32000-1 7.4.7). The filter has exactly one /DecodeParms entry, /JBIG2Globals: a stream of segments — typically a symbol dictionary — shared by every page of the document that was embedded, which a page's own segments refer to by segment number.
 //
-// Two polarity/sizing details, both of them PDF's rather than JBIG2's, and both handled here so src/image/jbig2.ts stays free of PDF knowledge. First, JBIG2 codes a black pixel as a 1 bit (T.88 3.29) while a PDF 1-bit /DeviceGray image reads 0 as black, so the decoded bitmap is inverted on the way out -- exactly the convention CCITTFaxDecode reaches through its own /BlackIs1 defaulting to false. Second, the image dictionary's own /Width and /Height are authoritative over the page information segment's, which is also the only way a JBIG2 page of "unknown" (striped) height resolves at all.
+// Two polarity/sizing details, both of them PDF's rather than JBIG2's, and both handled here so src/image/jbig2.ts stays free of PDF knowledge. First, JBIG2 codes a black pixel as a 1 bit (T.88 3.29) while a PDF 1-bit /DeviceGray image reads 0 as black, so the decoded bitmap is inverted on the way out — exactly the convention CCITTFaxDecode reaches through its own /BlackIs1 defaulting to false. Second, the image dictionary's own /Width and /Height are authoritative over the page information segment's, which is also the only way a JBIG2 page of "unknown" (striped) height resolves at all.
 //
 // Returns undefined when the stream uses a JBIG2 feature this decoder does not implement, or is malformed. That degrades exactly like an unimplemented filter: the caller gets the still-encoded bytes back with remainingFilter set, skips the image, and the rest of the page still reads. On success it returns the decoded samples beside the globals segments it consumed, so decodeStream can capture the verbatim-re-embedding pair (see DecodedStream.jbig2).
 function jbig2Decode(
@@ -325,7 +325,7 @@ const ASCII85_ZERO_GROUP_MARKER = 0x7a; // 'z'
 const ASCII85_END_MARKER = 0x7e; // '~'
 const ASCII85_MIN_DIGIT = 0x21; // '!'
 const ASCII85_MAX_DIGIT = 0x75; // 'u'
-const ASCII85_MAX_DIGIT_VALUE = ASCII85_MAX_DIGIT - ASCII85_MIN_DIGIT; // 84 -- the padding value for a final, partial group
+const ASCII85_MAX_DIGIT_VALUE = ASCII85_MAX_DIGIT - ASCII85_MIN_DIGIT; // 84 — the padding value for a final, partial group
 
 function pushAscii85Group(
   out: number[],
@@ -369,7 +369,7 @@ export function ascii85Decode(
       continue;
     }
     if (byte < ASCII85_MIN_DIGIT || byte > ASCII85_MAX_DIGIT) {
-      continue; // outside the ASCII85 alphabet -- skip rather than treat as fatal
+      continue; // outside the ASCII85 alphabet — skip rather than treat as fatal
     }
     tuple.push(byte - ASCII85_MIN_DIGIT);
     if (tuple.length === 5) {

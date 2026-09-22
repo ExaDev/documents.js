@@ -120,7 +120,7 @@ describe("readOdfParagraph: plain text and whitespace-run elements", () => {
     expect(readOdfParagraph(p, { parts: {} }).runs).toEqual([]);
   });
 
-  it("a bookmark or other zero-width marker child contributes no run, matching text.ts's own zero-length treatment (a field, by contrast, DOES contribute its cached text -- see the construct extents suite below)", () => {
+  it("a bookmark or other zero-width marker child contributes no run, matching text.ts's own zero-length treatment (a field, by contrast, DOES contribute its cached text — see the construct extents suite below)", () => {
     const p = el("text:p", {}, [
       txt("A"),
       el("text:bookmark", { "text:name": "x" }),
@@ -189,7 +189,7 @@ describe("readOdfParagraph: paragraph-level formatting", () => {
   });
 });
 
-// document-schema.js's own field comment states the raw ODF style:name as "Preformatted_20_Text" -- LibreOffice's "_20_" space encoding, not a literal "Preformatted_Text" -- confirmed against this package's own odt fixtures in the fix that added this describe block (ExaDev/documents.js#1020).
+// document-schema.js's own field comment states the raw ODF style:name as "Preformatted_20_Text" — LibreOffice's "_20_" space encoding, not a literal "Preformatted_Text" — confirmed against this package's own odt fixtures in the fix that added this describe block (ExaDev/documents.js#1020).
 function officeStylesPackage(children: XmlElement[]): Package["parts"][string] {
   return {
     kind: "xml",
@@ -211,7 +211,7 @@ describe("readOdfParagraph: preformatted (#1020)", () => {
     expect(readOdfParagraph(p, pkg).preformatted).toBe(true);
   });
 
-  it("sets preformatted: true when an automatic style's own parent-style-name resolves to Preformatted_20_Text -- the shape real pasted-preformatted content actually takes", () => {
+  it("sets preformatted: true when an automatic style's own parent-style-name resolves to Preformatted_20_Text — the shape real pasted-preformatted content actually takes", () => {
     const preformatted = styleStyle("Preformatted_20_Text", "paragraph", {});
     const automatic = styleStyle("P3", "paragraph", {
       "style:parent-style-name": "Preformatted_20_Text",
@@ -520,7 +520,7 @@ describe("readOdfParagraph: run-level construct extents (fields, bookmarks)", ()
     ]);
   });
 
-  it("reads text:bookmark-ref and text:note-ref displays the same way -- one *-ref display family, every member a field", () => {
+  it("reads text:bookmark-ref and text:note-ref displays the same way — one *-ref display family, every member a field", () => {
     const p = el("text:p", {}, [
       el(
         "text:bookmark-ref",
@@ -637,7 +637,7 @@ describe("readOdfParagraph: run-level construct extents (fields, bookmarks)", ()
   });
 
   it("pairs a same-named bookmark and reference-mark independently, since ODF keeps the two name spaces separate", () => {
-    // A bookmark 'x' and a reference-mark 'x' in one paragraph are two legal constructs that must never pair across families -- grouping halves by key alone would see four halves and drop both. Both pairs sit interior (text on both sides) so this pins family discrimination, not the edge scope split.
+    // A bookmark 'x' and a reference-mark 'x' in one paragraph are two legal constructs that must never pair across families — grouping halves by key alone would see four halves and drop both. Both pairs sit interior (text on both sides) so this pins family discrimination, not the edge scope split.
     const p = el("text:p", {}, [
       txt("a "),
       el("text:bookmark-start", { "text:name": "x" }),
@@ -686,7 +686,7 @@ describe("readOdfParagraph: run-level construct extents (fields, bookmarks)", ()
     ]);
   });
 
-  it("does not pair a bookmark whose halves both sit at paragraph edges -- that pair brackets whole blocks and belongs to the block-scope reader, never to both encodings", () => {
+  it("does not pair a bookmark whose halves both sit at paragraph edges — that pair brackets whole blocks and belongs to the block-scope reader, never to both encodings", () => {
     const p = el("text:p", {}, [
       el("text:bookmark-start", { "text:name": "whole" }),
       txt("whole paragraph is marked"),

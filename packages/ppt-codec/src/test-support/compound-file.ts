@@ -84,7 +84,7 @@ export function compoundFile(
   view.setUint32(0x30, firstDirectorySector, true);
   view.setUint32(0x38, MINI_STREAM_CUTOFF, true);
   view.setUint32(0x3c, ENDOFCHAIN, true); // firstMiniFatSector
-  // miniFatSectorCount (0x40) and difatSectorCount (0x48) both want 0, which `file` already holds from its own zero-initialization above -- there is nothing left for either field to write.
+  // miniFatSectorCount (0x40) and difatSectorCount (0x48) both want 0, which `file` already holds from its own zero-initialization above — there is nothing left for either field to write.
   view.setUint32(0x44, ENDOFCHAIN, true); // firstDifatSector
   for (const [i, sector] of Array.from(
     { length: HEADER_DIFAT_ENTRIES },
@@ -122,7 +122,7 @@ export function compoundFile(
     view.setUint32(at + 0x4c, childId, true);
     view.setUint32(at + 0x74, startSector, true);
     view.setUint32(at + 0x78, size, true);
-    // The stream size's high dword (at + 0x7c) wants 0, which `file` already holds -- no write needed.
+    // The stream size's high dword (at + 0x7c) wants 0, which `file` already holds — no write needed.
   };
 
   writeDirectoryEntry(

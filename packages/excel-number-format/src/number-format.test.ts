@@ -8,7 +8,7 @@ import {
   tokenizeNumberFormat,
 } from "./number-format";
 
-// Every format code exercised below is either one ECMA-376 Part 1 SS18.8.30's own built-in table defines, or one taken verbatim from real LibreOffice output -- not an invented approximation of what such a code might look like.
+// Every format code exercised below is either one ECMA-376 Part 1 SS18.8.30's own built-in table defines, or one taken verbatim from real LibreOffice output — not an invented approximation of what such a code might look like.
 
 describe("tokenizeNumberFormat: the constructs a regex cannot tell apart", () => {
   it("treats a quoted run as literal TEXT, so its characters never read as date/time codes", () => {
@@ -134,7 +134,7 @@ describe("classifyNumberFormat: a compact code-to-kind table", () => {
 });
 
 describe("classifyNumberFormat: real LibreOffice codes", () => {
-  it("reads [$-809] as a LOCALE tag, not currency -- the $ is immediately followed by the dash", () => {
+  it("reads [$-809] as a LOCALE tag, not currency — the $ is immediately followed by the dash", () => {
     expect(classifyNumberFormat("[$-809]yyyy\\-mm\\-dd")).toEqual({
       kind: "date",
     });
@@ -173,7 +173,7 @@ describe("classifyNumberFormat: real LibreOffice codes", () => {
 });
 
 describe("classifyNumberFormat: currency by symbol carries no invented code", () => {
-  it("classifies a bracketed symbol as currency with no code -- there is no faithful symbol-to-ISO-code mapping", () => {
+  it("classifies a bracketed symbol as currency with no code — there is no faithful symbol-to-ISO-code mapping", () => {
     expect(classifyNumberFormat("[$£-809]#,##0.00")).toEqual({
       kind: "currency",
     });
@@ -307,7 +307,7 @@ describe("classifyNumberFormat: precedence when a code carries several signals",
     expect(classifyNumberFormat("[mm]:ss")).toEqual({ kind: "elapsedTime" });
   });
 
-  it("a date code beats a time code -- a format carrying both is a genuine combined dateTime", () => {
+  it("a date code beats a time code — a format carrying both is a genuine combined dateTime", () => {
     expect(classifyNumberFormat("m/d/yy h:mm")).toEqual({ kind: "dateTime" });
   });
 
@@ -387,7 +387,7 @@ describe("BUILTIN_NUMBER_FORMATS: the same classifier, fed the spec's own implie
     expect(classOf(49)).toEqual({ kind: "text" });
   });
 
-  it("leaves ids 23-36 undefined -- ECMA-376's own table reserves them, and inventing codes would fabricate a mapping", () => {
+  it("leaves ids 23-36 undefined — ECMA-376's own table reserves them, and inventing codes would fabricate a mapping", () => {
     for (let id = 23; id <= 36; id++) {
       expect(BUILTIN_NUMBER_FORMATS.get(id)).toBeUndefined();
     }

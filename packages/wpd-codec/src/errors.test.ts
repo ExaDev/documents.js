@@ -7,7 +7,7 @@ import {
   WpdWrongPasswordError,
 } from "./errors";
 
-// Each subclass sets its own `.name`, and downstream reading code (and consumers catching by name) relies on it -- the integration tests exercising these errors never assert on `.name` itself, only on `instanceof`, so it needs its own direct coverage here.
+// Each subclass sets its own `.name`, and downstream reading code (and consumers catching by name) relies on it — the integration tests exercising these errors never assert on `.name` itself, only on `instanceof`, so it needs its own direct coverage here.
 describe("WpdFormatError subclasses", () => {
   it("names WpdFormatError itself", () => {
     expect(new WpdFormatError("x").name).toBe("WpdFormatError");

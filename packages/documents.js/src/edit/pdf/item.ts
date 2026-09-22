@@ -16,11 +16,11 @@ import type {
   LayoutText,
 } from "pdf-codec";
 
-// Live-view classes over a page's own LayoutItem entries -- the PDF-editor equivalent of src/edit/docx/run.ts's DocxRun or src/edit/odg/vector.ts's OdgBoxVector/OdgLineVector/OdgPathVector, adapted to this package's own model: a LayoutItem is a plain, Zod-inferred object (not an XmlElement), so there is no attribute tree to read/write through -- every getter/setter here reads or mutates the actual object sitting inside the page's own `items` array directly, and saving is nothing more than writePdf(doc) (PdfEditor.toBytes()). `container` is that page's own `LayoutItem[]` array (the exact reference PdfPage.items()/append*/insert* hold), `node` is this item's own object inside it.
+// Live-view classes over a page's own LayoutItem entries — the PDF-editor equivalent of src/edit/docx/run.ts's DocxRun or src/edit/odg/vector.ts's OdgBoxVector/OdgLineVector/OdgPathVector, adapted to this package's own model: a LayoutItem is a plain, Zod-inferred object (not an XmlElement), so there is no attribute tree to read/write through — every getter/setter here reads or mutates the actual object sitting inside the page's own `items` array directly, and saving is nothing more than writePdf(doc) (PdfEditor.toBytes()). `container` is that page's own `LayoutItem[]` array (the exact reference PdfPage.items()/append*/insert* hold), `node` is this item's own object inside it.
 //
-// Each of the seven LayoutItem kinds gets its own concrete class below rather than one class narrowing on a tag the way OdgBoxVector does for rect/ellipse -- a LayoutItem's `kind` is a real discriminant property already (LayoutItemSchema's z.discriminatedUnion), so there is no shared element shape to collapse two kinds onto the way draw:rect/draw:ellipse share one attribute vocabulary.
+// Each of the seven LayoutItem kinds gets its own concrete class below rather than one class narrowing on a tag the way OdgBoxVector does for rect/ellipse — a LayoutItem's `kind` is a real discriminant property already (LayoutItemSchema's z.discriminatedUnion), so there is no shared element shape to collapse two kinds onto the way draw:rect/draw:ellipse share one attribute vocabulary.
 
-// A page's own items() genuinely narrows on `kind` -- PdfTextItem.kind, PdfRectItem.kind, etc. are all real literal PROPERTIES (readonly kind = '<literal>' as const), not getters, exactly matching OdgLineVector/OdgPathVector's own convention for the same reason: a getter can't narrow a discriminated union the way a literal property can.
+// A page's own items() genuinely narrows on `kind` — PdfTextItem.kind, PdfRectItem.kind, etc. are all real literal PROPERTIES (readonly kind = '<literal>' as const), not getters, exactly matching OdgLineVector/OdgPathVector's own convention for the same reason: a getter can't narrow a discriminated union the way a literal property can.
 
 abstract class PdfItemBase<T extends LayoutItem> {
   protected readonly container: LayoutItem[];
@@ -43,7 +43,7 @@ abstract class PdfItemBase<T extends LayoutItem> {
     return this.node;
   }
 
-  // sourcePath is assigned only by a format reader at read time (document-schema.js's own layout.ts doc comment) -- never meaningfully settable here, so this exposes it read-only, matching what every LayoutItem variant actually carries. The internalLink item is the deliberate exception (an annotation rectangle is never laid out from a ContentDocument item), so it reads as undefined rather than being modelled on that variant.
+  // sourcePath is assigned only by a format reader at read time (document-schema.js's own layout.ts doc comment) — never meaningfully settable here, so this exposes it read-only, matching what every LayoutItem variant actually carries. The internalLink item is the deliberate exception (an annotation rectangle is never laid out from a ContentDocument item), so it reads as undefined rather than being modelled on that variant.
   get sourcePath(): string | undefined {
     const node = this.live();
     return node.kind === "internalLink" ? undefined : node.sourcePath;
@@ -68,7 +68,7 @@ function requireNonNegative(value: number, field: string): void {
   }
 }
 
-// Sets `node[key]` when `value` is defined, or removes the key entirely when it isn't -- matching every optional LayoutItem field's own Zod-schema shape (an absent key, never a present key holding `undefined`), the same convention DocxParagraph's own alignment/styleId setters follow for w:jc/w:pStyle by removing the element outright rather than writing one with no value.
+// Sets `node[key]` when `value` is defined, or removes the key entirely when it isn't — matching every optional LayoutItem field's own Zod-schema shape (an absent key, never a present key holding `undefined`), the same convention DocxParagraph's own alignment/styleId setters follow for w:jc/w:pStyle by removing the element outright rather than writing one with no value.
 function setOrDelete<T extends object, K extends keyof T>(
   node: T,
   key: K,
@@ -497,7 +497,7 @@ export class PdfPathItem extends PdfItemBase<LayoutPath> {
     super(container, node, "PdfPathItem");
   }
 
-  // A whole-array-replace setter only, in v1 -- no per-segment/per-point live editing of an existing path (see this module's own top-of-file scope note and the pdf editor's own module doc comment for why).
+  // A whole-array-replace setter only, in v1 — no per-segment/per-point live editing of an existing path (see this module's own top-of-file scope note and the pdf editor's own module doc comment for why).
   get subpaths(): readonly LayoutSubpath[] {
     return this.live().subpaths;
   }
@@ -634,7 +634,7 @@ export class PdfImageItem extends PdfItemBase<LayoutImage> {
     setOrDelete(this.live(), "rotationDeg", value);
   }
 
-  // Registers `bytes` in the document-wide image registry (deduplicated by content, exactly like a fresh appendImage/insertImageAt) and repoints this item's own imageId at the result -- position/size are untouched. The previous imageId is left exactly as it was in `images`: pruning it would be unsafe, since dedup means another item elsewhere in the document may still be referencing the identical entry: writePdf only ever embeds an images[] entry actually referenced by some item on some page, so an orphaned entry this call leaves behind is simply never written out.
+  // Registers `bytes` in the document-wide image registry (deduplicated by content, exactly like a fresh appendImage/insertImageAt) and repoints this item's own imageId at the result — position/size are untouched. The previous imageId is left exactly as it was in `images`: pruning it would be unsafe, since dedup means another item elsewhere in the document may still be referencing the identical entry: writePdf only ever embeds an images[] entry actually referenced by some item on some page, so an orphaned entry this call leaves behind is simply never written out.
   setImage(bytes: Uint8Array<ArrayBuffer>, format: "png" | "jpeg"): void {
     const node = this.live();
     node.imageId = registerImageBytes(bytes, format, this.images);
@@ -777,7 +777,7 @@ export type PdfItem =
   | PdfLinkItem
   | PdfInternalLinkItem;
 
-// Wraps whichever LayoutItem `node` actually is in its matching live-view class -- the read-side counterpart to buildTextItem/buildRectItem/etc above, and the single place kind-to-class dispatch lives. PdfPage's own items()/textItems()/imageItems()/etc, and every append*/insert*At below, funnel through this.
+// Wraps whichever LayoutItem `node` actually is in its matching live-view class — the read-side counterpart to buildTextItem/buildRectItem/etc above, and the single place kind-to-class dispatch lives. PdfPage's own items()/textItems()/imageItems()/etc, and every append*/insert*At below, funnel through this.
 export function wrapItem(
   container: LayoutItem[],
   node: LayoutItem,

@@ -14,13 +14,13 @@ import {
 import { glyphOfSymbolText, SymbolResolver } from "./symbols";
 import { decimalToRational } from "./rational";
 
-// LaTeX presentation -> MathExpression, the string-to-tree half of the two-layer math model (document-schema.js src/math.ts states the contract: this direction is total -- any input at least degrades to an `unparsed` node -- while tree-to-string rendering is partial, which is why storage carries both layers verbatim). The rules are mechanical exactly where notation is unambiguous and degrade to visible `unparsed` data everywhere else, per the design the issue records: `\frac` is always division, a radical is always a root, a scripted Sigma with limits is always a binder, and juxtaposition -- the one construct with two defensible readings (multiplication, function application) -- is NEVER guessed, because a wrong guess is indistinguishable from a correct lowering until someone computes with it.
+// LaTeX presentation -> MathExpression, the string-to-tree half of the two-layer math model (document-schema.js src/math.ts states the contract: this direction is total — any input at least degrades to an `unparsed` node — while tree-to-string rendering is partial, which is why storage carries both layers verbatim). The rules are mechanical exactly where notation is unambiguous and degrade to visible `unparsed` data everywhere else, per the design the issue records: `\frac` is always division, a radical is always a root, a scripted Sigma with limits is always a binder, and juxtaposition — the one construct with two defensible readings (multiplication, function application) — is NEVER guessed, because a wrong guess is indistinguishable from a correct lowering until someone computes with it.
 //
 // The input tree is temml's KaTeX-style parse tree (src/latex/temml.ts, the pinned parser). Everything here reads it through structural guards, so a temml release that reshapes a node changes a type-guard failure in the test suite rather than silently mis-lowering.
 
-// -- The operator registries this lowering emits into --
+// — The operator registries this lowering emits into --
 //
-// The core arithmetic registry ('math:' prefix): every operator below is one the schema names the grammar's reference consumers implement. Binary operators fold strictly left-to-right, one application per source operator, so the stored tree mirrors the source's own structure (a - b - c is subtract(subtract(a, b), c), not a variadic rewrite -- associativity is a semantics-layer judgement, not this lowering's to make).
+// The core arithmetic registry ('math:' prefix): every operator below is one the schema names the grammar's reference consumers implement. Binary operators fold strictly left-to-right, one application per source operator, so the stored tree mirrors the source's own structure (a - b - c is subtract(subtract(a, b), c), not a variadic rewrite — associativity is a semantics-layer judgement, not this lowering's to make).
 
 const BINARY_ATOM_OPERATORS: Readonly<Record<string, string>> = {
   "+": "math:add",
@@ -46,7 +46,7 @@ const RELATION_ATOM_OPERATORS: Readonly<Record<string, string>> = {
 const SUBTRACT_OPERATOR = "math:subtract";
 const UNARY_MINUS_OPERATOR = "math:negate";
 
-// Named single-argument functions. A function name is not reused as a variable in any convention these rules cover, so \sin applied to what follows is mechanical in a way bare f(x) is not -- which is exactly why f(x) degrades (juxtaposition) while \sin(x) lowers. Deliberately excludes variadic and ordering-sensitive names (\min, \max, \arg): their argument-list semantics have no representation in a single-argument registry entry, and half a variadic reading is a wrong reading.
+// Named single-argument functions. A function name is not reused as a variable in any convention these rules cover, so \sin applied to what follows is mechanical in a way bare f(x) is not — which is exactly why f(x) degrades (juxtaposition) while \sin(x) lowers. Deliberately excludes variadic and ordering-sensitive names (\min, \max, \arg): their argument-list semantics have no representation in a single-argument registry entry, and half a variadic reading is a wrong reading.
 const NAMED_FUNCTION_OPERATORS: Readonly<Record<string, string>> = {
   "\\sin": "math:sin",
   "\\cos": "math:cos",
@@ -65,21 +65,21 @@ const NAMED_FUNCTION_OPERATORS: Readonly<Record<string, string>> = {
   "\\ln": "math:ln",
 };
 
-// temml node types that carry no mathematics at all -- spacing commands, the zero-size `rule` artefact temml inserts as a radical's vinculum, kerns. Skipping them is not a degradation (there is nothing to degrade); everything else unknown degrades visibly instead.
+// temml node types that carry no mathematics at all — spacing commands, the zero-size `rule` artefact temml inserts as a radical's vinculum, kerns. Skipping them is not a degradation (there is nothing to degrade); everything else unknown degrades visibly instead.
 const PRESENTATION_ONLY_TYPES: ReadonlySet<string> = new Set([
   "spacing",
   "rule",
   "kern",
 ]);
 
-// Node types whose whole job is to wrap a body in presentation styling -- unwrapped, with the body lowered in place. Not in PRESENTATION_ONLY_TYPES because their body is mathematics.
+// Node types whose whole job is to wrap a body in presentation styling — unwrapped, with the body lowered in place. Not in PRESENTATION_ONLY_TYPES because their body is mathematics.
 const WRAPPER_TYPES: ReadonlySet<string> = new Set(["styling", "color"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// A temml node's `text` field when it holds a plain written character or a symbol command -- the things a glyph can be built from.
+// A temml node's `text` field when it holds a plain written character or a symbol command — the things a glyph can be built from.
 function nodeText(node: TemmlNode): string | undefined {
   return typeof node.text === "string" ? node.text : undefined;
 }
@@ -135,7 +135,7 @@ function app(
   return { kind: "app", operator, args: [...args] };
 }
 
-// The verbatim source substring a set of nodes came from -- what every degradation carries, per the schema's contract that a coverage gap stays visible as the exact source that resisted lowering. temml attaches positions to tokens and groups but not to the wrapper nodes built over them (supsub, genfrac, sqrt), so the walk descends: a wrapper without a position of its own is covered by the outermost span of its descendants. Nodes temml synthesised with no position and no positioned descendants (the radical-vinculum rule) contribute nothing; an all-synthetic set yields ''.
+// The verbatim source substring a set of nodes came from — what every degradation carries, per the schema's contract that a coverage gap stays visible as the exact source that resisted lowering. temml attaches positions to tokens and groups but not to the wrapper nodes built over them (supsub, genfrac, sqrt), so the walk descends: a wrapper without a position of its own is covered by the outermost span of its descendants. Nodes temml synthesised with no position and no positioned descendants (the radical-vinculum rule) contribute nothing; an all-synthetic set yields ''.
 function spanOfNodes(
   context: LoweringContext,
   nodes: readonly TemmlNode[],
@@ -176,7 +176,7 @@ function spanOfNodes(
     : context.input.slice(start, end);
 }
 
-// A sup/sub value as a node list: temml hands scripts as single nodes, with braces becoming an ordgroup -- unwrapped here so `^{n+1}` and `^n` reach the same lowering path. Styling wrappers unwrap the same way.
+// A sup/sub value as a node list: temml hands scripts as single nodes, with braces becoming an ordgroup — unwrapped here so `^{n+1}` and `^n` reach the same lowering path. Styling wrappers unwrap the same way.
 function nodesOfScript(script: unknown): readonly TemmlNode[] | undefined {
   if (!isTemmlNode(script)) {
     return undefined;
@@ -188,9 +188,9 @@ function nodesOfScript(script: unknown): readonly TemmlNode[] | undefined {
   return [script];
 }
 
-// -- The lowering levels --
+// — The lowering levels --
 
-// A node list with binary/relation operators folded: partition at operator atoms, lower each run as a term, then fold left-to-right. This is where `a + b = c` becomes eq(add(a, b), c), and where unmapped operators (\pm, \approx, \to) and malformed operator placement (a trailing '+', an empty middle run) degrade the whole list to one `unparsed` node -- there is no mechanical reading of a sequence this function cannot fold.
+// A node list with binary/relation operators folded: partition at operator atoms, lower each run as a term, then fold left-to-right. This is where `a + b = c` becomes eq(add(a, b), c), and where unmapped operators (\pm, \approx, \to) and malformed operator placement (a trailing '+', an empty middle run) degrade the whole list to one `unparsed` node — there is no mechanical reading of a sequence this function cannot fold.
 function lowerNodeList(
   nodes: readonly TemmlNode[],
   context: LoweringContext,
@@ -229,7 +229,7 @@ function lowerNodeList(
   const normalised = normaliseUnaryMinus(operators, wrapped);
   const [firstSegment, ...restSegments] = normalised.segments;
   if (firstSegment === undefined) {
-    // Normalisation consumed every segment as unary-minus carriers with nothing left to negate -- an operators-only sequence with no operand at all.
+    // Normalisation consumed every segment as unary-minus carriers with nothing left to negate — an operators-only sequence with no operand at all.
     diagnose(
       context,
       "latex/operator-placement-unparsed",
@@ -255,7 +255,7 @@ function lowerNodeList(
   );
 }
 
-// Whether this node is an atom in the bin/rel families carrying an operator glyph this registry does not map -- the unmapped ones (\pm between two operands) that must degrade the sequence rather than be dropped.
+// Whether this node is an atom in the bin/rel families carrying an operator glyph this registry does not map — the unmapped ones (\pm between two operands) that must degrade the sequence rather than be dropped.
 function isOperatorAtom(node: TemmlNode): boolean {
   return (
     node.type === "atom" && (node.family === "bin" || node.family === "rel")
@@ -263,7 +263,7 @@ function isOperatorAtom(node: TemmlNode): boolean {
 }
 
 function operatorOfNode(node: TemmlNode): string | undefined {
-  // Operator mapping keys off the atom's own text, not its family: TeX relabels a binary operator's atom by position (a leading '-' arrives as family 'open', an operator before another operator as 'ord'), which is a RENDERING convention about spacing, not a statement that the glyph stopped being an operator -- '-' at the head of `-x + y` is still subtraction-shaped and still lowers through the unary-minus reading below.
+  // Operator mapping keys off the atom's own text, not its family: TeX relabels a binary operator's atom by position (a leading '-' arrives as family 'open', an operator before another operator as 'ord'), which is a RENDERING convention about spacing, not a statement that the glyph stopped being an operator — '-' at the head of `-x + y` is still subtraction-shaped and still lowers through the unary-minus reading below.
   if (node.type === "atom") {
     const text = nodeText(node);
     if (text === undefined) {
@@ -271,7 +271,7 @@ function operatorOfNode(node: TemmlNode): string | undefined {
     }
     return BINARY_ATOM_OPERATORS[text] ?? RELATION_ATOM_OPERATORS[text];
   }
-  // '/' is a textord, not an atom, but a/b is as mechanically division as \frac{a}{b} -- the same operator, reached by the inline spelling.
+  // '/' is a textord, not an atom, but a/b is as mechanically division as \frac{a}{b} — the same operator, reached by the inline spelling.
   if (node.type === "textord" && nodeText(node) === "/") {
     return "math:divide";
   }
@@ -283,13 +283,13 @@ const RELATION_OPERATORS: ReadonlySet<string> = new Set(
   Object.values(RELATION_ATOM_OPERATORS),
 );
 
-// One operand segment in fold's input, carrying whether a preceding unary minus makes the segment's folded operand negate: a subtract operator whose FOLLOWING segment is empty (`T = -0.36`, `a + -b`, a leading `-x`) is not a binary subtraction at all -- the minus is the sign of the segment after the empty one. The normalisation pass below rewrites that shape into a subtract-free operator list with the flag set, so fold and foldArithmetic only ever see real binary operators and one flag per segment.
+// One operand segment in fold's input, carrying whether a preceding unary minus makes the segment's folded operand negate: a subtract operator whose FOLLOWING segment is empty (`T = -0.36`, `a + -b`, a leading `-x`) is not a binary subtraction at all — the minus is the sign of the segment after the empty one. The normalisation pass below rewrites that shape into a subtract-free operator list with the flag set, so fold and foldArithmetic only ever see real binary operators and one flag per segment.
 interface FoldSegment {
   readonly nodes: readonly TemmlNode[];
   readonly negated: boolean;
 }
 
-// Rewrites every empty-segment-with-a-subtract-after-it into a negation flag on the segment following the subtract (parity-counted, so `a = --b` negates twice), leaving any other empty segment (a genuine placement error, like `a = = b`) for fold's own diagnostic. This generalises the leading-minus-only reading the walk used to special-case: `T = -0.36` degraded the ENTIRE equality under the old spelling, because the empty segment sat after a relation rather than at the head of the sequence -- found by the generated at-scale worked-example corpus (12% of its first run), whose negative stated answers are textbook-ordinary.
+// Rewrites every empty-segment-with-a-subtract-after-it into a negation flag on the segment following the subtract (parity-counted, so `a = --b` negates twice), leaving any other empty segment (a genuine placement error, like `a = = b`) for fold's own diagnostic. This generalises the leading-minus-only reading the walk used to special-case: `T = -0.36` degraded the ENTIRE equality under the old spelling, because the empty segment sat after a relation rather than at the head of the sequence — found by the generated at-scale worked-example corpus (12% of its first run), whose negative stated answers are textbook-ordinary.
 function normaliseUnaryMinus(
   operators: readonly string[],
   segments: readonly FoldSegment[],
@@ -317,7 +317,7 @@ function normaliseUnaryMinus(
   return { operators: outOperators, segments: outSegments };
 }
 
-// Standard mathematical convention binds a relation (=, <, \leq, ...) looser than every arithmetic operator, regardless of which side of the relation the arithmetic sits on: `c = a + b` and `a + b = c` both read as eq(add(a,b), c), never add(eq(...), ...) or add(..., eq(...)). A single flat left-to-right fold over the mixed operator list cannot express that -- it folds whichever operator comes first in source order, so `F = m \times a` (relation before arithmetic) folded eq before multiply and produced multiply(eq(F,m), a), a tree with no sound mathematical reading (multiplying an equation by a value). fold instead runs two tiers: foldArithmetic resolves every maximal run of consecutive arithmetic operators into one operand first (unchanged left-to-right arithmetic behaviour within a run), and only then folds those operands together with the relation operators between them, left to right -- so arithmetic always binds first no matter which side of a relation it sits on.
+// Standard mathematical convention binds a relation (=, <, \leq, ...) looser than every arithmetic operator, regardless of which side of the relation the arithmetic sits on: `c = a + b` and `a + b = c` both read as eq(add(a,b), c), never add(eq(...), ...) or add(..., eq(...)). A single flat left-to-right fold over the mixed operator list cannot express that — it folds whichever operator comes first in source order, so `F = m \times a` (relation before arithmetic) folded eq before multiply and produced multiply(eq(F,m), a), a tree with no sound mathematical reading (multiplying an equation by a value). fold instead runs two tiers: foldArithmetic resolves every maximal run of consecutive arithmetic operators into one operand first (unchanged left-to-right arithmetic behaviour within a run), and only then folds those operands together with the relation operators between them, left to right — so arithmetic always binds first no matter which side of a relation it sits on.
 function fold(
   first: MathExpression,
   operators: readonly string[],
@@ -375,7 +375,7 @@ function fold(
   return folded;
 }
 
-// One maximal run of consecutive arithmetic operators, folded strictly left-to-right (the header comment's own contract: a - b - c is subtract(subtract(a,b),c), one application per source operator). `operators` here never contains a relation -- fold above only ever calls this on the arithmetic-only slices between relation boundaries.
+// One maximal run of consecutive arithmetic operators, folded strictly left-to-right (the header comment's own contract: a - b - c is subtract(subtract(a,b),c), one application per source operator). `operators` here never contains a relation — fold above only ever calls this on the arithmetic-only slices between relation boundaries.
 function foldArithmetic(
   first: MathExpression,
   operators: readonly string[],
@@ -396,7 +396,7 @@ function foldArithmetic(
   return folded;
 }
 
-// One segment's folded operand, with the unary-minus flag normalisation attached (negate wraps the folded term, never the raw nodes -- negation is an operation on the lowered value).
+// One segment's folded operand, with the unary-minus flag normalisation attached (negate wraps the folded term, never the raw nodes — negation is an operation on the lowered value).
 function lowerFoldSegment(
   segment: FoldSegment,
   context: LoweringContext,
@@ -405,7 +405,7 @@ function lowerFoldSegment(
   return segment.negated ? app(UNARY_MINUS_OPERATOR, [folded]) : folded;
 }
 
-// A run of nodes with no binary/relation operator inside: binders and named functions consume the rest of the run, digit runs fold into one numeric literal, and ANY remaining adjacency degrades to one `unparsed` node -- the juxtaposition rule. Juxtaposition is where the issue draws the line between mechanical and context-starved: `mc^2`, `f(x)`, `2(x+1)` all have multiplication AND function application as defensible readings, and LaTeX notation cannot say which, so the run stays visible data with a diagnostic instead of becoming a guess.
+// A run of nodes with no binary/relation operator inside: binders and named functions consume the rest of the run, digit runs fold into one numeric literal, and ANY remaining adjacency degrades to one `unparsed` node — the juxtaposition rule. Juxtaposition is where the issue draws the line between mechanical and context-starved: `mc^2`, `f(x)`, `2(x+1)` all have multiplication AND function application as defensible readings, and LaTeX notation cannot say which, so the run stays visible data with a diagnostic instead of becoming a guess.
 function lowerTerm(
   nodes: readonly TemmlNode[],
   context: LoweringContext,
@@ -534,7 +534,7 @@ function lowerTermItem(
   return lowerNode(item.node, context);
 }
 
-// A single node. Everything that is not one of the mechanical constructs below degrades to its own verbatim span with a construct diagnostic -- the total-by-degradation contract.
+// A single node. Everything that is not one of the mechanical constructs below degrades to its own verbatim span with a construct diagnostic — the total-by-degradation contract.
 function lowerNode(node: TemmlNode, context: LoweringContext): MathExpression {
   switch (node.type) {
     case "mathord": {
@@ -607,14 +607,14 @@ function symbolExpression(
   glyph: string,
   context: LoweringContext,
 ): MathExpression {
-  // The lexical rule: an in-scope binder's name shadows everything else -- the bound variable is local to the binder's body, and its id is the binder name itself rather than a table reference.
+  // The lexical rule: an in-scope binder's name shadows everything else — the bound variable is local to the binder's body, and its id is the binder name itself rather than a table reference.
   if (context.binders.includes(glyph)) {
     return { kind: "sym", id: glyph };
   }
   return { kind: "sym", id: context.resolver.resolve(glyph) };
 }
 
-// \frac -- the one generalised fraction that is unambiguously division: a bar, no delimiters. \binom and friends (delimiters drawn around them) and the bar-less \genfrac forms degrade rather than become a division they do not assert. temml spells "no delimiter" as null on the genfrac node, so absence is null-or-undefined on both fields.
+// \frac — the one generalised fraction that is unambiguously division: a bar, no delimiters. \binom and friends (delimiters drawn around them) and the bar-less \genfrac forms degrade rather than become a division they do not assert. temml spells "no delimiter" as null on the genfrac node, so absence is null-or-undefined on both fields.
 function lowerGenfrac(
   node: TemmlNode,
   context: LoweringContext,
@@ -639,7 +639,7 @@ function lowerGenfrac(
   ]);
 }
 
-// Radicals: \sqrt{x} is math:sqrt; \sqrt[n]{x} is x raised to the exact rational 1/n -- the mechanical identity between radical index and rational exponent, with the exponent itself built as a division so n never rounds. temml spells "no index" as null on the sqrt node.
+// Radicals: \sqrt{x} is math:sqrt; \sqrt[n]{x} is x raised to the exact rational 1/n — the mechanical identity between radical index and rational exponent, with the exponent itself built as a division so n never rounds. temml spells "no index" as null on the sqrt node.
 function lowerSqrt(node: TemmlNode, context: LoweringContext): MathExpression {
   const index = node.index === null ? undefined : node.index;
   if (!isTemmlNode(node.body) || (index !== undefined && !isTemmlNode(index))) {
@@ -658,7 +658,7 @@ function lowerSqrt(node: TemmlNode, context: LoweringContext): MathExpression {
   ]);
 }
 
-// A grouping construct -- bare parenthesised (content) arrives as a 'delimiter' node, \left(...\right) as 'leftright'. Both lower their inner sequence, so (a + b)^2 becomes pow(add(a, b), 2); a grouping adjacent to anything else was already degraded by the term level's juxtaposition rule. A grouping wrapping exactly one array node is a bracketed matrix (pmatrix, bmatrix) -- the wrapper is presentation, the array is the content.
+// A grouping construct — bare parenthesised (content) arrives as a 'delimiter' node, \left(...\right) as 'leftright'. Both lower their inner sequence, so (a + b)^2 becomes pow(add(a, b), 2); a grouping adjacent to anything else was already degraded by the term level's juxtaposition rule. A grouping wrapping exactly one array node is a bracketed matrix (pmatrix, bmatrix) — the wrapper is presentation, the array is the content.
 function lowerGrouping(
   node: TemmlNode,
   context: LoweringContext,
@@ -676,7 +676,7 @@ function lowerGrouping(
   return lowerNodeList(body, context);
 }
 
-// The matrix environments: rows of cells, each cell lowered whole. Layout-semantic environments (align, cases, aligned -- anything carrying envClasses) and column-spec arrays with separators degrade, and so does a ragged body, because the schema's matrix demands equal row widths and inventing padding cells would be a silent guess.
+// The matrix environments: rows of cells, each cell lowered whole. Layout-semantic environments (align, cases, aligned — anything carrying envClasses) and column-spec arrays with separators degrade, and so does a ragged body, because the schema's matrix demands equal row widths and inventing padding cells would be a silent guess.
 function lowerArray(node: TemmlNode, context: LoweringContext): MathExpression {
   const separated =
     Array.isArray(node.cols) &&
@@ -710,9 +710,9 @@ function lowerArray(node: TemmlNode, context: LoweringContext): MathExpression {
   return { kind: "matrix", rows };
 }
 
-// -- Scripts --
+// — Scripts --
 
-// The one place presentation is allowed to change SEMANTICS by lookup: a subscript makes a distinct symbol identity (x_1 is never x times 1 -- subscripting is how notation spells "another symbol"), resolved through the symbol table like any other glyph; a superscript is exponentiation UNLESS the table already curates the scripted form as one symbol (a document where an embellished pair is a single named quantity -- the table says so, the notation cannot).
+// The one place presentation is allowed to change SEMANTICS by lookup: a subscript makes a distinct symbol identity (x_1 is never x times 1 — subscripting is how notation spells "another symbol"), resolved through the symbol table like any other glyph; a superscript is exponentiation UNLESS the table already curates the scripted form as one symbol (a document where an embellished pair is a single named quantity — the table says so, the notation cannot).
 function lowerSupsub(
   node: TemmlNode,
   context: LoweringContext,
@@ -798,7 +798,7 @@ function scriptWrittenForm(
     .join("");
 }
 
-// Whether a subscript run is a simple symbol suffix -- every node a plain glyph (letter, digit, or symbol command) with nothing structural inside. 'max', 'ij', '1' qualify; 'i+1', '(n)' do not, and their construct degrades rather than becoming a mangled identity.
+// Whether a subscript run is a simple symbol suffix — every node a plain glyph (letter, digit, or symbol command) with nothing structural inside. 'max', 'ij', '1' qualify; 'i+1', '(n)' do not, and their construct degrades rather than becoming a mangled identity.
 function simpleScriptGlyph(nodes: readonly TemmlNode[]): string | undefined {
   const parts: string[] = [];
   for (const node of nodes) {
@@ -824,9 +824,9 @@ function simpleScriptGlyph(nodes: readonly TemmlNode[]): string | undefined {
   return parts.length === 0 ? undefined : parts.join("");
 }
 
-// -- Binders and named functions --
+// — Binders and named functions --
 
-// Reading a scripted big operator. A supsub whose base is a scripted Sigma or Product is a binder that OWNS the rest of its term (the summand/product term) -- the term level consults this before anything else, which is what makes \sum_{i=1}^{n} i^2 lower as one binder rather than a Sigma juxtaposed against its summand. \int is an op too but never a binder: the grammar's binders are exactly sum and prod, so integrals degrade as constructs and stay visible.
+// Reading a scripted big operator. A supsub whose base is a scripted Sigma or Product is a binder that OWNS the rest of its term (the summand/product term) — the term level consults this before anything else, which is what makes \sum_{i=1}^{n} i^2 lower as one binder rather than a Sigma juxtaposed against its summand. \int is an op too but never a binder: the grammar's binders are exactly sum and prod, so integrals degrade as constructs and stay visible.
 type BinderRead =
   | {
       readonly status: "binder";
@@ -904,7 +904,7 @@ function implicitBound(context: LoweringContext): MathExpression {
   return unparsed("");
 }
 
-// A named function op in head position (sin, log, exp): it consumes the rest of its run as its single argument, the same ownership rule a binder plays -- \sin x + 1 is add(sin(x), 1) because the run is split at '+' before the function ever looks.
+// A named function op in head position (sin, log, exp): it consumes the rest of its run as its single argument, the same ownership rule a binder plays — \sin x + 1 is add(sin(x), 1) because the run is split at '+' before the function ever looks.
 function namedFunctionOfOp(node: TemmlNode): string | undefined {
   if (node.type !== "op" || node.symbol === true) {
     return undefined;
@@ -913,7 +913,7 @@ function namedFunctionOfOp(node: TemmlNode): string | undefined {
   return name === undefined ? undefined : NAMED_FUNCTION_OPERATORS[name];
 }
 
-// -- The public surface --
+// — The public surface --
 
 export interface LowerLatexOptions {
   // The document symbol table's entries this lowering resolves glyphs against (a formula's `sym` references stay small because definitions live in the table once per document).
@@ -923,7 +923,7 @@ export interface LowerLatexOptions {
 }
 
 export interface LatexLoweringResult {
-  // The lowered expression -- always defined, worst case one `unparsed` node carrying the verbatim source.
+  // The lowered expression — always defined, worst case one `unparsed` node carrying the verbatim source.
   readonly expression: MathExpression;
   readonly diagnostics: readonly LatexDiagnostic[];
   // Table entries minted for glyphs no supplied entry covered, merge-ready for the document's symbolTable so every emitted `sym` reference resolves.
@@ -981,7 +981,7 @@ export interface LatexFormulaResult {
   readonly mintedSymbols: readonly MathSymbolEntry[];
 }
 
-// Lower one LaTeX string into a whole ContentFormula: the verbatim presentation layer, the presentation-MathML tree (so the formula renders through the existing MathML engine instead of degrading to text), the lowered content layer, and provenance. Both layers are stored as-authoritative per the schema -- nothing here derives one from the other at rest.
+// Lower one LaTeX string into a whole ContentFormula: the verbatim presentation layer, the presentation-MathML tree (so the formula renders through the existing MathML engine instead of degrading to text), the lowered content layer, and provenance. Both layers are stored as-authoritative per the schema — nothing here derives one from the other at rest.
 export function latexToFormula(
   latex: string,
   options?: LatexFormulaOptions,

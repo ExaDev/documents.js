@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { SI_UNIT_REGISTRY } from "../test-support/units";
 import { runWorkedExampleSequence } from "./worked-example";
 
-// Builds the "symbol = expression" shape ExaDev/documents.js's LaTeX lowering (packages/documents.js/src/latex/lower.ts) produces for "X = <something>" -- an app(math:eq, [sym, rhs]) -- directly against document-schema.js's own MathExpression, bypassing LaTeX entirely: these tests are about the harness's own recognition and evaluation logic, not about the lowering pipeline that would normally feed it (that's exercised separately, end to end, in corpus.test.ts).
+// Builds the "symbol = expression" shape ExaDev/documents.js's LaTeX lowering (packages/documents.js/src/latex/lower.ts) produces for "X = <something>" — an app(math:eq, [sym, rhs]) — directly against document-schema.js's own MathExpression, bypassing LaTeX entirely: these tests are about the harness's own recognition and evaluation logic, not about the lowering pipeline that would normally feed it (that's exercised separately, end to end, in corpus.test.ts).
 function equation(symbol: string, rhs: MathExpression): MathExpression {
   return {
     kind: "app",
@@ -16,7 +16,7 @@ function sym(id: string): MathExpression {
   return { kind: "sym", id };
 }
 
-// ExactRational's numerator is a signed-integer string, so a decimal literal (6.001) has to be built as its own exact fraction (6001/1000) rather than passed straight through -- MathExpressionSchema's own 'num' node carries no decimal-point spelling at all.
+// ExactRational's numerator is a signed-integer string, so a decimal literal (6.001) has to be built as its own exact fraction (6001/1000) rather than passed straight through — MathExpressionSchema's own 'num' node carries no decimal-point spelling at all.
 function num(value: number): MathExpression {
   if (Number.isInteger(value)) {
     return { kind: "num", numerator: String(value), denominator: "1" };
@@ -123,7 +123,7 @@ describe("runWorkedExampleSequence: dimensionless arithmetic", () => {
   });
 
   it("accepts a residual exactly at the relative tolerance boundary (the comparison is inclusive)", () => {
-    // Stated (expected) = 8, computed (actual) = m * a = 2 * 4.03125 = 8.0625: both exact in binary (0.03125 = 2^-5), and withinTolerance divides by |expected| = 8, so |actual - expected| / |expected| = 0.0625 / 8 = 2^-7 exactly, matching relativeTolerance = 2^-7 bit-for-bit -- not merely close to it.
+    // Stated (expected) = 8, computed (actual) = m * a = 2 * 4.03125 = 8.0625: both exact in binary (0.03125 = 2^-5), and withinTolerance divides by |expected| = 8, so |actual - expected| / |expected| = 0.0625 / 8 = 2^-7 exactly, matching relativeTolerance = 2^-7 bit-for-bit — not merely close to it.
     const relativeTolerance = 2 ** -7;
     const formulas = [
       formula(equation("F", app("math:multiply", [sym("m"), sym("a")]))),
@@ -138,7 +138,7 @@ describe("runWorkedExampleSequence: dimensionless arithmetic", () => {
   });
 
   it("rejects a residual just past the relative tolerance boundary, distinguishing the inclusive '<=' from a stricter '<'", () => {
-    // Same construction as above but with the stated answer nudged so the ratio is strictly greater than the tolerance -- must mismatch under either operator, so this alone doesn't kill the boundary mutant, but pairs with the exact-boundary test above to pin the comparison down from both sides.
+    // Same construction as above but with the stated answer nudged so the ratio is strictly greater than the tolerance — must mismatch under either operator, so this alone doesn't kill the boundary mutant, but pairs with the exact-boundary test above to pin the comparison down from both sides.
     const relativeTolerance = 2 ** -7;
     const formulas = [
       formula(equation("F", app("math:multiply", [sym("m"), sym("a")]))),
@@ -200,7 +200,7 @@ describe("runWorkedExampleSequence: units-typed physics worked example", () => {
 
   it("reports incompatible-dimensions when the definition mixes incompatible quantities", () => {
     const formulas = [
-      formula(equation("total", app("math:add", [sym("m"), sym("a")]))), // total = m + a -- mass + acceleration, nonsensical
+      formula(equation("total", app("math:add", [sym("m"), sym("a")]))), // total = m + a — mass + acceleration, nonsensical
       formula(equation("m", qty(2, "si:kilogram"))),
       formula(equation("a", qty(3, "si:metre-per-second-squared"))),
       formula(equation("total", num(5))),
@@ -282,7 +282,7 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
   });
 
   it("skips an 'app' formula whose operator is not math:eq, rather than misreading its first argument as an equality's own left-hand side", () => {
-    // If the operator check were bypassed, this formula (app('math:add', [sym('x'), num(1)])) would be misread as the equality shape asEquality actually recognises -- a bare symbol on the left -- treating it as the binding "x = 1" instead of skipping it entirely. Observed by checking x stays unbound: a later definition using x must gap with unbound-symbol, not silently succeed using a wrongly-inferred binding.
+    // If the operator check were bypassed, this formula (app('math:add', [sym('x'), num(1)])) would be misread as the equality shape asEquality actually recognises — a bare symbol on the left — treating it as the binding "x = 1" instead of skipping it entirely. Observed by checking x stays unbound: a later definition using x must gap with unbound-symbol, not silently succeed using a wrongly-inferred binding.
     const formulas = [
       formula({
         kind: "app",
@@ -303,7 +303,7 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
   });
 
   it("treats an expression as a definition when at least one argument contains a symbol, even if another argument is a closed literal", () => {
-    // math:add's args are [sym('x'), num(1)] -- one contains a symbol, one does not. If containsSymbol used .every instead of .some, this would be misclassified as already-closed and evaluated immediately against EMPTY_BINDINGS, producing an unbound-symbol gap instead of being held as a pending definition.
+    // math:add's args are [sym('x'), num(1)] — one contains a symbol, one does not. If containsSymbol used .every instead of .some, this would be misclassified as already-closed and evaluated immediately against EMPTY_BINDINGS, producing an unbound-symbol gap instead of being held as a pending definition.
     const formulas = [
       formula(equation("z", app("math:add", [sym("x"), num(1)]))),
       formula(equation("x", num(2))),
@@ -354,23 +354,23 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
   });
 
   it("treats a fully closed sum (no symbol anywhere in lower/upper/body) as a binding, not a definition held pending", () => {
-    // If the OR were replaced wholesale with 'true' (rather than mutating one of its three operands), every sum/prod would be misclassified as a definition regardless of content -- including this one, which has no symbol anywhere and should instead be evaluated immediately as an ordinary closed binding, generating no outcome of its own the same way "m = 2" never does.
+    // If the OR were replaced wholesale with 'true' (rather than mutating one of its three operands), every sum/prod would be misclassified as a definition regardless of content — including this one, which has no symbol anywhere and should instead be evaluated immediately as an ordinary closed binding, generating no outcome of its own the same way "m = 2" never does.
     const closedSum: MathExpression = {
       kind: "sum",
       binder: "i",
       lower: num(1),
       upper: num(3),
-      body: num(5), // constant body -- 5 + 5 + 5 = 15, no reference to the binder or anything else
+      body: num(5), // constant body — 5 + 5 + 5 = 15, no reference to the binder or anything else
     };
     const formulas = [formula(equation("total", closedSum))];
     const report = runWorkedExampleSequence(formulas);
-    // A closed binding with nothing ever restating it produces no outcome at all -- distinct from a wrongly-pending definition, which would surface as an "unresolved" outcome once the sequence ends.
+    // A closed binding with nothing ever restating it produces no outcome at all — distinct from a wrongly-pending definition, which would surface as an "unresolved" outcome once the sequence ends.
     expect(report.total).toBe(0);
     expect(report.unresolved).toBe(0);
   });
 
   it("treats a matrix expression as containing a symbol whenever any one cell does, holding it pending rather than gapping it immediately", () => {
-    // Distinguishes "held pending, then gapped only once something restates it" (correct: unresolved=0, gaps=1, from the eventual resolution attempt) from "wrongly read as closed, gapped immediately on first sight" (a .some/.every or arrow-function mutant: since nothing ever restates "total", a wrongly-immediate gap leaves nothing pending, so no "unresolved" outcome is ever produced either -- gaps=1 either way, but only the correct path also means the definition was genuinely held). The two are told apart by NEVER restating "total": correctly held pending, the sequence ends with it still awaiting a result, which closeUnresolved reports as "unresolved", not "gap".
+    // Distinguishes "held pending, then gapped only once something restates it" (correct: unresolved=0, gaps=1, from the eventual resolution attempt) from "wrongly read as closed, gapped immediately on first sight" (a .some/.every or arrow-function mutant: since nothing ever restates "total", a wrongly-immediate gap leaves nothing pending, so no "unresolved" outcome is ever produced either — gaps=1 either way, but only the correct path also means the definition was genuinely held). The two are told apart by NEVER restating "total": correctly held pending, the sequence ends with it still awaiting a result, which closeUnresolved reports as "unresolved", not "gap".
     const matrixWithSymbol: MathExpression = {
       kind: "matrix",
       rows: [
@@ -454,7 +454,7 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
       formula(equation("F", app("math:multiply", [sym("m"), sym("a")]))), // F = m * a (the definition)
       formula(equation("m", num(99))), // m redefined before F's own result is reached
       formula(equation("a", num(3))),
-      formula(equation("F", num(297))), // 99 * 3, using the latest m -- not the stale 2 * 3 = 6
+      formula(equation("F", num(297))), // 99 * 3, using the latest m — not the stale 2 * 3 = 6
     ];
     const report = runWorkedExampleSequence(formulas);
     expect(report.matched).toBe(1);
@@ -466,7 +466,7 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
 
   it("reports unbound-symbol rather than a false match when a definition's own binding was never supplied", () => {
     const formulas = [
-      formula(equation("range", sym("phi"))), // "range = phi" -- phi is never bound by any preceding closed statement
+      formula(equation("range", sym("phi"))), // "range = phi" — phi is never bound by any preceding closed statement
       formula(equation("range", num(1))),
     ];
     const report = runWorkedExampleSequence(formulas);
@@ -478,7 +478,7 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
   });
 
   it("reports coverage as undefined when nothing in the sequence has a resolvable stated answer, never a fabricated 0 or 1", () => {
-    const formulas = [formula(num(42))]; // skipped entirely -- not even a gap
+    const formulas = [formula(num(42))]; // skipped entirely — not even a gap
     const report = runWorkedExampleSequence(formulas);
     expect(report.coverage).toBeUndefined();
     expect(report.matched).toBe(0);
@@ -510,12 +510,12 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
     expect(report.mismatched).toBe(1);
     expect(report.gaps).toBe(1);
     expect(report.unresolved).toBe(1);
-    // 2 / (2 + 1) = 2/3 -- distinct from every other plausible ratio of these four counts.
+    // 2 / (2 + 1) = 2/3 — distinct from every other plausible ratio of these four counts.
     expect(report.coverage).toBeCloseTo(2 / 3, 12);
   });
 
   it("reports a defined coverage when matched equals mismatched (both nonzero), not a fabricated undefined", () => {
-    // matched - mismatched = 0 here even though matched + mismatched = 2 (nonzero) -- an arithmetic-operator mutant swapping the sum for a difference in the "nothing resolvable" guard would wrongly treat this as undefined.
+    // matched - mismatched = 0 here even though matched + mismatched = 2 (nonzero) — an arithmetic-operator mutant swapping the sum for a difference in the "nothing resolvable" guard would wrongly treat this as undefined.
     const formulas = [
       formula(equation("F", app("math:multiply", [sym("m"), sym("a")]))),
       formula(equation("m", num(2))),
@@ -534,7 +534,7 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
 
 describe("runWorkedExampleSequence: failures from outside this package's own error hierarchy", () => {
   it("reports other-evaluation-error, not a guessed category, when evaluation fails with an error no gap category covers", () => {
-    // A qty node whose exact value carries a zero denominator: MathExpressionSchema would reject it, but the harness reads an already-lowered ContentFormula rather than re-parsing one, so a malformed tree reaches rational.ts's own reduce() and fails there with a plain RangeError -- none of the six document-compute.js error classes. That has to surface as its own uncategorised gap rather than being folded into the nearest named one.
+    // A qty node whose exact value carries a zero denominator: MathExpressionSchema would reject it, but the harness reads an already-lowered ContentFormula rather than re-parsing one, so a malformed tree reaches rational.ts's own reduce() and fails there with a plain RangeError — none of the six document-compute.js error classes. That has to surface as its own uncategorised gap rather than being folded into the nearest named one.
     const formulas = [
       formula(
         equation("d", {

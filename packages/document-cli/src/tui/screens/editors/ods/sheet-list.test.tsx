@@ -10,7 +10,7 @@ import {
 import { settle, waitForFrame } from "../../../test-support.js";
 import { OdsSheetListScreen } from "./sheet-list.js";
 
-// Creates a fresh ods workbook on mount (a real createOds() editor, seeded with one default sheet -- confirmed by running it directly against the installed package) and exposes two probes: the live sheet count and the current screen stack's top, so tests can assert on real reducer/editor state rather than only on rendered text.
+// Creates a fresh ods workbook on mount (a real createOds() editor, seeded with one default sheet — confirmed by running it directly against the installed package) and exposes two probes: the live sheet count and the current screen stack's top, so tests can assert on real reducer/editor state rather than only on rendered text.
 function Harness(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();
@@ -61,7 +61,7 @@ describe("OdsSheetListScreen", () => {
     await waitForFrame(lastFrame, (candidate) =>
       candidate.includes("New sheet name:"),
     );
-    // The add-sheet TextField has just mounted for the first time -- see test-support.ts's own comment for why its input needs a settled tick before it reliably receives keystrokes, and between each of its own writes.
+    // The add-sheet TextField has just mounted for the first time — see test-support.ts's own comment for why its input needs a settled tick before it reliably receives keystrokes, and between each of its own writes.
     await settle();
     stdin.write("Budget");
     await settle();

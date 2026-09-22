@@ -1,9 +1,9 @@
 import { readUint32LE } from "./bytes";
 import { DocFormatError } from "./errors";
 
-// The PLC ("PLex of Cps"), [MS-DOC] 2.2.2 -- the one container shape that carries almost every mapping in the format: an array of 4-byte keys followed by an array of fixed-size data elements, with exactly one more key than element, so key[i] and key[i+1] bracket the range element i describes. The keys are character positions in PlcPcd and byte offsets in PlcBteChpx/PlcBtePapx ("Where most PLCs map CPs to data, the PlcBteChpx maps stream offsets to data instead"), but the layout and the element-count arithmetic are identical, so one parser serves both rather than each caller re-deriving the split point.
+// The PLC ("PLex of Cps"), [MS-DOC] 2.2.2 — the one container shape that carries almost every mapping in the format: an array of 4-byte keys followed by an array of fixed-size data elements, with exactly one more key than element, so key[i] and key[i+1] bracket the range element i describes. The keys are character positions in PlcPcd and byte offsets in PlcBteChpx/PlcBtePapx ("Where most PLCs map CPs to data, the PlcBteChpx maps stream offsets to data instead"), but the layout and the element-count arithmetic are identical, so one parser serves both rather than each caller re-deriving the split point.
 //
-// The element count is not stored: it is derived from the PLC's total size, which is why every caller must pass a size the FIB declared rather than the whole stream. [MS-DOC] 2.2.2 gives the derivation directly -- n = (cbPlc - 4) / (4 + cbData), and "the preceding expression MUST yield a whole number for n". A size that does not is a corrupt file, not a variant, so it throws rather than rounding: rounding would silently shift every element's boundary and produce plausible-looking wrong text.
+// The element count is not stored: it is derived from the PLC's total size, which is why every caller must pass a size the FIB declared rather than the whole stream. [MS-DOC] 2.2.2 gives the derivation directly — n = (cbPlc - 4) / (4 + cbData), and "the preceding expression MUST yield a whole number for n". A size that does not is a corrupt file, not a variant, so it throws rather than rounding: rounding would silently shift every element's boundary and produce plausible-looking wrong text.
 
 export interface Plc {
   /** The (count + 1) keys, ascending. keys[i] and keys[i + 1] bracket element i. */
@@ -11,7 +11,7 @@ export interface Plc {
   readonly count: number;
   /** The bytes of data element i, a view into the PLC's own bytes rather than a copy. */
   element(index: number): Uint8Array;
-  /** `keys[index]`, without the `noUncheckedIndexedAccess` `| undefined` a plain index read would carry -- every caller already only asks for an index bounded by its own bracketing arithmetic (0..count for a key, 0..count - 1 for an element), so this is the one place that bound is actually checked and reported, rather than each caller repeating an unreachable defensive guard of its own. */
+  /** `keys[index]`, without the `noUncheckedIndexedAccess` `| undefined` a plain index read would carry — every caller already only asks for an index bounded by its own bracketing arithmetic (0..count for a key, 0..count - 1 for an element), so this is the one place that bound is actually checked and reported, rather than each caller repeating an unreachable defensive guard of its own. */
   keyAt(index: number): number;
 }
 
@@ -41,7 +41,7 @@ export function parsePlc(
   for (let index = 0; index <= count; index += 1) {
     const key = readUint32LE(bytes, index * 4);
     const previous = keys[index - 1];
-    // "The CPs MUST appear in ascending order" ([MS-DOC] 2.2.2). Enforced rather than assumed because every lookup below is a binary search that would return an arbitrary index on unsorted keys instead of failing -- the silent-wrong-answer case this package exists to avoid.
+    // "The CPs MUST appear in ascending order" ([MS-DOC] 2.2.2). Enforced rather than assumed because every lookup below is a binary search that would return an arbitrary index on unsorted keys instead of failing — the silent-wrong-answer case this package exists to avoid.
     if (previous !== undefined && key < previous) {
       throw new DocFormatError(
         `${what} key ${index} is ${key}, which is less than the preceding key ${previous}; a PLC's keys must be in ascending order`,
@@ -76,7 +76,7 @@ export function parsePlc(
   };
 }
 
-// "Find the largest i such that keys[i] <= value" -- the lookup [MS-DOC]'s Retrieving Text, Direct Character Formatting, and Determining Paragraph Boundaries algorithms each phrase in exactly those words. Returns undefined when the value falls outside the PLC's range, which every one of those algorithms treats as "cp is outside the range of character positions in this document, and is not valid": the last key is a terminator, never the start of a range, so a value at or past it has no element.
+// "Find the largest i such that keys[i] <= value" — the lookup [MS-DOC]'s Retrieving Text, Direct Character Formatting, and Determining Paragraph Boundaries algorithms each phrase in exactly those words. Returns undefined when the value falls outside the PLC's range, which every one of those algorithms treats as "cp is outside the range of character positions in this document, and is not valid": the last key is a terminator, never the start of a range, so a value at or past it has no element.
 export function findLargestAtMost(
   keys: readonly number[],
   value: number,

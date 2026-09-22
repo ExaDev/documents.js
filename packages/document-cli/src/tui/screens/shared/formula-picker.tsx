@@ -26,12 +26,12 @@ const PICKER_ROWS: readonly PickerRow[] = [
 export interface FormulaPickerProps {
   readonly isActive: boolean;
   readonly onCancel: () => void;
-  // Fires with the chosen mathml -- either a preset's own tree, or a raw entry successfully parsed by parseXml. The caller decides what to do with it (dispatch immediately for docx's paragraph-scoped formula, or stash it and prompt for a frame next for odt's body-scoped one) -- this component never dispatches anything itself.
+  // Fires with the chosen mathml — either a preset's own tree, or a raw entry successfully parsed by parseXml. The caller decides what to do with it (dispatch immediately for docx's paragraph-scoped formula, or stash it and prompt for a frame next for odt's body-scoped one) — this component never dispatches anything itself.
   readonly onMathml: (mathml: readonly MathMlNode[]) => void;
   readonly onInvalidRawMathml: (message: string) => void;
 }
 
-// A preset picker (the fast default path) plus a raw-MathML free-text entry (the advanced fallback, wrapping the typed string in documents.js's own parseXml -- structurally compatible with MathMlNode[] with zero cast, see mathml/nodes.ts's own doc comment). Shared between paragraph-detail.tsx (docx, paragraph-scoped) and paragraph-family.tsx's ParagraphFamilyBodyList (odt, body-scoped, followed by a frame wizard) -- the picking UI is identical either way; only what happens with the result differs.
+// A preset picker (the fast default path) plus a raw-MathML free-text entry (the advanced fallback, wrapping the typed string in documents.js's own parseXml — structurally compatible with MathMlNode[] with zero cast, see mathml/nodes.ts's own doc comment). Shared between paragraph-detail.tsx (docx, paragraph-scoped) and paragraph-family.tsx's ParagraphFamilyBodyList (odt, body-scoped, followed by a frame wizard) — the picking UI is identical either way; only what happens with the result differs.
 export function FormulaPicker(props: FormulaPickerProps): ReactElement {
   const [rawInput, setRawInput] = useState<string | undefined>(undefined);
 
@@ -83,7 +83,7 @@ export function FormulaPicker(props: FormulaPickerProps): ReactElement {
 
   return (
     <Box flexDirection="column" borderStyle="round" paddingX={1}>
-      <Text bold>Insert formula -- choose a preset or write raw MathML</Text>
+      <Text bold>Insert formula — choose a preset or write raw MathML</Text>
       <ListView
         items={PICKER_ROWS}
         selectedIndex={selectedIndex}

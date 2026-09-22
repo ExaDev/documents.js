@@ -33,12 +33,12 @@ const ONE_RANGE: TestRange[] = [
   { startRow: 0, endRow: 9, startColumn: 0, endColumn: 0 },
 ];
 
-/** PtgStr ([MS-XLS] 2.5.198's own string-literal operand, opcode 0x17): a ShortXLUnicodeString -- the search text a containsText-family formula always carries somewhere in its own token stream. */
+/** PtgStr ([MS-XLS] 2.5.198's own string-literal operand, opcode 0x17): a ShortXLUnicodeString — the search text a containsText-family formula always carries somewhere in its own token stream. */
 function ptgStr(text: string): number[] {
   return [0x17, ...shortXlUnicodeString(text)];
 }
 
-/** A fully-relative PtgRef (value class, [MS-XLS] 2.5.198.61): opcode 0x44, row, then a relative ColRelU column field -- what a bare `A1` reference compiles to. */
+/** A fully-relative PtgRef (value class, [MS-XLS] 2.5.198.61): opcode 0x44, row, then a relative ColRelU column field — what a bare `A1` reference compiles to. */
 function ptgRef(row: number, column: number): number[] {
   return [0x44, ...u16(row), ...u16(0xc000 | column)];
 }
@@ -51,7 +51,7 @@ function cfExTextTemplateParams(ctp: number): number[] {
 const DXFFNTD_LENGTH = 122;
 const DXFFNTD_ICV_FORE_OFFSET = 80;
 
-/** A minimal DXFN12 ([MS-XLS] 2.4) naming only a font colour: the 6-byte flags header (ibitAtrFnt only) then a 122-byte DXFFntD with icvFore set at its own documented offset -- the same payload conditional-format-12.test.ts's own dxfFontColor builds, written independently here per this file's own top comment. */
+/** A minimal DXFN12 ([MS-XLS] 2.4) naming only a font colour: the 6-byte flags header (ibitAtrFnt only) then a 122-byte DXFFntD with icvFore set at its own documented offset — the same payload conditional-format-12.test.ts's own dxfFontColor builds, written independently here per this file's own top comment. */
 function dxfFontColor(icvFore: number): number[] {
   const block = new Array<number>(DXFFNTD_LENGTH).fill(0);
   const buffer = new ArrayBuffer(4);
@@ -123,7 +123,7 @@ function groupsFrom(
   return [...groupRecords(readRecords(concat(...records)))];
 }
 
-/** A single CFEx record, already grouped into the RecordGroup shape readCfEx itself consumes (its own Continue records, if any, joined in) -- readCfEx never sees the raw framed bytes cfExBytes produces, exactly as workbook/sheet.ts never hands it one either. */
+/** A single CFEx record, already grouped into the RecordGroup shape readCfEx itself consumes (its own Continue records, if any, joined in) — readCfEx never sees the raw framed bytes cfExBytes produces, exactly as workbook/sheet.ts never hands it one either. */
 function cfExRecordGroup(nID: number, options: CfExOptions = {}): RecordGroup {
   const group = groupsFrom(cfExBytes(nID, options))[0];
   if (group === undefined) {
@@ -238,7 +238,7 @@ describe("readCfEx", () => {
     expect(result).toMatchObject({ stopIfTrue: true });
   });
 
-  it("does not promote an inactive rule (fActive 0) -- Excel itself ignores it", () => {
+  it("does not promote an inactive rule (fActive 0) — Excel itself ignores it", () => {
     const target = targetFrom(ONE_RANGE, [
       { ct: 0x02, cp: 0x00, rgce1: new Uint8Array(ptgStr("needle")) },
     ]);
@@ -252,8 +252,8 @@ describe("readCfEx", () => {
     expect(readCfEx(cfExGroup, targets, NO_SHEETS)).toBeUndefined();
   });
 
-  it("does not promote a rule extending a CF12 record (fIsCF12 nonzero) -- that CF12 carries no ranges of its own, see this file's own top comment", () => {
-    // A target and a fully-valid CFExNonCF12 payload are both present here despite fIsCF12 being nonzero -- [MS-XLS] 2.4.63 says a CFEx with fIsCF12 set carries no such payload at all, but this test builds it anyway (rather than the empty tail cfExBytes itself would produce) so that a reader which skipped the fIsCF12 check would parse through to a defined result instead of stumbling into a coincidentally-also-undefined outcome (a missing target, or a cursor overrun) for an unrelated reason.
+  it("does not promote a rule extending a CF12 record (fIsCF12 nonzero) — that CF12 carries no ranges of its own, see this file's own top comment", () => {
+    // A target and a fully-valid CFExNonCF12 payload are both present here despite fIsCF12 being nonzero — [MS-XLS] 2.4.63 says a CFEx with fIsCF12 set carries no such payload at all, but this test builds it anyway (rather than the empty tail cfExBytes itself would produce) so that a reader which skipped the fIsCF12 check would parse through to a defined result instead of stumbling into a coincidentally-also-undefined outcome (a missing target, or a cursor overrun) for an unrelated reason.
     const target = targetFrom(ONE_RANGE, [
       { ct: 0x02, cp: 0x00, rgce1: new Uint8Array(ptgStr("needle")) },
     ]);
@@ -326,7 +326,7 @@ describe("readCfEx", () => {
     ]);
     const targets = new Map([[1, target]]);
     const cfExGroup = cfExRecordGroup(1, {
-      icfTemplate: 0x01, // "Formula" -- not a text template
+      icfTemplate: 0x01, // "Formula" — not a text template
       templateParams: cfExTextTemplateParams(0x0000),
     });
 
@@ -371,7 +371,7 @@ describe("readCfEx", () => {
   });
 });
 
-// End-to-end: a real worksheet substream carries the base CondFmt/CF group first, then the CFEx that extends one of its CF children -- this proves readCondFmtGroup's own nID/rawCfs and readCfEx actually compose the way workbook/sheet.ts wires them together, not just that each function is individually correct against a hand-built CfExTarget.
+// End-to-end: a real worksheet substream carries the base CondFmt/CF group first, then the CFEx that extends one of its CF children — this proves readCondFmtGroup's own nID/rawCfs and readCfEx actually compose the way workbook/sheet.ts wires them together, not just that each function is individually correct against a hand-built CfExTarget.
 describe("readCondFmtGroup + readCfEx integration", () => {
   it("resolves a CFEx against the CondFmt group it names by nID", () => {
     const cfBytes = (

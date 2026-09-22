@@ -96,7 +96,7 @@ describe("the named base encodings a simple font's /Encoding can select", () => 
   });
 
   it("differs from WinAnsi across the upper half, which is what makes approximating one as another wrong", () => {
-    // Reading one table as another silently substitutes a different, entirely plausible character: 0xBD is "perthousand" in StandardEncoding, "Omega" in MacRomanEncoding, and "onehalf" in WinAnsi -- three unrelated glyphs at one code.
+    // Reading one table as another silently substitutes a different, entirely plausible character: 0xBD is "perthousand" in StandardEncoding, "Omega" in MacRomanEncoding, and "onehalf" in WinAnsi — three unrelated glyphs at one code.
     expect(standardGlyphName(0xbd)).toBe("perthousand");
     expect(macRomanGlyphName(0xbd)).toBe("Omega");
     expect(winAnsiGlyphName(0xbd)).toBe("onehalf");

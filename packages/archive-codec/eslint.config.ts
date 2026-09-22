@@ -11,6 +11,6 @@ export default packageLintConfig({
     "exadev/prefer-numeric-sort-compare",
   ],
   isomorphic: true,
-  // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why -- this package's own hand-rolled binary readers/writers genuinely mutate several array/object parameters in place. Tracked for burn-down.
+  // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why — this package's own hand-rolled binary readers/writers genuinely mutate several array/object parameters in place. Tracked for burn-down.
   preferReadonlyParams: "off",
 });

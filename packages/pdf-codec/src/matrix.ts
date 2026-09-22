@@ -6,7 +6,7 @@ export type Matrix = readonly [number, number, number, number, number, number];
 
 export const IDENTITY_MATRIX: Matrix = [1, 0, 0, 1, 0, 0];
 
-// Composes two matrices as "apply `m` first, then `n`" -- the PDF/PostScript convention where a new cm operand M is prepended to the CTM (CTM' = M x CTM). Verified against the row-vector matrix product by hand: for M=[[a1,b1,0],[c1,d1,0],[e1,f1,1]] and N=[[a2,b2,0],[c2,d2,0],[e2,f2,1]], M x N's top-left 2x2 block and translation row expand to exactly the six expressions below.
+// Composes two matrices as "apply `m` first, then `n`" — the PDF/PostScript convention where a new cm operand M is prepended to the CTM (CTM' = M x CTM). Verified against the row-vector matrix product by hand: for M=[[a1,b1,0],[c1,d1,0],[e1,f1,1]] and N=[[a2,b2,0],[c2,d2,0],[e2,f2,1]], M x N's top-left 2x2 block and translation row expand to exactly the six expressions below.
 export function multiplyMatrices(m: Matrix, n: Matrix): Matrix {
   const [a1, b1, c1, d1, e1, f1] = m;
   const [a2, b2, c2, d2, e2, f2] = n;
@@ -44,7 +44,7 @@ export function rotationMatrix(degrees: number): Matrix {
   return [cos, sin, -sin, cos, 0, 0];
 }
 
-// The effective horizontal/vertical scale and rotation a matrix applies -- used both when building a placement matrix for an image (content-write.ts) and, on the read path, when recovering an image's placed size/rotation from an observed CTM (a future pdf/interpret.ts concern).
+// The effective horizontal/vertical scale and rotation a matrix applies — used both when building a placement matrix for an image (content-write.ts) and, on the read path, when recovering an image's placed size/rotation from an observed CTM (a future pdf/interpret.ts concern).
 export function matrixScaleX(m: Matrix): number {
   return Math.hypot(m[0], m[1]);
 }
@@ -57,7 +57,7 @@ export function matrixRotationDegrees(m: Matrix): number {
   return (Math.atan2(m[1], m[0]) * 180) / Math.PI;
 }
 
-// Rotates `point` about `center` by `degrees` (counter-clockwise, this module's own convention). Used to reconcile two different rotation pivots: DrawingML rotates a shape about its own bounding-box centre (a:xfrm/@rot), but content-write.ts's writeText/writeImage rotate about the anchor point passed as xPt/yPt -- which is invariant under that rotation by construction (translationMatrix is applied after rotationMatrix, so whatever anchor is passed is exactly where it ends up). Feeding this function the shape's UNROTATED corner and its centre computes the corner position a caller must pass as xPt/yPt so the centre-pivot rotation PowerPoint actually performs comes out identical, without needing to change how the writer itself rotates.
+// Rotates `point` about `center` by `degrees` (counter-clockwise, this module's own convention). Used to reconcile two different rotation pivots: DrawingML rotates a shape about its own bounding-box centre (a:xfrm/@rot), but content-write.ts's writeText/writeImage rotate about the anchor point passed as xPt/yPt — which is invariant under that rotation by construction (translationMatrix is applied after rotationMatrix, so whatever anchor is passed is exactly where it ends up). Feeding this function the shape's UNROTATED corner and its centre computes the corner position a caller must pass as xPt/yPt so the centre-pivot rotation PowerPoint actually performs comes out identical, without needing to change how the writer itself rotates.
 export function rotatePointAboutCenter(
   point: Point,
   center: Point,

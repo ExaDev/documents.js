@@ -44,13 +44,13 @@ import type { SfntFont } from "./sfnt";
 import { concatBytes } from "./bytes/writer";
 import { throwIfAborted } from "./util/abort";
 
-// The rasterisation port: the contract a consumer's canvas implements, plus renderPdfPage, the driver that walks one page's content through this package's existing read machinery (openPdfDocument + interpretContentStream, the same interpreter readPdf itself runs) and drives the rasteriser with positioned draw operations. pdf-codec deliberately does NOT pick a rasteriser, embed one, or depend on any canvas API (ExaDev/documents.js#1198): a runtime with no canvas at all (Cloudflare Workers has neither canvas nor OffscreenCanvas) and a runtime with a free hardware-accelerated one (a browser) both consume the same port, and the weight of an actual raster backend lands only in whichever backend package a consumer installs -- pdf-raster-cpu is this family's pure-software reference backend. The port mirrors the font-port precedent of document-schema.js (the types a caller implements are pure data plus callbacks; the implementation machinery stays behind the interface), with the one difference that the contract lives here rather than in the shared schema package because its vocabulary -- page points, PDF matrices, item paint semantics -- is this codec's own: no second codec could implement it.
+// The rasterisation port: the contract a consumer's canvas implements, plus renderPdfPage, the driver that walks one page's content through this package's existing read machinery (openPdfDocument + interpretContentStream, the same interpreter readPdf itself runs) and drives the rasteriser with positioned draw operations. pdf-codec deliberately does NOT pick a rasteriser, embed one, or depend on any canvas API (ExaDev/documents.js#1198): a runtime with no canvas at all (Cloudflare Workers has neither canvas nor OffscreenCanvas) and a runtime with a free hardware-accelerated one (a browser) both consume the same port, and the weight of an actual raster backend lands only in whichever backend package a consumer installs — pdf-raster-cpu is this family's pure-software reference backend. The port mirrors the font-port precedent of document-schema.js (the types a caller implements are pure data plus callbacks; the implementation machinery stays behind the interface), with the one difference that the contract lives here rather than in the shared schema package because its vocabulary — page points, PDF matrices, item paint semantics — is this codec's own: no second codec could implement it.
 //
-// Everything here is Worker-isomorphic pure data: no canvas, no DOM, no node:* builtins, no network, and no OCR or vision anywhere -- the port hands a caller pixels, exactly as the issue's "what we are NOT asking for" section requires. Glyphs arrive as filled outline paths rather than bitmaps or font references, so a backend needs no font machinery at all: pdf-codec resolves each run's embedded sfnt outlines through its own glyf/cmap readers (the same tables the write path's embedder builds) and hands the backend closed subpaths in device space. Text whose font carries no sfnt outlines (a standard-14 face with nothing embedded, a CFF program, a Type3 glyph procedure) is refused through a named diagnostic rather than approximated with a substitute shape.
+// Everything here is Worker-isomorphic pure data: no canvas, no DOM, no node:* builtins, no network, and no OCR or vision anywhere — the port hands a caller pixels, exactly as the issue's "what we are NOT asking for" section requires. Glyphs arrive as filled outline paths rather than bitmaps or font references, so a backend needs no font machinery at all: pdf-codec resolves each run's embedded sfnt outlines through its own glyf/cmap readers (the same tables the write path's embedder builds) and hands the backend closed subpaths in device space. Text whose font carries no sfnt outlines (a standard-14 face with nothing embedded, a CFF program, a Type3 glyph procedure) is refused through a named diagnostic rather than approximated with a substitute shape.
 
 // --- The port: device space and the draw-op vocabulary. ---
 
-// All coordinates every draw op carries are DEVICE PIXELS: origin top-left at the rendered region's own top-left corner, x increasing right, y increasing down -- the convention of every raster buffer and 2D canvas API, rather than PDF's own bottom-left/y-up user space, so a backend never flips anything. renderPdfPage performs the one flip itself when it composes the page-space-to-device-space transform, which is also what makes clipPt (expressed in PDF user space, y up) line up with the top-left-origin image a consumer expects for OCR.
+// All coordinates every draw op carries are DEVICE PIXELS: origin top-left at the rendered region's own top-left corner, x increasing right, y increasing down — the convention of every raster buffer and 2D canvas API, rather than PDF's own bottom-left/y-up user space, so a backend never flips anything. renderPdfPage performs the one flip itself when it composes the page-space-to-device-space transform, which is also what makes clipPt (expressed in PDF user space, y up) line up with the top-left-origin image a consumer expects for OCR.
 export type RasterMatrix = readonly [
   number,
   number,
@@ -87,11 +87,11 @@ export interface RasterFillSpec {
 export interface RasterStrokeSpec {
   readonly color: LayoutColor;
   readonly widthPx: number;
-  // Dash on/off lengths in device pixels. Absent means solid. A dotted style never arrives here as a zero-length dash array (which paints nothing under a butt cap -- PDF's own Table 52 behaviour): renderPdfPage converts recovered dotted strokes into small filled squares before the port, so a backend needs no round-cap primitive.
+  // Dash on/off lengths in device pixels. Absent means solid. A dotted style never arrives here as a zero-length dash array (which paints nothing under a butt cap — PDF's own Table 52 behaviour): renderPdfPage converts recovered dotted strokes into small filled squares before the port, so a backend needs no round-cap primitive.
   readonly dashPx?: readonly number[];
 }
 
-// An axis-aligned rectangle fill -- the single most common painted item on real pages (table rules, cell shading, redaction bars) and the one op a backend can implement with a plain row loop.
+// An axis-aligned rectangle fill — the single most common painted item on real pages (table rules, cell shading, redaction bars) and the one op a backend can implement with a plain row loop.
 export interface RasterFillRectOp {
   readonly kind: "fillRect";
   readonly xPx: number;
@@ -109,7 +109,7 @@ export interface RasterPathOp {
   readonly stroke?: RasterStrokeSpec;
 }
 
-// An image placed by affine transform. `matrix` maps the unit image square -- origin at the image's TOP-LEFT corner, x right across source columns, y down across source rows -- into device pixels, in PDF's own [a b c d e f] cm convention (row-vector: [x' y'] = [x y] x M). Carrying the full affine rather than a destination rectangle is what lets a rotated page or a rotated Do-placement render exactly; the axis-aligned case is just b = c = 0. `bytes`/`format`/`sourceWidthPx`/`sourceHeightPx` are exactly what images-read.ts recovers (PNG for every decoded filter, JPEG passed through verbatim), so a backend with a native JPEG decoder (a browser canvas) draws DCTDecode scans directly while a backend without one can refuse by name rather than re-encode.
+// An image placed by affine transform. `matrix` maps the unit image square — origin at the image's TOP-LEFT corner, x right across source columns, y down across source rows — into device pixels, in PDF's own [a b c d e f] cm convention (row-vector: [x' y'] = [x y] x M). Carrying the full affine rather than a destination rectangle is what lets a rotated page or a rotated Do-placement render exactly; the axis-aligned case is just b = c = 0. `bytes`/`format`/`sourceWidthPx`/`sourceHeightPx` are exactly what images-read.ts recovers (PNG for every decoded filter, JPEG passed through verbatim), so a backend with a native JPEG decoder (a browser canvas) draws DCTDecode scans directly while a backend without one can refuse by name rather than re-encode.
 export interface RasterImageOp {
   readonly kind: "image";
   readonly format: "png" | "jpeg";
@@ -130,7 +130,7 @@ export interface RasterPageGeometry {
   readonly heightPt: number;
 }
 
-// The contract a consumer's canvas implements. beginPage, then a document-order sequence of draw calls (the same order the page's content stream paints in, so later draws overlap earlier ones), then finish, which returns the rendered PNG bytes -- synchronously or as a promise, whichever the backend's own encoder needs, so an async-encoding backend (a canvas convertToBlob, say) implements the same interface as a synchronous buffer writer. Ops may extend outside the canvas (page content straddling the clip boundary keeps its original geometry in the item layer, and rendering clips rather than truncates, exactly as a viewer does); a backend must bounds-check, never assume.
+// The contract a consumer's canvas implements. beginPage, then a document-order sequence of draw calls (the same order the page's content stream paints in, so later draws overlap earlier ones), then finish, which returns the rendered PNG bytes — synchronously or as a promise, whichever the backend's own encoder needs, so an async-encoding backend (a canvas convertToBlob, say) implements the same interface as a synchronous buffer writer. Ops may extend outside the canvas (page content straddling the clip boundary keeps its original geometry in the item layer, and rendering clips rather than truncates, exactly as a viewer does); a backend must bounds-check, never assume.
 export interface PageRasteriser {
   beginPage(geometry: RasterPageGeometry): void;
   draw(op: RasterDrawOp): void;
@@ -207,7 +207,7 @@ export function renderPdfPage(
   }
   const page = pages[pageIndex]!;
 
-  // --- Page geometry: the same visible-region computation read.ts's readPage performs (crop box, /Rotate, visible-rect origin), re-derived here because readPdf's own copy is module-private. This is the one deliberately duplicated block in the module, and raster.test.ts pins it: a rotated, cropped fixture must place rendered ink exactly where readPdf reports the corresponding item, so the clipPt contract (the same point coordinates LayoutFrame uses) is a tested fact rather than a hope -- an edit to read.ts's geometry that drifts from this copy fails that test rather than shipping a renderer that disagrees with the reader about where anything is.
+  // --- Page geometry: the same visible-region computation read.ts's readPage performs (crop box, /Rotate, visible-rect origin), re-derived here because readPdf's own copy is module-private. This is the one deliberately duplicated block in the module, and raster.test.ts pins it: a rotated, cropped fixture must place rendered ink exactly where readPdf reports the corresponding item, so the clipPt contract (the same point coordinates LayoutFrame uses) is a tested fact rather than a hope — an edit to read.ts's geometry that drifts from this copy fails that test rather than shipping a renderer that disagrees with the reader about where anything is.
   const mediaBox = readMediaBox(page);
   let cropBox = readDeclaredPageBox(page, "CropBox") ?? mediaBox;
   if (cropBox.urx - cropBox.llx <= 0 || cropBox.ury - cropBox.lly <= 0) {
@@ -221,7 +221,7 @@ export function renderPdfPage(
     cropBox = mediaBox;
   }
   const rotation = normalizeRotation(asNumber(dictGet(page, "Rotate")));
-  // Only rotationResult.matrix is used below, never its own widthPt/heightPt fields -- and the matrix's rotation/reflection component (a, b, c, d) never depends on the w/h arguments at all, only its translation component (e, f) does. That translation is provably canceled by the origin renormalization two lines down (translationMatrix(-visibleRect.minX, -visibleRect.minY) subtracts out exactly the offset any w/h value would have introduced), so the real mediaBox width/height computed here would produce a byte-identical pageMatrix and visibleRect to passing 0 for both -- confirmed directly against an asymmetric MediaBox/CropBox pair under every rotation, not merely the aligned case. Passing 0 rather than the real (but unobservable) mediaBox dimensions removes an arithmetic expression whose result genuinely never reaches any output.
+  // Only rotationResult.matrix is used below, never its own widthPt/heightPt fields — and the matrix's rotation/reflection component (a, b, c, d) never depends on the w/h arguments at all, only its translation component (e, f) does. That translation is provably canceled by the origin renormalization two lines down (translationMatrix(-visibleRect.minX, -visibleRect.minY) subtracts out exactly the offset any w/h value would have introduced), so the real mediaBox width/height computed here would produce a byte-identical pageMatrix and visibleRect to passing 0 for both — confirmed directly against an asymmetric MediaBox/CropBox pair under every rotation, not merely the aligned case. Passing 0 rather than the real (but unobservable) mediaBox dimensions removes an arithmetic expression whose result genuinely never reaches any output.
   const rotationResult = pageRotationTransform(rotation, 0, 0);
   const visibleRect = rotatedRectBounds(cropBox, rotationResult.matrix);
   const pageWidthPt = visibleRect.maxX - visibleRect.minX;
@@ -286,7 +286,7 @@ export function renderPdfPage(
 
   const fontResolver = createFontResolver({ resolver: doc, sink });
   const { layers, layerNameOf } = readOptionalContent(doc.catalog, doc, sink);
-  // Optional-content visibility is applied here, where a render must take a side (readPdf deliberately stamps layer names and lets each consumer decide): items in a layer the default configuration leaves OFF are not drawn, because that is what a viewer displays -- the same line read.ts's own crop filter draws between source data and rendering facts.
+  // Optional-content visibility is applied here, where a render must take a side (readPdf deliberately stamps layer names and lets each consumer decide): items in a layer the default configuration leaves OFF are not drawn, because that is what a viewer displays — the same line read.ts's own crop filter draws between source data and rendering facts.
   const hiddenLayers = new Set(
     layers.filter((layer) => !layer.visible).map((layer) => layer.name),
   );
@@ -491,7 +491,7 @@ function drawEllipse(
   });
 }
 
-// A recovered line: one open two-point subpath, stroked. A dotted style never reaches the port as a dash array (a zero on-length paints nothing under a butt cap -- PDF's own Table 52 behaviour): it becomes a run of small filled squares along the segment, the closest axis-aligned approximation of the round-cap dot the writer's own dotted convention paints.
+// A recovered line: one open two-point subpath, stroked. A dotted style never reaches the port as a dash array (a zero on-length paints nothing under a butt cap — PDF's own Table 52 behaviour): it becomes a run of small filled squares along the segment, the closest axis-aligned approximation of the round-cap dot the writer's own dotted convention paints.
 function drawLine(
   item: ExtractedLine,
   matrix: Matrix,
@@ -528,7 +528,7 @@ function drawLine(
   });
 }
 
-// A recovered general path: every point of every subpath transformed individually (line endpoints and cubic control points alike -- affine-exact), paint specs passed through with the fill rule the paint operator itself used. A dotted stroke draws as dot trains instead (see drawLine), so it never reaches the port as a dash array.
+// A recovered general path: every point of every subpath transformed individually (line endpoints and cubic control points alike — affine-exact), paint specs passed through with the fill rule the paint operator itself used. A dotted stroke draws as dot trains instead (see drawLine), so it never reaches the port as a dash array.
 function drawPath(
   item: ExtractedPath,
   matrix: Matrix,
@@ -641,7 +641,7 @@ function drawInlineImageItem(
   drawImage(image, item.matrix, interpretToDeviceMatrix, rasteriser);
 }
 
-// Composes the image placement: PDF places an image XObject's unit square (origin BOTTOM-left in its own space, ISO 32000-1 8.5.3) through the Do CTM, while the port's image space is top-left/y-down (row 0 at the top) -- so the composed matrix begins with that one flip and ends in device pixels.
+// Composes the image placement: PDF places an image XObject's unit square (origin BOTTOM-left in its own space, ISO 32000-1 8.5.3) through the Do CTM, while the port's image space is top-left/y-down (row 0 at the top) — so the composed matrix begins with that one flip and ends in device pixels.
 function drawImage(
   image: {
     readonly format: "png" | "jpeg";
@@ -713,11 +713,11 @@ function drawDottedSegment(
   }
 }
 
-// De Casteljau subdivision of one device-space cubic into a polyline, splitting recursively until every piece's control points sit within STROKE_FLATTEN_TOLERANCE_PX of its chord -- the standard tolerance-driven flattening every stroker applies before offsetting segments. Deterministic (identical inputs produce identical pieces), which the pixel-asserting tests rely on; the depth cap keeps a pathological curve finite even for a tolerance it never quite meets.
+// De Casteljau subdivision of one device-space cubic into a polyline, splitting recursively until every piece's control points sit within STROKE_FLATTEN_TOLERANCE_PX of its chord — the standard tolerance-driven flattening every stroker applies before offsetting segments. Deterministic (identical inputs produce identical pieces), which the pixel-asserting tests rely on; the depth cap keeps a pathological curve finite even for a tolerance it never quite meets.
 const STROKE_FLATTEN_TOLERANCE_PX = 0.05;
 const MAX_FLATTEN_DEPTH = 16;
 
-// Exported solely so raster.test.ts can drive its own subdivision arithmetic and depth cap directly with hand-computed control points -- every caller reaches it only through curves recovered from real PDF content streams, which offers no way to pin an exact subdivision count or force the depth cap deterministically.
+// Exported solely so raster.test.ts can drive its own subdivision arithmetic and depth cap directly with hand-computed control points — every caller reaches it only through curves recovered from real PDF content streams, which offers no way to pin an exact subdivision count or force the depth cap deterministically.
 export function flattenCubic(
   p0: { x: number; y: number },
   c1: { x: number; y: number },
@@ -771,7 +771,7 @@ interface TextOutlineFace {
   ): number | undefined;
 }
 
-// What an embedded font program turned out to carry, as resolved from a /FontDescriptor. The "glyf" case's own face carries only what every caller actually reads off it (glyf/unitsPerEm) -- composite-ness and the shown-code -> glyph-ID mapping are per-font-dictionary facts a Type0 or TrueType caller derives for itself, never read back off this intermediate value.
+// What an embedded font program turned out to carry, as resolved from a /FontDescriptor. The "glyf" case's own face carries only what every caller actually reads off it (glyf/unitsPerEm) — composite-ness and the shown-code -> glyph-ID mapping are per-font-dictionary facts a Type0 or TrueType caller derives for itself, never read back off this intermediate value.
 type EmbeddedProgram =
   | {
       readonly kind: "glyf";
@@ -781,7 +781,7 @@ type EmbeddedProgram =
   | { readonly kind: "cff" }
   | { readonly kind: "absent" };
 
-// Pulls the /FontDescriptor's embedded program from whichever key it lives under (FontFile2, or FontFile3 -- an /OpenType-wrapped sfnt is a legal container for either outline flavour, and the bytes themselves, not the key, say which flavour: the same sniffing rule font-read.ts's readFontProgram applies) and classifies it. A bare CFF program (0x01 0x00 0x04 header) or an 'OTTO' sfnt carrying a 'CFF ' table is CFF; anything parseable as an sfnt with a readable glyf/head/maxp trio is fillable; anything else (no descriptor, no stream, an unparseable or table-less program) is absent.
+// Pulls the /FontDescriptor's embedded program from whichever key it lives under (FontFile2, or FontFile3 — an /OpenType-wrapped sfnt is a legal container for either outline flavour, and the bytes themselves, not the key, say which flavour: the same sniffing rule font-read.ts's readFontProgram applies) and classifies it. A bare CFF program (0x01 0x00 0x04 header) or an 'OTTO' sfnt carrying a 'CFF ' table is CFF; anything parseable as an sfnt with a readable glyf/head/maxp trio is fillable; anything else (no descriptor, no stream, an unparseable or table-less program) is absent.
 function openEmbeddedProgram(
   descriptorOwner: PdfDict,
   resolver: PdfObjectResolver,
@@ -802,7 +802,7 @@ function openEmbeddedProgram(
       stream.dict,
       NOOP_DIAGNOSTIC_SINK,
     ).bytes;
-    // No separate bytes.length >= 3 guard: with noUncheckedIndexedAccess, an out-of-bounds index already reads as undefined, which can never strictly equal any of these three literals -- a short stream already fails the chain on its own without a length check duplicating that fact.
+    // No separate bytes.length >= 3 guard: with noUncheckedIndexedAccess, an out-of-bounds index already reads as undefined, which can never strictly equal any of these three literals — a short stream already fails the chain on its own without a length check duplicating that fact.
     if (bytes[0] === 0x01 && bytes[1] === 0x00 && bytes[2] === 0x04) {
       return { kind: "cff" }; // a bare CFF program: header major 1, minor 0, hdrSize 4 (ISO 32000-1's /Type1C spelling)
     }
@@ -834,7 +834,7 @@ function openEmbeddedProgram(
   return { kind: "absent" };
 }
 
-// Resolves one font resource's outline face, cached by the font dictionary's own object identity (font-read.ts's own caching convention: the resolver hands back the same dict object for repeated lookups, so a font referenced by many runs parses exactly once). Undefined means this run's text cannot be drawn as outlines -- a diagnostic naming why has already gone to the sink, once per font rather than once per run.
+// Resolves one font resource's outline face, cached by the font dictionary's own object identity (font-read.ts's own caching convention: the resolver hands back the same dict object for repeated lookups, so a font referenced by many runs parses exactly once). Undefined means this run's text cannot be drawn as outlines — a diagnostic naming why has already gone to the sink, once per font rather than once per run.
 function resolveTextOutlineFace(
   fontResourceName: string,
   resources: PdfDict,
@@ -948,7 +948,7 @@ function buildTextOutlineFace(
       return;
     }
     if (cidToGidMap?.kind === "stream") {
-      // An explicit mapping stream: 2-byte big-endian GID per CID (ISO 32000-1 9.7.4.2). CIDs past the stream's end have no entry, and a missing GID is skipped -- never drawn as glyph 0, which would paint .notdef ink the file never stated.
+      // An explicit mapping stream: 2-byte big-endian GID per CID (ISO 32000-1 9.7.4.2). CIDs past the stream's end have no entry, and a missing GID is skipped — never drawn as glyph 0, which would paint .notdef ink the file never stated.
       const decodedBytes = decodeStream(
         cidToGidMap.raw,
         cidToGidMap.dict,
@@ -962,7 +962,7 @@ function buildTextOutlineFace(
         glyf: program.face.glyf,
         unitsPerEm: program.face.unitsPerEm,
         glyphIdOf: (codes, offset) => {
-          // No separate cid < entries.length guard: cid is always a non-negative index (built from two unsigned byte shifts), and a plain array already reads out of bounds as undefined -- entries[cid] alone is exactly the ": undefined" branch for every cid past the map's own last entry.
+          // No separate cid < entries.length guard: cid is always a non-negative index (built from two unsigned byte shifts), and a plain array already reads out of bounds as undefined — entries[cid] alone is exactly the ": undefined" branch for every cid past the map's own last entry.
           const cid = (codes[offset]! << 8) | codes[offset + 1]!;
           return entries[cid];
         },
@@ -1044,7 +1044,7 @@ function drawTextRun(
   if (face === undefined) {
     return; // the diagnostic naming why has already gone to the sink
   }
-  // Per-glyph advances exactly as the interpreter accumulated them (same port), without the Tc/Tw/Tz text-state adjustments that live inside the interpreter -- those are absorbed by the end-matrix correction below.
+  // Per-glyph advances exactly as the interpreter accumulated them (same port), without the Tc/Tw/Tz text-state adjustments that live inside the interpreter — those are absorbed by the end-matrix correction below.
   const placements: {
     readonly glyphId: number | undefined;
     readonly advance: number;
@@ -1055,7 +1055,7 @@ function drawTextRun(
   let offset = 0;
   let cumulative = 0;
   while (offset < item.codes.length) {
-    // Never undefined: resolveTextOutlineFace above already resolved item.fontResourceName against item.resources to a real font dict (returning early otherwise), and fontResolver.metrics.glyphAdvance's own resolution does the identical dictGet(resources, "Font") -> dictGet(fontsDict, fontResourceName) lookup against the same two values, then always returns a populated result once that dict exists -- there is no way for this call to find no font once the one above already did.
+    // Never undefined: resolveTextOutlineFace above already resolved item.fontResourceName against item.resources to a real font dict (returning early otherwise), and fontResolver.metrics.glyphAdvance's own resolution does the identical dictGet(resources, "Font") -> dictGet(fontsDict, fontResourceName) lookup against the same two values, then always returns a populated result once that dict exists — there is no way for this call to find no font once the one above already did.
     const advance = fontResolver.metrics.glyphAdvance(
       item.fontResourceName,
       item.resources,
@@ -1076,7 +1076,7 @@ function drawTextRun(
     offset += byteLength;
   }
 
-  // End-matrix correction: the interpreter's own walk included char/word spacing, horizontal scaling, and TJ adjustments this walk cannot see per glyph, so raw cumulative advances can drift from where the page actually placed the run's end. The run's start and end matrices ARE exact (interpret.ts stamps both), so the drift is corrected by scaling every glyph's advance by one uniform factor -- the ratio of the run's actual device-space extent to the raw accumulated extent. A run's total placement is therefore always exact; only the (bounded) distribution between its glyphs is approximate when spacing state was in play.
+  // End-matrix correction: the interpreter's own walk included char/word spacing, horizontal scaling, and TJ adjustments this walk cannot see per glyph, so raw cumulative advances can drift from where the page actually placed the run's end. The run's start and end matrices ARE exact (interpret.ts stamps both), so the drift is corrected by scaling every glyph's advance by one uniform factor — the ratio of the run's actual device-space extent to the raw accumulated extent. A run's total placement is therefore always exact; only the (bounded) distribution between its glyphs is approximate when spacing state was in play.
   const startDeviceMatrix = multiplyMatrices(
     item.startMatrix,
     interpretToDeviceMatrix,
@@ -1154,7 +1154,7 @@ export function drawGlyphOutline(
   });
 }
 
-// TrueType contours to port subpaths: each contour's on/off-curve points walked into line and quadratic segments, each quadratic elevated to the exactly equivalent cubic (control points at 2/3 of the way from the on-curve ends toward the off-curve control -- the standard exact quadratic-to-cubic elevation, no approximation), then every point transformed as a point. A run of consecutive off-curve points implies an on-curve point at each neighbouring pair's midpoint, per the TrueType glyph specification's own contour convention. Exported solely so this suite can drive it directly with hand-built contours: a real embedded font's own glyphs (this module's only other route in) never reliably exercise every branch on demand -- no vendored face happens to start a contour off-curve, or carries a contour with no on-curve point at all, the way a hand-built GlyphOutline can.
+// TrueType contours to port subpaths: each contour's on/off-curve points walked into line and quadratic segments, each quadratic elevated to the exactly equivalent cubic (control points at 2/3 of the way from the on-curve ends toward the off-curve control — the standard exact quadratic-to-cubic elevation, no approximation), then every point transformed as a point. A run of consecutive off-curve points implies an on-curve point at each neighbouring pair's midpoint, per the TrueType glyph specification's own contour convention. Exported solely so this suite can drive it directly with hand-built contours: a real embedded font's own glyphs (this module's only other route in) never reliably exercise every branch on demand — no vendored face happens to start a contour off-curve, or carries a contour with no on-curve point at all, the way a hand-built GlyphOutline can.
 export function glyphOutlineSubpaths(
   outline: GlyphOutline,
   matrix: Matrix,
@@ -1164,7 +1164,7 @@ export function glyphOutlineSubpaths(
     if (contour.length < 3) {
       continue; // a degenerate contour (a stray point or pair) bounds no area and paints nothing
     }
-    // Rotate so the walk starts on a real on-curve point where one exists; a contour with none at all (a pure-quad circle, say) starts at the implied midpoint of its last and first points. Both branches below share one hoisted condition rather than repeating `firstOn >= 0`: at firstOn === 0 the two `ordered` branches already coincide (rotating by zero is a no-op), so a lone, un-shared copy of the condition guarding `ordered` alone has no boundary input left where mutating it changes anything observable -- sharing it with `current`'s own branch (which genuinely does differ at that boundary) is what keeps the condition itself meaningful to test.
+    // Rotate so the walk starts on a real on-curve point where one exists; a contour with none at all (a pure-quad circle, say) starts at the implied midpoint of its last and first points. Both branches below share one hoisted condition rather than repeating `firstOn >= 0`: at firstOn === 0 the two `ordered` branches already coincide (rotating by zero is a no-op), so a lone, un-shared copy of the condition guarding `ordered` alone has no boundary input left where mutating it changes anything observable — sharing it with `current`'s own branch (which genuinely does differ at that boundary) is what keeps the condition itself meaningful to test.
     const firstOn = contour.findIndex((point) => point.onCurve);
     const contourPoints = contour.map((point) => ({
       x: point.x,
@@ -1235,7 +1235,7 @@ export function glyphOutlineSubpaths(
     if (pendingOffCurve !== undefined) {
       emitQuad(current, pendingOffCurve, start);
     }
-    // No separate segments.length guard: the contour.length < 3 continue above already guarantees at least two segments here. Walking a contour of n >= 3 points emits exactly one segment per point that isn't the first half of a still-open off-curve pair (an on-curve point always emits, and only the very first off-curve point encountered after a clear state emits none) -- for n >= 3 points that can defer at most one single emission this way, and the loop's own trailing flush emits one more for a pair left open at the end, so the count can never drop below n - 1, i.e. never below 2.
+    // No separate segments.length guard: the contour.length < 3 continue above already guarantees at least two segments here. Walking a contour of n >= 3 points emits exactly one segment per point that isn't the first half of a still-open off-curve pair (an on-curve point always emits, and only the very first off-curve point encountered after a clear state emits none) — for n >= 3 points that can defer at most one single emission this way, and the loop's own trailing flush emits one more for a pair left open at the end, so the count can never drop below n - 1, i.e. never below 2.
     const startPx = applyMatrix(matrix, start);
     subpaths.push({
       startXPx: startPx.x,
@@ -1249,7 +1249,7 @@ export function glyphOutlineSubpaths(
 
 // --- Read-side helpers whose read.ts originals are module-private. ---
 
-// The %PDF- header scan readPdf performs (a junk-prefixed file is legal per ISO 32000-1 7.5.2, so a window is searched rather than offset 0 required): re-derived here because read.ts's own copy is not exported, with raster.test.ts holding the observable behaviour to the same pdf/no-header error readPdf throws for a non-PDF input. A latin1 decode maps each byte 0-255 to the identical code point one-for-one, so String.prototype.includes over it is exactly a byte-sequence search -- the language's own substring search, rather than a hand-written double loop whose own bounds arithmetic would just be re-deriving what indexOf already guarantees correct.
+// The %PDF- header scan readPdf performs (a junk-prefixed file is legal per ISO 32000-1 7.5.2, so a window is searched rather than offset 0 required): re-derived here because read.ts's own copy is not exported, with raster.test.ts holding the observable behaviour to the same pdf/no-header error readPdf throws for a non-PDF input. A latin1 decode maps each byte 0-255 to the identical code point one-for-one, so String.prototype.includes over it is exactly a byte-sequence search — the language's own substring search, rather than a hand-written double loop whose own bounds arithmetic would just be re-deriving what indexOf already guarantees correct.
 const HEADER_SEARCH_WINDOW = 1024;
 
 function hasPdfHeader(bytes: Uint8Array<ArrayBuffer>): boolean {
@@ -1267,7 +1267,7 @@ interface PageBoxRect {
   readonly ury: number;
 }
 
-// /MediaBox, /CropBox and their kin, normalised to lower-left/upper-right corners -- read.ts's own readDeclaredPageBox, re-derived here (see the geometry comment inside renderPdfPage for why the duplication is deliberate and test-pinned).
+// /MediaBox, /CropBox and their kin, normalised to lower-left/upper-right corners — read.ts's own readDeclaredPageBox, re-derived here (see the geometry comment inside renderPdfPage for why the duplication is deliberate and test-pinned).
 function readDeclaredPageBox(
   page: PdfDict,
   key: string,
@@ -1303,7 +1303,7 @@ function readMediaBox(page: PdfDict): PageBoxRect {
   );
 }
 
-// The axis-aligned bounds of a page rectangle after a rotation transform -- read.ts's own rotatedRectBounds: all four corners transformed, then min/max, because a rotation that is not about the box's own corner does not preserve which corner is lower-left.
+// The axis-aligned bounds of a page rectangle after a rotation transform — read.ts's own rotatedRectBounds: all four corners transformed, then min/max, because a rotation that is not about the box's own corner does not preserve which corner is lower-left.
 function rotatedRectBounds(
   rect: PageBoxRect,
   matrix: Matrix,

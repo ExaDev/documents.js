@@ -23,7 +23,7 @@ describe("resolveMetadataTimestamps", () => {
     };
     const result = resolveMetadataTimestamps(metadata, throwingClock);
     expect(result).toEqual(metadata);
-    expect(result).toBe(metadata); // returned unchanged -- not even a shallow copy
+    expect(result).toBe(metadata); // returned unchanged — not even a shallow copy
   });
 
   it("fills in only the missing field when exactly one of the two is already present, never overwriting the one that is", () => {

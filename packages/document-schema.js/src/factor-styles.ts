@@ -33,18 +33,18 @@ import type {
   SlideGroupNode,
 } from "./package-node";
 
-// The styles minting half of the package boundary (#21's factoring pass): assembleTree = decompose then factorStyles, and the two are separate passes so minting idempotence stays independently testable. Minting walks the freshly decomposed tree, finds property tuples that repeat, and hoists each onto a wrapper ref + styles-table entry -- pure compression over the one tree a conversion just built, never a second authority for content.
+// The styles minting half of the package boundary (#21's factoring pass): assembleTree = decompose then factorStyles, and the two are separate passes so minting idempotence stays independently testable. Minting walks the freshly decomposed tree, finds property tuples that repeat, and hoists each onto a wrapper ref + styles-table entry — pure compression over the one tree a conversion just built, never a second authority for content.
 //
-// The mintable property sets are exactly the schema's own style halves (StyleParagraphProperties / StyleRunProperties) minus `list`: frames, sourcePath, and styleId are per-node facts the schema's strict entry objects already refuse outright (the ban list), and `list` is additionally excluded here because it is a grouping signal -- decompose's own stack semantics and the anchor schema (ListParagraphSchema requires list on a list group's node) read it off the node object, so a membership factored into the table would move structure the tree itself must keep stating. headingLevel is not a StyleParagraphProperties field at all, so heading anchors are equally safe by construction.
+// The mintable property sets are exactly the schema's own style halves (StyleParagraphProperties / StyleRunProperties) minus `list`: frames, sourcePath, and styleId are per-node facts the schema's strict entry objects already refuse outright (the ban list), and `list` is additionally excluded here because it is a grouping signal — decompose's own stack semantics and the anchor schema (ListParagraphSchema requires list on a list group's node) read it off the node object, so a membership factored into the table would move structure the tree itself must keep stating. headingLevel is not a StyleParagraphProperties field at all, so heading anchors are equally safe by construction.
 //
-// Exactness -- the promotion's law (ii), that a factored and an unfactored serialisation of one document resolve to the same effective properties -- is guaranteed by two rules, both consequences of the resolution helpers being gap-fill-never-overwrite (applyParagraphStyleProperties / applyRunStyleProperties):
+// Exactness — the promotion's law (ii), that a factored and an unfactored serialisation of one document resolve to the same effective properties — is guaranteed by two rules, both consequences of the resolution helpers being gap-fill-never-overwrite (applyParagraphStyleProperties / applyRunStyleProperties):
 //
-// 1. A minted tuple's keys must be carried by EVERY paragraph (for the paragraph half) and EVERY run of every extent paragraph (for the run half) of the wrapper's whole subtree extent -- the block-flow paragraphs resolution overlays the ref onto (group anchors and bare paragraph leaves; a table leaf's cell paragraphs and an embedded document's own content are outside the walk, exactly as they are outside resolution). A key a node already carries wins over the entry whatever its value, so unstripped extent nodes are untouched; a key a node lacks would be FILLED, so the every-node-carries-it condition is what makes the fill a no-op for everyone except the stripped positions it restores.
+// 1. A minted tuple's keys must be carried by EVERY paragraph (for the paragraph half) and EVERY run of every extent paragraph (for the run half) of the wrapper's whole subtree extent — the block-flow paragraphs resolution overlays the ref onto (group anchors and bare paragraph leaves; a table leaf's cell paragraphs and an embedded document's own content are outside the walk, exactly as they are outside resolution). A key a node already carries wins over the entry whatever its value, so unstripped extent nodes are untouched; a key a node lacks would be FILLED, so the every-node-carries-it condition is what makes the fill a no-op for everyone except the stripped positions it restores.
 // 2. A key already minted by an ancestor wrapper's entry is frozen for every wrapper below it: resolution overlays the chain outermost-first with the nearest entry winning, so a nested entry re-minting an ancestor's key with a different value would silently rewrite the value the ancestor's ref restores for its own stripped positions. Freezing keeps already-factored keys out of every deeper candidate.
 //
-// Minting order and identity per the plan's locked rules: wrappers are visited outermost-first (pre-order, document order); a wrapper mints at most one entry (optionally carrying both halves) when some paragraph tuple and/or run tuple occurs on two or more positions in its extent that no wrapper on its root-to-leaf chain has already factored (the factored bookkeeping is branch-scoped, never global -- see Branch); the best tuple at a wrapper is the most frequent, tie-broken by first occurrence in document order -- a total rule, since a position joins exactly one tuple group, so two distinct tuples can never share a first occurrence. Identical entries minted at several wrappers share one table entry; ids are s1, s2, ... in (descending total frequency, first wrapper visit) order -- itself total, because one wrapper mints at most one entry, so distinct entries always have distinct first visits -- and the pass is deterministic.
+// Minting order and identity per the plan's locked rules: wrappers are visited outermost-first (pre-order, document order); a wrapper mints at most one entry (optionally carrying both halves) when some paragraph tuple and/or run tuple occurs on two or more positions in its extent that no wrapper on its root-to-leaf chain has already factored (the factored bookkeeping is branch-scoped, never global — see Branch); the best tuple at a wrapper is the most frequent, tie-broken by first occurrence in document order — a total rule, since a position joins exactly one tuple group, so two distinct tuples can never share a first occurrence. Identical entries minted at several wrappers share one table entry; ids are s1, s2, ... in (descending total frequency, first wrapper visit) order — itself total, because one wrapper mints at most one entry, so distinct entries always have distinct first visits — and the pass is deterministic.
 //
-// The whole pass is a pure function of the MATERIALISED content: factorStyles flattens its input first (resolving any refs it already carries), so factoring a second time computes the identical plan over the identical values and mints the identical table -- law (iii), minting idempotence, holds by construction. Stripping copies only the paragraphs and runs whose keys moved to a table entry (never the caller's nodes in place -- decompose embedded those, and the layout pass's frames ride on them); every other node in the minted tree is the same object the flat content owns. Strips apply per chain, not per node object: the same paragraph or run object may legally sit at positions under two sibling wrappers (a caller-built document that pushes one node into two sections is a two-position tree once serialised), and each position is stripped only by a wrapper whose ref that position's own chain resolves -- flatten resolves per position, so minting strips per position too (see WrapperStrips).
+// The whole pass is a pure function of the MATERIALISED content: factorStyles flattens its input first (resolving any refs it already carries), so factoring a second time computes the identical plan over the identical values and mints the identical table — law (iii), minting idempotence, holds by construction. Stripping copies only the paragraphs and runs whose keys moved to a table entry (never the caller's nodes in place — decompose embedded those, and the layout pass's frames ride on them); every other node in the minted tree is the same object the flat content owns. Strips apply per chain, not per node object: the same paragraph or run object may legally sit at positions under two sibling wrappers (a caller-built document that pushes one node into two sections is a two-position tree once serialised), and each position is stripped only by a wrapper whose ref that position's own chain resolves — flatten resolves per position, so minting strips per position too (see WrapperStrips).
 
 // The paragraph half's mintable keys, in the schema's own declaration order (StyleParagraphProperties minus `list`; see the module doc for why list never factors).
 const PARAGRAPH_STYLE_KEYS = [
@@ -58,7 +58,7 @@ const PARAGRAPH_STYLE_KEYS = [
   "pageBreakAfter",
 ] as const;
 
-// The run half's mintable keys -- StyleRunProperties' full field set, schema declaration order.
+// The run half's mintable keys — StyleRunProperties' full field set, schema declaration order.
 const RUN_STYLE_KEYS = [
   "bold",
   "italic",
@@ -72,7 +72,7 @@ const RUN_STYLE_KEYS = [
 type ParagraphKey = (typeof PARAGRAPH_STYLE_KEYS)[number];
 type RunKey = (typeof RUN_STYLE_KEYS)[number];
 
-// The wrapper kinds that can carry a ref and hold block-flow paragraphs. SheetGroupNode fits the wrapper shape but its children are images and embedded objects -- no paragraphs, an always-empty extent -- so it never mints and is excluded from the walk's type. SectionConstructGroupNode/ShapeConstructGroupNode (4.1.0) join the set on equal footing: each carries the same `{ node, style?, children }` shape as every other wrapper here, and neither needs a dedicated dispatch arm below -- their node is never the 'paragraph'/'slide'/'drawPage' discriminant any other wrapper matches on, so both fall straight through to extentOf/childWrappers' shared "no anchor of its own" default, the same default a plain SectionGroupNode already relies on.
+// The wrapper kinds that can carry a ref and hold block-flow paragraphs. SheetGroupNode fits the wrapper shape but its children are images and embedded objects — no paragraphs, an always-empty extent — so it never mints and is excluded from the walk's type. SectionConstructGroupNode/ShapeConstructGroupNode (4.1.0) join the set on equal footing: each carries the same `{ node, style?, children }` shape as every other wrapper here, and neither needs a dedicated dispatch arm below — their node is never the 'paragraph'/'slide'/'drawPage' discriminant any other wrapper matches on, so both fall straight through to extentOf/childWrappers' shared "no anchor of its own" default, the same default a plain SectionGroupNode already relies on.
 type MintWrapper =
   | SectionGroupNode
   | SlideGroupNode
@@ -83,11 +83,11 @@ type MintWrapper =
   | SectionConstructGroupNode
   | ShapeConstructGroupNode;
 
-// One child position of any block flow: the union of the section, list, and shape flows' child vocabularies. ListChild and ShapeChild are the identical type (ListGroupNode | ShapeConstructGroupNode | TreeBlockLeaf) since 4.1.0, no longer a sub-range of SectionChild (which carries SectionConstructGroupNode instead) -- so the extent walk needs both halves explicitly to serve all three flows with one function.
-// SectionChild | ListChild covers every block-flow position; ShapeGroupNode | ContentVector additionally covers a slide's own children (ShapeGroupNode[]) and a draw page's (ShapeGroupNode | ContentVector) -- flowExtent and childWrappers both walk every MintWrapper kind's children generically (recurse into anything carrying its own node+children, treat a bare paragraph leaf as an anchor, skip everything else), so this is the one union wide enough for every kind's own children type.
+// One child position of any block flow: the union of the section, list, and shape flows' child vocabularies. ListChild and ShapeChild are the identical type (ListGroupNode | ShapeConstructGroupNode | TreeBlockLeaf) since 4.1.0, no longer a sub-range of SectionChild (which carries SectionConstructGroupNode instead) — so the extent walk needs both halves explicitly to serve all three flows with one function.
+// SectionChild | ListChild covers every block-flow position; ShapeGroupNode | ContentVector additionally covers a slide's own children (ShapeGroupNode[]) and a draw page's (ShapeGroupNode | ContentVector) — flowExtent and childWrappers both walk every MintWrapper kind's children generically (recurse into anything carrying its own node+children, treat a bare paragraph leaf as an anchor, skip everything else), so this is the one union wide enough for every kind's own children type.
 type FlowChild = SectionChild | ListChild | ShapeGroupNode | ContentVector;
 
-// The one per-kind narrower extentOf/childWrappers still need: TypeScript does not narrow a union from a comparison against a NESTED discriminant (`wrapper.node.kind === 'paragraph'` narrows wrapper.node at best, never `wrapper`), so an explicit guard is what narrows the wrapper itself. Every OTHER MintWrapper kind (shape, slide, draw page, section, and both construct-group variants) has no anchor of its own, so extentOf and childWrappers both treat them alike via their own shared, kind-agnostic defaults -- see each function's own comment.
+// The one per-kind narrower extentOf/childWrappers still need: TypeScript does not narrow a union from a comparison against a NESTED discriminant (`wrapper.node.kind === 'paragraph'` narrows wrapper.node at best, never `wrapper`), so an explicit guard is what narrows the wrapper itself. Every OTHER MintWrapper kind (shape, slide, draw page, section, and both construct-group variants) has no anchor of its own, so extentOf and childWrappers both treat them alike via their own shared, kind-agnostic defaults — see each function's own comment.
 function isAnchorGroupWrapper(
   wrapper: MintWrapper,
 ): wrapper is HeadingGroupNode | ListGroupNode {
@@ -133,7 +133,7 @@ export function assembleTree(
         children: content.pages.map(decomposeDrawPage),
       });
     case "formula":
-      // A formula package's single child is a leaf -- no wrappers, no paragraphs -- so minting is necessarily a no-op; it routes through mint anyway so the return shape stays one code path.
+      // A formula package's single child is a leaf — no wrappers, no paragraphs — so minting is necessarily a no-op; it routes through mint anyway so the return shape stays one code path.
       return mint({
         kind: "formula",
         ...envelope,
@@ -142,7 +142,7 @@ export function assembleTree(
   }
 }
 
-// Re-factors an already-assembled package. The input is flattened first (materialising its refs), so this both re-mints a minted package to the identical table (law iii) and factors any hand-built or round-tripped tree a caller hands in. `pages`, `fonts`, `definitions`, and the package-level `source` residue table ride the input through: none has a spelling on the flat ContentDocument, so the flatten step cannot carry them and the reassembled tree would otherwise drop them silently. Minting never reads `fonts`, `definitions`, or `source` -- all three are per-document caller data, not style content the pass has any business rewriting (and rewriting residue would breach the channel's own opacity contract, src/source.ts).
+// Re-factors an already-assembled package. The input is flattened first (materialising its refs), so this both re-mints a minted package to the identical table (law iii) and factors any hand-built or round-tripped tree a caller hands in. `pages`, `fonts`, `definitions`, and the package-level `source` residue table ride the input through: none has a spelling on the flat ContentDocument, so the flatten step cannot carry them and the reassembled tree would otherwise drop them silently. Minting never reads `fonts`, `definitions`, or `source` — all three are per-document caller data, not style content the pass has any business rewriting (and rewriting residue would breach the channel's own opacity contract, src/source.ts).
 export function factorStyles(pkg: DocumentTree): DocumentTree {
   const reassembled = assembleTree(flattenTree(pkg), pkg.pages);
   const carried = {
@@ -155,9 +155,9 @@ export function factorStyles(pkg: DocumentTree): DocumentTree {
 
 // --- The plan: extents, candidates, selection -----------------------------------------------------------
 
-// The paragraphs a wrapper's ref would overlay onto: the wrapper's own anchor (heading and list groups) plus, recursively, nested group anchors and bare paragraph leaves inside the block flow. This is exactly flatten.ts's resolution extent -- the same walk boundary, the same exclusions -- because exactness is proven against exactly the nodes resolution touches.
+// The paragraphs a wrapper's ref would overlay onto: the wrapper's own anchor (heading and list groups) plus, recursively, nested group anchors and bare paragraph leaves inside the block flow. This is exactly flatten.ts's resolution extent — the same walk boundary, the same exclusions — because exactness is proven against exactly the nodes resolution touches.
 //
-// Only the anchor-group arm is special-cased: a heading or list group's own anchor paragraph contributes itself, on top of its flow. Every other wrapper kind -- a shape group, a slide, a draw page, a section group, or a construct group -- has no anchor of its own, so its whole contribution is exactly its flow's own extent; flowExtent already walks any wrapper kind's children generically (recursing into anything carrying its own node+children, collecting a bare paragraph leaf, skipping everything else), so there is nothing left for a per-kind arm to do differently for any of them.
+// Only the anchor-group arm is special-cased: a heading or list group's own anchor paragraph contributes itself, on top of its flow. Every other wrapper kind — a shape group, a slide, a draw page, a section group, or a construct group — has no anchor of its own, so its whole contribution is exactly its flow's own extent; flowExtent already walks any wrapper kind's children generically (recursing into anything carrying its own node+children, collecting a bare paragraph leaf, skipping everything else), so there is nothing left for a per-kind arm to do differently for any of them.
 function extentOf(wrapper: MintWrapper): ContentParagraph[] {
   if (isAnchorGroupWrapper(wrapper)) {
     return [wrapper.node, ...flowExtent(wrapper.children)];
@@ -178,8 +178,8 @@ function flowExtent(children: readonly FlowChild[]): ContentParagraph[] {
   return paragraphs;
 }
 
-// A tuple of just the keys in `keys` that the paragraph actually carries -- the candidate identity for the paragraph namespace. Absent keys are omitted, not set to undefined, so canonicalKey treats both spellings of absence identically.
-// `keys` is always commonParagraphKeys' own result for this exact extent (bestParagraphCandidate is the sole caller), which by construction already guarantees every key in the list is present on every paragraph of that extent -- so unlike a general-purpose "pick present keys" helper, this one can assign unconditionally rather than checking for an absence its own caller has already ruled out.
+// A tuple of just the keys in `keys` that the paragraph actually carries — the candidate identity for the paragraph namespace. Absent keys are omitted, not set to undefined, so canonicalKey treats both spellings of absence identically.
+// `keys` is always commonParagraphKeys' own result for this exact extent (bestParagraphCandidate is the sole caller), which by construction already guarantees every key in the list is present on every paragraph of that extent — so unlike a general-purpose "pick present keys" helper, this one can assign unconditionally rather than checking for an absence its own caller has already ruled out.
 function paragraphTuple(
   paragraph: ContentParagraph,
   keys: readonly ParagraphKey[],
@@ -203,7 +203,7 @@ function runTuple(
   return tuple;
 }
 
-// The keys (from the mintable set, minus the ancestor-frozen ones) that EVERY paragraph in the extent carries -- rule 1's every-node-carries-it condition, computed before grouping so candidates can only form over keys the whole extent shares.
+// The keys (from the mintable set, minus the ancestor-frozen ones) that EVERY paragraph in the extent carries — rule 1's every-node-carries-it condition, computed before grouping so candidates can only form over keys the whole extent shares.
 function commonParagraphKeys(
   extent: readonly ContentParagraph[],
   frozen: ReadonlySet<ParagraphKey>,
@@ -238,7 +238,7 @@ interface RunCandidate {
   readonly positions: ContentRun[];
 }
 
-// Groups the not-yet-factored positions by their restricted tuple and returns the best candidate -- the one occurring on two or more positions, most frequent first, then earliest first position -- or undefined when no tuple reaches the threshold. The frequency threshold is the plan's own economy rule: a singleton ref plus its table entry is larger than the inline tuple it would replace.
+// Groups the not-yet-factored positions by their restricted tuple and returns the best candidate — the one occurring on two or more positions, most frequent first, then earliest first position — or undefined when no tuple reaches the threshold. The frequency threshold is the plan's own economy rule: a singleton ref plus its table entry is larger than the inline tuple it would replace.
 function bestParagraphCandidate(
   extent: readonly ContentParagraph[],
   keys: readonly ParagraphKey[],
@@ -294,7 +294,7 @@ function bestGroup<
 
 // --- The plan walk and the apply phase -------------------------------------------------------------------
 
-// The strips one minting wrapper's selection recorded: the keys its entry takes off each paragraph and each run it factored. Held per wrapper and consulted per chain during the rebuild, so the same node object aliased at positions under two sibling wrappers is stripped by each branch's own minter (or by neither) -- flatten resolves refs per position, so minting must strip per position too. A single node-keyed strip map cannot express that: it would apply one branch's strip at every position, and a position whose own chain minted nothing (or minted a different key set) would lose the stripped properties with no ref to restore them.
+// The strips one minting wrapper's selection recorded: the keys its entry takes off each paragraph and each run it factored. Held per wrapper and consulted per chain during the rebuild, so the same node object aliased at positions under two sibling wrappers is stripped by each branch's own minter (or by neither) — flatten resolves refs per position, so minting must strip per position too. A single node-keyed strip map cannot express that: it would apply one branch's strip at every position, and a position whose own chain minted nothing (or minted a different key set) would lose the stripped properties with no ref to restore them.
 interface WrapperStrips {
   readonly paragraphs: Map<ContentParagraph, readonly ParagraphKey[]>;
   readonly runs: Map<ContentRun, readonly RunKey[]>;
@@ -308,7 +308,7 @@ interface MintState {
   readonly wrapperStrips: Map<MintWrapper, WrapperStrips>;
 }
 
-// The chain-scoped planning context one plan() call sees: the keys an ancestor's entry froze for everything below it, and the positions an ancestor's entry already factored (restoring those is that ancestor ref's job). Copy-on-descend, so a factored position is invisible to every SIBLING branch: the same paragraph or run object may legally sit at positions under two sibling wrappers (a caller-built document that pushes one node into two sections is a two-position tree once serialised), and chain-global bookkeeping would let the first wrapper's mint suppress the second branch's own mint -- leaving the second position's chain ref-less while a strip still took its properties, silently breaking law (i). Branch-scoped, the sibling mints the identical entry content, shares the table entry through the canonical key, and carries its own ref, so both positions resolve back.
+// The chain-scoped planning context one plan() call sees: the keys an ancestor's entry froze for everything below it, and the positions an ancestor's entry already factored (restoring those is that ancestor ref's job). Copy-on-descend, so a factored position is invisible to every SIBLING branch: the same paragraph or run object may legally sit at positions under two sibling wrappers (a caller-built document that pushes one node into two sections is a two-position tree once serialised), and chain-global bookkeeping would let the first wrapper's mint suppress the second branch's own mint — leaving the second position's chain ref-less while a strip still took its properties, silently breaking law (i). Branch-scoped, the sibling mints the identical entry content, shares the table entry through the canonical key, and carries its own ref, so both positions resolve back.
 interface Branch {
   readonly frozenParagraphs: ReadonlySet<ParagraphKey>;
   readonly frozenRuns: ReadonlySet<RunKey>;
@@ -316,7 +316,7 @@ interface Branch {
   readonly factoredRuns: ReadonlySet<ContentRun>;
 }
 
-// One accumulated table entry: its resolved content, the wrappers referencing it, and the total stripped positions feeding its frequency. Entry ORDER (the "first occurrence" tie-break) needs no field of its own here: entries.values() already yields ascending pre-order-visit order for free, since each entry is inserted into the Map at the moment plan() first visits the wrapper that mints it, and Map iteration is insertion order -- see mint()'s own sort comment.
+// One accumulated table entry: its resolved content, the wrappers referencing it, and the total stripped positions feeding its frequency. Entry ORDER (the "first occurrence" tie-break) needs no field of its own here: entries.values() already yields ascending pre-order-visit order for free, since each entry is inserted into the Map at the moment plan() first visits the wrapper that mints it, and Map iteration is insertion order — see mint()'s own sort comment.
 interface MintedEntry {
   readonly content: StyleEntry;
   readonly wrappers: MintWrapper[];
@@ -399,10 +399,10 @@ function plan(
   }
 }
 
-// The direct child wrappers of a wrapper, in document order -- the pre-order walk's recursion set.
+// The direct child wrappers of a wrapper, in document order — the pre-order walk's recursion set.
 // One loop serves every MintWrapper kind: a slide's children (always ShapeGroupNode, always
 // carrying node+children) are all kept; a draw page's (ShapeGroupNode | ContentVector) keeps the
-// shape groups and skips the vectors (which carry neither); a section/heading/list/shape/ construct group's flow keeps its nested groups and skips its leaves -- the identical "has its own node and children" test picks out exactly the wrapper positions in every one of these child vocabularies, so no per-kind dispatch is needed at all.
+// shape groups and skips the vectors (which carry neither); a section/heading/list/shape/ construct group's flow keeps its nested groups and skips its leaves — the identical "has its own node and children" test picks out exactly the wrapper positions in every one of these child vocabularies, so no per-kind dispatch is needed at all.
 function childWrappers(wrapper: MintWrapper): MintWrapper[] {
   const wrappers: MintWrapper[] = [];
   for (const child of wrapper.children) {
@@ -425,20 +425,20 @@ export function mint(pkg: DocumentTree): DocumentTree {
     factoredRuns: new Set(),
   };
   switch (pkg.kind) {
-    // The three container-rooted kinds share this identical body -- pkg.children is a MintWrapper[] for every one of them (SectionGroupNode[]/SlideGroupNode[]/DrawPageGroupNode[]), and plan() itself dispatches on each wrapper's own node.kind, not on which switch arm reached it. Combined deliberately rather than left as three textually-identical arms: with three separate arms, an empty (fallen-through) "wordprocessing" arm would fall into "presentation"'s byte-identical loop and reach the exact same result, making the case label itself unobservable to a test.
+    // The three container-rooted kinds share this identical body — pkg.children is a MintWrapper[] for every one of them (SectionGroupNode[]/SlideGroupNode[]/DrawPageGroupNode[]), and plan() itself dispatches on each wrapper's own node.kind, not on which switch arm reached it. Combined deliberately rather than left as three textually-identical arms: with three separate arms, an empty (fallen-through) "wordprocessing" arm would fall into "presentation"'s byte-identical loop and reach the exact same result, making the case label itself unobservable to a test.
     case "wordprocessing":
     case "presentation":
     case "drawing":
       for (const root of pkg.children) plan(root, rootBranch, state, entries);
       break;
-    // A spreadsheet's roots are sheet groups (no block flow, never minted) and a formula package's single child is a leaf: neither holds a wrapper to visit -- both arms are genuinely empty, the switch's own last arms, so there is nothing to break out of.
+    // A spreadsheet's roots are sheet groups (no block flow, never minted) and a formula package's single child is a leaf: neither holds a wrapper to visit — both arms are genuinely empty, the switch's own last arms, so there is nothing to break out of.
     case "spreadsheet":
     case "formula":
   }
   if (entries.size === 0) {
     return pkg;
   }
-  // Entry ids in (descending total frequency, first wrapper visit) order -- the deterministic table order the plan locks. entries.values() already yields ascending pre-order-visit order for free (each entry is inserted into the Map at the moment plan() first mints it, and Map iteration is insertion order), and Array.prototype.sort has been a STABLE sort by spec since ES2019 -- so sorting by descending frequency alone, with no explicit tie-break, already preserves each frequency-tied group's own relative (ascending pre-order-visit) insertion order exactly as a manual first-visit tie-break would, without a second comparator arm -- or a recorded firstVisit field -- to state or get wrong.
+  // Entry ids in (descending total frequency, first wrapper visit) order — the deterministic table order the plan locks. entries.values() already yields ascending pre-order-visit order for free (each entry is inserted into the Map at the moment plan() first mints it, and Map iteration is insertion order), and Array.prototype.sort has been a STABLE sort by spec since ES2019 — so sorting by descending frequency alone, with no explicit tie-break, already preserves each frequency-tied group's own relative (ascending pre-order-visit) insertion order exactly as a manual first-visit tie-break would, without a second comparator arm — or a recorded firstVisit field — to state or get wrong.
   const ordered = [...entries.values()].sort(
     (a, b) => b.frequency - a.frequency,
   );
@@ -474,14 +474,14 @@ export function mint(pkg: DocumentTree): DocumentTree {
           rebuildDrawPageGroup(group, [], state),
         ),
       };
-    // No wrapper was visited for these arms (sheets hold no block flow; a formula package holds one leaf), so entries is empty and the early return above has already fired -- the arms exist for switch totality only.
+    // No wrapper was visited for these arms (sheets hold no block flow; a formula package holds one leaf), so entries is empty and the early return above has already fired — the arms exist for switch totality only.
     case "spreadsheet":
     case "formula":
       return { ...pkg, styles };
   }
 }
 
-// The strip records of every minted wrapper on the current rebuild chain, outermost first (each rebuild level appends its own record before walking its children). A node's strip is the LAST record naming it -- the chain is outermost-first, so the last is the innermost, and branch-scoped factoring gives each chain at most one minter per node anyway, which is what makes the per-position rule exact: an aliased node is stripped by its own branch's record and never by a sibling's.
+// The strip records of every minted wrapper on the current rebuild chain, outermost first (each rebuild level appends its own record before walking its children). A node's strip is the LAST record naming it — the chain is outermost-first, so the last is the innermost, and branch-scoped factoring gives each chain at most one minter per node anyway, which is what makes the per-position rule exact: an aliased node is stripped by its own branch's record and never by a sibling's.
 type ChainStrips = readonly WrapperStrips[];
 
 // The chain one level deeper than `group`: unchanged when this wrapper minted nothing, extended by its own strips when it did.
@@ -542,7 +542,7 @@ function rebuildSlideGroup(
       };
 }
 
-// One draw-page group: its shape children rebuild, its vector leaves pass through unchanged (no paragraphs to strip, no ref to carry -- a vector is a leaf).
+// One draw-page group: its shape children rebuild, its vector leaves pass through unchanged (no paragraphs to strip, no ref to carry — a vector is a leaf).
 function rebuildDrawPageGroup(
   group: DrawPageGroupNode,
   chain: ChainStrips,
@@ -670,9 +670,9 @@ function rebuildShapeGroup(
       };
 }
 
-// One paragraph (leaf or anchor): stripped -- copied sans its minted keys -- when a wrapper on its chain factored it (chain-scoped, so an aliased position is stripped by its own branch's minter, never another branch's), with its runs rebuilt through the same copy-or-share rule. Returns the same object when nothing under it changed.
+// One paragraph (leaf or anchor): stripped — copied sans its minted keys — when a wrapper on its chain factored it (chain-scoped, so an aliased position is stripped by its own branch's minter, never another branch's), with its runs rebuilt through the same copy-or-share rule. Returns the same object when nothing under it changed.
 //
-// Generic over the paragraph's own type (rather than fixed to the loose ContentParagraph) so a heading or list anchor keeps its REQUIRED grouping signal (headingLevel/list) through the round trip with no re-narrowing at the call site -- neither an assertion function nor a banned `as` cast. This is sound with no runtime check because PARAGRAPH_STYLE_KEYS (the only source stripParagraphKeys ever draws a strip's key list from, transitively through commonParagraphKeys/bestParagraphCandidate) never contains "headingLevel" or "list" -- see the module doc -- so stripping can never touch either signal, on a HeadingParagraph, a ListParagraph, or a bare ContentParagraph leaf alike.
+// Generic over the paragraph's own type (rather than fixed to the loose ContentParagraph) so a heading or list anchor keeps its REQUIRED grouping signal (headingLevel/list) through the round trip with no re-narrowing at the call site — neither an assertion function nor a banned `as` cast. This is sound with no runtime check because PARAGRAPH_STYLE_KEYS (the only source stripParagraphKeys ever draws a strip's key list from, transitively through commonParagraphKeys/bestParagraphCandidate) never contains "headingLevel" or "list" — see the module doc — so stripping can never touch either signal, on a HeadingParagraph, a ListParagraph, or a bare ContentParagraph leaf alike.
 function rebuildParagraph<P extends ContentParagraph>(
   paragraph: P,
   chain: ChainStrips,
@@ -693,7 +693,7 @@ function rebuildParagraph<P extends ContentParagraph>(
   return { ...base, runs };
 }
 
-// Copies a paragraph sans the named keys -- copy-then-delete, never destructuring the keys out (an unused binding) and never mutating the input (decompose embedded the caller's own node objects, and the layout pass's frames ride on them). Every mintable paragraph key is optional on ContentParagraph, so the deletes are type-honest. Generic for the same reason rebuildParagraph is: preserves a heading/list anchor's own narrower type through the copy.
+// Copies a paragraph sans the named keys — copy-then-delete, never destructuring the keys out (an unused binding) and never mutating the input (decompose embedded the caller's own node objects, and the layout pass's frames ride on them). Every mintable paragraph key is optional on ContentParagraph, so the deletes are type-honest. Generic for the same reason rebuildParagraph is: preserves a heading/list anchor's own narrower type through the copy.
 function stripParagraphKeys<P extends ContentParagraph>(
   paragraph: P,
   keys: readonly ParagraphKey[],

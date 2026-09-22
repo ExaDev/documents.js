@@ -3,7 +3,7 @@ import { parseMathTable } from "./math-table";
 import type { SfntFont } from "./sfnt";
 import { parseSfnt } from "./sfnt";
 
-// A minimal but structurally real 'MATH' table (Microsoft OpenType MATH spec), built field-by-field the same way cmap-table.test.ts's own buildFontWithCmapSubtable builds a synthetic 'cmap' -- not mocked, so every one of these tests genuinely exercises math-table.ts's real byte-level parsing rather than a stand-in. Layout, in order: the 10-byte MATH header; a zero-filled MathConstants subtable (every MathValueRecord at 0 is a legitimate, if degenerate, font); a zero-filled MathGlyphInfo subtable (both its own coverage offsets 0, meaning neither italics-correction nor top-accent data); then, only when `variants` is given, a MathVariants subtable built from the caller's own per-axis coverage/construction description.
+// A minimal but structurally real 'MATH' table (Microsoft OpenType MATH spec), built field-by-field the same way cmap-table.test.ts's own buildFontWithCmapSubtable builds a synthetic 'cmap' — not mocked, so every one of these tests genuinely exercises math-table.ts's real byte-level parsing rather than a stand-in. Layout, in order: the 10-byte MATH header; a zero-filled MathConstants subtable (every MathValueRecord at 0 is a legitimate, if degenerate, font); a zero-filled MathGlyphInfo subtable (both its own coverage offsets 0, meaning neither italics-correction nor top-accent data); then, only when `variants` is given, a MathVariants subtable built from the caller's own per-axis coverage/construction description.
 const HEADER_SIZE = 10;
 const CONSTANTS_SIZE = 8 + 51 * 4 + 2; // MATH_VALUE_RECORDS_START + 51 MathValueRecords + the trailing percent field
 const GLYPH_INFO_SIZE = 4; // two Offset16 fields (italics, top-accent), both left 0
@@ -12,9 +12,9 @@ const VARIANTS_HEADER_SIZE = 10; // minConnectorOverlap + two coverage Offset16s
 interface AxisVariantsFixture {
   // Raw bytes for this axis's own Coverage table (already in final on-disk form), or undefined for an axis with no coverage at all (coverageOffset 0).
   readonly coverage?: Uint8Array<ArrayBuffer>;
-  // One MathGlyphConstruction per coverage-array slot, in slot order -- each just a variant list, no assembly, which is all these tests need to prove an entry was (or wasn't) resolved.
+  // One MathGlyphConstruction per coverage-array slot, in slot order — each just a variant list, no assembly, which is all these tests need to prove an entry was (or wasn't) resolved.
   readonly constructions: readonly { glyphId: number; advance: number }[];
-  // The real construction-ARRAY length recorded in the header (MathVariantCount) -- deliberately allowed to differ from `constructions.length` so a test can under-declare it and prove the out-of-range slots this axis's own coverage table still names are skipped rather than read.
+  // The real construction-ARRAY length recorded in the header (MathVariantCount) — deliberately allowed to differ from `constructions.length` so a test can under-declare it and prove the out-of-range slots this axis's own coverage table still names are skipped rather than read.
   readonly declaredCount: number;
 }
 
@@ -24,7 +24,7 @@ function buildMathBytes(
   horizontal: AxisVariantsFixture | undefined,
 ): Uint8Array<ArrayBuffer> {
   const variantsOffset = HEADER_SIZE + CONSTANTS_SIZE + GLYPH_INFO_SIZE;
-  // The real parser computes each axis's own construction-array position structurally (immediately after the header, vertical then horizontal -- see parseMathVariants's own verticalArrayOffset/horizontalArrayOffset), never from a stored field, so this builder must lay them out the identical way rather than wherever it happens to place other content.
+  // The real parser computes each axis's own construction-array position structurally (immediately after the header, vertical then horizontal — see parseMathVariants's own verticalArrayOffset/horizontalArrayOffset), never from a stored field, so this builder must lay them out the identical way rather than wherever it happens to place other content.
   const verticalCount = vertical?.declaredCount ?? 0;
   const horizontalCount = horizontal?.declaredCount ?? 0;
   const verticalArrayOffset = variantsOffset + VARIANTS_HEADER_SIZE;
@@ -146,7 +146,7 @@ describe("parseMathTable against synthetic MATH tables", () => {
   });
 
   it("leaves an axis with no coverage table empty while its sibling axis still resolves normally", () => {
-    // The vertical axis carries real coverage; the horizontal axis's own coverageOffset is 0. minConnectorOverlap is deliberately 1 (a Coverage table's own format 1) -- reading from the MathVariants subtable's own start (what a mutant that dropped this guard would do for a 0 coverageOffset) means byte 2 of that misread header is the VERTICAL axis's own (nonzero) coverageOffset field, read instead as a bogus glyph count. This is what proves the guard is load-bearing rather than a dead branch: without it, the horizontal axis would resolve extra, wrong entries from that misread instead of staying empty.
+    // The vertical axis carries real coverage; the horizontal axis's own coverageOffset is 0. minConnectorOverlap is deliberately 1 (a Coverage table's own format 1) — reading from the MathVariants subtable's own start (what a mutant that dropped this guard would do for a 0 coverageOffset) means byte 2 of that misread header is the VERTICAL axis's own (nonzero) coverageOffset field, read instead as a bogus glyph count. This is what proves the guard is load-bearing rather than a dead branch: without it, the horizontal axis would resolve extra, wrong entries from that misread instead of staying empty.
     const font = buildFontWithMathTable(
       buildMathBytes(
         1,
@@ -166,7 +166,7 @@ describe("parseMathTable against synthetic MATH tables", () => {
   });
 
   it("skips a coverage entry whose index falls beyond the construction array's own declared length", () => {
-    // Two glyphs (50, 51) covered at indices 0 and 1, but the construction array declares a length of only 1 -- index 1 names a slot the array was never given, and must be skipped rather than read past the array's own end.
+    // Two glyphs (50, 51) covered at indices 0 and 1, but the construction array declares a length of only 1 — index 1 names a slot the array was never given, and must be skipped rather than read past the array's own end.
     const font = buildFontWithMathTable(
       buildMathBytes(0, undefined, {
         coverage: format1Coverage([50, 51]),

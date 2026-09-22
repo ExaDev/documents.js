@@ -7,7 +7,7 @@ import { el, txt } from "../../xml/fragment";
 import { parsePackage } from "../../package-io/read";
 import { readOdm } from "./read";
 
-// This suite reads a real, unmodified LibreOffice 26.2-generated .odm fixture (src/typed/odm/fixtures/two-chapters.odm, built via a headless UNO Basic macro -- see read.ts's own top-of-file note for the exact UNO calls -- never hand-edited afterwards) for the genuine-producer-shape assertions, mirroring readOdtContent's and readOdsContent's own established convention. Its two linked chapters (fixtures/chapter1.odt, fixtures/chapter2.odt) are checked in alongside it for realism -- a genuine master document is meaningless without its sibling files on disk -- though readOdm itself never opens them; it only ever reads the master document's own content.xml. A handful of narrow scope-boundary/error-path tests at the end use small, synthetic, hand-built packages instead (via el/txt), for shapes no genuine master document produced by this verification ever exercises (a non-master text:section with no text:section-source, a malformed section missing a required attribute) or that plain ODF cannot produce at all (a missing content.xml).
+// This suite reads a real, unmodified LibreOffice 26.2-generated .odm fixture (src/typed/odm/fixtures/two-chapters.odm, built via a headless UNO Basic macro — see read.ts's own top-of-file note for the exact UNO calls — never hand-edited afterwards) for the genuine-producer-shape assertions, mirroring readOdtContent's and readOdsContent's own established convention. Its two linked chapters (fixtures/chapter1.odt, fixtures/chapter2.odt) are checked in alongside it for realism — a genuine master document is meaningless without its sibling files on disk — though readOdm itself never opens them; it only ever reads the master document's own content.xml. A handful of narrow scope-boundary/error-path tests at the end use small, synthetic, hand-built packages instead (via el/txt), for shapes no genuine master document produced by this verification ever exercises (a non-master text:section with no text:section-source, a malformed section missing a required attribute) or that plain ODF cannot produce at all (a missing content.xml).
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 
@@ -40,7 +40,7 @@ describe("readOdm: two-chapters.odm (real LibreOffice output)", () => {
     });
   });
 
-  it("never populates inlineContent -- not even for Chapter1, whose real text:section DOES carry ten non-empty child elements (LibreOffice's own chapter-numbering-continuity placeholders, not chapter content -- see read.ts's own top-of-file note)", () => {
+  it("never populates inlineContent — not even for Chapter1, whose real text:section DOES carry ten non-empty child elements (LibreOffice's own chapter-numbering-continuity placeholders, not chapter content — see read.ts's own top-of-file note)", () => {
     expect("inlineContent" in (sections[0] ?? {})).toBe(false);
     expect("inlineContent" in (sections[1] ?? {})).toBe(false);
     expect(sections[0]?.inlineContent).toBeUndefined();
@@ -92,7 +92,7 @@ describe("readOdm: scope boundaries and error paths (synthetic packages)", () =>
     const realSection = el("text:section", { "text:name": "ChapterOne" }, [
       el("text:section-source", { "xlink:href": "chapter1.odt" }),
     ]);
-    // A decoy carrying a genuine text:section-source child, deliberately shaped so readSection would succeed on it if this element's own tag check were ever skipped -- an ordinary tagless decoy (like the stray text:p below) can't tell "skipped by tag" apart from "reached readSection, which itself found nothing to read".
+    // A decoy carrying a genuine text:section-source child, deliberately shaped so readSection would succeed on it if this element's own tag check were ever skipped — an ordinary tagless decoy (like the stray text:p below) can't tell "skipped by tag" apart from "reached readSection, which itself found nothing to read".
     const decoy = el("text:p", { "text:name": "Decoy" }, [
       el("text:section-source", { "xlink:href": "not-a-real-chapter.odt" }),
     ]);
@@ -120,7 +120,7 @@ describe("readOdm: scope boundaries and error paths (synthetic packages)", () =>
     ]);
   });
 
-  it("skips a top-level text:section with no text:section-source child -- ODF's generic, non-master-document section (e.g. multi-column layout), not a chapter reference", () => {
+  it("skips a top-level text:section with no text:section-source child — ODF's generic, non-master-document section (e.g. multi-column layout), not a chapter reference", () => {
     const plainSection = el(
       "text:section",
       { "text:name": "ColumnLayout", "text:style-name": "Sect1" },

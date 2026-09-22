@@ -129,7 +129,7 @@ const paragraph = insertNode(
     properties: { kind: "paragraph", runs: [{ text: "New paragraph." }] },
   },
 );
-// paragraph: { graph: PropertyGraph, id: string } -- id is contentHashV1 of exactly the content given
+// paragraph: { graph: PropertyGraph, id: string } — id is contentHashV1 of exactly the content given
 
 const withParagraph = insertEdge(
   paragraph.graph,

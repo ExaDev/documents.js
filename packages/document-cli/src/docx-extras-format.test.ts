@@ -7,7 +7,7 @@ import {
   DOCX_EXTRAS_FIXTURE,
 } from "./test-support/docx-extras-fixture";
 
-// sectionHeaderFooters is positional (one entry per section, {} when that section spells no references) -- a one-section document with none spells exactly [{}].
+// sectionHeaderFooters is positional (one entry per section, {} when that section spells no references) — a one-section document with none spells exactly [{}].
 const EMPTY_EXTRAS: DocxExtras = {
   comments: [],
   footnotes: [],

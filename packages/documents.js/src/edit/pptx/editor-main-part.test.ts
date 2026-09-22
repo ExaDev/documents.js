@@ -6,7 +6,7 @@ import {
 } from "../../test-support/pptx";
 import { openPptx } from "./editor";
 
-// openPptx on a package whose presentation part is not at ppt/presentation.xml -- the pptx half of ExaDev/documents.js#1339, the same gap the docx editor had. The fixture carries the identical deck minimalPptxBytes does, so these assertions are the conventional fixture's own behaviour rather than a weaker substitute.
+// openPptx on a package whose presentation part is not at ppt/presentation.xml — the pptx half of ExaDev/documents.js#1339, the same gap the docx editor had. The fixture carries the identical deck minimalPptxBytes does, so these assertions are the conventional fixture's own behaviour rather than a weaker substitute.
 
 describe("openPptx: main part named by the officeDocument relationship", () => {
   it("opens a package whose presentation is at ppt/presentation2.xml", () => {

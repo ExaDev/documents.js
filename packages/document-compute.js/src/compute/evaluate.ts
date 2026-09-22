@@ -46,9 +46,9 @@ import {
   UnsupportedExpressionError,
 } from "./errors";
 
-// The tree-walking interpreter over document-schema.js's MathExpression (src/math.ts) -- this package's answer to ExaDev/documents.js#573's `evaluate(expression, bindings, context) -> Quantity | Interval | error`. context is optional because not every expression contains a 'qty' node (a purely symbolic formula over already-typed bindings never looks a unit up), and defaults to an empty registry.
+// The tree-walking interpreter over document-schema.js's MathExpression (src/math.ts) — this package's answer to ExaDev/documents.js#573's `evaluate(expression, bindings, context) -> Quantity | Interval | error`. context is optional because not every expression contains a 'qty' node (a purely symbolic formula over already-typed bindings never looks a unit up), and defaults to an empty registry.
 //
-// Return shape: a *successful* call returns EvaluationResult (Quantity | Interval) directly, never a result-wrapper object -- every failure throws one of this package's own Error subclasses (errors.ts) instead, matching the family's existing convention for signalling failure (document-schema.js's schema-io.ts, archive-codec's CompoundFileFormatError/ArchiveWalkLimitError: a thrown, named Error a caller can catch by class, not a `{ ok, error }` union folded into the return type).
+// Return shape: a *successful* call returns EvaluationResult (Quantity | Interval) directly, never a result-wrapper object — every failure throws one of this package's own Error subclasses (errors.ts) instead, matching the family's existing convention for signalling failure (document-schema.js's schema-io.ts, archive-codec's CompoundFileFormatError/ArchiveWalkLimitError: a thrown, named Error a caller can catch by class, not a `{ ok, error }` union folded into the return type).
 export type EvaluationResult = Quantity | Interval;
 
 const EMPTY_SYMBOL_TABLE: SymbolTable = { symbols: [], units: [] };
@@ -80,10 +80,10 @@ interface BinaryOperator {
 
 interface UnaryOperator {
   quantity: (a: Quantity) => Quantity;
-  interval?: (a: Interval) => Interval; // absent means this operator has no interval rule in this pass -- see errors.ts's UnsupportedExpressionError doc comment
+  interval?: (a: Interval) => Interval; // absent means this operator has no interval rule in this pass — see errors.ts's UnsupportedExpressionError doc comment
 }
 
-// The core arithmetic registry every reference consumer of this grammar implements (document-schema.js's own comment on MathApp, src/math.ts): namespaced 'math:*' operator ids, arity and semantics owned here since document-schema.js never evaluates anything. Deliberately not exhaustive of all conceivable numeric functions -- symbolic algebra and a general function library are out of scope for this pass (see this package's README); what is here covers the four required arithmetic operations plus enough unary operators (negate/abs/sqrt/trig) to make solveFor's worked examples realistic.
+// The core arithmetic registry every reference consumer of this grammar implements (document-schema.js's own comment on MathApp, src/math.ts): namespaced 'math:*' operator ids, arity and semantics owned here since document-schema.js never evaluates anything. Deliberately not exhaustive of all conceivable numeric functions — symbolic algebra and a general function library are out of scope for this pass (see this package's README); what is here covers the four required arithmetic operations plus enough unary operators (negate/abs/sqrt/trig) to make solveFor's worked examples realistic.
 const BINARY_OPERATORS: Record<string, BinaryOperator> = {
   "math:add": { quantity: addQuantities, interval: addIntervals },
   "math:subtract": {
@@ -131,7 +131,7 @@ export function evaluate(
     case "matrix":
       throw new UnsupportedExpressionError(
         "evaluate",
-        "matrix-valued expressions are out of scope for this pass -- document-compute.js evaluates scalar Quantity/Interval values only",
+        "matrix-valued expressions are out of scope for this pass — document-compute.js evaluates scalar Quantity/Interval values only",
       );
     case "unparsed":
       throw new UnsupportedExpressionError(
@@ -141,7 +141,7 @@ export function evaluate(
   }
 }
 
-// evaluate() for a caller that can only work with a point value: same walk, same errors, but an Interval result is reported as an UnsupportedExpressionError instead of widening the return type. An Interval only ever enters an evaluation by being bound to a symbol, so a caller whose bindings are all Quantity gets a Quantity back -- but that is a fact about the bindings it passes, not something the type system can check for it, which is exactly why the narrowing belongs here as one shared, exercised check rather than being restated at each such call site (the worked-example harness is the one in this package).
+// evaluate() for a caller that can only work with a point value: same walk, same errors, but an Interval result is reported as an UnsupportedExpressionError instead of widening the return type. An Interval only ever enters an evaluation by being bound to a symbol, so a caller whose bindings are all Quantity gets a Quantity back — but that is a fact about the bindings it passes, not something the type system can check for it, which is exactly why the narrowing belongs here as one shared, exercised check rather than being restated at each such call site (the worked-example harness is the one in this package).
 export function evaluateQuantity(
   expression: MathExpression,
   bindings: FormulaBindings,
@@ -158,7 +158,7 @@ function evaluateQty(node: MathQty, context: SymbolTable): Quantity {
   if (unit === undefined) {
     throw new UnknownUnitError(node.unit);
   }
-  // si_value = value * factorToSi + offsetToSi, computed entirely as exact BigInt rationals (rational.ts) and converted to a float exactly once -- see quantity.ts's header comment on where this package draws the exact/float boundary.
+  // si_value = value * factorToSi + offsetToSi, computed entirely as exact BigInt rationals (rational.ts) and converted to a float exactly once — see quantity.ts's header comment on where this package draws the exact/float boundary.
   let siValue = multiplyRational(
     toRational(node.value),
     toRational(unit.factorToSi),
@@ -229,7 +229,7 @@ function evaluateApp(
     return unary.quantity(only);
   }
 
-  // math:pow is binary like the arithmetic operators above but is not defined over intervals in this pass (a general interval power needs monotonicity analysis this pass does not implement -- see the README's scope note), so it is handled on its own rather than folded into BINARY_OPERATORS.
+  // math:pow is binary like the arithmetic operators above but is not defined over intervals in this pass (a general interval power needs monotonicity analysis this pass does not implement — see the README's scope note), so it is handled on its own rather than folded into BINARY_OPERATORS.
   if (node.operator === "math:pow") {
     const [base, exponent] = expectTwoArgs(args, "'math:pow'");
     return powQuantity(
@@ -244,7 +244,7 @@ function evaluateApp(
   );
 }
 
-// Sigma/product notation: bounds must resolve to dimensionless integers (a loop index has no unit), the binder name is bound locally to each successive integer as the body is evaluated, and the accumulator starts at the operation's identity (0 for sum, 1 for prod). Kept to Quantity-only bounds and bodies -- summing/multiplying a family of Intervals is a real generalisation this pass leaves out (see the README's scope note); a binder that would need it throws UnsupportedExpressionError rather than silently narrowing an Interval to its point value.
+// Sigma/product notation: bounds must resolve to dimensionless integers (a loop index has no unit), the binder name is bound locally to each successive integer as the body is evaluated, and the accumulator starts at the operation's identity (0 for sum, 1 for prod). Kept to Quantity-only bounds and bodies — summing/multiplying a family of Intervals is a real generalisation this pass leaves out (see the README's scope note); a binder that would need it throws UnsupportedExpressionError rather than silently narrowing an Interval to its point value.
 function evaluateBinder(
   node: MathSum | MathProd,
   bindings: FormulaBindings,

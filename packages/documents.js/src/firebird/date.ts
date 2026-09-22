@@ -1,8 +1,8 @@
-// Firebird's own DATE/TIME wire encoding -- unlike the gbak backup framing itself (Gotchas: no ratified spec), this part genuinely IS documented Firebird public API behaviour (ISC_DATE/ISC_TIME), and is additionally cross-checked here against the actual open-source engine implementation (src/common/classes/NoThrowTimeStamp.cpp's decode_date/decode_time) rather than taken purely from memory. A SQL DATE is a signed 32-bit day count with day 0 = 17 November 1858 (the Modified Julian Date epoch Firebird/InterBase has always used); a SQL TIME is an unsigned 32-bit count of 1/10000-second ticks since midnight (ISC_TIME_SECONDS_PRECISION, confirmed at src/common/classes/NoThrowTimeStamp.h:74 -- `#define ISC_TIME_SECONDS_PRECISION 10000`).
+// Firebird's own DATE/TIME wire encoding — unlike the gbak backup framing itself (Gotchas: no ratified spec), this part genuinely IS documented Firebird public API behaviour (ISC_DATE/ISC_TIME), and is additionally cross-checked here against the actual open-source engine implementation (src/common/classes/NoThrowTimeStamp.cpp's decode_date/decode_time) rather than taken purely from memory. A SQL DATE is a signed 32-bit day count with day 0 = 17 November 1858 (the Modified Julian Date epoch Firebird/InterBase has always used); a SQL TIME is an unsigned 32-bit count of 1/10000-second ticks since midnight (ISC_TIME_SECONDS_PRECISION, confirmed at src/common/classes/NoThrowTimeStamp.h:74 — `#define ISC_TIME_SECONDS_PRECISION 10000`).
 
 const ISC_TIME_SECONDS_PRECISION = 10000;
 
-// The exact integer algorithm from NoThrowTimeStamp::decode_date, restated in TypeScript -- not reimplemented from a generic Julian-day formula, since the two magic constants (1721119, 2400001) are specific to Firebird's own MJD-based epoch and this reader's own testing is against Firebird's real output, not a general calendar library.
+// The exact integer algorithm from NoThrowTimeStamp::decode_date, restated in TypeScript — not reimplemented from a generic Julian-day formula, since the two magic constants (1721119, 2400001) are specific to Firebird's own MJD-based epoch and this reader's own testing is against Firebird's real output, not a general calendar library.
 export function decodeFirebirdDate(days: number): {
   year: number;
   month: number;
@@ -57,7 +57,7 @@ function pad4(value: number): string {
   return String(value).padStart(4, "0");
 }
 
-// Matches this package's own ContentCellValue 'date' kind's string convention (src/hsqldb/script.ts's own DATE/TIMESTAMP literal handling): an ISO-shaped "YYYY-MM-DD" (or "YYYY-MM-DD HH:MM:SS[.fff]" for a timestamp), never a Date object or epoch number -- ContentCellValue's date/time kinds are both plain strings.
+// Matches this package's own ContentCellValue 'date' kind's string convention (src/hsqldb/script.ts's own DATE/TIMESTAMP literal handling): an ISO-shaped "YYYY-MM-DD" (or "YYYY-MM-DD HH:MM:SS[.fff]" for a timestamp), never a Date object or epoch number — ContentCellValue's date/time kinds are both plain strings.
 export function formatFirebirdDate(days: number): string {
   const { year, month, day } = decodeFirebirdDate(days);
   return `${pad4(year)}-${pad2(month)}-${pad2(day)}`;

@@ -11,7 +11,7 @@ import {
 
 const PLAIN_CELL: TableCellToWrite = { vertMerge: 0, horzMerge: 0 };
 
-// Reuses tap.ts's own Prl-folding logic (via applyTableSprms) as the reader half of a round trip -- exactly what table/write.ts's own real pipeline does, since the row mark's grpprl this writer builds is read back through the identical parser real documents use.
+// Reuses tap.ts's own Prl-folding logic (via applyTableSprms) as the reader half of a round trip — exactly what table/write.ts's own real pipeline does, since the row mark's grpprl this writer builds is read back through the identical parser real documents use.
 function decode(grpprl: readonly number[]): TableRowProperties {
   const prls = readGrpprl(Uint8Array.from(grpprl));
   return applyTableSprms(prls, {});
@@ -187,7 +187,7 @@ describe("encodeTableRowGrpprl", () => {
         break;
       }
     }
-    // One Shd (10 bytes: two 4-byte COLORREFs plus a 2-byte ipat) for the single shaded cell -- not 30, which is what writing all three cells in the window (rather than stopping at the last shaded one) would declare instead.
+    // One Shd (10 bytes: two 4-byte COLORREFs plus a 2-byte ipat) for the single shaded cell — not 30, which is what writing all three cells in the window (rather than stopping at the last shaded one) would declare instead.
     expect(shdLengthByte).toBe(10);
   });
 

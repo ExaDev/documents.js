@@ -17,7 +17,7 @@ import {
   type DrawShapeWriteState,
 } from "./write-shapes";
 
-// This module had no direct unit tests at all -- every function here was only exercised indirectly through typed/odp/write.test.ts and typed/odg/write.test.ts's own whole-document round-trip suites, which (see typed/shared/canonicalise.ts's own top-of-file note) cannot observe a mutation that changes what gets WRITTEN in a way the reader's own inverse tolerates.
+// This module had no direct unit tests at all — every function here was only exercised indirectly through typed/odp/write.test.ts and typed/odg/write.test.ts's own whole-document round-trip suites, which (see typed/shared/canonicalise.ts's own top-of-file note) cannot observe a mutation that changes what gets WRITTEN in a way the reader's own inverse tolerates.
 
 function freshListState(): ListPlanState {
   return { next: 1 };

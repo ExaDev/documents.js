@@ -13,7 +13,7 @@ import {
 } from "./text/style";
 
 const NO_STYLE: StyleTextProps = { paragraphRuns: [], characterRuns: [] };
-// An empty table resolves nothing for any type/level -- these tests are about the paragraph/run-splitting logic buildParagraphs itself owns, not the master cascade (covered separately in document/master.test.ts and read.test.ts's own end-to-end fixture).
+// An empty table resolves nothing for any type/level — these tests are about the paragraph/run-splitting logic buildParagraphs itself owns, not the master cascade (covered separately in document/master.test.ts and read.test.ts's own end-to-end fixture).
 const NO_MASTER_STYLES: MasterStyleTable = { byType: new Map() };
 const NO_COLOR_SCHEME: readonly RgbColor[] = [];
 // Every CharacterProperties field left absent, for a test that only cares about overriding one or two of them.
@@ -139,7 +139,7 @@ describe("buildParagraphs", () => {
   });
 
   it("slices a non-first paragraph's own run at the run's real end, not past it", () => {
-    // A second character run boundary landing inside a later paragraph: the first run's slice must stop at its own extent, not run on to the end of the paragraph's text -- a run of 9 chars into a 13-char paragraph must yield only its own 5 covered characters.
+    // A second character run boundary landing inside a later paragraph: the first run's slice must stop at its own extent, not run on to the end of the paragraph's text — a run of 9 chars into a 13-char paragraph must yield only its own 5 covered characters.
     const style = styleOf(
       [{ count: 17, properties: pfProps(0, undefined) }],
       [
@@ -222,7 +222,7 @@ describe("buildParagraphs", () => {
     expect(build("abc", style, [])[0]?.lineSpacing).toBeUndefined();
   });
 
-  it("converts a ParaSpacing of exactly 0 -- the percentage form's own boundary -- to a line-height multiplier of 0, not undefined", () => {
+  it("converts a ParaSpacing of exactly 0 — the percentage form's own boundary — to a line-height multiplier of 0, not undefined", () => {
     const style = styleOf(
       [
         {

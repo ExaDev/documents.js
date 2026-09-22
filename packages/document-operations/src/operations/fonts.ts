@@ -11,7 +11,7 @@ import {
 } from "../io/document-input";
 import { defineOperation } from "../operation";
 
-// ProvidedFont (pdf-codec, re-exported by documents.js) carries `bytes` directly, with no `byteLength` field of its own -- reported here as a computed byte length rather than the raw embedded font bytes, which no caller of this operation has asked for and would bloat the response by however large the embedded face is. Mirrors document-cli's own FontFaceSummary (src/commands/fonts.ts) exactly, so the CLI and every other consumer report identical shapes for identical input.
+// ProvidedFont (pdf-codec, re-exported by documents.js) carries `bytes` directly, with no `byteLength` field of its own — reported here as a computed byte length rather than the raw embedded font bytes, which no caller of this operation has asked for and would bloat the response by however large the embedded face is. Mirrors document-cli's own FontFaceSummary (src/commands/fonts.ts) exactly, so the CLI and every other consumer report identical shapes for identical input.
 const FontFaceSummarySchema = z.object({
   family: z.string(),
   bold: z.boolean(),
@@ -48,7 +48,7 @@ export const fontsOperation = defineOperation({
   },
 });
 
-// describe_font_file inspects a standalone font FILE, not a document -- a .ttf/.otf is not one of DocumentFormat's members, so it deliberately does not reuse DocumentInputSchema, whose bytesBase64 shape requires a DocumentFormat. A bare path/bytesBase64 union instead, scoped to this one operation -- mirroring odm.ts's own OdmMasterSourceSchema for the identical "this input has no DocumentFormat to carry" problem.
+// describe_font_file inspects a standalone font FILE, not a document — a .ttf/.otf is not one of DocumentFormat's members, so it deliberately does not reuse DocumentInputSchema, whose bytesBase64 shape requires a DocumentFormat. A bare path/bytesBase64 union instead, scoped to this one operation — mirroring odm.ts's own OdmMasterSourceSchema for the identical "this input has no DocumentFormat to carry" problem.
 const FontFileInputSchema = z.union([
   z.object({
     path: z
@@ -65,7 +65,7 @@ interface ResolvedFontFileInput {
   readonly source: string;
 }
 
-// Resolves FontFileInputSchema to raw bytes plus a source label for describeFontFace's own error messages (which always name the file/label a parse failure came from) -- the path itself when given, or a generic label for inline bytes, which carry no filename of their own.
+// Resolves FontFileInputSchema to raw bytes plus a source label for describeFontFace's own error messages (which always name the file/label a parse failure came from) — the path itself when given, or a generic label for inline bytes, which carry no filename of their own.
 async function resolveFontFileInput(
   input: z.infer<typeof FontFileInputSchema>,
 ): Promise<ResolvedFontFileInput> {
@@ -81,7 +81,7 @@ async function resolveFontFileInput(
 
 const DescribeFontFileInputSchema = z.object({
   source: FontFileInputSchema.describe(
-    "The standalone .ttf/.otf font file to inspect -- not a document.",
+    "The standalone .ttf/.otf font file to inspect — not a document.",
   ),
 });
 

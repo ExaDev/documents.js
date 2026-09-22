@@ -8,7 +8,7 @@ import type {
 } from "ooxml.js";
 import { readDocxContent as readDocxFlat } from "ooxml.js";
 
-// The docx metadata readDocxContent (./read.ts) deliberately drops because it genuinely doesn't fit ContentDocument's section/block shape: comments, footnotes, the header/footer layer (headerFooterParts carrying every word/header*/word/footer* part as block flow, referenced or not, plus sectionHeaderFooters' per-section slot references), and numbering (abstractNum/num) definitions. ooxml.js's own readDocxContent (the flat DocxDocument reader since ooxml.js 4.0.0; the bare readDocx name now reads the tree-form DocumentTree) already reads all of it -- this is a thin re-projection of that same call, exposed as its own real return type rather than forced into a shape that doesn't model it. Comment/Footnote/NumberingDefinitions/HeaderFooterPart/SectionHeaderFooterReferences are ooxml.js's own types, reused directly rather than mirrored locally.
+// The docx metadata readDocxContent (./read.ts) deliberately drops because it genuinely doesn't fit ContentDocument's section/block shape: comments, footnotes, the header/footer layer (headerFooterParts carrying every word/header*/word/footer* part as block flow, referenced or not, plus sectionHeaderFooters' per-section slot references), and numbering (abstractNum/num) definitions. ooxml.js's own readDocxContent (the flat DocxDocument reader since ooxml.js 4.0.0; the bare readDocx name now reads the tree-form DocumentTree) already reads all of it — this is a thin re-projection of that same call, exposed as its own real return type rather than forced into a shape that doesn't model it. Comment/Footnote/NumberingDefinitions/HeaderFooterPart/SectionHeaderFooterReferences are ooxml.js's own types, reused directly rather than mirrored locally.
 export interface DocxExtras {
   readonly comments: readonly Comment[];
   readonly footnotes: readonly Footnote[];
@@ -17,7 +17,7 @@ export interface DocxExtras {
   readonly numbering: NumberingDefinitions;
 }
 
-// Package -> DocxExtras. Calls the upstream reader a second time when a caller also calls readDocxContent on the same package -- an accepted cost of two independently-usable pipeline stages (matching every other "each stage independently exported" pair in this codebase) rather than a reason to fuse the two into one combined return shape neither caller asked for.
+// Package -> DocxExtras. Calls the upstream reader a second time when a caller also calls readDocxContent on the same package — an accepted cost of two independently-usable pipeline stages (matching every other "each stage independently exported" pair in this codebase) rather than a reason to fuse the two into one combined return shape neither caller asked for.
 export function readDocxExtras(pkg: Package): DocxExtras {
   const docxDoc = readDocxFlat(pkg);
   return {

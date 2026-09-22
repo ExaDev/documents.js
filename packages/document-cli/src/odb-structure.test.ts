@@ -18,7 +18,7 @@ import {
   loadFormAndReportOdbReports,
 } from "./test-support/odb-fixture";
 
-// Every assertion here is against the real `.odb` fixture (see test-support/odb-fixture.ts for its provenance) read through documents.js's own readOdbForms/readOdbReports -- not a hand-built OdbForm/OdbReport value. A synthetic structure would prove only that this module renders what it was handed; against genuine LibreOffice output it proves the rendering matches the shape the reader beneath it actually produces, including the two things most easily got wrong by assumption: a sub-form sitting on a different command from its parent, and a group key that is an expression rather than a bare column name.
+// Every assertion here is against the real `.odb` fixture (see test-support/odb-fixture.ts for its provenance) read through documents.js's own readOdbForms/readOdbReports — not a hand-built OdbForm/OdbReport value. A synthetic structure would prove only that this module renders what it was handed; against genuine LibreOffice output it proves the rendering matches the shape the reader beneath it actually produces, including the two things most easily got wrong by assumption: a sub-form sitting on a different command from its parent, and a group key that is an expression rather than a bare column name.
 
 function onlyForm(): OdbForm {
   const forms = loadFormAndReportOdbForms();
@@ -50,9 +50,9 @@ describe("form rendering against the real fixture", () => {
   });
 
   it("summarises the form with its href and its own control counts, counting a sub-form's controls too", () => {
-    // Five controls on SalesForm itself plus one on HighValueSubForm; five of the six are field-bound -- only lblHeading, the fixed-text heading, carries no form:data-field.
+    // Five controls on SalesForm itself plus one on HighValueSubForm; five of the six are field-bound — only lblHeading, the fixed-text heading, carries no form:data-field.
     expect(describeOdbForm(onlyForm())).toBe(
-      "SalesForm [forms/Obj11] -- 1 form, 6 controls (5 bound)",
+      "SalesForm [forms/Obj11] — 1 form, 6 controls (5 bound)",
     );
   });
 
@@ -92,7 +92,7 @@ describe("report rendering against the real fixture", () => {
   it("summarises the report with its data-source command and its own group and element counts", () => {
     // Seven report-level elements (1 report header, 2 page header, 2 detail, 0 page footer, 2 report footer) plus three in each of the two groups' own header/footer bands.
     expect(describeOdbReport(onlyReport())).toBe(
-      'SalesByRegion [reports/Obj11] -- on query "HighValueSales", 2 groups, 13 elements',
+      'SalesByRegion [reports/Obj11] — on query "HighValueSales", 2 groups, 13 elements',
     );
   });
 
@@ -132,7 +132,7 @@ describe("report rendering against the real fixture", () => {
   });
 });
 
-// The fixture's own SalesForm/SalesByRegion structures are rich enough to prove real-world fidelity, but every case below sits on a boundary (zero vs one vs many, present vs absent) the one fixture happens to land on only one side of. These build plain OdbForm/OdbReport/OdbFormControl/OdbFormDefinition values directly -- still pure data, never bytes or I/O -- specifically to reach the other side; onlyForm()'s own `document`/`href`/`name` are reused via spread since only `forms` varies here.
+// The fixture's own SalesForm/SalesByRegion structures are rich enough to prove real-world fidelity, but every case below sits on a boundary (zero vs one vs many, present vs absent) the one fixture happens to land on only one side of. These build plain OdbForm/OdbReport/OdbFormControl/OdbFormDefinition values directly — still pure data, never bytes or I/O — specifically to reach the other side; onlyForm()'s own `document`/`href`/`name` are reused via spread since only `forms` varies here.
 describe("form structure edge cases the fixture never reaches", () => {
   it("counts a control's own nested children, not just its top-level siblings", () => {
     const controls: OdbFormControl[] = [
@@ -156,7 +156,7 @@ describe("form structure edge cases the fixture never reaches", () => {
       subForms: [],
     };
     expect(describeOdbForm({ ...base, forms: [definition] })).toBe(
-      `${base.name} [${base.href}] -- 1 form, 1 control (0 bound)`,
+      `${base.name} [${base.href}] — 1 form, 1 control (0 bound)`,
     );
   });
 
@@ -231,7 +231,7 @@ describe("report structure edge cases the fixture never reaches", () => {
       functions: [],
     };
     expect(describeOdbReport(report)).toBe(
-      "PlainReport [reports/Obj1] -- no data source, 0 groups, 0 elements",
+      "PlainReport [reports/Obj1] — no data source, 0 groups, 0 elements",
     );
   });
 
@@ -247,7 +247,7 @@ describe("report structure edge cases the fixture never reaches", () => {
       functions: [],
     };
     expect(describeOdbReport(report)).toBe(
-      "OneOfEach [reports/Obj2] -- no data source, 1 group, 1 element",
+      "OneOfEach [reports/Obj2] — no data source, 1 group, 1 element",
     );
   });
 

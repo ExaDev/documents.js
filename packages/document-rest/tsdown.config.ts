@@ -11,7 +11,7 @@ export default defineConfig([
     fixedExtension: false,
   },
   {
-    // ESM only -- a bin script is executed, never require()'d. Mirrors document-mcp's own tsdown.config.ts bin entry.
+    // ESM only — a bin script is executed, never require()'d. Mirrors document-mcp's own tsdown.config.ts bin entry.
     entry: ["src/bin.ts"],
     format: ["esm"],
     dts: false,

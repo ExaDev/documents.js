@@ -28,7 +28,7 @@ function expectWellFormedHeaderAndTrailer(bytes: Uint8Array): string {
   return text;
 }
 
-// Verifies every in-use entry in a SINGLE, full (0..N) classic xref section points at that object's own "N 0 obj" header -- the same style of check write.test.ts already applies to our own writer's output, applied here to hand-built fixtures instead.
+// Verifies every in-use entry in a SINGLE, full (0..N) classic xref section points at that object's own "N 0 obj" header — the same style of check write.test.ts already applies to our own writer's output, applied here to hand-built fixtures instead.
 function verifyFullClassicXref(bytes: Uint8Array): void {
   const text = decode(bytes);
   const xrefIdx = text.lastIndexOf("\nxref\n") + 1;
@@ -294,7 +294,7 @@ describe("inlineImagePdf", () => {
     expect(text).toContain("BI /W 2 /H 2");
     expect(text).toContain(" ID ");
     expect(text).toContain(" EI Q");
-    // The raw 2x2 RGB pixel bytes themselves must sit between ID and EI -- the substring checks above would pass unchanged even with no pixel data at all. latin1 decoding is one character per byte, so the string index doubles as the byte offset.
+    // The raw 2x2 RGB pixel bytes themselves must sit between ID and EI — the substring checks above would pass unchanged even with no pixel data at all. latin1 decoding is one character per byte, so the string index doubles as the byte offset.
     const pixelStart = text.indexOf(" ID ") + " ID ".length;
     const pixelBytes = [255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0];
     expect([

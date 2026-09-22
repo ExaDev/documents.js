@@ -8,7 +8,7 @@ import {
   FIB_RG_W_OFFSET,
 } from "./offsets";
 
-// The offsets the whole reader depends on, restated here as an independent check rather than only exercised through parseFib: each is the running sum of the field sizes [MS-DOC] 2.5.1 declares for the Fib, and a single wrong one silently shifts every subsequent read onto neighbouring bytes -- exactly the failure mode that produces plausible-looking wrong output instead of an error.
+// The offsets the whole reader depends on, restated here as an independent check rather than only exercised through parseFib: each is the running sum of the field sizes [MS-DOC] 2.5.1 declares for the Fib, and a single wrong one silently shifts every subsequent read onto neighbouring bytes — exactly the failure mode that produces plausible-looking wrong output instead of an error.
 describe("Fib field offsets", () => {
   it("places FibRgW97 after the 32-byte FibBase and its 2-byte count", () => {
     expect(FIB_RG_W_OFFSET).toBe(34);
@@ -123,7 +123,7 @@ describe("parseFib", () => {
     );
   });
 
-  it("no longer refuses fEncrypted itself -- read.ts's own orchestration does, via peekFibBaseFlags, before parseFib ever runs on genuinely encrypted bytes", () => {
+  it("no longer refuses fEncrypted itself — read.ts's own orchestration does, via peekFibBaseFlags, before parseFib ever runs on genuinely encrypted bytes", () => {
     expect(parseFib(buildFib({ fEncrypted: true })).nFib).toBe(0x00c1);
   });
 

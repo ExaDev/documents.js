@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 import { createOdt } from "./editor";
 import { buildParagraph, OdtParagraph } from "./paragraph";
 
-// A genuine, decodable 2x2 PNG (not just a bare magic-number stub) -- mirrors src/test-support/odp.ts's own tinyPngBase64 reasoning: readOdtContent's own image detection (src/odf/image/detect.ts) calls odf.js's own readDrawImageBlock, which sniffs the actual bytes and returns undefined for anything it cannot recognise as a real image format.
+// A genuine, decodable 2x2 PNG (not just a bare magic-number stub) — mirrors src/test-support/odp.ts's own tinyPngBase64 reasoning: readOdtContent's own image detection (src/odf/image/detect.ts) calls odf.js's own readDrawImageBlock, which sniffs the actual bytes and returns undefined for anything it cannot recognise as a real image format.
 function tinyPngBytes(): Uint8Array<ArrayBuffer> {
   return encodePng({
     width: 2,
@@ -117,7 +117,7 @@ describe("buildParagraph", () => {
     expect(paragraph.styleId).toBe("Standard");
   });
 
-  // styleId and alignment both ultimately target the same text:style-name attribute (ODF has no separate inline alignment attribute the way WordprocessingML's w:jc is independent of w:pStyle) -- applying alignment always resolve-merges-interns a fresh automatic style and repoints text:style-name at it, so a styleId set earlier in the same buildParagraph call is superseded, not layered underneath. This is the same direct-formatting-flattens-the-cascade trade-off applyStyleChange's own comment (props.ts) documents for any two sequential setter calls, styleId included.
+  // styleId and alignment both ultimately target the same text:style-name attribute (ODF has no separate inline alignment attribute the way WordprocessingML's w:jc is independent of w:pStyle) — applying alignment always resolve-merges-interns a fresh automatic style and repoints text:style-name at it, so a styleId set earlier in the same buildParagraph call is superseded, not layered underneath. This is the same direct-formatting-flattens-the-cascade trade-off applyStyleChange's own comment (props.ts) documents for any two sequential setter calls, styleId included.
   it("alignment applied after styleId supersedes styleId, rather than layering under it", () => {
     const editor = createOdt();
     const paragraphElement = buildParagraph(editor.toPackage(), {
@@ -134,7 +134,7 @@ describe("buildParagraph", () => {
     expect(paragraph.styleId).not.toBe("Standard");
   });
 
-  // A heading is a distinct ODF ELEMENT (text:h + text:outline-level), not a text:p with a heading-ish style name -- and the style spelling ODF resolves is Heading_20_2 (ODF's _20_ escape for the space in "Heading 2"), never the synthetic cross-format "Heading2" shape the flat ContentDocument carries in styleId. The paragraph's own init carries both spellings of the same depth for exactly the reason odf.js's own reader derives both from the one text:h element (typed/shared/paragraph.ts's readParagraphOrHeading): one element state, two consumers (styleId-keyed and numeric), no way for them to disagree.
+  // A heading is a distinct ODF ELEMENT (text:h + text:outline-level), not a text:p with a heading-ish style name — and the style spelling ODF resolves is Heading_20_2 (ODF's _20_ escape for the space in "Heading 2"), never the synthetic cross-format "Heading2" shape the flat ContentDocument carries in styleId. The paragraph's own init carries both spellings of the same depth for exactly the reason odf.js's own reader derives both from the one text:h element (typed/shared/paragraph.ts's readParagraphOrHeading): one element state, two consumers (styleId-keyed and numeric), no way for them to disagree.
   it("builds a real text:h with text:outline-level and the Heading_20_N style spelling for a headingLevel init", () => {
     const editor = createOdt();
     const paragraphElement = buildParagraph(editor.toPackage(), {
@@ -169,7 +169,7 @@ describe("OdtParagraph.headingLevel", () => {
     const paragraph = editor.body.appendParagraph({ text: "Chapter" });
     expect(paragraph.headingLevel).toBeUndefined();
     paragraph.headingLevel = 3;
-    // The promote is a tag rename on the SAME element, not a remove-and-reinsert -- the live view keeps working, and editor.paragraphs() (which surfaces text:p and text:h both, see its own comment) still lists the paragraph as the heading it now is.
+    // The promote is a tag rename on the SAME element, not a remove-and-reinsert — the live view keeps working, and editor.paragraphs() (which surfaces text:p and text:h both, see its own comment) still lists the paragraph as the heading it now is.
     expect(paragraph.headingLevel).toBe(3);
     expect(paragraph.text).toBe("Chapter");
     expect(editor.paragraphs()).toHaveLength(1);

@@ -36,7 +36,7 @@ describe("RotationField", () => {
 
   it("rounds floating-point rotation noise to a clean display value", () => {
     const { lastFrame } = render(
-      // documents.js's own rotation setter can round-trip a clean 15 into 14.999999999999998 (confirmed empirically) -- this must never leak into the UI.
+      // documents.js's own rotation setter can round-trip a clean 15 into 14.999999999999998 (confirmed empirically) — this must never leak into the UI.
       <RotationField
         rotationDeg={14.999999999999998}
         isSelected={false}

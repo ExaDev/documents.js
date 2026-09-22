@@ -82,7 +82,7 @@ describe("ensureDefaultContentType", () => {
   it("does not mistake an Override element carrying the same Extension attribute value for an existing Default", () => {
     const pkg = emptyPackage();
     ensureContentTypeOverride(pkg, "png", "image/png");
-    // Force an Extension attribute onto that Override entry, matching what ensureDefaultContentType would look for on a Default -- proving the presence check keys on the element's own tag, not merely on the attribute value.
+    // Force an Extension attribute onto that Override entry, matching what ensureDefaultContentType would look for on a Default — proving the presence check keys on the element's own tag, not merely on the attribute value.
     const [override] = findChildElements(rootChildren(pkg), "Override");
     if (override !== undefined) {
       override.node.attributes.push({ name: "Extension", value: "png" });
@@ -111,7 +111,7 @@ describe("ensureContentTypeOverride", () => {
     expect(findChildElements(rootChildren(pkg), "Override")).toHaveLength(1);
   });
 
-  // A sibling element that merely happens to carry a matching PartName attribute must not be mistaken for an existing Override -- the scan has to check the element's own tag, not just its PartName, or a same-named non-Override child would suppress the real Override this call is meant to add. No real Override exists yet, so a scan that matched on PartName alone would wrongly conclude one is already present and add nothing.
+  // A sibling element that merely happens to carry a matching PartName attribute must not be mistaken for an existing Override — the scan has to check the element's own tag, not just its PartName, or a same-named non-Override child would suppress the real Override this call is meant to add. No real Override exists yet, so a scan that matched on PartName alone would wrongly conclude one is already present and add nothing.
   it("does not treat a non-Override element with a matching PartName as an existing entry", () => {
     const pkg = emptyPackage();
     ensureDefaultContentType(pkg, "png", "image/png");

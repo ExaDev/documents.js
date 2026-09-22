@@ -31,7 +31,7 @@ export function readWorkspacePackage(
   return { name: parsed.name, directory, private: parsed.private === true };
 }
 
-// Derives the set of workspace package directories a diff touches from the changed file paths alone -- a package is in scope if any file under its own packages/<directory>/ changed, not only when its package.json did, since a pull request adding source files to an already-registered-but-still-new package is exactly the case someone is already looking at it and could bootstrap it.
+// Derives the set of workspace package directories a diff touches from the changed file paths alone — a package is in scope if any file under its own packages/<directory>/ changed, not only when its package.json did, since a pull request adding source files to an already-registered-but-still-new package is exactly the case someone is already looking at it and could bootstrap it.
 export function touchedPackageDirectories(
   changedPaths: readonly string[],
 ): ReadonlySet<string> {

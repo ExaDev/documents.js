@@ -1,6 +1,6 @@
 import type { Box, Point } from "document-schema.js";
 
-// Converts a Box from a top-left-origin, y-down coordinate space (OOXML's own convention, and ContentShape.frame's) into a bottom-left-origin, y-up space (PDF's own convention, and every LayoutItem's) of the given total height, or back again -- the transform is its own exact inverse. This did NOT move to document-schema.js: it's PDF-specific, a concern document-schema.js has no notion of.
+// Converts a Box from a top-left-origin, y-down coordinate space (OOXML's own convention, and ContentShape.frame's) into a bottom-left-origin, y-up space (PDF's own convention, and every LayoutItem's) of the given total height, or back again — the transform is its own exact inverse. This did NOT move to document-schema.js: it's PDF-specific, a concern document-schema.js has no notion of.
 export function flipY(box: Box, containerHeightPt: number): Box {
   return {
     xPt: box.xPt,

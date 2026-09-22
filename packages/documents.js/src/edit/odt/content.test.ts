@@ -30,7 +30,7 @@ import {
 import { buildOdtPackage } from "./content";
 import { OdtEditor } from "./editor";
 
-// A genuine, decodable 2x2 PNG -- readOdtContent's own image detection (src/odf/image/detect.ts) calls odf.js's own readDrawImageBlock, which sniffs the actual bytes and returns undefined for anything it cannot recognise as a real image format.
+// A genuine, decodable 2x2 PNG — readOdtContent's own image detection (src/odf/image/detect.ts) calls odf.js's own readDrawImageBlock, which sniffs the actual bytes and returns undefined for anything it cannot recognise as a real image format.
 function tinyPngBase64(): string {
   return bytesToBase64(
     encodePng({
@@ -70,7 +70,7 @@ function officeText(pkg: Package): XmlElement {
   return text;
 }
 
-// Every vector this package wrote into a text document's flow, read back through odf.js's OWN readDrawPageContent -- the same reader readOdgContent uses for a real drawing page -- rather than through an inverse written alongside the writer. A text-anchored vector lives inside the text:p it is anchored to (see OdtBody.appendVectors), so this hands that paragraph's children to the reader exactly as readOdg hands it a draw:page's.
+// Every vector this package wrote into a text document's flow, read back through odf.js's OWN readDrawPageContent — the same reader readOdgContent uses for a real drawing page — rather than through an inverse written alongside the writer. A text-anchored vector lives inside the text:p it is anchored to (see OdtBody.appendVectors), so this hands that paragraph's children to the reader exactly as readOdg hands it a draw:page's.
 function readFlowVectors(pkg: Package): ContentVector[] {
   return childrenWithTag(officeText(pkg), "text:p").flatMap(
     (paragraph) => readDrawPageContent(paragraph.children, pkg).vectors,
@@ -171,7 +171,7 @@ describe("buildOdtPackage", () => {
   });
 
   it("drops a residue-less index contentControl pair by name rather than guessing a wrapper", () => {
-    // No *-source residue means no fact naming which of the seven wrappers to write -- the pair restores nothing, and the bracketed content still writes.
+    // No *-source residue means no fact naming which of the seven wrappers to write — the pair restores nothing, and the bracketed content still writes.
     const content = wordDoc([
       {
         pageSize: { widthPt: 612, heightPt: 792 },
@@ -371,12 +371,12 @@ describe("buildOdtPackage", () => {
     ]);
     const editor = new OdtEditor(buildOdtPackage(content));
     const [paragraph] = editor.paragraphs();
-    // runs() only surfaces text:span children, and the tab was written as a bare text:tab (not wrapped in a span) -- so paragraph.text (which does see it, via decodeOdfText) carries the tab, but runs() shows only the two real spans.
+    // runs() only surfaces text:span children, and the tab was written as a bare text:tab (not wrapped in a span) — so paragraph.text (which does see it, via decodeOdfText) carries the tab, but runs() shows only the two real spans.
     expect(paragraph!.runs().map((r) => r.text)).toEqual(["Left", "Right"]);
     expect(paragraph!.text).toBe("Left\tRight");
   });
 
-  // The heading contract the whole bridge hangs off: a paragraph carrying the canonical headingLevel becomes a real text:h element with text:outline-level and the ODF Heading_20_N style spelling -- never the producer's verbatim "Heading2", a synthetic cross-format shape no odt defines. Read back, odf.js's readParagraphOrHeading derives both spellings from the one text:h, restoring the exact input.
+  // The heading contract the whole bridge hangs off: a paragraph carrying the canonical headingLevel becomes a real text:h element with text:outline-level and the ODF Heading_20_N style spelling — never the producer's verbatim "Heading2", a synthetic cross-format shape no odt defines. Read back, odf.js's readParagraphOrHeading derives both spellings from the one text:h, restoring the exact input.
   it("writes a headingLevel paragraph as a real text:h, not a styled text:p, and round-trips it", () => {
     const content = wordDoc([
       {
@@ -411,7 +411,7 @@ describe("buildOdtPackage", () => {
     });
   });
 
-  // The promote lands BEFORE the applyStyleChange-based setters, so alignment resolves the heading style's own cascade and layers on top of it -- both facts then survive the round trip together, rather than the alignment intern repointing the paragraph away from its heading identity or vice versa.
+  // The promote lands BEFORE the applyStyleChange-based setters, so alignment resolves the heading style's own cascade and layers on top of it — both facts then survive the round trip together, rather than the alignment intern repointing the paragraph away from its heading identity or vice versa.
   it("layers paragraph properties on top of the promoted heading style", () => {
     const content = wordDoc([
       {
@@ -455,7 +455,7 @@ describe("buildOdtPackage", () => {
       },
     ]);
     const pkg = buildOdtPackage(content);
-    // text:list-item directly contains its member text:p/text:h elements -- the heading sits inside the item, not beside the list.
+    // text:list-item directly contains its member text:p/text:h elements — the heading sits inside the item, not beside the list.
     expect(elementsWithTag([officeText(pkg)], "text:h")).toHaveLength(1);
     const roundTripped = readOdtContent(pkg);
     if (roundTripped.kind !== "wordprocessing") {
@@ -469,7 +469,7 @@ describe("buildOdtPackage", () => {
     });
   });
 
-  // A table cell is one of the three ODF containers whose content model carries text:h, and odf.js's own cell reader reads one back with full heading identity (typed/shared/table.ts), so the writer promotes a cell heading exactly as a body paragraph -- the write/read pair this round trip proves. This closes the last container where headingLevel used to degrade to a plain styled text:p on the odt side.
+  // A table cell is one of the three ODF containers whose content model carries text:h, and odf.js's own cell reader reads one back with full heading identity (typed/shared/table.ts), so the writer promotes a cell heading exactly as a body paragraph — the write/read pair this round trip proves. This closes the last container where headingLevel used to degrade to a plain styled text:p on the odt side.
   it("writes a heading paragraph inside a table cell as the text:h the reader reads back", () => {
     const content = wordDoc([
       {
@@ -673,7 +673,7 @@ describe("buildOdtPackage", () => {
     if (tableBlock?.kind !== "table") {
       throw new Error("expected a table block");
     }
-    // ODF writes a real table:covered-table-cell placeholder for the consumed column, unlike docx's gridSpan-collapse -- so this row still reports two cells.
+    // ODF writes a real table:covered-table-cell placeholder for the consumed column, unlike docx's gridSpan-collapse — so this row still reports two cells.
     expect(tableBlock.rows[0]?.cells).toHaveLength(2);
     expect(tableBlock.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(tableBlock.rows[0]?.cells[0]?.blocks[0]).toMatchObject({
@@ -881,14 +881,14 @@ describe("buildOdtPackage", () => {
       p.startsWith("Pictures/"),
     );
     expect(mediaParts).toHaveLength(1);
-    // A bare image block with no preceding paragraph still gets one real text:p to anchor into (appendBlock's own 'image' case, mirroring buildDocxPackage's identical fallback) -- exactly one physical paragraph was written.
+    // A bare image block with no preceding paragraph still gets one real text:p to anchor into (appendBlock's own 'image' case, mirroring buildDocxPackage's identical fallback) — exactly one physical paragraph was written.
     expect(new OdtEditor(pkg).paragraphs()).toHaveLength(1);
 
     const recovered = readOdtContent(decodePackage(encodePackage(pkg)));
     if (recovered.kind !== "wordprocessing") {
       throw new Error("expected a wordprocessing ContentDocument");
     }
-    // readOdtContent's own image detection never consumes the paragraph it finds the image in (see src/odf/odt/read.ts's own top-of-file comment) -- so the single physical text:p reads back as an empty paragraph block immediately followed by the image block, the identical two-block shape ooxml.js's own readDocx produces for a docx inline image with no surrounding text.
+    // readOdtContent's own image detection never consumes the paragraph it finds the image in (see src/odf/odt/read.ts's own top-of-file comment) — so the single physical text:p reads back as an empty paragraph block immediately followed by the image block, the identical two-block shape ooxml.js's own readDocx produces for a docx inline image with no surrounding text.
     expect(recovered.sections[0]!.blocks.map((block) => block.kind)).toEqual([
       "paragraph",
       "image",
@@ -921,7 +921,7 @@ describe("buildOdtPackage", () => {
       },
     ]);
     const pkg = buildOdtPackage(content);
-    // Exactly three real text:p elements were written -- if the merge failed, the empty run-carrying paragraph and its image would have landed as two separate paragraphs, producing four.
+    // Exactly three real text:p elements were written — if the merge failed, the empty run-carrying paragraph and its image would have landed as two separate paragraphs, producing four.
     const editor = new OdtEditor(pkg);
     expect(editor.paragraphs().map((p) => p.text)).toEqual([
       "Before",
@@ -929,7 +929,7 @@ describe("buildOdtPackage", () => {
       "After",
     ]);
 
-    // Reading the three physical paragraphs back splits the merged one into its own [paragraph, image] pair again (see the test above), so the four LOGICAL blocks the source declared survive exactly -- the merge only ever avoids an extra spurious PHYSICAL paragraph, never a logical one.
+    // Reading the three physical paragraphs back splits the merged one into its own [paragraph, image] pair again (see the test above), so the four LOGICAL blocks the source declared survive exactly — the merge only ever avoids an extra spurious PHYSICAL paragraph, never a logical one.
     const recovered = readOdtContent(decodePackage(encodePackage(pkg)));
     if (recovered.kind !== "wordprocessing") {
       throw new Error("expected a wordprocessing ContentDocument");

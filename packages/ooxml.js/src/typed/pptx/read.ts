@@ -64,7 +64,7 @@ import { readDiagramResidue, readDiagramText } from "./diagram";
 
 // Package -> PptxDocument. Walks PresentationML directly: document order, placeholder inheritance, and theme resolution all matter for conversion fidelity in a way a flat text/shape-list projection doesn't preserve. Ported from documents.js's src/ooxml/pptx/read.ts.
 //
-// This is the flat, content-level half of the pptx read pair: readPptx (typed/document-tree.ts) wraps it into a tree-form DocumentTree, which is the primary name. Both are read-only -- this package has no PresentationML writer, so neither has an inverse.
+// This is the flat, content-level half of the pptx read pair: readPptx (typed/document-tree.ts) wraps it into a tree-form DocumentTree, which is the primary name. Both are read-only — this package has no PresentationML writer, so neither has an inverse.
 
 export const PptxDocumentSchema = z.object({
   metadata: DocumentMetadataSchema,
@@ -72,7 +72,7 @@ export const PptxDocumentSchema = z.object({
 });
 export type PptxDocument = z.infer<typeof PptxDocumentSchema>;
 
-// The conventional name for the presentation part. OPC names it through the package root's own officeDocument relationship, so this is only the fallback for a package that declares no usable one -- see typed/opc.ts.
+// The conventional name for the presentation part. OPC names it through the package root's own officeDocument relationship, so this is only the fallback for a package that declares no usable one — see typed/opc.ts.
 const CONVENTIONAL_PRESENTATION_PATH = "ppt/presentation.xml";
 const SLIDE_REL_TYPE =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
@@ -97,7 +97,7 @@ function readSlideSize(presentationRoot: XmlElement | undefined): PageSize {
     : { widthPt: emuToPt(Number(cx)), heightPt: emuToPt(Number(cy)) };
 }
 
-// Slide order comes from p:presentation/p:sldIdLst, resolved through the presentation's own relationships -- never from slide part filenames, which carry no ordering guarantee.
+// Slide order comes from p:presentation/p:sldIdLst, resolved through the presentation's own relationships — never from slide part filenames, which carry no ordering guarantee.
 function readSlidePathsInOrder(
   pkg: Package,
   presentationPath: string,
@@ -170,7 +170,7 @@ function readHyperlink(
   return rel?.targetMode === "External" ? rel.target : undefined;
 }
 
-// An a:hlinkClick whose relationship is an internal reference to another slide (relationship type .../slide, no TargetMode): PresentationML addresses slide jumps by part relationship, never by name, so the run-level `link` construct's internal anchor carries the target slide's package part path -- resolveRelationships' normalised spelling (e.g. 'ppt/slides/slide2.xml'), the document-unique string the file itself spells, which a resolver matches against the slides the presentation part orders. An action-only jump (ppaction://hlinkshowjump, no r:id) and a non-slide internal target (a custom show, an OLE action) name nothing this model carries and stay unrecorded.
+// An a:hlinkClick whose relationship is an internal reference to another slide (relationship type .../slide, no TargetMode): PresentationML addresses slide jumps by part relationship, never by name, so the run-level `link` construct's internal anchor carries the target slide's package part path — resolveRelationships' normalised spelling (e.g. 'ppt/slides/slide2.xml'), the document-unique string the file itself spells, which a resolver matches against the slides the presentation part orders. An action-only jump (ppaction://hlinkshowjump, no r:id) and a non-slide internal target (a custom show, an OLE action) name nothing this model carries and stay unrecorded.
 function readInternalSlideJump(
   runEl: XmlElement,
   slideRels: ReadonlyMap<string, Relationship>,
@@ -189,7 +189,7 @@ function readInternalSlideJump(
     : undefined;
 }
 
-// Reads a single run's text/formatting, given the cascade base already resolved for its paragraph (master txStyles default, overridden by the paragraph's own a:pPr/a:defRPr if present). Shared by a:r and a:fld (a cached dynamic field, e.g. slide number/date) -- both carry the identical a:rPr + a:t shape.
+// Reads a single run's text/formatting, given the cascade base already resolved for its paragraph (master txStyles default, overridden by the paragraph's own a:pPr/a:defRPr if present). Shared by a:r and a:fld (a cached dynamic field, e.g. slide number/date) — both carry the identical a:rPr + a:t shape.
 function readRun(
   runEl: XmlElement,
   cascadeBase: DefaultRunProperties,
@@ -230,7 +230,7 @@ function readAlignment(algn: string | undefined): Alignment | undefined {
   return undefined;
 }
 
-// a:spcBef/a:spcAft wrap either an absolute a:spcPts (hundredths of a point, the same scale as run font size) or a relative a:spcPct (percentage of line height). Only the absolute form is read -- resolving a percentage needs the paragraph's own effective font size, which complicates this reader for a case real-world content uses far less often than the absolute form.
+// a:spcBef/a:spcAft wrap either an absolute a:spcPts (hundredths of a point, the same scale as run font size) or a relative a:spcPct (percentage of line height). Only the absolute form is read — resolving a percentage needs the paragraph's own effective font size, which complicates this reader for a case real-world content uses far less often than the absolute form.
 function readAbsoluteSpacingPt(
   spc: XmlElement | undefined,
 ): number | undefined {
@@ -289,7 +289,7 @@ function readParagraph(
         );
 
   const runs: ContentRun[] = [];
-  // A dynamic field (a:fld) reads as an ordinary run AND records a field run construct covering exactly that run: the run's text is the rendered content, the construct's instruction is @type and its cachedResult the cached a:t -- the two-fact spelling document-schema.js's FieldDescriptor itself names pptx for. A fld with no @type carries no field-ness worth recording and stays an ordinary run. An internal slide-jump link records a `link` construct over the same single run (DrawingML hangs hyperlinks off each run's own rPr, so one link is always exactly one run); fields first, then links, both in walk order -- the two families concatenate rather than interleave for the same reason the docx walk's do: extents are data on the paragraph, never brackets, so no ordering between families is load-bearing.
+  // A dynamic field (a:fld) reads as an ordinary run AND records a field run construct covering exactly that run: the run's text is the rendered content, the construct's instruction is @type and its cachedResult the cached a:t — the two-fact spelling document-schema.js's FieldDescriptor itself names pptx for. A fld with no @type carries no field-ness worth recording and stays an ordinary run. An internal slide-jump link records a `link` construct over the same single run (DrawingML hangs hyperlinks off each run's own rPr, so one link is always exactly one run); fields first, then links, both in walk order — the two families concatenate rather than interleave for the same reason the docx walk's do: extents are data on the paragraph, never brackets, so no ordering between families is load-bearing.
   const fieldExtents: RunConstructExtent[] = [];
   const linkExtents: RunConstructExtent[] = [];
   for (const child of pEl.children) {
@@ -340,7 +340,7 @@ function readParagraph(
       ? { constructs: [...fieldExtents, ...linkExtents] }
       : {}),
     alignment: pPr === undefined ? undefined : readAlignment(attr(pPr, "algn")),
-    // DrawingML paragraphs carry only an outline depth, never a numbering identity (no numPr exists in a:pPr), so list is emitted with level alone -- numId optional since document-schema.js 3.3.0 -- and a fabricated numId would be a lie in the data. An absent (or malformed) @lvl emits no list rather than a redundant { level: 0 }: absent means the body placeholder's default level 0, and outline consumers already treat a missing list as level 0, so the zero would carry no information.
+    // DrawingML paragraphs carry only an outline depth, never a numbering identity (no numPr exists in a:pPr), so list is emitted with level alone — numId optional since document-schema.js 3.3.0 — and a fabricated numId would be a lie in the data. An absent (or malformed) @lvl emits no list rather than a redundant { level: 0 }: absent means the body placeholder's default level 0, and outline consumers already treat a missing list as level 0, so the zero would carry no information.
     list: outlineLevel === undefined ? undefined : { level: outlineLevel },
     spacingBeforePt: readAbsoluteSpacingPt(
       pPr === undefined ? undefined : childrenWithTag(pPr, "a:spcBef")[0],
@@ -390,7 +390,7 @@ const NO_TEXT_BODY_EXTRAS: ShapeTextExtras = {
   lineSpacingReduction: undefined,
 };
 
-// Reads a:bodyPr's insets (falling back to ECMA-376's own defaults) and any a:normAutofit-computed shrinkage. A shape with no p:txBody at all (a picture, a table frame) has no text body properties to read -- its insets are genuinely zero, not a missing/defaulted value, since nothing ever positions text against them.
+// Reads a:bodyPr's insets (falling back to ECMA-376's own defaults) and any a:normAutofit-computed shrinkage. A shape with no p:txBody at all (a picture, a table frame) has no text body properties to read — its insets are genuinely zero, not a missing/defaulted value, since nothing ever positions text against them.
 function readShapeTextExtras(txBody: XmlElement | undefined): ShapeTextExtras {
   if (txBody === undefined) {
     return NO_TEXT_BODY_EXTRAS;
@@ -430,7 +430,7 @@ function readShapeTextExtras(txBody: XmlElement | undefined): ShapeTextExtras {
   };
 }
 
-// p:spPr (shape properties, holding a:xfrm) is named identically on both p:sp and p:pic -- the only two callers of this function.
+// p:spPr (shape properties, holding a:xfrm) is named identically on both p:sp and p:pic — the only two callers of this function.
 function resolveShapeFrame(
   shape: XmlElement,
   context: SlideInheritanceContext,
@@ -491,7 +491,7 @@ function readSpShape(
   };
 }
 
-// Resolves the first a:blip/@r:embed anywhere under parent (a p:pic's own p:blipFill, or an OLE object's fallback p:pic nested inside a:graphicData's mc:AlternateContent) through the slide's relationships to a sniffed ContentImageBlock sized to the given frame -- undefined when the id, relationship, part, or magic bytes don't line up, leaving the shape with no image content. Alt text comes from the nearest p:cNvPr's @descr (falling back to @title) under the same parent -- p:cNvPr is CT_NonVisualDrawingProps, the identical element docx's own w:docPr shares (ECMA-376 20.1.2.2.8), so this mirrors typed/docx/read.ts's readDrawingImage exactly and is what documents.js's own pptx picture writer (edit/pptx/shape.ts's buildPictureShape) writes descr against.
+// Resolves the first a:blip/@r:embed anywhere under parent (a p:pic's own p:blipFill, or an OLE object's fallback p:pic nested inside a:graphicData's mc:AlternateContent) through the slide's relationships to a sniffed ContentImageBlock sized to the given frame — undefined when the id, relationship, part, or magic bytes don't line up, leaving the shape with no image content. Alt text comes from the nearest p:cNvPr's @descr (falling back to @title) under the same parent — p:cNvPr is CT_NonVisualDrawingProps, the identical element docx's own w:docPr shares (ECMA-376 20.1.2.2.8), so this mirrors typed/docx/read.ts's readDrawingImage exactly and is what documents.js's own pptx picture writer (edit/pptx/shape.ts's buildPictureShape) writes descr against.
 function readBlipImage(
   parent: XmlElement,
   slideRels: ReadonlyMap<string, Relationship>,
@@ -550,7 +550,7 @@ function readPicShape(
   };
 }
 
-// DrawingML's own preset dash vocabulary (a:prstDash/@val, ECMA-376 20.1.10.48) has no 'double' member -- documents.js's own src/edit/drawingml/vector.ts notes this same gap on the write side -- and several of its members are dash-dot variants ContentStrokeStyle's four values can't distinguish individually, so each collapses onto whichever of solid/dashed/dotted it visually resembles most closely: the same "narrow to the closest matching value" convention typed/docx/read.ts's own BORDER_STYLE_MAP and typed/xlsx/styles.ts's own border-style table already apply to their own formats' larger enumerations.
+// DrawingML's own preset dash vocabulary (a:prstDash/@val, ECMA-376 20.1.10.48) has no 'double' member — documents.js's own src/edit/drawingml/vector.ts notes this same gap on the write side — and several of its members are dash-dot variants ContentStrokeStyle's four values can't distinguish individually, so each collapses onto whichever of solid/dashed/dotted it visually resembles most closely: the same "narrow to the closest matching value" convention typed/docx/read.ts's own BORDER_STYLE_MAP and typed/xlsx/styles.ts's own border-style table already apply to their own formats' larger enumerations.
 const DRAWINGML_DASH_STYLE_MAP: ReadonlyMap<string, ContentStrokeStyle> =
   new Map([
     ["solid", "solid"],
@@ -566,7 +566,7 @@ const DRAWINGML_DASH_STYLE_MAP: ReadonlyMap<string, ContentStrokeStyle> =
     ["lgDashDotDot", "dashed"],
   ]);
 
-// One a:tcPr child among a:lnL/a:lnR/a:lnT/a:lnB (ECMA-376 21.1.3.2-5, each a CT_LineProperties) -- the DrawingML table cell's own per-edge border, the pptx-side counterpart to WordprocessingML's w:tcBorders edges (typed/docx/read.ts's readCellBorderEdge). @w is the edge's width in EMU and an a:solidFill child names its colour, resolved through the same scheme-colour-aware readSolidFillColor this cell's own background fill already uses rather than the write side's own srgbClr-only shortcut (src/edit/pptx/table.ts), so a theme-coloured border resolves correctly too; an optional a:prstDash child names its dash pattern. An edge missing @w, whose @w doesn't resolve to a positive number (non-numeric, zero, or negative), or whose colour doesn't resolve (no a:solidFill, or one this reader can't resolve to a Color -- including an explicit a:noFill), reads as no border on that side: ContentBorderSchema requires both a resolved colour and a positive widthPt, so an edge failing either has no valid ContentBorder to construct -- unlike WordprocessingML's own readCellBorderEdge, which defaults an absent width to half a point and an absent colour to black rather than dropping the edge, since w:tcBorders only ever omits @w:sz/@w:color on a genuine (non-nil/none) edge.
+// One a:tcPr child among a:lnL/a:lnR/a:lnT/a:lnB (ECMA-376 21.1.3.2-5, each a CT_LineProperties) — the DrawingML table cell's own per-edge border, the pptx-side counterpart to WordprocessingML's w:tcBorders edges (typed/docx/read.ts's readCellBorderEdge). @w is the edge's width in EMU and an a:solidFill child names its colour, resolved through the same scheme-colour-aware readSolidFillColor this cell's own background fill already uses rather than the write side's own srgbClr-only shortcut (src/edit/pptx/table.ts), so a theme-coloured border resolves correctly too; an optional a:prstDash child names its dash pattern. An edge missing @w, whose @w doesn't resolve to a positive number (non-numeric, zero, or negative), or whose colour doesn't resolve (no a:solidFill, or one this reader can't resolve to a Color — including an explicit a:noFill), reads as no border on that side: ContentBorderSchema requires both a resolved colour and a positive widthPt, so an edge failing either has no valid ContentBorder to construct — unlike WordprocessingML's own readCellBorderEdge, which defaults an absent width to half a point and an absent colour to black rather than dropping the edge, since w:tcBorders only ever omits @w:sz/@w:color on a genuine (non-nil/none) edge.
 function readTableCellBorderEdge(
   tcPr: XmlElement,
   tag: "a:lnL" | "a:lnR" | "a:lnT" | "a:lnB",
@@ -601,7 +601,7 @@ function readTableCellBorderEdge(
   };
 }
 
-// a:tcPr's own a:lnL/a:lnR/a:lnT/a:lnB (ECMA-376 21.1.3.2-5) -- the pptx-side counterpart to WordprocessingML's w:tcBorders (typed/docx/read.ts's readCellBorders). Returns undefined when the cell carries no a:tcPr at all, or a:tcPr with every edge unresolvable, matching readCellBorders' own "no information vs information-but-empty are the same absent result" convention.
+// a:tcPr's own a:lnL/a:lnR/a:lnT/a:lnB (ECMA-376 21.1.3.2-5) — the pptx-side counterpart to WordprocessingML's w:tcBorders (typed/docx/read.ts's readCellBorders). Returns undefined when the cell carries no a:tcPr at all, or a:tcPr with every edge unresolvable, matching readCellBorders' own "no information vs information-but-empty are the same absent result" convention.
 function readTableCellBorders(
   tcPr: XmlElement | undefined,
   context: SlideInheritanceContext,
@@ -637,7 +637,7 @@ function readTableCellBorders(
   return borders;
 }
 
-// DrawingML's a:pattFill preset pattern vocabulary (ECMA-376 Part 1 20.1.8.36, ST_PresetPatternVal) has 54 members -- directional hatches (horz/vert/diag and their light/dark/narrow/dashed variants), checks, grids, bricks, diamonds, and pictorial fills (sphere/wave/weave/divot/shingle/plaid/zigZag/confetti among them) -- but ContentCellPatternTypeSchema is deliberately closed to exactly two other vocabularies (WordprocessingML's ST_Shd and SpreadsheetML's ST_PatternType, per that schema's own comment in document-schema.js), which the two share only their dozen percentage-density members. Only that overlap maps; every other preset resolves to no background at all, matching the existing "unrecognised token -> no fill" convention this reader already applies to an a:solidFill it cannot resolve to a Color.
+// DrawingML's a:pattFill preset pattern vocabulary (ECMA-376 Part 1 20.1.8.36, ST_PresetPatternVal) has 54 members — directional hatches (horz/vert/diag and their light/dark/narrow/dashed variants), checks, grids, bricks, diamonds, and pictorial fills (sphere/wave/weave/divot/shingle/plaid/zigZag/confetti among them) — but ContentCellPatternTypeSchema is deliberately closed to exactly two other vocabularies (WordprocessingML's ST_Shd and SpreadsheetML's ST_PatternType, per that schema's own comment in document-schema.js), which the two share only their dozen percentage-density members. Only that overlap maps; every other preset resolves to no background at all, matching the existing "unrecognised token -> no fill" convention this reader already applies to an a:solidFill it cannot resolve to a Color.
 const DRAWINGML_PATTERN_PERCENT_MAP: ReadonlyMap<
   string,
   ContentCellPatternType
@@ -656,7 +656,7 @@ const DRAWINGML_PATTERN_PERCENT_MAP: ReadonlyMap<
   ["pct90", "percent90"],
 ]);
 
-// A DrawingML a:pattFill's own two-colour density fill (ECMA-376 20.1.8.36 CT_PatternFillProperties): @prst names the pattern, and a:fgClr/a:bgClr each wrap a colour choice the same way a:solidFill itself does, so both resolve through the same scheme-colour-aware readSolidFillColor a cell's own solid background and border colours already use. Returns undefined for a preset outside DRAWINGML_PATTERN_PERCENT_MAP's mapped subset -- ContentCellFillSchema's 'pattern' variant needs a real patternType to be worth constructing at all, and there is no member here to fall back to.
+// A DrawingML a:pattFill's own two-colour density fill (ECMA-376 20.1.8.36 CT_PatternFillProperties): @prst names the pattern, and a:fgClr/a:bgClr each wrap a colour choice the same way a:solidFill itself does, so both resolve through the same scheme-colour-aware readSolidFillColor a cell's own solid background and border colours already use. Returns undefined for a preset outside DRAWINGML_PATTERN_PERCENT_MAP's mapped subset — ContentCellFillSchema's 'pattern' variant needs a real patternType to be worth constructing at all, and there is no member here to fall back to.
 function readPatternFill(
   pattFillEl: XmlElement,
   context: SlideInheritanceContext,
@@ -710,7 +710,7 @@ function readTableCellFill(
     : readPatternFill(pattFill, context);
 }
 
-// a:tcPr/@anchor (ECMA-376 21.1.3.8, ST_TextAnchoringType) -- the pptx-side counterpart to ODF's style:vertical-align (odf.js's typed/shared/table.ts, PIVOT_VERTICAL_ALIGN_BY_ODF) and RTF's \clvertalt/\clvertalc/\clvertalb, all three converging on ContentTableCell.verticalAlign's own three-member vocabulary. ST_TextAnchoringType has five members -- t/ctr/b plus just and dist -- but "just" (justified, first and last lines flush to both edges) and "dist" (distributed, every line evenly spaced) describe how multiple lines fill the cell's vertical extent, not a position among three discrete slots, so neither has a pivot equivalent to map onto; both are left unread here, the same "no member to guess at" convention isVerticalAlign applies in odf.js. An anchor attribute absent entirely, or set to just/dist, both read as undefined.
+// a:tcPr/@anchor (ECMA-376 21.1.3.8, ST_TextAnchoringType) — the pptx-side counterpart to ODF's style:vertical-align (odf.js's typed/shared/table.ts, PIVOT_VERTICAL_ALIGN_BY_ODF) and RTF's \clvertalt/\clvertalc/\clvertalb, all three converging on ContentTableCell.verticalAlign's own three-member vocabulary. ST_TextAnchoringType has five members — t/ctr/b plus just and dist — but "just" (justified, first and last lines flush to both edges) and "dist" (distributed, every line evenly spaced) describe how multiple lines fill the cell's vertical extent, not a position among three discrete slots, so neither has a pivot equivalent to map onto; both are left unread here, the same "no member to guess at" convention isVerticalAlign applies in odf.js. An anchor attribute absent entirely, or set to just/dist, both read as undefined.
 const PIVOT_VERTICAL_ALIGN_BY_ANCHOR: ReadonlyMap<
   string,
   NonNullable<ContentTableCell["verticalAlign"]>
@@ -782,7 +782,7 @@ function readTable(
   return { kind: "table", rows, columnWidthsPt };
 }
 
-// Resolves an r:id found inside a graphic frame's a:graphicData child element (a chart reference's part, a diagram's data model, ...) through the slide's own relationships to the target part's root element -- undefined when the id, relationship, part, or XML root is missing anywhere along the chain, leaving the frame's geometry with empty content.
+// Resolves an r:id found inside a graphic frame's a:graphicData child element (a chart reference's part, a diagram's data model, ...) through the slide's own relationships to the target part's root element — undefined when the id, relationship, part, or XML root is missing anywhere along the chain, leaving the frame's geometry with empty content.
 function relatedPartRoot(
   rId: string | undefined,
   slideRels: ReadonlyMap<string, Relationship>,
@@ -795,7 +795,7 @@ function relatedPartRoot(
   return rel === undefined ? undefined : rootElement(pkg.parts[rel.target]);
 }
 
-// Resolves the OLE object's own payload (p:oleObj/@r:id -> slide relationship -> embeddings part) through readEmbeddedPayloadPart: a ZIP payload (a modern producer's embedded xlsx/docx/pptx) and a classic compound-file .bin payload whose Package stream carries a ZIP both become the recovered sub-document's ContentEmbeddedObjectBlock at the frame's own geometry, while a compound file holding native legacy streams (no Package stream, or a packaged file that is not a ZIP) and a ZIP that does not decode as one of the three OOXML flavours both return undefined and leave the frame's content to the fallback-picture rules above -- second-order content degrades, it never fails the host read. Undefined follows the same convention as readBlipImage: an id, relationship, or part that does not line up leaves the shape with no embedded content, never a partial block.
+// Resolves the OLE object's own payload (p:oleObj/@r:id -> slide relationship -> embeddings part) through readEmbeddedPayloadPart: a ZIP payload (a modern producer's embedded xlsx/docx/pptx) and a classic compound-file .bin payload whose Package stream carries a ZIP both become the recovered sub-document's ContentEmbeddedObjectBlock at the frame's own geometry, while a compound file holding native legacy streams (no Package stream, or a packaged file that is not a ZIP) and a ZIP that does not decode as one of the three OOXML flavours both return undefined and leave the frame's content to the fallback-picture rules above — second-order content degrades, it never fails the host read. Undefined follows the same convention as readBlipImage: an id, relationship, or part that does not line up leaves the shape with no embedded content, never a partial block.
 function readOleEmbeddedObject(
   graphicData: XmlElement,
   slideRels: ReadonlyMap<string, Relationship>,
@@ -827,7 +827,7 @@ function readGraphicFrameShape(
   pkg: Package,
   parentTransform: GroupChildTransform | undefined,
 ): ContentShape | undefined {
-  // p:graphicFrame's own transform is a direct p:xfrm child (not nested under p:spPr, unlike p:sp/p:pic) -- verified against ECMA-376's CT_GraphicalObjectFrame element sequence.
+  // p:graphicFrame's own transform is a direct p:xfrm child (not nested under p:spPr, unlike p:sp/p:pic) — verified against ECMA-376's CT_GraphicalObjectFrame element sequence.
   const xfrm = readXfrm(childrenWithTag(gf, "p:xfrm")[0]);
   if (xfrm === undefined) {
     return undefined;
@@ -842,7 +842,7 @@ function readGraphicFrameShape(
     parentTransform === undefined
       ? localFrame
       : applyGroupTransform(parentTransform, localFrame);
-  // Composed the same way resolveShapeFrame composes a p:sp/p:pic's own rotation -- see composeShapeRotationDeg's own doc comment.
+  // Composed the same way resolveShapeFrame composes a p:sp/p:pic's own rotation — see composeShapeRotationDeg's own doc comment.
   const composedRotationDeg = composeShapeRotationDeg(
     parentTransform,
     xfrm.rotationDeg,
@@ -862,7 +862,7 @@ function readGraphicFrameShape(
       : undefined;
   let blocks: ContentBlock[];
   let shapeSource: SourceResidue | undefined;
-  // origin names what this shape's content IS, when the graphic-frame kind establishes it: a SmartArt diagram's blocks are the diagram's own node text, not freeform slide prose -- the annotation channel's motivating distinction, stated only where the reader genuinely knows it.
+  // origin names what this shape's content IS, when the graphic-frame kind establishes it: a SmartArt diagram's blocks are the diagram's own node text, not freeform slide prose — the annotation channel's motivating distinction, stated only where the reader genuinely knows it.
   let shapeOrigin: ContentOrigin | undefined;
   if (tbl !== undefined) {
     blocks = [readTable(tbl, context, slideRels)];
@@ -880,7 +880,7 @@ function readGraphicFrameShape(
     }
     blocks = chartTable === undefined ? [] : [chartTable];
   } else if (uri === DIAGRAM_GRAPHIC_URI && graphicData !== undefined) {
-    // dgm:relIds' r:dm names the data model part -- the semantic graph of nodes and text. r:lo/r:qs/r:cs (layout, quick-style, colours) only decide how that graph is DRAWN, so they carry no text of their own to read into blocks; they quarantine whole as the shape's own residue instead (readDiagramResidue), rather than being silently dropped.
+    // dgm:relIds' r:dm names the data model part — the semantic graph of nodes and text. r:lo/r:qs/r:cs (layout, quick-style, colours) only decide how that graph is DRAWN, so they carry no text of their own to read into blocks; they quarantine whole as the shape's own residue instead (readDiagramResidue), rather than being silently dropped.
     const relIds = childrenWithTag(graphicData, "dgm:relIds")[0];
     const relPartRoot = (attrName: string): XmlElement | undefined =>
       relatedPartRoot(
@@ -897,7 +897,7 @@ function readGraphicFrameShape(
     );
     shapeOrigin = "diagram";
   } else if (uri === OLE_GRAPHIC_URI && graphicData !== undefined) {
-    // What the slide actually displays is the OLE object's fallback picture (mc:Fallback > p:oleObj > p:pic under the mc:AlternateContent wrapper, or a p:pic directly under p:oleObj where a producer skipped the wrapper), so that picture is read like any other blip image. With no reachable picture, the p:oleObj's progId at least records what kind of object the frame holds. The object's own payload (p:oleObj/@r:id's embedded part) is additionally decoded when it is a ZIP archive -- a modern producer's embedded xlsx/docx/pptx -- and its recovered sub-document appended as an embeddedObject block beside whatever the display path produced (readOleEmbeddedObject below); the classic non-ZIP OLE compound-file payload stays opaque external-application data, and a ZIP that does not decode as one of the three OOXML flavours degrades to no embedded block, so an undecodable payload never fails the slide read.
+    // What the slide actually displays is the OLE object's fallback picture (mc:Fallback > p:oleObj > p:pic under the mc:AlternateContent wrapper, or a p:pic directly under p:oleObj where a producer skipped the wrapper), so that picture is read like any other blip image. With no reachable picture, the p:oleObj's progId at least records what kind of object the frame holds. The object's own payload (p:oleObj/@r:id's embedded part) is additionally decoded when it is a ZIP archive — a modern producer's embedded xlsx/docx/pptx — and its recovered sub-document appended as an embeddedObject block beside whatever the display path produced (readOleEmbeddedObject below); the classic non-ZIP OLE compound-file payload stays opaque external-application data, and a ZIP that does not decode as one of the three OOXML flavours degrades to no embedded block, so an undecodable payload never fails the slide read.
     const image = readBlipImage(graphicData, slideRels, pkg, frame);
     if (image !== undefined) {
       blocks = [image];
@@ -928,7 +928,7 @@ function readGraphicFrameShape(
   };
 }
 
-// Flattens the shape tree, including nested p:grpSp groups, into ContentSlide's flat shapes list -- ContentShape has no representation for a nested group, so group resolution (composing each level's chOff/chExt transform into an absolute frame) happens here rather than being deferred to a later stage. p:cxnSp (connector lines) are skipped: decorative, no text content, general vector-path recovery is out of scope.
+// Flattens the shape tree, including nested p:grpSp groups, into ContentSlide's flat shapes list — ContentShape has no representation for a nested group, so group resolution (composing each level's chOff/chExt transform into an absolute frame) happens here rather than being deferred to a later stage. p:cxnSp (connector lines) are skipped: decorative, no text content, general vector-path recovery is out of scope.
 function walkShapeTreeChildren(
   children: readonly XmlNode[],
   parentTransform: GroupChildTransform | undefined,

@@ -9,16 +9,16 @@ import { schemaUriFor } from "./schema-io";
 
 // The hand-authored JSON Schema $defs fragments spliced into content-document.schema.json's `override()` callback (scripts/generate-json-schemas.mjs), lifted out into their own src module rather than staying inline in that script. The reason is single-sourcing, not tidiness: this exact object needs to be reachable from two places that cannot share an import graph --
 //
-//   1. scripts/generate-json-schemas.mjs itself, which only ever runs against the freshly-built ../dist/ (it imports every other schema it needs the same way), so it imports CONTENT_DEFS from '../dist/content-json-schema-defs.js', the file tsdown emits for this module (entry: 'src/**/*.ts', one dist file per src file -- see tsdown.config.ts).
-//   2. content-json-schema-defs.test.ts (src/, run directly by vitest's "unit" project against source, never against dist), which imports this exact same CONTENT_DEFS value straight from here and asserts it stays byte-for-byte in step with a live z.toJSONSchema() call over each fragment's real exported Zod schema counterpart -- every fragment in this file except the nine package-tree group wrappers (src/package-node.ts, still z.custom over recursive tree-of-groups guards, out of ExaDev/documents.js#1009's own scope) now has one, ContentBlock/ContentTableCell/ContentTableRow/ContentTable/ContentEmbeddedObject(Block)/ContentFormula/MathExpression/MathApp/MathSum/MathProd/MathMatrix included since #1009's z.lazy() rewrite made ContentBlockSchema, ContentEmbeddedObjectSchema, and MathExpressionSchema real, self-recursive z.discriminatedUnion()s rather than z.custom() predicates -- see that test file's own top comment for the registered-schema list and for why this is the only structural defence this generator has against silently drifting away from the schemas it's meant to describe.
+//   1. scripts/generate-json-schemas.mjs itself, which only ever runs against the freshly-built ../dist/ (it imports every other schema it needs the same way), so it imports CONTENT_DEFS from '../dist/content-json-schema-defs.js', the file tsdown emits for this module (entry: 'src/**/*.ts', one dist file per src file — see tsdown.config.ts).
+//   2. content-json-schema-defs.test.ts (src/, run directly by vitest's "unit" project against source, never against dist), which imports this exact same CONTENT_DEFS value straight from here and asserts it stays byte-for-byte in step with a live z.toJSONSchema() call over each fragment's real exported Zod schema counterpart — every fragment in this file except the nine package-tree group wrappers (src/package-node.ts, still z.custom over recursive tree-of-groups guards, out of ExaDev/documents.js#1009's own scope) now has one, ContentBlock/ContentTableCell/ContentTableRow/ContentTable/ContentEmbeddedObject(Block)/ContentFormula/MathExpression/MathApp/MathSum/MathProd/MathMatrix included since #1009's z.lazy() rewrite made ContentBlockSchema, ContentEmbeddedObjectSchema, and MathExpressionSchema real, self-recursive z.discriminatedUnion()s rather than z.custom() predicates — see that test file's own top comment for the registered-schema list and for why this is the only structural defence this generator has against silently drifting away from the schemas it's meant to describe.
 //
-// If CONTENT_DEFS stayed inline in the .mjs script, only path 1 above would work: the script imports Zod schemas exclusively from '../dist/index.js' (a build artefact that may not exist, and per eslint.config.ts/tsconfig.json is deliberately excluded from both linting and typechecking, matching test/smoke.test.mjs's own precedent) -- a test that has to import through that path would only ever run after a build, which `pnpm test` (the "unit" vitest project, run standalone in CI's own "test" job, with no build step beforehand) never guarantees. Living here instead, this is an ordinary, fully typechecked and linted src module like any other -- CONTENT_DEFS just happens to be consumed by a script as well as by the package's own test suite.
+// If CONTENT_DEFS stayed inline in the .mjs script, only path 1 above would work: the script imports Zod schemas exclusively from '../dist/index.js' (a build artefact that may not exist, and per eslint.config.ts/tsconfig.json is deliberately excluded from both linting and typechecking, matching test/smoke.test.mjs's own precedent) — a test that has to import through that path would only ever run after a build, which `pnpm test` (the "unit" vitest project, run standalone in CI's own "test" job, with no build step beforehand) never guarantees. Living here instead, this is an ordinary, fully typechecked and linted src module like any other — CONTENT_DEFS just happens to be consumed by a script as well as by the package's own test suite.
 //
-// The fragments below still cover exactly what scripts/generate-json-schemas.mjs's own top-of-file comment already explains, updated for ExaDev/documents.js#1009: the package tree's own opaque set, added in the 4.0.0 major, remains -- DocumentTreeSchema's children reach the tree's per-kind group schemas (src/package-node.ts, all z.custom over recursive tree-of-groups guards, a genuinely separate recursion axis #1009 does not touch), so the whole TreeNode vocabulary -- container descriptors, anchor paragraphs, the nine group wrappers (the seven of 4.0.0 plus 4.1.0's two construct groups), and the sheet-image/vector leaves -- is transcribed here, and the generator splices CONTENT_DEFS into document-tree.schema.json as well as content-document.schema.json so both files resolve their local #/$defs pointers without depending on each other's file layout (the one deliberate cross-file ref stays $defs.ContentEmbeddedObject(Block)'s document pointer, CONTENT_DOCUMENT_URI). ContentBlockSchema, ContentEmbeddedObjectSchema, and MathExpressionSchema left the opaque set in #1009 -- each is a real, self-recursive z.discriminatedUnion() now (src/content.ts, src/math.ts), the identical z.lazy() rewrite ExaDev/documents.js#937 already applied to MathMlNodeSchema -- but ContentBlock/ContentTableCell/ContentTableRow/ContentTable/ContentEmbeddedObject(Block)/ContentFormula/MathExpression/MathApp/MathSum/MathProd/MathMatrix stay hand-transcribed here rather than moving to MathMlAttribute/Element/Node's own computed-`get`-accessor treatment: that treatment exists specifically for a schema with no OTHER already-hand-transcribed sibling fragments cross-referencing it by name, and every one of these eleven is reached from (or reaches) at least one such sibling (ContentBlock's own union members include ContentParagraph/ContentImageBlock/ContentPageBreak/ContentConstructStart/ContentConstructEnd, all separately hand-transcribed fragments elsewhere in this file) -- a live registry-based generation covering the whole reachable family would work (content-json-schema-defs.test.ts's own REGISTERED_SCHEMAS registry already proves as much, registering all eleven alongside their siblings), but replacing eleven already-correct, already-independently-verified fragments with computed accessors is a distinct, separable piece of tidying from #1009's own stated scope (converting the three schemas away from z.custom, confirmed via the real-corpus bijection gate and a full-workspace affected typecheck/test run) and is left for a future pass. SymbolTableSchema (transcribed so each ContentDocument arm's symbolTable field is one named $ref rather than five inlined copies of the whole unit-registry subtree) and StyleEntrySchema/DefinitionEntrySchema (same five-copies reason for the package arms' styles/definitions fields) are transcribed for an unrelated, still-current reason -- the generator's override() replaces each with a $ref to its fragment here regardless of opacity. Every fragment in this file except the nine group wrappers now has a real, non-custom, exported Zod schema counterpart, and content-json-schema-defs.test.ts's own REGISTERED_SCHEMAS registry holds every one of them to a live z.toJSONSchema() comparison -- see that test file's own top comment for the full list and construction.
+// The fragments below still cover exactly what scripts/generate-json-schemas.mjs's own top-of-file comment already explains, updated for ExaDev/documents.js#1009: the package tree's own opaque set, added in the 4.0.0 major, remains — DocumentTreeSchema's children reach the tree's per-kind group schemas (src/package-node.ts, all z.custom over recursive tree-of-groups guards, a genuinely separate recursion axis #1009 does not touch), so the whole TreeNode vocabulary — container descriptors, anchor paragraphs, the nine group wrappers (the seven of 4.0.0 plus 4.1.0's two construct groups), and the sheet-image/vector leaves — is transcribed here, and the generator splices CONTENT_DEFS into document-tree.schema.json as well as content-document.schema.json so both files resolve their local #/$defs pointers without depending on each other's file layout (the one deliberate cross-file ref stays $defs.ContentEmbeddedObject(Block)'s document pointer, CONTENT_DOCUMENT_URI). ContentBlockSchema, ContentEmbeddedObjectSchema, and MathExpressionSchema left the opaque set in #1009 — each is a real, self-recursive z.discriminatedUnion() now (src/content.ts, src/math.ts), the identical z.lazy() rewrite ExaDev/documents.js#937 already applied to MathMlNodeSchema — but ContentBlock/ContentTableCell/ContentTableRow/ContentTable/ContentEmbeddedObject(Block)/ContentFormula/MathExpression/MathApp/MathSum/MathProd/MathMatrix stay hand-transcribed here rather than moving to MathMlAttribute/Element/Node's own computed-`get`-accessor treatment: that treatment exists specifically for a schema with no OTHER already-hand-transcribed sibling fragments cross-referencing it by name, and every one of these eleven is reached from (or reaches) at least one such sibling (ContentBlock's own union members include ContentParagraph/ContentImageBlock/ContentPageBreak/ContentConstructStart/ContentConstructEnd, all separately hand-transcribed fragments elsewhere in this file) — a live registry-based generation covering the whole reachable family would work (content-json-schema-defs.test.ts's own REGISTERED_SCHEMAS registry already proves as much, registering all eleven alongside their siblings), but replacing eleven already-correct, already-independently-verified fragments with computed accessors is a distinct, separable piece of tidying from #1009's own stated scope (converting the three schemas away from z.custom, confirmed via the real-corpus bijection gate and a full-workspace affected typecheck/test run) and is left for a future pass. SymbolTableSchema (transcribed so each ContentDocument arm's symbolTable field is one named $ref rather than five inlined copies of the whole unit-registry subtree) and StyleEntrySchema/DefinitionEntrySchema (same five-copies reason for the package arms' styles/definitions fields) are transcribed for an unrelated, still-current reason — the generator's override() replaces each with a $ref to its fragment here regardless of opacity. Every fragment in this file except the nine group wrappers now has a real, non-custom, exported Zod schema counterpart, and content-json-schema-defs.test.ts's own REGISTERED_SCHEMAS registry holds every one of them to a live z.toJSONSchema() comparison — see that test file's own top comment for the full list and construction.
 
 type JsonSchema = z.core.JSONSchema.JSONSchema;
 
-// Zod's own `.int()` bag range (node_modules/zod/v4/core/json-schema-processors.js's numberProcessor), reproduced verbatim wherever a hand-authored integer field below mirrors a real `z.number().int()...` field -- confirmed empirically against ContentListMembershipSchema.level and ContentTableCellSchema.colSpan/rowSpan.
+// Zod's own `.int()` bag range (node_modules/zod/v4/core/json-schema-processors.js's numberProcessor), reproduced verbatim wherever a hand-authored integer field below mirrors a real `z.number().int()...` field — confirmed empirically against ContentListMembershipSchema.level and ContentTableCellSchema.colSpan/rowSpan.
 export const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER;
 
 export const EMBEDDED_OBJECT_KINDS = [
@@ -33,9 +33,9 @@ export const EMBEDDED_OBJECT_KINDS = [
 // The genuine cycle back to a whole ContentDocument: ContentEmbeddedObject(Block)'s own `document` field. Resolved once here since both the ContentEmbeddedObjectBlock fragment below and scripts/generate-json-schemas.mjs's own override() branch for the standalone ContentEmbeddedObjectSchema need the identical URI.
 export const CONTENT_DOCUMENT_URI = schemaUriFor("ContentDocument");
 
-// MathMlAttribute/MathMlElement/MathMlNode (src/mathml.ts), computed from a live z.toJSONSchema() call rather than transcribed by hand: MathMlNodeSchema stopped being a z.custom() node in ExaDev/documents.js#937, so it introspects cleanly now. The `#/$defs/<id>` uri scheme matches every other cross-reference CONTENT_DEFS's own fragments use, and reproduces the identical nested-$ref shape (MathMlElement.children and MathMlNode's own element variant pointing back at each other by name rather than inlining) that content-json-schema-defs.test.ts's own live-comparison registry confirms empirically against CONTENT_DEFS's own value -- see that file's top comment for the same construction and for why that comparison is a generation-determinism check for these three ids rather than an independent drift check.
+// MathMlAttribute/MathMlElement/MathMlNode (src/mathml.ts), computed from a live z.toJSONSchema() call rather than transcribed by hand: MathMlNodeSchema stopped being a z.custom() node in ExaDev/documents.js#937, so it introspects cleanly now. The `#/$defs/<id>` uri scheme matches every other cross-reference CONTENT_DEFS's own fragments use, and reproduces the identical nested-$ref shape (MathMlElement.children and MathMlNode's own element variant pointing back at each other by name rather than inlining) that content-json-schema-defs.test.ts's own live-comparison registry confirms empirically against CONTENT_DEFS's own value — see that file's top comment for the same construction and for why that comparison is a generation-determinism check for these three ids rather than an independent drift check.
 //
-// Computed lazily rather than at module load. This module is re-exported wholesale from src/index.ts (`export * from "./content-json-schema-defs"`), so an eager, at-module-load computation here would make every consumer of document-schema.js -- a package every codec in the workspace depends on, held to Worker-isomorphism -- pay for this z.toJSONSchema() call the moment it imported the package, whether or not it ever read $defs.MathMlAttribute/Element/Node; ExaDev/documents.js#937's z.lazy() rewrite landed the deferral alongside MathMlNodeSchema's own recursion, so no released version of this package ever paid that cost. getMathMlJsonSchemas() below builds the registry and runs the conversion at most once, the first time any of the three `get MathMlAttribute()`/`get MathMlElement()`/`get MathMlNode()` accessors CONTENT_DEFS's own object literal declares further down (in their original field position, not spread in as plain values -- see that literal's own comment) is actually read, and every later read reuses the cached result.
+// Computed lazily rather than at module load. This module is re-exported wholesale from src/index.ts (`export * from "./content-json-schema-defs"`), so an eager, at-module-load computation here would make every consumer of document-schema.js — a package every codec in the workspace depends on, held to Worker-isomorphism — pay for this z.toJSONSchema() call the moment it imported the package, whether or not it ever read $defs.MathMlAttribute/Element/Node; ExaDev/documents.js#937's z.lazy() rewrite landed the deferral alongside MathMlNodeSchema's own recursion, so no released version of this package ever paid that cost. getMathMlJsonSchemas() below builds the registry and runs the conversion at most once, the first time any of the three `get MathMlAttribute()`/`get MathMlElement()`/`get MathMlNode()` accessors CONTENT_DEFS's own object literal declares further down (in their original field position, not spread in as plain values — see that literal's own comment) is actually read, and every later read reuses the cached result.
 let cachedMathMlJsonSchemas: Record<string, JsonSchema> | undefined;
 function getMathMlJsonSchemas(): Record<string, JsonSchema> {
   if (cachedMathMlJsonSchemas === undefined) {
@@ -51,9 +51,9 @@ function getMathMlJsonSchemas(): Record<string, JsonSchema> {
   return cachedMathMlJsonSchemas;
 }
 
-// Strips the $schema/$id root markers z.toJSONSchema() stamps onto every registry entry (each is generated as its own standalone root) -- an artefact of generation, not a real structural difference from a fragment nested inside another schema's own $defs, matching content-json-schema-defs.test.ts's own withoutRootMarkers.
+// Strips the $schema/$id root markers z.toJSONSchema() stamps onto every registry entry (each is generated as its own standalone root) — an artefact of generation, not a real structural difference from a fragment nested inside another schema's own $defs, matching content-json-schema-defs.test.ts's own withoutRootMarkers.
 //
-// The non-null assertion on the lookup below is exactly the case this package's own eslint config turns nonNullAssertion off for: getMathMlJsonSchemas() adds precisely these three ids to the registry before calling z.toJSONSchema() on it, and a registry's own conversion result carries an entry for every schema registered onto it -- id is never anything other than one of those three literal strings, so the lookup can never actually miss. A defensive undefined check here would be unreachable by any real input, not a genuine safety net.
+// The non-null assertion on the lookup below is exactly the case this package's own eslint config turns nonNullAssertion off for: getMathMlJsonSchemas() adds precisely these three ids to the registry before calling z.toJSONSchema() on it, and a registry's own conversion result carries an entry for every schema registered onto it — id is never anything other than one of those three literal strings, so the lookup can never actually miss. A defensive undefined check here would be unreachable by any real input, not a genuine safety net.
 function mathMlDef(
   id: "MathMlAttribute" | "MathMlElement" | "MathMlNode",
 ): JsonSchema {
@@ -64,7 +64,7 @@ function mathMlDef(
   return stripped;
 }
 
-// Called from each of CONTENT_DEFS's own `get MathMlAttribute()`/`get MathMlElement()`/`get MathMlNode()` accessors (see that object literal further down), never before CONTENT_DEFS itself has finished being constructed: a getter's body only runs when something later reads the property, strictly after the `export const CONTENT_DEFS = {...}` statement below has completed, so referencing CONTENT_DEFS by name here is safe despite this function being declared above it -- the same forward-reference-inside-a-deferred-closure pattern ordinary mutual recursion between top-level functions already relies on. Redefines CONTENT_DEFS's own property as a plain cached value on first call so the underlying z.toJSONSchema() call and this stripping work run at most once per id, and every read after the first is a plain property lookup with no getter overhead at all.
+// Called from each of CONTENT_DEFS's own `get MathMlAttribute()`/`get MathMlElement()`/`get MathMlNode()` accessors (see that object literal further down), never before CONTENT_DEFS itself has finished being constructed: a getter's body only runs when something later reads the property, strictly after the `export const CONTENT_DEFS = {...}` statement below has completed, so referencing CONTENT_DEFS by name here is safe despite this function being declared above it — the same forward-reference-inside-a-deferred-closure pattern ordinary mutual recursion between top-level functions already relies on. Redefines CONTENT_DEFS's own property as a plain cached value on first call so the underlying z.toJSONSchema() call and this stripping work run at most once per id, and every read after the first is a plain property lookup with no getter overhead at all.
 function cacheMathMlDef(
   id: "MathMlAttribute" | "MathMlElement" | "MathMlNode",
 ): JsonSchema {
@@ -78,7 +78,7 @@ function cacheMathMlDef(
   return value;
 }
 
-// The two binder variants (MathSum/MathProd) differ only in their kind discriminant -- one builder rather than two copies of the same twelve-line fragment, so a binder-field change lands in both or fails the hand re-verification visibly in the diff.
+// The two binder variants (MathSum/MathProd) differ only in their kind discriminant — one builder rather than two copies of the same twelve-line fragment, so a binder-field change lands in both or fails the hand re-verification visibly in the diff.
 function mathBinderDef(kind: "sum" | "prod"): JsonSchema {
   return {
     type: "object",
@@ -94,9 +94,9 @@ function mathBinderDef(kind: "sum" | "prod"): JsonSchema {
   };
 }
 
-// -- Hand-authored $defs, spliced into content-document.schema.json only (via scripts/generate-json-schemas.mjs's own ContentDocumentSchema override branch) --
+// — Hand-authored $defs, spliced into content-document.schema.json only (via scripts/generate-json-schemas.mjs's own ContentDocumentSchema override branch) --
 //
-// The fragments below are transcribed by hand, field-for-field, from src/content.ts's real Zod object definitions (ContentParagraphSchema, ContentTableSchema/ContentTableRowSchema/ContentTableCellSchema, ContentImageBlockSchema, ContentPageBreakSchema, ContentRunSchema, ContentListMembershipSchema, ColorSchema, BoxSchema, LayoutFrameSchema, AlignmentSchema, ContentStrokeStyleSchema, ContentBorderSchema, ContentCellBordersSchema, ContentParagraphBordersSchema, ContentCellPatternTypeSchema, ContentCellFillSchema, ContentStrokeDashSchema, ContentGradientStyleSchema, ContentGradientFillSchema, ContentHatchStyleSchema, ContentHatchFillSchema, ContentBitmapFillSchema, ContentFillPatternSchema -- each cross-checked directly against a real z.toJSONSchema() call over that exact exported schema, and the ones with a real, non-recursive, non-custom counterpart are held to that comparison as a running test by content-json-schema-defs.test.ts) plus the ContentEmbeddedObject/ContentEmbeddedObjectBlock TS interfaces, which have no exported z.object() counterpart at all (both are validated only via the isContentEmbeddedObject*() z.custom() guards), plus the math value schemas of src/math.ts (the semantic half of the two-layer formula model -- see that file's own top comment for how the layers divide). Re-verify this block against src/content.ts/src/math.ts whenever those files' field shapes change -- nothing here is generated or checked against the real schemas at build time, other than the leaf/near-leaf fragments the regression test below does cover.
+// The fragments below are transcribed by hand, field-for-field, from src/content.ts's real Zod object definitions (ContentParagraphSchema, ContentTableSchema/ContentTableRowSchema/ContentTableCellSchema, ContentImageBlockSchema, ContentPageBreakSchema, ContentRunSchema, ContentListMembershipSchema, ColorSchema, BoxSchema, LayoutFrameSchema, AlignmentSchema, ContentStrokeStyleSchema, ContentBorderSchema, ContentCellBordersSchema, ContentParagraphBordersSchema, ContentCellPatternTypeSchema, ContentCellFillSchema, ContentStrokeDashSchema, ContentGradientStyleSchema, ContentGradientFillSchema, ContentHatchStyleSchema, ContentHatchFillSchema, ContentBitmapFillSchema, ContentFillPatternSchema — each cross-checked directly against a real z.toJSONSchema() call over that exact exported schema, and the ones with a real, non-recursive, non-custom counterpart are held to that comparison as a running test by content-json-schema-defs.test.ts) plus the ContentEmbeddedObject/ContentEmbeddedObjectBlock TS interfaces, which have no exported z.object() counterpart at all (both are validated only via the isContentEmbeddedObject*() z.custom() guards), plus the math value schemas of src/math.ts (the semantic half of the two-layer formula model — see that file's own top comment for how the layers divide). Re-verify this block against src/content.ts/src/math.ts whenever those files' field shapes change — nothing here is generated or checked against the real schemas at build time, other than the leaf/near-leaf fragments the regression test below does cover.
 export const CONTENT_DEFS: Record<string, JsonSchema> = {
   Color: {
     type: "object",
@@ -159,7 +159,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
           "wpd",
         ],
       },
-      xml: { type: "string" }, // opaque text -- validation stops at "is a string"; everything about the content is the producer's to know
+      xml: { type: "string" }, // opaque text — validation stops at "is a string"; everything about the content is the producer's to know
     },
     required: ["format", "xml"],
     additionalProperties: false,
@@ -200,7 +200,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     },
     additionalProperties: false,
   },
-  // The closed pattern-type vocabulary a table/sheet cell's own pattern fill can name -- WordprocessingML's ST_Shd percentage/stripe/cross families and SpreadsheetML's ST_PatternType named-density/hatch families, spliced into one flat enum since the two never share a member name (src/content.ts's own ContentCellPatternTypeSchema comment has the full citation).
+  // The closed pattern-type vocabulary a table/sheet cell's own pattern fill can name — WordprocessingML's ST_Shd percentage/stripe/cross families and SpreadsheetML's ST_PatternType named-density/hatch families, spliced into one flat enum since the two never share a member name (src/content.ts's own ContentCellPatternTypeSchema comment has the full citation).
   ContentCellPatternType: {
     type: "string",
     enum: [
@@ -286,10 +286,10 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
   ContentListMembership: {
     type: "object",
     properties: {
-      numId: { type: "string" }, // optional in the Zod source -- depth-only list membership (OOXML drawing paragraphs) carries no numbering identity
+      numId: { type: "string" }, // optional in the Zod source — depth-only list membership (OOXML drawing paragraphs) carries no numbering identity
       level: { type: "integer", minimum: 0, maximum: MAX_SAFE_INTEGER },
-      checked: { type: "boolean" }, // a GFM task-list item's checkbox state -- see src/content.ts's own field comment
-      itemId: { type: "string" }, // the identity of ONE list item, distinguishing "one item, several blocks" from sibling items sharing a numId/level -- see src/content.ts's own field comment
+      checked: { type: "boolean" }, // a GFM task-list item's checkbox state — see src/content.ts's own field comment
+      itemId: { type: "string" }, // the identity of ONE list item, distinguishing "one item, several blocks" from sibling items sharing a numId/level — see src/content.ts's own field comment
       format: {
         type: "string",
         enum: [
@@ -300,7 +300,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
           "lowerRoman",
           "upperRoman",
         ],
-      }, // the item's own numbering format -- see src/content.ts's own field comment
+      }, // the item's own numbering format — see src/content.ts's own field comment
     },
     required: ["level"],
     additionalProperties: false,
@@ -318,7 +318,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       color: { $ref: "#/$defs/Color" },
       hyperlink: { type: "string" }, // resolved external URI
       verticalAlign: { type: "string", enum: ["superscript", "subscript"] },
-      direction: { type: "string", enum: ["ltr", "rtl"] }, // RTF's \rtlch/\ltrch scope -- see src/content.ts's own field comment
+      direction: { type: "string", enum: ["ltr", "rtl"] }, // RTF's \rtlch/\ltrch scope — see src/content.ts's own field comment
       sourcePath: { type: "string" },
       source: { $ref: "#/$defs/SourceResidue" },
       frames: { type: "array", items: { $ref: "#/$defs/LayoutFrame" } },
@@ -347,15 +347,15 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       constructs: {
         type: "array",
         items: { $ref: "#/$defs/RunConstructExtent" },
-      }, // the run-scoped construct extents this paragraph carries -- see src/content.ts's own field comment for the block-marker/run-extent scope split
+      }, // the run-scoped construct extents this paragraph carries — see src/content.ts's own field comment for the block-marker/run-extent scope split
       styleId: { type: "string" }, // w:pStyle/@w:val, e.g. 'Heading1'
-      codeLanguage: { type: "string" }, // the source-format language identifier of a code-styled block -- see src/content.ts's own field comment
-      preformatted: { type: "boolean" }, // whitespace inside this paragraph's own runs is significant and must survive verbatim -- see src/content.ts's own field comment
+      codeLanguage: { type: "string" }, // the source-format language identifier of a code-styled block — see src/content.ts's own field comment
+      preformatted: { type: "boolean" }, // whitespace inside this paragraph's own runs is significant and must survive verbatim — see src/content.ts's own field comment
       headingLevel: {
         type: "integer",
         exclusiveMinimum: 0,
         maximum: MAX_SAFE_INTEGER,
-      }, // canonical, format-agnostic heading depth -- see src/content.ts's own field comment
+      }, // canonical, format-agnostic heading depth — see src/content.ts's own field comment
       alignment: { $ref: "#/$defs/Alignment" },
       list: { $ref: "#/$defs/ContentListMembership" },
       spacingBeforePt: { type: "number" },
@@ -364,10 +364,10 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       indentLeftPt: { type: "number" },
       indentRightPt: { type: "number" },
       indentFirstLinePt: { type: "number" },
-      direction: { type: "string", enum: ["ltr", "rtl"] }, // RTF's \rtlpar/\ltrpar scope -- see src/content.ts's own field comment
+      direction: { type: "string", enum: ["ltr", "rtl"] }, // RTF's \rtlpar/\ltrpar scope — see src/content.ts's own field comment
       pageBreakBefore: { type: "boolean" }, // explicit page boundaries a paragraph style forces around its own paragraph
       pageBreakAfter: { type: "boolean" },
-      borders: { $ref: "#/$defs/ContentParagraphBorders" }, // direct paragraph-level border formatting -- see src/content.ts's own field comment
+      borders: { $ref: "#/$defs/ContentParagraphBorders" }, // direct paragraph-level border formatting — see src/content.ts's own field comment
       sourcePath: { type: "string" },
       source: { $ref: "#/$defs/SourceResidue" },
       frames: { type: "array", items: { $ref: "#/$defs/LayoutFrame" } },
@@ -430,12 +430,12 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["horizontal", "vertical"],
     additionalProperties: false,
   },
-  // What this node's content IS, when the reader knows -- see src/content.ts's ContentOriginSchema and the annotation-channel block above it.
+  // What this node's content IS, when the reader knows — see src/content.ts's ContentOriginSchema and the annotation-channel block above it.
   ContentOrigin: {
     type: "string",
     enum: ["chart", "diagram", "table", "image", "notes", "body"],
   },
-  // A model's output about the node it is attached to -- see src/content.ts's ContentInterpretationSchema. transcript is inline (its schema is not separately registered, so live generation inlines it here too).
+  // A model's output about the node it is attached to — see src/content.ts's ContentInterpretationSchema. transcript is inline (its schema is not separately registered, so live generation inlines it here too).
   ContentInterpretation: {
     type: "object",
     properties: {
@@ -462,7 +462,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     },
     additionalProperties: false,
   },
-  // The source's own compressed bytes for a no-encoder image filter (JBIG2, JPEG 2000) -- see src/content.ts's ContentImageOriginalSchema.
+  // The source's own compressed bytes for a no-encoder image filter (JBIG2, JPEG 2000) — see src/content.ts's ContentImageOriginalSchema.
   ContentImageOriginal: {
     type: "object",
     properties: {
@@ -517,7 +517,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["kind"],
     additionalProperties: false,
   },
-  // ContentTableCellSchema/ContentTableRowSchema/ContentTableSchema are real, exported z.object() schemas, and ContentTableCellSchema.blocks reaches the now-real, self-recursive ContentBlockSchema through z.lazy() (ExaDev/documents.js#1009) rather than an opaque z.custom() node -- transcribed by hand here regardless, alongside ContentBlock itself, since content-json-schema-defs.test.ts's own REGISTERED_SCHEMAS registry holds all three (ContentBlockSchema included) to a live z.toJSONSchema() comparison together, the same registry-based $ref-reproducing construction every other cross-referencing fragment in this file already relies on.
+  // ContentTableCellSchema/ContentTableRowSchema/ContentTableSchema are real, exported z.object() schemas, and ContentTableCellSchema.blocks reaches the now-real, self-recursive ContentBlockSchema through z.lazy() (ExaDev/documents.js#1009) rather than an opaque z.custom() node — transcribed by hand here regardless, alongside ContentBlock itself, since content-json-schema-defs.test.ts's own REGISTERED_SCHEMAS registry holds all three (ContentBlockSchema included) to a live z.toJSONSchema() comparison together, the same registry-based $ref-reproducing construction every other cross-referencing fragment in this file already relies on.
   ContentTableCell: {
     type: "object",
     properties: {
@@ -551,8 +551,8 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       // pptx tables carry an explicit row height (a:tr/@h); docx tables do not model one at the row level in the same way, so heightPt is undefined there (src/content.ts's own ContentTableRow comment).
       cells: { type: "array", items: { $ref: "#/$defs/ContentTableCell" } },
       heightPt: { type: "number", exclusiveMinimum: 0 },
-      direction: { type: "string", enum: ["ltr", "rtl"] }, // RTF's \rtlrow/\ltrrow scope -- see src/content.ts's own field comment
-      isHeader: { type: "boolean" }, // this row is a header row -- see THE HEADER RULE on src/content.ts's own ContentTableRow interface
+      direction: { type: "string", enum: ["ltr", "rtl"] }, // RTF's \rtlrow/\ltrrow scope — see src/content.ts's own field comment
+      isHeader: { type: "boolean" }, // this row is a header row — see THE HEADER RULE on src/content.ts's own ContentTableRow interface
     },
     required: ["cells"],
     additionalProperties: false,
@@ -562,7 +562,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     properties: {
       kind: { type: "string", const: "table" },
       rows: { type: "array", items: { $ref: "#/$defs/ContentTableRow" } },
-      // nonnegative, not positive -- see ContentTableSchema's own field comment (src/content.ts): both ooxml.js and odf.js's table readers deliberately default an unresolvable column's own width to 0 rather than omitting it, a real shape ExaDev/documents.js#1009's own real-corpus bijection gate confirmed live documents actually produce.
+      // nonnegative, not positive — see ContentTableSchema's own field comment (src/content.ts): both ooxml.js and odf.js's table readers deliberately default an unresolvable column's own width to 0 rather than omitting it, a real shape ExaDev/documents.js#1009's own real-corpus bijection gate confirmed live documents actually produce.
       columnWidthsPt: {
         type: "array",
         items: { type: "number", minimum: 0 },
@@ -576,7 +576,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["kind", "rows", "columnWidthsPt"],
     additionalProperties: false,
   },
-  // ContentEmbeddedObjectBlock extends ContentEmbeddedObject (src/content.ts): both are real, exported z.object() schemas now (ExaDev/documents.js#1009), transcribed by hand from CONTENT_EMBEDDED_OBJECT_FIELDS/ContentEmbeddedObjectBlockSchema. Deliberately excluded from content-json-schema-defs.test.ts's own live comparison, unlike every other fragment reachable through ContentBlockSchema: their `document` field's cross-file cycle back to ContentDocumentSchema produced an anonymous `#/$defs/__shared#/$defs/schemaN`-shaped ref rather than the CONTENT_DOCUMENT_URI stated below, once ContentDocumentSchema was registered alongside that test's other ~90 entries -- confirmed empirically to work correctly in isolation (just these two schemas plus ContentDocumentSchema registered together), so this is a narrow, real interaction between Zod's own cyclic-schema handling and a large multi-schema registry, not the opacity that used to justify hand-transcribing everything below. See that test file's own top comment.
+  // ContentEmbeddedObjectBlock extends ContentEmbeddedObject (src/content.ts): both are real, exported z.object() schemas now (ExaDev/documents.js#1009), transcribed by hand from CONTENT_EMBEDDED_OBJECT_FIELDS/ContentEmbeddedObjectBlockSchema. Deliberately excluded from content-json-schema-defs.test.ts's own live comparison, unlike every other fragment reachable through ContentBlockSchema: their `document` field's cross-file cycle back to ContentDocumentSchema produced an anonymous `#/$defs/__shared#/$defs/schemaN`-shaped ref rather than the CONTENT_DOCUMENT_URI stated below, once ContentDocumentSchema was registered alongside that test's other ~90 entries — confirmed empirically to work correctly in isolation (just these two schemas plus ContentDocumentSchema registered together), so this is a narrow, real interaction between Zod's own cyclic-schema handling and a large multi-schema registry, not the opacity that used to justify hand-transcribing everything below. See that test file's own top comment.
   ContentEmbeddedObjectBlock: {
     type: "object",
     properties: {
@@ -587,7 +587,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       sourcePath: { type: "string" },
       source: { $ref: "#/$defs/SourceResidue" },
       frames: { type: "array", items: { $ref: "#/$defs/LayoutFrame" } },
-      // Cell-anchor position, all four optional -- only set on an embedded object held in a ContentSheetSchema.embeddedObjects array; mirrors ContentSheetImageSchema's own anchorRow/anchorColumn/offsetXPt/offsetYPt representation exactly (see schemas/content-document.schema.json's own ContentSheetImage fragment, generated -- not hand-transcribed -- since that schema is a real z.object()).
+      // Cell-anchor position, all four optional — only set on an embedded object held in a ContentSheetSchema.embeddedObjects array; mirrors ContentSheetImageSchema's own anchorRow/anchorColumn/offsetXPt/offsetYPt representation exactly (see schemas/content-document.schema.json's own ContentSheetImage fragment, generated — not hand-transcribed — since that schema is a real z.object()).
       anchorRow: { type: "integer", minimum: 0, maximum: MAX_SAFE_INTEGER },
       anchorColumn: { type: "integer", minimum: 0, maximum: MAX_SAFE_INTEGER },
       offsetXPt: { type: "number" },
@@ -596,7 +596,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["kind", "objectKind", "document", "frame"],
     additionalProperties: false,
   },
-  // The flat form's two construct boundary markers (src/content.ts): a matched pair bracketing the extent a construct spans, which is how a codec emits construct data into the one shape it actually produces. Both are real z.objects reaching no opaque node, so both are held to the live comparison by content-json-schema-defs.test.ts. Neither carries frames, sourcePath, or a style ref -- see the schemas' own comments for why a boundary has none of those facts to state.
+  // The flat form's two construct boundary markers (src/content.ts): a matched pair bracketing the extent a construct spans, which is how a codec emits construct data into the one shape it actually produces. Both are real z.objects reaching no opaque node, so both are held to the live comparison by content-json-schema-defs.test.ts. Neither carries frames, sourcePath, or a style ref — see the schemas' own comments for why a boundary has none of those facts to state.
   ContentConstructStart: {
     type: "object",
     properties: {
@@ -626,7 +626,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       { $ref: "#/$defs/ContentConstructEnd" },
     ],
   },
-  // The block leaf of the package tree (src/package-node.ts's TreeBlockLeaf): every ContentBlock member except the two boundary markers, which the tree refuses because it carries a construct as a group instead. Its own fragment rather than a reuse of ContentBlock above, so the published schema forbids exactly what the runtime guards forbid -- a tree fragment pointing at ContentBlock would advertise marker leaves as legal to every non-TypeScript consumer while documentFromJson rejected them. A table cell's blocks keep pointing at ContentBlock: a table is one leaf, decomposition never descends into its cells, so a cell's list is flat in both encodings and a construct inside one is a marker pair there too.
+  // The block leaf of the package tree (src/package-node.ts's TreeBlockLeaf): every ContentBlock member except the two boundary markers, which the tree refuses because it carries a construct as a group instead. Its own fragment rather than a reuse of ContentBlock above, so the published schema forbids exactly what the runtime guards forbid — a tree fragment pointing at ContentBlock would advertise marker leaves as legal to every non-TypeScript consumer while documentFromJson rejected them. A table cell's blocks keep pointing at ContentBlock: a table is one leaf, decomposition never descends into its cells, so a cell's list is flat in both encodings and a construct inside one is a marker pair there too.
   TreeBlockLeaf: {
     oneOf: [
       { $ref: "#/$defs/ContentParagraph" },
@@ -636,7 +636,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       { $ref: "#/$defs/ContentEmbeddedObjectBlock" },
     ],
   },
-  // -- The package tree (src/package-node.ts), reached through DocumentTreeSchema's children --
+  // — The package tree (src/package-node.ts), reached through DocumentTreeSchema's children --
   //
   // Everything in this block is here because the tree's group schemas are z.custom() guards z.toJSONSchema() cannot walk, so the descriptors, anchors, leaves, and wrappers underneath them exist only as these fragments. The descriptors, anchors, and leaves have real exported Zod counterparts built from the content schemas by omit+extend, and content-json-schema-defs.test.ts holds each to a live comparison; only the seven group wrappers (recursive through their children arrays) and ContentEmbeddedObject (the z.custom-backed interface with no z.object at all) are hand-verified alone.
   PageSize: {
@@ -738,7 +738,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["size", "kind"],
     additionalProperties: false,
   },
-  // A shape group's node payload -- the one descriptor with no kind tag, since ContentShape carries none; identified structurally by its frame and insets. strictObject in the source (src/package-node.ts) is what rejects a raw flat ContentShape's blocks key here, matching additionalProperties: false plus blocks' absence.
+  // A shape group's node payload — the one descriptor with no kind tag, since ContentShape carries none; identified structurally by its frame and insets. strictObject in the source (src/package-node.ts) is what rejects a raw flat ContentShape's blocks key here, matching additionalProperties: false plus blocks' absence.
   ShapeDescriptor: {
     type: "object",
     properties: {
@@ -846,7 +846,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["kind", "runs", "list"],
     additionalProperties: false,
   },
-  // A standalone font descriptor -- the canonical run font vocabulary (src/content.ts's ContentFontSchema, single-sourced with ContentRun's own inline fields and StyleRunProperties via RUN_FONT_PROPERTY_SHAPE).
+  // A standalone font descriptor — the canonical run font vocabulary (src/content.ts's ContentFontSchema, single-sourced with ContentRun's own inline fields and StyleRunProperties via RUN_FONT_PROPERTY_SHAPE).
   ContentFont: {
     type: "object",
     properties: {
@@ -895,7 +895,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["row", "column", "value", "displayText"],
     additionalProperties: false,
   },
-  // A cell's own computed/typed value, one variant per ODF office:value-type plus dateTime -- the ten-member discriminated union in declared order (src/content.ts's ContentCellValueSchema).
+  // A cell's own computed/typed value, one variant per ODF office:value-type plus dateTime — the ten-member discriminated union in declared order (src/content.ts's ContentCellValueSchema).
   ContentCellValue: {
     oneOf: [
       {
@@ -1107,7 +1107,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["start", "end"],
     additionalProperties: false,
   },
-  // A rule's target range -- structurally identical to ContentSheetPrintRange above, kept separate since the two facts are unrelated (src/content.ts's own comment on ContentSheetRangeSchema).
+  // A rule's target range — structurally identical to ContentSheetPrintRange above, kept separate since the two facts are unrelated (src/content.ts's own comment on ContentSheetRangeSchema).
   ContentSheetRange: {
     type: "object",
     properties: {
@@ -1696,7 +1696,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       },
     ],
   },
-  // An embedded object on its own (the sheet-children leaf position) -- the same member fields as ContentEmbeddedObjectBlock above minus the block-level kind discriminant, transcribed from the ContentEmbeddedObject interface (src/content.ts), which has no z.object() counterpart at all.
+  // An embedded object on its own (the sheet-children leaf position) — the same member fields as ContentEmbeddedObjectBlock above minus the block-level kind discriminant, transcribed from the ContentEmbeddedObject interface (src/content.ts), which has no z.object() counterpart at all.
   ContentEmbeddedObject: {
     type: "object",
     properties: {
@@ -1712,7 +1712,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["objectKind", "document", "frame"],
     additionalProperties: false,
   },
-  // The nine group wrappers, hand-verified alone (recursive through their children arrays): `{ node, style?, children }` where children's permitted members are exactly that group kind's own child types (src/package-node.ts's per-kind guards) -- which is why every block-flow wrapper points at TreeBlockLeaf rather than ContentBlock: a construct is a group at these positions, never a boundary marker. A wordprocessing section's flow.
+  // The nine group wrappers, hand-verified alone (recursive through their children arrays): `{ node, style?, children }` where children's permitted members are exactly that group kind's own child types (src/package-node.ts's per-kind guards) — which is why every block-flow wrapper points at TreeBlockLeaf rather than ContentBlock: a construct is a group at these positions, never a boundary marker. A wordprocessing section's flow.
   SectionGroup: {
     type: "object",
     properties: {
@@ -1772,7 +1772,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["node", "children"],
     additionalProperties: false,
   },
-  // A slide holds shape groups only, in shape order -- grouping never crosses a shape boundary (a slide's paragraphs across its shapes is the outline's lossy TOC projection, not a decomposition).
+  // A slide holds shape groups only, in shape order — grouping never crosses a shape boundary (a slide's paragraphs across its shapes is the outline's lossy TOC projection, not a decomposition).
   SlideGroup: {
     type: "object",
     properties: {
@@ -1840,7 +1840,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["node", "children"],
     additionalProperties: false,
   },
-  // The two construct group wrappers (src/package-node.ts), hand-verified alone for the same reason as the seven above -- their children arrays recurse back through the same per-flow child unions. One per block flow: the section-scoped variant admits heading groups, the shape-scoped one does not, exactly as SectionChild and ShapeChild differ. A list item's flow takes the shape-scoped variant, since ListChild and ShapeChild admit the same members.
+  // The two construct group wrappers (src/package-node.ts), hand-verified alone for the same reason as the seven above — their children arrays recurse back through the same per-flow child unions. One per block flow: the section-scoped variant admits heading groups, the shape-scoped one does not, exactly as SectionChild and ShapeChild differ. A list item's flow takes the shape-scoped variant, since ListChild and ShapeChild admit the same members.
   SectionConstructGroup: {
     type: "object",
     properties: {
@@ -1880,7 +1880,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["node", "children"],
     additionalProperties: false,
   },
-  // -- The construct descriptor vocabulary (src/construct.ts), the node payload of the two group wrappers above. Every fragment from here to ConstructDescriptor has a real, non-recursive, non-custom Zod counterpart, so all of them are held to the live z.toJSONSchema() comparison by content-json-schema-defs.test.ts rather than needing hand re-verification. --
+  // — The construct descriptor vocabulary (src/construct.ts), the node payload of the two group wrappers above. Every fragment from here to ConstructDescriptor has a real, non-recursive, non-custom Zod counterpart, so all of them are held to the live z.toJSONSchema() comparison by content-json-schema-defs.test.ts rather than needing hand re-verification. --
   ContentControlDescriptor: {
     type: "object",
     properties: {
@@ -2019,7 +2019,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       { $ref: "#/$defs/DivisionDescriptor" },
     ],
   },
-  // -- The definitions facility (src/definitions.ts), reached through DocumentTreeSchema's styles/definitions fields and, since 4.1.0, its layers/attachments/destinations tables --
+  // — The definitions facility (src/definitions.ts), reached through DocumentTreeSchema's styles/definitions fields and, since 4.1.0, its layers/attachments/destinations tables --
   StyleParagraphProperties: {
     type: "object",
     properties: {
@@ -2030,7 +2030,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       lineSpacing: { type: "number", exclusiveMinimum: 0 },
       indentLeftPt: { type: "number" },
       indentFirstLinePt: { type: "number" },
-      pageBreakBefore: { type: "boolean" }, // the page-boundary flags ContentParagraph carries -- the styles-table spelling of a paragraph style that forces a page break
+      pageBreakBefore: { type: "boolean" }, // the page-boundary flags ContentParagraph carries — the styles-table spelling of a paragraph style that forces a page break
       pageBreakAfter: { type: "boolean" },
     },
     additionalProperties: false,
@@ -2056,7 +2056,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     },
     additionalProperties: false,
   },
-  // A tenant-generic definitions-table entry: a required `kind` discriminator plus an open body whose keys belong to the tenant's vocabulary, never this package's -- the empty additionalProperties schema is JSON Schema's "anything", the emitted form of z.looseObject (src/definitions.ts).
+  // A tenant-generic definitions-table entry: a required `kind` discriminator plus an open body whose keys belong to the tenant's vocabulary, never this package's — the empty additionalProperties schema is JSON Schema's "anything", the emitted form of z.looseObject (src/definitions.ts).
   DefinitionEntry: {
     type: "object",
     properties: {
@@ -2065,7 +2065,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["kind"],
     additionalProperties: {},
   },
-  // The MathML node tree carried by the ContentDocument 'formula' variant's own ContentFormulaSchema.mathml (src/content.ts) -- MathMlAttribute/MathMlElement/MathMlNode, rather than transcribed by hand, since MathMlNodeSchema stopped being a z.custom() node in ExaDev/documents.js#937 and z.toJSONSchema() can introspect it directly now. Declared as `get` accessors here, in their own field position, rather than spread in as plain values from a separately-built object: a getter fires only when the property is actually read, so cacheMathMlDef()'s z.toJSONSchema() call happens on first access to any of the three, not the moment this object literal is constructed -- and declaring them in place (rather than via Object.defineProperty after this literal closes) keeps CONTENT_DEFS's own key order exactly where it always was, so the generated content-document.schema.json/document-tree.schema.json's own $defs key order is unaffected by the deferral. See cacheMathMlDef's own comment above for the self-caching mechanism and why referencing CONTENT_DEFS from inside it is safe.
+  // The MathML node tree carried by the ContentDocument 'formula' variant's own ContentFormulaSchema.mathml (src/content.ts) — MathMlAttribute/MathMlElement/MathMlNode, rather than transcribed by hand, since MathMlNodeSchema stopped being a z.custom() node in ExaDev/documents.js#937 and z.toJSONSchema() can introspect it directly now. Declared as `get` accessors here, in their own field position, rather than spread in as plain values from a separately-built object: a getter fires only when the property is actually read, so cacheMathMlDef()'s z.toJSONSchema() call happens on first access to any of the three, not the moment this object literal is constructed — and declaring them in place (rather than via Object.defineProperty after this literal closes) keeps CONTENT_DEFS's own key order exactly where it always was, so the generated content-document.schema.json/document-tree.schema.json's own $defs key order is unaffected by the deferral. See cacheMathMlDef's own comment above for the self-caching mechanism and why referencing CONTENT_DEFS from inside it is safe.
   get MathMlAttribute(): JsonSchema {
     return cacheMathMlDef("MathMlAttribute");
   },
@@ -2076,9 +2076,9 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     return cacheMathMlDef("MathMlNode");
   },
   //
-  // -- The math value schemas (src/math.ts) --
+  // — The math value schemas (src/math.ts) --
   //
-  // ContentFormula itself (src/content.ts): a real z.object() whose every field is a real, non-custom schema now -- `mathml` reaching MathMlNodeSchema since ExaDev/documents.js#937, `content` reaching the now-real, self-recursive MathExpressionSchema since #1009 -- so the generator's override() replacing every occurrence with a $ref to this fragment is for the SAME "named reference instead of duplicated inlining" reason SymbolTableSchema gets that treatment, not because any field still resolves to an opaque node. Transcribed by hand regardless, alongside MathExpression and its own recursive variants below, per this file's own top comment; presentation/provenance/starMath are transcribed alongside rather than left to inline, so the whole fragment tree under `formula` lives here where content-json-schema-defs.test.ts's own live comparison can see the leaves.
+  // ContentFormula itself (src/content.ts): a real z.object() whose every field is a real, non-custom schema now — `mathml` reaching MathMlNodeSchema since ExaDev/documents.js#937, `content` reaching the now-real, self-recursive MathExpressionSchema since #1009 — so the generator's override() replacing every occurrence with a $ref to this fragment is for the SAME "named reference instead of duplicated inlining" reason SymbolTableSchema gets that treatment, not because any field still resolves to an opaque node. Transcribed by hand regardless, alongside MathExpression and its own recursive variants below, per this file's own top comment; presentation/provenance/starMath are transcribed alongside rather than left to inline, so the whole fragment tree under `formula` lives here where content-json-schema-defs.test.ts's own live comparison can see the leaves.
   ContentFormula: {
     type: "object",
     properties: {
@@ -2094,7 +2094,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["mathml"],
     additionalProperties: false,
   },
-  // An exact rational's two halves as canonical decimal-integer strings (src/math.ts's CANONICAL_SIGNED_INTEGER/CANONICAL_POSITIVE_INTEGER -- the patterns ARE the canonicalisation: no leading zeros, no '-0', denominator strictly positive).
+  // An exact rational's two halves as canonical decimal-integer strings (src/math.ts's CANONICAL_SIGNED_INTEGER/CANONICAL_POSITIVE_INTEGER — the patterns ARE the canonicalisation: no leading zeros, no '-0', denominator strictly positive).
   ExactRational: {
     type: "object",
     properties: {
@@ -2104,7 +2104,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["numerator", "denominator"],
     additionalProperties: false,
   },
-  // A dimension as exponents over the SI bases (DimensionVectorSchema = z.partialRecord(z.enum(SI_BASE_DIMENSIONS), z.number().int())) -- the enum below is spread from that same const so the two cannot drift.
+  // A dimension as exponents over the SI bases (DimensionVectorSchema = z.partialRecord(z.enum(SI_BASE_DIMENSIONS), z.number().int())) — the enum below is spread from that same const so the two cannot drift.
   DimensionVector: {
     type: "object",
     propertyNames: { type: "string", enum: [...SI_BASE_DIMENSIONS] },
@@ -2169,7 +2169,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["id", "symbol", "dimension", "factorToSi"],
     additionalProperties: false,
   },
-  // The bases array's entry object is inlined rather than given its own $def -- MathMlNode's five non-element variants set the precedent for inlining definitions nothing else references.
+  // The bases array's entry object is inlined rather than given its own $def — MathMlNode's five non-element variants set the precedent for inlining definitions nothing else references.
   MathNormalisationContext: {
     type: "object",
     properties: {
@@ -2202,7 +2202,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["family", "bold", "italic", "base64"],
     additionalProperties: false,
   },
-  // SymbolTableSchema is a real z.object with no custom node anywhere under it, so z.toJSONSchema() could convert it inline -- it is transcribed here (and the generator $refs to it) so each ContentDocument arm's symbolTable field stays one named reference instead of five duplicated copies of this whole subtree.
+  // SymbolTableSchema is a real z.object with no custom node anywhere under it, so z.toJSONSchema() could convert it inline — it is transcribed here (and the generator $refs to it) so each ContentDocument arm's symbolTable field stays one named reference instead of five duplicated copies of this whole subtree.
   SymbolTable: {
     type: "object",
     properties: {
@@ -2216,7 +2216,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["symbols", "units"],
     additionalProperties: false,
   },
-  // MathExpression and the recursive variants below it (src/math.ts) are all real, exported Zod schemas now, MathExpressionSchema included (ExaDev/documents.js#1009) -- transcribed by hand regardless, since MathApp/MathSum/MathProd/MathMatrix's own args/lower/upper/body/rows fields reach MathExpression, one of this file's own hand-transcribed fragments below, and content-json-schema-defs.test.ts's own REGISTERED_SCHEMAS registry holds all five (plus MathNum/MathQty/MathSym/MathUnparsed above, already covered before #1009) to a live z.toJSONSchema() comparison, catching drift the same way every other hand-transcribed fragment in this file already does.
+  // MathExpression and the recursive variants below it (src/math.ts) are all real, exported Zod schemas now, MathExpressionSchema included (ExaDev/documents.js#1009) — transcribed by hand regardless, since MathApp/MathSum/MathProd/MathMatrix's own args/lower/upper/body/rows fields reach MathExpression, one of this file's own hand-transcribed fragments below, and content-json-schema-defs.test.ts's own REGISTERED_SCHEMAS registry holds all five (plus MathNum/MathQty/MathSym/MathUnparsed above, already covered before #1009) to a live z.toJSONSchema() comparison, catching drift the same way every other hand-transcribed fragment in this file already does.
   MathNum: {
     type: "object",
     properties: {

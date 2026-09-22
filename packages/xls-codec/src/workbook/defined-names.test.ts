@@ -19,13 +19,13 @@ import {
   writeDefinedNameRecords,
 } from "./defined-names";
 
-/** A single-sheet workbook, ixti 0 resolving to Sheet1 alone -- every read-side fixture below names a reference on this one sheet. */
+/** A single-sheet workbook, ixti 0 resolving to Sheet1 alone — every read-side fixture below names a reference on this one sheet. */
 const ONE_SHEET: FormulaSheetContext = {
   sheets: [{ name: "Sheet1" }],
   sheetRanges: [{ firstSheetIndex: 0, lastSheetIndex: 0 }],
 };
 
-/** PtgArea3d, reference class ([MS-XLS] 2.5.198.28): opcode 0x3b, the ixti, then an RgceArea -- a well-formed "the rest of the token stream parses fine" rgce for tests that are really probing an earlier field. */
+/** PtgArea3d, reference class ([MS-XLS] 2.5.198.28): opcode 0x3b, the ixti, then an RgceArea — a well-formed "the rest of the token stream parses fine" rgce for tests that are really probing an earlier field. */
 function area3dToken(
   ixti: number,
   rowFirst: number,
@@ -45,7 +45,7 @@ function area3dToken(
 
 const VALID_REF_RGCE = area3dToken(0, 0, 0, 0, 0);
 
-/** PtgArray (value class, [MS-XLS] 61167ac8): opcode 0x40, then seven bytes this reader never inspects -- the real values live in the RgbExtra trailer's own PtgExtraArray, at the same position in the token sequence. */
+/** PtgArray (value class, [MS-XLS] 61167ac8): opcode 0x40, then seven bytes this reader never inspects — the real values live in the RgbExtra trailer's own PtgExtraArray, at the same position in the token sequence. */
 function ptgArrayToken(): Uint8Array<ArrayBuffer> {
   return new Uint8Array([0x40, 0, 0, 0, 0, 0, 0, 0]);
 }
@@ -62,7 +62,7 @@ function ptgExtraArray(rows: readonly (readonly number[])[][]): number[] {
   return [(columnCount - 1) & 0xff, ...u16(rows.length - 1), ...elements];
 }
 
-/** The Lbl record's own body ([MS-XLS] 2.4.150), independent of this package's own writer -- so a test can put an EARLIER field into a shape the real writer never produces (a builtin index instead of a spelled name, a mismatched cch) while keeping every later field well-formed. */
+/** The Lbl record's own body ([MS-XLS] 2.4.150), independent of this package's own writer — so a test can put an EARLIER field into a shape the real writer never produces (a builtin index instead of a spelled name, a mismatched cch) while keeping every later field well-formed. */
 function lblBody(options: {
   readonly builtin?: boolean;
   readonly cch?: number;
@@ -134,7 +134,7 @@ describe("readDefinedNames", () => {
   it("skips a malformed Lbl record whose own bytes run out before its declared fields, without aborting the names read from every other record", () => {
     const truncated = writeRecord(
       RECORD_LBL,
-      new RecordBuilder().u16(0x0000).build(), // only grbit -- chKey/cch/cce/itab/reserved4-7 are all missing
+      new RecordBuilder().u16(0x0000).build(), // only grbit — chKey/cch/cce/itab/reserved4-7 are all missing
     );
     const real = lblRecord({ name: "Real" });
     const names = readDefinedNames(groupsOf(truncated, real), ONE_SHEET);
@@ -142,7 +142,7 @@ describe("readDefinedNames", () => {
   });
 
   it("propagates a genuine bug rather than absorbing it as just another malformed record", () => {
-    // BlockCursor.prototype.u16 is what readLblRecord's very first field read (grbit) calls, so failing its first call fails before any real malformed-record condition could apply -- proving readDefinedNames' own catch only recovers from a genuine BiffFormatError (recoverFromFormatError's own re-throw for anything else), not silently swallowing every exception a malformed record's own reader could throw.
+    // BlockCursor.prototype.u16 is what readLblRecord's very first field read (grbit) calls, so failing its first call fails before any real malformed-record condition could apply — proving readDefinedNames' own catch only recovers from a genuine BiffFormatError (recoverFromFormatError's own re-throw for anything else), not silently swallowing every exception a malformed record's own reader could throw.
     const bug = new TypeError("a genuine bug, not a malformed record");
     const spy = vi
       .spyOn(BlockCursor.prototype, "u16")
@@ -407,7 +407,7 @@ describe("requiredCaptureGroup", () => {
     expect(requiredCaptureGroup("A1")).toBe("A1");
   });
 
-  it("throws for an undefined group -- the one case this module's own regexes never actually produce, verified directly since none of its real callers can construct it", () => {
+  it("throws for an undefined group — the one case this module's own regexes never actually produce, verified directly since none of its real callers can construct it", () => {
     expect(() => requiredCaptureGroup(undefined)).toThrow(
       "internal error: a regex capture group this module's own callers already proved present was undefined",
     );

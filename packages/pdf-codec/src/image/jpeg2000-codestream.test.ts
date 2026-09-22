@@ -87,7 +87,7 @@ describe("parseJpeg2000Codestream", () => {
       useSop: false,
       useEph: false,
     });
-    // No explicit precinct sizes were transmitted, so every resolution level takes the maximal partition -- one precinct covering the whole level.
+    // No explicit precinct sizes were transmitted, so every resolution level takes the maximal partition — one precinct covering the whole level.
     expect(codestream.main.cod?.precinctSizes).toEqual([
       { ppx: 15, ppy: 15 },
       { ppx: 15, ppy: 15 },
@@ -561,7 +561,7 @@ describe("parseJpeg2000Codestream, header-segment guards a real encoder never tr
     const codestream = parseJpeg2000Codestream(withoutEoc);
     const part = codestream.tileParts[0];
     expect(part).toBeDefined();
-    // The tile-part's own trailing 0xFF 0xD9 only gets trimmed when Psot runs to the codestream's own end and the real EOC marker sits there -- not merely because the last two bytes happen to match.
+    // The tile-part's own trailing 0xFF 0xD9 only gets trimmed when Psot runs to the codestream's own end and the real EOC marker sits there — not merely because the last two bytes happen to match.
     expect(part?.dataEnd).toBe(withoutEoc.length);
   });
 
@@ -677,7 +677,7 @@ describe("parseJpeg2000Codestream, header-segment guards a real encoder never tr
   });
 
   it("skips a marker segment type this decoder has no other handling for, without recording anything", () => {
-    // The body deliberately looks like a registration-1 COM segment ("registration 1, text AB") -- if TLM were ever misread as COM this would show up as a spurious comment, not merely a silent no-op that happens to look the same either way.
+    // The body deliberately looks like a registration-1 COM segment ("registration 1, text AB") — if TLM were ever misread as COM this would show up as a spurious comment, not merely a silent no-op that happens to look the same either way.
     const tlm = segment(0xff55, [0, 1, 0x41, 0x42]);
     const data = minimalCodestream({ afterMainHeader: tlm });
     const codestream = parseJpeg2000Codestream(data);
@@ -686,7 +686,7 @@ describe("parseJpeg2000Codestream, header-segment guards a real encoder never tr
   });
 
   it("stops reading quantization step sizes exactly at its own segment boundary", () => {
-    // One entry, then a single trailing pad byte -- one byte short of a second entry, so a mutant that reads one iteration too many would either read past the segment into whatever follows or throw, rather than stopping here with exactly one.
+    // One entry, then a single trailing pad byte — one byte short of a second entry, so a mutant that reads one iteration too many would either read past the segment into whatever follows or throw, rather than stopping here with exactly one.
     const qcd = segment(MARKER_QCD, [
       (0 << 5) | 1,
       ...u16((5 << 11) | 1),
@@ -752,7 +752,7 @@ describe("parseJpeg2000Codestream, header-segment guards a real encoder never tr
       ytosiz: 1,
     });
     const codestream = parseJpeg2000Codestream(minimalCodestream({ siz }));
-    // ceil((10 - 2) / 4) = 2, and ceil((9 - 1) / 3) = 3 -- not ceil((10 + 2) / 4) = 3 or ceil((9 + 1) / 3) = 4.
+    // ceil((10 - 2) / 4) = 2, and ceil((9 - 1) / 3) = 3 — not ceil((10 + 2) / 4) = 3 or ceil((9 + 1) / 3) = 4.
     expect(codestream.numTilesWide).toBe(2);
     expect(codestream.numTilesHigh).toBe(3);
   });

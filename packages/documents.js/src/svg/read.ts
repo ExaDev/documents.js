@@ -36,14 +36,14 @@ import { decodeEntities } from "ooxml.js";
 //
 // COORDINATE CONVENTIONS: SVG user space is y-down/top-left-origin, which is exactly the convention ContentVector's own frames carry in the drawing variant's page model (src/layout/drawing.ts flips into PDF's bottom-left origin at the layout boundary, not here). Every parsed coordinate therefore stays in y-down page-point space end to end: user units flow through rootMap (the viewBox -> viewport scale) composed with each ancestor group's transform, and the resulting page-point values become the vector's frame / from / to directly. A length carrying an absolute unit (mm, pt, ...) on a geometry attribute resolves to user units against CSS px (1 user unit = 1px = 0.75pt exactly), matching SVG's own rule that absolute lengths convert into the initial user coordinate system before any viewBox scale applies.
 //
-// ROTATED RECT/ELLIPSE FRAMES: for a similarity CTM (uniform scale + rotation) the emitted frame is the SCALED PRE-ROTATION box centred on the transformed centre, with rotationDeg alongside -- the exact contract src/layout/drawing.ts implements, where a rotated vector renders by rotating the frame's own corners/curve points about the frame's own centre. A tight bbox of the rotated corners would instead be the wrong frame: the renderer would inscribe a shape in it and rotate that again, growing the shape.
+// ROTATED RECT/ELLIPSE FRAMES: for a similarity CTM (uniform scale + rotation) the emitted frame is the SCALED PRE-ROTATION box centred on the transformed centre, with rotationDeg alongside — the exact contract src/layout/drawing.ts implements, where a rotated vector renders by rotating the frame's own corners/curve points about the frame's own centre. A tight bbox of the rotated corners would instead be the wrong frame: the renderer would inscribe a shape in it and rotate that again, growing the shape.
 
-// Named ReadSvgContentOptions rather than SvgReadOptions because convert.ts declares its own SvgReadOptions as the ergonomic intersection type the named svg-sourced conversions expose -- the identical split csv holds between ReadCsvContentOptions and CsvReadOptions, so the two layers never collide on this package's export surface.
+// Named ReadSvgContentOptions rather than SvgReadOptions because convert.ts declares its own SvgReadOptions as the ergonomic intersection type the named svg-sourced conversions expose — the identical split csv holds between ReadCsvContentOptions and CsvReadOptions, so the two layers never collide on this package's export surface.
 export interface ReadSvgContentOptions {
   readonly onSvgDiagnostic?: SvgDiagnosticSink;
 }
 
-// A recognised svg byte stream whose root element is not <svg> -- a named class matching this package's convention for every other "recognised but unsupported" input, so a caller can branch on it with instanceof rather than string-matching a thrown Error's own message.
+// A recognised svg byte stream whose root element is not <svg> — a named class matching this package's convention for every other "recognised but unsupported" input, so a caller can branch on it with instanceof rather than string-matching a thrown Error's own message.
 export class SvgMissingRootElementError extends Error {
   constructor() {
     super("svg text must contain an <svg> root element");
@@ -91,7 +91,7 @@ function textOf(element: XmlElement): string {
   return text;
 }
 
-// The inherited presentation-attribute state, walked as raw strings and resolved only at the shape that uses them -- so a diagnostic about an unresolvable value fires per painted element, not per declaration, and a value on a group that paints nothing directly diagnoses nothing.
+// The inherited presentation-attribute state, walked as raw strings and resolved only at the shape that uses them — so a diagnostic about an unresolvable value fires per painted element, not per declaration, and a value on a group that paints nothing directly diagnoses nothing.
 interface PaintState {
   readonly fillSpec?: string;
   readonly strokeSpec?: string;
@@ -125,7 +125,7 @@ function report(
   state.sink?.(detail === undefined ? { code } : { code, detail });
 }
 
-// One paint property resolved to the schema's vocabulary, with every degradation named. Defaults follow SVG's own: an absent fill paints black, an absent stroke paints nothing. 'none' unpaints; url(#...) is reported as the gradient limit and unpaints (rendering a guessed solid colour would misrepresent the document worse than leaving it unpainted); currentColor renders black -- the CSS 'color' property's own initial value -- under a paint-unsupported diagnostic; an unparseable value falls back to the property's own default under the same diagnostic rather than poisoning geometry with a half-parse.
+// One paint property resolved to the schema's vocabulary, with every degradation named. Defaults follow SVG's own: an absent fill paints black, an absent stroke paints nothing. 'none' unpaints; url(#...) is reported as the gradient limit and unpaints (rendering a guessed solid colour would misrepresent the document worse than leaving it unpainted); currentColor renders black — the CSS 'color' property's own initial value — under a paint-unsupported diagnostic; an unparseable value falls back to the property's own default under the same diagnostic rather than poisoning geometry with a half-parse.
 function resolveFillPaint(
   state: ReaderState,
   spec: string | undefined,
@@ -157,7 +157,7 @@ function resolveFillPaint(
   return paint.color;
 }
 
-// Stroke width resolves through the shared user-unit length parser (default 1, the attribute's own default), then scales by the CTM's mean column scale. A stroke whose scaled width is not positive is dropped rather than clamped -- ContentStrokeSchema demands widthPt > 0, and a zero-width stroke paints nothing in a conforming renderer either.
+// Stroke width resolves through the shared user-unit length parser (default 1, the attribute's own default), then scales by the CTM's mean column scale. A stroke whose scaled width is not positive is dropped rather than clamped — ContentStrokeSchema demands widthPt > 0, and a zero-width stroke paints nothing in a conforming renderer either.
 function resolveStroke(
   state: ReaderState,
   paint: PaintState,
@@ -219,7 +219,7 @@ function axisAlignedFrame(
   ]);
 }
 
-// The frame a non-reflecting similarity CTM gives a box, per the module note's pre-rotation contract: the uniformly scaled box, positioned so its centre sits on the transformed centre -- the renderer then rotates the frame's own points about that centre by rotationDeg and lands exactly on the transformed corners.
+// The frame a non-reflecting similarity CTM gives a box, per the module note's pre-rotation contract: the uniformly scaled box, positioned so its centre sits on the transformed centre — the renderer then rotates the frame's own points about that centre by rotationDeg and lands exactly on the transformed corners.
 function similarityFrame(
   ctm: AffineMatrix,
   x: number,
@@ -237,7 +237,7 @@ function similarityFrame(
   };
 }
 
-// The path pipeline every curve-carrying construction funnels into: transform each point of the already-parsed local-space subpaths through the CTM (an affine maps a cubic's controls exactly, so nothing is approximated here), take the tight bounding box of ALL points including cubic controls (the identical hull convention src/layout/drawing.ts's own vectorItemBounds documents -- a cubic lies within the convex hull of its controls, so the frame contains the rendered curve), and rebase the points into the frame's own local space, which is the ContentVector path variant's own subpaths contract.
+// The path pipeline every curve-carrying construction funnels into: transform each point of the already-parsed local-space subpaths through the CTM (an affine maps a cubic's controls exactly, so nothing is approximated here), take the tight bounding box of ALL points including cubic controls (the identical hull convention src/layout/drawing.ts's own vectorItemBounds documents — a cubic lies within the convex hull of its controls, so the frame contains the rendered curve), and rebase the points into the frame's own local space, which is the ContentVector path variant's own subpaths contract.
 function buildPathVector(
   state: ReaderState,
   subpaths: readonly ParsedPathSubpath[],
@@ -370,7 +370,7 @@ function roundedRectSubpaths(
   ];
 }
 
-// An ellipse as its four kappa quarter-arc cubics, walked clockwise from the rightmost axis point in y-down space -- the mirror image of src/layout/drawing.ts's own ellipseCubicPoints walk (counter-clockwise in PDF's y-up space; both trace the same curve).
+// An ellipse as its four kappa quarter-arc cubics, walked clockwise from the rightmost axis point in y-down space — the mirror image of src/layout/drawing.ts's own ellipseCubicPoints walk (counter-clockwise in PDF's y-up space; both trace the same curve).
 function ellipseSubpaths(
   cx: number,
   cy: number,
@@ -457,13 +457,13 @@ function readShape(
       report(state, "svg/element-skipped", `${detail}: zero or negative size`);
       return;
     }
-    // Each corner radius defaults to the other when only one is present -- the attribute's own rule.
+    // Each corner radius defaults to the other when only one is present — the attribute's own rule.
     const rxAttr = parseSvgUserUnits(findAttribute(element, "rx"));
     const ryAttr = parseSvgUserUnits(findAttribute(element, "ry"));
     const rx = rxAttr ?? ryAttr ?? 0;
     const ry = ryAttr ?? rxAttr ?? 0;
     if (rx > 0 || ry > 0) {
-      // The schema's rect variant has no corner-radius field, so rounded corners are exactly representable only as a path -- constructed the same way the renderer itself draws them.
+      // The schema's rect variant has no corner-radius field, so rounded corners are exactly representable only as a path — constructed the same way the renderer itself draws them.
       const vector = buildPathVector(
         state,
         roundedRectSubpaths(x, y, width, height, rx, ry),
@@ -671,7 +671,7 @@ function readShape(
   }
 }
 
-// Elements that never render directly -- definitions, references, and non-visual metadata -- walked past silently rather than diagnosed: they are supposed to produce nothing on the canvas, and a <defs> full of gradients is not a fidelity loss until something actually references one (which the url(#...) resolution then reports).
+// Elements that never render directly — definitions, references, and non-visual metadata — walked past silently rather than diagnosed: they are supposed to produce nothing on the canvas, and a <defs> full of gradients is not a fidelity loss until something actually references one (which the url(#...) resolution then reports).
 const NON_RENDERING_ELEMENTS = new Set([
   "defs",
   "title",
@@ -757,7 +757,7 @@ function walkElement(
     name === "polygon" ||
     name === "path"
   ) {
-    // A shape element's own transform attribute composes after the ancestors' -- SVG applies transform to every element, not just groups, and the write side relies on this directly (rotationDeg is emitted as a transform on the shape element itself, so honouring it here is what makes a rotated rect survive its own round trip). The element's own presentation attributes merge over the inherited paint state the same way a group's do -- fill=/stroke= directly on a shape is the most common authoring pattern there is.
+    // A shape element's own transform attribute composes after the ancestors' — SVG applies transform to every element, not just groups, and the write side relies on this directly (rotationDeg is emitted as a transform on the shape element itself, so honouring it here is what makes a rotated rect survive its own round trip). The element's own presentation attributes merge over the inherited paint state the same way a group's do — fill=/stroke= directly on a shape is the most common authoring pattern there is.
     const own = parseSvgTransform(findAttribute(element, "transform"));
     readShape(
       state,
@@ -882,7 +882,7 @@ export function readSvgContent(
   };
   const rootGeometry = resolveRootGeometry(root, state);
 
-  // The root element's own <title> child is SVG's one genuinely representable metadata field -- it becomes the document's metadata.title, entity-decoded because odf.js's parseXml deliberately keeps the original encoding.
+  // The root element's own <title> child is SVG's one genuinely representable metadata field — it becomes the document's metadata.title, entity-decoded because odf.js's parseXml deliberately keeps the original encoding.
   const titleElement = elementChildren(root).find(
     (child) => localName(child.tag) === "title",
   );

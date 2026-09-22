@@ -3,13 +3,13 @@ import type { PdfObject } from "../objects";
 import { pdfDict, pdfNum, pdfRef } from "../objects";
 import { writeObject } from "../serialize";
 
-// Assembles a complete classic-cross-reference PDF file around an already-built object list, through this package's own serialize.ts -- the same write path writePdf's own tail uses. Unlike test-support/pdf.ts's FixtureBuilder (which deliberately avoids this package's own writer to keep the read-side test oracle independent), this helper exists for the opposite case: a write-side unit test that already has real PdfObject values from the module under test (buildEmbeddedFontObjects, buildMathFontObjects, ...) and wants the minimum well-formed document those objects can be read back from, written through the real serializer rather than reimplemented.
+// Assembles a complete classic-cross-reference PDF file around an already-built object list, through this package's own serialize.ts — the same write path writePdf's own tail uses. Unlike test-support/pdf.ts's FixtureBuilder (which deliberately avoids this package's own writer to keep the read-side test oracle independent), this helper exists for the opposite case: a write-side unit test that already has real PdfObject values from the module under test (buildEmbeddedFontObjects, buildMathFontObjects, ...) and wants the minimum well-formed document those objects can be read back from, written through the real serializer rather than reimplemented.
 export interface AllocatedObject {
   readonly num: number;
   readonly value: PdfObject;
 }
 
-// `objects` must number its entries contiguously from 1 (no gaps, no repeats) -- both this file's callers allocate that way already, matching write.ts's own fixed-order allocation, so the xref table below can record one offset per object as it is written rather than re-deriving the count from whatever numbers happen to appear.
+// `objects` must number its entries contiguously from 1 (no gaps, no repeats) — both this file's callers allocate that way already, matching write.ts's own fixed-order allocation, so the xref table below can record one offset per object as it is written rather than re-deriving the count from whatever numbers happen to appear.
 export function assemblePdf(
   objects: readonly AllocatedObject[],
   rootNum: number,

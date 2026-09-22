@@ -92,7 +92,7 @@ describe("readFileHeader", () => {
       WpdEncryptedDocumentError,
     );
     expect(() => readFileHeader(headerBytes({ encryption: 1 }))).toThrow(
-      'This document is encrypted (encryption word 1); nothing beyond the file header is intelligible without the password. Pass { password } to read it -- the standard ("original") encryption mode is supported, and a non-matching password throws WpdWrongPasswordError.',
+      'This document is encrypted (encryption word 1); nothing beyond the file header is intelligible without the password. Pass { password } to read it — the standard ("original") encryption mode is supported, and a non-matching password throws WpdWrongPasswordError.',
     );
   });
 
