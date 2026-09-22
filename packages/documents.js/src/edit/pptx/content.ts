@@ -231,6 +231,25 @@ function populateCellParagraphs(
 
 // A DrawingML table's own a:tr always carries exactly `columns` a:tc elements regardless of merges — a covered position is a real a:tc marked hMerge/vMerge="1" (see table.ts's own PptxTableCell), never an omitted or replaced element — and ContentTable's grid rule (ContentTableCell in document-schema.js) gives every row exactly one entry per grid column too, so an entry's array index is its a:tc's own column with no running-offset bookkeeping. walkTableGrid classifies each entry: an anchor carries its spans and its content, while a covered entry states which side of its region it lies on and carries only its own background and borders, since its content belongs to the anchor. A position the region reaches along its own row is marked hMerge and one it reaches from an earlier row is marked vMerge, both at once for the interior of a region wider and taller than one cell, as real PowerPoint output states it.
 //
+// A column's own isHeader (ContentTableColumn, ExaDev/documents.js#1381) is reported through onDiagnostic rather than written, the column-axis mirror of the row-header reporting immediately below: DrawingML's a:tblGrid has no header-column marker at all, so the column's own cells are written exactly like any other column and only the flag is dropped. Reported once per flagged column, naming its index, before any row is populated, matching ppt-codec's own per-column TABLE_HEADER_COLUMN_DROPPED precedent (src/drawing/shapes-write.ts) for the identical field.
+function reportDroppedHeaderColumns(
+  block: ContentTable,
+  onDiagnostic: PptxWriteDiagnosticSink,
+): void {
+  block.columns.forEach((column, columnIndex) => {
+    if (column.isHeader === true) {
+      onDiagnostic(
+        {
+          code: PptxWriteDiagnosticCodes.TABLE_HEADER_COLUMN_DROPPED,
+          severity: "warning",
+          message: `buildPptxPackage: table column ${String(columnIndex)} is a header column, and that is dropped; DrawingML has no header-column marker, so the column is written exactly as any other`,
+        },
+        { sourcePath: block.sourcePath },
+      );
+    }
+  });
+}
+
 // A row's own isHeader (ContentTableRow, ExaDev/documents.js#1390) is reported through onDiagnostic rather than written: DrawingML has no per-row header marker at all (see diagnostics.ts's own TABLE_HEADER_ROW_DROPPED comment), so the row's cells are written exactly like any other row and only the flag is dropped. Reported once per flagged row, before its cells are populated, matching ppt-codec's own writeIMsoArray precedent (src/drawing/shapes-write.ts) for the identical field.
 function populatePptxTable(
   table: PptxTable,
@@ -239,6 +258,7 @@ function populatePptxTable(
   resolveHyperlinkRId?: (url: string) => string,
 ): void {
   assertTableObeysGridRule(block, "buildPptxPackage");
+  reportDroppedHeaderColumns(block, onDiagnostic);
   walkTableGrid(block).forEach((positions, rowIndex) => {
     const row = block.rows[rowIndex];
     if (row?.isHeader === true) {

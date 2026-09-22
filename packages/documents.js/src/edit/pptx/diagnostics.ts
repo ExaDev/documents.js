@@ -8,6 +8,8 @@ export type PptxWriteDiagnosticSeverity = "info" | "warning";
 export const PptxWriteDiagnosticCodes = {
   // A table row's own isHeader (document-schema.js's ContentTableRow). DrawingML has no per-row header marker at all: a:tblPr's firstRow/bandRow select which rows the table STYLE bands, not which row repeats as a page header, and can only ever name the first row, so mapping onto them would state visual emphasis in place of page repetition and narrow "any row" to "row 0 or nothing" (ExaDev/documents.js#1377, #1390). The row's own content is written exactly like any other row; only the flag itself is dropped.
   TABLE_HEADER_ROW_DROPPED: "pptx-write/table-header-row-dropped",
+  // A column's own isHeader (document-schema.js's ContentTableColumn), the column-axis mirror of TABLE_HEADER_ROW_DROPPED immediately above (ExaDev/documents.js#1381). DrawingML's a:tblGrid has no header-column concept at all, unlike ODF's table:table-header-columns: a:tblPr's firstCol/bandCol select which column the table STYLE bands, not which column repeats at the left of each printed page, and firstCol can only ever name the first column. The column's own cells are written exactly like any other column's; only the flag itself is dropped.
+  TABLE_HEADER_COLUMN_DROPPED: "pptx-write/table-header-column-dropped",
 } as const;
 
 export type PptxWriteDiagnosticCode =
