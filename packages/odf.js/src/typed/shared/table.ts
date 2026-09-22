@@ -8,6 +8,7 @@ import type {
   ContentParagraph,
   ContentTable,
   ContentTableCell,
+  ContentTableColumn,
   ContentTableRow,
 } from "document-schema.js";
 import { resolveCellFillColor, walkTableGrid } from "document-schema.js";
@@ -515,8 +516,8 @@ export function writeOdfTable(
   assertTableObeysGridRule(table, "writeOdfTable");
   const { registry } = context;
   const tableName = context.mintTableName();
-  const columns = table.columnWidthsPt.map((widthPt) => {
-    const styleName = tableColumnStyle(widthPt, registry);
+  const columnElements = table.columns.map((column) => {
+    const styleName = tableColumnStyle(column.widthPt, registry);
     return el(
       "table:table-column",
       styleName === undefined
@@ -558,8 +559,8 @@ export function writeOdfTable(
   });
 
   // The table's own style carries the one property a real consumer needs to lay it out at all: its total width, the sum of the column widths it was given. A table whose columns state no width at all gets the alignment alone, since a fabricated width would be worse than none.
-  const totalWidthPt = table.columnWidthsPt.reduce(
-    (total, widthPt) => total + widthPt,
+  const totalWidthPt = table.columns.reduce(
+    (total, column) => total + column.widthPt,
     0,
   );
   const tableProperties: Record<string, string> = { "table:align": "margins" };
@@ -578,7 +579,10 @@ export function writeOdfTable(
       "table:name": encodeXmlText(tableName),
       "table:style-name": encodeXmlText(tableStyleName),
     },
-    [...columns, ...groupHeaderRows(table.rows, rows)],
+    [
+      ...groupHeaderColumns(table.columns, columnElements),
+      ...groupHeaderRows(table.rows, rows),
+    ],
   );
 }
 
@@ -601,6 +605,33 @@ function groupHeaderRows(
     // One element per row, built by the caller's own map over these same rows, so this index is always in range.
     const element = elements[index]!;
     if (row.isHeader === true) {
+      run.push(element);
+      return;
+    }
+    closeRun();
+    out.push(element);
+  });
+  closeRun();
+  return out;
+}
+
+// THE HEADER COLUMN RULE's write side (document-schema.js's ContentTable): the column-axis mirror of groupHeaderRows immediately above, wrapping each MAXIMAL RUN of consecutive columns carrying isHeader in its own table:table-header-columns, exactly as groupHeaderRows wraps a run of rows. This is the same table-rows-and-groups/table-columns-and-groups symmetry OASIS ODF 1.3's own schema states for the two axes (9.1.2 columns, 9.1.5 rows), so several wrappers in one table is valid here for the identical reason it is valid on the row axis, and a non-leading or non-contiguous header column round-trips as stated rather than being flattened or refused.
+function groupHeaderColumns(
+  columns: readonly ContentTableColumn[],
+  elements: readonly XmlElement[],
+): XmlElement[] {
+  const out: XmlElement[] = [];
+  let run: XmlElement[] = [];
+  const closeRun = (): void => {
+    if (run.length > 0) {
+      out.push(el("table:table-header-columns", {}, run));
+      run = [];
+    }
+  };
+  columns.forEach((column, index) => {
+    // One element per column, built by the caller's own map over these same columns, so this index is always in range.
+    const element = elements[index]!;
+    if (column.isHeader === true) {
       run.push(element);
       return;
     }
@@ -666,18 +697,21 @@ export function readOdfTable(
   pkg: Package,
   listIdState: OdfListIdState = { next: 1 },
 ): ContentTable {
-  const columnWidthsPt: number[] = [];
-  // A column's own insideHeader is read and dropped here: ContentTable states a column as a width alone, with no per-column object for a header-column flag to live on, so table:table-header-columns has nowhere to land (ExaDev/documents.js#1381). Nothing else in this function is affected, since the wrapper was already transparent to the flattening.
-  for (const { element: column } of flattenTableParts(
+  const columns: ContentTableColumn[] = [];
+  for (const { element: column, insideHeader } of flattenTableParts(
     tableElement,
     "table:table-column",
     COLUMN_WRAPPER_TAGS,
     "table:table-header-columns",
   )) {
     const widthPt = resolveColumnWidthPt(column, pkg);
+    // A repeated header column repeats as a header column: table:number-columns-repeated states how many identical columns the one element stands for, and every one of them sits inside the same wrapper. Mirrors readTableRow's own table:number-rows-repeated handling for the row axis below.
+    const readColumn: ContentTableColumn = insideHeader
+      ? { widthPt, isHeader: true }
+      : { widthPt };
     const repeat = readRepeatCount(column, "table:number-columns-repeated");
     for (let i = 0; i < repeat; i++) {
-      columnWidthsPt.push(widthPt);
+      columns.push(readColumn);
     }
   }
 
@@ -697,5 +731,5 @@ export function readOdfTable(
     }
   }
 
-  return { kind: "table", rows, columnWidthsPt };
+  return { kind: "table", rows, columns };
 }

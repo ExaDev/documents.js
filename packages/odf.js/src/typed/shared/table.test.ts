@@ -89,12 +89,16 @@ describe("readOdfTable: columns", () => {
     const pkg: Package = {
       parts: { "content.xml": contentPackage([co1, co2]) },
     };
-    expect(readOdfTable(table, pkg).columnWidthsPt).toEqual([100, 150]);
+    expect(readOdfTable(table, pkg).columns.map((c) => c.widthPt)).toEqual([
+      100, 150,
+    ]);
   });
 
   it("defaults an unresolvable column width to 0pt, matching ooxml.js's own established readTable convention", () => {
     const table = el("table:table", {}, [el("table:table-column")]);
-    expect(readOdfTable(table, { parts: {} }).columnWidthsPt).toEqual([0]);
+    expect(
+      readOdfTable(table, { parts: {} }).columns.map((c) => c.widthPt),
+    ).toEqual([0]);
   });
 
   it("expands table:number-columns-repeated into that many repeated width entries", () => {
@@ -106,7 +110,9 @@ describe("readOdfTable: columns", () => {
       }),
     ]);
     const pkg: Package = { parts: { "content.xml": contentPackage([co1]) } };
-    expect(readOdfTable(table, pkg).columnWidthsPt).toEqual([80, 80, 80]);
+    expect(readOdfTable(table, pkg).columns.map((c) => c.widthPt)).toEqual([
+      80, 80, 80,
+    ]);
   });
 });
 
@@ -408,7 +414,7 @@ describe("readOdfTable: overall shape", () => {
     expect(readOdfTable(el("table:table"), { parts: {} })).toEqual({
       kind: "table",
       rows: [],
-      columnWidthsPt: [],
+      columns: [],
     });
   });
 });
@@ -418,21 +424,27 @@ describe("readOdfTable: repeat-count edge cases (readRepeatCount)", () => {
     const table = el("table:table", {}, [
       el("table:table-column", { "table:number-columns-repeated": "0" }),
     ]);
-    expect(readOdfTable(table, { parts: {} }).columnWidthsPt).toEqual([0]);
+    expect(
+      readOdfTable(table, { parts: {} }).columns.map((c) => c.widthPt),
+    ).toEqual([0]);
   });
 
   it("a negative repeated count is invalid and falls back to a single entry", () => {
     const table = el("table:table", {}, [
       el("table:table-column", { "table:number-columns-repeated": "-3" }),
     ]);
-    expect(readOdfTable(table, { parts: {} }).columnWidthsPt).toEqual([0]);
+    expect(
+      readOdfTable(table, { parts: {} }).columns.map((c) => c.widthPt),
+    ).toEqual([0]);
   });
 
   it("a non-numeric repeated count is invalid and falls back to a single entry", () => {
     const table = el("table:table", {}, [
       el("table:table-column", { "table:number-columns-repeated": "abc" }),
     ]);
-    expect(readOdfTable(table, { parts: {} }).columnWidthsPt).toEqual([0]);
+    expect(
+      readOdfTable(table, { parts: {} }).columns.map((c) => c.widthPt),
+    ).toEqual([0]);
   });
 
   it("a genuinely positive repeated count on a row is honoured in full, not truncated", () => {
@@ -555,6 +567,7 @@ describe("writeOdfTable", () => {
   function writeContext(): {
     context: OdfTableWriteContext;
     mintedStyles: () => XmlElement[];
+    pkg: Package;
   } {
     const automaticStyles = el("office:automatic-styles", {}, []);
     const pkg: Package = {
@@ -578,6 +591,7 @@ describe("writeOdfTable", () => {
           (c): c is XmlElement =>
             c.type === "element" && c.tag === "style:style",
         ),
+      pkg,
     };
   }
 
@@ -603,7 +617,7 @@ describe("writeOdfTable", () => {
     // A merged header whose covered position carries a second copy of the anchor's content, which a table:covered-table-cell has no room for.
     const coveredContentTable: ContentTable = {
       kind: "table",
-      columnWidthsPt: [100, 100],
+      columns: [{ widthPt: 100 }, { widthPt: 100 }],
       rows: [
         {
           cells: [
@@ -625,7 +639,7 @@ describe("writeOdfTable", () => {
       const { context } = writeContext();
       expect(() => writeOdfTable(coveredContentTable, context)).toThrow();
       const clean = writeOdfTable(
-        { kind: "table", rows: [], columnWidthsPt: [] },
+        { kind: "table", rows: [], columns: [] },
         context,
       );
       expect(attrValue(clean, "table:name")).toBe("Table1");
@@ -635,7 +649,7 @@ describe("writeOdfTable", () => {
       const { context } = writeContext();
       const outer: ContentTable = {
         kind: "table",
-        columnWidthsPt: [100],
+        columns: [{ widthPt: 100 }],
         rows: [{ cells: [{ blocks: [coveredContentTable] }] }],
       };
       expect(() => writeOdfTable(outer, context)).toThrow(
@@ -649,7 +663,7 @@ describe("writeOdfTable", () => {
     const table: ContentTable = {
       kind: "table",
       rows: [],
-      columnWidthsPt: [],
+      columns: [],
     };
     const first = writeOdfTable(table, context);
     const second = writeOdfTable(table, context);
@@ -661,7 +675,7 @@ describe("writeOdfTable", () => {
     const table: ContentTable = {
       kind: "table",
       rows: [],
-      columnWidthsPt: [0, 100],
+      columns: [{ widthPt: 0 }, { widthPt: 100 }],
     };
     const { context } = writeContext();
     const written = writeOdfTable(table, context);
@@ -671,6 +685,83 @@ describe("writeOdfTable", () => {
     expect(attr(columns[1], "table:style-name")).toBeDefined();
   });
 
+  it("wraps a leading run of header columns in one table:table-header-columns and leaves the plain columns as direct children", () => {
+    const table: ContentTable = {
+      kind: "table",
+      rows: [],
+      columns: [
+        { widthPt: 10, isHeader: true },
+        { widthPt: 20, isHeader: true },
+        { widthPt: 30 },
+      ],
+    };
+    const { context } = writeContext();
+    const written = writeOdfTable(table, context);
+    const wrappers = elementsWithTag(
+      written.children,
+      "table:table-header-columns",
+    );
+    expect(wrappers).toHaveLength(1);
+    expect(
+      elementsWithTag(wrappers[0]!.children, "table:table-column"),
+    ).toHaveLength(2);
+    expect(
+      elementsWithTag(written.children, "table:table-column"),
+    ).toHaveLength(1);
+  });
+
+  it("writes no wrapper at all for a table whose columns state no header", () => {
+    const table: ContentTable = {
+      kind: "table",
+      rows: [],
+      columns: [{ widthPt: 10 }, { widthPt: 20 }],
+    };
+    const { context } = writeContext();
+    const written = writeOdfTable(table, context);
+    expect(
+      elementsWithTag(written.children, "table:table-header-columns"),
+    ).toHaveLength(0);
+    expect(
+      elementsWithTag(written.children, "table:table-column"),
+    ).toHaveLength(2);
+  });
+
+  // A header column that is neither leading nor contiguous with the leading block is stated as its own wrapper rather than dropped or folded into the first one, the column-axis mirror of the identical row-axis test above: ODF's own content model allows several table:table-header-columns blocks in one table, so nothing has to be lost to write it.
+  it("gives each run of header columns its own wrapper, keeping every column in document order", () => {
+    const table: ContentTable = {
+      kind: "table",
+      rows: [],
+      columns: [
+        { widthPt: 10 },
+        { widthPt: 20, isHeader: true },
+        { widthPt: 30 },
+        { widthPt: 40, isHeader: true },
+        { widthPt: 50, isHeader: true },
+      ],
+    };
+    const { context, pkg } = writeContext();
+    const written = writeOdfTable(table, context);
+    expect(
+      written.children
+        .filter((child): child is XmlElement => child.type === "element")
+        .map((child) => child.tag),
+    ).toEqual([
+      "table:table-column",
+      "table:table-header-columns",
+      "table:table-column",
+      "table:table-header-columns",
+    ]);
+    const reread = readOdfTable(written, pkg);
+    expect(reread.columns.map((c) => c.widthPt)).toEqual([10, 20, 30, 40, 50]);
+    expect(reread.columns.map((c) => c.isHeader)).toEqual([
+      undefined,
+      true,
+      undefined,
+      true,
+      true,
+    ]);
+  });
+
   it("writes a table:style-name on a row only when it carries a heightPt", () => {
     const table: ContentTable = {
       kind: "table",
@@ -678,7 +769,7 @@ describe("writeOdfTable", () => {
         { cells: [paragraphCell("a")] },
         { cells: [paragraphCell("b")], heightPt: 20 },
       ],
-      columnWidthsPt: [],
+      columns: [],
     };
     const { context } = writeContext();
     const written = writeOdfTable(table, context);
@@ -695,7 +786,7 @@ describe("writeOdfTable", () => {
         { cells: [paragraphCell("H2")], isHeader: true },
         { cells: [paragraphCell("B")] },
       ],
-      columnWidthsPt: [],
+      columns: [],
     };
     const { context } = writeContext();
     const written = writeOdfTable(table, context);
@@ -716,7 +807,7 @@ describe("writeOdfTable", () => {
     const table: ContentTable = {
       kind: "table",
       rows: [{ cells: [paragraphCell("a")] }, { cells: [paragraphCell("b")] }],
-      columnWidthsPt: [],
+      columns: [],
     };
     const { context } = writeContext();
     const written = writeOdfTable(table, context);
@@ -739,7 +830,7 @@ describe("writeOdfTable", () => {
         { cells: [paragraphCell("h2")], isHeader: true },
         { cells: [paragraphCell("h3")], isHeader: true },
       ],
-      columnWidthsPt: [],
+      columns: [],
     };
     const { context } = writeContext();
     const written = writeOdfTable(table, context);
@@ -768,7 +859,7 @@ describe("writeOdfTable", () => {
     const table: ContentTable = {
       kind: "table",
       rows: [{ cells: [paragraphCell("h")], isHeader: true, heightPt: 20 }],
-      columnWidthsPt: [],
+      columns: [],
     };
     const { context } = writeContext();
     const written = writeOdfTable(table, context);
@@ -785,12 +876,12 @@ describe("writeOdfTable", () => {
     const withWidth: ContentTable = {
       kind: "table",
       rows: [],
-      columnWidthsPt: [50, 50],
+      columns: [{ widthPt: 50 }, { widthPt: 50 }],
     };
     const withoutWidth: ContentTable = {
       kind: "table",
       rows: [],
-      columnWidthsPt: [],
+      columns: [],
     };
     const { context: ctxWith, mintedStyles: stylesWith } = writeContext();
     writeOdfTable(withWidth, ctxWith);
@@ -829,7 +920,7 @@ describe("writeOdfTable", () => {
           ],
         },
       ],
-      columnWidthsPt: [],
+      columns: [],
     };
     const { context } = writeContext();
     const written = writeOdfTable(table, context);
@@ -858,7 +949,7 @@ describe("writeOdfTable", () => {
         },
         { cells: [{ blocks: [] }, paragraphCell("plain")] },
       ],
-      columnWidthsPt: [],
+      columns: [],
     };
     const { context } = writeContext();
     const written = writeOdfTable(table, context);
@@ -884,7 +975,7 @@ describe("writeOdfTable", () => {
         { cells: [{ blocks: [] }, { blocks: [] }] },
         { cells: [{ blocks: [] }, { blocks: [] }] },
       ],
-      columnWidthsPt: [10, 10],
+      columns: [{ widthPt: 10 }, { widthPt: 10 }],
     };
     const { context } = writeContext();
     const written = writeOdfTable(table, context);
@@ -901,7 +992,7 @@ describe("writeOdfTable", () => {
     const table: ContentTable = {
       kind: "table",
       rows: [{ cells: [paragraphCell("plain")] }],
-      columnWidthsPt: [],
+      columns: [],
     };
     const { context } = writeContext();
     const written = writeOdfTable(table, context);
@@ -928,7 +1019,7 @@ describe("writeOdfTable", () => {
           ],
         },
       ],
-      columnWidthsPt: [],
+      columns: [],
     };
     const { context } = writeContext();
     const written = writeOdfTable(table, context);
@@ -956,7 +1047,7 @@ describe("writeOdfTable", () => {
           ],
         },
       ],
-      columnWidthsPt: [],
+      columns: [],
     };
     const { context, mintedStyles } = writeContext();
     writeOdfTable(table, context);
@@ -997,7 +1088,7 @@ describe("writeOdfTable", () => {
           ],
         },
       ],
-      columnWidthsPt: [],
+      columns: [],
     };
     const { context } = writeContext();
     const written = writeOdfTable(table, context);
@@ -1041,7 +1132,7 @@ describe("writeOdfTable", () => {
           ],
         },
       ],
-      columnWidthsPt: [],
+      columns: [],
     };
     const { context } = writeContext();
     const written = writeOdfTable(table, context);
@@ -1072,14 +1163,14 @@ describe("writeOdfTable", () => {
                 {
                   kind: "table",
                   rows: [{ cells: [paragraphCell("nested")] }],
-                  columnWidthsPt: [],
+                  columns: [],
                 },
               ],
             },
           ],
         },
       ],
-      columnWidthsPt: [],
+      columns: [],
     };
     const { context } = writeContext();
     const written = writeOdfTable(table, context);
@@ -1123,7 +1214,7 @@ describe("writeOdfTable", () => {
           ],
         },
       ],
-      columnWidthsPt: [],
+      columns: [],
     };
     const { context } = writeContext();
     expect(() => writeOdfTable(table, context)).toThrow(/image/);
@@ -1147,9 +1238,9 @@ describe("the grid rule: readOdfTable output is dense", () => {
   }
 
   function expectEveryRowAsWideAsTheColumns(table: ContentTable): void {
-    expect(table.columnWidthsPt).toHaveLength(3);
+    expect(table.columns).toHaveLength(3);
     for (const row of table.rows) {
-      expect(row.cells).toHaveLength(table.columnWidthsPt.length);
+      expect(row.cells).toHaveLength(table.columns.length);
     }
   }
 
@@ -1330,7 +1421,7 @@ describe("a covered position's own background and borders", () => {
     };
     const table: ContentTable = {
       kind: "table",
-      columnWidthsPt: [10, 10],
+      columns: [{ widthPt: 10 }, { widthPt: 10 }],
       rows: [
         {
           cells: [
@@ -1386,7 +1477,7 @@ describe("a covered position's own background and borders", () => {
     const written = writeOdfTable(
       {
         kind: "table",
-        columnWidthsPt: [10, 10],
+        columns: [{ widthPt: 10 }, { widthPt: 10 }],
         rows: [{ cells: [{ blocks: [], colSpan: 2 }, { blocks: [] }] }],
       },
       context,
@@ -1670,7 +1761,7 @@ describe("readOdfTable: row wrappers (table:table-header-rows, table:table-rows,
       ]),
       { parts: {} },
     );
-    expect(table.columnWidthsPt).toHaveLength(3);
+    expect(table.columns).toHaveLength(3);
     for (const row of table.rows) {
       expect(row.cells).toHaveLength(3);
     }
@@ -1730,7 +1821,7 @@ describe("readOdfTable: column wrappers (table:table-header-columns, table:table
       ]),
       widthPkg(),
     );
-    expect(table.columnWidthsPt).toEqual([10, 20]);
+    expect(table.columns.map((c) => c.widthPt)).toEqual([10, 20]);
   });
 
   it("honours table:number-columns-repeated on a column inside a wrapper", () => {
@@ -1745,7 +1836,7 @@ describe("readOdfTable: column wrappers (table:table-header-columns, table:table
       ]),
       widthPkg(),
     );
-    expect(table.columnWidthsPt).toEqual([10, 10]);
+    expect(table.columns.map((c) => c.widthPt)).toEqual([10, 10]);
   });
 
   it("counts the columns inside table:table-columns", () => {
@@ -1758,7 +1849,7 @@ describe("readOdfTable: column wrappers (table:table-header-columns, table:table
       ]),
       widthPkg(),
     );
-    expect(table.columnWidthsPt).toEqual([10, 20]);
+    expect(table.columns.map((c) => c.widthPt)).toEqual([10, 20]);
   });
 
   it("counts the columns inside table:table-column-group, including a nested group and a header-columns wrapper inside one", () => {
@@ -1777,7 +1868,7 @@ describe("readOdfTable: column wrappers (table:table-header-columns, table:table
       ]),
       widthPkg(),
     );
-    expect(table.columnWidthsPt).toEqual([10, 20, 30, 40]);
+    expect(table.columns.map((c) => c.widthPt)).toEqual([10, 20, 30, 40]);
   });
 
   it("does not read a table:table-column that sits inside a row wrapper", () => {
@@ -1790,7 +1881,7 @@ describe("readOdfTable: column wrappers (table:table-header-columns, table:table
       ]),
       widthPkg(),
     );
-    expect(table.columnWidthsPt).toEqual([20]);
+    expect(table.columns.map((c) => c.widthPt)).toEqual([20]);
   });
 
   it("states a grid as wide as the columns the file declares across wrappers, with every row as wide", () => {
@@ -1806,8 +1897,95 @@ describe("readOdfTable: column wrappers (table:table-header-columns, table:table
       ]),
       { parts: {} },
     );
-    expect(table.columnWidthsPt).toHaveLength(3);
+    expect(table.columns).toHaveLength(3);
     expect(table.rows[0]?.cells).toHaveLength(3);
+  });
+
+  it("marks every column inside table:table-header-columns as a header column, and leaves the plain columns unmarked", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-header-columns", {}, [
+          el("table:table-column", { "table:style-name": "co1" }),
+          el("table:table-column", { "table:style-name": "co2" }),
+        ]),
+        el("table:table-column", { "table:style-name": "co3" }),
+      ]),
+      widthPkg(),
+    );
+    expect(table.columns.map((c) => c.isHeader)).toEqual([
+      true,
+      true,
+      undefined,
+    ]);
+  });
+
+  it("marks a repeated header column's every copy, since table:number-columns-repeated stands for identical columns inside the same wrapper", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-header-columns", {}, [
+          el("table:table-column", {
+            "table:style-name": "co1",
+            "table:number-columns-repeated": "3",
+          }),
+        ]),
+      ]),
+      widthPkg(),
+    );
+    expect(table.columns.map((c) => c.isHeader)).toEqual([true, true, true]);
+  });
+
+  it("marks the columns of a table:table-header-columns nested inside a table:table-column-group, however deep the groups go", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-column-group", {}, [
+          el("table:table-column", { "table:style-name": "co1" }),
+          el("table:table-column-group", {}, [
+            el("table:table-header-columns", {}, [
+              el("table:table-column", { "table:style-name": "co2" }),
+            ]),
+            el("table:table-column", { "table:style-name": "co3" }),
+          ]),
+        ]),
+      ]),
+      widthPkg(),
+    );
+    expect(table.columns.map((c) => c.widthPt)).toEqual([10, 20, 30]);
+    expect(table.columns.map((c) => c.isHeader)).toEqual([
+      undefined,
+      true,
+      undefined,
+    ]);
+  });
+
+  it("marks a header wrapper that does not lead the table, rather than only a leading one", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-column", { "table:style-name": "co1" }),
+        el("table:table-header-columns", {}, [
+          el("table:table-column", { "table:style-name": "co2" }),
+        ]),
+      ]),
+      widthPkg(),
+    );
+    expect(table.columns.map((c) => c.isHeader)).toEqual([undefined, true]);
+  });
+
+  it("leaves a column inside table:table-columns or a plain column group unmarked, since neither states a header", () => {
+    const table = readOdfTable(
+      el("table:table", {}, [
+        el("table:table-columns", {}, [
+          el("table:table-column", { "table:style-name": "co1" }),
+        ]),
+        el("table:table-column-group", {}, [
+          el("table:table-column", { "table:style-name": "co2" }),
+        ]),
+      ]),
+      widthPkg(),
+    );
+    expect(table.columns.map((c) => c.isHeader)).toEqual([
+      undefined,
+      undefined,
+    ]);
   });
 });
 
@@ -1989,7 +2167,7 @@ describe("writeOdfTable: a cell's vertical alignment", () => {
     (pivot, odf) => {
       const { written, reread, automaticStyles } = roundTrip({
         kind: "table",
-        columnWidthsPt: [10],
+        columns: [{ widthPt: 10 }],
         rows: [{ cells: [{ blocks: [], verticalAlign: pivot }] }],
       });
       expect(styleAttribute(written, automaticStyles, 0)).toBe(odf);
@@ -2000,7 +2178,7 @@ describe("writeOdfTable: a cell's vertical alignment", () => {
   it("writes no style for a cell that states no verticalAlign", () => {
     const { written, automaticStyles } = roundTrip({
       kind: "table",
-      columnWidthsPt: [10],
+      columns: [{ widthPt: 10 }],
       rows: [{ cells: [{ blocks: [] }] }],
     });
     const cellElement = writtenCell(written, 0);
@@ -2017,7 +2195,7 @@ describe("writeOdfTable: a cell's vertical alignment", () => {
     const fill = { kind: "solid", color: { r: 1, g: 0, b: 0 } } as const;
     const { reread } = roundTrip({
       kind: "table",
-      columnWidthsPt: [10],
+      columns: [{ widthPt: 10 }],
       rows: [
         { cells: [{ blocks: [], background: fill, verticalAlign: "center" }] },
       ],
@@ -2029,7 +2207,7 @@ describe("writeOdfTable: a cell's vertical alignment", () => {
   it("writes it onto a covered entry and reads it back", () => {
     const { written, reread, automaticStyles } = roundTrip({
       kind: "table",
-      columnWidthsPt: [10, 10],
+      columns: [{ widthPt: 10 }, { widthPt: 10 }],
       rows: [
         {
           cells: [

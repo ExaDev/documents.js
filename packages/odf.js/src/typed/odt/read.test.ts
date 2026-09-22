@@ -236,8 +236,8 @@ describe("readOdtContent: kitchen-sink.odt (real LibreOffice output)", () => {
 
   it("reads a table with a genuinely merged cell: colSpan on the anchor cell, an empty placeholder cell for the covered cell (mirroring ooxml.js's own vMerge-continuation convention), and the third cell unaffected", () => {
     const table = asTable(blocks.find((b) => b.kind === "table"));
-    expect(table.columnWidthsPt).toHaveLength(3);
-    expect(table.columnWidthsPt.every((w) => w > 0)).toBe(true);
+    expect(table.columns).toHaveLength(3);
+    expect(table.columns.every((c) => c.widthPt > 0)).toBe(true);
     expect(table.rows).toHaveLength(3);
 
     const headerRow = table.rows[0];
