@@ -63,7 +63,7 @@ describe("extractOdfEmbeddedFonts", () => {
     ]);
   });
 
-  // The fixture repeats the identical office:font-face-decls block in content.xml AND styles.xml, exactly as a real LibreOffice-saved document does -- two declarations of one embedded face must not become two faces.
+  // The fixture repeats the identical office:font-face-decls block in content.xml AND styles.xml, exactly as a real LibreOffice-saved document does — two declarations of one embedded face must not become two faces.
   it("de-duplicates a face declared in both content.xml and styles.xml", () => {
     expect(extractOdfEmbeddedFonts(embeddedFontOdtPackage())).toHaveLength(2);
   });
@@ -109,7 +109,7 @@ describe("extractOdfEmbeddedFonts", () => {
     },
   );
 
-  // LibreOffice quotes any CSS font-family value containing a space, and may list generic fallbacks after it -- neither belongs in the family name a font registry matches on.
+  // LibreOffice quotes any CSS font-family value containing a space, and may list generic fallbacks after it — neither belongs in the family name a font registry matches on.
   it.each([
     ["&apos;Liberation Serif&apos;", "Liberation Serif"],
     ["&quot;Noto Sans&quot;, sans-serif", "Noto Sans"],
@@ -174,7 +174,7 @@ describe("extractOdfEmbeddedFonts", () => {
     ).toThrow(OdfEmbeddedFontError);
   });
 
-  // ODF embeds fonts unmodified, so a part that is not already a recognisable font is a broken package rather than something to sniff a font key for -- there is no key anywhere in an ODF package to try.
+  // ODF embeds fonts unmodified, so a part that is not already a recognisable font is a broken package rather than something to sniff a font key for — there is no key anywhere in an ODF package to try.
   it("throws when an embedded part is not a recognisable font", () => {
     expect(() =>
       extractOdfEmbeddedFonts(

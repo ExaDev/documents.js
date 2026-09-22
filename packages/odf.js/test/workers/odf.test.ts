@@ -14,7 +14,7 @@ import {
   type ZipEntry,
 } from '../../src';
 
-// Proves odf.js's ODF package parsing and content reading execute inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. The pipeline exercised -- zipPackage (fflate, pure JS), decodePackage (zip + manifest parse), readOdtContent (fast-xml-parser over content.xml, pure JS), and readOdt on top of it (document-schema.js's own assembleTree, pure Zod/TS) -- is deliberately Node-free; if any path touched node:fs/Buffer/process the workerd isolate would throw instead of these passing. The package-native reader is covered here as well as the content-level one precisely because it pulls in a second package's transform code at runtime: whatever assembleTree reaches for has to be Worker-safe too, and this is the check that says so rather than assumes it. The minimal .odt is built INLINE (no fs): an ODF package is a zip whose first entry must be the uncompressed "mimetype" part, followed by content.xml and META-INF/manifest.xml, mirroring the inline fixture shape src/round-trip.test.ts already uses.
+// Proves odf.js's ODF package parsing and content reading execute inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. The pipeline exercised — zipPackage (fflate, pure JS), decodePackage (zip + manifest parse), readOdtContent (fast-xml-parser over content.xml, pure JS), and readOdt on top of it (document-schema.js's own assembleTree, pure Zod/TS) — is deliberately Node-free; if any path touched node:fs/Buffer/process the workerd isolate would throw instead of these passing. The package-native reader is covered here as well as the content-level one precisely because it pulls in a second package's transform code at runtime: whatever assembleTree reaches for has to be Worker-safe too, and this is the check that says so rather than assumes it. The minimal .odt is built INLINE (no fs): an ODF package is a zip whose first entry must be the uncompressed "mimetype" part, followed by content.xml and META-INF/manifest.xml, mirroring the inline fixture shape src/round-trip.test.ts already uses.
 
 function minimalOdtBytes(): Uint8Array<ArrayBuffer> {
   const encoder = new TextEncoder();
@@ -59,7 +59,7 @@ describe('odf.js under the Cloudflare Workers runtime', () => {
   });
 });
 
-// The OpenOffice.org 1.x path reaches for one API the ODF path does not -- TextEncoder, to synthesise the "mimetype" part those packages never carried -- so it gets its own runtime check rather than riding on the ODF one above. Everything else it does (the whole namespace/element/style transform in src/ooo1/) is pure tree rewriting over the same parsed nodes.
+// The OpenOffice.org 1.x path reaches for one API the ODF path does not — TextEncoder, to synthesise the "mimetype" part those packages never carried — so it gets its own runtime check rather than riding on the ODF one above. Everything else it does (the whole namespace/element/style transform in src/ooo1/) is pure tree rewriting over the same parsed nodes.
 function minimalSxwBytes(): Uint8Array<ArrayBuffer> {
   const encoder = new TextEncoder();
   const contentXml = encoder.encode(
@@ -76,7 +76,7 @@ function minimalSxwBytes(): Uint8Array<ArrayBuffer> {
   return zipPackage(entries);
 }
 
-// The WRITE path gets its own runtime check for the same reason the package-native reader does: it reaches for machinery the read path never touches -- StyleRegistry's interning, the package scaffold's TextEncoder, fflate's zip WRITER, and document-schema.js's flattenTree -- and every one of those has to be Worker-safe too. Writing bytes and reading them straight back is the strongest single assertion available inside an isolate, since it exercises the whole pipeline in both directions with no fixture file to load.
+// The WRITE path gets its own runtime check for the same reason the package-native reader does: it reaches for machinery the read path never touches — StyleRegistry's interning, the package scaffold's TextEncoder, fflate's zip WRITER, and document-schema.js's flattenTree — and every one of those has to be Worker-safe too. Writing bytes and reading them straight back is the strongest single assertion available inside an isolate, since it exercises the whole pipeline in both directions with no fixture file to load.
 describe('odf.js odt writing under the Cloudflare Workers runtime', () => {
   it('writes a real .odt and reads it back, with no Node fs, Buffer, or process', () => {
     const document: ContentDocument = {
@@ -127,7 +127,7 @@ describe('odf.js OpenOffice.org 1.x reading under the Cloudflare Workers runtime
   });
 });
 
-// The .sxw WRITE path's own runtime check, mirroring the odt writer's above: writeSxwContent is writeOdtContent's own output run through transformToOoo1Package (src/ooo1/transform.ts), pure tree rewriting over the parsed content -- Map/Set/string operations only, no new Node-only API beyond what writeOdtContent already exercises -- but it is the check that says so rather than assumes it.
+// The .sxw WRITE path's own runtime check, mirroring the odt writer's above: writeSxwContent is writeOdtContent's own output run through transformToOoo1Package (src/ooo1/transform.ts), pure tree rewriting over the parsed content — Map/Set/string operations only, no new Node-only API beyond what writeOdtContent already exercises — but it is the check that says so rather than assumes it.
 describe('odf.js sxw writing under the Cloudflare Workers runtime', () => {
   it('writes a real .sxw and reads it back through readSxwContent, with no Node fs, Buffer, or process', () => {
     const document: ContentDocument = {

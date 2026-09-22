@@ -17,7 +17,7 @@ export const DocumentOutputSchema = z.object({
 export type DocumentOutput = z.infer<typeof DocumentOutputSchema>;
 
 /**
- * Above this many bytes, an inline base64 result is flagged `large: true` so a caller/LLM can see the response is sizeable before deciding whether to consume it directly. Purely advisory: `resolveDocumentOutput` never truncates or refuses to return large bytes, it only flags them -- silently truncating a document would produce a corrupt file with no indication anything was lost. 5 MB is a reasonable default order of magnitude for "an LLM context probably wants to know before this lands inline", well under typical MCP stdio transport limits.
+ * Above this many bytes, an inline base64 result is flagged `large: true` so a caller/LLM can see the response is sizeable before deciding whether to consume it directly. Purely advisory: `resolveDocumentOutput` never truncates or refuses to return large bytes, it only flags them — silently truncating a document would produce a corrupt file with no indication anything was lost. 5 MB is a reasonable default order of magnitude for "an LLM context probably wants to know before this lands inline", well under typical MCP stdio transport limits.
  */
 export const LARGE_RESULT_THRESHOLD_BYTES = 5 * 1024 * 1024;
 

@@ -59,12 +59,12 @@ import { TEXT_TYPE_OTHER } from "../text/atoms";
 import { writeStyleTextPropAtom } from "../text/style-write";
 import { pointsToEmu, pointsToMasterUnits } from "../units";
 
-// A generic narrowing helper rather than a plain `as number` at each call site: this workspace's own strictTypeChecked lint tier auto-fixes a concrete `x as T` narrowing only nullability into `x!`, which `no-non-null-assertion` then bans outright -- a generic assertion (T unresolved at this call) doesn't match that autofix's own pattern, so it stays exactly the cast it is.
+// A generic narrowing helper rather than a plain `as number` at each call site: this workspace's own strictTypeChecked lint tier auto-fixes a concrete `x as T` narrowing only nullability into `x!`, which `no-non-null-assertion` then bans outright — a generic assertion (T unresolved at this call) doesn't match that autofix's own pattern, so it stays exactly the cast it is.
 function definiteAt<T>(array: readonly T[], index: number): T {
   return array[index] as T;
 }
 
-// Whichever of a shape's own four insets differs from the default its own picture-ness implies (zero on every side for a picture, the standard 0.1in/0.05in pair otherwise -- read.ts's insetsForShape states the identical default pair for the identical reason). A shape stating exactly the applicable default writes no inset property at all, matching a real producer's own habit of only emitting what a shape actually overrides.
+// Whichever of a shape's own four insets differs from the default its own picture-ness implies (zero on every side for a picture, the standard 0.1in/0.05in pair otherwise — read.ts's insetsForShape states the identical default pair for the identical reason). A shape stating exactly the applicable default writes no inset property at all, matching a real producer's own habit of only emitting what a shape actually overrides.
 function insetProperties(
   shape: ContentShape,
   isPicture: boolean,
@@ -99,15 +99,15 @@ function insetProperties(
   return entries;
 }
 
-// The write-side mirror of drawing/shapes.ts: given a slide's ContentShape list, emits the [MS-ODRAW]/[MS-PPT] shape tree readDrawingShapes flattens back into PptShape[] -- one outermost patriarch group (the same fGroup|fPatriarch placeholder shape collectGroup/groupTransform special-case on read) followed by one plain OfficeArtSpContainer per content shape, each carrying a client anchor in slide coordinates, a property table when the shape states rotation or displays a picture, and, when the shape has text, an OfficeArtClientTextbox. Deliberately narrower than the read side's own coverage: every shape this writer emits is an ungrouped, unrotated-rectangle-in-slide-coordinates shape (an OfficeArtClientAnchor, never OfficeArtChildAnchor/OfficeArtFSPGR group nesting) -- see the package README's write-scope section.
+// The write-side mirror of drawing/shapes.ts: given a slide's ContentShape list, emits the [MS-ODRAW]/[MS-PPT] shape tree readDrawingShapes flattens back into PptShape[] — one outermost patriarch group (the same fGroup|fPatriarch placeholder shape collectGroup/groupTransform special-case on read) followed by one plain OfficeArtSpContainer per content shape, each carrying a client anchor in slide coordinates, a property table when the shape states rotation or displays a picture, and, when the shape has text, an OfficeArtClientTextbox. Deliberately narrower than the read side's own coverage: every shape this writer emits is an ungrouped, unrotated-rectangle-in-slide-coordinates shape (an OfficeArtClientAnchor, never OfficeArtChildAnchor/OfficeArtFSPGR group nesting) — see the package README's write-scope section.
 
-// [MS-ODRAW] 2.2.40 OfficeArtFSP's flags word -- the same bits drawing/shapes.ts's FSP_GROUP/FSP_PATRIARCH name for reading.
+// [MS-ODRAW] 2.2.40 OfficeArtFSP's flags word — the same bits drawing/shapes.ts's FSP_GROUP/FSP_PATRIARCH name for reading.
 const FSP_GROUP = 1 << 0;
 const FSP_CHILD = 1 << 1;
-// [MS-ODRAW] 2.2.40 bit 9: "this shape has an anchor to the parent" -- real producers set it on every anchored shape, the table group's own shape included.
+// [MS-ODRAW] 2.2.40 bit 9: "this shape has an anchor to the parent" — real producers set it on every anchored shape, the table group's own shape included.
 const FSP_HAVE_ANCHOR = 1 << 9;
 const FSP_PATRIARCH = 1 << 2;
-// The patriarch's own shape id is always 1 ([MS-ODRAW] does not mandate this, but every real producer's outermost group shape is spid 1, and nothing in this reader's own drawing/shapes.ts inspects spid values at all -- see PptShape.spid's read-side comment); content shapes are numbered from 2, uniquely per slide, which is all readDrawingShapes/collectShape ever need of an spid.
+// The patriarch's own shape id is always 1 ([MS-ODRAW] does not mandate this, but every real producer's outermost group shape is spid 1, and nothing in this reader's own drawing/shapes.ts inspects spid values at all — see PptShape.spid's read-side comment); content shapes are numbered from 2, uniquely per slide, which is all readDrawingShapes/collectShape ever need of an spid.
 const PATRIARCH_SPID = 1;
 const FIRST_CONTENT_SPID = 2;
 
@@ -117,7 +117,7 @@ function writeFsp(spid: number, flags: number): Uint8Array<ArrayBuffer> {
   });
 }
 
-// [MS-PPT] 2.7.1 OfficeArtClientAnchor: written as the 16-byte RectStruct form (recLen 0x10, four signed 32-bit coordinates) rather than the 8-byte SmallRectStruct -- unlike a captured real file, this writer has no reason to prefer the smaller form, and the 32-bit range removes any risk of a large slide's master-unit coordinates overflowing a 16-bit one. Field order matches readClientAnchor's "top-left" spelling: top, left, right, bottom.
+// [MS-PPT] 2.7.1 OfficeArtClientAnchor: written as the 16-byte RectStruct form (recLen 0x10, four signed 32-bit coordinates) rather than the 8-byte SmallRectStruct — unlike a captured real file, this writer has no reason to prefer the smaller form, and the 32-bit range removes any risk of a large slide's master-unit coordinates overflowing a 16-bit one. Field order matches readClientAnchor's "top-left" spelling: top, left, right, bottom.
 function writeClientAnchor(
   xPt: number,
   yPt: number,
@@ -159,7 +159,7 @@ function writeShapeProperties(
     : writeShapePropertyTable(OfficeArtFOPT, entries);
 }
 
-// The shape's own text, or undefined when it carries no paragraph block at all -- matching the reader's own optional clientTextbox rather than emitting an empty one nothing wrote.
+// The shape's own text, or undefined when it carries no paragraph block at all — matching the reader's own optional clientTextbox rather than emitting an empty one nothing wrote.
 function writeClientTextbox(
   textBlocks: readonly ContentBlock[],
   fontIndexOf: (family: string) => number,
@@ -185,7 +185,7 @@ function writeShape(
 ): Uint8Array<ArrayBuffer> {
   const properties = writeShapeProperties(shape, pib);
   const clientTextbox = writeClientTextbox(textBlocks, fontIndexOf);
-  // [MS-ODRAW] 2.2.14's own child order: shapeProp (OfficeArtFSP) first, then the property tables, then the anchor, then clientData, then clientTextbox -- each table before the anchor it qualifies, exactly where every producer this package has been checked against puts it.
+  // [MS-ODRAW] 2.2.14's own child order: shapeProp (OfficeArtFSP) first, then the property tables, then the anchor, then clientData, then clientTextbox — each table before the anchor it qualifies, exactly where every producer this package has been checked against puts it.
   const children = [writeFsp(spid, 0)];
   if (properties !== undefined) {
     children.push(properties);
@@ -207,7 +207,7 @@ function writeShape(
   return writeContainer(OfficeArtSpContainer, children);
 }
 
-// The outermost group every real drawing carries: an OfficeArtSpContainer holding only an OfficeArtFSPGR (a degenerate coordinate system, never read for the patriarch -- groupTransform returns the parent transform unchanged whenever FSP_PATRIARCH is set) and an FSP with fGroup|fPatriarch set. [MS-ODRAW] 2.2.16: "the first child of a group container is always the OfficeArtSpContainer holding that group's own shape information" -- collectGroup relies on this exact position.
+// The outermost group every real drawing carries: an OfficeArtSpContainer holding only an OfficeArtFSPGR (a degenerate coordinate system, never read for the patriarch — groupTransform returns the parent transform unchanged whenever FSP_PATRIARCH is set) and an FSP with fGroup|fPatriarch set. [MS-ODRAW] 2.2.16: "the first child of a group container is always the OfficeArtSpContainer holding that group's own shape information" — collectGroup relies on this exact position.
 function writePatriarch(): Uint8Array<ArrayBuffer> {
   return writeContainer(OfficeArtSpContainer, [
     writeAtom(OfficeArtFSPGR, new Uint8Array(16), { recVer: 0x1 }),
@@ -215,7 +215,7 @@ function writePatriarch(): Uint8Array<ArrayBuffer> {
   ]);
 }
 
-// A shape plus the host-side fact a drawing cannot derive for itself: the OfficeArtClientData record it carries (a main master's PlaceholderAtom). A picture's blip-store reference is not one of these -- planShapeBlocks resolves it from the shape's own image blocks through the context's blipIndexOf, so the pib a shape writes and the image block it came from can never disagree.
+// A shape plus the host-side fact a drawing cannot derive for itself: the OfficeArtClientData record it carries (a main master's PlaceholderAtom). A picture's blip-store reference is not one of these — planShapeBlocks resolves it from the shape's own image blocks through the context's blipIndexOf, so the pib a shape writes and the image block it came from can never disagree.
 export interface DrawingShape {
   readonly shape: ContentShape;
   readonly clientData: Uint8Array<ArrayBuffer> | undefined;
@@ -228,7 +228,7 @@ export interface DrawingWritten {
   readonly maxSpid: number;
 }
 
-// Everything a drawing's writer needs from the document around it: the font resolver the text body shares, the blip-store resolver that assigns a picture its one-based pib (called only for an image whose format this writer can blip -- png or jpeg), a function stating each diagnostic message's own reason against a human name for where this drawing sits (so a message reads "slide 2: ..." rather than naming an index the caller has to decode), the diagnostic sink every deliberate drop fires through, and whether a whole-block drop should throw instead of merely reporting (see reportDrop below). describeMessage is a function rather than a plain location string field: write.ts's own contextFor is the only place that ever has a real location to state, and the main master's placeholders and a notes container's plain-text body -- which can never actually produce a diagnostic at all -- pass the identity function, needing no location value, unobservable or otherwise, to state one.
+// Everything a drawing's writer needs from the document around it: the font resolver the text body shares, the blip-store resolver that assigns a picture its one-based pib (called only for an image whose format this writer can blip — png or jpeg), a function stating each diagnostic message's own reason against a human name for where this drawing sits (so a message reads "slide 2: ..." rather than naming an index the caller has to decode), the diagnostic sink every deliberate drop fires through, and whether a whole-block drop should throw instead of merely reporting (see reportDrop below). describeMessage is a function rather than a plain location string field: write.ts's own contextFor is the only place that ever has a real location to state, and the main master's placeholders and a notes container's plain-text body — which can never actually produce a diagnostic at all — pass the identity function, needing no location value, unobservable or otherwise, to state one.
 export interface DrawingWriteContext {
   readonly fontIndexOf: (family: string) => number;
   readonly blipIndexOf: (image: ContentImageBlock) => number;
@@ -237,7 +237,7 @@ export interface DrawingWriteContext {
   readonly strict: boolean;
 }
 
-// The one place a whole-block drop (a block that does not appear in the written output at all -- BLOCK_DROPPED, IMAGE_DROPPED) decides between WritePptOptions' two policies: reported through the sink alone (the default, matching every existing caller's own current behaviour), or reported AND thrown as a PptUnsupportedContentError, for a caller that would rather fail the whole conversion than ship a file quietly missing content it asked for. A lossy-but-still-written narrowing (TABLE_SPAN_DROPPED, a merged cell writing one column/row wide rather than vanishing) is never routed through this: it is a fidelity approximation, not an omission, and always stays sink-only regardless of the caller's policy.
+// The one place a whole-block drop (a block that does not appear in the written output at all — BLOCK_DROPPED, IMAGE_DROPPED) decides between WritePptOptions' two policies: reported through the sink alone (the default, matching every existing caller's own current behaviour), or reported AND thrown as a PptUnsupportedContentError, for a caller that would rather fail the whole conversion than ship a file quietly missing content it asked for. A lossy-but-still-written narrowing (TABLE_SPAN_DROPPED, a merged cell writing one column/row wide rather than vanishing) is never routed through this: it is a fidelity approximation, not an omission, and always stays sink-only regardless of the caller's policy.
 function reportDrop(
   context: DrawingWriteContext,
   diagnostic: PptDiagnostic,
@@ -248,9 +248,9 @@ function reportDrop(
   }
 }
 
-// The image formats MSOBLIPTYPE gives this writer a blip record for are exactly isBlipFormat's two -- the same vocabulary drawing/blips.ts reads with, so a written picture always reads back as the same image.
+// The image formats MSOBLIPTYPE gives this writer a blip record for are exactly isBlipFormat's two — the same vocabulary drawing/blips.ts reads with, so a written picture always reads back as the same image.
 
-// One shape's blocks, partitioned the way the writer genuinely treats them, so the drop diagnostics and the write itself can never disagree: paragraph blocks become the text body, the first png/jpeg image becomes the shape's single blip reference, the first table block turns the whole shape into a table group, an embeddedObject block is silently skipped when `hasOleClientData` says write.ts's own OLE plan already turned it into a real ExObjRefAtom (naming it here too would be a false "dropped" diagnostic for content that was genuinely written), and everything else -- an image whose format has no MSOBLIPTYPE token here, a second image beyond the one pib a shape carries, a second table, an embeddedObject block no OLE plan claimed (no serialiser port, or one that declined this document), and every block kind with no [MS-PPT] spelling this writer produces -- is dropped, with a diagnostic naming it. When a table is present the shape is a table group and carries no text body or blip of its own, so any paragraph or image collected before the table is dropped too, each named through the same sink. Keeping the partition in one place is what makes the diagnostic honest: there is no second filter elsewhere that could silently spare or spare-drop a block this function classified differently.
+// One shape's blocks, partitioned the way the writer genuinely treats them, so the drop diagnostics and the write itself can never disagree: paragraph blocks become the text body, the first png/jpeg image becomes the shape's single blip reference, the first table block turns the whole shape into a table group, an embeddedObject block is silently skipped when `hasOleClientData` says write.ts's own OLE plan already turned it into a real ExObjRefAtom (naming it here too would be a false "dropped" diagnostic for content that was genuinely written), and everything else — an image whose format has no MSOBLIPTYPE token here, a second image beyond the one pib a shape carries, a second table, an embeddedObject block no OLE plan claimed (no serialiser port, or one that declined this document), and every block kind with no [MS-PPT] spelling this writer produces — is dropped, with a diagnostic naming it. When a table is present the shape is a table group and carries no text body or blip of its own, so any paragraph or image collected before the table is dropped too, each named through the same sink. Keeping the partition in one place is what makes the diagnostic honest: there is no second filter elsewhere that could silently spare or spare-drop a block this function classified differently.
 function planShapeBlocks(
   blocks: readonly ContentBlock[],
   context: DrawingWriteContext,
@@ -339,7 +339,7 @@ function planShapeBlocks(
   return { pib, textBlocks, table };
 }
 
-// A table's row heights in master units, for the tableRowProperties IMsoArray: every row stating a heightPt states its own minimum height, and the rows stating none share what remains of the table's own height equally -- the neutral division that adds no information the input did not give, where inventing per-row values would.
+// A table's row heights in master units, for the tableRowProperties IMsoArray: every row stating a heightPt states its own minimum height, and the rows stating none share what remains of the table's own height equally — the neutral division that adds no information the input did not give, where inventing per-row values would.
 function tableRowHeights(
   table: ContentTable,
   frameHeightMasterUnits: number,
@@ -356,7 +356,7 @@ function tableRowHeights(
   return stated.map((height) => height ?? shared);
 }
 
-// A table group, in the spelling a real PowerPoint-authored file carries (confirmed by inspecting Microsoft Office PowerPoint's own output, Apache POI's table_test.ppt fixture): the group shape opens with the FSPGR child coordinate system ([MS-ODRAW] 2.2.14 puts shapeGroup first), carries fGroup, states tableProperties fIsTable plus tableRowProperties as a complex IMsoArray of row minimum heights in the tertiary property table, and anchors the whole table with a client anchor whose rectangle is the FSPGR's own -- an identity mapping, so the cells' child anchors read as slide coordinates directly; then one plain text-box shape per cell, each carrying fChild and an OfficeArtChildAnchor at its grid position. Cell geometry is derived from the table's own frame, the column widths, and the row heights -- the same derivation read.ts's tableBlockFor reverses, so the grid this writer lays out is exactly the grid that reads back.
+// A table group, in the spelling a real PowerPoint-authored file carries (confirmed by inspecting Microsoft Office PowerPoint's own output, Apache POI's table_test.ppt fixture): the group shape opens with the FSPGR child coordinate system ([MS-ODRAW] 2.2.14 puts shapeGroup first), carries fGroup, states tableProperties fIsTable plus tableRowProperties as a complex IMsoArray of row minimum heights in the tertiary property table, and anchors the whole table with a client anchor whose rectangle is the FSPGR's own — an identity mapping, so the cells' child anchors read as slide coordinates directly; then one plain text-box shape per cell, each carrying fChild and an OfficeArtChildAnchor at its grid position. Cell geometry is derived from the table's own frame, the column widths, and the row heights — the same derivation read.ts's tableBlockFor reverses, so the grid this writer lays out is exactly the grid that reads back.
 function writeTableGroup(
   spid: number,
   shape: ContentShape,
@@ -410,7 +410,7 @@ function writeTableGroup(
   }
   rowBoundaries.push(rowEdge);
   const rowHeightsPayload = writeIMsoArray(rowHeights, 4);
-  // The FSPGR states the table's own slide-coordinate rectangle, and the client anchor states the same rectangle -- the identity mapping real PowerPoint writes, so the cells' child anchors are their slide positions.
+  // The FSPGR states the table's own slide-coordinate rectangle, and the client anchor states the same rectangle — the identity mapping real PowerPoint writes, so the cells' child anchors are their slide positions.
   const tableLeft = pointsToMasterUnits(frame.xPt);
   const tableTop = pointsToMasterUnits(frame.yPt);
   const tableRight = pointsToMasterUnits(frame.xPt + frame.widthPt);
@@ -442,7 +442,7 @@ function writeTableGroup(
       {
         opid: PROPERTY_TABLE_ROW_PROPERTIES,
         op: rowHeightsPayload.length,
-        // fBid is set alongside fComplex because the real producer sets both together here (Microsoft Office PowerPoint's own table writes do exactly this, confirmed by inspecting its raw bytes) and LibreOffice's import only finds the row-height payload on a property marked fBid -- without it the group imports as plain grouped shapes rather than a table.
+        // fBid is set alongside fComplex because the real producer sets both together here (Microsoft Office PowerPoint's own table writes do exactly this, confirmed by inspecting its raw bytes) and LibreOffice's import only finds the row-height payload on a property marked fBid — without it the group imports as plain grouped shapes rather than a table.
         fBid: true,
         complex: rowHeightsPayload,
       },
@@ -461,7 +461,7 @@ function writeTableGroup(
       });
     }
     return row.cells.map((cell, columnIndex) => {
-      // columnIndex is always < cellCount (cellCount is derived as the max of every row's own cell count) and rowIndex always < table.rows.length (rowHeights carries exactly one entry per row), so columnBoundaries/rowBoundaries -- each one element longer than the count they bound -- always have both `[index]` and `[index + 1]` defined for a real cell. TypeScript's indexed-access typing cannot see that derivation across the two arrays, so this asserts it once, by construction, rather than guarding against an out-of-range case no real table can produce.
+      // columnIndex is always < cellCount (cellCount is derived as the max of every row's own cell count) and rowIndex always < table.rows.length (rowHeights carries exactly one entry per row), so columnBoundaries/rowBoundaries — each one element longer than the count they bound — always have both `[index]` and `[index + 1]` defined for a real cell. TypeScript's indexed-access typing cannot see that derivation across the two arrays, so this asserts it once, by construction, rather than guarding against an out-of-range case no real table can produce.
       const cellLeft = definiteAt(columnBoundaries, columnIndex);
       const cellRight = definiteAt(columnBoundaries, columnIndex + 1);
       const cellTop = definiteAt(rowBoundaries, rowIndex);
@@ -502,7 +502,7 @@ function writeTableGroup(
         writeFsp(cellSpid, FSP_CHILD),
         writeAtom(
           OfficeArtChildAnchor,
-          // OfficeArtChildAnchor 2.2.39: xLeft, yTop, xRight, yBottom -- the left-top order, unlike a client anchor's top-left one.
+          // OfficeArtChildAnchor 2.2.39: xLeft, yTop, xRight, yBottom — the left-top order, unlike a client anchor's top-left one.
           concatBytes(
             i32le(cellLeft),
             i32le(cellTop),
@@ -529,7 +529,7 @@ function writeDrawing(
   shapes: readonly DrawingShape[],
   context: DrawingWriteContext,
 ): DrawingWritten {
-  // Spids are minted contiguously across every shape this drawing writes -- a plain shape takes one, a table group takes one for its group shape and one per cell -- so the identifier space and the shape count stay derived from the same walk.
+  // Spids are minted contiguously across every shape this drawing writes — a plain shape takes one, a table group takes one for its group shape and one per cell — so the identifier space and the shape count stay derived from the same walk.
   let nextSpid = FIRST_CONTENT_SPID;
   let shapeCount = 1; // the patriarch
   const shapeContainers: Uint8Array<ArrayBuffer>[] = [];
@@ -573,7 +573,7 @@ function writeDrawing(
   };
 }
 
-// One slide's whole DrawingContainer: a single OfficeArtDgContainer holding one OfficeArtSpgrContainer (the patriarch group plus every content shape as its siblings) -- the same shape readDrawingShapes' top-level walk expects (one OfficeArtSpgrContainer collected via collectGroup, IDENTITY transform).
+// One slide's whole DrawingContainer: a single OfficeArtDgContainer holding one OfficeArtSpgrContainer (the patriarch group plus every content shape as its siblings) — the same shape readDrawingShapes' top-level walk expects (one OfficeArtSpgrContainer collected via collectGroup, IDENTITY transform).
 export function writeSlideDrawing(
   shapes: readonly DrawingShape[],
   context: DrawingWriteContext,

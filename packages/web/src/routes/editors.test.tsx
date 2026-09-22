@@ -29,7 +29,7 @@ vi.mock("../ui/notify", () => ({
   },
 }));
 
-// Stands in for the real FileUpload (already covered by its own dedicated test suite): EditorsPage's own logic -- inferring the format, opening/editing/saving through the editor session mutations -- is what this file exercises.
+// Stands in for the real FileUpload (already covered by its own dedicated test suite): EditorsPage's own logic — inferring the format, opening/editing/saving through the editor session mutations — is what this file exercises.
 let latestOnFile: ((file: OpenedFile) => void) | undefined;
 let latestFile: OpenedFile | undefined;
 let latestAccept: Record<string, string[]> | undefined;
@@ -306,7 +306,7 @@ describe("EditorsPage", () => {
     const [input] = vi.mocked(client.editor.setParagraphText).mock.calls[0]!;
     expect(input).toEqual({ id: 7, index: 0, text: "First (edited)" });
 
-    // The committed response's own text, distinct from what was typed, proves the resolved snapshot -- not just the optimistic edit already on screen -- is what ends up rendered.
+    // The committed response's own text, distinct from what was typed, proves the resolved snapshot — not just the optimistic edit already on screen — is what ends up rendered.
     await vi.waitFor(() => {
       expect(paragraphTextareas(mounted.container)[0]!.value).toBe(
         "First (normalised)",

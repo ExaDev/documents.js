@@ -1,5 +1,5 @@
 // @vitest-environment node
-// jsdom's own TextEncoder (patched in from Node's util module by the unit project's jsdom environment) constructs its Uint8Array in a different realm than the one bare `Uint8Array` resolves to inside that same environment, so a router.ts procedure's z.instanceof(Uint8Array) input schema rejects it as "expected Uint8Array, received Uint8Array" -- confirmed directly by comparing `bytes instanceof Uint8Array` (false under jsdom, true under node) for the identical TextEncoder().encode() call. router.ts itself is pure Node-executable document logic with no DOM dependency, so forcing this one file onto vitest's node environment sidesteps the realm split entirely rather than working around it per call site.
+// jsdom's own TextEncoder (patched in from Node's util module by the unit project's jsdom environment) constructs its Uint8Array in a different realm than the one bare `Uint8Array` resolves to inside that same environment, so a router.ts procedure's z.instanceof(Uint8Array) input schema rejects it as "expected Uint8Array, received Uint8Array" — confirmed directly by comparing `bytes instanceof Uint8Array` (false under jsdom, true under node) for the identical TextEncoder().encode() call. router.ts itself is pure Node-executable document logic with no DOM dependency, so forcing this one file onto vitest's node environment sidesteps the realm split entirely rather than working around it per call site.
 import { call } from "@orpc/server";
 import type { ContentDocument } from "documents.js";
 import {
@@ -24,7 +24,7 @@ function enc(text: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(text);
 }
 
-// A structurally authentic embedded-HSQLDB .odb, built directly from documents.js's own public zipPackage/parsePackage/readOdbInventory/readOdbTables surface rather than importing odf.js (which this UI layer never depends on) -- the identical shape documents.js's own internal odb fixtures use (mimetype, a manifest naming content.xml and database/script, an office:database pointing at "sdbc:embedded:hsqldb", and a real HSQLDB TEXT-format script), just assembled here with the pieces router.ts's odb.read handler already imports.
+// A structurally authentic embedded-HSQLDB .odb, built directly from documents.js's own public zipPackage/parsePackage/readOdbInventory/readOdbTables surface rather than importing odf.js (which this UI layer never depends on) — the identical shape documents.js's own internal odb fixtures use (mimetype, a manifest naming content.xml and database/script, an office:database pointing at "sdbc:embedded:hsqldb", and a real HSQLDB TEXT-format script), just assembled here with the pieces router.ts's odb.read handler already imports.
 function minimalOdbBytes(): Uint8Array<ArrayBuffer> {
   const script = [
     "CREATE SCHEMA PUBLIC AUTHORIZATION DBA",
@@ -47,7 +47,7 @@ function minimalOdbBytes(): Uint8Array<ArrayBuffer> {
   });
 }
 
-// A minimal, structurally authentic .odm master document: office:text carrying one text:section per chapter, each pointing at that chapter's own href via a text:section-source -- the shape odf.js's own readOdm expects (see documents.js's odmToPdf module comment). Built with plain zipPackage rather than odf.js's own package model, since this UI layer never depends on odf.js directly.
+// A minimal, structurally authentic .odm master document: office:text carrying one text:section per chapter, each pointing at that chapter's own href via a text:section-source — the shape odf.js's own readOdm expects (see documents.js's odmToPdf module comment). Built with plain zipPackage rather than odf.js's own package model, since this UI layer never depends on odf.js directly.
 function minimalOdmBytes(
   sections: readonly { name: string; href: string }[],
 ): Uint8Array<ArrayBuffer> {
@@ -116,7 +116,7 @@ describe("content.read / content.restore", () => {
     });
     const restoredText = new TextDecoder().decode(restored.bytes);
     expect(restoredText).toContain("Title");
-    // markdown-codec's writer escapes a trailing '.' (ambiguous with an ordered-list marker), so the round-tripped bytes read "Body text\." rather than the original "Body text." -- checked without the punctuation, which the escaping doesn't touch.
+    // markdown-codec's writer escapes a trailing '.' (ambiguous with an ordered-list marker), so the round-tripped bytes read "Body text\." rather than the original "Body text." — checked without the punctuation, which the escaping doesn't touch.
     expect(restoredText).toContain("Body text");
   });
 
@@ -156,7 +156,7 @@ describe("content.read / content.restore", () => {
   });
 
   it("resolves a docx list paragraph's opaque numId against its real numbering.xml definition", async () => {
-    // The tree-based docx writer (buildDocumentBytes) emits a real word/numbering.xml abstractNum/num pair for any list-membership paragraph -- built via the same public assembleTree/buildDocumentBytes pipeline the Package/JSON tool uses, not a hand-authored fixture, so router.ts's own normalizeDocxListKinds resolves against a real NumberingDefinitions map exactly as it would for a document Word itself produced. (ExaDev/documents.js#1273: this writer currently always synthesises numId "1" as a bullet list regardless of the source ContentListMembership's own numId/format, so this asserts the writer's real current output rather than the specific numId/format requested below.)
+    // The tree-based docx writer (buildDocumentBytes) emits a real word/numbering.xml abstractNum/num pair for any list-membership paragraph — built via the same public assembleTree/buildDocumentBytes pipeline the Package/JSON tool uses, not a hand-authored fixture, so router.ts's own normalizeDocxListKinds resolves against a real NumberingDefinitions map exactly as it would for a document Word itself produced. (ExaDev/documents.js#1273: this writer currently always synthesises numId "1" as a bullet list regardless of the source ContentListMembership's own numId/format, so this asserts the writer's real current output rather than the specific numId/format requested below.)
     const bytes = buildDocumentBytes(
       documentTreeWithSchema(
         assembleTree({
@@ -367,7 +367,7 @@ describe("fonts.describe / fonts.extractSourceFonts", () => {
 describe("odb.read", () => {
   it("reads an embedded HSQLDB .odb's inventory and table data as a spreadsheet document", async () => {
     const read = await call(router.odb.read, { bytes: minimalOdbBytes() });
-    // inventory.tables names only what content.xml's own db:table-representations/db:schema-definition declare -- a display customisation this minimal fixture never adds, not the embedded engine's real table names (those come from readOdbTables, exercised via read.content below).
+    // inventory.tables names only what content.xml's own db:table-representations/db:schema-definition declare — a display customisation this minimal fixture never adds, not the embedded engine's real table names (those come from readOdbTables, exercised via read.content below).
     expect(read.inventory.tables).toEqual([]);
     expect(read.content.kind).toBe("spreadsheet");
     if (read.content.kind !== "spreadsheet") {
@@ -417,7 +417,7 @@ describe("odm.render", () => {
   });
 });
 
-// A real, minimal, valid 1x1 transparent PNG -- decoded and re-embedded (never re-encoded) so a docx built through the tree pipeline below carries a genuine image the PDF layout pass places a real "image" item for, rather than only text.
+// A real, minimal, valid 1x1 transparent PNG — decoded and re-embedded (never re-encoded) so a docx built through the tree pipeline below carries a genuine image the PDF layout pass places a real "image" item for, rather than only text.
 const PNG_1X1_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
@@ -502,7 +502,7 @@ describe("pdf.inspect", () => {
     );
     expect(totalCounted).toBe(totalItems);
     expect(totalItems).toBeGreaterThan(1);
-    // The sanitized images map carries one real, non-empty entry per embedded image, each with a genuine positive byteLength -- not an empty object a no-op map body would also produce.
+    // The sanitized images map carries one real, non-empty entry per embedded image, each with a genuine positive byteLength — not an empty object a no-op map body would also produce.
     const imageIds = Object.keys(inspected.layout.images);
     expect(imageIds.length).toBeGreaterThanOrEqual(1);
     const [firstId] = imageIds;

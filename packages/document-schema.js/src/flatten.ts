@@ -30,11 +30,11 @@ import type {
   ShapeGroupNode,
 } from "./package-node";
 
-// The tree-to-flat half of the package boundary, ported from document-outline.js's phase-1 reference (pre-re-charter history) onto the 4.x tree types, with the styles resolution the reference left as a separate effective/effectiveTree seam fused directly into the walk: the flat codec-exchange form is ALWAYS fully materialised (no table, no refs -- #21's own rule), so materialising and restructuring are one pass here. Resolution semantics are the reviewed reference's: a group's ref plus every ancestor group's ref overlays onto each paragraph in that group's subtree -- group anchors (heading and list groups carry ContentParagraph anchors) and bare paragraph leaves alike -- with the chain ordered outermost first so the nearest group's entry wins over further-out ones and the paragraph's own direct properties win over everything (applyParagraphStyleProperties / applyRunStyleProperties fill gaps, never overwrite). The run half of a resolved entry applies to every run of each paragraph it resolved for. The walk's boundary is the block flow: a table leaf's cell paragraphs and an embedded document's own content are leaf-local payload this walk does not rewrite, exactly as resolution does not.
+// The tree-to-flat half of the package boundary, ported from document-outline.js's phase-1 reference (pre-re-charter history) onto the 4.x tree types, with the styles resolution the reference left as a separate effective/effectiveTree seam fused directly into the walk: the flat codec-exchange form is ALWAYS fully materialised (no table, no refs — #21's own rule), so materialising and restructuring are one pass here. Resolution semantics are the reviewed reference's: a group's ref plus every ancestor group's ref overlays onto each paragraph in that group's subtree — group anchors (heading and list groups carry ContentParagraph anchors) and bare paragraph leaves alike — with the chain ordered outermost first so the nearest group's entry wins over further-out ones and the paragraph's own direct properties win over everything (applyParagraphStyleProperties / applyRunStyleProperties fill gaps, never overwrite). The run half of a resolved entry applies to every run of each paragraph it resolved for. The walk's boundary is the block flow: a table leaf's cell paragraphs and an embedded document's own content are leaf-local payload this walk does not rewrite, exactly as resolution does not.
 //
-// For a styles-free package the walk emits the SAME node objects the tree embeds (no copies -- the ownership discipline decompose.ts states), so flattenTree(assembleTree(c)) shares every content node with c unless minting factored a property tuple onto a wrapper ref (those paragraphs come back as resolved copies carrying identical values). The one node with no object to share is a construct boundary: TreeBlockLeaf excludes both marker kinds, so a construct group's constructStart/constructEnd pair is rebuilt here from the group's own ConstructDescriptor (that descriptor object IS the one decompose embedded, handed straight back on the rebuilt marker) rather than carried through as the marker object the flat form arrived with.
+// For a styles-free package the walk emits the SAME node objects the tree embeds (no copies — the ownership discipline decompose.ts states), so flattenTree(assembleTree(c)) shares every content node with c unless minting factored a property tuple onto a wrapper ref (those paragraphs come back as resolved copies carrying identical values). The one node with no object to share is a construct boundary: TreeBlockLeaf excludes both marker kinds, so a construct group's constructStart/constructEnd pair is rebuilt here from the group's own ConstructDescriptor (that descriptor object IS the one decompose embedded, handed straight back on the rebuilt marker) rather than carried through as the marker object the flat form arrived with.
 //
-// A construct group's style chain is CUMULATIVE, not reset: the recursion extends the incoming chain with the group's own ref exactly as a heading or list group does, never starts a fresh one the way a section/slide/sheet/draw-page root does. A construct is a semantic wrapper nested inside ambient content -- a field, a content control, a tracked-change span -- so a paragraph inside it must still inherit the enclosing heading's or section's factored properties, as though the construct were not there. That is a different axis from the heading/list STACK reset decompose performs when it walks a construct's interior: that reset is about which markers group structurally, this is about which refs resolve, and the two are deliberately independent.
+// A construct group's style chain is CUMULATIVE, not reset: the recursion extends the incoming chain with the group's own ref exactly as a heading or list group does, never starts a fresh one the way a section/slide/sheet/draw-page root does. A construct is a semantic wrapper nested inside ambient content — a field, a content control, a tracked-change span — so a paragraph inside it must still inherit the enclosing heading's or section's factored properties, as though the construct were not there. That is a different axis from the heading/list STACK reset decompose performs when it walks a construct's interior: that reset is about which markers group structurally, this is about which refs resolve, and the two are deliberately independent.
 
 // A group's chain extended by its own ref when it carries one: the array passed to everything inside the group, which is how a group's style applies to its whole subtree. Outermost-first order, so resolveStyleChain's overlay fold makes the nearest entry win over further-out ones.
 function chainWithRef(
@@ -58,7 +58,7 @@ function entryOf(
   return resolveStyleChain(styles, chain);
 }
 
-// Applies one resolved entry to one paragraph: the entry's paragraph half fills the paragraph's own gaps, its run half fills each run's gaps. Pure -- unchanged halves return the same objects (applyParagraphStyleProperties itself returns the input paragraph when the entry has no paragraph half).
+// Applies one resolved entry to one paragraph: the entry's paragraph half fills the paragraph's own gaps, its run half fills each run's gaps. Pure — unchanged halves return the same objects (applyParagraphStyleProperties itself returns the input paragraph when the entry has no paragraph half).
 function applyEntry(
   entry: StyleEntry,
   paragraph: ContentParagraph,
@@ -77,7 +77,7 @@ function applyEntry(
   };
 }
 
-// The exact inverse of decompose: a pre-order walk over the tree reconstituting sections, slides, sheets, and pages in document order, re-emitting every group-represented paragraph as an ordinary block (a heading or list group's anchor paragraph IS the block; it was never copied, only wrapped) and every construct group as the constructStart/constructEnd marker pair that delimited it, with every style ref resolved away into materialised direct properties. Leaf nodes pass through as the same objects. The result is schema-valid against ContentDocumentSchema and structurally identical to the source document the tree was assembled from -- the bijection law flattenTree(assembleTree(c)) reproduces c exactly, pinned in bijection.test.ts.
+// The exact inverse of decompose: a pre-order walk over the tree reconstituting sections, slides, sheets, and pages in document order, re-emitting every group-represented paragraph as an ordinary block (a heading or list group's anchor paragraph IS the block; it was never copied, only wrapped) and every construct group as the constructStart/constructEnd marker pair that delimited it, with every style ref resolved away into materialised direct properties. Leaf nodes pass through as the same objects. The result is schema-valid against ContentDocumentSchema and structurally identical to the source document the tree was assembled from — the bijection law flattenTree(assembleTree(c)) reproduces c exactly, pinned in bijection.test.ts.
 export function flattenTree(pkg: DocumentTree): ContentDocument {
   const styles = pkg.styles;
   const envelope = {
@@ -118,7 +118,7 @@ export function flattenTree(pkg: DocumentTree): ContentDocument {
         ...envelope,
         ...(pkg.names !== undefined ? { names: pkg.names } : {}),
         sheets: pkg.children.map((group): ContentSheet => {
-          // The schema allows a style ref on every group node, but a sheet group holds no block flow, so a chain built here has nothing to resolve onto -- refuse rather than pass the ref by silently, the same all-or-nothing rule as entryOf's missing-table refusal below. Minting never stamps a ref on a sheet (its extent is always empty); the guard is for hand-built trees.
+          // The schema allows a style ref on every group node, but a sheet group holds no block flow, so a chain built here has nothing to resolve onto — refuse rather than pass the ref by silently, the same all-or-nothing rule as entryOf's missing-table refusal below. Minting never stamps a ref on a sheet (its extent is always empty); the guard is for hand-built trees.
           if (group.style !== undefined) {
             throw new Error(
               "flattenTree: a sheet group carries a style ref but a sheet holds no block flow to resolve it onto",
@@ -131,7 +131,7 @@ export function flattenTree(pkg: DocumentTree): ContentDocument {
             if ("kind" in child) images.push(child);
             else embedded.push(child);
           }
-          // embeddedObjects is rebuilt only when the sheet actually carried embedded objects, so a sheet whose field was absent round-trips with it absent again -- absent-versus-present is content here, not a default to fill in. The one declared exception: a present-but-empty array (schema-legal, emitted by no codec) is indistinguishable from an absent field once decompose has concatenated images and embedded objects into one children array, so it normalises to absent (bijection.test.ts declares the normalisation on both sides).
+          // embeddedObjects is rebuilt only when the sheet actually carried embedded objects, so a sheet whose field was absent round-trips with it absent again — absent-versus-present is content here, not a default to fill in. The one declared exception: a present-but-empty array (schema-legal, emitted by no codec) is indistinguishable from an absent field once decompose has concatenated images and embedded objects into one children array, so it normalises to absent (bijection.test.ts declares the normalisation on both sides).
           return {
             ...untag(group.node),
             images,
@@ -148,7 +148,7 @@ export function flattenTree(pkg: DocumentTree): ContentDocument {
           const shapes: ContentShape[] = [];
           const vectors: ContentVector[] = [];
           for (const child of group.children) {
-            // Shape groups carry `node`; vectors do not -- the presence check reverses decompose's fixed shapes-then-vectors concatenation without re-inspecting payloads.
+            // Shape groups carry `node`; vectors do not — the presence check reverses decompose's fixed shapes-then-vectors concatenation without re-inspecting payloads.
             if ("node" in child)
               shapes.push(flattenShape(styles, chain, child));
             else vectors.push(child);
@@ -185,7 +185,7 @@ function flattenShape(
   chain: readonly string[],
   group: ShapeGroupNode,
 ): ContentShape {
-  // A shape group's descriptor needs no untagging -- ContentShape carries no kind, so the descriptor is every field except blocks and the blocks ride straight back on.
+  // A shape group's descriptor needs no untagging — ContentShape carries no kind, so the descriptor is every field except blocks and the blocks ride straight back on.
   return {
     ...group.node,
     blocks: flattenListChildren(
@@ -196,7 +196,7 @@ function flattenShape(
   };
 }
 
-// One section-flow child walk: nested heading/list groups recurse with their extended chain, a construct group re-emits its boundary marker pair around its own recursed extent (see below), a bare paragraph leaf resolves against the incoming chain (it carries no ref of its own -- refs are legal only on group wrappers), and every other leaf is its own payload, untouched.
+// One section-flow child walk: nested heading/list groups recurse with their extended chain, a construct group re-emits its boundary marker pair around its own recursed extent (see below), a bare paragraph leaf resolves against the incoming chain (it carries no ref of its own — refs are legal only on group wrappers), and every other leaf is its own payload, untouched.
 function flattenSectionChildren(
   styles: StylesTable | undefined,
   chain: readonly string[],
@@ -283,7 +283,7 @@ function isListGroup(child: SectionChild | ListChild): child is ListGroupNode {
   );
 }
 
-// A construct group's own node is a ConstructDescriptor (contentControl/field/anchor/link/provenance/division), never a paragraph -- discriminated off the same node.kind property the heading/list narrows above read, since a ConstructDescriptor's `kind` is always disjoint from `'paragraph'`. Section and shape construct groups share this one narrow: the emitted marker pair is identical for both, and each call site's own argument type is what picks the flow the extent recurses through, so the guard never needs to tell the two apart itself.
+// A construct group's own node is a ConstructDescriptor (contentControl/field/anchor/link/provenance/division), never a paragraph — discriminated off the same node.kind property the heading/list narrows above read, since a ConstructDescriptor's `kind` is always disjoint from `'paragraph'`. Section and shape construct groups share this one narrow: the emitted marker pair is identical for both, and each call site's own argument type is what picks the flow the extent recurses through, so the guard never needs to tell the two apart itself.
 function isConstructGroup(
   child: SectionChild | ListChild,
 ): child is SectionConstructGroupNode | ShapeConstructGroupNode {
@@ -292,7 +292,7 @@ function isConstructGroup(
   );
 }
 
-// One group anchor under its own chain: an empty chain leaves the anchor object as-is (the ownership discipline -- no copies when nothing resolves), anything else resolves the entry and applies it; the anchor's required grouping signal survives gap-fill by construction, and a resolved heading/list anchor keeps its narrowed type through the shared ContentParagraph return.
+// One group anchor under its own chain: an empty chain leaves the anchor object as-is (the ownership discipline — no copies when nothing resolves), anything else resolves the entry and applies it; the anchor's required grouping signal survives gap-fill by construction, and a resolved heading/list anchor keeps its narrowed type through the shared ContentParagraph return.
 function resolveAnchor(
   styles: StylesTable | undefined,
   chain: readonly string[],

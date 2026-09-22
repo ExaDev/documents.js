@@ -1,4 +1,4 @@
-// SVG transform parsing and affine composition. SVG models every transform attribute (and the viewBox -> viewport map, and the group nesting rule) as one 2x3 affine matrix applied to user-space column vectors: x' = a*x + c*y + e, y' = b*x + d*y + f -- the identical parameterisation CSS transforms and PDF's cm operator use, and the reason a composition of any number of SVG transforms stays exactly one matrix rather than a tree of closures.
+// SVG transform parsing and affine composition. SVG models every transform attribute (and the viewBox -> viewport map, and the group nesting rule) as one 2x3 affine matrix applied to user-space column vectors: x' = a*x + c*y + e, y' = b*x + d*y + f — the identical parameterisation CSS transforms and PDF's cm operator use, and the reason a composition of any number of SVG transforms stays exactly one matrix rather than a tree of closures.
 export interface AffineMatrix {
   readonly a: number;
   readonly b: number;
@@ -25,7 +25,7 @@ export function applyMatrix(
   return { x: m.a * x + m.c * y + m.e, y: m.b * x + m.d * y + m.f };
 }
 
-// Applies `inner` first and `outer` second -- the SVG nesting semantics: a group's transform maps its children's coordinates, so the total matrix walking into a child is outerCTM * childOwnTransform, matrix-multiplied in that left-to-right order (outer ∘ inner as function composition).
+// Applies `inner` first and `outer` second — the SVG nesting semantics: a group's transform maps its children's coordinates, so the total matrix walking into a child is outerCTM * childOwnTransform, matrix-multiplied in that left-to-right order (outer ∘ inner as function composition).
 export function composeMatrices(
   outer: AffineMatrix,
   inner: AffineMatrix,
@@ -51,12 +51,12 @@ export function applyScale(m: AffineMatrix, factor: number): AffineMatrix {
   };
 }
 
-// The mean of the two column scales -- the factor a stroke width grows by under m. Not the determinant's square root: for a shear-heavy matrix the columns disagree, and the mean keeps a stroked line's weight tracking the average of how the matrix stretches each basis direction, which is the best one-number answer a schema carrying a scalar stroke width has.
+// The mean of the two column scales — the factor a stroke width grows by under m. Not the determinant's square root: for a shear-heavy matrix the columns disagree, and the mean keeps a stroked line's weight tracking the average of how the matrix stretches each basis direction, which is the best one-number answer a schema carrying a scalar stroke width has.
 export function meanScaleFactor(m: AffineMatrix): number {
   return (Math.hypot(m.a, m.b) + Math.hypot(m.c, m.d)) / 2;
 }
 
-// axis-aligned: no rotation or shear terms at all, so a rect stays an axis-aligned rect and an ellipse stays an axis-aligned ellipse (possibly mirrored, which a bounding box absorbs exactly). A similarity additionally allows a uniform rotation/reflection but still maps squares to squares and circles to circles, so rect/ellipse again keep their kind -- via a bounding frame plus a rotationDeg the schema's rect/ellipse variants do carry -- provided the matrix does not reflect (a mirrored ellipse is not a rotated one; det < 0 is excluded). Anything more (non-uniform scale composed with rotation, shear) maps a circle to a genuinely skewed conic, which only the path variant can express.
+// axis-aligned: no rotation or shear terms at all, so a rect stays an axis-aligned rect and an ellipse stays an axis-aligned ellipse (possibly mirrored, which a bounding box absorbs exactly). A similarity additionally allows a uniform rotation/reflection but still maps squares to squares and circles to circles, so rect/ellipse again keep their kind — via a bounding frame plus a rotationDeg the schema's rect/ellipse variants do carry — provided the matrix does not reflect (a mirrored ellipse is not a rotated one; det < 0 is excluded). Anything more (non-uniform scale composed with rotation, shear) maps a circle to a genuinely skewed conic, which only the path variant can express.
 export function isAxisAligned(m: AffineMatrix): boolean {
   return m.b === 0 && m.c === 0;
 }
@@ -76,7 +76,7 @@ export function similarityRotationDeg(m: AffineMatrix): number {
   return (Math.atan2(m.b, m.a) * 180) / Math.PI;
 }
 
-// The transform attribute grammar: a whitespace/comma-separated list of function calls translate(tx [ty]), scale(sx [sy]), rotate(angle [cx cy]), skewX(a), skewY(a), matrix(a b c d e f), applied LEFT TO RIGHT in list order -- which is the composition order composeMatrices(outer, inner) with each list entry as the new outer. Numbers reuse the shared SVG number grammar; function names are case-sensitive per the spec. Returns undefined for any malformed list (an unknown function, a bad argument count, a non-finite number) rather than a partial parse -- a half-applied transform would silently misplace every descendant.
+// The transform attribute grammar: a whitespace/comma-separated list of function calls translate(tx [ty]), scale(sx [sy]), rotate(angle [cx cy]), skewX(a), skewY(a), matrix(a b c d e f), applied LEFT TO RIGHT in list order — which is the composition order composeMatrices(outer, inner) with each list entry as the new outer. Numbers reuse the shared SVG number grammar; function names are case-sensitive per the spec. Returns undefined for any malformed list (an unknown function, a bad argument count, a non-finite number) rather than a partial parse — a half-applied transform would silently misplace every descendant.
 const TRANSFORM_NUMBER = /[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/y;
 const TRANSFORM_FUNCTIONS = [
   "translate",
@@ -92,7 +92,7 @@ interface TransformScanner {
   pos: number;
 }
 
-// Returns whether a comma was consumed, so the argument loop can reject a comma left dangling before the closing paren -- "rotate(90,)" is malformed, not an omitted argument silently accepted as rotate(90).
+// Returns whether a comma was consumed, so the argument loop can reject a comma left dangling before the closing paren — "rotate(90,)" is malformed, not an omitted argument silently accepted as rotate(90).
 function skipTransformSeparators(
   source: string,
   scanner: TransformScanner,

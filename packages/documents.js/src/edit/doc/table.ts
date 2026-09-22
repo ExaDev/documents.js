@@ -16,7 +16,7 @@ import { resolvePivotTableGrid } from "../table-grid";
 import type { ParagraphInit } from "./paragraph";
 import { buildParagraph, DocParagraph } from "./paragraph";
 
-// 468pt (6.5in) -- matches OdtTable's own DEFAULT_TABLE_WIDTH_PT (src/edit/odt/table.ts) and markdown's table.ts: the content width a new table defaults to when no explicit widths are given. Unlike markdown (whose own writer never reads columnWidthsPt at all), doc-codec's writer genuinely consumes the table-wide column grid these widths define -- each physical cell's boundaries are computed from it -- so this default is real input to the written rgdxaCenter, not just schema validity.
+// 468pt (6.5in) — matches OdtTable's own DEFAULT_TABLE_WIDTH_PT (src/edit/odt/table.ts) and markdown's table.ts: the content width a new table defaults to when no explicit widths are given. Unlike markdown (whose own writer never reads columnWidthsPt at all), doc-codec's writer genuinely consumes the table-wide column grid these widths define — each physical cell's boundaries are computed from it — so this default is real input to the written rgdxaCenter, not just schema validity.
 const DEFAULT_TABLE_WIDTH_PT = 468;
 
 export interface TableInit {
@@ -46,14 +46,14 @@ export class DocTableCell {
     return new DocParagraph(this.node.blocks, paragraph);
   }
 
-  // Newline-joined across this cell's own paragraphs, matching MarkdownTableCell.text/OdtTableCell.text's own convention. Unlike markdown (whose writer space-joins a multi-paragraph cell back down to one line), a multi-paragraph doc cell round-trips as multiple paragraphs -- the getter reports both what the cell holds and what the writer will keep.
+  // Newline-joined across this cell's own paragraphs, matching MarkdownTableCell.text/OdtTableCell.text's own convention. Unlike markdown (whose writer space-joins a multi-paragraph cell back down to one line), a multi-paragraph doc cell round-trips as multiple paragraphs — the getter reports both what the cell holds and what the writer will keep.
   get text(): string {
     return this.paragraphs()
       .map((p) => p.text)
       .join("\n");
   }
 
-  // Clears this cell's existing blocks and replaces them with a single paragraph carrying a single run -- the same clear-and-replace convention MarkdownTableCell.text's own setter uses.
+  // Clears this cell's existing blocks and replaces them with a single paragraph carrying a single run — the same clear-and-replace convention MarkdownTableCell.text's own setter uses.
   set text(value: string) {
     this.node.blocks = [buildParagraph({ text: value })];
   }
@@ -108,9 +108,9 @@ function buildRow(columnCount: number): ContentTableRowNode {
   return { cells };
 }
 
-// A live view over a ContentTable object living inside a section's own blocks array, mirroring MarkdownTable over the identical node shape -- see markdown's table.ts for the live-view rationale over a plain ContentDocument with no XmlElement tree.
+// A live view over a ContentTable object living inside a section's own blocks array, mirroring MarkdownTable over the identical node shape — see markdown's table.ts for the live-view rationale over a plain ContentDocument with no XmlElement tree.
 //
-// One genuine doc-specific limit worth stating here: a table nested INSIDE a table cell is the one table-shaped construct writeDocContent refuses outright (doc-codec's table/write.ts writes depth 1 only, throwing rather than flattening -- see its README's Tables section), so while nothing stops a caller reaching a nested table through this class's own paragraphs, toBytes() on a document carrying one will name it rather than approximate it.
+// One genuine doc-specific limit worth stating here: a table nested INSIDE a table cell is the one table-shaped construct writeDocContent refuses outright (doc-codec's table/write.ts writes depth 1 only, throwing rather than flattening — see its README's Tables section), so while nothing stops a caller reaching a nested table through this class's own paragraphs, toBytes() on a document carrying one will name it rather than approximate it.
 export class DocTable {
   private readonly container: ContentBlock[];
   private readonly node: ContentTableNode;
@@ -148,7 +148,7 @@ export class DocTable {
     return resolvePivotTableGrid(this.live(), (cell) => new DocTableCell(cell));
   }
 
-  // Appends a row with the same column count as this table's own columnWidthsPt -- the table-wide column grid those widths define is what doc-codec's writer derives every physical cell's boundaries from, so the grid and the row cell counts must stay in agreement exactly as they are kept here.
+  // Appends a row with the same column count as this table's own columnWidthsPt — the table-wide column grid those widths define is what doc-codec's writer derives every physical cell's boundaries from, so the grid and the row cell counts must stay in agreement exactly as they are kept here.
   appendRow(): DocTableRow {
     const node = this.live();
     const row = buildRow(node.columnWidthsPt.length);
@@ -242,7 +242,7 @@ export class DocTable {
   }
 }
 
-// Builds a fresh ContentTable from scratch (not a live view), with an even column split of the default content width -- the identical defaulting MarkdownTable.buildTable applies, except here the widths are genuine writer input rather than schema ballast.
+// Builds a fresh ContentTable from scratch (not a live view), with an even column split of the default content width — the identical defaulting MarkdownTable.buildTable applies, except here the widths are genuine writer input rather than schema ballast.
 export function buildTable(init: TableInit): ContentTableNode {
   const columnWidthsPt = Array.from(
     { length: init.columns },

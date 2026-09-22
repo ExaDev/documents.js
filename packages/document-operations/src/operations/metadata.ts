@@ -22,7 +22,7 @@ const MetadataReadInputSchema = z.object({
   source: DocumentInputSchema.describe("The document to read metadata from."),
 });
 
-// The original MCP tool registration declared no outputSchema for metadata_read at all (readDocumentMetadata's own return shape varies per format -- see that function's own doc comment), so this operation declares none either rather than guessing one and risking rejecting a genuine value the guess did not anticipate. The output type comes straight from readDocumentMetadata's own return type instead.
+// The original MCP tool registration declared no outputSchema for metadata_read at all (readDocumentMetadata's own return shape varies per format — see that function's own doc comment), so this operation declares none either rather than guessing one and risking rejecting a genuine value the guess did not anticipate. The output type comes straight from readDocumentMetadata's own return type instead.
 export const metadataReadOperation = defineOperationWithoutOutputSchema<
   typeof MetadataReadInputSchema,
   ReturnType<typeof readDocumentMetadata>
@@ -50,7 +50,7 @@ const ResolvedDocumentOutputSchema = z.union([
 const MetadataWriteInputSchema = z.object({
   source: DocumentInputSchema.describe("The document to patch metadata on."),
   targetFormat: DocumentFormatSchema.describe(
-    "The format to write the patched document back out as -- must match the source document's own format (or both be 'pdf'). metadata_write never converts format.",
+    "The format to write the patched document back out as — must match the source document's own format (or both be 'pdf'). metadata_write never converts format.",
   ),
   output: DocumentOutputSchema.optional().describe(
     "Where to write the patched document. Omit entirely to receive the bytes inline, base64-encoded.",
@@ -85,7 +85,7 @@ export const metadataWriteOperation = defineOperation({
   name: "metadata_write",
   title: "Write document metadata",
   description:
-    "Patches a document's own title/author/subject/keywords, leaving every other field and every other flag as-is. Does not convert format -- the source document's own format and targetFormat must match (or both be 'pdf'); odf (a standalone formula document) is rejected outright as either a source or a target, since it has no write path back out at all. Convert the document to a different format first (e.g. with a documents.js conversion operation) if metadata needs to be set on the result of a format change.",
+    "Patches a document's own title/author/subject/keywords, leaving every other field and every other flag as-is. Does not convert format — the source document's own format and targetFormat must match (or both be 'pdf'); odf (a standalone formula document) is rejected outright as either a source or a target, since it has no write path back out at all. Convert the document to a different format first (e.g. with a documents.js conversion operation) if metadata needs to be set on the result of a format change.",
   inputSchema: MetadataWriteInputSchema,
   outputSchema: ResolvedDocumentOutputSchema,
   async run({

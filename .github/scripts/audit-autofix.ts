@@ -18,7 +18,7 @@ export interface AuditReport {
   advisories: Record<string, AuditAdvisory>;
 }
 
-// npm's own error envelope: what `pnpm audit --json` prints verbatim when the registry's bulk advisory endpoint itself fails (a timeout, a 5xx, a rate limit) rather than pnpm failing to talk to it at all -- confirmed directly against a real timeout ("The operation was aborted due to timeout", code 23) from registry.npmjs.org/-/npm/v1/security/advisories/bulk. This is not the same failure as a genuinely unexpected JSON shape: it is valid, well-formed JSON from npm's own API describing a real upstream outage, and treating it identically to a parsing bug in this script produces a misleading "did not match the expected shape" error on every advisory-service hiccup, org-wide, across every open PR.
+// npm's own error envelope: what `pnpm audit --json` prints verbatim when the registry's bulk advisory endpoint itself fails (a timeout, a 5xx, a rate limit) rather than pnpm failing to talk to it at all — confirmed directly against a real timeout ("The operation was aborted due to timeout", code 23) from registry.npmjs.org/-/npm/v1/security/advisories/bulk. This is not the same failure as a genuinely unexpected JSON shape: it is valid, well-formed JSON from npm's own API describing a real upstream outage, and treating it identically to a parsing bug in this script produces a misleading "did not match the expected shape" error on every advisory-service hiccup, org-wide, across every open PR.
 export interface AuditServiceError {
   error: { code: number; message: string };
 }
@@ -45,7 +45,7 @@ export interface Classified {
   candidates: Candidate[];
 }
 
-// pnpm 11.0.9 only honoured override selectors written to package.json's `pnpm.overrides` field; pnpm 11.21.0 flipped this -- it now silently ignores that field (a warning, not an error, so nothing failed loudly) and only reads `overrides:` from pnpm-workspace.yaml, confirmed empirically against both versions. This workspace already keeps its overrides there, which both versions honour. Also confirmed empirically: adding a new override for a package that already has a resolved lockfile entry does NOT get applied by an incremental `pnpm install`, even with `--force` or `pnpm dedupe` -- which is why the fix path below re-resolves with `pnpm update` on the affected names rather than trusting an install to notice. minimumReleaseAge still gates whatever that re-resolution picks, so this cannot pull a version younger than the configured window; it does mean the packages named in the update can also drift to a newer in-range, aged version on a fix run, which `lint`, `typecheck` and `test` still gate as usual afterwards.
+// pnpm 11.0.9 only honoured override selectors written to package.json's `pnpm.overrides` field; pnpm 11.21.0 flipped this — it now silently ignores that field (a warning, not an error, so nothing failed loudly) and only reads `overrides:` from pnpm-workspace.yaml, confirmed empirically against both versions. This workspace already keeps its overrides there, which both versions honour. Also confirmed empirically: adding a new override for a package that already has a resolved lockfile entry does NOT get applied by an incremental `pnpm install`, even with `--force` or `pnpm dedupe` — which is why the fix path below re-resolves with `pnpm update` on the affected names rather than trusting an install to notice. minimumReleaseAge still gates whatever that re-resolution picks, so this cannot pull a version younger than the configured window; it does mean the packages named in the update can also drift to a newer in-range, aged version on a fix run, which `lint`, `typecheck` and `test` still gate as usual afterwards.
 const WORKSPACE_FILE = "pnpm-workspace.yaml";
 const LOCKFILE = "pnpm-lock.yaml";
 const auditLevel = process.env.AUDIT_LEVEL ?? "high";
@@ -76,7 +76,7 @@ export function isAuditReport(value: unknown): value is AuditReport {
   return Object.values(value.advisories).every(isAuditAdvisory);
 }
 
-// pnpm's minimumReleaseAge is a number of MINUTES, not days: pnpm types the setting "number (minutes)" in its own settings reference (https://pnpm.io/settings#minimumreleaseage). This workspace configures 60 -- one hour -- where the repository these scripts were ported from configures 10080, seven days, which is why nothing here converts to days or hardcodes a window. Reading the live value and quoting it unconverted is what keeps a message about the age gate from drifting away from the gate itself. An absent key is a real error rather than a case to default: the age gate is what makes applying a security override unattended safe at all, so a workspace that has not configured one is not a workspace this script should quietly fix.
+// pnpm's minimumReleaseAge is a number of MINUTES, not days: pnpm types the setting "number (minutes)" in its own settings reference (https://pnpm.io/settings#minimumreleaseage). This workspace configures 60 — one hour — where the repository these scripts were ported from configures 10080, seven days, which is why nothing here converts to days or hardcodes a window. Reading the live value and quoting it unconverted is what keeps a message about the age gate from drifting away from the gate itself. An absent key is a real error rather than a case to default: the age gate is what makes applying a security override unattended safe at all, so a workspace that has not configured one is not a workspace this script should quietly fix.
 export function minimumReleaseAgeMinutes(workspaceYamlText: string): number {
   const parsed: unknown = parse(workspaceYamlText);
   if (!isRecord(parsed) || typeof parsed.minimumReleaseAge !== "number") {
@@ -87,7 +87,7 @@ export function minimumReleaseAgeMinutes(workspaceYamlText: string): number {
   return parsed.minimumReleaseAge;
 }
 
-// Retries only npm's own service-error envelope (isAuditServiceError), never a genuinely unexpected shape -- an outage is worth waiting out, a real parsing mismatch is not, and conflating the two would silently retry past an actual bug in this script's own expectations. registry.npmjs.org's advisory-bulk endpoint has been observed recovering within a couple of minutes of a timeout, so three attempts a minute apart covers a real transient blip without turning a genuine, sustained outage into a ten-minute CI job.
+// Retries only npm's own service-error envelope (isAuditServiceError), never a genuinely unexpected shape — an outage is worth waiting out, a real parsing mismatch is not, and conflating the two would silently retry past an actual bug in this script's own expectations. registry.npmjs.org's advisory-bulk endpoint has been observed recovering within a couple of minutes of a timeout, so three attempts a minute apart covers a real transient blip without turning a genuine, sustained outage into a ten-minute CI job.
 const AUDIT_SERVICE_ERROR_ATTEMPTS = 3;
 const AUDIT_SERVICE_ERROR_RETRY_DELAY_SECONDS = 60;
 
@@ -153,17 +153,17 @@ function writeWorkspaceDoc(doc: Document): void {
   writeFileSync(WORKSPACE_FILE, doc.toString());
 }
 
-// Patches the `overrides` node one child key at a time, on a clone rather than the original document, so every other key and comment in pnpm-workspace.yaml survives (linkWorkspacePackages, allowBuilds, minimumReleaseAge and its exclusions, and the rationale comments each of them carries) -- a naive parse-to-object-then-JSON.stringify round trip would silently discard all of that.
+// Patches the `overrides` node one child key at a time, on a clone rather than the original document, so every other key and comment in pnpm-workspace.yaml survives (linkWorkspacePackages, allowBuilds, minimumReleaseAge and its exclusions, and the rationale comments each of them carries) — a naive parse-to-object-then-JSON.stringify round trip would silently discard all of that.
 //
-// Child-key patching rather than replacing the whole node, which is what makes a comment attached to an individual override line survive a fix run. Confirmed empirically both ways against this repository's own file: a comment sitting above the `overrides:` key itself (here, the CVE rationale for the fast-uri and js-yaml entries) survives either approach, because it attaches to the key rather than to the value -- but a comment attached to one entry inside the map is destroyed by a whole-node replace and preserved by setIn, since the untouched entries' nodes are never rebuilt.
+// Child-key patching rather than replacing the whole node, which is what makes a comment attached to an individual override line survive a fix run. Confirmed empirically both ways against this repository's own file: a comment sitting above the `overrides:` key itself (here, the CVE rationale for the fast-uri and js-yaml entries) survives either approach, because it attaches to the key rather than to the value — but a comment attached to one entry inside the map is destroyed by a whole-node replace and preserved by setIn, since the untouched entries' nodes are never rebuilt.
 //
-// `overrides` is passed as the complete desired state, not a patch: keys it omits are deleted individually, which is what the prune pass at the end of a run relies on. Entries whose value is not a string are left alone rather than removed, since currentOverrides only reports string-valued keys -- a value this script does not understand is not a value it should destroy.
+// `overrides` is passed as the complete desired state, not a patch: keys it omits are deleted individually, which is what the prune pass at the end of a run relies on. Entries whose value is not a string are left alone rather than removed, since currentOverrides only reports string-valued keys — a value this script does not understand is not a value it should destroy.
 export function withOverrides(
   workspace: Document,
   overrides: Readonly<Record<string, string>>,
 ): Document {
   const cloned = workspace.clone();
-  // An empty map is written as a bare `overrides: {}` line that never goes away on its own -- deleting the key when there is nothing to override keeps a fully-pruned file clean instead of accumulating dead boilerplate. The comment above the key goes with it, which is correct: it documents overrides that no longer exist.
+  // An empty map is written as a bare `overrides: {}` line that never goes away on its own — deleting the key when there is nothing to override keeps a fully-pruned file clean instead of accumulating dead boilerplate. The comment above the key goes with it, which is correct: it documents overrides that no longer exist.
   if (Object.keys(overrides).length === 0) {
     cloned.delete("overrides");
     return cloned;
@@ -214,7 +214,7 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-// Whether pnpm-workspace.yaml or the lockfile actually differ from HEAD, checked directly rather than inferred from `fixed`/`prunedKeys` being non-empty. Those two lists say an advisory currently has a working override in the file this run produced -- true on every run for as long as the vulnerability exists, including a rerun against a workspace where a prior run already committed that exact override and this run's writes reproduced it byte-for-byte. Only a real git diff distinguishes "this run changed something" from "this run re-verified something already fixed," and only the former is a reason to open a PR.
+// Whether pnpm-workspace.yaml or the lockfile actually differ from HEAD, checked directly rather than inferred from `fixed`/`prunedKeys` being non-empty. Those two lists say an advisory currently has a working override in the file this run produced — true on every run for as long as the vulnerability exists, including a rerun against a workspace where a prior run already committed that exact override and this run's writes reproduced it byte-for-byte. Only a real git diff distinguishes "this run changed something" from "this run re-verified something already fixed," and only the former is a reason to open a PR.
 function hasUncommittedChanges(): boolean {
   return (
     spawnSync("git", ["diff", "--quiet", "--", WORKSPACE_FILE, LOCKFILE])
@@ -224,7 +224,7 @@ function hasUncommittedChanges(): boolean {
 
 // pnpm's own exit code from `update` is not a reliable signal that an override actually took effect — confirmed empirically: an unsatisfiable override (no published version clears it) still exits 0, silently leaving the package at whatever it could otherwise resolve. The only trustworthy signal is re-auditing and checking whether each candidate's own specific advisories are gone. A non-zero exit from `update` itself does mean something more fundamental broke (e.g. an unresolvable peer conflict) and is reported as `conflicted` so the caller can isolate which candidate is responsible.
 //
-// `-r`, unlike the single-importer form this was ported from: `overrides` in pnpm-workspace.yaml is a workspace-wide setting, but a non-recursive `pnpm update` re-resolves the root importer's dependencies only, leaving every one of this workspace's package importers on the resolutions already in the lockfile. Since almost everything an advisory names here is transitive to a package rather than to the root, the update would report success while the vulnerable entries the audit found stayed exactly where they were -- and the re-audit below would then correctly refuse to call the candidate fixed. Recursive is the form that matches where the overrides apply.
+// `-r`, unlike the single-importer form this was ported from: `overrides` in pnpm-workspace.yaml is a workspace-wide setting, but a non-recursive `pnpm update` re-resolves the root importer's dependencies only, leaving every one of this workspace's package importers on the resolutions already in the lockfile. Since almost everything an advisory names here is transitive to a package rather than to the root, the update would report success while the vulnerable entries the audit found stayed exactly where they were — and the re-audit below would then correctly refuse to call the candidate fixed. Recursive is the form that matches where the overrides apply.
 function attemptBatch(
   workspace: Document,
   baseOverrides: Readonly<Record<string, string>>,
@@ -342,7 +342,7 @@ export function classifyAdvisories(
   return { deferred, candidates: [...candidatesByKey.values()] };
 }
 
-// An override is inert when no version its selector could rewrite is present: the selector is the vulnerable range on the key (`pkg@<range>`), and the override only acts on resolutions matching that range. If nothing resolved matches the selector, the override forces nothing today -- regardless of what the package resolves outside the selector. The autofix only ever adds overrides, so without this pass the map accumulates one entry per historical advisory forever. Dropping inert entries is self-correcting rather than risky: if a future update resolves back into a vulnerable range, the next audit run re-adds the override through the same fix path.
+// An override is inert when no version its selector could rewrite is present: the selector is the vulnerable range on the key (`pkg@<range>`), and the override only acts on resolutions matching that range. If nothing resolved matches the selector, the override forces nothing today — regardless of what the package resolves outside the selector. The autofix only ever adds overrides, so without this pass the map accumulates one entry per historical advisory forever. Dropping inert entries is self-correcting rather than risky: if a future update resolves back into a vulnerable range, the next audit run re-adds the override through the same fix path.
 export function inertOverrideKeys(
   overrides: Readonly<Record<string, string>>,
   resolvedVersions: Map<string, Set<string>>,
@@ -363,7 +363,7 @@ export function inertOverrideKeys(
   return inert;
 }
 
-// The resolved package@version set from the lockfile's `packages` map(s), minus peer-dependency suffixes. pnpm writes a multi-document lockfile once a project pins its own pnpm binary through packageManagerDependencies -- a self-management document listing the pinned pnpm build's own per-platform packages, ahead of the project's own document -- and this workspace does exactly that (package.json's packageManager field, pnpm 12), so the single-document assumption this function used to make no longer holds. Every document in the stream that carries a `packages` map has its entries unioned into the same result, rather than picking one: the self-management document's own entries (`@pnpm/exe.*` platform binaries) are real resolved packages too, just never ones `pnpm audit` has advisories against, so including them changes nothing about correctness and needs no guess about which document is "the real" project lockfile. A document with no `packages` map at all is skipped rather than treated as an error on its own; only a stream where no document anywhere has a packages map is an error, since that means the lockfile as a whole resolves nothing. The map is the union of every importer's resolutions, which is what an inertness check needs across every package in the workspace.
+// The resolved package@version set from the lockfile's `packages` map(s), minus peer-dependency suffixes. pnpm writes a multi-document lockfile once a project pins its own pnpm binary through packageManagerDependencies — a self-management document listing the pinned pnpm build's own per-platform packages, ahead of the project's own document — and this workspace does exactly that (package.json's packageManager field, pnpm 12), so the single-document assumption this function used to make no longer holds. Every document in the stream that carries a `packages` map has its entries unioned into the same result, rather than picking one: the self-management document's own entries (`@pnpm/exe.*` platform binaries) are real resolved packages too, just never ones `pnpm audit` has advisories against, so including them changes nothing about correctness and needs no guess about which document is "the real" project lockfile. A document with no `packages` map at all is skipped rather than treated as an error on its own; only a stream where no document anywhere has a packages map is an error, since that means the lockfile as a whole resolves nothing. The map is the union of every importer's resolutions, which is what an inertness check needs across every package in the workspace.
 export function resolvedVersionsFromLockfileText(
   yamlText: string,
 ): Map<string, Set<string>> {
@@ -442,7 +442,7 @@ function main(): void {
     );
   }
 
-  // Prune inert overrides: entries whose package the lockfile already resolves entirely inside the override's target. The pruned pnpm-workspace.yaml rides the same fix PR, and the pruned state is verified below before it is kept -- anything that regresses restores the pre-prune files.
+  // Prune inert overrides: entries whose package the lockfile already resolves entirely inside the override's target. The pruned pnpm-workspace.yaml rides the same fix PR, and the pruned state is verified below before it is kept — anything that regresses restores the pre-prune files.
   let prunedKeys: string[] = [];
   const workspaceNow = readWorkspaceDoc();
   const overridesNow = currentOverrides(workspaceNow);
@@ -459,7 +459,7 @@ function main(): void {
     writeWorkspaceDoc(withOverrides(workspaceNow, pruned));
     if (spawnSync("pnpm", ["install"], { encoding: "utf8" }).status === 0) {
       const postPrune = runAudit();
-      // Clean means: no advisory is present that this run did not start with -- the prune resurrected nothing the fixes removed and introduced nothing new.
+      // Clean means: no advisory is present that this run did not start with — the prune resurrected nothing the fixes removed and introduced nothing new.
       const regressed = Object.values(postPrune.advisories).some(
         (a) => !initialIds.has(a.github_advisory_id),
       );
@@ -547,7 +547,7 @@ function main(): void {
   setOutput("fixed", fixedFlag);
   // The CI job invokes this through a composite action, which declares no outputs of its own and so cannot carry a step's GITHUB_OUTPUT up to the job; the file is the channel the job re-emits from.
   //
-  // Whatever the job does with that flag runs on the ordinary GITHUB_TOKEN, not the GitHub App token the release job holds -- that token exists so the release orchestrator can push straight to a protected main, which an audit branch never needs. The cost of the ordinary token is that its own push cannot trigger a workflow run, so the fix branch's checks have to be dispatched explicitly rather than waited for.
+  // Whatever the job does with that flag runs on the ordinary GITHUB_TOKEN, not the GitHub App token the release job holds — that token exists so the release orchestrator can push straight to a protected main, which an audit branch never needs. The cost of the ordinary token is that its own push cannot trigger a workflow run, so the fix branch's checks have to be dispatched explicitly rather than waited for.
   writeFileSync("/tmp/audit-fix-fixed.txt", fixedFlag);
 
   console.log(

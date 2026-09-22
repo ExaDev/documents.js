@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Jpeg2000ParseError } from "./jpeg2000-errors";
 import { PacketBitReader, TagTree } from "./jpeg2000-tagtree";
 
-// These two primitives are exercised end to end by every fixture in jpeg2000.test.ts -- a tag tree that disagreed with the encoder by a single bit would desynchronise the packet header and no fixture would decode at all. What follows pins the two edges that a whole-file test cannot isolate: the stuffed-bit rule at a 0xFF byte, and the resumption of a partially-determined tag tree across successive thresholds.
+// These two primitives are exercised end to end by every fixture in jpeg2000.test.ts — a tag tree that disagreed with the encoder by a single bit would desynchronise the packet header and no fixture would decode at all. What follows pins the two edges that a whole-file test cannot isolate: the stuffed-bit rule at a 0xFF byte, and the resumption of a partially-determined tag tree across successive thresholds.
 
 describe("PacketBitReader", () => {
   it("reads bits most significant first", () => {

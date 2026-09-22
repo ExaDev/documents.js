@@ -1,4 +1,4 @@
-// Firebird's BLR type opcodes (the raw integer a gbak backup's own att_field_type attribute carries, taken directly from field->fld_type -- see restore.epp's get_field: `case att_field_type: field->fld_type = (USHORT) get_int32(tdgbl); break;`) and the table that maps each opcode onto its underlying PHYSICAL storage representation (dtype). Both sourced directly from Firebird's own open-source engine, not guessed: opcode values from src/include/firebird/impl/blr.h (via src/jrd/align.h's own comments, which restate each value next to its dtype mapping), and the mapping table itself is align.h's own `gds_cvt_blr_dtype` array, transcribed verbatim -- see this package's README Gotchas entry on .odb Tier 3 for the exact commit/URL this was pulled from. Only the opcodes a Firebird-embedded LibreOffice .odb can plausibly emit for an ordinary user table are named here (the ones this reader's own real fixture was built to exercise, plus their neighbours in the same table); an opcode with no FirebirdPhysicalType mapping throws rather than silently guessing.
+// Firebird's BLR type opcodes (the raw integer a gbak backup's own att_field_type attribute carries, taken directly from field->fld_type — see restore.epp's get_field: `case att_field_type: field->fld_type = (USHORT) get_int32(tdgbl); break;`) and the table that maps each opcode onto its underlying PHYSICAL storage representation (dtype). Both sourced directly from Firebird's own open-source engine, not guessed: opcode values from src/include/firebird/impl/blr.h (via src/jrd/align.h's own comments, which restate each value next to its dtype mapping), and the mapping table itself is align.h's own `gds_cvt_blr_dtype` array, transcribed verbatim — see this package's README Gotchas entry on .odb Tier 3 for the exact commit/URL this was pulled from. Only the opcodes a Firebird-embedded LibreOffice .odb can plausibly emit for an ordinary user table are named here (the ones this reader's own real fixture was built to exercise, plus their neighbours in the same table); an opcode with no FirebirdPhysicalType mapping throws rather than silently guessing.
 
 export const BLR_SHORT = 7;
 export const BLR_LONG = 8;
@@ -41,7 +41,7 @@ export type FirebirdPhysicalType =
   | "boolean"
   | "blob"
   | "quad"
-  // Genuinely supported by src/firebird/reader.ts's XdrReader (readInt64) but not yet interpreted into a ContentCellValue by src/firebird/data.ts -- an int128-precision NUMERIC/DECIMAL (FB4+ only; this reader's own real fixture targets a Firebird 3.0-era embedded engine, which has no int128/dec64/dec128 type at all) or a genuine DECFLOAT column. See the README's .odb Tier 3 Gotchas entry.
+  // Genuinely supported by src/firebird/reader.ts's XdrReader (readInt64) but not yet interpreted into a ContentCellValue by src/firebird/data.ts — an int128-precision NUMERIC/DECIMAL (FB4+ only; this reader's own real fixture targets a Firebird 3.0-era embedded engine, which has no int128/dec64/dec128 type at all) or a genuine DECFLOAT column. See the README's .odb Tier 3 Gotchas entry.
   | "int128"
   | "dec64"
   | "dec128"
@@ -96,7 +96,7 @@ export function decodeBlrType(blrType: number): FirebirdPhysicalType {
   return physical;
 }
 
-// A human-readable SQL-shaped type label for HsqldbColumn.type -- see that field's own doc comment: "kept whole rather than parsed into a structured type ... nothing here models SQL constraints". Synthesised from the field's own binary metadata (BLR type + length + scale + sub-type) rather than lifted verbatim from source SQL text (there IS no source SQL text in a gbak backup -- see the README's .odb Tier 3 Gotchas entry), but serves the identical purpose: a readable label, not a re-parseable declaration. scale is Firebird's own convention: 0 or negative, where the field's underlying integer value is multiplied by 10^scale to get the true numeric value (a DECIMAL(10,2) column carries scale -2).
+// A human-readable SQL-shaped type label for HsqldbColumn.type — see that field's own doc comment: "kept whole rather than parsed into a structured type ... nothing here models SQL constraints". Synthesised from the field's own binary metadata (BLR type + length + scale + sub-type) rather than lifted verbatim from source SQL text (there IS no source SQL text in a gbak backup — see the README's .odb Tier 3 Gotchas entry), but serves the identical purpose: a readable label, not a re-parseable declaration. scale is Firebird's own convention: 0 or negative, where the field's underlying integer value is multiplied by 10^scale to get the true numeric value (a DECIMAL(10,2) column carries scale -2).
 export function describeFieldType(
   physical: FirebirdPhysicalType,
   lengthBytes: number,
@@ -130,7 +130,7 @@ export function describeFieldType(
     case "boolean":
       return "BOOLEAN";
     case "blob":
-      // A blob's own sub-type is part of its declared type in real Firebird DDL (`BLOB SUB_TYPE 1` is a text blob, `SUB_TYPE 0` a binary one), and is what decides how src/firebird/data.ts records the recovered content -- so it belongs in the label rather than being flattened away.
+      // A blob's own sub-type is part of its declared type in real Firebird DDL (`BLOB SUB_TYPE 1` is a text blob, `SUB_TYPE 0` a binary one), and is what decides how src/firebird/data.ts records the recovered content — so it belongs in the label rather than being flattened away.
       return `BLOB SUB_TYPE ${subType}`;
     case "quad":
       return "ARRAY";

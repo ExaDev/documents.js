@@ -74,7 +74,7 @@ import {
   newDrawingCounters,
 } from "./drawings-write";
 
-// ContentDocument (kind: 'spreadsheet') -> Package: the first genuinely NEW xlsx package this ecosystem writes from scratch, rather than decoding/re-encoding an existing one -- every part below is constructed directly via xml/fragment.ts's el/txt, matching typed/xlsx/content.ts's own readXlsxContent as its read-side inverse: writing everything that reader reads, through the same number-format vocabulary that reader classifies (see renderCellValue and typed/xlsx/number-format.ts's own write-side section), and honestly re-approximating the one lossy conversion left on the way in (column-width characters). ContentSheetCell.comment now survives a round trip too, via the threaded-comments part comments-write.ts builds (see buildWorksheetPart's own note below). The reader's own drawing rows -- chart graphic frames (embeddedObjects) and pictures (images), typed/xlsx/drawings.ts -- now have a real write side too (ExaDev/documents.js#973, typed/xlsx/drawings-write.ts): every image and chart embedded object a sheet carries writes back out as a real xdr:oneCellAnchor in a genuine xl/drawings/drawingN.xml, plus xl/media/imageN.<ext> or xl/charts/chartN.xml as appropriate. The workbook's own defined names now ride the ContentDocument's names field both ways (typed/xlsx/defined-names.ts's readWorkbookNames, definitions-write.ts's buildNameDefinedNameElements), and its table/List objects still ride the tree-only definitions table (typed/xlsx/definitions.ts on the read side, the optional `definitions` passed in BuildXlsxContentOptions on the write side) -- flattenTree cannot carry that table (it is a tree-only facility, document-schema.js's own rule), so buildXlsxPackage (typed/document-tree.ts) threads it through as this separate option rather than through the flattened ContentDocument. See typed/xlsx/content.test.ts and typed/xlsx/build.test.ts for the real-LibreOffice round-trip verification this pairing is built and tested against.
+// ContentDocument (kind: 'spreadsheet') -> Package: the first genuinely NEW xlsx package this ecosystem writes from scratch, rather than decoding/re-encoding an existing one — every part below is constructed directly via xml/fragment.ts's el/txt, matching typed/xlsx/content.ts's own readXlsxContent as its read-side inverse: writing everything that reader reads, through the same number-format vocabulary that reader classifies (see renderCellValue and typed/xlsx/number-format.ts's own write-side section), and honestly re-approximating the one lossy conversion left on the way in (column-width characters). ContentSheetCell.comment now survives a round trip too, via the threaded-comments part comments-write.ts builds (see buildWorksheetPart's own note below). The reader's own drawing rows — chart graphic frames (embeddedObjects) and pictures (images), typed/xlsx/drawings.ts — now have a real write side too (ExaDev/documents.js#973, typed/xlsx/drawings-write.ts): every image and chart embedded object a sheet carries writes back out as a real xdr:oneCellAnchor in a genuine xl/drawings/drawingN.xml, plus xl/media/imageN.<ext> or xl/charts/chartN.xml as appropriate. The workbook's own defined names now ride the ContentDocument's names field both ways (typed/xlsx/defined-names.ts's readWorkbookNames, definitions-write.ts's buildNameDefinedNameElements), and its table/List objects still ride the tree-only definitions table (typed/xlsx/definitions.ts on the read side, the optional `definitions` passed in BuildXlsxContentOptions on the write side) — flattenTree cannot carry that table (it is a tree-only facility, document-schema.js's own rule), so buildXlsxPackage (typed/document-tree.ts) threads it through as this separate option rather than through the flattened ContentDocument. See typed/xlsx/content.test.ts and typed/xlsx/build.test.ts for the real-LibreOffice round-trip verification this pairing is built and tested against.
 //
 // This is the flat, content-level half of the xlsx write pair: buildXlsxPackage (typed/document-tree.ts) is the primary name, flattening a tree-form DocumentTree (styles-table refs materialised away) and handing the result straight to this function.
 
@@ -115,14 +115,14 @@ const REL_EXTENDED_PROPS = `${REL_NS}/extended-properties`;
 const REL_WORKSHEET = `${REL_NS}/worksheet`;
 const REL_STYLES = `${REL_NS}/styles`;
 const REL_SHARED_STRINGS = `${REL_NS}/sharedStrings`;
-// Matches typed/xlsx/comments.ts's own REL_THREADED_COMMENTS exactly -- the read side already reads whatever this writer emits under this relationship type, so the two must stay identical.
+// Matches typed/xlsx/comments.ts's own REL_THREADED_COMMENTS exactly — the read side already reads whatever this writer emits under this relationship type, so the two must stay identical.
 const REL_THREADED_COMMENTS =
   "http://schemas.microsoft.com/office/2017/10/relationships/threadedComment";
-// Matches typed/xlsx/drawings.ts's own DRAWING_REL_SUFFIX and typed/xlsx/definitions.ts's own TABLE_REL_SUFFIX -- the read side resolves a worksheet's drawing/table parts by relationship TYPE alone, never by r:id, so these must stay identical to what those readers match against.
+// Matches typed/xlsx/drawings.ts's own DRAWING_REL_SUFFIX and typed/xlsx/definitions.ts's own TABLE_REL_SUFFIX — the read side resolves a worksheet's drawing/table parts by relationship TYPE alone, never by r:id, so these must stay identical to what those readers match against.
 const REL_DRAWING = `${REL_NS}/drawing`;
 const REL_TABLE = `${REL_NS}/table`;
 
-// 0-based indices of the last column (XFD, the 16384th) and the last row (the 1,048,576th) -- the current OOXML worksheet size limits, used as rowBreaks/colBreaks' own <brk max="..."> extent (the full width/height of the sheet the break spans), per ECMA-376 Part 1 SS18.3.1.2's own min/max attribute semantics documented in print-settings.ts's readManualBreaks.
+// 0-based indices of the last column (XFD, the 16384th) and the last row (the 1,048,576th) — the current OOXML worksheet size limits, used as rowBreaks/colBreaks' own <brk max="..."> extent (the full width/height of the sheet the break spans), per ECMA-376 Part 1 SS18.3.1.2's own min/max attribute semantics documented in print-settings.ts's readManualBreaks.
 const MAX_COLUMN_INDEX = 16383;
 const MAX_ROW_INDEX = 1048575;
 
@@ -348,7 +348,7 @@ function buildWorkbookPart(
     }),
   );
   const children: XmlElement[] = [el("sheets", {}, sheetElements)];
-  // The document's own names array writes back VERBATIM and in its own order -- the file's own definedName order is the only order a same-format round trip can hope to reproduce, and the array's refersTo (a multi-area print range, a quoted sheet name) is the higher-fidelity spelling of exactly the two _xlnm print names a structured printRange/repeatRows can restate. The print-settings derivation then fills in only what the array does not carry: a hand-built document stating a structured printRange with no matching names entry still gets its reserved definedName.
+  // The document's own names array writes back VERBATIM and in its own order — the file's own definedName order is the only order a same-format round trip can hope to reproduce, and the array's refersTo (a multi-area print range, a quoted sheet name) is the higher-fidelity spelling of exactly the two _xlnm print names a structured printRange/repeatRows can restate. The print-settings derivation then fills in only what the array does not carry: a hand-built document stating a structured printRange with no matching names entry still gets its reserved definedName.
   const carriedNames = new Set<string>();
   const nameElements = buildNameDefinedNameElements(names, carriedNames);
   const definedNameElements = [
@@ -367,7 +367,7 @@ function buildWorkbookPart(
 function buildSharedStringsPart(sharedStrings: SharedStringTable): XmlPart {
   const entries = sharedStrings.entries();
   const siElements = entries.map((value) =>
-    // xml:space="preserve" unconditionally -- confirmed as real producers' own convention (typed/xlsx/content.test.ts's own kitchen-sink fixture writes it on every single <t>, regardless of whether that particular string actually has significant leading/trailing whitespace), simpler and always-safe to match rather than conditionally detecting it per string.
+    // xml:space="preserve" unconditionally — confirmed as real producers' own convention (typed/xlsx/content.test.ts's own kitchen-sink fixture writes it on every single <t>, regardless of whether that particular string actually has significant leading/trailing whitespace), simpler and always-safe to match rather than conditionally detecting it per string.
     el("si", {}, [
       el("t", { "xml:space": "preserve" }, [txt(encodeXmlText(value))]),
     ]),
@@ -388,9 +388,9 @@ function buildSharedStringsPart(sharedStrings: SharedStringTable): XmlPart {
 
 // <fonts> and the two reserved <fills> entries (index 0 "none", index 1 Excel's mandatory gray125) plus the empty reserved <borders> entry (index 0) are fixed scaffolding, confirmed against multiple independent references as the source of Excel's "we found a problem with some content" repair prompt when a hand-rolled writer omits them. On top of that scaffolding this writer now emits the real per-cell fonts, real solid fills, and real per-edge borders the cells themselves carried, interned by CellFormatTable alongside the number formats.
 //
-// The variable parts come straight from the CellFormatTable the worksheets filled: one <numFmt> per custom code interned (and NO <numFmts> element at all when nothing was, which is what keeps a workbook of ordinary numbers and strings byte-identical to what this writer produced before number formats existed), one <font> per distinct cell font (the DEFAULT_FONT Calibri-11 entry always at index 0, one further entry per font that genuinely differs), one <fill> per distinct solid background, one <border> per distinct edge set, and one <xf> per cell-format index -- index 0 always being the General + default-font + no-decoration default. <dxfs> is the same story for conditionalFormatting rule styling: one <dxf> per DxfTable.intern call the worksheets made (also NO <dxfs> element at all when a workbook has no styled conditional-format rule), populated by the very same per-sheet build pass, which is why buildXlsxPackageFromContent's own worksheets-before-styles ordering note below applies to dxfTable exactly as it already does to cellFormats.
+// The variable parts come straight from the CellFormatTable the worksheets filled: one <numFmt> per custom code interned (and NO <numFmts> element at all when nothing was, which is what keeps a workbook of ordinary numbers and strings byte-identical to what this writer produced before number formats existed), one <font> per distinct cell font (the DEFAULT_FONT Calibri-11 entry always at index 0, one further entry per font that genuinely differs), one <fill> per distinct solid background, one <border> per distinct edge set, and one <xf> per cell-format index — index 0 always being the General + default-font + no-decoration default. <dxfs> is the same story for conditionalFormatting rule styling: one <dxf> per DxfTable.intern call the worksheets made (also NO <dxfs> element at all when a workbook has no styled conditional-format rule), populated by the very same per-sheet build pass, which is why buildXlsxPackageFromContent's own worksheets-before-styles ordering note below applies to dxfTable exactly as it already does to cellFormats.
 //
-// CT_Stylesheet's own required child element ORDER (ECMA-376 Part 1 SS18.8.39): numFmts?, fonts?, fills?, borders?, cellStyleXfs?, cellXfs?, cellStyles?, dxfs?, ... -- numFmts FIRST, before the fonts element that used to lead this part, and dxfs right after cellStyles (confirmed against real-producer-validation-and-cellis.xlsx's own styles.xml, which places its <dxfs> there, immediately before its <colors> element this writer does not emit).
+// CT_Stylesheet's own required child element ORDER (ECMA-376 Part 1 SS18.8.39): numFmts?, fonts?, fills?, borders?, cellStyleXfs?, cellXfs?, cellStyles?, dxfs?, ... — numFmts FIRST, before the fonts element that used to lead this part, and dxfs right after cellStyles (confirmed against real-producer-validation-and-cellis.xlsx's own styles.xml, which places its <dxfs> there, immediately before its <colors> element this writer does not emit).
 function buildStylesPart(
   cellFormats: CellFormatTable,
   dxfTable: DxfTable,
@@ -418,7 +418,7 @@ function buildStylesPart(
       case "gray125":
         return el("fill", {}, [el("patternFill", { patternType: "gray125" })]);
       case "solid": {
-        // Excel's solid-fill convention: the visible cell colour is the pattern's fgColor, with bgColor indexed="64" (the documented "no separate background" sentinel) -- the exact inverse of readFillBackground, which reads fgColor as the solid-fill colour.
+        // Excel's solid-fill convention: the visible cell colour is the pattern's fgColor, with bgColor indexed="64" (the documented "no separate background" sentinel) — the exact inverse of readFillBackground, which reads fgColor as the solid-fill colour.
         return el("fill", {}, [
           el("patternFill", { patternType: "solid" }, [
             el("fgColor", { rgb: `FF${fill.rgb}` }),
@@ -427,7 +427,7 @@ function buildStylesPart(
         ]);
       }
       case "pattern": {
-        // A genuine two-colour pattern fill (ExaDev/documents.js#951): fgColor is the colour the pattern's strokes are drawn in, bgColor the colour its gaps show through -- each emitted only when the ContentCellFill actually stated it, left absent (Excel's own "automatic" default) otherwise.
+        // A genuine two-colour pattern fill (ExaDev/documents.js#951): fgColor is the colour the pattern's strokes are drawn in, bgColor the colour its gaps show through — each emitted only when the ContentCellFill actually stated it, left absent (Excel's own "automatic" default) otherwise.
         const children: XmlElement[] = [];
         if (fill.fgRgb !== undefined) {
           children.push(el("fgColor", { rgb: `FF${fill.fgRgb}` }));
@@ -502,7 +502,7 @@ function buildStylesPart(
       xfId: "0",
     };
     if (record.numFmtId !== GENERAL_NUM_FMT_ID) {
-      // CT_Xf/@applyNumberFormat tells a consumer to honour this xf's OWN numFmtId rather than the one it would otherwise inherit from the cell style it is based on (xfId). Real producers differ here -- Excel writes it on every formatted xf, LibreOffice omits it entirely and relies on numFmtId alone (see this directory's own kitchen-sink fixture, whose six formatted xfs carry no applyNumberFormat at all) -- so this writer emits the explicit form, which cannot be misread by either: LibreOffice 26.2 renders every format below correctly with it present (verified), and Excel's own inheritance rule makes it the unambiguous spelling.
+      // CT_Xf/@applyNumberFormat tells a consumer to honour this xf's OWN numFmtId rather than the one it would otherwise inherit from the cell style it is based on (xfId). Real producers differ here — Excel writes it on every formatted xf, LibreOffice omits it entirely and relies on numFmtId alone (see this directory's own kitchen-sink fixture, whose six formatted xfs carry no applyNumberFormat at all) — so this writer emits the explicit form, which cannot be misread by either: LibreOffice 26.2 renders every format below correctly with it present (verified), and Excel's own inheritance rule makes it the unambiguous spelling.
       attrs.applyNumberFormat = writeXmlBool(true);
     }
     // Each apply* flag mirrors applyNumberFormat: it tells a consumer to honour this xf's OWN fontId/fillId/borderId/alignment rather than the one inherited from the cell style it is based on. Set next to the id that drives it so what triggers the flag stays local to the line.
@@ -643,7 +643,7 @@ function buildColsElement(
   if (columns.length === 0) {
     return undefined;
   }
-  // One <col min max> range per ContentSheetColumn, min=max=that single column -- the honest inverse of readColumns' own "one entry per <col> element, never per repeated position" policy: this writer never attempts to re-merge adjacent same-width columns back into a wider range, which would be a real optimization but isn't needed for a correct, valid file. widthPt is optional (a column entry can exist purely to declare `hidden`, with no declared size at all) -- width/customWidth are only written when a real width is present, matching ECMA-376's own optional CT_Col@width/@customWidth rather than fabricating a zero-width column.
+  // One <col min max> range per ContentSheetColumn, min=max=that single column — the honest inverse of readColumns' own "one entry per <col> element, never per repeated position" policy: this writer never attempts to re-merge adjacent same-width columns back into a wider range, which would be a real optimization but isn't needed for a correct, valid file. widthPt is optional (a column entry can exist purely to declare `hidden`, with no declared size at all) — width/customWidth are only written when a real width is present, matching ECMA-376's own optional CT_Col@width/@customWidth rather than fabricating a zero-width column.
   const colElements = columns.map((column) => {
     const attrs: Record<string, string> = {
       min: String(column.index + 1),
@@ -671,7 +671,7 @@ interface RenderedCellValue {
   format?: CellNumberFormat;
 }
 
-// xlsx has no distinct CELL TYPE for a percentage, an amount of money, a date, or a time -- every one of them is an ordinary number whose meaning lives entirely in the number format its style points at, which is exactly how typed/xlsx/content.ts recovers them on the way in. So this writer says what it means the same way a real producer does: it renders the value as a bare number and asks for the matching format from typed/xlsx/number-format.ts's own write-side vocabulary, which the CellFormatTable interns into a real <numFmt>/<xf> pair.
+// xlsx has no distinct CELL TYPE for a percentage, an amount of money, a date, or a time — every one of them is an ordinary number whose meaning lives entirely in the number format its style points at, which is exactly how typed/xlsx/content.ts recovers them on the way in. So this writer says what it means the same way a real producer does: it renders the value as a bare number and asks for the matching format from typed/xlsx/number-format.ts's own write-side vocabulary, which the CellFormatTable interns into a real <numFmt>/<xf> pair.
 //
 // ST_CellType's rare t="d" ISO-8601 variant is deliberately NOT used for the temporal kinds, even though it would carry their string spelling verbatim: real Excel does not render it as a date at all, and it is a SINGLE combined date-and-time type, so writing all three temporal kinds through it collapses them onto one indistinguishable wire form that reads back as 'dateTime' whatever went in. A serial plus a date/time/dateTime format is both what real files carry and what keeps the three kinds distinguishable.
 function renderCellValue(
@@ -685,7 +685,7 @@ function renderCellValue(
     case "number":
       return { content: String(value.value) };
     case "percentage":
-      // The stored value stays the raw fraction ContentCellValue carries (0.4256), which is what a percent-formatted cell holds in every real file -- the x100 is the format's job, not the value's.
+      // The stored value stays the raw fraction ContentCellValue carries (0.4256), which is what a percent-formatted cell holds in every real file — the x100 is the format's job, not the value's.
       return { content: String(value.value), format: PERCENTAGE_NUMBER_FORMAT };
     case "currency":
       return {
@@ -735,13 +735,13 @@ function renderString(
   sharedStrings: SharedStringTable,
 ): RenderedCellValue {
   if (isFormulaResult) {
-    // A formula's own cached string result is written literally (t="str"), never shared-string indexed -- shared strings are ECMA-376's own convention for literal, non-formula text cells only; a formula's cached text result is written inline instead, mirroring exactly how typed/xlsx/content.ts's readCellValue reads the two cases apart.
+    // A formula's own cached string result is written literally (t="str"), never shared-string indexed — shared strings are ECMA-376's own convention for literal, non-formula text cells only; a formula's cached text result is written inline instead, mirroring exactly how typed/xlsx/content.ts's readCellValue reads the two cases apart.
     return { type: "str", content: encodeXmlText(text) };
   }
   return { type: "s", content: String(sharedStrings.intern(text)) };
 }
 
-// A temporal value whose ISO spelling could not be converted to a serial at all -- a value that is not the canonical ContentCellValue spelling (see typed/xlsx/serial.ts), or one naming a moment with no serial (a date before the epoch, an impossible calendar day, an hour past 23) -- degrades to an ordinary text cell carrying that original string VERBATIM. Writing a fabricated or clamped serial would silently turn an unreadable value into a plausible wrong one; writing the text keeps every character the caller supplied, visibly as text.
+// A temporal value whose ISO spelling could not be converted to a serial at all — a value that is not the canonical ContentCellValue spelling (see typed/xlsx/serial.ts), or one naming a moment with no serial (a date before the epoch, an impossible calendar day, an hour past 23) — degrades to an ordinary text cell carrying that original string VERBATIM. Writing a fabricated or clamped serial would silently turn an unreadable value into a plausible wrong one; writing the text keeps every character the caller supplied, visibly as text.
 function renderTemporal(
   serial: number | undefined,
   iso: string,
@@ -925,12 +925,12 @@ function buildPageSetupElement(
     attrs.paperWidth = ptToUniversalMeasure(settings.pageSize.widthPt);
     attrs.paperHeight = ptToUniversalMeasure(settings.pageSize.heightPt);
   }
-  // scale/fitToWidth/fitToHeight are written together regardless of which mode sheetPr/pageSetUpPr@fitToPage actually selects -- matching real producer output (see this directory's own kitchen-sink fixture, where LibreOffice writes all three unconditionally, only one pair of them ever meaningfully honoured).
+  // scale/fitToWidth/fitToHeight are written together regardless of which mode sheetPr/pageSetUpPr@fitToPage actually selects — matching real producer output (see this directory's own kitchen-sink fixture, where LibreOffice writes all three unconditionally, only one pair of them ever meaningfully honoured).
   attrs.scale = String(settings.scalePercent ?? 100);
   attrs.fitToWidth = String(settings.fitToPages?.width ?? 1);
   attrs.fitToHeight = String(settings.fitToPages?.height ?? 1);
   attrs.pageOrder = settings.pageOrder;
-  // ContentSheetPrintSettings carries no explicit print-orientation field of its own -- PageSize's own width-vs-height already encodes it (a landscape page style's own recorded width exceeds its height), the same relationship typed/xlsx/print-settings.ts's own readPageSize swaps back on the way in when pageSetup@orientation="landscape" is present, so this is a real, non-fabricated derivation, not an assumption.
+  // ContentSheetPrintSettings carries no explicit print-orientation field of its own — PageSize's own width-vs-height already encodes it (a landscape page style's own recorded width exceeds its height), the same relationship typed/xlsx/print-settings.ts's own readPageSize swaps back on the way in when pageSetup@orientation="landscape" is present, so this is a real, non-fabricated derivation, not an assumption.
   attrs.orientation =
     settings.pageSize.widthPt > settings.pageSize.heightPt
       ? "landscape"
@@ -986,7 +986,7 @@ interface WorksheetRelationship {
   readonly target: string;
 }
 
-// A worksheet part only ever needs its own .rels when something on the sheet relates to a sibling part outside xl/worksheets/ -- a commented cell (sheetHasComments, comments-write.ts), a drawing layer carrying at least one image or chart (typed/xlsx/drawings-write.ts), or a Table/List object anchored to it (typed/xlsx/definitions-write.ts) -- addressed by the SAME relative-target convention typed/xlsx/util.ts's own resolveRelTarget already resolves back through.
+// A worksheet part only ever needs its own .rels when something on the sheet relates to a sibling part outside xl/worksheets/ — a commented cell (sheetHasComments, comments-write.ts), a drawing layer carrying at least one image or chart (typed/xlsx/drawings-write.ts), or a Table/List object anchored to it (typed/xlsx/definitions-write.ts) — addressed by the SAME relative-target convention typed/xlsx/util.ts's own resolveRelTarget already resolves back through.
 function buildWorksheetRelsPart(
   relationships: readonly WorksheetRelationship[],
 ): XmlPart {
@@ -1000,7 +1000,7 @@ function buildWorksheetRelsPart(
   return xmlPart(root);
 }
 
-// CT_Worksheet's own required child element ORDER (ECMA-376 Part 1 SS18.3.1.99): sheetPr?, dimension?, sheetViews?, sheetFormatPr?, cols*, sheetData, ..., mergeCells?, conditionalFormatting*, dataValidations?, ..., printOptions?, pageMargins?, pageSetup?, headerFooter?, rowBreaks?, colBreaks?, ..., drawing?, ..., tableParts?, extLst? -- every element this writer emits follows that relative order (sheetViews and headerFooter are both skipped entirely: pure UI/print-preview state this package's own content model carries no data for), confirmed against real-producer-validation-and-cellis.xlsx's own emitted order: mergeCells (this fixture has none), conditionalFormatting, dataValidations, printOptions/pageMargins/pageSetup. drawing (typed/xlsx/drawings-write.ts) and tableParts (typed/xlsx/definitions-write.ts) both sit past colBreaks, drawing first, matching CT_Worksheet's own sequence.
+// CT_Worksheet's own required child element ORDER (ECMA-376 Part 1 SS18.3.1.99): sheetPr?, dimension?, sheetViews?, sheetFormatPr?, cols*, sheetData, ..., mergeCells?, conditionalFormatting*, dataValidations?, ..., printOptions?, pageMargins?, pageSetup?, headerFooter?, rowBreaks?, colBreaks?, ..., drawing?, ..., tableParts?, extLst? — every element this writer emits follows that relative order (sheetViews and headerFooter are both skipped entirely: pure UI/print-preview state this package's own content model carries no data for), confirmed against real-producer-validation-and-cellis.xlsx's own emitted order: mergeCells (this fixture has none), conditionalFormatting, dataValidations, printOptions/pageMargins/pageSetup. drawing (typed/xlsx/drawings-write.ts) and tableParts (typed/xlsx/definitions-write.ts) both sit past colBreaks, drawing first, matching CT_Worksheet's own sequence.
 function buildWorksheetPart(
   sheet: ContentSheet,
   sharedStrings: SharedStringTable,
@@ -1075,7 +1075,7 @@ function buildWorksheetPart(
 // --- entry point -----------------------------------------------------------------------------------------------
 
 export interface BuildXlsxContentOptions {
-  // A workbook's Table/List objects -- the tree reader's own root-level facility (typed/document-tree.ts's readXlsx/typed/xlsx/definitions.ts), passed straight through by buildXlsxPackage since flattenTree itself drops the table on the way down (document-schema.js's own rule -- the flat ContentDocument structurally cannot carry it). A caller driving this flat entry point directly may also supply one. Defined names are NOT this option's concern: they ride the ContentDocument's own names field both ways, so supplying them here is no longer possible.
+  // A workbook's Table/List objects — the tree reader's own root-level facility (typed/document-tree.ts's readXlsx/typed/xlsx/definitions.ts), passed straight through by buildXlsxPackage since flattenTree itself drops the table on the way down (document-schema.js's own rule — the flat ContentDocument structurally cannot carry it). A caller driving this flat entry point directly may also supply one. Defined names are NOT this option's concern: they ride the ContentDocument's own names field both ways, so supplying them here is no longer possible.
   readonly definitions?: DefinitionsTable;
 }
 
@@ -1106,7 +1106,7 @@ export function buildXlsxPackageFromContent(
   const dxfTable = new DxfTable();
   const drawingCounters = newDrawingCounters();
 
-  // Table entries carry a globally unique, workbook-scoped id (CT_Table/@id) assigned once here in definitions order, then grouped by the sheet they belong to -- typed/xlsx/definitions.ts's own readTableEntries records exactly that `sheet` field for this reason.
+  // Table entries carry a globally unique, workbook-scoped id (CT_Table/@id) assigned once here in definitions order, then grouped by the sheet they belong to — typed/xlsx/definitions.ts's own readTableEntries records exactly that `sheet` field for this reason.
   const tableEntries: readonly (TableEntry & { readonly id: number })[] =
     collectTableEntries(options?.definitions).map((entry, index) => ({
       ...entry,
@@ -1180,7 +1180,7 @@ export function buildXlsxPackageFromContent(
   });
 
   // Building every worksheet part first, before touching xl/sharedStrings.xml or xl/styles.xml, is load-bearing: buildCellElement interns every literal string value into `sharedStrings` and every non-General number format into `cellFormats` as a side effect while it walks each sheet's cells, buildConditionalFormattingElements interns every styled conditional-format rule into `dxfTable` the same way, and buildSharedStringsPart/buildStylesPart below must all see the FULLY populated tables.
-  // No optional chain or ?? fallback on the extras lookup: sheetExtras is index-aligned with the very sheets this map walks (both derive from the one sheets array), so the lookup always resolves and the fallbacks were dead spellings -- the non-null assertion is the same index-invariant spelling parseFlow's own stack top uses.
+  // No optional chain or ?? fallback on the extras lookup: sheetExtras is index-aligned with the very sheets this map walks (both derive from the one sheets array), so the lookup always resolves and the fallbacks were dead spellings — the non-null assertion is the same index-invariant spelling parseFlow's own stack top uses.
   const worksheetParts = sheets.map((sheet, index) => {
     const extras = sheetExtras[index]!;
     return buildWorksheetPart(

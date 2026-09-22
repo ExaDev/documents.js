@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // Regenerates src/test-support/jpeg2000.ts: real JPEG 2000 codestreams for src/image/jpeg2000.test.ts, src/filters.test.ts and src/images-read.test.ts to decode back.
 //
-// Run with `node scripts/generate-jpeg2000-fixtures.mjs`, which requires OpenJPEG's opj_compress and opj_decompress on PATH (`brew install openjpeg`). Not part of `pnpm build`/`pnpm test` -- the generated .ts file is committed like any other checked-in generated artifact, so the test suite needs neither that tool nor a filesystem read to run.
+// Run with `node scripts/generate-jpeg2000-fixtures.mjs`, which requires OpenJPEG's opj_compress and opj_decompress on PATH (`brew install openjpeg`). Not part of `pnpm build`/`pnpm test` — the generated .ts file is committed like any other checked-in generated artifact, so the test suite needs neither that tool nor a filesystem read to run.
 //
 // The independence argument, which is what makes these fixtures worth anything. Nothing in this repository influences a single byte of the codestreams: OpenJPEG's own encoder writes them from ordinary PGM/PPM input this script generates. Then two separate checks are applied before a fixture is written out at all:
 //
-//   1. Every reversible (5-3) codestream is decoded by opj_decompress and its output must be byte-identical to the PGM/PPM handed to the encoder. That establishes the codestream really is lossless, so the source image is a legitimate exact oracle -- one produced by neither this package nor OpenJPEG's decoder, but by the definition of the transform.
+//   1. Every reversible (5-3) codestream is decoded by opj_decompress and its output must be byte-identical to the PGM/PPM handed to the encoder. That establishes the codestream really is lossless, so the source image is a legitimate exact oracle — one produced by neither this package nor OpenJPEG's decoder, but by the definition of the transform.
 //   2. The expected samples recorded for a reversible fixture are the SOURCE image's, not opj_decompress's and certainly not this package's. A JPEG 2000 decoder that reproduces them has reproduced the exact integers the encoder was given, which no shared mistake between an encoder and decoder can fake.
 //
-// The irreversible (9-7) codestreams have no exact oracle at all -- the transform is lossy by construction, so "the right answer" is only defined up to the rounding an implementation does in floating point. Their expected samples are opj_decompress's own output, and the test that consumes them asserts a tight per-sample tolerance rather than equality, with the honest consequence that they pin this decoder against OpenJPEG's arithmetic rather than against the specification in the absolute way the reversible fixtures do.
+// The irreversible (9-7) codestreams have no exact oracle at all — the transform is lossy by construction, so "the right answer" is only defined up to the rounding an implementation does in floating point. Their expected samples are opj_decompress's own output, and the test that consumes them asserts a tight per-sample tolerance rather than equality, with the honest consequence that they pin this decoder against OpenJPEG's arithmetic rather than against the specification in the absolute way the reversible fixtures do.
 //
 // This script is deliberately outside tsconfig.json's "include" and eslint.config.ts's linted set (see the "scripts" entry in both), matching scripts/generate-jbig2-fixtures.mjs.
 
@@ -122,7 +122,7 @@ function samplesToBase64(planes, wide) {
 
 const FIXTURES = [
   { name: 'ramp-basic', source: 'ramp', args: ['-n', '3'], description: 'three resolution levels (two wavelet decompositions), everything else at OpenJPEG defaults' },
-  { name: 'ramp-no-wavelet', source: 'ramp', args: ['-n', '1'], description: 'a single resolution level, i.e. no wavelet decomposition at all -- the samples are entropy coded directly' },
+  { name: 'ramp-no-wavelet', source: 'ramp', args: ['-n', '1'], description: 'a single resolution level, i.e. no wavelet decomposition at all — the samples are entropy coded directly' },
   { name: 'ramp-one-decomposition', source: 'ramp', args: ['-n', '2'], description: 'exactly one wavelet decomposition, so resolution 0 is half the image on each axis' },
   { name: 'odd-dimensions', source: 'odd', args: ['-n', '3'], description: 'a 37x23 image, odd on both axes at every resolution level' },
   { name: 'single-sample', source: 'dot', args: ['-n', '1'], description: 'a 1x1 image, the degenerate single-coefficient case of 1D_SR' },
@@ -133,7 +133,7 @@ const FIXTURES = [
   { name: 'colour-no-mct', source: 'colour', args: ['-n', '3', '-mct', '0'], description: 'three components coded independently, no colour transform' },
   { name: 'colour-photo', source: 'colourPhoto', args: ['-n', '4'], description: 'four resolution levels over three continuous-tone components' },
   { name: 'multi-tile', source: 'photo', args: ['-n', '2', '-t', '16,16'], description: 'a 3x2 grid of 16x16 tiles, each coded and composed independently' },
-  // An image whose origin on the reference grid is not (0, 0) makes every resolution level's own trx0/try0 non-zero, and odd at some of them -- the case that decides whether the subband coordinate split and the wavelet's own symmetric extension are anchored where the specification says rather than merely at zero.
+  // An image whose origin on the reference grid is not (0, 0) makes every resolution level's own trx0/try0 non-zero, and odd at some of them — the case that decides whether the subband coordinate split and the wavelet's own symmetric extension are anchored where the specification says rather than merely at zero.
   { name: 'origin-offset', source: 'photo', args: ['-n', '3', '-d', '3,5'], description: 'an image origin at (3, 5) on the reference grid, so resolution levels start at odd coordinates' },
   { name: 'origin-offset-tiles', source: 'photo', args: ['-n', '2', '-d', '3,5', '-t', '20,20'], description: 'a non-zero image origin combined with a tile grid, so tile coordinates are offset too' },
   { name: 'multi-layer', source: 'photo', args: ['-n', '3', '-r', '20,10,1'], description: 'three quality layers, the last lossless, so code-blocks span several packets' },
@@ -223,7 +223,7 @@ function emit(fixtures) {
   const lines = [];
   lines.push("import { base64ToBytes } from '../util/base64';");
   lines.push('');
-  lines.push('// Real JPEG 2000 codestreams -- the exact bytes a PDF /JPXDecode filter carries -- produced by OpenJPEG 2.5.4 (opj_compress) from deterministic source images, by scripts/generate-jpeg2000-fixtures.mjs. Embedded as base64 so the suite needs no filesystem access.');
+  lines.push('// Real JPEG 2000 codestreams — the exact bytes a PDF /JPXDecode filter carries — produced by OpenJPEG 2.5.4 (opj_compress) from deterministic source images, by scripts/generate-jpeg2000-fixtures.mjs. Embedded as base64 so the suite needs no filesystem access.');
   lines.push('//');
   lines.push("// For every `lossless: true` fixture, `expected` is the SOURCE image the encoder was handed, not any decoder's output: the generator first proves the configuration round-trips byte-identically through OpenJPEG's own decoder, which makes the source an exact oracle that neither this package nor OpenJPEG produced. A decoder reproducing it has reproduced the original integers.");
   lines.push('//');

@@ -27,7 +27,7 @@ type Atom = BoxAtom | GlueAtom | BreakAtom;
 
 const WORD_OR_WHITESPACE_PATTERN = /\n|\s+|\S+/g;
 
-// Splits `runs` into word-shaped "box" atoms, "glue" (space) atoms, and explicit line-"break" atoms. Critically, atomisation happens *across run boundaries*: a word split by a formatting change (e.g. "hel" in a plain run immediately followed by "lo" in a bold run) becomes a single box atom carrying both styled fragments, so it can never be broken apart -- only between boxes, and boxes are word-shaped regardless of how the source text was split across runs.
+// Splits `runs` into word-shaped "box" atoms, "glue" (space) atoms, and explicit line-"break" atoms. Critically, atomisation happens *across run boundaries*: a word split by a formatting change (e.g. "hel" in a plain run immediately followed by "lo" in a bold run) becomes a single box atom carrying both styled fragments, so it can never be broken apart — only between boxes, and boxes are word-shaped regardless of how the source text was split across runs.
 function atomizeRuns(
   runs: readonly StyledRun[],
   measurer: TextMeasurer,
@@ -233,7 +233,7 @@ function buildEmptyLine(
   };
 }
 
-// Greedy first-fit line breaking over word-shaped atoms -- the same algorithm Word itself uses (an optimal-fit breaker like Knuth-Plass would produce different, not merely better, line breaks, which is the opposite of matching Word's own output). Never breaks inside a word, regardless of how many runs it spans; an over-long single word is emergency-split at the character level, always making at least one character of progress.
+// Greedy first-fit line breaking over word-shaped atoms — the same algorithm Word itself uses (an optimal-fit breaker like Knuth-Plass would produce different, not merely better, line breaks, which is the opposite of matching Word's own output). Never breaks inside a word, regardless of how many runs it spans; an over-long single word is emergency-split at the character level, always making at least one character of progress.
 export function wrapRunsToWidth(
   runs: readonly StyledRun[],
   measurer: TextMeasurer,
@@ -243,7 +243,7 @@ export function wrapRunsToWidth(
   const breakLongWords = options.breakLongWords ?? true;
 
   if (maxWidthPt <= 0) {
-    // Guards against an infinite loop when placeholder geometry resolution fails upstream (e.g. a shape with zero content width) -- return one unwrapped line rather than looping forever.
+    // Guards against an infinite loop when placeholder geometry resolution fails upstream (e.g. a shape with zero content width) — return one unwrapped line rather than looping forever.
     const atoms = atomizeRuns(runs, measurer).filter(
       (a): a is BoxAtom | GlueAtom => a.kind !== "break",
     );
@@ -286,7 +286,7 @@ export function wrapRunsToWidth(
       continue;
     }
     if (current.length > 0) {
-      // Doesn't fit what's already on the line -- start a new line and re-attempt this same atom.
+      // Doesn't fit what's already on the line — start a new line and re-attempt this same atom.
       pushLine();
       continue;
     }

@@ -1,15 +1,15 @@
 import { zlibSync } from "fflate";
 import { ByteWriter } from "pdf-codec";
 
-// Hand-built PDF fixtures for exercising pdf-codec's own parser (readPdf) through documents.js's DocumentConverter port, by literal byte/string concatenation with this file's own local offset tracking -- deliberately never calling pdf-codec's writePdf itself. A PDF fixture built by calling writePdf would let a writer bug hide from the reader test and vice versa; the write-side and read-side test oracles must be genuinely independent, not just nominally separate files. Using fflate's zlibSync directly here (for a compressed xref/object stream) is legitimate, not a violation of that independence -- fflate is the shared DEFLATE oracle both sides already depend on; what's being independently constructed is the PDF structure around it, not the compression algorithm. ByteWriter itself is just pdf-codec's generic chunked byte-writing primitive, no different from using it for any other byte-level fixture.
+// Hand-built PDF fixtures for exercising pdf-codec's own parser (readPdf) through documents.js's DocumentConverter port, by literal byte/string concatenation with this file's own local offset tracking — deliberately never calling pdf-codec's writePdf itself. A PDF fixture built by calling writePdf would let a writer bug hide from the reader test and vice versa; the write-side and read-side test oracles must be genuinely independent, not just nominally separate files. Using fflate's zlibSync directly here (for a compressed xref/object stream) is legitimate, not a violation of that independence — fflate is the shared DEFLATE oracle both sides already depend on; what's being independently constructed is the PDF structure around it, not the compression algorithm. ByteWriter itself is just pdf-codec's generic chunked byte-writing primitive, no different from using it for any other byte-level fixture.
 //
-// Do NOT refactor this to call pdf-codec's writePdf, however tempting the duplication looks -- that would silently destroy the whole point of this file.
+// Do NOT refactor this to call pdf-codec's writePdf, however tempting the duplication looks — that would silently destroy the whole point of this file.
 
 function enc(text: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(text);
 }
 
-// Tracks byte offsets as objects are appended, purely by recording ByteWriter's own running length before each write -- the same mechanical idea src/pdf/write.ts uses, reimplemented independently here rather than shared with it.
+// Tracks byte offsets as objects are appended, purely by recording ByteWriter's own running length before each write — the same mechanical idea src/pdf/write.ts uses, reimplemented independently here rather than shared with it.
 class FixtureBuilder {
   private readonly writer = new ByteWriter();
   private readonly offsets = new Map<number, number>();
@@ -39,7 +39,7 @@ class FixtureBuilder {
     return this;
   }
 
-  // `dict` must NOT include /Length -- it's computed from `raw`'s actual byte length and inserted automatically, exactly mirroring the real writer's own guarantee that /Length can never drift from the bytes that follow.
+  // `dict` must NOT include /Length — it's computed from `raw`'s actual byte length and inserted automatically, exactly mirroring the real writer's own guarantee that /Length can never drift from the bytes that follow.
   stream(
     num: number,
     dictWithoutLength: string,
@@ -102,7 +102,7 @@ function catalogPagesPageFontObjects(
   b.object(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
 }
 
-// A minimal, structurally ordinary PDF: classic xref table, a literal (parenthesized) content-stream string -- the OTHER string form our own writer never emits (it always emits hex strings), so a fixture using this form specifically exercises the parser's literal-string handling rather than only round-tripping what our own writer happens to produce.
+// A minimal, structurally ordinary PDF: classic xref table, a literal (parenthesized) content-stream string — the OTHER string form our own writer never emits (it always emits hex strings), so a fixture using this form specifically exercises the parser's literal-string handling rather than only round-tripping what our own writer happens to produce.
 export function minimalClassicXrefPdf(): Uint8Array<ArrayBuffer> {
   const b = new FixtureBuilder().header("1.4");
   catalogPagesPageFontObjects(b, 5);
@@ -111,14 +111,14 @@ export function minimalClassicXrefPdf(): Uint8Array<ArrayBuffer> {
   return b.bytes();
 }
 
-// The single highest-value fixture in the suite: Word/PowerPoint/Chrome/LibreOffice all default to PDF 1.5+ cross-reference *streams* with object streams, not the classic table our own writer emits -- a reader that only handles the classic form would fail on the overwhelming majority of real-world, non-self-produced PDFs. Catalog/Pages/Page are packed into one compressed object stream (a stream object itself is never permitted inside an object stream, per ISO 32000-1 7.5.7, so the content stream, the object stream, and the xref stream itself all remain ordinary top-level objects). The xref stream is self-referential: its own entry describes its own byte offset.
+// The single highest-value fixture in the suite: Word/PowerPoint/Chrome/LibreOffice all default to PDF 1.5+ cross-reference *streams* with object streams, not the classic table our own writer emits — a reader that only handles the classic form would fail on the overwhelming majority of real-world, non-self-produced PDFs. Catalog/Pages/Page are packed into one compressed object stream (a stream object itself is never permitted inside an object stream, per ISO 32000-1 7.5.7, so the content stream, the object stream, and the xref stream itself all remain ordinary top-level objects). The xref stream is self-referential: its own entry describes its own byte offset.
 export function xrefStreamWithObjectStreamPdf(): Uint8Array<ArrayBuffer> {
   const catalogBody = "<< /Type /Catalog /Pages 2 0 R >>";
   const pagesBody = "<< /Type /Pages /Kids [3 0 R] /Count 1 >>";
   const pageBody =
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents 5 0 R >>";
 
-  // ObjStm body: a header of "objNum offset" pairs (offsets relative to /First, i.e. relative to the start of the object data that follows the header), then each object's own value in the same order -- ISO 32000-1 7.5.7.
+  // ObjStm body: a header of "objNum offset" pairs (offsets relative to /First, i.e. relative to the start of the object data that follows the header), then each object's own value in the same order — ISO 32000-1 7.5.7.
   const entries: readonly { readonly num: number; readonly body: string }[] = [
     { num: 1, body: catalogBody },
     { num: 2, body: pagesBody },
@@ -144,7 +144,7 @@ export function xrefStreamWithObjectStreamPdf(): Uint8Array<ArrayBuffer> {
   );
   b.stream(5, "<< >>", enc(HELLO_CONTENT));
 
-  // /W [1 4 2]: 1-byte type, 4-byte second field, 2-byte third field -- type 2 (compressed) rows store the containing ObjStm's object number and the index within it; type 1 (uncompressed) rows store a plain byte offset and generation.
+  // /W [1 4 2]: 1-byte type, 4-byte second field, 2-byte third field — type 2 (compressed) rows store the containing ObjStm's object number and the index within it; type 1 (uncompressed) rows store a plain byte offset and generation.
   const rows: number[][] = [
     [0, 0, 0, 0, 0, 255, 255], // object 0: the conventional free-list head
     [2, 0, 0, 0, 4, 0, 0], // object 1 (Catalog): in ObjStm 4, index 0
@@ -156,7 +156,7 @@ export function xrefStreamWithObjectStreamPdf(): Uint8Array<ArrayBuffer> {
   rows.push([1, ...be4(objStmOffset), 0, 0]);
   rows.push([1, ...be4(contentOffset), 0, 0]);
   const xrefObjNum = 6;
-  // The xref stream's own row references its own not-yet-written offset -- known in advance because FixtureBuilder assigns it the moment `stream()` is called, before any bytes are written.
+  // The xref stream's own row references its own not-yet-written offset — known in advance because FixtureBuilder assigns it the moment `stream()` is called, before any bytes are written.
   const xrefOffsetPlaceholderIndex = rows.length;
   rows.push([1, 0, 0, 0, 0, 0, 0]); // patched below once the real offset is known
 
@@ -181,7 +181,7 @@ function be4(n: number): [number, number, number, number] {
   return [(n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff];
 }
 
-// startxref points at a nonsense offset -- the parser must fall back to a linear scan for "N G obj" patterns to rebuild the xref table from scratch, then raise a recovery diagnostic rather than failing outright.
+// startxref points at a nonsense offset — the parser must fall back to a linear scan for "N G obj" patterns to rebuild the xref table from scratch, then raise a recovery diagnostic rather than failing outright.
 export function brokenStartxrefPdf(): Uint8Array<ArrayBuffer> {
   const b = new FixtureBuilder().header("1.4");
   catalogPagesPageFontObjects(b, 5);
@@ -219,7 +219,7 @@ export function incrementalUpdatePdf(): Uint8Array<ArrayBuffer> {
   return b.bytes();
 }
 
-// /Encrypt present -- readPdf must throw a clear, specific "this PDF is encrypted and unsupported" error rather than a generic parse failure, even for the common empty-user-password case this fixture represents (a real /Encrypt dict would carry /Filter /Standard /V /R /O /U /P; this fixture only needs the key the reader is required to notice).
+// /Encrypt present — readPdf must throw a clear, specific "this PDF is encrypted and unsupported" error rather than a generic parse failure, even for the common empty-user-password case this fixture represents (a real /Encrypt dict would carry /Filter /Standard /V /R /O /U /P; this fixture only needs the key the reader is required to notice).
 export function encryptedPdf(): Uint8Array<ArrayBuffer> {
   const b = new FixtureBuilder().header("1.4");
   catalogPagesPageFontObjects(b, 5);
@@ -229,7 +229,7 @@ export function encryptedPdf(): Uint8Array<ArrayBuffer> {
   return b.bytes();
 }
 
-// A page rotated 90 degrees clockwise (/Rotate, ISO 32000-1's own page-rotation attribute -- distinct from any content-stream rotation matrix).
+// A page rotated 90 degrees clockwise (/Rotate, ISO 32000-1's own page-rotation attribute — distinct from any content-stream rotation matrix).
 export function rotatedPagePdf(): Uint8Array<ArrayBuffer> {
   const b = new FixtureBuilder().header("1.4");
   catalogPagesPageFontObjects(b, 5, "[0 0 200 100]", "/Rotate 90 ");
@@ -238,7 +238,7 @@ export function rotatedPagePdf(): Uint8Array<ArrayBuffer> {
   return b.bytes();
 }
 
-// A /MediaBox whose origin isn't (0,0) -- our own writer never produces one (see write.ts's own module doc), but real producers occasionally do; placement must be computed relative to the MediaBox's own origin, not assumed to be (0,0).
+// A /MediaBox whose origin isn't (0,0) — our own writer never produces one (see write.ts's own module doc), but real producers occasionally do; placement must be computed relative to the MediaBox's own origin, not assumed to be (0,0).
 export function nonZeroOriginMediaBoxPdf(): Uint8Array<ArrayBuffer> {
   const b = new FixtureBuilder().header("1.4");
   catalogPagesPageFontObjects(b, 5, "[50 50 250 150]");
@@ -247,7 +247,7 @@ export function nonZeroOriginMediaBoxPdf(): Uint8Array<ArrayBuffer> {
   return b.bytes();
 }
 
-// A page whose content invokes a form XObject (/Subtype /Form) -- common output from LibreOffice and other producers that wrap page content in a reusable form. The interpreter must recurse into it, composing the form's own /Matrix into the CTM.
+// A page whose content invokes a form XObject (/Subtype /Form) — common output from LibreOffice and other producers that wrap page content in a reusable form. The interpreter must recurse into it, composing the form's own /Matrix into the CTM.
 export function formXObjectPdf(): Uint8Array<ArrayBuffer> {
   const b = new FixtureBuilder().header("1.4");
   b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
@@ -269,7 +269,7 @@ export function formXObjectPdf(): Uint8Array<ArrayBuffer> {
   return b.bytes();
 }
 
-// A content stream using the inline-image form (BI ... ID <binary> EI) rather than a full Image XObject -- its end must be located by scanning for EI (no /Length is available for inline images), which is a distinct, easy-to-desynchronize code path from the XObject case.
+// A content stream using the inline-image form (BI ... ID <binary> EI) rather than a full Image XObject — its end must be located by scanning for EI (no /Length is available for inline images), which is a distinct, easy-to-desynchronize code path from the XObject case.
 export function inlineImagePdf(): Uint8Array<ArrayBuffer> {
   const b = new FixtureBuilder().header("1.4");
   catalogPagesPageFontObjects(b, 5);
@@ -285,7 +285,7 @@ export function inlineImagePdf(): Uint8Array<ArrayBuffer> {
   return b.bytes();
 }
 
-// Two pages under a Pages node that itself carries /MediaBox and /Resources -- neither Page defines them directly, so a reader must inherit both down from the Pages node (ISO 32000-1 7.7.3.4, Table 30). The second page additionally sets its own /Rotate, which an inheriting reader must not overwrite with any (here absent) inherited value.
+// Two pages under a Pages node that itself carries /MediaBox and /Resources — neither Page defines them directly, so a reader must inherit both down from the Pages node (ISO 32000-1 7.7.3.4, Table 30). The second page additionally sets its own /Rotate, which an inheriting reader must not overwrite with any (here absent) inherited value.
 export function inheritedPageAttributesPdf(): Uint8Array<ArrayBuffer> {
   const b = new FixtureBuilder().header("1.4");
   b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
@@ -317,7 +317,7 @@ export function withInfoDictPdf(): Uint8Array<ArrayBuffer> {
   return b.bytes();
 }
 
-// Two pages sharing one font resource, the first carrying a single text run and the second carrying two -- for exercising src/edit/pdf's own PdfEditor/PdfPage against a genuinely external, multi-page, multi-item document rather than only ever round-tripping this package's own writePdf output. Deliberately real, distinguishable item content and positions across both pages (rather than one item repeated) so a test editing one item can assert every OTHER item, on either page, survived completely unchanged.
+// Two pages sharing one font resource, the first carrying a single text run and the second carrying two — for exercising src/edit/pdf's own PdfEditor/PdfPage against a genuinely external, multi-page, multi-item document rather than only ever round-tripping this package's own writePdf output. Deliberately real, distinguishable item content and positions across both pages (rather than one item repeated) so a test editing one item can assert every OTHER item, on either page, survived completely unchanged.
 export function twoPageMultiTextPdf(): Uint8Array<ArrayBuffer> {
   const b = new FixtureBuilder().header("1.4");
   b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");

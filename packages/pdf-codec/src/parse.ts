@@ -16,7 +16,7 @@ import {
   pdfStream,
 } from "./objects";
 
-// tokens (lexer.ts) -> PdfObject (objects.ts): array/dict nesting, the "N G R" reference vs bare-number disambiguation, and indirect-object/stream-body assembly. Every recoverable malformation here reports through the caller's PdfDiagnosticSink and degrades gracefully (an empty array, a null value, a best-effort stream length) rather than throwing -- the throw tier is reserved for document.ts/xref.ts, which know whether a given malformed object is actually load-bearing.
+// tokens (lexer.ts) -> PdfObject (objects.ts): array/dict nesting, the "N G R" reference vs bare-number disambiguation, and indirect-object/stream-body assembly. Every recoverable malformation here reports through the caller's PdfDiagnosticSink and degrades gracefully (an empty array, a null value, a best-effort stream length) rather than throwing — the throw tier is reserved for document.ts/xref.ts, which know whether a given malformed object is actually load-bearing.
 
 // Reads one PDF value at the reader's current position: null/true/false, a number (or an "N G R" reference, resolved via lookahead), a name, a literal or hex string, a nested array, or a nested dict (or the stream it introduces). Returns undefined only at end of input.
 export function parseValue(
@@ -74,7 +74,7 @@ function parseKeywordValue(
   return pdfNull();
 }
 
-// Only a non-negative integer can start an "N G R" reference -- floats and negative numbers skip the lookahead entirely, since ECMA-376's own grammar never allows them there and attempting it would just cost a wasted mark/reset on every ordinary float in a Widths array or a coordinate array.
+// Only a non-negative integer can start an "N G R" reference — floats and negative numbers skip the lookahead entirely, since ECMA-376's own grammar never allows them there and attempting it would just cost a wasted mark/reset on every ordinary float in a Widths array or a coordinate array.
 function parseNumberOrReference(reader: ByteReader, first: number): PdfObject {
   if (!Number.isInteger(first) || first < 0) {
     return pdfNum(first);
@@ -204,7 +204,7 @@ function skipStreamDataStart(
 
 const ENDSTREAM_BYTES = new TextEncoder().encode("endstream");
 
-// A stream's /Length is very often an indirect reference (the producer doesn't know the compressed length until after the object is written) -- unresolvable at this layer, since there's no object store yet. This function only trusts a *direct* numeric /Length, and only after confirming it actually lands on "endstream"; every other case (missing, indirect, wrong) falls back to scanning forward for the literal "endstream" keyword, which is what real-world malformed/regenerated files need anyway.
+// A stream's /Length is very often an indirect reference (the producer doesn't know the compressed length until after the object is written) — unresolvable at this layer, since there's no object store yet. This function only trusts a *direct* numeric /Length, and only after confirming it actually lands on "endstream"; every other case (missing, indirect, wrong) falls back to scanning forward for the literal "endstream" keyword, which is what real-world malformed/regenerated files need anyway.
 function parseStreamBody(
   reader: ByteReader,
   sink: PdfDiagnosticSink,
@@ -330,7 +330,7 @@ export interface ParsedIndirectObject {
   readonly value: PdfObject;
 }
 
-// Reads "N G obj <value> endobj" at the reader's current position. Returns undefined, with the reader position unchanged, if the current position doesn't actually start an indirect object header -- the caller (xref.ts's recovery scan) relies on this to probe candidate offsets without committing to them.
+// Reads "N G obj <value> endobj" at the reader's current position. Returns undefined, with the reader position unchanged, if the current position doesn't actually start an indirect object header — the caller (xref.ts's recovery scan) relies on this to probe candidate offsets without committing to them.
 export function parseIndirectObject(
   reader: ByteReader,
   sink: PdfDiagnosticSink,

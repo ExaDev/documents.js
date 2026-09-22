@@ -2,7 +2,7 @@ import { unzipPackage } from "odf.js";
 import { describe, expect, it } from "vitest";
 import { chapterOdtBytes, odmBytes } from "./odm-fixture";
 
-// content.xml is written through zipPackage with no `stored: true`, so it is genuinely deflate-compressed in the zip -- decoding the raw zip bytes as text (as assertMimetypeEntryLayout deliberately does for the mimetype entry) never recovers its real markup. unzipPackage inflates it back to the real bytes odmContentXml/chapterContentXml produced.
+// content.xml is written through zipPackage with no `stored: true`, so it is genuinely deflate-compressed in the zip — decoding the raw zip bytes as text (as assertMimetypeEntryLayout deliberately does for the mimetype entry) never recovers its real markup. unzipPackage inflates it back to the real bytes odmContentXml/chapterContentXml produced.
 function contentXmlText(bytes: Uint8Array<ArrayBuffer>): string {
   const unzipped = unzipPackage(bytes);
   const contentXml = unzipped["content.xml"];
@@ -12,7 +12,7 @@ function contentXmlText(bytes: Uint8Array<ArrayBuffer>): string {
   return new TextDecoder().decode(contentXml);
 }
 
-// ODF (OASIS Open Document Format Part 3, "Packages") requires the "mimetype" part to be the zip's very first entry, stored uncompressed with a zero-length extra field, so a reader can identify the container's media type from fixed byte offsets alone. Checked directly against the raw zip bytes (a DataView over the local file header, not odf.js's own unzipPackage, which normalises stored vs deflated content away entirely) -- otherwise nothing pins the entry's own name or its "stored" flag, both of which a real ODF-consuming reader depends on. Duplicated from src/test-support/odf-formula-fixture.test.ts's own identical helper rather than shared, since both are small, test-only, and pin two genuinely separate fixtures.
+// ODF (OASIS Open Document Format Part 3, "Packages") requires the "mimetype" part to be the zip's very first entry, stored uncompressed with a zero-length extra field, so a reader can identify the container's media type from fixed byte offsets alone. Checked directly against the raw zip bytes (a DataView over the local file header, not odf.js's own unzipPackage, which normalises stored vs deflated content away entirely) — otherwise nothing pins the entry's own name or its "stored" flag, both of which a real ODF-consuming reader depends on. Duplicated from src/test-support/odf-formula-fixture.test.ts's own identical helper rather than shared, since both are small, test-only, and pin two genuinely separate fixtures.
 function assertMimetypeEntryLayout(bytes: Uint8Array, mediaType: string): void {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const decoder = new TextDecoder();
@@ -51,7 +51,7 @@ describe("odmBytes", () => {
       { name: "Two", href: "two.odt" },
     ]);
     const text = contentXmlText(bytes);
-    // The two text:section elements sit back to back in source order -- a non-empty join separator (e.g. Stryker's own canary string) would appear literally between </text:section> and the next <text:section, which this substring search would catch directly.
+    // The two text:section elements sit back to back in source order — a non-empty join separator (e.g. Stryker's own canary string) would appear literally between </text:section> and the next <text:section, which this substring search would catch directly.
     expect(text).toContain(
       '<text:section text:name="One">' +
         '<text:section-source xlink:href="one.odt" text:filter-name="writer8"/>' +

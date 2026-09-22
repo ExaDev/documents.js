@@ -42,7 +42,7 @@ function blocksOf(bodyChildren: XmlNode[]): ContentBlock[] {
   return readDocxContent(docxPackage(bodyChildren)).sections[0]?.blocks ?? [];
 }
 
-// A compact, order-preserving projection of a block list: each construct marker as its descriptor (or a bare close), each paragraph as its text, everything else as its kind -- so a test asserts the whole shape at once rather than probing indices one at a time.
+// A compact, order-preserving projection of a block list: each construct marker as its descriptor (or a bare close), each paragraph as its text, everything else as its kind — so a test asserts the whole shape at once rather than probing indices one at a time.
 function outline(
   blocks: readonly ContentBlock[],
 ): (string | ConstructDescriptor)[] {
@@ -62,7 +62,7 @@ function outline(
 
 describe("indexParagraphContent", () => {
   it("indexes a non-run element as content-bearing unconditionally, and a run only when it carries non-inert content", () => {
-    // The hyperlink has no children at all, so it only counts as content-bearing via the "not a w:r" branch itself, never by inspecting children the way a run is inspected -- if that branch were skipped, an empty non-run element would wrongly fall through to the run-only children check and read as empty. The run mixes an inert w:rPr with a real w:t, which only reads as content-bearing under "some child is non-inert" (true here); "every child is non-inert" would read it as false, since w:rPr alone already fails that.
+    // The hyperlink has no children at all, so it only counts as content-bearing via the "not a w:r" branch itself, never by inspecting children the way a run is inspected — if that branch were skipped, an empty non-run element would wrongly fall through to the run-only children check and read as empty. The run mixes an inert w:rPr with a real w:t, which only reads as content-bearing under "some child is non-inert" (true here); "every child is non-inert" would read it as false, since w:rPr alone already fails that.
     const paragraph = el("w:p", {}, [
       el("w:pPr", {}, []),
       el("w:hyperlink", {}, []),
@@ -98,7 +98,7 @@ describe("runRangeMarkerExtents: isBlockScopedHalf", () => {
     runPosition,
   });
 
-  it("treats a half nested inside a container -- not a direct paragraph child -- as run-scoped, not block-scoped", () => {
+  it("treats a half nested inside a container — not a direct paragraph child — as run-scoped, not block-scoped", () => {
     // Both halves sit inside the hyperlink rather than directly on the paragraph, so index.elements.indexOf never finds either: this is the "not found among the direct children" case the container comment describes, and it must resolve to run-scoped (kept) rather than silently falling through to the leading/trailing position math with a stray -1.
     const startEl = el("w:bookmarkStart", { "w:id": "z", "w:name": "bm" }, []);
     const endEl = el("w:bookmarkEnd", { "w:id": "z" }, []);
@@ -139,7 +139,7 @@ describe("runRangeMarkerExtents: isBlockScopedHalf", () => {
   const filler = (): XmlElement => el("w:r", {}, []);
 
   it("treats a found half sitting exactly at the first content-bearing position as NOT leading", () => {
-    // The start half sits at array position 0, exactly firstContentIndex (0): leading must be false there (strictly less than, not less-than-or-equal), or the pair would be wrongly dropped. The end half sits at array position 5, past a lastContentIndex of 2 by a wide margin, pinning IT as block-scoped (via trailing) regardless of either boundary mutant here or in the sibling test below -- so the pair's own "both block-scoped" AND hinges entirely on the start half's own leading value.
+    // The start half sits at array position 0, exactly firstContentIndex (0): leading must be false there (strictly less than, not less-than-or-equal), or the pair would be wrongly dropped. The end half sits at array position 5, past a lastContentIndex of 2 by a wide margin, pinning IT as block-scoped (via trailing) regardless of either boundary mutant here or in the sibling test below — so the pair's own "both block-scoped" AND hinges entirely on the start half's own leading value.
     const startEl = el("w:bookmarkStart", { "w:id": "z", "w:name": "bm" }, []);
     const endEl = el("w:bookmarkEnd", { "w:id": "z" }, []);
     const index: ParagraphContentIndex = {
@@ -157,7 +157,7 @@ describe("runRangeMarkerExtents: isBlockScopedHalf", () => {
   });
 
   it("treats a found half sitting exactly at the last content-bearing position as NOT trailing", () => {
-    // The end half sits at array position 15, exactly lastContentIndex (15): trailing must be false there (strictly greater than, not greater-than-or-equal), or the pair would be wrongly dropped. The start half sits at array position 0, clearly below a firstContentIndex of 10, pinning IT as block-scoped (via leading) regardless of either boundary mutant -- so the AND hinges entirely on the end half's own trailing value.
+    // The end half sits at array position 15, exactly lastContentIndex (15): trailing must be false there (strictly greater than, not greater-than-or-equal), or the pair would be wrongly dropped. The start half sits at array position 0, clearly below a firstContentIndex of 10, pinning IT as block-scoped (via leading) regardless of either boundary mutant — so the AND hinges entirely on the end half's own trailing value.
     const startEl = el("w:bookmarkStart", { "w:id": "z", "w:name": "bm" }, []);
     const endEl = el("w:bookmarkEnd", { "w:id": "z" }, []);
     const elements = [startEl, ...Array.from({ length: 14 }, filler), endEl];
@@ -388,7 +388,7 @@ describe("docx constructs: structured document tags", () => {
       ]),
       el("w:sdtContent", {}, [para("Title page")]),
     ]);
-    // The TOC gallery is the one the semantic vocabulary names, so it needs no residue; every other gallery degrades to richText with the whole w:docPartObj element carried verbatim -- the serialisation the lossless layer's own builder produces for that subtree, the same equivalence class it round-trips within.
+    // The TOC gallery is the one the semantic vocabulary names, so it needs no residue; every other gallery degrades to richText with the whole w:docPartObj element carried verbatim — the serialisation the lossless layer's own builder produces for that subtree, the same equivalence class it round-trips within.
     expect(outline(blocksOf([toc]))[0]).toEqual({
       kind: "contentControl",
       controlType: "index",
@@ -500,7 +500,7 @@ describe("readContentControlDescriptor: internals", () => {
   });
 
   it("reads a checkbox's own checked value from its plain w:val, not only w14:val", () => {
-    // "0" rather than some other value: a checked state read via a broken w:val fallback would come back undefined, which this toggle's own convention reads as checked (true) -- indistinguishable from a genuine "1" unless the real answer is false.
+    // "0" rather than some other value: a checked state read via a broken w:val fallback would come back undefined, which this toggle's own convention reads as checked (true) — indistinguishable from a genuine "1" unless the real answer is false.
     const sdt = el("w:sdt", {}, [
       el("w:sdtPr", {}, [
         el("w14:checkbox", {}, [el("w14:checked", { "w:val": "0" })]),
@@ -675,7 +675,7 @@ describe("docx constructs: tracked changes", () => {
     expect(outline(blocksOf([paragraph]))).toEqual(["kept added "]);
   });
 
-  // This block-level w:del (a tracked-change element wrapping whole w:p elements directly) is not a shape Word itself ever emits -- CT_RunTrackChange has no w:p in its content model, so this is reader tolerance of malformed input, not a spelling buildDocxPackageFromContent produces. Word's own multi-paragraph deletion repeats the in-paragraph shape (a w:del wrapping each paragraph's own runs, with that paragraph's own mark also marked deleted) once per paragraph; see write.test.ts's own round-trip coverage for the writer's actual output shape.
+  // This block-level w:del (a tracked-change element wrapping whole w:p elements directly) is not a shape Word itself ever emits — CT_RunTrackChange has no w:p in its content model, so this is reader tolerance of malformed input, not a spelling buildDocxPackageFromContent produces. Word's own multi-paragraph deletion repeats the in-paragraph shape (a w:del wrapping each paragraph's own runs, with that paragraph's own mark also marked deleted) once per paragraph; see write.test.ts's own round-trip coverage for the writer's actual output shape.
   it("reads a block-level w:del wrapping whole paragraphs as one deletion construct over both", () => {
     const del = el(
       "w:del",
@@ -877,7 +877,7 @@ describe("docx constructs: bookmarks", () => {
     expect(paragraphBlock.constructs).toBeUndefined();
   });
 
-  it("still drops a bookmark whose interior halves sit in two different paragraphs -- one paragraph can't host the pair", () => {
+  it("still drops a bookmark whose interior halves sit in two different paragraphs — one paragraph can't host the pair", () => {
     const body = [
       el("w:p", {}, [
         el("w:r", {}, [el("w:t", {}, [txt("first")])]),
@@ -933,7 +933,7 @@ describe("docx constructs: bookmarks", () => {
     ]);
   });
 
-  it("reads a bookmark with nothing between its halves as a point anchor -- an immediately closed pair", () => {
+  it("reads a bookmark with nothing between its halves as a point anchor — an immediately closed pair", () => {
     const body = [
       para("one"),
       el("w:bookmarkStart", { "w:id": "9", "w:name": "point" }),
@@ -1133,7 +1133,7 @@ describe("insertConstructMarkers", () => {
   });
 
   it("sorts crossing extents by their own startIndex, not by discovery order alone", () => {
-    // P starts before Q but ends before Q ends too -- a genuine crossing, which the extent-scope rule drops entirely (Q has no encoding). P and Q's `order` fields are deliberately the REVERSE of their startIndex order: if compareExtents fell back to comparing `order` alone without weighing startIndex first, it would process Q before P, and P (starting at 0, before Q's own already-open span) would then read as nested inside Q rather than the reverse -- both extents would wrongly survive instead of Q alone being dropped.
+    // P starts before Q but ends before Q ends too — a genuine crossing, which the extent-scope rule drops entirely (Q has no encoding). P and Q's `order` fields are deliberately the REVERSE of their startIndex order: if compareExtents fell back to comparing `order` alone without weighing startIndex first, it would process Q before P, and P (starting at 0, before Q's own already-open span) would then read as nested inside Q rather than the reverse — both extents would wrongly survive instead of Q alone being dropped.
     const marked = insertConstructMarkers(blocks, [
       { startIndex: 0, endIndex: 2, order: 1, descriptor: anchor("p") },
       { startIndex: 1, endIndex: 3, order: 0, descriptor: anchor("q") },

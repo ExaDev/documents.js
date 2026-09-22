@@ -59,12 +59,12 @@ export interface ResolvedImageResource {
   readonly resourceName: string; // e.g. 'Im1', the key under the page's /Resources/XObject dict
 }
 
-// content-write.ts never allocates font/image resource names itself -- write.ts owns that (registry-keyed, sorted-order allocation, so object numbers stay deterministic regardless of Map/object iteration order). This context is purely a lookup back into whatever write.ts already decided, keeping this module a short, dumb dispatch over item kind.
+// content-write.ts never allocates font/image resource names itself — write.ts owns that (registry-keyed, sorted-order allocation, so object numbers stay deterministic regardless of Map/object iteration order). This context is purely a lookup back into whatever write.ts already decided, keeping this module a short, dumb dispatch over item kind.
 export interface ContentWriteContext {
   readonly measurer: TextMeasurer;
   resolveFont(font: LayoutFont): ResolvedFontResource;
   resolveImage(imageId: string): ResolvedImageResource;
-  // #967: the indirect-object number of an optional-content group by layer name (write.ts allocates one OCG per doc.layers row). An item carrying a layer the document's own layers table does not name draws unmarked rather than failing -- the model tolerates the dangling name, so the writer does too.
+  // #967: the indirect-object number of an optional-content group by layer name (write.ts allocates one OCG per doc.layers row). An item carrying a layer the document's own layers table does not name draws unmarked rather than failing — the model tolerates the dangling name, so the writer does too.
   readonly layerObjectNumberOf?: (name: string) => number | undefined;
   // #967: the next page-scoped marked-content identifier, sequential in emission order. Absent when nothing consumes MCIDs (no structure tree): items still draw, and any /OC layer marking works without one.
   readonly nextMcid?: () => number;
@@ -72,11 +72,11 @@ export interface ContentWriteContext {
 
 export interface ContentStreamResult {
   readonly bytes: Uint8Array<ArrayBuffer>;
-  // #967: every item marked with an MCID, in emission order -- the (MCID -> owning element id) pairs the caller needs to build the structure parent tree. Items marked for a layer only (no structure) appear nowhere here: a layer mark carries no MCID.
+  // #967: every item marked with an MCID, in emission order — the (MCID -> owning element id) pairs the caller needs to build the structure parent tree. Items marked for a layer only (no structure) appear nowhere here: a layer mark carries no MCID.
   readonly markedStructure: readonly MarkedStructureItem[];
-  // Every WinAnsi substitution made while emitting text in a STANDARD-14 face, in item order -- content-write.ts has no Diagnostic schema of its own to turn these into, so it hands back the raw substitutions and leaves that translation to whichever layer owns diagnostics.
+  // Every WinAnsi substitution made while emitting text in a STANDARD-14 face, in item order — content-write.ts has no Diagnostic schema of its own to turn these into, so it hands back the raw substitutions and leaves that translation to whichever layer owns diagnostics.
   readonly substitutions: readonly WinAnsiSubstitution[];
-  // Every character shown as .notdef because the EMBEDDED face it was drawn in has no glyph for it, in item order. Kept separate from `substitutions` rather than folded into it because nothing visible was chosen as a replacement here -- a WinAnsiSubstitution's own `to` field would have to be invented, and claiming a '?' was drawn when a notdef box was drawn is a worse report than none. Reported rather than dropped: only the caller can decide whether that means picking another face or accepting the box.
+  // Every character shown as .notdef because the EMBEDDED face it was drawn in has no glyph for it, in item order. Kept separate from `substitutions` rather than folded into it because nothing visible was chosen as a replacement here — a WinAnsiSubstitution's own `to` field would have to be invented, and claiming a '?' was drawn when a notdef box was drawn is a worse report than none. Reported rather than dropped: only the caller can decide whether that means picking another face or accepting the box.
   readonly missingGlyphs: readonly EmbeddedFaceSubstitution[];
 }
 
@@ -98,7 +98,7 @@ function writeMatrixOperator(
   writer.writeAscii(`${m.map(formatNumber).join(" ")} ${operator}\n`);
 }
 
-// The matrix that both places and rotates something anchored at (xPt, yPt): a plain rotation matrix with its translation components overridden to the anchor point, rather than a rotate-then-translate composition -- PDF's Tm/cm operands already encode rotation and translation in one 6-tuple, so this is the direct construction rather than a multiplyMatrices detour. Shared between text (Tm) and its underline rectangle (cm), which is what keeps the underline glued to the text's own baseline under rotation.
+// The matrix that both places and rotates something anchored at (xPt, yPt): a plain rotation matrix with its translation components overridden to the anchor point, rather than a rotate-then-translate composition — PDF's Tm/cm operands already encode rotation and translation in one 6-tuple, so this is the direct construction rather than a multiplyMatrices detour. Shared between text (Tm) and its underline rectangle (cm), which is what keeps the underline glued to the text's own baseline under rotation.
 function anchorMatrix(
   xPt: number,
   yPt: number,
@@ -134,7 +134,7 @@ interface ShowOperand {
   readonly operator: "Tj" | "TJ";
 }
 
-// The BT..ET block both text branches share, differing only in the resource name, the Tz percentage, and the already-encoded show operand -- the operator sequence, its order, and the absolute Tm are identical whether the operand is a WinAnsi byte string shown with Tj or an Identity-H CID array shown with TJ.
+// The BT..ET block both text branches share, differing only in the resource name, the Tz percentage, and the already-encoded show operand — the operator sequence, its order, and the absolute Tm are identical whether the operand is a WinAnsi byte string shown with Tj or an Identity-H CID array shown with TJ.
 function writeShowTextBlock(
   writer: ByteWriter,
   item: LayoutText,
@@ -167,7 +167,7 @@ function writeStandardText(
   const encoded = encodeForShow(item.text, standardName);
   substitutions.push(...encoded.substitutions);
 
-  // The Tz (horizontal scaling) percentage is a text-state parameter that persists across content-stream items until explicitly changed -- it must be written for every text item, even when the correction is 1.0 (100%), or a preceding item's correction would silently leak into this one.
+  // The Tz (horizontal scaling) percentage is a text-state parameter that persists across content-stream items until explicitly changed — it must be written for every text item, even when the correction is 1.0 (100%), or a preceding item's correction would silently leak into this one.
   const scale = measurer.horizontalScaleFor(item.font);
   // Always a plain Tj: a standard-14 face is measured through afm-widths.ts's own per-glyph width table, which carries no pair data of any kind, so there is no kerning on this path to position glyphs for and nothing that could make an array operand differ from a single string.
   writeShowTextBlock(writer, item, resourceName, scale * 100, {
@@ -188,7 +188,7 @@ function writeStandardText(
   }
 }
 
-// How an embedded run's glyphs are shown: 2-byte big-endian CIDs (== glyph IDs, since every embedded font program this package writes preserves glyph IDs and declares /CIDToGIDMap /Identity) against a /Type0 Identity-H resource -- the same operand shape math-content-write.ts already uses for the math font -- with the run split at each of the face's own pair-kerning adjustments.
+// How an embedded run's glyphs are shown: 2-byte big-endian CIDs (== glyph IDs, since every embedded font program this package writes preserves glyph IDs and declares /CIDToGIDMap /Identity) against a /Type0 Identity-H resource — the same operand shape math-content-write.ts already uses for the math font — with the run split at each of the face's own pair-kerning adjustments.
 //
 // A run whose adjacent glyph pairs the face kerns nothing about (which includes every run in a face with no reachable 'GPOS' kerning at all) is shown as one unsplit hex string with Tj, byte for byte what this module emitted before kerning existed. Only a genuinely kerned run pays for a TJ array.
 //
@@ -270,7 +270,7 @@ function writeText(
   );
 }
 
-// 'f'/'f*' (fill only, nonzero/evenodd), 'S' (stroke only), 'B'/'B*' (both, nonzero/evenodd), or undefined when neither is set -- a rect/ellipse/path with neither fill nor stroke is a valid LayoutItem (the schema permits it) that simply paints nothing, so callers skip emitting path bytes for it entirely rather than drawing an invisible path. fillRule only ever matters when fill is set (rect/ellipse never pass one, always taking the nonzero 'f'/'B' branch); a path with fillRule: 'evenodd' takes the starred variant instead.
+// 'f'/'f*' (fill only, nonzero/evenodd), 'S' (stroke only), 'B'/'B*' (both, nonzero/evenodd), or undefined when neither is set — a rect/ellipse/path with neither fill nor stroke is a valid LayoutItem (the schema permits it) that simply paints nothing, so callers skip emitting path bytes for it entirely rather than drawing an invisible path. fillRule only ever matters when fill is set (rect/ellipse never pass one, always taking the nonzero 'f'/'B' branch); a path with fillRule: 'evenodd' takes the starred variant instead.
 function paintOperatorFor(
   fill: LayoutColor | undefined,
   stroke: { readonly color: LayoutColor; readonly widthPt: number } | undefined,
@@ -289,7 +289,7 @@ function paintOperatorFor(
   return undefined;
 }
 
-// Formats an x/y pair as PDF operands, e.g. for m/l/c/re coordinates -- shared by writeEllipse and writeSubpath, the two emitters that build points programmatically rather than lifting them straight off a LayoutItem's own named fields.
+// Formats an x/y pair as PDF operands, e.g. for m/l/c/re coordinates — shared by writeEllipse and writeSubpath, the two emitters that build points programmatically rather than lifting them straight off a LayoutItem's own named fields.
 function formatPoint(x: number, y: number): string {
   return `${formatNumber(x)} ${formatNumber(y)}`;
 }
@@ -301,7 +301,7 @@ type StrokeStyle = NonNullable<LayoutLine["style"]>;
 const DASHED_ON_WIDTH_MULTIPLE = 3;
 const DASHED_GAP_WIDTH_MULTIPLE = 3;
 
-// A dotted stroke is a dash array with a ZERO on-length, painted under a round cap: a zero-length dash paints its two round caps at the same point, i.e. exactly one filled circle of diameter = the stroke width, which is what a dot is. Any non-zero on-length would paint a capsule (the segment plus a semicircle at each end) instead, reading as a short dash rather than a dot. Under the DEFAULT butt cap (0 J) the identical array paints nothing at all -- a butt cap adds no length to a zero-length segment -- which is why the 'J' operator below is not optional decoration here but the thing that makes the dots exist.
+// A dotted stroke is a dash array with a ZERO on-length, painted under a round cap: a zero-length dash paints its two round caps at the same point, i.e. exactly one filled circle of diameter = the stroke width, which is what a dot is. Any non-zero on-length would paint a capsule (the segment plus a semicircle at each end) instead, reading as a short dash rather than a dot. Under the DEFAULT butt cap (0 J) the identical array paints nothing at all — a butt cap adds no length to a zero-length segment — which is why the 'J' operator below is not optional decoration here but the thing that makes the dots exist.
 const DOTTED_ON_LENGTH_PT = 0;
 const DOTTED_GAP_WIDTH_MULTIPLE = 2;
 
@@ -312,13 +312,13 @@ const DASH_PHASE_PT = 0;
 const LINE_CAP_BUTT = 0;
 const LINE_CAP_ROUND = 1;
 
-// A 'double' stroke has no PDF operator of its own -- it is two parallel strokes. Splitting the declared width w into three equal bands (ink, gap, ink) gives each rule a width of w/3 and puts their centrelines w/3 either side of the original one, so the pair's total ink extent is exactly w: the same visual weight the single solid stroke would have carried, now read as two rules with a gap of their own width between them.
+// A 'double' stroke has no PDF operator of its own — it is two parallel strokes. Splitting the declared width w into three equal bands (ink, gap, ink) gives each rule a width of w/3 and puts their centrelines w/3 either side of the original one, so the pair's total ink extent is exactly w: the same visual weight the single solid stroke would have carried, now read as two rules with a gap of their own width between them.
 const DOUBLE_RULE_BANDS = 3;
 
 // Which side of the original centreline each of the two rules is drawn on, in emission order.
 const DOUBLE_RULE_SIGNS = [1, -1] as const;
 
-// Emits the graphics-state operators one stroke style needs before the path it applies to, and reports whether it emitted any -- the caller uses that to decide whether resetStrokeStyleState is needed afterwards. 'double' is not handled here at all: it is a geometry change (two offset paths), not a graphics-state one, and its callers route around this entirely.
+// Emits the graphics-state operators one stroke style needs before the path it applies to, and reports whether it emitted any — the caller uses that to decide whether resetStrokeStyleState is needed afterwards. 'double' is not handled here at all: it is a geometry change (two offset paths), not a graphics-state one, and its callers route around this entirely.
 function writeStrokeStyleState(
   writer: ByteWriter,
   style: StrokeStyle | undefined,
@@ -356,7 +356,7 @@ interface UnitNormal {
   readonly y: number;
 }
 
-// The left-hand unit normal of the chord from (fromX, fromY) to (toX, toY), or undefined for a zero-length chord -- a point has no direction to be perpendicular to, and normalising it would divide by zero.
+// The left-hand unit normal of the chord from (fromX, fromY) to (toX, toY), or undefined for a zero-length chord — a point has no direction to be perpendicular to, and normalising it would divide by zero.
 function chordNormal(
   fromX: number,
   fromY: number,
@@ -372,7 +372,7 @@ function chordNormal(
   return { x: -dy / length, y: dx / length };
 }
 
-// The offset direction at a vertex joining two chords: the normalised sum of their own unit normals, which bisects the corner rather than picking one side's perpendicular arbitrarily. Undefined when neither neighbour has a direction, and also when the two exactly cancel (a 180-degree reversal, where the sum is the zero vector and there is no meaningful bisector) -- both cases leave that point un-offset rather than moving it in an invented direction.
+// The offset direction at a vertex joining two chords: the normalised sum of their own unit normals, which bisects the corner rather than picking one side's perpendicular arbitrarily. Undefined when neither neighbour has a direction, and also when the two exactly cancel (a 180-degree reversal, where the sum is the zero vector and there is no meaningful bisector) — both cases leave that point un-offset rather than moving it in an invented direction.
 function averageNormal(
   a: UnitNormal | undefined,
   b: UnitNormal | undefined,
@@ -408,7 +408,7 @@ function offsetY(
   return normal === undefined ? y : y + normal.y * offsetPt;
 }
 
-// Displaces a whole subpath sideways by offsetPt, for the two parallel rules a 'double' stroke is drawn as. Each ON-PATH point moves along the bisector of its own two adjacent chord normals (so a corner's two rules stay parallel through the corner rather than crossing it), and a cubic's control points move along their own segment's chord normal. This is a chord-based approximation of a true parallel curve, not an exact offset -- an exact offset of a cubic Bezier is not itself a cubic and cannot be written as one -- but the offsets here are a third of a stroke width, at which scale the difference is far below the width of the ink being drawn.
+// Displaces a whole subpath sideways by offsetPt, for the two parallel rules a 'double' stroke is drawn as. Each ON-PATH point moves along the bisector of its own two adjacent chord normals (so a corner's two rules stay parallel through the corner rather than crossing it), and a cubic's control points move along their own segment's chord normal. This is a chord-based approximation of a true parallel curve, not an exact offset — an exact offset of a cubic Bezier is not itself a cubic and cannot be written as one — but the offsets here are a third of a stroke width, at which scale the difference is far below the width of the ink being drawn.
 function offsetSubpath(
   subpath: LayoutSubpath,
   offsetPt: number,
@@ -418,7 +418,7 @@ function offsetSubpath(
     ...subpath.segments.map((segment) => ({ x: segment.xPt, y: segment.yPt })),
   ];
 
-  // One entry per segment, in segment order, plus -- when the subpath is closed -- the implicit closing chord from the last point back to the first. That closing edge is real ink (drawn by 'h'), so its normal has to reach the two vertices it joins just as an explicit segment's does. Indexing works out so that chords[i] is always the chord LEAVING points[i].
+  // One entry per segment, in segment order, plus — when the subpath is closed — the implicit closing chord from the last point back to the first. That closing edge is real ink (drawn by 'h'), so its normal has to reach the two vertices it joins just as an explicit segment's does. Indexing works out so that chords[i] is always the chord LEAVING points[i].
   const chords: (UnitNormal | undefined)[] = [];
   for (let i = 0; i + 1 < points.length; i += 1) {
     const from = points[i]!;
@@ -495,7 +495,7 @@ function writeRect(writer: ByteWriter, item: LayoutRect): void {
   writer.writeAscii(`${paint}\n`);
 }
 
-// A 'double' line, drawn as its two parallel rules: the line's own direction gives the perpendicular to offset along directly, so there is no per-vertex bisecting to do the way offsetSubpath needs for a path. A zero-length line has no direction at all and is drawn once at its declared width instead -- the only alternative would be offsetting along an invented direction.
+// A 'double' line, drawn as its two parallel rules: the line's own direction gives the perpendicular to offset along directly, so there is no per-vertex bisecting to do the way offsetSubpath needs for a path. A zero-length line has no direction at all and is drawn once at its declared width instead — the only alternative would be offsetting along an invented direction.
 function writeDoubleLine(writer: ByteWriter, item: LayoutLine): void {
   writeRgbOperator(writer, item.color, "RG");
   const normal = chordNormal(item.x1Pt, item.y1Pt, item.x2Pt, item.y2Pt);
@@ -537,7 +537,7 @@ function writeLine(writer: ByteWriter, item: LayoutLine): void {
   }
 }
 
-// Approximates the ellipse as four cubic Bezier arcs, one per quadrant, using the standard kappa constant for the control-point offset -- PDF has no native ellipse or circle operator. The final arc returns exactly to the starting point, so an explicit `h` (closepath) is emitted even though it draws no additional ink: ISO 32000-1 8.5.3.1 already implicitly closes every subpath for FILL purposes regardless, but never for STROKE, so an ellipse written without `h` paints its own stroke as a technically-open path -- invisible for a smooth curve with no sharp corner at the seam, but it also means readPdf's own general path tracking (interpret.ts) records the recovered subpath as closed: false (it only sets closed: true when it actually sees an `h` operator), which then blocks a filled-and-stroked ellipse from being recognised as fillable by any downstream ODF/SVG consumer that correctly requires an explicitly closed path before filling it (confirmed against real LibreOffice 26.2: a reconstructed ellipse-turned-path with fill set but closed: false rendered with no fill at all). Emitting `h` makes both the PDF bytes and the recovered geometry match the ellipse's own true, always-closed shape.
+// Approximates the ellipse as four cubic Bezier arcs, one per quadrant, using the standard kappa constant for the control-point offset — PDF has no native ellipse or circle operator. The final arc returns exactly to the starting point, so an explicit `h` (closepath) is emitted even though it draws no additional ink: ISO 32000-1 8.5.3.1 already implicitly closes every subpath for FILL purposes regardless, but never for STROKE, so an ellipse written without `h` paints its own stroke as a technically-open path — invisible for a smooth curve with no sharp corner at the seam, but it also means readPdf's own general path tracking (interpret.ts) records the recovered subpath as closed: false (it only sets closed: true when it actually sees an `h` operator), which then blocks a filled-and-stroked ellipse from being recognised as fillable by any downstream ODF/SVG consumer that correctly requires an explicitly closed path before filling it (confirmed against real LibreOffice 26.2: a reconstructed ellipse-turned-path with fill set but closed: false rendered with no fill at all). Emitting `h` makes both the PDF bytes and the recovered geometry match the ellipse's own true, always-closed shape.
 function writeEllipse(writer: ByteWriter, item: LayoutEllipse): void {
   const paint = paintOperatorFor(item.fill, item.stroke);
   if (paint === undefined) {
@@ -569,7 +569,7 @@ function writeEllipse(writer: ByteWriter, item: LayoutEllipse): void {
   writer.writeAscii(`${paint}\n`);
 }
 
-// One subpath: m (moveto the subpath's own starting point), then l/c per segment, then h if the subpath is closed. No quadratic-to-cubic elevation and no SVG elliptical-arc endpoint-to-center parameterization exist anywhere in this module, deliberately: LayoutPathSegment's own discriminated union (src/layout.ts) only ever has 'line'/'cubic' variants, because the sole real-world producer of a LayoutPath -- odf.js's own svg:d/draw:points parser (typed/shared/path.ts), verified against genuine LibreOffice output -- never emits a quadratic or an arc segment in the first place: ODF's own svg:d grammar recognises S/s, Q/q, T/t, A/a as command letters (so the token stream stays in sync) but that parser explicitly produces no segment for any of them, real LibreOffice output for rectangles/ellipses/freeform curves/basic custom-shape presets never exercises them, and ContentPathSegmentSchema itself only models 'line'/'cubic' regardless. There is nothing here to elevate or parameterize, and building that conversion code with no caller would be unused code kept "just in case".
+// One subpath: m (moveto the subpath's own starting point), then l/c per segment, then h if the subpath is closed. No quadratic-to-cubic elevation and no SVG elliptical-arc endpoint-to-center parameterization exist anywhere in this module, deliberately: LayoutPathSegment's own discriminated union (src/layout.ts) only ever has 'line'/'cubic' variants, because the sole real-world producer of a LayoutPath — odf.js's own svg:d/draw:points parser (typed/shared/path.ts), verified against genuine LibreOffice output — never emits a quadratic or an arc segment in the first place: ODF's own svg:d grammar recognises S/s, Q/q, T/t, A/a as command letters (so the token stream stays in sync) but that parser explicitly produces no segment for any of them, real LibreOffice output for rectangles/ellipses/freeform curves/basic custom-shape presets never exercises them, and ContentPathSegmentSchema itself only models 'line'/'cubic' regardless. There is nothing here to elevate or parameterize, and building that conversion code with no caller would be unused code kept "just in case".
 function writeSubpath(writer: ByteWriter, subpath: LayoutSubpath): void {
   writer.writeAscii(`${formatPoint(subpath.startXPt, subpath.startYPt)} m\n`);
   for (const segment of subpath.segments) {
@@ -617,7 +617,7 @@ function writePath(writer: ByteWriter, item: LayoutPath): void {
   if (paint === undefined) {
     return;
   }
-  // A stroke style only means anything when there is a stroke to apply it to -- a fill-only path carrying style: 'dashed' has no ink whose on/off lengths could differ, and paints exactly as it would without the field.
+  // A stroke style only means anything when there is a stroke to apply it to — a fill-only path carrying style: 'dashed' has no ink whose on/off lengths could differ, and paints exactly as it would without the field.
   if (item.stroke === undefined) {
     writeFillAndStroke(writer, item.fill, undefined);
     for (const subpath of item.subpaths) {
@@ -664,7 +664,7 @@ function writeImage(
   writer.writeAscii("Q\n");
 }
 
-// Renders one page's LayoutItem[] into PDF content-stream operator bytes. 'link' items are annotations, not painted content -- write.ts builds the page's /Annots array from them directly, so they contribute no bytes here.
+// Renders one page's LayoutItem[] into PDF content-stream operator bytes. 'link' items are annotations, not painted content — write.ts builds the page's /Annots array from them directly, so they contribute no bytes here.
 export function writeContentStream(
   items: readonly LayoutItem[],
   context: ContentWriteContext,
@@ -675,7 +675,7 @@ export function writeContentStream(
   const markedStructure: MarkedStructureItem[] = [];
 
   for (const item of items) {
-    // #967: one BDC/EMC span around any item that carries a structure owner (an MCID through the parent tree) or a layer (an /OC group reference), the single marked-content spelling that serves both channels -- the reader's own BDC handler reads /MCID and /OC out of the same property dict. 'link' items are annotations, not painted content, so they are never marked here.
+    // #967: one BDC/EMC span around any item that carries a structure owner (an MCID through the parent tree) or a layer (an /OC group reference), the single marked-content spelling that serves both channels — the reader's own BDC handler reads /MCID and /OC out of the same property dict. 'link' items are annotations, not painted content, so they are never marked here.
     // 'layer' in item / 'structure' in item narrow the union to the painted item kinds (a 'link' carries neither).
     const itemLayer = "layer" in item ? item.layer : undefined;
     const itemStructure = "structure" in item ? item.structure : undefined;

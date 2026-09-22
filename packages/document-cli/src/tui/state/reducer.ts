@@ -74,7 +74,7 @@ import {
 
 // THIS REDUCER IS DELIBERATELY IMPURE FOR EVERY MUTATING ACTION, AND THAT IS THE DESIGN, NOT AN OVERSIGHT.
 //
-// documents.js's editors are live views over the mutable XML tree inside a decoded package: `run.bold = true` edits that tree in place and hands back no new object. There is no immutable document value to fold an action into and no new reference for React to compare, so a mutating case here calls the editor method that performs the real mutation and then returns a NEW OUTER STATE OBJECT (`{ ...state, hasUnsavedChanges: true, undoStack }`) purely so React sees a changed reference and re-renders the screens that read the document through fresh accessor calls. Re-running one of these actions against the same state does NOT produce the same result -- appending a paragraph twice appends two paragraphs. Do not add React StrictMode double-invocation, and do not replay actions.
+// documents.js's editors are live views over the mutable XML tree inside a decoded package: `run.bold = true` edits that tree in place and hands back no new object. There is no immutable document value to fold an action into and no new reference for React to compare, so a mutating case here calls the editor method that performs the real mutation and then returns a NEW OUTER STATE OBJECT (`{ ...state, hasUnsavedChanges: true, undoStack }`) purely so React sees a changed reference and re-renders the screens that read the document through fresh accessor calls. Re-running one of these actions against the same state does NOT produce the same result — appending a paragraph twice appends two paragraphs. Do not add React StrictMode double-invocation, and do not replay actions.
 //
 // `Date.now()` in the status helper is impure for the same reason and to no lesser degree; a `ClockPort` would buy nothing while the mutations themselves are in here.
 
@@ -135,7 +135,7 @@ function setOverlay(
   }
 }
 
-// A negative slice bound is exactly as safe as the "if too long, slice; else return as-is" branch it replaces -- Array.prototype.slice(-N) on an array no longer than N returns every element, so this single expression covers both the truncating and non-truncating cases with no conditional to keep in sync with UNDO_STACK_LIMIT.
+// A negative slice bound is exactly as safe as the "if too long, slice; else return as-is" branch it replaces — Array.prototype.slice(-N) on an array no longer than N returns every element, so this single expression covers both the truncating and non-truncating cases with no conditional to keep in sync with UNDO_STACK_LIMIT.
 function pushSnapshot(
   stack: readonly Uint8Array<ArrayBuffer>[],
   snapshot: Uint8Array<ArrayBuffer>,
@@ -230,14 +230,14 @@ function reopenEditable(
   }
 }
 
-// markdown's own MarkdownEditor has no toBytes() at all (bytes are incidental to markdown -- see MarkdownOpenDocument's own doc comment): its undo snapshot is the encoded text `toMarkdownText()` produces right now, the same byte<->text boundary every other markdown-touching call site in this codebase (openDocumentAtPath, saveDocumentTo, exportToPdf) already uses.
+// markdown's own MarkdownEditor has no toBytes() at all (bytes are incidental to markdown — see MarkdownOpenDocument's own doc comment): its undo snapshot is the encoded text `toMarkdownText()` produces right now, the same byte<->text boundary every other markdown-touching call site in this codebase (openDocumentAtPath, saveDocumentTo, exportToPdf) already uses.
 function toUndoSnapshot(doc: WritableOpenDocument): Uint8Array<ArrayBuffer> {
   return doc.format === "markdown"
     ? encodeMarkdownText(doc.editor.toMarkdownText())
     : doc.editor.toBytes();
 }
 
-// Snapshot BEFORE the mutation runs, so the pushed entry is the state to come back to, then run the mutation against the live tree and hand React a fresh outer object. Takes any WritableOpenDocument, not just EditableOpenDocument, so markdown's own live-view MarkdownEditor shares this exact undo/mutate machinery with zero format-specific reducer code of its own -- see toUndoSnapshot above for the one place the two byte<->text boundaries genuinely differ.
+// Snapshot BEFORE the mutation runs, so the pushed entry is the state to come back to, then run the mutation against the live tree and hand React a fresh outer object. Takes any WritableOpenDocument, not just EditableOpenDocument, so markdown's own live-view MarkdownEditor shares this exact undo/mutate machinery with zero format-specific reducer code of its own — see toUndoSnapshot above for the one place the two byte<->text boundaries genuinely differ.
 function mutate(
   state: AppState,
   doc: WritableOpenDocument,
@@ -252,7 +252,7 @@ function mutate(
   };
 }
 
-// mutate()'s own counterpart for an `apply` that can genuinely fail on bad caller input rather than only on a routing bug -- a merge rectangle that overruns a table/sheet's own bounds throws a real Error from documents.js's own mergeCells primitives (OdsSheet.mergeCells, DocxTable.mergeCells, OdtTable.mergeCells, this file's own mergePptxTableCells), and the UI screens that dispatch these actions bound their own row/column pickers against the target's current dimensions but cannot guarantee every dispatch stays in range (e.g. a screen driven by a scripted/test caller, or a race with a concurrent edit). Reports the thrown message as a warning status instead of letting it escape the reducer and crash the app. If `apply` throws after partially mutating the live tree (e.g. a docx table's own row-by-row mergeCells loop merging row 0 successfully before finding row 1 out of range), that partial mutation genuinely already happened -- this only prevents the crash and the false "nothing changed" undo-stack/hasUnsavedChanges bookkeeping, it does not roll the live tree back, matching the "the reducer is deliberately impure" caveat at the top of this file.
+// mutate()'s own counterpart for an `apply` that can genuinely fail on bad caller input rather than only on a routing bug — a merge rectangle that overruns a table/sheet's own bounds throws a real Error from documents.js's own mergeCells primitives (OdsSheet.mergeCells, DocxTable.mergeCells, OdtTable.mergeCells, this file's own mergePptxTableCells), and the UI screens that dispatch these actions bound their own row/column pickers against the target's current dimensions but cannot guarantee every dispatch stays in range (e.g. a screen driven by a scripted/test caller, or a race with a concurrent edit). Reports the thrown message as a warning status instead of letting it escape the reducer and crash the app. If `apply` throws after partially mutating the live tree (e.g. a docx table's own row-by-row mergeCells loop merging row 0 successfully before finding row 1 out of range), that partial mutation genuinely already happened — this only prevents the crash and the false "nothing changed" undo-stack/hasUnsavedChanges bookkeeping, it does not roll the live tree back, matching the "the reducer is deliberately impure" caveat at the top of this file.
 function mutateGuarded(
   state: AppState,
   doc: WritableOpenDocument,
@@ -269,7 +269,7 @@ function mutateGuarded(
   }
 }
 
-// The pptx-side counterpart to DocxTable.mergeCells/OdtTable.mergeCells: a DrawingML table has no such convenience on PptxTable itself (see documents.js's own edit/pptx/table.ts doc comment -- every row always carries exactly `columns` a:tc elements, and a merge is expressed purely via gridSpan/rowSpan/hMerge/vMerge attributes on cells that already exist, never by removing or retagging an element the way docx/ODF each do). The anchor cell gets colSpan/rowSpan; every other cell in the rectangle gets horizontalMerge (covered from the left, in the SAME row) and/or verticalMerge (covered from above) set, matching real PowerPoint output for a rectangular merge's interior/trailing cells (both attributes set together), and its own content cleared.
+// The pptx-side counterpart to DocxTable.mergeCells/OdtTable.mergeCells: a DrawingML table has no such convenience on PptxTable itself (see documents.js's own edit/pptx/table.ts doc comment — every row always carries exactly `columns` a:tc elements, and a merge is expressed purely via gridSpan/rowSpan/hMerge/vMerge attributes on cells that already exist, never by removing or retagging an element the way docx/ODF each do). The anchor cell gets colSpan/rowSpan; every other cell in the rectangle gets horizontalMerge (covered from the left, in the SAME row) and/or verticalMerge (covered from above) set, matching real PowerPoint output for a rectangular merge's interior/trailing cells (both attributes set together), and its own content cleared.
 function mergePptxTableCells(
   table: PptxTable,
   startRow: number,
@@ -349,7 +349,7 @@ function wrongDocument(state: AppState, expected: string): AppState {
   );
 }
 
-// The genuinely format-agnostic paragraph/run/table actions (APPEND_PARAGRAPH, SET_RUN_TEXT, TOGGLE_RUN_BOLD/ITALIC, APPEND_RUN, APPEND_TABLE, SET_TABLE_CELL_TEXT, ADD_LIST_ITEM's own non-odt branch) resolve through this widened union -- documents.js's MarkdownParagraph/MarkdownRun/MarkdownTable share exactly the subset of DocxParagraph/DocxRun/DocxTable's own shape those actions touch (text/bold/italic, appendRun/appendParagraph/appendTable). `styledWordprocessingDocument` below is the narrower, pre-markdown version of this same idea, kept for the actions that touch a field only docx/odt runs/paragraphs actually have (underline, colour, font family/size, alignment).
+// The genuinely format-agnostic paragraph/run/table actions (APPEND_PARAGRAPH, SET_RUN_TEXT, TOGGLE_RUN_BOLD/ITALIC, APPEND_RUN, APPEND_TABLE, SET_TABLE_CELL_TEXT, ADD_LIST_ITEM's own non-odt branch) resolve through this widened union — documents.js's MarkdownParagraph/MarkdownRun/MarkdownTable share exactly the subset of DocxParagraph/DocxRun/DocxTable's own shape those actions touch (text/bold/italic, appendRun/appendParagraph/appendTable). `styledWordprocessingDocument` below is the narrower, pre-markdown version of this same idea, kept for the actions that touch a field only docx/odt runs/paragraphs actually have (underline, colour, font family/size, alignment).
 type WordprocessingOpenDocument =
   DocxOpenDocument | OdtOpenDocument | MarkdownOpenDocument | DocOpenDocument;
 // The rich pptx/odp surface (slides carrying tables, images, the full shape editor API) versus the wider presentation union that also admits ppt, whose PptSlide carries the text-box/notes subset every presentation action shares.
@@ -373,7 +373,7 @@ function wordprocessingDocument(
     : undefined;
 }
 
-// The narrow counterpart to wordprocessingDocument above -- for actions that need a real per-run/per-paragraph styling field (underline, colour, font family/size, alignment) MarkdownRun/MarkdownParagraph simply do not carry, rather than a markdown branch that would have nothing to do. doc carries the full set (doc-codec's writer round-trips every one of those fields), so it joins docx/odt here.
+// The narrow counterpart to wordprocessingDocument above — for actions that need a real per-run/per-paragraph styling field (underline, colour, font family/size, alignment) MarkdownRun/MarkdownParagraph simply do not carry, rather than a markdown branch that would have nothing to do. doc carries the full set (doc-codec's writer round-trips every one of those fields), so it joins docx/odt here.
 function styledWordprocessingDocument(
   state: AppState,
 ): DocxOpenDocument | OdtOpenDocument | DocOpenDocument | undefined {
@@ -429,7 +429,7 @@ function shapeHostDocument(state: AppState): ShapeHostOpenDocument | undefined {
     : undefined;
 }
 
-// OdsSheet and XlsSheet share the exact accessor subset the spreadsheet actions below touch (sheets()/addSheet(name), cell(row, column).value, printSettings) -- the widened union lets one narrowing serve both, with the genuinely ods-only actions (a formula write, a floating image, mergeCells' rectangle API) narrowing further through withOdsSheet below.
+// OdsSheet and XlsSheet share the exact accessor subset the spreadsheet actions below touch (sheets()/addSheet(name), cell(row, column).value, printSettings) — the widened union lets one narrowing serve both, with the genuinely ods-only actions (a formula write, a floating image, mergeCells' rectangle API) narrowing further through withOdsSheet below.
 function spreadsheetDocument(
   state: AppState,
 ): SpreadsheetOpenDocument | undefined {
@@ -473,7 +473,7 @@ function pdfItemAt(
   return doc.editor.page(pageIndex)?.items()[itemIndex];
 }
 
-// One page-scoped action per ADD_PDF_* case: resolves `pageIndex` against `editor.page()` (a real, live PdfPage), then mutates through it -- the pdf-family counterpart to withSheet/withShape above.
+// One page-scoped action per ADD_PDF_* case: resolves `pageIndex` against `editor.page()` (a real, live PdfPage), then mutates through it — the pdf-family counterpart to withSheet/withShape above.
 function withPdfPage(
   state: AppState,
   pageIndex: number,
@@ -496,7 +496,7 @@ function withPdfPage(
   });
 }
 
-// Resolves (pageIndex, itemIndex) fresh against the live editor on every dispatch -- PdfPage.items() is a real, unambiguous enumeration accessor with no parity-mismatch risk (unlike OdgPage.vectors(), see actions.ts's own top-of-file note on why the odg vector actions carry a live object instead), so addressing by index alone is safe here. `guard` narrows to the one PdfItem subtype the calling action's own field set assumes; a mismatch (the item changed kind under a stale index, or the wrong action was dispatched for this row) reports a warning rather than silently touching the wrong fields.
+// Resolves (pageIndex, itemIndex) fresh against the live editor on every dispatch — PdfPage.items() is a real, unambiguous enumeration accessor with no parity-mismatch risk (unlike OdgPage.vectors(), see actions.ts's own top-of-file note on why the odg vector actions carry a live object instead), so addressing by index alone is safe here. `guard` narrows to the one PdfItem subtype the calling action's own field set assumes; a mismatch (the item changed kind under a stale index, or the wrong action was dispatched for this row) reports a warning rather than silently touching the wrong fields.
 function withPdfItemMatching<T extends PdfItem>(
   state: AppState,
   pageIndex: number,
@@ -548,7 +548,7 @@ const isPdfInternalLinkItem = (item: PdfItem): item is PdfInternalLinkItem =>
 
 type VectorHostOpenDocument = OdgOpenDocument | OdpOpenDocument;
 
-// The odg-or-odp narrowing ADD_RECT/ADD_ELLIPSE/ADD_LINE/ADD_PATH share: odg hosts a vector primitive on a drawing page (OdgPage.addRect/etc, a real live-view class per kind), odp on a slide (OdpSlide.addVector, one generic method taking a real ContentVector) -- see documents.js's own README architecture entry on why odp reuses odg's vector writer wholesale rather than duplicating it.
+// The odg-or-odp narrowing ADD_RECT/ADD_ELLIPSE/ADD_LINE/ADD_PATH share: odg hosts a vector primitive on a drawing page (OdgPage.addRect/etc, a real live-view class per kind), odp on a slide (OdpSlide.addVector, one generic method taking a real ContentVector) — see documents.js's own README architecture entry on why odp reuses odg's vector writer wholesale rather than duplicating it.
 function vectorHostDocument(
   state: AppState,
 ): VectorHostOpenDocument | undefined {
@@ -573,7 +573,7 @@ function tableAt(
   return doc.editor.tables()[tableIndex];
 }
 
-// The universal cell lookup every table kind supports, used in place of DocxTable/OdtTable's own `.cell(row, column)` shortcut -- MarkdownTable has no such shortcut (only `rows()`/`appendRow()`/`remove()`), so SET_TABLE_CELL_TEXT resolves a cell through the one traversal all four genuinely share: the grid view. The column is a GRID column, the same one MERGE_TABLE_CELLS takes, so a position a merged region covers resolves to the region's anchor cell rather than to whichever physical cell happens to sit at that index.
+// The universal cell lookup every table kind supports, used in place of DocxTable/OdtTable's own `.cell(row, column)` shortcut — MarkdownTable has no such shortcut (only `rows()`/`appendRow()`/`remove()`), so SET_TABLE_CELL_TEXT resolves a cell through the one traversal all four genuinely share: the grid view. The column is a GRID column, the same one MERGE_TABLE_CELLS takes, so a position a merged region covers resolves to the region's anchor cell rather than to whichever physical cell happens to sit at that index.
 function tableCellAt(
   table: DocxTable | OdtTable | MarkdownTable | DocTable,
   row: number,
@@ -639,7 +639,7 @@ function withRun(
   });
 }
 
-// withRun's narrow, docx/odt-only counterpart -- for TOGGLE_RUN_UNDERLINE/SET_RUN_COLOR/SET_RUN_FONT_FAMILY/SET_RUN_FONT_SIZE, none of which MarkdownRun has a field for at all (it carries bold/italic/strike/hyperlink/code, not underline/colour/fontFamily/sizePt).
+// withRun's narrow, docx/odt-only counterpart — for TOGGLE_RUN_UNDERLINE/SET_RUN_COLOR/SET_RUN_FONT_FAMILY/SET_RUN_FONT_SIZE, none of which MarkdownRun has a field for at all (it carries bold/italic/strike/hyperlink/code, not underline/colour/fontFamily/sizePt).
 function withStyledRun(
   state: AppState,
   blockIndex: number,
@@ -694,7 +694,7 @@ function withShape(
   });
 }
 
-// The widened shape counterpart for the two shape fields every presentation shape carries (text, frame) -- PptShape included. Rotation and the other rich-shape actions stay on withShape above, since PptxShape/OdpShape alone carry them.
+// The widened shape counterpart for the two shape fields every presentation shape carries (text, frame) — PptShape included. Rotation and the other rich-shape actions stay on withShape above, since PptxShape/OdpShape alone carry them.
 function shapeWideAt(
   doc: ShapeHostOpenDocument | PresentationOpenDocument,
   containerIndex: number,
@@ -773,7 +773,7 @@ function withOdsSheet(
   });
 }
 
-// The small structural shape a "replace this container's whole text" write needs -- satisfied by DocxTableCell/OdtTableCell (paragraphs()/appendParagraph()) and equally by OdtListItem (the identical paragraphs()/appendParagraph() pair, see documents.js's src/edit/odt/list.ts), even though a table cell and a list item share no common base class or interface of their own.
+// The small structural shape a "replace this container's whole text" write needs — satisfied by DocxTableCell/OdtTableCell (paragraphs()/appendParagraph()) and equally by OdtListItem (the identical paragraphs()/appendParagraph() pair, see documents.js's src/edit/odt/list.ts), even though a table cell and a list item share no common base class or interface of their own.
 interface TextRunLike {
   text: string;
   remove(): void;
@@ -814,7 +814,7 @@ function setCellText(
   setTextContainerText(cell, text);
 }
 
-// documents.js's own MathMlNode (src/mathml/nodes.ts, what INSERT_ODT_FORMULA's own action field is typed with, matching appendOfficeMath's identical parameter type) declares every array field `readonly` -- but ContentFormula.mathml (document-schema.js's own, separately hand-written MathMlNode, what OdtBody.appendFormula's own `formula` parameter actually requires) declares the identical fields as plain mutable arrays. The two describe the same JSON shape at runtime; TypeScript still refuses a `readonly T[]` value at a `T[]`-typed target, at every nesting level (attributes, children), so a shallow spread of the top-level array is not enough. This rebuilds the tree as fresh, genuinely mutable objects/arrays, structurally satisfying document-schema.js's MathMlNode with no cast. documents.js's own MathMlNode collapses the cdata/comment/declaration/pi variants down to a bare `{ type }` with none of their other fields (that module's own doc comment: "MathML content never meaningfully contains any of them"), so there is nothing to carry across for those four kinds -- document-schema.js's schema still requires one, so an empty stand-in is supplied; neither a hand-authored preset (formula-presets.ts) nor a real parsed MathML formula ever produces one of these kinds in practice.
+// documents.js's own MathMlNode (src/mathml/nodes.ts, what INSERT_ODT_FORMULA's own action field is typed with, matching appendOfficeMath's identical parameter type) declares every array field `readonly` — but ContentFormula.mathml (document-schema.js's own, separately hand-written MathMlNode, what OdtBody.appendFormula's own `formula` parameter actually requires) declares the identical fields as plain mutable arrays. The two describe the same JSON shape at runtime; TypeScript still refuses a `readonly T[]` value at a `T[]`-typed target, at every nesting level (attributes, children), so a shallow spread of the top-level array is not enough. This rebuilds the tree as fresh, genuinely mutable objects/arrays, structurally satisfying document-schema.js's MathMlNode with no cast. documents.js's own MathMlNode collapses the cdata/comment/declaration/pi variants down to a bare `{ type }` with none of their other fields (that module's own doc comment: "MathML content never meaningfully contains any of them"), so there is nothing to carry across for those four kinds — document-schema.js's schema still requires one, so an empty stand-in is supplied; neither a hand-authored preset (formula-presets.ts) nor a real parsed MathML formula ever produces one of these kinds in practice.
 interface MutableMathMlAttribute {
   readonly name: string;
   readonly value: string;
@@ -941,7 +941,7 @@ export function appReducer(state: AppState, action: Action): AppState {
           stack: [rootScreenForFormat(action.doc.format)],
         },
         "info",
-        // xlsx, csv, svg, rtf, wpd, doc, xls, ppt, and epub have no editor to open at all -- action.doc is already a read-only PDF-preview conversion by the time it reaches here (see format/open-document.ts) -- so these are the formats whose "opened" message doubles as pointing the way to the one thing that can actually be done with them next.
+        // xlsx, csv, svg, rtf, wpd, doc, xls, ppt, and epub have no editor to open at all — action.doc is already a read-only PDF-preview conversion by the time it reaches here (see format/open-document.ts) — so these are the formats whose "opened" message doubles as pointing the way to the one thing that can actually be done with them next.
         action.doc.format === "xlsx" ||
           action.doc.format === "csv" ||
           action.doc.format === "svg" ||
@@ -951,7 +951,7 @@ export function appReducer(state: AppState, action: Action): AppState {
           action.doc.format === "xls" ||
           action.doc.format === "ppt" ||
           action.doc.format === "epub"
-          ? `Opened ${action.path} as a read-only PDF preview -- press ':' then 'export pdf' to save it as a real PDF`
+          ? `Opened ${action.path} as a read-only PDF preview — press ':' then 'export pdf' to save it as a real PDF`
           : `Opened ${action.path}`,
       );
 
@@ -1014,7 +1014,7 @@ export function appReducer(state: AppState, action: Action): AppState {
         selection: { ...state.selection, [action.key]: action.index },
       };
 
-    // MarkdownParagraphInit has no alignment field at all (CommonMark/GFM has no per-paragraph alignment construct), but MarkdownEditor.body.appendParagraph accepts the identical wordprocessing ParagraphInit shape as docx/odt and simply ignores the field it does not model -- so one call, with `alignment` always present, covers every wordprocessingDocument format with no format-specific branch.
+    // MarkdownParagraphInit has no alignment field at all (CommonMark/GFM has no per-paragraph alignment construct), but MarkdownEditor.body.appendParagraph accepts the identical wordprocessing ParagraphInit shape as docx/odt and simply ignores the field it does not model — so one call, with `alignment` always present, covers every wordprocessingDocument format with no format-specific branch.
     case "APPEND_PARAGRAPH": {
       const doc = wordprocessingDocument(state);
       if (doc === undefined) {
@@ -1105,13 +1105,13 @@ export function appReducer(state: AppState, action: Action): AppState {
         run.sizePt = action.sizePt;
       });
 
-    // MarkdownTable has no mergeCells at all -- GFM tables have no cell-merge concept -- so a merge requested against a freshly-created markdown table still creates the (unmerged) table and reports why the merge itself didn't happen, rather than either silently dropping the merge or refusing to create the table at all.
+    // MarkdownTable has no mergeCells at all — GFM tables have no cell-merge concept — so a merge requested against a freshly-created markdown table still creates the (unmerged) table and reports why the merge itself didn't happen, rather than either silently dropping the merge or refusing to create the table at all.
     case "APPEND_TABLE": {
       const doc = wordprocessingDocument(state);
       if (doc === undefined) {
         return wrongDocument(state, "a docx, odt or markdown document");
       }
-      // A property on a const holder, not a bare `let`: the only write is inside the mutateGuarded callback below, and TypeScript ignores assignments made in a nested function when narrowing the enclosing scope -- so a `let` would read as `false` at the check and the warning branch would look statically dead while genuinely firing.
+      // A property on a const holder, not a bare `let`: the only write is inside the mutateGuarded callback below, and TypeScript ignores assignments made in a nested function when narrowing the enclosing scope — so a `let` would read as `false` at the check and the warning branch would look statically dead while genuinely firing.
       const merge = { unsupported: false };
       const nextState = mutateGuarded(state, doc, () => {
         const table = doc.editor.body.appendTable({
@@ -1136,12 +1136,12 @@ export function appReducer(state: AppState, action: Action): AppState {
         ? withStatus(
             nextState,
             "warning",
-            "Markdown tables do not support merged cells -- the table was created without merging",
+            "Markdown tables do not support merged cells — the table was created without merging",
           )
         : nextState;
     }
 
-    // MarkdownTable has no mergeCells at all (see APPEND_TABLE above) -- resolved through the wide wordprocessingDocument union so the table lookup itself stays generic, with the same in-narrowing decline for a markdown table specifically.
+    // MarkdownTable has no mergeCells at all (see APPEND_TABLE above) — resolved through the wide wordprocessingDocument union so the table lookup itself stays generic, with the same in-narrowing decline for a markdown table specifically.
     case "MERGE_TABLE_CELLS": {
       const doc = wordprocessingDocument(state);
       if (doc === undefined) {
@@ -1198,7 +1198,7 @@ export function appReducer(state: AppState, action: Action): AppState {
       });
     }
 
-    // ODF models a list as a real `text:list`/`text:list-item` tree, OOXML and markdown both as a flat per-paragraph numId/level membership -- so odt's own write path genuinely differs from docx/markdown's shared one. For odt the anchor block index selects which `text:list` to extend; for docx/markdown it selects the paragraph whose list membership a newly appended paragraph should copy.
+    // ODF models a list as a real `text:list`/`text:list-item` tree, OOXML and markdown both as a flat per-paragraph numId/level membership — so odt's own write path genuinely differs from docx/markdown's shared one. For odt the anchor block index selects which `text:list` to extend; for docx/markdown it selects the paragraph whose list membership a newly appended paragraph should copy.
     case "ADD_LIST_ITEM": {
       const doc = wordprocessingDocument(state);
       if (doc === undefined) {
@@ -1239,7 +1239,7 @@ export function appReducer(state: AppState, action: Action): AppState {
       });
     }
 
-    // odt-only, unlike ADD_LIST_ITEM: a list is a genuinely separate ODF concept (text:list/text:list-item) with no docx analogue -- OOXML's own list membership is flat paragraph metadata with no equivalent "list item" object to address by (blockIndex, itemIndex) at all.
+    // odt-only, unlike ADD_LIST_ITEM: a list is a genuinely separate ODF concept (text:list/text:list-item) with no docx analogue — OOXML's own list membership is flat paragraph metadata with no equivalent "list item" object to address by (blockIndex, itemIndex) at all.
     case "SET_LIST_ITEM_TEXT": {
       const doc = wordprocessingDocument(state);
       if (doc === undefined) {
@@ -1272,7 +1272,7 @@ export function appReducer(state: AppState, action: Action): AppState {
       });
     }
 
-    // odt-only, matching SET_LIST_ITEM_TEXT's own narrowing: nests the item one level deeper via OdtList.indentItem, which throws for the first item (no preceding sibling to nest under) -- reported through the status line via mutateGuarded, the same way mergeCells' own out-of-range throw already is, rather than an unhandled exception reaching the UI.
+    // odt-only, matching SET_LIST_ITEM_TEXT's own narrowing: nests the item one level deeper via OdtList.indentItem, which throws for the first item (no preceding sibling to nest under) — reported through the status line via mutateGuarded, the same way mergeCells' own out-of-range throw already is, rather than an unhandled exception reaching the UI.
     case "INDENT_LIST_ITEM": {
       const doc = wordprocessingDocument(state);
       if (doc === undefined) {
@@ -1297,7 +1297,7 @@ export function appReducer(state: AppState, action: Action): AppState {
       });
     }
 
-    // odt-only, matching SET_LIST_ITEM_TEXT's own narrowing: creates a real, brand-new, empty text:list via OdtBody.appendList() -- docx has no ADD_LIST_ITEM-shaped anchor to create a fresh list against (a docx paragraph gains list membership by copying an EXISTING paragraph's own numId/level, see ADD_LIST_ITEM above), so there is no equivalent "create a list from nothing" action to share.
+    // odt-only, matching SET_LIST_ITEM_TEXT's own narrowing: creates a real, brand-new, empty text:list via OdtBody.appendList() — docx has no ADD_LIST_ITEM-shaped anchor to create a fresh list against (a docx paragraph gains list membership by copying an EXISTING paragraph's own numId/level, see ADD_LIST_ITEM above), so there is no equivalent "create a list from nothing" action to share.
     case "ADD_LIST": {
       const doc = wordprocessingDocument(state);
       if (doc === undefined) {
@@ -1314,7 +1314,7 @@ export function appReducer(state: AppState, action: Action): AppState {
       });
     }
 
-    // Both DocxParagraph.insertImageAfter and OdtParagraph.insertImageAfter accept the identical ImageInit shape (documents.js's own edit/{docx,odt}/image.ts), so this resolves through a docx/odt-only narrowing -- deliberately excluding markdown (MarkdownParagraph has no insertImageAfter at all) and doc (a ContentDocument paragraph has no image insertion point; doc-codec's writer reads images from the block flow itself, not a paragraph-level insert).
+    // Both DocxParagraph.insertImageAfter and OdtParagraph.insertImageAfter accept the identical ImageInit shape (documents.js's own edit/{docx,odt}/image.ts), so this resolves through a docx/odt-only narrowing — deliberately excluding markdown (MarkdownParagraph has no insertImageAfter at all) and doc (a ContentDocument paragraph has no image insertion point; doc-codec's writer reads images from the block flow itself, not a paragraph-level insert).
     case "INSERT_PARAGRAPH_IMAGE": {
       const doc = docxOdtDocument(state);
       if (doc === undefined) {
@@ -1353,7 +1353,7 @@ export function appReducer(state: AppState, action: Action): AppState {
           `There is no paragraph at index ${action.blockIndex}`,
         );
       }
-      // Unlike `merge` above, this assignment is unconditional -- mutate()'s own `apply` always runs synchronously before it returns, so `written` is always set by the time it is read below. A definite-assignment declaration (no initial value at all) says so directly, rather than giving it a placeholder literal that can never actually be observed.
+      // Unlike `merge` above, this assignment is unconditional — mutate()'s own `apply` always runs synchronously before it returns, so `written` is always set by the time it is read below. A definite-assignment declaration (no initial value at all) says so directly, rather than giving it a placeholder literal that can never actually be observed.
       let written!: boolean;
       const nextState = mutate(state, doc, () => {
         written = paragraph.appendOfficeMath(action.mathml).written;
@@ -1367,7 +1367,7 @@ export function appReducer(state: AppState, action: Action): AppState {
           );
     }
 
-    // odt's OdtBody.appendFormula has no docx counterpart at all (see the action's own doc comment) -- narrowed to odt specifically rather than through wordprocessingDocument.
+    // odt's OdtBody.appendFormula has no docx counterpart at all (see the action's own doc comment) — narrowed to odt specifically rather than through wordprocessingDocument.
     case "INSERT_ODT_FORMULA": {
       const doc = state.openDocument;
       if (doc?.format !== "odt") {
@@ -1459,7 +1459,7 @@ export function appReducer(state: AppState, action: Action): AppState {
     }
 
     case "ADD_TEXTBOX": {
-      // odg branches first through the drawing narrowing, then every presentation format takes the identical addTextBox({frame, text}) shape -- pptx/odp through their rich slides, ppt through PptSlide's own same-shaped text-box API.
+      // odg branches first through the drawing narrowing, then every presentation format takes the identical addTextBox({frame, text}) shape — pptx/odp through their rich slides, ppt through PptSlide's own same-shaped text-box API.
       const drawing = drawingDocument(state);
       if (drawing !== undefined) {
         const page = drawing.editor.pages()[action.containerIndex];
@@ -1548,7 +1548,7 @@ export function appReducer(state: AppState, action: Action): AppState {
         },
       );
 
-    // PptxShape gained a real `rotationDeg` getter/setter alongside OdpShape's -- SET_SHAPE_ROTATION resolves through the same withShape helper SET_SHAPE_TEXT/SET_SHAPE_FRAME already use rather than a pptx-specific rejection.
+    // PptxShape gained a real `rotationDeg` getter/setter alongside OdpShape's — SET_SHAPE_ROTATION resolves through the same withShape helper SET_SHAPE_TEXT/SET_SHAPE_FRAME already use rather than a pptx-specific rejection.
     case "SET_SHAPE_ROTATION":
       return withShape(
         state,
@@ -1592,7 +1592,7 @@ export function appReducer(state: AppState, action: Action): AppState {
         sheet.cell(action.row, action.column).value = action.value;
       });
 
-    // A separate action/edit mode from SET_CELL_VALUE, not a variant of it -- see actions.ts's own doc comment: OdsCell.formula and .value are two independent attributes of the same real cell, both settable at once.
+    // A separate action/edit mode from SET_CELL_VALUE, not a variant of it — see actions.ts's own doc comment: OdsCell.formula and .value are two independent attributes of the same real cell, both settable at once.
     case "SET_CELL_FORMULA": {
       // ods-only: XlsCell.formula is getter-only (xls-codec's writer has no formula write path), so a formula edit against an xls sheet is refused by name rather than silently dropped at save time.
       const doc = odsDocument(state);
@@ -1612,7 +1612,7 @@ export function appReducer(state: AppState, action: Action): AppState {
       });
     }
 
-    // OdsSheet.addImage takes a real ContentSheetImage, which -- unlike ADD_IMAGE/INSERT_PARAGRAPH_IMAGE's own SlideImageInit/ImageInit -- carries its bytes as `base64: string`, not a raw Uint8Array (document-schema.js's ContentImageBlockSchema, shared with every other embedded-image/object shape); the conversion happens here, once, rather than pushing bytesToBase64 out to every dispatch site.
+    // OdsSheet.addImage takes a real ContentSheetImage, which — unlike ADD_IMAGE/INSERT_PARAGRAPH_IMAGE's own SlideImageInit/ImageInit — carries its bytes as `base64: string`, not a raw Uint8Array (document-schema.js's ContentImageBlockSchema, shared with every other embedded-image/object shape); the conversion happens here, once, rather than pushing bytesToBase64 out to every dispatch site.
     case "ADD_SHEET_IMAGE": {
       // ods-only: XlsSheet has no addImage (xls-codec's writer writes no floating images).
       const ods = odsDocument(state);
@@ -1708,7 +1708,7 @@ export function appReducer(state: AppState, action: Action): AppState {
           }
         });
       }
-      // odp has no per-kind convenience methods the way odg does -- OdpSlide.addVector is the ONE generic method every kind goes through, so the ContentVector literal is built here from the same OdgBoxVectorInit/OdgLineVectorInit/OdgPathVectorInit shape the odg branch above already consumes, rather than a second, odp-specific init type.
+      // odp has no per-kind convenience methods the way odg does — OdpSlide.addVector is the ONE generic method every kind goes through, so the ContentVector literal is built here from the same OdgBoxVectorInit/OdgLineVectorInit/OdgPathVectorInit shape the odg branch above already consumes, rather than a second, odp-specific init type.
       const slide = doc.editor.slides()[action.containerIndex];
       if (slide === undefined) {
         return withStatus(
@@ -2183,7 +2183,7 @@ export function appReducer(state: AppState, action: Action): AppState {
         },
       );
 
-    // Every EditableOpenDocument's own `editor.metadata` setter (docx/pptx/odt/odp/ods/odg/pdf) takes the identical MetadataOverrides shape and patches the live package in place -- one action covers all seven, matching how mutate/mutateGuarded already take the format-agnostic WritableOpenDocument. Markdown is excluded: MarkdownEditor has no metadata setter (ExaDev/documents.js#933's own resolution never added one, since markdown carries no docProps/core.xml or meta.xml to patch), so it is not part of EditableOpenDocument's own metadata surface.
+    // Every EditableOpenDocument's own `editor.metadata` setter (docx/pptx/odt/odp/ods/odg/pdf) takes the identical MetadataOverrides shape and patches the live package in place — one action covers all seven, matching how mutate/mutateGuarded already take the format-agnostic WritableOpenDocument. Markdown is excluded: MarkdownEditor has no metadata setter (ExaDev/documents.js#933's own resolution never added one, since markdown carries no docProps/core.xml or meta.xml to patch), so it is not part of EditableOpenDocument's own metadata surface.
     case "SET_METADATA": {
       const doc = state.openDocument;
       if (doc === undefined || !isEditableDocument(doc)) {
@@ -2228,7 +2228,7 @@ export function appReducer(state: AppState, action: Action): AppState {
       if (doc === undefined) {
         return withStatus(state, "info", "There is nothing to undo");
       }
-      // doc/xls/ppt are deliberately absent from this list: they gained real live-view editors (DocEditor/XlsEditor/PptEditor) and a reopenEditable case of their own in the same change that widened EditableOpenDocument to include them, so -- like every other EditableOpenDocument format -- they push real undo snapshots via mutate() and must be able to pop them back off here too. Only the genuinely read-only, no-live-editor formats belong in this list.
+      // doc/xls/ppt are deliberately absent from this list: they gained real live-view editors (DocEditor/XlsEditor/PptEditor) and a reopenEditable case of their own in the same change that widened EditableOpenDocument to include them, so — like every other EditableOpenDocument format — they push real undo snapshots via mutate() and must be able to pop them back off here too. Only the genuinely read-only, no-live-editor formats belong in this list.
       if (
         doc.format === "odb" ||
         doc.format === "xlsx" ||

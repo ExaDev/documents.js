@@ -1,7 +1,7 @@
 import { encodePng } from "byte-codec";
 import { zipPackage } from "ooxml.js";
 
-// Never imported by src/index.ts and never reaches dist/ (see docx.ts's top-of-file comment for the reasoning). Host fixtures carrying a real OLE-embedded object -- the markup shape ooxml.js's OLE readers recover a ContentEmbeddedObjectBlock from (pptx: a p:graphicFrame whose p:oleObj names an embeddings relationship; docx: a w:object whose o:OLEObject does the same, with the classic VML preview spelling alongside). Each host's embeddings relationship targets a part whose bytes are a genuine minimal xlsx package, so a reader under test recovers a real nested spreadsheet document (a named sheet and a distinctive cell a test can assert on), never an empty envelope. Shared by the bijection corpus (src/convert/bijection.test.ts), which is why the builders return bytes: every corpus entry goes through the same real decode the conversions themselves use.
+// Never imported by src/index.ts and never reaches dist/ (see docx.ts's top-of-file comment for the reasoning). Host fixtures carrying a real OLE-embedded object — the markup shape ooxml.js's OLE readers recover a ContentEmbeddedObjectBlock from (pptx: a p:graphicFrame whose p:oleObj names an embeddings relationship; docx: a w:object whose o:OLEObject does the same, with the classic VML preview spelling alongside). Each host's embeddings relationship targets a part whose bytes are a genuine minimal xlsx package, so a reader under test recovers a real nested spreadsheet document (a named sheet and a distinctive cell a test can assert on), never an empty envelope. Shared by the bijection corpus (src/convert/bijection.test.ts), which is why the builders return bytes: every corpus entry goes through the same real decode the conversions themselves use.
 
 function enc(s: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(s);
@@ -64,7 +64,7 @@ export function oleEmbeddedPptxBytes(): Uint8Array<ArrayBuffer> {
   });
 }
 
-// A one-paragraph host docx whose single run carries a w:object in the real-world inline spelling: w:dxaOrig/w:dyaOrig size it, the VML v:shape > v:imagedata names the preview picture rendered in its place (a spelling the docx reader has no path for, so the preview contributes no image block), and o:OLEObject names the payload relationship, whose target part really exists and is a genuine xlsx -- so the read recovers the embedded spreadsheet as a sibling block beside the paragraph's own.
+// A one-paragraph host docx whose single run carries a w:object in the real-world inline spelling: w:dxaOrig/w:dyaOrig size it, the VML v:shape > v:imagedata names the preview picture rendered in its place (a spelling the docx reader has no path for, so the preview contributes no image block), and o:OLEObject names the payload relationship, whose target part really exists and is a genuine xlsx — so the read recovers the embedded spreadsheet as a sibling block beside the paragraph's own.
 export function oleEmbeddedDocxBytes(): Uint8Array<ArrayBuffer> {
   return zipPackage({
     "[Content_Types].xml": enc(

@@ -8,7 +8,7 @@ export const RECORD_BOF = 0x0809;
 export const RECORD_EOF = 0x000a;
 /** Carries the overflow of a preceding record whose data exceeds what one record can hold ([MS-XLS] 2.4.58). */
 export const RECORD_CONTINUE = 0x003c;
-/** Carries the overflow of a preceding "future record type" (FRT) record -- CondFmt12/CF12 among them -- whose data exceeds what one record can hold, restating a 12-byte FrtRefHeader of its own before the actual continuation bytes ([MS-XLS] 2.4.62). Plain Continue never follows an FRT record; this is its own record type precisely so a reader can tell the two apart. */
+/** Carries the overflow of a preceding "future record type" (FRT) record — CondFmt12/CF12 among them — whose data exceeds what one record can hold, restating a 12-byte FrtRefHeader of its own before the actual continuation bytes ([MS-XLS] 2.4.62). Plain Continue never follows an FRT record; this is its own record type precisely so a reader can tell the two apart. */
 export const RECORD_CONTINUEFRT12 = 0x087f;
 
 // --- Workbook globals substream ---
@@ -30,7 +30,7 @@ export const RECORD_STYLE = 0x0293;
 /** Present only in an encrypted workbook, where every record after it is ciphertext ([MS-XLS] 2.4.117). */
 export const RECORD_FILEPASS = 0x002f;
 
-// --- Records [MS-XLS] 2.2.10 (Encryption (Password to Open)) names as MUST NOT be obfuscated or encrypted, even though every one of them can occur after FilePass -- see workbook/encryption.ts, the only reader of these four. None of the four is otherwise read: they belong to the shared-workbook revision-tracking feature this package has no other reason to model. RECORD_INTERFACEHDR's own 0x00e1 is confirmed directly against Apache POI's InterfaceHdrRecord.sid; the other three are corroborated by the (pre-MS-XLS) "Microsoft Office Excel 97-2007 Binary File Format Specification" and independent secondary citations of the current [MS-XLS] page for each record, since neither the current [MS-XLS] per-record page nor Apache POI's Biff8DecryptingStream states them directly (POI does not implement these four at all).
+// --- Records [MS-XLS] 2.2.10 (Encryption (Password to Open)) names as MUST NOT be obfuscated or encrypted, even though every one of them can occur after FilePass — see workbook/encryption.ts, the only reader of these four. None of the four is otherwise read: they belong to the shared-workbook revision-tracking feature this package has no other reason to model. RECORD_INTERFACEHDR's own 0x00e1 is confirmed directly against Apache POI's InterfaceHdrRecord.sid; the other three are corroborated by the (pre-MS-XLS) "Microsoft Office Excel 97-2007 Binary File Format Specification" and independent secondary citations of the current [MS-XLS] page for each record, since neither the current [MS-XLS] per-record page nor Apache POI's Biff8DecryptingStream states them directly (POI does not implement these four at all).
 
 /** Specifies whether a user holds an exclusive lock on a shared workbook ([MS-XLS] 2.4.339). */
 export const RECORD_USREXCL = 0x0194;
@@ -44,11 +44,11 @@ export const RECORD_RRDINFO = 0x0196;
 export const RECORD_RRDHEAD = 0x0138;
 /** A collection of XTI structures resolving a formula's ixti to a sheet range, for a 3D reference ([MS-XLS] 2.4.106). */
 export const RECORD_EXTERNSHEET = 0x0017;
-/** The beginning of a supporting-link's own record collection: another workbook, a DDE/OLE data source, an add-in, or -- the one case this reader resolves -- this same workbook, self-referencing ([MS-XLS] 2.4.271). */
+/** The beginning of a supporting-link's own record collection: another workbook, a DDE/OLE data source, an add-in, or — the one case this reader resolves — this same workbook, self-referencing ([MS-XLS] 2.4.271). */
 export const RECORD_SUPBOOK = 0x01ae;
 /** The workbook's custom colour table ([MS-XLS] 2.4.188): a fixed 56-entry override of the default palette every icv 8-63 an XF's fill/border colour fields name resolves through when this record is absent. */
 export const RECORD_PALETTE = 0x0092;
-/** A defined name ([MS-XLS] 2.4.150). Read and written only for the two BUILT-IN names a sheet's print settings live in -- Print_Area and Print_Titles; see workbook/print-names.ts. */
+/** A defined name ([MS-XLS] 2.4.150). Read and written only for the two BUILT-IN names a sheet's print settings live in — Print_Area and Print_Titles; see workbook/print-names.ts. */
 export const RECORD_LBL = 0x0018;
 
 // --- Worksheet substream ---
@@ -65,51 +65,51 @@ export const RECORD_DEFCOLWIDTH = 0x0055;
 export const RECORD_DEFAULTROWHEIGHT = 0x0225;
 /** Merged cell ranges ([MS-XLS] 2.4.168). */
 export const RECORD_MERGECELLS = 0x00e5;
-/** Marks the start of a collection of Dv records and carries only input-window UI state (position, drop-down Obj reference) this reader does not model ([MS-XLS] 2.4.96). Not read for its own fields -- the Dv records that follow it are found by type, not counted against DVal's own idvMac. */
+/** Marks the start of a collection of Dv records and carries only input-window UI state (position, drop-down Obj reference) this reader does not model ([MS-XLS] 2.4.96). Not read for its own fields — the Dv records that follow it are found by type, not counted against DVal's own idvMac. */
 export const RECORD_DVAL = 0x01b2;
 /** One data-validation rule: its type/operator/error-style/flags, prompt and error text, one or two formulas, and the cell ranges it applies to ([MS-XLS] 2.4.95). */
 export const RECORD_DV = 0x01be;
 /** Marks the start of a collection of 1-3 CF records and carries their own shared cell-range list (a bounding Ref8U plus a SqRefU) and a rule-set id CFEx can later extend ([MS-XLS] 2.4.56). */
 export const RECORD_CONDFMT = 0x01b0;
-/** One conditional-formatting rule: a comparison ("Cell Value Is") or formula condition, one or two Ptg-encoded formulas, and a DXFN structure naming the resulting cell's own font/fill override ([MS-XLS] 2.4.42). Every richer rule type (top10, aboveAverage, colour scale, data bar, icon set, …) is a CF12/CFEx extension instead -- not this record. */
+/** One conditional-formatting rule: a comparison ("Cell Value Is") or formula condition, one or two Ptg-encoded formulas, and a DXFN structure naming the resulting cell's own font/fill override ([MS-XLS] 2.4.42). Every richer rule type (top10, aboveAverage, colour scale, data bar, icon set, …) is a CF12/CFEx extension instead — not this record. */
 export const RECORD_CF = 0x01b1;
-/** Marks the start of a collection of CF12 records, the "future record" (FRT) equivalent of CondFmt for the rule types Excel 97's own CF record cannot express ([MS-XLS] 2.4.57). Wraps a CondFmtStructure -- the same ccf/flags/refBound/sqref shape CondFmt's own body carries, just prefixed by a 12-byte FrtRefHeaderU this reader never needs to read. */
+/** Marks the start of a collection of CF12 records, the "future record" (FRT) equivalent of CondFmt for the rule types Excel 97's own CF record cannot express ([MS-XLS] 2.4.57). Wraps a CondFmtStructure — the same ccf/flags/refBound/sqref shape CondFmt's own body carries, just prefixed by a 12-byte FrtRefHeaderU this reader never needs to read. */
 export const RECORD_CONDFMT12 = 0x0879;
 /** One extended conditional-formatting rule: colour scale, data bar, icon set, a filter-dispatched template (top10, aboveAverage, contains-text, a date/time period, …), or a plain comparison/formula rule re-expressed in the newer record shape ([MS-XLS] 2.4.43). */
 export const RECORD_CF12 = 0x087a;
-/** Extends an existing CondFmt-owned rule with icfTemplate/priority metadata a legacy (Excel 97) CF record has no field for -- CF12's counterpart for a rule Excel keeps expressible as a plain formula condition for pre-2007 readers, most notably the containsText family ([MS-XLS] 2.4.63). Read by workbook/conditional-format-ex.ts. */
+/** Extends an existing CondFmt-owned rule with icfTemplate/priority metadata a legacy (Excel 97) CF record has no field for — CF12's counterpart for a rule Excel keeps expressible as a plain formula condition for pre-2007 readers, most notably the containsText family ([MS-XLS] 2.4.63). Read by workbook/conditional-format-ex.ts. */
 export const RECORD_CFEX = 0x087b;
-/** A cell comment's anchor -- row, column, and its own author, linking to the Obj record that names its text ([MS-XLS] 2.4.179). */
+/** A cell comment's anchor — row, column, and its own author, linking to the Obj record that names its text ([MS-XLS] 2.4.179). */
 export const RECORD_NOTE = 0x001c;
 /** A drawing object's common properties (id, type) and, for a comment, its FtNts sub-structure ([MS-XLS] 2.4.181). */
 export const RECORD_OBJ = 0x005d;
 /** The rich text of a text box or comment, its characters and formatting runs carried in trailing Continue records ([MS-XLS] 2.4.329). */
 export const RECORD_TXO = 0x01b6;
-/** One worksheet's own MS-ODRAW (Escher) drawing bytes, chunked across as many of these records as the drawing needs ([MS-XLS] 2.4.180's sibling "MsoDrawing", https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/1b0b0ea3-5e1d-41ce-8e79-e27f1041331e) -- every MsoDrawing record's own data in one worksheet substream concatenates, in stream order, into one continuous Escher byte stream (src/drawing/escher.ts reads it). */
+/** One worksheet's own MS-ODRAW (Escher) drawing bytes, chunked across as many of these records as the drawing needs ([MS-XLS] 2.4.180's sibling "MsoDrawing", https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/1b0b0ea3-5e1d-41ce-8e79-e27f1041331e) — every MsoDrawing record's own data in one worksheet substream concatenates, in stream order, into one continuous Escher byte stream (src/drawing/escher.ts reads it). */
 export const RECORD_MSODRAWING = 0x00ec;
-/** The workbook-wide counterpart of MsoDrawing, carrying the drawing group's own shared state -- most importantly the Blip Store (`OfficeArtBStoreContainer`) every worksheet's picture/chart shapes reference by index -- concatenated the same way, but read from the WORKBOOK GLOBALS substream rather than a worksheet's. */
+/** The workbook-wide counterpart of MsoDrawing, carrying the drawing group's own shared state — most importantly the Blip Store (`OfficeArtBStoreContainer`) every worksheet's picture/chart shapes reference by index — concatenated the same way, but read from the WORKBOOK GLOBALS substream rather than a worksheet's. */
 export const RECORD_MSODRAWINGGROUP = 0x00eb;
-/** Which Escher shapes a worksheet had selected when it was last saved -- UI state this package has no use for, named here only so a reader that walks every record type in a worksheet substream can recognise and skip it rather than mistake it for drawing bytes. */
+/** Which Escher shapes a worksheet had selected when it was last saved — UI state this package has no use for, named here only so a reader that walks every record type in a worksheet substream can recognise and skip it rather than mistake it for drawing bytes. */
 export const RECORD_MSODRAWINGSELECTION = 0x00ed;
 
-// --- Chart records ([MS-OGRAPH]/[MS-XLS] Chart Sheet Substream, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/732ff614-d939-416b-b7c7-6d983471ff11) -- an embedded chart's own BOF(dt=BOF_TYPE_CHART)...EOF substream, reached from the worksheet substream that anchors it through the MsoDrawing+Obj pair immediately preceding it (src/workbook/drawing.ts). document-schema.js carries a chart as a flattened series/category table (ExaDev/documents.js#719, matching ooxml.js's own xlsx/pptx chart reading), not a typed chart object, so this package reads only the records that table actually needs -- a series' own name/category/value links and their cached or resolvable text -- and not the chart-group-type records (Bar/Line/Pie/...) a richer chart schema would need to tell a bar chart from a pie chart. Record ids confirmed against the primary [MS-XLS] page where fetchable (Series, SeriesText, AI/BRAI, SIIndex); the remainder cross-checked against xlwt's ExcelMagic.py (itself sourced from the OpenOffice.org binary-filter project) for internal consistency with the verified subset, since [MS-XLS] 2.3's own record-enumeration table renders client-side and is not fetchable as static text. ---
+// --- Chart records ([MS-OGRAPH]/[MS-XLS] Chart Sheet Substream, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/732ff614-d939-416b-b7c7-6d983471ff11) — an embedded chart's own BOF(dt=BOF_TYPE_CHART)...EOF substream, reached from the worksheet substream that anchors it through the MsoDrawing+Obj pair immediately preceding it (src/workbook/drawing.ts). document-schema.js carries a chart as a flattened series/category table (ExaDev/documents.js#719, matching ooxml.js's own xlsx/pptx chart reading), not a typed chart object, so this package reads only the records that table actually needs — a series' own name/category/value links and their cached or resolvable text — and not the chart-group-type records (Bar/Line/Pie/...) a richer chart schema would need to tell a bar chart from a pie chart. Record ids confirmed against the primary [MS-XLS] page where fetchable (Series, SeriesText, AI/BRAI, SIIndex); the remainder cross-checked against xlwt's ExcelMagic.py (itself sourced from the OpenOffice.org binary-filter project) for internal consistency with the verified subset, since [MS-XLS] 2.3's own record-enumeration table renders client-side and is not fetchable as static text. ---
 
-/** One data series' own type/count header and, following it, its four AI (BRAI) links -- categories, values, bubble sizes, name, each identified by the AI's own `id` field rather than by position ([MS-XLS] "Series"). */
+/** One data series' own type/count header and, following it, its four AI (BRAI) links — categories, values, bubble sizes, name, each identified by the AI's own `id` field rather than by position ([MS-XLS] "Series"). */
 export const RECORD_SERIES = 0x1003;
 /** A series' cached NAME text, when the file states one as a literal rather than through its own `AI id=0` formula reference ([MS-XLS] "SeriesText"): a ShortXLUnicodeString (one-byte length prefix), unlike the double-byte-length XLUnicodeString most other BIFF8 strings use. */
 export const RECORD_SERIESTEXT = 0x100d;
-/** A data-role link on a series -- name, categories, values, or bubble sizes, selected by the record's own `id` field -- carrying either a literal value/text or a `ChartParsedFormula` range reference this package's own Ptg reference tokens (PtgArea3d/PtgRef3d) can resolve ([MS-XLS] "AI"/BRAI, restricted to a narrower Ptg grammar than a worksheet cell's own Formula record). */
+/** A data-role link on a series — name, categories, values, or bubble sizes, selected by the record's own `id` field — carrying either a literal value/text or a `ChartParsedFormula` range reference this package's own Ptg reference tokens (PtgArea3d/PtgRef3d) can resolve ([MS-XLS] "AI"/BRAI, restricted to a narrower Ptg grammar than a worksheet cell's own Formula record). */
 export const RECORD_AI = 0x1051;
 /** Precedes each of the up-to-three chart-wide cached data blocks (values, categories, bubble sizes) a `SERIESDATA` production carries, its own `numIndex` field naming which of the three follows ([MS-XLS] "SIIndex"). Each cached `Number`/`BoolErr`/`Blank`/`Label` record that follows carries the same `col` field the worksheet cell-record family already does, here reused as the zero-based Series-record index the cached value belongs to. */
 export const RECORD_SIINDEX = 0x1065;
 
-// --- Print settings: the worksheet substream's own GLOBALS and PAGESETUP productions ([MS-XLS] 2.1.7.20.6's Common Productions), the records a sheet's page setup lives in. `GLOBALS = CalcMode CalcCount CalcRefMode CalcIter CalcDelta CalcSaveRecalc PrintRowCol PrintGrid GridSet Guts DefaultRowHeight WsBool [Sync] [LPr] [HorizontalPageBreaks] [VerticalPageBreaks]`, and `PAGESETUP = Header Footer HCenter VCenter [LeftMargin] [RightMargin] [TopMargin] [BottomMargin] [Pls *Continue] [Setup]`. The remaining half of a sheet's print settings -- its print range and its repeated header rows/columns -- is not in the worksheet substream at all: it lives in the globals substream, as the built-in defined names RECORD_LBL above carries.
+// --- Print settings: the worksheet substream's own GLOBALS and PAGESETUP productions ([MS-XLS] 2.1.7.20.6's Common Productions), the records a sheet's page setup lives in. `GLOBALS = CalcMode CalcCount CalcRefMode CalcIter CalcDelta CalcSaveRecalc PrintRowCol PrintGrid GridSet Guts DefaultRowHeight WsBool [Sync] [LPr] [HorizontalPageBreaks] [VerticalPageBreaks]`, and `PAGESETUP = Header Footer HCenter VCenter [LeftMargin] [RightMargin] [TopMargin] [BottomMargin] [Pls *Continue] [Setup]`. The remaining half of a sheet's print settings — its print range and its repeated header rows/columns — is not in the worksheet substream at all: it lives in the globals substream, as the built-in defined names RECORD_LBL above carries.
 
 /** Whether the row and column headers are printed ([MS-XLS] 2.4.203). */
 export const RECORD_PRINTROWCOL = 0x002a;
 /** Whether the gridlines are printed ([MS-XLS] 2.4.202). */
 export const RECORD_PRINTGRID = 0x002b;
-/** Sheet-level flags, of which only fFitToPage -- whether the sheet prints scaled to a page count rather than to a percentage -- is read or written ([MS-XLS] 2.4.351). */
+/** Sheet-level flags, of which only fFitToPage — whether the sheet prints scaled to a page count rather than to a percentage — is read or written ([MS-XLS] 2.4.351). */
 export const RECORD_WSBOOL = 0x0081;
 /** Explicit row page breaks ([MS-XLS] 2.4.142). */
 export const RECORD_HORIZONTALPAGEBREAKS = 0x001b;
@@ -126,7 +126,7 @@ export const RECORD_BOTTOMMARGIN = 0x0029;
 /** Paper size, print scale, fit-to-page counts, page order, and orientation ([MS-XLS] 2.4.257). */
 export const RECORD_SETUP = 0x00a1;
 
-// The calculation-state records the GLOBALS production requires ahead of PrintRowCol -- written, never read, and carrying nothing this schema models. They exist here because the production makes them mandatory and a real consumer notices when they are missing: see workbook/sheet-writer.ts's own writeCalculationStateRecords for what LibreOffice does to a worksheet substream whose first record is a print setting.
+// The calculation-state records the GLOBALS production requires ahead of PrintRowCol — written, never read, and carrying nothing this schema models. They exist here because the production makes them mandatory and a real consumer notices when they are missing: see workbook/sheet-writer.ts's own writeCalculationStateRecords for what LibreOffice does to a worksheet substream whose first record is a print setting.
 
 /** The iteration count for iterative calculation ([MS-XLS] 2.4.31). */
 export const RECORD_CALCCOUNT = 0x000c;

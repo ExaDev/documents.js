@@ -19,7 +19,7 @@ import {
   wordString,
 } from "./test-support/build-wpd";
 
-// -- The structure a WordPerfect document states about itself: its page, its tables, its styles, its outline numbering, and its own summary --
+// — The structure a WordPerfect document states about itself: its page, its tables, its styles, its outline numbering, and its own summary --
 //
 // Every byte sequence below is assembled from the specification's own field tables rather than captured from a file, which is what makes each expectation checkable against the SDK page it cites. See the README's "What is not yet proven" for exactly what that is and is not evidence of.
 
@@ -131,7 +131,7 @@ function tableColumn(widthWpu: number): number[] {
   });
 }
 
-// Table Definition (Table On), one Table Column per column, and Define Table End -- the grid's own shape, stated before any of its content.
+// Table Definition (Table On), one Table Column per column, and Define Table End — the grid's own shape, stated before any of its content.
 function tableDefinition(columnWidthsWpu: readonly number[]): number[] {
   return [
     ...variableFunction({ group: CHARACTER_GROUP, subgroup: 0x2a }),
@@ -180,7 +180,7 @@ describe("page geometry", () => {
     expect(section.pageSize.heightPt).toBeCloseTo(841.86, 2);
   });
 
-  // The vertical pair lives in the Page group and the horizontal pair in the Column group -- a left or right margin is a column-oriented fact in this format.
+  // The vertical pair lives in the Page group and the horizontal pair in the Column group — a left or right margin is a column-oriented fact in this format.
   it("reads all four margins from their own two groups", () => {
     const section = sectionOf(
       readDocumentArea([
@@ -391,7 +391,7 @@ describe("tables", () => {
     ]);
   });
 
-  // "<number of cells spanned horizontally> bit 7 is set if spanned from left" -- the spanning cell carries the count, and the position it covers carries the high bit; that position still holds its own grid entry in the shared schema, block-less and with no span of its own.
+  // "<number of cells spanned horizontally> bit 7 is set if spanned from left" — the spanning cell carries the count, and the position it covers carries the high bit; that position still holds its own grid entry in the shared schema, block-less and with no span of its own.
   it("reads a horizontal merge as one anchor with a colSpan followed by a block-less entry at the position it covers", () => {
     const document = readDocumentArea([
       ...tableDefinition([1200, 1200]),
@@ -675,7 +675,7 @@ describe("tables", () => {
     expect(row === undefined ? false : Object.hasOwn(row, "heightPt")).toBe(
       false,
     );
-    // closeCell's alignment walk must never run at all for a cell with no stated justification -- not run and assign `undefined`, which the shared schema's own optional field cannot tell apart from "never set".
+    // closeCell's alignment walk must never run at all for a cell with no stated justification — not run and assign `undefined`, which the shared schema's own optional field cannot tell apart from "never set".
     const paragraph = cell?.blocks[0];
     expect(
       paragraph === undefined ? false : Object.hasOwn(paragraph, "alignment"),
@@ -704,7 +704,7 @@ describe("tables", () => {
     ).toBe(false);
   });
 
-  // A table definition the document never fills with a single row is dropped entirely -- an empty grid the author never actually built is not real content.
+  // A table definition the document never fills with a single row is dropped entirely — an empty grid the author never actually built is not real content.
   it("drops a table definition that closes with no rows at all", () => {
     const document = readDocumentArea([
       ...tableDefinition([1200]),
@@ -713,7 +713,7 @@ describe("tables", () => {
     expect(tablesOf(document)).toHaveLength(0);
   });
 
-  // A fixed row height set on an earlier cell within the same row must survive to the row's own close even when a later cell in that row carries no row-information subfunction of its own -- the absence of a later statement is not itself a statement that clears the height.
+  // A fixed row height set on an earlier cell within the same row must survive to the row's own close even when a later cell in that row carries no row-information subfunction of its own — the absence of a later statement is not itself a statement that clears the height.
   it("keeps a fixed row height set by an earlier cell once a later cell in the same row states none", () => {
     const document = readDocumentArea([
       ...tableDefinition([1200, 1200]),
@@ -776,7 +776,7 @@ describe("tables", () => {
     expect(tablesOf(document)[0]?.rows[0]?.isHeader).toBeUndefined();
   });
 
-  // A cell boundary must still close a cell whose pending text is empty but whose runs are not (a run already split off by an attribute change) -- checking only pending text and accumulated cell blocks would wrongly drop it, even at Table Off, which otherwise skips closing an already-closed cell.
+  // A cell boundary must still close a cell whose pending text is empty but whose runs are not (a run already split off by an attribute change) — checking only pending text and accumulated cell blocks would wrongly drop it, even at Table Off, which otherwise skips closing an already-closed cell.
   it("closes a Table Off cell whose pending text is empty but whose runs are not", () => {
     const document = readDocumentArea([
       ...tableDefinition([1200]),
@@ -789,7 +789,7 @@ describe("tables", () => {
     expect(tablesOf(document)[0]?.rows[0]?.cells.map(cellText)).toEqual(["a"]);
   });
 
-  // A cell boundary must still close a cell whose pending text and runs are both empty but which already holds a flushed paragraph (a hard return inside the cell) -- Table Off otherwise skips closing an already-closed cell, and must not mistake "nothing pending" for "nothing to close".
+  // A cell boundary must still close a cell whose pending text and runs are both empty but which already holds a flushed paragraph (a hard return inside the cell) — Table Off otherwise skips closing an already-closed cell, and must not mistake "nothing pending" for "nothing to close".
   it("closes a Table Off cell holding only an already-flushed paragraph", () => {
     const document = readDocumentArea([
       ...tableDefinition([1200]),
@@ -877,7 +877,7 @@ describe("tables", () => {
     expect(tablesOf(document)[0]?.rows).toHaveLength(1);
   });
 
-  // A row still accumulating closed cells but never itself closed by any EOL boundary before the document area ends must still become a real row -- not vanish along with the whole table, which happens only when it holds zero rows.
+  // A row still accumulating closed cells but never itself closed by any EOL boundary before the document area ends must still become a real row — not vanish along with the whole table, which happens only when it holds zero rows.
   it("closes an unfinished row's own already-closed cells when the document area ends", () => {
     const document = readDocumentArea([
       ...tableDefinition([1200]),
@@ -905,7 +905,7 @@ describe("styles", () => {
     ]);
   });
 
-  // A style region ends at its own closing code, which in a real document sits BEFORE the hard return that ends the paragraph -- so the heading is captured when the paragraph's first character arrives rather than when it closes.
+  // A style region ends at its own closing code, which in a real document sits BEFORE the hard return that ends the paragraph — so the heading is captured when the paragraph's first character arrives rather than when it closes.
   it("keeps the heading level when the style closes before the hard return", () => {
     const document = readDocumentArea([
       ...styleScope(70, text("Third level")),
@@ -921,7 +921,7 @@ describe("styles", () => {
     expect(paragraphsOf(document)[0]?.headingLevel).toBe(2);
   });
 
-  // The heading level is captured once, at the paragraph's own first character, and never re-derived from whatever style happens to be active later in the same paragraph -- a second, different structural style opening later must not overwrite it.
+  // The heading level is captured once, at the paragraph's own first character, and never re-derived from whatever style happens to be active later in the same paragraph — a second, different structural style opening later must not overwrite it.
   it("keeps the first style's own heading level, not a second style's, within one paragraph", () => {
     const document = readDocumentArea([
       ...styleScope(70, text("a")),
@@ -931,7 +931,7 @@ describe("styles", () => {
     expect(paragraphsOf(document)[0]?.headingLevel).toBe(3);
   });
 
-  // "52 = level 1 style (indented)" -- an outline level, counted from zero by ContentListMembership.
+  // "52 = level 1 style (indented)" — an outline level, counted from zero by ContentListMembership.
   it("reads an outline level style as a list membership", () => {
     const document = readDocumentArea([
       ...styleScope(53, text("Nested item")),
@@ -940,7 +940,7 @@ describe("styles", () => {
     expect(paragraphsOf(document)[0]?.list).toEqual({ level: 1 });
   });
 
-  // Both structural facts (heading level and list membership) are captured together, at the paragraph's first character, from whichever single style is active then -- not independently, each from whatever style happens to be active when its own first non-undefined value shows up. A list style at the first character must keep the paragraph's own list membership even once a later, heading-only style becomes active in the same paragraph.
+  // Both structural facts (heading level and list membership) are captured together, at the paragraph's first character, from whichever single style is active then — not independently, each from whatever style happens to be active when its own first non-undefined value shows up. A list style at the first character must keep the paragraph's own list membership even once a later, heading-only style becomes active in the same paragraph.
   it("keeps the first style's own list membership once a later style sets a heading instead", () => {
     const document = readDocumentArea([
       ...styleScope(53, text("a")),
@@ -972,7 +972,7 @@ describe("styles", () => {
 });
 
 describe("outline numbering", () => {
-  // "<level number to display (0 - n)>" -- the rendered digits between the pair are generated content, replaced by the list membership that regenerates them.
+  // "<level number to display (0 - n)>" — the rendered digits between the pair are generated content, replaced by the list membership that regenerates them.
   it("reads a paragraph number display as a list membership and drops its digits", () => {
     const { document, diagnostics } = readWithDiagnostics([
       ...variableFunction({
@@ -998,7 +998,7 @@ describe("outline numbering", () => {
   });
 
   // Every other member of the group displays a counter inside running text and carries no structure, so its digits stay exactly where they are.
-  // applyDisplayNumberGroup's own Off dispatch must actually gate on the subfunction being an Off, not decrement the suppression depth for any subgroup it does not recognise as one -- a page-number-display On (0x04) sits in the very same function group but names none of the paragraph-number On/Off codes.
+  // applyDisplayNumberGroup's own Off dispatch must actually gate on the subfunction being an Off, not decrement the suppression depth for any subgroup it does not recognise as one — a page-number-display On (0x04) sits in the very same function group but names none of the paragraph-number On/Off codes.
   it("does not end paragraph-number suppression for an unrelated function in the same group", () => {
     const document = readDocumentArea([
       ...variableFunction({
@@ -1009,7 +1009,7 @@ describe("outline numbering", () => {
       ...text("hidden"),
       ...variableFunction({
         group: DISPLAY_NUMBER_GROUP,
-        subgroup: 0x04, // page number display On -- a real function, but not a paragraph-number Off
+        subgroup: 0x04, // page number display On — a real function, but not a paragraph-number Off
         nonDeletable: [0],
       }),
       ...text("stillHidden"),
@@ -1119,7 +1119,7 @@ describe("document metadata", () => {
     expect(readDocumentArea(text("body")).metadata).toEqual({});
   });
 
-  // readMetadata's own packet lookup must actually filter on packet type, not just take the first packet in the index -- a document whose summary is not the first packet must still find it.
+  // readMetadata's own packet lookup must actually filter on packet type, not just take the first packet in the index — a document whose summary is not the first packet must still find it.
   it("finds the summary packet even when it is not the first packet in the index", () => {
     const document = readDocumentArea(text("body"), [
       { packetType: 0x08, bytes: new Uint8Array(0) }, // General WP Text, not a summary
@@ -1130,13 +1130,13 @@ describe("document metadata", () => {
 });
 
 describe("constructs this reader does not lift", () => {
-  // Each of these is recognised by the tokeniser and skipped by the fold, so a document containing it still reads -- and says what it lost rather than passing over it in silence. Group 0xD6 no longer appears here: a header, footer, or watermark function is LIFTED into ContentSection.headers/footers/watermarks (see the page-furniture describe below), and a function whose occurrence bits claim neither parity is suppressed in its own file and lifts nothing with nothing to report.
+  // Each of these is recognised by the tokeniser and skipped by the fold, so a document containing it still reads — and says what it lost rather than passing over it in silence. Group 0xD6 no longer appears here: a header, footer, or watermark function is LIFTED into ContentSection.headers/footers/watermarks (see the page-furniture describe below), and a function whose occurrence bits claim neither parity is suppressed in its own file and lifts nothing with nothing to report.
   it.each([
     [
       0xdf,
       WpdDiagnosticCodes.BoxDropped,
       0x00,
-      "This document contains a box -- a figure, text box, equation, or graphic -- whose function-level override names no content this reader can resolve.",
+      "This document contains a box — a figure, text box, equation, or graphic — whose function-level override names no content this reader can resolve.",
     ],
     [
       0xd7,
@@ -1255,7 +1255,7 @@ describe("table cell attribute gaps", () => {
         ...variableFunction({
           group: 0xd0,
           subgroup: EOL_TABLE_ROW,
-          // deletableSize word claims 50 bytes of deletable data, but none follow -- overruns the function's own nonDeletable region.
+          // deletableSize word claims 50 bytes of deletable data, but none follow — overruns the function's own nonDeletable region.
           nonDeletable: [...word(50)],
         }),
         ...eolFunction({ subgroup: EOL_TABLE_OFF }),
@@ -1301,7 +1301,7 @@ describe("table cell attribute gaps", () => {
   });
 
   it("carries a resolved table formula onto the cell, reporting nothing", () => {
-    // A1+B1: a cell reference (code 64, absolute-flag word, row word, column word) for A1, the binary "+" token (1), then the same cell-reference shape for B1 -- the identical byte pattern stream/formula.test.ts proves readTableFormula resolves to "A1+B1" on its own, here wrapped in the embedded subfunction's own leading and trailing length-word framing.
+    // A1+B1: a cell reference (code 64, absolute-flag word, row word, column word) for A1, the binary "+" token (1), then the same cell-reference shape for B1 — the identical byte pattern stream/formula.test.ts proves readTableFormula resolves to "A1+B1" on its own, here wrapped in the embedded subfunction's own leading and trailing length-word framing.
     const cellA1 = [64, ...word(0), ...word(0)];
     const cellB1 = [64, ...word(0), ...word(1)];
     const formulaTokens = [...cellA1, 1, ...cellB1];
@@ -1324,7 +1324,7 @@ describe("table cell attribute gaps", () => {
     );
     const cell = tablesOf(document)[0]?.rows[0]?.cells[0];
     expect(cell?.formula).toBe("A1+B1");
-    // A formula that DID resolve must not also trigger the "could not decode with confidence" diagnostic -- the two are mutually exclusive outcomes of the same read.
+    // A formula that DID resolve must not also trigger the "could not decode with confidence" diagnostic — the two are mutually exclusive outcomes of the same read.
     expect(
       diagnostics.some(
         (d) => d.code === WpdDiagnosticCodes.TableFormulaUnresolved,
@@ -1340,7 +1340,7 @@ describe("table cell attribute gaps", () => {
         ...text("shaded"),
         ...eolFunction({
           subgroup: EOL_TABLE_ROW,
-          // foreground (10,20,30) shade 200 (unused), background (0,255,0), background shade 128 -- not FULL_SHADE (255), so the fill blends.
+          // foreground (10,20,30) shade 200 (unused), background (0,255,0), background shade 128 — not FULL_SHADE (255), so the fill blends.
           embedded: embeddedSubfunction(
             CELL_FILL_COLORS,
             [10, 20, 30, 200, 0, 255, 0, 128],
@@ -1386,7 +1386,7 @@ describe("table cell attribute gaps", () => {
         ...text("solid"),
         ...eolFunction({
           subgroup: EOL_TABLE_ROW,
-          // foreground unused (shade 0), background (0,0,255) at FULL_SHADE (255) -- a plain solid fill, not a blend.
+          // foreground unused (shade 0), background (0,0,255) at FULL_SHADE (255) — a plain solid fill, not a blend.
           embedded: embeddedSubfunction(
             CELL_FILL_COLORS,
             [0, 0, 0, 0, 0, 0, 255, 255],
@@ -1480,7 +1480,7 @@ describe("style resolution depth and scope handling", () => {
         id === depth
           ? variableFunction({
               group: CHARACTER_GROUP,
-              subgroup: 0x1b, // a font size change: a real, non-empty begin block that opens no further style -- nothing left to over-recurse into
+              subgroup: 0x1b, // a font size change: a real, non-empty begin block that opens no further style — nothing left to over-recurse into
               nonDeletable: [0x58, 0x02, 0, 0, 0, 0, 0, 0],
             })
           : variableFunction({
@@ -1514,7 +1514,7 @@ describe("style resolution depth and scope handling", () => {
     ).toHaveLength(1);
   });
 
-  // The resolution depth counter must return to its starting value once a style's own begin block finishes resolving, not keep climbing -- otherwise a long enough run of entirely separate, non-nested style scopes would eventually (and wrongly) trip the same depth guard a genuinely self-referential chain trips.
+  // The resolution depth counter must return to its starting value once a style's own begin block finishes resolving, not keep climbing — otherwise a long enough run of entirely separate, non-nested style scopes would eventually (and wrongly) trip the same depth guard a genuinely self-referential chain trips.
   it("never accumulates resolution depth across sibling, non-nested style scopes", () => {
     const siblingCount = 9; // enough that a counter incrementing instead of decrementing after each one would cross MAX_STYLE_RESOLUTION_DEPTH (16)
     const prefixIds = Array.from({ length: siblingCount }, (_, i) => i + 1);
@@ -1548,7 +1548,7 @@ describe("style resolution depth and scope handling", () => {
     ).toBe(false);
   });
 
-  // The four intermediate style subfunctions (per style.test.ts: 1, 2, 5, 6, 7, 8) delimit the style's own before/after codes but neither open nor close a scope -- one arriving mid-scope must not be mistaken for the scope's own closer.
+  // The four intermediate style subfunctions (per style.test.ts: 1, 2, 5, 6, 7, 8) delimit the style's own before/after codes but neither open nor close a scope — one arriving mid-scope must not be mistaken for the scope's own closer.
   it("does not close a style scope on an intermediate subfunction", () => {
     const document = readDocumentArea([
       ...variableFunction({
@@ -1608,7 +1608,7 @@ describe("outline numbering gaps", () => {
       ...variableFunction({
         group: DISPLAY_NUMBER_GROUP,
         subgroup: 0x0c,
-        nonDeletable: [5], // a second On, nested -- must not overwrite the first level
+        nonDeletable: [5], // a second On, nested — must not overwrite the first level
       }),
       ...text("Item"),
       HARD_EOL,

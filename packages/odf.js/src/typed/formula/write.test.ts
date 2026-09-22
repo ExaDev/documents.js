@@ -15,7 +15,7 @@ import {
   writeOdfFormulaMathMl,
 } from "./write";
 
-// The math root below is the same genuine-LibreOffice-26.2 content.xml root read.test.ts transcribes element-for-element from a real UNO-produced .odf (its own top-of-file note states the provenance) -- reused here rather than restated differently so the writer's round trip is proven against the real producer's own shape, not a hand-simplified stand-in.
+// The math root below is the same genuine-LibreOffice-26.2 content.xml root read.test.ts transcribes element-for-element from a real UNO-produced .odf (its own top-of-file note states the provenance) — reused here rather than restated differently so the writer's round trip is proven against the real producer's own shape, not a hand-simplified stand-in.
 function realFormulaMathRoot(): XmlElement {
   return el(
     "math",

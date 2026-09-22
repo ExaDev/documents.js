@@ -6,7 +6,7 @@ import {
   readUint32LE,
 } from "./zip";
 
-// Builds a single synthetic local file header (signature 0x04034b50) plus a body of `compressedSize` zero bytes, with an arbitrary filename and extra-field length, entirely by hand rather than through fflate -- fflate's own zipSync never emits a non-empty extra field, so exercising the `extraLength` term in localFileHeaderNames's offset arithmetic needs bytes built directly.
+// Builds a single synthetic local file header (signature 0x04034b50) plus a body of `compressedSize` zero bytes, with an arbitrary filename and extra-field length, entirely by hand rather than through fflate — fflate's own zipSync never emits a non-empty extra field, so exercising the `extraLength` term in localFileHeaderNames's offset arithmetic needs bytes built directly.
 function buildLocalFileHeader(options: {
   filename: string;
   extraLength: number;
@@ -39,7 +39,7 @@ function concatBytes(chunks: Uint8Array[]): Uint8Array {
 
 describe("readUint16LE", () => {
   it("combines two distinct bytes little-endian", () => {
-    // 0x02 | (0x01 << 8) = 0x0102 -- transposing the bytes or negating the shift would give a different value.
+    // 0x02 | (0x01 << 8) = 0x0102 — transposing the bytes or negating the shift would give a different value.
     expect(readUint16LE(new Uint8Array([0x02, 0x01]), 0)).toBe(0x0102);
   });
 

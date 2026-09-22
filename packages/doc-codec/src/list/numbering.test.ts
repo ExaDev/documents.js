@@ -3,7 +3,7 @@ import { buildFib } from "../test-support/fib";
 import { parseFib } from "../fib/fib";
 import { readNumberingDefinitions } from "./numbering";
 
-// Hand-built PlfLst/PlfLfo byte sequences, assembled directly from [MS-DOC] 2.9.201 (PlfLst)/2.9.147 (LSTF)/2.9.149 (LVL)/2.9.150 (LVLF)/2.9.353 (Xst)/2.9.200 (PlfLfo)/2.9.181 (LFO)'s own field tables, independently of numbering.ts's own reader -- so a test asserting against these bytes is checking the reader's understanding of the spec, not agreement with a second copy of the same layout (the identical convention table/decoration.test.ts states for its own hand-built Brc80/Shd80 fixtures).
+// Hand-built PlfLst/PlfLfo byte sequences, assembled directly from [MS-DOC] 2.9.201 (PlfLst)/2.9.147 (LSTF)/2.9.149 (LVL)/2.9.150 (LVLF)/2.9.353 (Xst)/2.9.200 (PlfLfo)/2.9.181 (LFO)'s own field tables, independently of numbering.ts's own reader — so a test asserting against these bytes is checking the reader's understanding of the spec, not agreement with a second copy of the same layout (the identical convention table/decoration.test.ts states for its own hand-built Brc80/Shd80 fixtures).
 
 function u16(value: number): number[] {
   return [value & 0xff, (value >>> 8) & 0xff];
@@ -20,7 +20,7 @@ function i32(value: number): number[] {
   return u32(value >>> 0);
 }
 
-/** One LSTF ([MS-DOC] 2.9.147): lsid(4) + tplc(4, zero -- UI-only) + rgistdPara(18, all 0x0FFF -- "no style linked") + a flags byte (only fSimpleList, bit 0) + grfhic(1, zero). */
+/** One LSTF ([MS-DOC] 2.9.147): lsid(4) + tplc(4, zero — UI-only) + rgistdPara(18, all 0x0FFF — "no style linked") + a flags byte (only fSimpleList, bit 0) + grfhic(1, zero). */
 function buildLstf(lsid: number, fSimpleList: boolean): number[] {
   const rgistdPara: number[] = [];
   for (let index = 0; index < 9; index += 1) {
@@ -40,7 +40,7 @@ interface XstPart {
   readonly placeholderLevel?: number;
 }
 
-/** An Xst ([MS-DOC] 2.9.353) plus the rgbxchNums positions a caller's own placeholder parts land at -- cch(2) then that many raw 16-bit code units, where a `{ placeholderLevel }` part writes the RAW zero-based level index as its own code unit rather than a literal character, exactly what [MS-DOC] 2.9.149's own LVL field text describes, not Xst's own (Xst is a generic length-prefixed string used all over the format for unrelated fields too): "Each placeholder is an unsigned 2-byte integer that specifies the zero-based level". */
+/** An Xst ([MS-DOC] 2.9.353) plus the rgbxchNums positions a caller's own placeholder parts land at — cch(2) then that many raw 16-bit code units, where a `{ placeholderLevel }` part writes the RAW zero-based level index as its own code unit rather than a literal character, exactly what [MS-DOC] 2.9.149's own LVL field text describes, not Xst's own (Xst is a generic length-prefixed string used all over the format for unrelated fields too): "Each placeholder is an unsigned 2-byte integer that specifies the zero-based level". */
 function buildXst(parts: readonly XstPart[]): {
   readonly bytes: number[];
   readonly rgbxchNums: number[];
@@ -95,7 +95,7 @@ interface LstfWithLevels {
   readonly levels: readonly LvlSpec[]; // 1 entry for a simple list, 9 for a multi-level one
 }
 
-/** PlfLst ([MS-DOC] 2.9.201): cLst(2, signed) then that many 28-byte LSTF entries, followed IMMEDIATELY (not accounted for by lcbPlfLst) by the appended LVL array in LSTF order -- exactly what FibRgFcLcb97's own fcPlfLst field text describes. Returns the two pieces separately since the caller has to place them at fc and fc+lcb respectively, with nothing in between. */
+/** PlfLst ([MS-DOC] 2.9.201): cLst(2, signed) then that many 28-byte LSTF entries, followed IMMEDIATELY (not accounted for by lcbPlfLst) by the appended LVL array in LSTF order — exactly what FibRgFcLcb97's own fcPlfLst field text describes. Returns the two pieces separately since the caller has to place them at fc and fc+lcb respectively, with nothing in between. */
 function buildPlfLst(entries: readonly LstfWithLevels[]): {
   readonly plfLst: number[];
   readonly appendedLvls: number[];
@@ -110,7 +110,7 @@ function buildPlfLst(entries: readonly LstfWithLevels[]): {
   return { plfLst: [...cLst, ...rgLstf], appendedLvls };
 }
 
-/** PlfLfo ([MS-DOC] 2.9.200), rgLfo only ([MS-DOC] 2.9.181's own LFO: lsid(4) + unused1(4) + unused2(4) + clfolvl(1)=0 + ibstFltAutoNum(1)=0 + grfhic(1)=0 + unused3(1)) -- this reader never reads rgLfoData (see numbering.ts's own top comment), so the fixture never builds one either; a real file's own lcbPlfLfo would cover rgLfoData too, but nothing in this reader's own contract depends on that extra length being present. */
+/** PlfLfo ([MS-DOC] 2.9.200), rgLfo only ([MS-DOC] 2.9.181's own LFO: lsid(4) + unused1(4) + unused2(4) + clfolvl(1)=0 + ibstFltAutoNum(1)=0 + grfhic(1)=0 + unused3(1)) — this reader never reads rgLfoData (see numbering.ts's own top comment), so the fixture never builds one either; a real file's own lcbPlfLfo would cover rgLfoData too, but nothing in this reader's own contract depends on that extra length being present. */
 function buildPlfLfo(lsids: readonly number[]): number[] {
   const rgLfo = lsids.flatMap((lsid) => [
     ...i32(lsid),
@@ -124,7 +124,7 @@ function buildPlfLfo(lsids: readonly number[]): number[] {
   return [...i32(lsids.length), ...rgLfo];
 }
 
-/** Assembles a Table stream carrying exactly one PlfLst and one PlfLfo, back to back at arbitrary (but real) offsets, and a Fib whose fcPlfLst/fcPlfLfo point at them -- the minimum a real document needs for readNumberingDefinitions to have anything to resolve. */
+/** Assembles a Table stream carrying exactly one PlfLst and one PlfLfo, back to back at arbitrary (but real) offsets, and a Fib whose fcPlfLst/fcPlfLfo point at them — the minimum a real document needs for readNumberingDefinitions to have anything to resolve. */
 function tableStreamWithNumbering(
   entries: readonly LstfWithLevels[],
   lsids: readonly number[],
@@ -179,7 +179,7 @@ describe("readNumberingDefinitions", () => {
   });
 
   it("reads an LVLF.nfc outside MSONFC's table as decimal rather than refusing the document", () => {
-    // The genuine in-the-wild shape: a real .doc readable end to end by LibreOffice carries nfc 0x92, far outside MSONFC's 0x00-0x3B and 0xFF range -- one byte of one level's number format, not structural corruption, so the whole document no longer refuses over it (see numberFormatFor's own note for the independent implementation's matching default).
+    // The genuine in-the-wild shape: a real .doc readable end to end by LibreOffice carries nfc 0x92, far outside MSONFC's 0x00-0x3B and 0xFF range — one byte of one level's number format, not structural corruption, so the whole document no longer refuses over it (see numberFormatFor's own note for the independent implementation's matching default).
     const { table, fib } = tableStreamWithNumbering(
       [
         {
@@ -263,7 +263,7 @@ describe("readNumberingDefinitions", () => {
   });
 
   it("resolves ilvlRestartLim only when fNoRestart is set, and leaves it absent otherwise", () => {
-    // A non-simple LSTF always carries exactly nine LVLs ([MS-DOC]'s own fSimpleList field text), even though only the first two are asserted on here -- levels 2-8 are trivial filler with no restart state of their own.
+    // A non-simple LSTF always carries exactly nine LVLs ([MS-DOC]'s own fSimpleList field text), even though only the first two are asserted on here — levels 2-8 are trivial filler with no restart state of their own.
     const levels: LvlSpec[] = [
       { nfc: 0x00, restart: 2, text: [{ placeholderLevel: 0 }] },
       { nfc: 0x00, text: [{ placeholderLevel: 1 }] }, // no restart field: fNoRestart clear
@@ -364,7 +364,7 @@ describe("readNumberingDefinitions", () => {
   });
 
   it("names the correct entry capacity for a PlfLfo buffer whose own length isn't a clean multiple of one LFO plus the header", () => {
-    // A physically real 2-entry PlfLfo (4 + 2*16 = 36 bytes), but declared as 35 bytes -- one byte short of two full entries, so only 1 fits; 35 is not of the form 16k + 4, the only shape floor((length-4)/16) and a length+4 mistake would ever agree on.
+    // A physically real 2-entry PlfLfo (4 + 2*16 = 36 bytes), but declared as 35 bytes — one byte short of two full entries, so only 1 fits; 35 is not of the form 16k + 4, the only shape floor((length-4)/16) and a length+4 mistake would ever agree on.
     const { table, fib } = tableStreamWithNumbering([], [1, 2]);
     const view = new DataView(table.buffer, table.byteOffset, table.byteLength);
     view.setInt32(fib.fcPlfLfo, 3, true); // lfoMac 3, declaring more than even the full 36 bytes hold.
@@ -399,7 +399,7 @@ describe("readNumberingDefinitions", () => {
   });
 
   it("reads rgbxchNums' own full nine-entry array when none of the nine is zero, without reading a tenth byte past it", () => {
-    // Nine placeholders at odd character positions (1,3,...,17), a literal "." at every even position in between -- if the reader ever read a tenth, out-of-range entry, it would land on ixchFollow (always 0x02 in this fixture builder) and wrongly turn position 2's literal "." into a placeholder too.
+    // Nine placeholders at odd character positions (1,3,...,17), a literal "." at every even position in between — if the reader ever read a tenth, out-of-range entry, it would land on ixchFollow (always 0x02 in this fixture builder) and wrongly turn position 2's literal "." into a placeholder too.
     const parts: XstPart[] = [];
     for (let level = 0; level < 9; level += 1) {
       parts.push({ placeholderLevel: level });
@@ -437,7 +437,7 @@ describe("readNumberingDefinitions", () => {
       ],
       [8000],
     );
-    // Every rgbxchNums entry is genuinely 0 in this fixture (no placeholders at all) -- corrupt the second entry to a nonzero value that must still be ignored, since the format's own zero-terminated rule means nothing after the first zero entry counts.
+    // Every rgbxchNums entry is genuinely 0 in this fixture (no placeholders at all) — corrupt the second entry to a nonzero value that must still be ignored, since the format's own zero-terminated rule means nothing after the first zero entry counts.
     const lvlOffset = fib.fcPlfLst + fib.lcbPlfLst;
     const rgbxchNumsSecondEntryOffset = lvlOffset + 6 + 1; // LVLF: iStartAt(4) + nfc(1) + flags(1), then rgbxchNums.
     table[rgbxchNumsSecondEntryOffset] = 5;
@@ -457,7 +457,7 @@ describe("readNumberingDefinitions", () => {
     );
     const lvlOffset = fib.fcPlfLst + fib.lcbPlfLst;
     const rgbxchNumsFirstEntryOffset = lvlOffset + 6; // LVLF: iStartAt(4) + nfc(1) + flags(1).
-    table[rgbxchNumsFirstEntryOffset] = 3; // position 3 -- one past this 2-character Xst.
+    table[rgbxchNumsFirstEntryOffset] = 3; // position 3 — one past this 2-character Xst.
     const definitions = readNumberingDefinitions(table, fib);
     expect(definitions["1"]?.levels["0"]?.text).toBe("AB");
   });
@@ -489,7 +489,7 @@ describe("readNumberingDefinitions", () => {
   });
 
   it("advances past a level's own grpprlPapx/grpprlChpx by their own combined byte length before reading the next level", () => {
-    // A hand-built LVL, bypassing buildLvl (which always writes both as 0-length), so cbGrpprlPapx (3) and cbGrpprlChpx (2) are genuinely distinct nonzero values -- any offset arithmetic that swapped a + for a - would land the Xst read, and the next level's own cursor, somewhere else entirely.
+    // A hand-built LVL, bypassing buildLvl (which always writes both as 0-length), so cbGrpprlPapx (3) and cbGrpprlChpx (2) are genuinely distinct nonzero values — any offset arithmetic that swapped a + for a - would land the Xst read, and the next level's own cursor, somewhere else entirely.
     const grpprlPapxBytes = [0xbb, 0xbb, 0xbb];
     const grpprlChpxBytes = [0xaa, 0xaa];
     const { bytes: xstBytes0 } = buildXst([{ char: "Z" }]);

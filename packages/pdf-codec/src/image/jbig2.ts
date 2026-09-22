@@ -59,7 +59,7 @@ const SEGMENT_EXTENSION = 62;
 // T.88 7.2.7: a data length of 0xFFFFFFFF means the segment's own length is not transmitted, and the decoder must find the end by searching for a terminating row count. Only ever legal for an immediate generic region, and not something any mainstream encoder emits.
 const UNKNOWN_DATA_LENGTH = 0xffffffff;
 
-// T.88 7.4.8.5: a page whose height is not known when its page information segment is written, resolved either by end-of-stripe segments or -- in a PDF, where the image dictionary already declares it -- by the caller's own height.
+// T.88 7.4.8.5: a page whose height is not known when its page information segment is written, resolved either by end-of-stripe segments or — in a PDF, where the image dictionary already declares it — by the caller's own height.
 const UNKNOWN_PAGE_HEIGHT = 0xffffffff;
 
 interface SegmentHeader {
@@ -214,7 +214,7 @@ export interface Jbig2DecodeOptions {
 }
 
 export interface Jbig2Image {
-  // Packed 1 bit per pixel, MSB first, each row padded out to a whole number of bytes. A 1 bit is a BLACK pixel, JBIG2's own polarity -- the inverse of what a PDF /DeviceGray image expects.
+  // Packed 1 bit per pixel, MSB first, each row padded out to a whole number of bytes. A 1 bit is a BLACK pixel, JBIG2's own polarity — the inverse of what a PDF /DeviceGray image expects.
   readonly bytes: Uint8Array<ArrayBuffer>;
   readonly width: number;
   readonly height: number;
@@ -300,7 +300,7 @@ class Jbig2Decoder {
   private readPageInformation(cursor: ByteCursor): void {
     const declaredWidth = cursor.uint32();
     const declaredHeight = cursor.uint32();
-    cursor.uint32(); // X resolution, in pixels per metre -- display metadata this decoder has no use for.
+    cursor.uint32(); // X resolution, in pixels per metre — display metadata this decoder has no use for.
     cursor.uint32(); // Y resolution.
     const flags = cursor.uint8();
     cursor.uint16(); // Striping information: the maximum stripe size, which only matters when composing a page from end-of-stripe segments.
@@ -370,7 +370,7 @@ class Jbig2Decoder {
     const payload = cursor.position;
 
     if (mmr) {
-      // T.88 6.2.6: an MMR-coded generic region is exactly a T.6 (Group 4) bitstream, which src/image/ccitt.ts already decodes -- with black in the 1 bits, matching JBIG2's own polarity.
+      // T.88 6.2.6: an MMR-coded generic region is exactly a T.6 (Group 4) bitstream, which src/image/ccitt.ts already decodes — with black in the 1 bits, matching JBIG2's own polarity.
       const fax = decodeCcittFax(cursor.data.subarray(payload, dataEnd), {
         k: -1,
         columns: region.width,
@@ -434,7 +434,7 @@ class Jbig2Decoder {
       mq,
       contexts,
     );
-    // Composed with the region's OWN declared operator rather than through compose() above, which would let the page's "combination operator may be overridden" flag substitute the page default. A refinement whose reference is the page it is being drawn back onto only makes sense under REPLACE -- under OR it could add black pixels but never correct one back to white, which is most of what refining a lossy region is for -- and T.88 7.4.7.6 requires REPLACE for exactly that case.
+    // Composed with the region's OWN declared operator rather than through compose() above, which would let the page's "combination operator may be overridden" flag substitute the page default. A refinement whose reference is the page it is being drawn back onto only makes sense under REPLACE — under OR it could add black pixels but never correct one back to white, which is most of what refining a lossy region is for — and T.88 7.4.7.6 requires REPLACE for exactly that case.
     combineBitmap(
       page.bitmap,
       refined,

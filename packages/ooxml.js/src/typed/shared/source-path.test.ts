@@ -27,7 +27,7 @@ function asParagraph(block: ContentBlock | undefined): ContentParagraph {
   return block;
 }
 
-// The two construct-boundary markers have no sourcePath field at all (a boundary is not content), so reading one off an unnarrowed ContentBlock no longer type-checks -- this narrows past them for the assertions below, which only ever look at real content blocks.
+// The two construct-boundary markers have no sourcePath field at all (a boundary is not content), so reading one off an unnarrowed ContentBlock no longer type-checks — this narrows past them for the assertions below, which only ever look at real content blocks.
 function sourcePathOf(block: ContentBlock | undefined): string | undefined {
   if (
     block === undefined ||

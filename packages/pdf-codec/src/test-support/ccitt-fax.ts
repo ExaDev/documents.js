@@ -1,14 +1,14 @@
 import { base64ToBytes } from "byte-codec";
 
-// Real CCITT Group 3/Group 4 bitstreams, encoded by libtiff (LIBTIFF 4.7.2, driven through Pillow 12.1.0 and tiffcp) rather than by anything in this package -- the same "independent implementation on purpose" rationale test-support/encrypted-pdfs.ts states for its own fixtures: a stream this package encoded itself would let a mistake in the T.4 code tables cancel out between an encoder and a decoder that shared it, and pass anyway. Embedded as base64 so the suite needs no filesystem access.
+// Real CCITT Group 3/Group 4 bitstreams, encoded by libtiff (LIBTIFF 4.7.2, driven through Pillow 12.1.0 and tiffcp) rather than by anything in this package — the same "independent implementation on purpose" rationale test-support/encrypted-pdfs.ts states for its own fixtures: a stream this package encoded itself would let a mistake in the T.4 code tables cancel out between an encoder and a decoder that shared it, and pass anyway. Embedded as base64 so the suite needs no filesystem access.
 //
 // How each stream was produced, reproducibly:
 //   1. Build the bitmap from `isBlack` below and write it as a 1-bit TIFF via Pillow.
 //   2. `tiffcp -c <g4|g3|g3:2d|g3:2d:fill> -r <rows> src.tif out.tif` (one strip, so the strip's own bytes are one continuous bitstream).
-//   3. Concatenate the strip bytes named by out.tif's /StripOffsets and /StripByteCounts -- that concatenation is what is stored here.
+//   3. Concatenate the strip bytes named by out.tif's /StripOffsets and /StripByteCounts — that concatenation is what is stored here.
 //   4. Confirm libtiff itself decodes out.tif back to the original bitmap before the stream is kept.
 //
-// One polarity trap worth stating, since it silently inverts every fixture otherwise: Pillow writes a 1-bit TIFF with PhotometricInterpretation = 1 (BlackIsZero), while libtiff's fax codec is photometric-blind and always codes 0-bit samples as WHITE runs. The generator therefore writes the sample bit equal to the fax colour (sample 1 where `isBlack` is true), so these streams carry exactly the black/white runs `isBlack` describes -- which is also PDF's own convention once /BlackIs1 is left at its default false (black pixels decode to 0 bits).
+// One polarity trap worth stating, since it silently inverts every fixture otherwise: Pillow writes a 1-bit TIFF with PhotometricInterpretation = 1 (BlackIsZero), while libtiff's fax codec is photometric-blind and always codes 0-bit samples as WHITE runs. The generator therefore writes the sample bit equal to the fax colour (sample 1 where `isBlack` is true), so these streams carry exactly the black/white runs `isBlack` describes — which is also PDF's own convention once /BlackIs1 is left at its default false (black pixels decode to 0 bits).
 
 export interface CcittFaxFixture {
   readonly name: string;
@@ -47,7 +47,7 @@ export const CCITT_FAX_FIXTURES: readonly CcittFaxFixture[] = [
     name: "checker8",
     columns: 16,
     rows: 8,
-    // Same-parity check rather than "sum is even": a+b and a-b always share the same parity, so a `+` here would be an equivalent mutant under an ArithmeticOperator swap to `-` -- no bitmap this fixture ever produces could distinguish the two. Comparing parities directly leaves no arithmetic operator for that mutation to target.
+    // Same-parity check rather than "sum is even": a+b and a-b always share the same parity, so a `+` here would be an equivalent mutant under an ArithmeticOperator swap to `-` — no bitmap this fixture ever produces could distinguish the two. Comparing parities directly leaves no arithmetic operator for that mutation to target.
     isBlack: (x, y) => (((x / 2) | 0) & 1) === (((y / 2) | 0) & 1),
     encodings: {
       group4: "Jrl8vl//wwgggggv+EEEEEEEF/4YQQQQQX/ABABA",

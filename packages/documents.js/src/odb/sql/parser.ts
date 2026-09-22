@@ -2,13 +2,13 @@ import { HsqldbSqlParseError, HsqldbSqlUnsupportedError } from "./errors";
 import type { SqlComparisonOperator, SqlToken } from "./lexer";
 import { tokenizeSql } from "./lexer";
 
-// A real recursive-descent grammar for the one statement shape src/odb/sql/ implements -- a SELECT over one table (or one derived table) plus zero or more JOINs of any kind:
+// A real recursive-descent grammar for the one statement shape src/odb/sql/ implements — a SELECT over one table (or one derived table) plus zero or more JOINs of any kind:
 //
 // - statement  := selectBody [;]
 // - selectBody := SELECT selectList FROM fromSource {joinClause} [WHERE predicate] [GROUP BY columnList] [ORDER BY orderTerm {, orderTerm}]
 // - fromSource := tableRef | '(' selectBody ')' [AS] identifier
 // - joinClause := [NATURAL] (INNER | LEFT [OUTER] | RIGHT [OUTER] | FULL [OUTER] | CROSS)? JOIN tableRef (ON predicate | USING '(' identifier {, identifier} ')')?
-//   -- a bare JOIN (no leading keyword) is INNER; ON or USING is required for a plain/INNER/LEFT/RIGHT/FULL join unless NATURAL supplies the condition implicitly; CROSS JOIN takes none of NATURAL, ON, or USING.
+//   — a bare JOIN (no leading keyword) is INNER; ON or USING is required for a plain/INNER/LEFT/RIGHT/FULL join unless NATURAL supplies the condition implicitly; CROSS JOIN takes none of NATURAL, ON, or USING.
 // - tableRef   := identifier [[AS] identifier]
 // - selectList := '*' | selectItem {, selectItem}
 // - selectItem := columnRef | COUNT '(' ('*' | columnRef) ')' | (SUM|AVG|MIN|MAX) '(' columnRef ')'
@@ -18,15 +18,15 @@ import { tokenizeSql } from "./lexer";
 // - operand    := columnRef | literal ; literal := ['-'] number | string | TRUE | FALSE | NULL
 // - columnRef  := identifier ['.' identifier] ; orderTerm := columnRef [ASC | DESC]
 //
-// ON's own predicate is the identical `predicate` production WHERE uses -- there is no separate join-condition grammar, so anything a WHERE clause can express (comparisons, AND/OR/NOT, IS NULL, LIKE, IN, BETWEEN, EXISTS) an ON clause can too.
+// ON's own predicate is the identical `predicate` production WHERE uses — there is no separate join-condition grammar, so anything a WHERE clause can express (comparisons, AND/OR/NOT, IS NULL, LIKE, IN, BETWEEN, EXISTS) an ON clause can too.
 //
-// A table reference -- the base FROM table or any JOIN's own table -- may carry an alias, written with or without AS. Once given, the alias is the only name that reaches column-reference resolution for that table (see src/odb/sql/evaluate.ts's own qualifier-resolution rule); this is what makes a genuine self-join (FROM T t1 JOIN T t2 ON ...) resolvable at all, since without an alias two occurrences of the same table name have no way to tell their columns apart and any reference to either is ambiguous. A derived table (fromSource's parenthesised form) carries the identical alias grammar, except its own alias is REQUIRED rather than optional -- unlike a real table, it has no name of its own for a later column reference or JOIN to qualify against.
+// A table reference — the base FROM table or any JOIN's own table — may carry an alias, written with or without AS. Once given, the alias is the only name that reaches column-reference resolution for that table (see src/odb/sql/evaluate.ts's own qualifier-resolution rule); this is what makes a genuine self-join (FROM T t1 JOIN T t2 ON ...) resolvable at all, since without an alias two occurrences of the same table name have no way to tell their columns apart and any reference to either is ambiguous. A derived table (fromSource's parenthesised form) carries the identical alias grammar, except its own alias is REQUIRED rather than optional — unlike a real table, it has no name of its own for a later column reference or JOIN to qualify against.
 //
-// USING and NATURAL JOIN both express an equi-join over columns the two sides share -- USING names them explicitly, NATURAL finds every column name both sides declare -- and src/odb/sql/evaluate.ts merges each shared pair into one output column, COALESCE(left, right), so an outer join's NULL side never hides the other. This follows PostgreSQL's own documented USING/NATURAL semantics (one merged output column per shared pair, redundant columns suppressed) rather than inventing bespoke behaviour -- see https://www.postgresql.org/docs/current/queries-table-expressions.html.
+// USING and NATURAL JOIN both express an equi-join over columns the two sides share — USING names them explicitly, NATURAL finds every column name both sides declare — and src/odb/sql/evaluate.ts merges each shared pair into one output column, COALESCE(left, right), so an outer join's NULL side never hides the other. This follows PostgreSQL's own documented USING/NATURAL semantics (one merged output column per shared pair, redundant columns suppressed) rather than inventing bespoke behaviour — see https://www.postgresql.org/docs/current/queries-table-expressions.html.
 //
-// `selectBody` is the identical production wherever it recurs -- a derived table's own SELECT, or an IN (SELECT ...)/EXISTS (SELECT ...) operand's own SELECT -- so a subquery can itself JOIN (of any kind), filter, group, order, and nest a further subquery to whatever depth this grammar's own recursive descent naturally reaches; nothing here imposes an artificial depth limit.
+// `selectBody` is the identical production wherever it recurs — a derived table's own SELECT, or an IN (SELECT ...)/EXISTS (SELECT ...) operand's own SELECT — so a subquery can itself JOIN (of any kind), filter, group, order, and nest a further subquery to whatever depth this grammar's own recursive descent naturally reaches; nothing here imposes an artificial depth limit.
 //
-// UNION/INTERSECT/EXCEPT, DISTINCT, HAVING, row limits, a comma-separated FROM list, column aliases, CASE expressions, quantified subquery predicates (ANY/SOME), and every scalar function (anything beyond the five aggregates above) are deliberately NOT supported, and none of them is silently ignored: each is recognised by name and throws HsqldbSqlUnsupportedError. This is src/hsqldb/script.ts's own closed-allowlist policy applied to a grammar rather than to a statement list -- see src/odb/sql/errors.ts's top-of-file comment, which quotes that module's policy statement in full as the precedent being followed. Anything that is neither in the grammar above nor in the recognised out-of-scope vocabulary throws HsqldbSqlParseError. There is no path through this parser that discards part of a statement and returns the rest.
+// UNION/INTERSECT/EXCEPT, DISTINCT, HAVING, row limits, a comma-separated FROM list, column aliases, CASE expressions, quantified subquery predicates (ANY/SOME), and every scalar function (anything beyond the five aggregates above) are deliberately NOT supported, and none of them is silently ignored: each is recognised by name and throws HsqldbSqlUnsupportedError. This is src/hsqldb/script.ts's own closed-allowlist policy applied to a grammar rather than to a statement list — see src/odb/sql/errors.ts's top-of-file comment, which quotes that module's policy statement in full as the precedent being followed. Anything that is neither in the grammar above nor in the recognised out-of-scope vocabulary throws HsqldbSqlParseError. There is no path through this parser that discards part of a statement and returns the rest.
 
 export type SqlAggregateFunction = "COUNT" | "SUM" | "AVG" | "MIN" | "MAX";
 
@@ -90,7 +90,7 @@ export type SqlPredicate =
       readonly values: readonly SqlLiteral[];
       readonly negated: boolean;
     }
-  // IN (SELECT ...) -- kept as its own predicate kind rather than folding into "in" above, since the right-hand side is a query to evaluate rather than a literal list to compare against directly; see src/odb/sql/evaluate.ts's own evaluateInSubquery.
+  // IN (SELECT ...) — kept as its own predicate kind rather than folding into "in" above, since the right-hand side is a query to evaluate rather than a literal list to compare against directly; see src/odb/sql/evaluate.ts's own evaluateInSubquery.
   | {
       readonly kind: "inSubquery";
       readonly operand: SqlOperand;
@@ -104,7 +104,7 @@ export type SqlPredicate =
       readonly upper: SqlOperand;
       readonly negated: boolean;
     }
-  // EXISTS (SELECT ...) -- no operand and no `negated` flag of its own: NOT EXISTS parses as an ordinary "not" predicate wrapping this one (see parsePrimary below), the same mechanism every other predicate here is negated through except the postfix forms (LIKE/IN/BETWEEN), which write NOT before the keyword rather than around the whole predicate.
+  // EXISTS (SELECT ...) — no operand and no `negated` flag of its own: NOT EXISTS parses as an ordinary "not" predicate wrapping this one (see parsePrimary below), the same mechanism every other predicate here is negated through except the postfix forms (LIKE/IN/BETWEEN), which write NOT before the keyword rather than around the whole predicate.
   | { readonly kind: "exists"; readonly query: SqlSelectStatement }
   | { readonly kind: "not"; readonly predicate: SqlPredicate }
   | {
@@ -125,7 +125,7 @@ export type SqlAggregateArgument =
 export type SqlSelectItem =
   | { readonly kind: "star" }
   | { readonly kind: "column"; readonly column: SqlColumnRef }
-  // `outputName` is this item's own result-set column label: COUNT(*), SUM(AMOUNT) -- built from the argument's own written column name, so SUM(AMOUNT) and SUM("SALES"."AMOUNT") both label their column SUM(AMOUNT).
+  // `outputName` is this item's own result-set column label: COUNT(*), SUM(AMOUNT) — built from the argument's own written column name, so SUM(AMOUNT) and SUM("SALES"."AMOUNT") both label their column SUM(AMOUNT).
   | {
       readonly kind: "aggregate";
       readonly aggregate: SqlAggregateFunction;
@@ -140,17 +140,17 @@ export interface SqlOrderByTerm {
   readonly direction: SqlSortDirection;
 }
 
-// The five join kinds this engine implements, independent of how the join's own condition is expressed (ON, USING, NATURAL, or -- for CROSS alone -- none at all).
+// The five join kinds this engine implements, independent of how the join's own condition is expressed (ON, USING, NATURAL, or — for CROSS alone — none at all).
 export type SqlJoinKind = "inner" | "left" | "right" | "full" | "cross";
 
-// How a join clause decides which row pairs match. USING/NATURAL both name an equi-join over shared columns -- USING explicitly, NATURAL by discovering every column name both sides declare -- and src/odb/sql/evaluate.ts merges each shared pair into one output column rather than keeping both (see this module's own top-of-file comment). CROSS JOIN carries "none": every row pair matches unconditionally.
+// How a join clause decides which row pairs match. USING/NATURAL both name an equi-join over shared columns — USING explicitly, NATURAL by discovering every column name both sides declare — and src/odb/sql/evaluate.ts merges each shared pair into one output column rather than keeping both (see this module's own top-of-file comment). CROSS JOIN carries "none": every row pair matches unconditionally.
 export type SqlJoinCondition =
   | { readonly kind: "on"; readonly predicate: SqlPredicate }
   | { readonly kind: "using"; readonly columns: readonly SqlNameRef[] }
   | { readonly kind: "natural" }
   | { readonly kind: "none" };
 
-// One join clause, in the order it was written -- src/odb/sql/evaluate.ts folds joins left to right, each one widening (or, for a USING/NATURAL join, reshaping) the row set the NEXT join clause and the statement's own WHERE/select list see. `alias`, once given, is the only name that reaches column-reference resolution for this table -- see this module's own top-of-file comment on why that is what makes a self-join resolvable.
+// One join clause, in the order it was written — src/odb/sql/evaluate.ts folds joins left to right, each one widening (or, for a USING/NATURAL join, reshaping) the row set the NEXT join clause and the statement's own WHERE/select list see. `alias`, once given, is the only name that reaches column-reference resolution for this table — see this module's own top-of-file comment on why that is what makes a self-join resolvable.
 export interface SqlJoinClause {
   readonly joinKind: SqlJoinKind;
   readonly table: SqlNameRef;
@@ -158,7 +158,7 @@ export interface SqlJoinClause {
   readonly condition: SqlJoinCondition;
 }
 
-// The statement's own base FROM source -- a real table (with its own optional alias, exactly as a JOIN clause's own table carries -- SqlJoinClause.alias above), or a derived table (a subquery standing in for one, which unlike a real table must carry an alias since it has no name of its own). A JOIN clause's own target (SqlJoinClause.table above) stays a plain table reference: this engine's grammar only admits a derived table in the base FROM position, not as a JOIN target.
+// The statement's own base FROM source — a real table (with its own optional alias, exactly as a JOIN clause's own table carries — SqlJoinClause.alias above), or a derived table (a subquery standing in for one, which unlike a real table must carry an alias since it has no name of its own). A JOIN clause's own target (SqlJoinClause.table above) stays a plain table reference: this engine's grammar only admits a derived table in the base FROM position, not as a JOIN target.
 export type SqlFromSource =
   | {
       readonly kind: "table";
@@ -177,7 +177,7 @@ export interface SqlFromClause {
 }
 
 export interface SqlSelectStatement {
-  // The statement's own source text, verbatim -- carried through so an evaluation failure can quote the statement that produced it.
+  // The statement's own source text, verbatim — carried through so an evaluation failure can quote the statement that produced it.
   readonly sql: string;
   readonly items: readonly SqlSelectItem[];
   readonly from: SqlFromClause;
@@ -186,7 +186,7 @@ export interface SqlSelectStatement {
   readonly orderBy: readonly SqlOrderByTerm[];
 }
 
-// Every keyword this engine recognises as real SQL and deliberately does not implement, mapped to the construct name reported to the caller. Scanned across the whole token stream before parsing starts (see rejectOutOfScopeConstructs), so a HAVING or a DISTINCT is named as itself rather than surfacing as a baffling "unexpected keyword" from wherever the recursive descent happened to stop. JOIN, INNER, ON, OUTER, LEFT, RIGHT, FULL, CROSS, NATURAL, USING, AS, and EXISTS are all deliberately absent from this map -- they are real grammar now (see this module's own top-of-file note on the JOIN, table-alias, and subquery grammar). AS is worth stating explicitly: it is legal in a table-alias position (FROM T AS t, or a derived table's own alias) but a column alias (SELECT A AS x) is still out of scope, so that one case is rejected by parseSelectItem itself, at the point it is unambiguous, rather than by this blanket pre-scan. ANY/SOME (a quantified comparison, not the same construct as IN or EXISTS) stay out of scope.
+// Every keyword this engine recognises as real SQL and deliberately does not implement, mapped to the construct name reported to the caller. Scanned across the whole token stream before parsing starts (see rejectOutOfScopeConstructs), so a HAVING or a DISTINCT is named as itself rather than surfacing as a baffling "unexpected keyword" from wherever the recursive descent happened to stop. JOIN, INNER, ON, OUTER, LEFT, RIGHT, FULL, CROSS, NATURAL, USING, AS, and EXISTS are all deliberately absent from this map — they are real grammar now (see this module's own top-of-file note on the JOIN, table-alias, and subquery grammar). AS is worth stating explicitly: it is legal in a table-alias position (FROM T AS t, or a derived table's own alias) but a column alias (SELECT A AS x) is still out of scope, so that one case is rejected by parseSelectItem itself, at the point it is unambiguous, rather than by this blanket pre-scan. ANY/SOME (a quantified comparison, not the same construct as IN or EXISTS) stay out of scope.
 const OUT_OF_SCOPE_KEYWORDS: ReadonlyMap<string, string> = new Map([
   ["UNION", "UNION"],
   ["INTERSECT", "INTERSECT"],
@@ -238,7 +238,7 @@ function describeToken(token: SqlToken): string {
   }
 }
 
-// The pre-scan half of this module's closed allowlist: walk every token once and reject each recognised out-of-scope construct by name before the grammar below ever runs. Two rules, in the order a reader would want them reported: a named out-of-scope keyword (checked regardless of where in the statement it sits, including inside a derived table's own SELECT -- none of these become legal anywhere just because a derived table now is), and an identifier immediately followed by "(" -- necessarily a scalar function call, since the only function calls this grammar has are the five aggregates, and those lex as keywords rather than identifiers. A SELECT keyword past the first token is no longer rejected here: a derived table's own SELECT is real grammar now (see this module's own top-of-file note), so whether a nested SELECT is legal is a question the recursive-descent grammar below answers by position -- specifically, a derived table's own FROM -- rather than something this flat pre-scan can decide. IN and EXISTS still admit only a literal list or a scalar operand respectively, at this grammar's current scope: nothing here yet parses a SELECT in either position, so a construct like `IN (SELECT ...)` still fails, just as a plain parse error (an unexpected keyword where a literal was expected) rather than a named "a subquery" HsqldbSqlUnsupportedError.
+// The pre-scan half of this module's closed allowlist: walk every token once and reject each recognised out-of-scope construct by name before the grammar below ever runs. Two rules, in the order a reader would want them reported: a named out-of-scope keyword (checked regardless of where in the statement it sits, including inside a derived table's own SELECT — none of these become legal anywhere just because a derived table now is), and an identifier immediately followed by "(" — necessarily a scalar function call, since the only function calls this grammar has are the five aggregates, and those lex as keywords rather than identifiers. A SELECT keyword past the first token is no longer rejected here: a derived table's own SELECT is real grammar now (see this module's own top-of-file note), so whether a nested SELECT is legal is a question the recursive-descent grammar below answers by position — specifically, a derived table's own FROM — rather than something this flat pre-scan can decide. IN and EXISTS still admit only a literal list or a scalar operand respectively, at this grammar's current scope: nothing here yet parses a SELECT in either position, so a construct like `IN (SELECT ...)` still fails, just as a plain parse error (an unexpected keyword where a literal was expected) rather than a named "a subquery" HsqldbSqlUnsupportedError.
 function rejectOutOfScopeConstructs(
   tokens: readonly SqlToken[],
   sql: string,
@@ -274,7 +274,7 @@ class SqlParser {
     rejectOutOfScopeConstructs(this.tokens, sql);
   }
 
-  // Never returns undefined: tokenizeSql always terminates the stream with an 'end' token, and nothing below advances past it -- an index beyond that is a bug in this parser, and throws rather than being papered over.
+  // Never returns undefined: tokenizeSql always terminates the stream with an 'end' token, and nothing below advances past it — an index beyond that is a bug in this parser, and throws rather than being papered over.
   private peek(): SqlToken {
     const token = this.tokens[this.index];
     if (token === undefined) {
@@ -375,7 +375,7 @@ class SqlParser {
     if (this.atPunctuation("*")) {
       if (aggregate !== "COUNT") {
         this.fail(
-          `a column name -- ${aggregate}(*) is not valid SQL, only COUNT(*) is`,
+          `a column name — ${aggregate}(*) is not valid SQL, only COUNT(*) is`,
         );
       }
       this.advance();
@@ -654,7 +654,7 @@ class SqlParser {
     const token = this.peek();
     if (token.kind === "keyword" && isAggregateFunction(token.keyword)) {
       this.fail(
-        "a column name -- an aggregate function is not valid in GROUP BY",
+        "a column name — an aggregate function is not valid in GROUP BY",
       );
     }
     return this.parseColumnRef();
@@ -697,7 +697,7 @@ class SqlParser {
     return { column, direction: "asc" };
   }
 
-  // One real table name in FROM or a JOIN clause, with its optional alias -- the identical checks apply to both, since neither admits a derived table or a schema qualifier (a derived table's own required alias is a different production entirely, parseFromSource below, reachable only from the base FROM position). The comma-separated-FROM-list check is NOT here: it only ever applies right after the very first table (a JOIN clause's own table can never be followed by a bare comma, since parseJoins' own loop condition already requires a join keyword or nothing next), so it stays in parseSelectBody/parseJoins where that distinction is visible.
+  // One real table name in FROM or a JOIN clause, with its optional alias — the identical checks apply to both, since neither admits a derived table or a schema qualifier (a derived table's own required alias is a different production entirely, parseFromSource below, reachable only from the base FROM position). The comma-separated-FROM-list check is NOT here: it only ever applies right after the very first table (a JOIN clause's own table can never be followed by a bare comma, since parseJoins' own loop condition already requires a join keyword or nothing next), so it stays in parseSelectBody/parseJoins where that distinction is visible.
   private parseTableRefWithAlias(): {
     readonly table: SqlNameRef;
     readonly alias: SqlNameRef | undefined;
@@ -707,7 +707,7 @@ class SqlParser {
     }
     const table = this.takeName("a table name");
     if (this.atPunctuation(".")) {
-      // A schema-qualified table name (PUBLIC.SALES) resolves against a schema catalogue this engine has no model of at all -- readOdbTables hands it a flat table list with no schema dimension.
+      // A schema-qualified table name (PUBLIC.SALES) resolves against a schema catalogue this engine has no model of at all — readOdbTables hands it a flat table list with no schema dimension.
       throw new HsqldbSqlUnsupportedError(
         "a schema-qualified table name",
         this.sql,
@@ -716,7 +716,7 @@ class SqlParser {
     return { table, alias: this.parseOptionalTableAlias() };
   }
 
-  // AS is optional, exactly as real SQL allows (FROM T AS t and FROM T t are equivalent) -- an identifier straight after the table name, with no AS, is unambiguously an alias too, since nothing else this grammar accepts can follow a table name at that position (the next real token is always ON, USING, a join keyword, WHERE, GROUP, ORDER, ';', or end).
+  // AS is optional, exactly as real SQL allows (FROM T AS t and FROM T t are equivalent) — an identifier straight after the table name, with no AS, is unambiguously an alias too, since nothing else this grammar accepts can follow a table name at that position (the next real token is always ON, USING, a join keyword, WHERE, GROUP, ORDER, ';', or end).
   private parseOptionalTableAlias(): SqlNameRef | undefined {
     if (this.atKeyword("AS")) {
       this.advance();
@@ -728,7 +728,7 @@ class SqlParser {
     return undefined;
   }
 
-  // A derived table's own alias, optionally introduced by AS exactly as a real table's is (parseOptionalTableAlias) -- but this position never allows omitting the alias entirely, since a derived table has no name of its own for a later column reference or JOIN to qualify against (see parseFromSource's own comment).
+  // A derived table's own alias, optionally introduced by AS exactly as a real table's is (parseOptionalTableAlias) — but this position never allows omitting the alias entirely, since a derived table has no name of its own for a later column reference or JOIN to qualify against (see parseFromSource's own comment).
   private parseRequiredAlias(what: string): SqlNameRef {
     if (this.atKeyword("AS")) {
       this.advance();
@@ -737,7 +737,7 @@ class SqlParser {
     return this.takeName(what);
   }
 
-  // The statement's own base FROM source: either a real table (parseTableRefWithAlias's own rule, unchanged -- this branch is what makes "(" the ONLY thing that distinguishes a derived table from a real one here) or a derived table, `(` selectBody `)` [AS] identifier. Unlike a real table, a derived table MUST carry an alias -- it has no name of its own for a later column reference or JOIN to qualify against -- so the identifier (with or without a leading AS) immediately following the closing ")" is required, not merely permitted.
+  // The statement's own base FROM source: either a real table (parseTableRefWithAlias's own rule, unchanged — this branch is what makes "(" the ONLY thing that distinguishes a derived table from a real one here) or a derived table, `(` selectBody `)` [AS] identifier. Unlike a real table, a derived table MUST carry an alias — it has no name of its own for a later column reference or JOIN to qualify against — so the identifier (with or without a leading AS) immediately following the closing ")" is required, not merely permitted.
   private parseFromSource(): SqlFromSource {
     if (this.atPunctuation("(")) {
       this.advance();
@@ -750,7 +750,7 @@ class SqlParser {
     return { kind: "table", table, alias };
   }
 
-  // The join-kind keyword(s), if any is next -- INNER, LEFT [OUTER], RIGHT [OUTER], FULL [OUTER], CROSS, or a bare JOIN (which defaults to "inner" without consuming JOIN itself, so the caller's own takeKeyword("JOIN") still runs uniformly for every kind). Returns undefined when none of these is next, which is how parseJoins knows the join list has ended.
+  // The join-kind keyword(s), if any is next — INNER, LEFT [OUTER], RIGHT [OUTER], FULL [OUTER], CROSS, or a bare JOIN (which defaults to "inner" without consuming JOIN itself, so the caller's own takeKeyword("JOIN") still runs uniformly for every kind). Returns undefined when none of these is next, which is how parseJoins knows the join list has ended.
   private parseJoinKind(): SqlJoinKind | undefined {
     if (this.atKeyword("INNER")) {
       this.advance();
@@ -813,7 +813,7 @@ class SqlParser {
     return { kind: "on", predicate: this.parsePredicate() };
   }
 
-  // Zero or more join clauses, folded left to right by src/odb/sql/evaluate.ts. Stops the moment no NATURAL and no join-kind keyword is next -- including at a bare comma, which parseSelectBody's own caller checks for and reports as the deliberately-unsupported comma-separated FROM list.
+  // Zero or more join clauses, folded left to right by src/odb/sql/evaluate.ts. Stops the moment no NATURAL and no join-kind keyword is next — including at a bare comma, which parseSelectBody's own caller checks for and reports as the deliberately-unsupported comma-separated FROM list.
   private parseJoins(): readonly SqlJoinClause[] {
     const joins: SqlJoinClause[] = [];
     for (;;) {
@@ -841,7 +841,7 @@ class SqlParser {
     return joins;
   }
 
-  // One SELECT ... [FROM ...] [WHERE ...] [GROUP BY ...] [ORDER BY ...] body, with no trailing ";"/end-of-input check of its own. Used both by parseStatement (the top-level entry, which adds that check once the whole input is expected to be consumed) and recursively for every subquery position this grammar supports -- a derived table's own SELECT (parseFromSource above), and an IN (SELECT ...) or EXISTS (SELECT ...) operand's own SELECT -- each of which is followed by its own closing ")" rather than end-of-input. A subquery is exactly as capable as a top-level statement, since it is parsed by the identical method: it can itself JOIN (of any kind), filter, group, order, and nest a further subquery to whatever depth the recursion naturally reaches.
+  // One SELECT ... [FROM ...] [WHERE ...] [GROUP BY ...] [ORDER BY ...] body, with no trailing ";"/end-of-input check of its own. Used both by parseStatement (the top-level entry, which adds that check once the whole input is expected to be consumed) and recursively for every subquery position this grammar supports — a derived table's own SELECT (parseFromSource above), and an IN (SELECT ...) or EXISTS (SELECT ...) operand's own SELECT — each of which is followed by its own closing ")" rather than end-of-input. A subquery is exactly as capable as a top-level statement, since it is parsed by the identical method: it can itself JOIN (of any kind), filter, group, order, and nest a further subquery to whatever depth the recursion naturally reaches.
   private parseSelectBody(): SqlSelectStatement {
     this.takeKeyword("SELECT");
     const items = this.parseSelectList();

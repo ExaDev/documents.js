@@ -20,7 +20,7 @@ import {
 import { assertMimetypeEntryLayout } from "../../test-support/zip";
 import { writeOdtContent } from "./write";
 
-// The write side's XML-shape suite: what writeOdtContent actually emits, construct by construct. The round-trip suite beside it (write-round-trip.test.ts) proves the output reads back as the document it came from; this one proves the output is the ODF a real consumer expects, which a round trip through one package's own reader cannot -- a writer and reader that agreed on the same wrong spelling would round-trip perfectly and open nowhere.
+// The write side's XML-shape suite: what writeOdtContent actually emits, construct by construct. The round-trip suite beside it (write-round-trip.test.ts) proves the output reads back as the document it came from; this one proves the output is the ODF a real consumer expects, which a round trip through one package's own reader cannot — a writer and reader that agreed on the same wrong spelling would round-trip perfectly and open nowhere.
 //
 // The one spelling this file pins hardest, style:master-page-name's position, is exactly that case: it was verified against LibreOffice directly rather than against this package's own reader (see the master-page describe block below).
 
@@ -351,7 +351,7 @@ describe("writeOdtContent: paragraphs and runs", () => {
   });
 });
 
-// ODF represents a run of two or more spaces, a tab, and a hard line break as ELEMENTS, because paragraph text collapses whitespace HTML-style. A writer that emitted them as literal characters would produce a document whose own text changes the moment any conforming consumer applies the format's rules -- so these are the assertions that keep the writer honest about it.
+// ODF represents a run of two or more spaces, a tab, and a hard line break as ELEMENTS, because paragraph text collapses whitespace HTML-style. A writer that emitted them as literal characters would produce a document whose own text changes the moment any conforming consumer applies the format's rules — so these are the assertions that keep the writer honest about it.
 describe("writeOdtContent: whitespace is structure", () => {
   it("leaves a single interior space literal, so ordinary prose stays one text node", () => {
     const pkg = writeOdtContent(
@@ -436,7 +436,7 @@ describe("writeOdtContent: lists", () => {
     );
   });
 
-  it("states the ordered-versus-bullet kind the only way ODF can -- a text:list-style's own level-1 child", () => {
+  it("states the ordered-versus-bullet kind the only way ODF can — a text:list-style's own level-1 child", () => {
     const bullet = writeOdtContent(listDocument);
     const bulletStyle = childrenWithTag(
       contentAutomaticStyles(bullet),
@@ -783,7 +783,7 @@ describe("writeOdtContent: page geometry and section boundaries", () => {
   // The placement this test pins was verified against LibreOffice itself, not against this package's own reader: a flat-ODF document carrying style:master-page-name on style:style renders its second page at the second master page's own size and survives a re-save verbatim, while the identical document carrying it on style:paragraph-properties renders one page and has the attribute stripped outright. Writing it in the second position would round-trip perfectly through odf.js and open as a single-page document everywhere else.
   it("states a section's page-style switch as style:master-page-name on the style:style element itself", () => {
     const named = findChildElement(stylesRoot.children, "office:styles");
-    // Preformatted_20_Text is minted unconditionally, once per document (ExaDev/documents.js#1020) -- it precedes MP2Start here only because it is pushed first, not because ordering is itself load-bearing for either style.
+    // Preformatted_20_Text is minted unconditionally, once per document (ExaDev/documents.js#1020) — it precedes MP2Start here only because it is pushed first, not because ordering is itself load-bearing for either style.
     expect(buildXml(childrenWithTag(named!, "style:style"))).toBe(
       '<style:style style:name="Preformatted_20_Text"' +
         ' style:family="paragraph"></style:style>' +
@@ -1013,7 +1013,7 @@ describe("writeOdtContent: what it refuses rather than dropping", () => {
     ).toThrow(/run-level construct extent this writer does not spell back yet/);
   });
 
-  it("refuses an embedded chart object -- the one kind with no write-side serialiser", () => {
+  it("refuses an embedded chart object — the one kind with no write-side serialiser", () => {
     expect(() =>
       writeOdtContent(
         documentOf([

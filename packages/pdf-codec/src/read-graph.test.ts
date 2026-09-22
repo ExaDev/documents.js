@@ -5,11 +5,11 @@ import { describe, expect, it } from "vitest";
 
 // Guards the read path's module graph (#720's regression test): everything statically reachable from the read entry must exclude the write path and the vendored font assets, so a read-only consumer bundling pdf-codec never pays for font binaries it cannot execute. The check is a static walk over src/'s own import statements rather than an esbuild/rolldown metafile because the package deliberately carries no bundler dependency: tsdown compiles src/ module-for-module (entry glob, root src/), so the source import graph IS the shipped dist import graph. A bundler-based check would add a dev dependency whose only job is to re-derive what the source already states.
 //
-// The walk follows only relative specifiers ('./x'): bare specifiers (zod, fflate, document-schema.js, byte-codec) are other packages' graphs, with no font assets of their own to guard. Type-only statements ('import type' / 'export type') are skipped because tsdown erases them -- a type import adds zero runtime graph weight, which is exactly the property that lets read-adjacent modules keep typing against the full barrel without re-importing it.
+// The walk follows only relative specifiers ('./x'): bare specifiers (zod, fflate, document-schema.js, byte-codec) are other packages' graphs, with no font assets of their own to guard. Type-only statements ('import type' / 'export type') are skipped because tsdown erases them — a type import adds zero runtime graph weight, which is exactly the property that lets read-adjacent modules keep typing against the full barrel without re-importing it.
 
 const SRC_DIR = fileURLToPath(new URL("./", import.meta.url));
 
-// Resolves an extensionless relative specifier ('./write', '../bytes/crc32') to its ts source file, failing loudly on anything the walk cannot resolve -- a silently skipped edge would silently skip whatever it reaches.
+// Resolves an extensionless relative specifier ('./write', '../bytes/crc32') to its ts source file, failing loudly on anything the walk cannot resolve — a silently skipped edge would silently skip whatever it reaches.
 function resolveRelativeSpecifier(fromFile: string, specifier: string): string {
   const base = join(dirname(fromFile), specifier);
   const asFile = `${base}.ts`;
@@ -25,7 +25,7 @@ function resolveRelativeSpecifier(fromFile: string, specifier: string): string {
   );
 }
 
-// Extracts a module's runtime import edges from its source text: comment-stripped source minus type-only statements, then every remaining specifier in one of the three runtime import forms -- `from '<relative>'` (named, default, and re-export statements all end in one), bare `import '<relative>'` (side-effect), and `import('<relative>')` with a string-literal specifier (dynamic, but a bundler still ships the target). Comment stripping comes first because this codebase's module comments quote specifiers in prose ('src/write.ts', './read') and a prose mention must never count as an edge. A dynamic import with a computed (non-literal) specifier is not statically walkable by any means this test has; none exists in this package.
+// Extracts a module's runtime import edges from its source text: comment-stripped source minus type-only statements, then every remaining specifier in one of the three runtime import forms — `from '<relative>'` (named, default, and re-export statements all end in one), bare `import '<relative>'` (side-effect), and `import('<relative>')` with a string-literal specifier (dynamic, but a bundler still ships the target). Comment stripping comes first because this codebase's module comments quote specifiers in prose ('src/write.ts', './read') and a prose mention must never count as an edge. A dynamic import with a computed (non-literal) specifier is not statically walkable by any means this test has; none exists in this package.
 function runtimeImportSpecifiers(source: string): readonly string[] {
   const withoutComments = source
     .replace(/\/\*[\s\S]*?\*\//g, "")
@@ -101,7 +101,7 @@ function chainTo(
     .join(" -> ");
 }
 
-// The modules whose reachability from a read entry is the defect #720 describes: the write entry itself (write.ts, whose own graph is the whole write path), the two modules that eagerly import the vendored font assets at module scope (math-font.ts: STIX Two Math; font-registry.ts: the Carlito/Caladea faces), and the asset modules those imports pull in. Everything else on the write side is caught transitively -- it reaches one of these.
+// The modules whose reachability from a read entry is the defect #720 describes: the write entry itself (write.ts, whose own graph is the whole write path), the two modules that eagerly import the vendored font assets at module scope (math-font.ts: STIX Two Math; font-registry.ts: the Carlito/Caladea faces), and the asset modules those imports pull in. Everything else on the write side is caught transitively — it reaches one of these.
 // Narrowing guard for the package.json JSON.parse boundary (no assertions, per family discipline).
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -143,7 +143,7 @@ describe("the read path module graph excludes the write path and font assets", (
       !isRecord(parsed.exports["./read"])
     ) {
       throw new Error(
-        "read-graph guard: package.json exports has no ./read entry -- the read-only entry point must stay declared, not just wildcard-reachable",
+        "read-graph guard: package.json exports has no ./read entry — the read-only entry point must stay declared, not just wildcard-reachable",
       );
     }
     expect(parsed.exports["./read"].import).toBe("./dist/read.js");

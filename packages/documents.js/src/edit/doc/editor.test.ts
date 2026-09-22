@@ -26,7 +26,7 @@ describe("createDoc", () => {
   it("round-trips an empty document through toBytes and openDoc", () => {
     const editor = createDoc();
     const reread = openDoc(editor.toBytes());
-    // writeDocContent appends one trailing empty paragraph to an otherwise-empty section ([MS-DOC]'s own final-character requirement -- see its closeSection note), so an empty document reads back as exactly one empty paragraph, not zero.
+    // writeDocContent appends one trailing empty paragraph to an otherwise-empty section ([MS-DOC]'s own final-character requirement — see its closeSection note), so an empty document reads back as exactly one empty paragraph, not zero.
     expect(reread.paragraphs()).toHaveLength(1);
     expect(reread.paragraphs()[0]!.text).toBe("");
     expect(reread.sections()[0]!.pageSize).toEqual(
@@ -77,7 +77,7 @@ describe("DocEditor paragraph and run round trips", () => {
     const [heading, bullet] = reread.paragraphs();
     expect(heading?.headingLevel).toBe(1);
     expect(heading?.alignment).toBe("center");
-    // numId is the schema's own string-typed identity (the source format's numbering definition name); the reader remints it in its own first-occurrence order, so only the membership and level themselves are stable across a round trip -- the identical convention the odt editor's own list round trips follow.
+    // numId is the schema's own string-typed identity (the source format's numbering definition name); the reader remints it in its own first-occurrence order, so only the membership and level themselves are stable across a round trip — the identical convention the odt editor's own list round trips follow.
     expect(bullet?.list?.level).toBe(0);
     expect(bullet?.list?.numId).toBe("1");
   });
@@ -207,7 +207,7 @@ describe("DocEditor live-view contract", () => {
     const before: DocParagraph[] = editor.paragraphs();
     expect(before).toHaveLength(0);
     editor.appendParagraph({ text: "late" });
-    // The live-view contract: an array captured before a mutation is stale, and a fresh call sees the mutation -- the exact behaviour document-cli's TUI render loop depends on (see that package's state/types.ts RULE note).
+    // The live-view contract: an array captured before a mutation is stale, and a fresh call sees the mutation — the exact behaviour document-cli's TUI render loop depends on (see that package's state/types.ts RULE note).
     expect(editor.paragraphs()).toHaveLength(1);
     expect(before).toHaveLength(0);
   });

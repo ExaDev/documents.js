@@ -56,7 +56,7 @@ describe("nextToken: numbers", () => {
   });
 
   it("produces a NaN number token for a bare sign or dot with no digits, rather than throwing", () => {
-    // A malformed producer can write a lone '+', '-', or '.' where a number is expected. The lexer's own job is only tokenizing, not validating the value -- it hands back a NaN number token instead of erroring, so every consumer of a number token (e.g. an image dict's /Width or /Height) must itself reject a NaN value rather than assuming asNumber() always yields a well-formed number.
+    // A malformed producer can write a lone '+', '-', or '.' where a number is expected. The lexer's own job is only tokenizing, not validating the value — it hands back a NaN number token instead of erroring, so every consumer of a number token (e.g. an image dict's /Width or /Height) must itself reject a NaN value rather than assuming asNumber() always yields a well-formed number.
     expect(tokens("-")).toEqual([{ kind: "number", value: Number.NaN }]);
     expect(tokens("+")).toEqual([{ kind: "number", value: Number.NaN }]);
     expect(tokens(".")).toEqual([{ kind: "number", value: Number.NaN }]);

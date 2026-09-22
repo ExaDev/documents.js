@@ -21,7 +21,7 @@ import {
 import { applyTableSprms } from "./tap";
 import { encodeTableRowGrpprl, type TableCellToWrite } from "./tap-write";
 
-// The border/shading vocabulary on its own, at the level table/tap.ts and table/tap-write.ts actually exchange it. write.test.ts's own round trips cover what a whole document does with a cell's decoration; this file covers the encodings a real third-party producer may state that this package's own writer never emits -- every BrcType outside the four it writes, both no-border spellings, the Word 97-era Shd80 array, the ipatSolid pattern, and the automatic colours -- since a reader-only path has no round trip to be verified by.
+// The border/shading vocabulary on its own, at the level table/tap.ts and table/tap-write.ts actually exchange it. write.test.ts's own round trips cover what a whole document does with a cell's decoration; this file covers the encodings a real third-party producer may state that this package's own writer never emits — every BrcType outside the four it writes, both no-border spellings, the Word 97-era Shd80 array, the ipatSolid pattern, and the automatic colours — since a reader-only path has no round trip to be verified by.
 
 const BLACK = { r: 0, g: 0, b: 0 };
 const RED = { r: 1, g: 0, b: 0 };
@@ -50,7 +50,7 @@ describe("Brc80", () => {
   });
 
   it("applies [MS-DOC]'s own floor of 2 to a dptLineWidth below it", () => {
-    // "Values of less than 2 are considered to be equivalent to 2" -- and a widthPt of 0 would fail ContentBorderSchema's own positive() bound anyway.
+    // "Values of less than 2 are considered to be equivalent to 2" — and a widthPt of 0 would fail ContentBorderSchema's own positive() bound anyway.
     expect(readBrc80(bytes([0x00, 0x01, 0x01, 0x00]), 0)?.widthPt).toBe(0.25);
     expect(readBrc80(bytes([0x01, 0x01, 0x01, 0x00]), 0)?.widthPt).toBe(0.25);
   });
@@ -64,7 +64,7 @@ describe("Brc80", () => {
   });
 
   it("resolves an ico past the palette's own 0x11 bound to the automatic colour, rather than aborting the whole document read", () => {
-    // ico is a full byte, so a malformed or third-party-extended file can state a value the 17-entry palette has no entry for. A run's own sprmCIco has to throw for exactly this -- a colour that is not automatic and has nowhere else to be recovered from -- but a cell border is decorative and already has an automatic-colour fallback of its own (the case above), so one out-of-range byte in one cell must not fail the entire read the way DocFormatError otherwise would.
+    // ico is a full byte, so a malformed or third-party-extended file can state a value the 17-entry palette has no entry for. A run's own sprmCIco has to throw for exactly this — a colour that is not automatic and has nowhere else to be recovered from — but a cell border is decorative and already has an automatic-colour fallback of its own (the case above), so one out-of-range byte in one cell must not fail the entire read the way DocFormatError otherwise would.
     expect(readBrc80(bytes([0x08, 0x01, 0x11, 0x00]), 0)).toEqual({
       color: BLACK,
       widthPt: 1,
@@ -84,7 +84,7 @@ describe("Brc80", () => {
   it.each([
     [0x01, undefined], // single
     [0x05, undefined], // a thin single solid line
-    [0x14, undefined], // wave -- one continuous stroke
+    [0x14, undefined], // wave — one continuous stroke
     [0x03, "double"],
     [0x0a, "double"], // triple
     [0x0b, "double"], // thinThickSmallGap
@@ -108,7 +108,7 @@ describe("Brc80", () => {
   );
 
   it("reads an art/image border as no border, since [MS-DOC] permits one only on a page", () => {
-    // "Values that are larger than 0x1B are not valid unless they describe a page border" -- 0x40 is `apples`.
+    // "Values that are larger than 0x1B are not valid unless they describe a page border" — 0x40 is `apples`.
     expect(readBrc80(bytes([0x08, 0x40, 0x01, 0x00]), 0)).toBeUndefined();
     // 0xFF: "This MUST be ignored."
     expect(readBrc80(bytes([0x08, 0xff, 0x01, 0x00]), 0)).toBeUndefined();
@@ -186,7 +186,7 @@ describe("Brc80", () => {
     });
 
     it("applies the dptLineWidth floor before tripling, not after", () => {
-      // "Values of less than 2 are considered to be equivalent to 2" floors the field itself to 2 eighths, which then triples to 6 eighths (0.75pt) -- not 3 eighths (0.375pt), which tripling the raw sub-floor value of 1 would give.
+      // "Values of less than 2 are considered to be equivalent to 2" floors the field itself to 2 eighths, which then triples to 6 eighths (0.75pt) — not 3 eighths (0.375pt), which tripling the raw sub-floor value of 1 would give.
       expect(readBrc80(bytes([0x01, 0x03, 0x00, 0x00]), 0)?.widthPt).toBe(0.75);
     });
 
@@ -221,7 +221,7 @@ describe("Brc80", () => {
     });
 
     it("writes an ordinary sub-0.75pt double border width, like Word's own 0.5pt UI default, without refusing it", () => {
-      // 0.5pt total divided by three and rounded to the nearest eighth is 1 -- below MIN_DPT_LINE_WIDTH's general floor of 2, but not below MIN_DPT_LINE_WIDTH_DOUBLE's own floor of 1, which is what a real producer's own writer floors this same field to rather than ever refusing to state a thin double border at all.
+      // 0.5pt total divided by three and rounded to the nearest eighth is 1 — below MIN_DPT_LINE_WIDTH's general floor of 2, but not below MIN_DPT_LINE_WIDTH_DOUBLE's own floor of 1, which is what a real producer's own writer floors this same field to rather than ever refusing to state a thin double border at all.
       expect(writeBrc80({ color: RED, widthPt: 0.5, style: "double" })[0]).toBe(
         1,
       );
@@ -230,8 +230,8 @@ describe("Brc80", () => {
       );
     });
 
-    it("does not round-trip a 0.5pt double border exactly -- the written dptLineWidth of 1 is below the read-side floor of 2, so it comes back 50% wider than requested", () => {
-      // A real, [MS-DOC]-consistent narrowing, not a regression: MIN_DPT_LINE_WIDTH_DOUBLE (1) is lower than MIN_DPT_LINE_WIDTH (2) purely so the writer can state a thin double border at all, but the reader applies MIN_DPT_LINE_WIDTH's own floor to every dptLineWidth regardless of brcType, per [MS-DOC]'s "values less than 2 are considered to be equivalent to 2" -- so the stored 1 reads back as 2, tripled to 0.75pt, not the 0.5pt it was written with.
+    it("does not round-trip a 0.5pt double border exactly — the written dptLineWidth of 1 is below the read-side floor of 2, so it comes back 50% wider than requested", () => {
+      // A real, [MS-DOC]-consistent narrowing, not a regression: MIN_DPT_LINE_WIDTH_DOUBLE (1) is lower than MIN_DPT_LINE_WIDTH (2) purely so the writer can state a thin double border at all, but the reader applies MIN_DPT_LINE_WIDTH's own floor to every dptLineWidth regardless of brcType, per [MS-DOC]'s "values less than 2 are considered to be equivalent to 2" — so the stored 1 reads back as 2, tripled to 0.75pt, not the 0.5pt it was written with.
       const border: ContentBorder = {
         color: RED,
         widthPt: 0.5,
@@ -265,7 +265,7 @@ describe("Brc80", () => {
     });
 
     it("does not round-trip a non-literal collapsed BrcType's own width, since BRC_TYPE_STYLE has already discarded which of the 24 families a 'double'-style border came from by the time it is written back", () => {
-      // 0x0e (thinThickMediumGap) is one of the 23 BrcTypes BRC_TYPE_STYLE folds onto 'double' without the literal-0x03 tripling: reading it back reports dptLineWidth's own untripled value directly (16 eighths, 2pt), an approximation of unknown accuracy per DOUBLE_BORDER_WIDTH_MULTIPLIER's own note on the ratios LibreOffice's source actually gives that family. Writing that same ContentBorder back has no way to recover 0x0e -- ContentStrokeStyle names only one 'double' member -- so it re-emits a literal 0x03 and applies this package's own tripling to the 2pt it was given, producing dptLineWidth 5 rather than the original 16: a further, compounding approximation on an already-lossy round trip, not a fresh regression from this file's own read/write pair agreeing with each other.
+      // 0x0e (thinThickMediumGap) is one of the 23 BrcTypes BRC_TYPE_STYLE folds onto 'double' without the literal-0x03 tripling: reading it back reports dptLineWidth's own untripled value directly (16 eighths, 2pt), an approximation of unknown accuracy per DOUBLE_BORDER_WIDTH_MULTIPLIER's own note on the ratios LibreOffice's source actually gives that family. Writing that same ContentBorder back has no way to recover 0x0e — ContentStrokeStyle names only one 'double' member — so it re-emits a literal 0x03 and applies this package's own tripling to the 2pt it was given, producing dptLineWidth 5 rather than the original 16: a further, compounding approximation on an already-lossy round trip, not a fresh regression from this file's own read/write pair agreeing with each other.
       const read = readBrc80(bytes([0x10, 0x0e, 0x06, 0x00]), 0);
       expect(read).toEqual({ color: RED, widthPt: 2, style: "double" });
       if (read === undefined) throw new Error("expected a border");
@@ -275,7 +275,7 @@ describe("Brc80", () => {
 });
 
 describe("Brc", () => {
-  it("reads a NilBrc -- the last four bytes all set -- as no border", () => {
+  it("reads a NilBrc — the last four bytes all set — as no border", () => {
     expect(
       readBrc(bytes([0x11, 0x22, 0x33, 0x00, 0xff, 0xff, 0xff, 0xff]), 0),
     ).toBeUndefined();
@@ -414,7 +414,7 @@ describe("Shd", () => {
     });
   });
 
-  it("reads ShdAuto -- both colours automatic under ipatAuto -- as no background", () => {
+  it("reads ShdAuto — both colours automatic under ipatAuto — as no background", () => {
     const shdAuto = [
       0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00,
     ];
@@ -437,7 +437,7 @@ describe("Shd", () => {
     const diagCross = [
       0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0xff, 0x13, 0x00,
     ];
-    // toStrictEqual, not toEqual: with both colours automatic, readShd must omit foregroundColor/backgroundColor entirely rather than state them present-but-undefined -- toEqual treats the two the same and would not catch a mutant that always spreads the key in.
+    // toStrictEqual, not toEqual: with both colours automatic, readShd must omit foregroundColor/backgroundColor entirely rather than state them present-but-undefined — toEqual treats the two the same and would not catch a mutant that always spreads the key in.
     expect(readShd(bytes(diagCross), 0)).toStrictEqual({
       kind: "pattern",
       patternType: "diagonalCross",
@@ -448,7 +448,7 @@ describe("Shd", () => {
     // ipatNil (0xFFFF), ST_Shd nil.
     const nil = [0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x00, 0xff, 0xff];
     expect(readShd(bytes(nil), 0)).toBeUndefined();
-    // ipatPctNew2 (0x0023), a 2.5% fill [MS-DOC] itself says SHOULD NOT be used, and that ST_Shd -- and therefore ContentCellPatternType -- has no member for at all.
+    // ipatPctNew2 (0x0023), a 2.5% fill [MS-DOC] itself says SHOULD NOT be used, and that ST_Shd — and therefore ContentCellPatternType — has no member for at all.
     const pctNew2 = [
       0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x00, 0x23, 0x00,
     ];
@@ -521,12 +521,12 @@ describe("Shd80", () => {
     expect(readShd80(0x0000)).toBeUndefined();
   });
 
-  it("reads Shd80Nil -- every bit set -- as no background", () => {
+  it("reads Shd80Nil — every bit set — as no background", () => {
     expect(readShd80(0xffff)).toBeUndefined();
   });
 
   it("resolves an icoFore/icoBack past the palette's own 0x11 bound to no background, rather than aborting the whole document read", () => {
-    // icoFore and icoBack are each a 5-bit field (0-31), so a value the 17-entry palette has no entry for is a real possibility this reader must not fail the whole document over -- see decoration.ts's own readBrc80 note and color.ts's decorativeIcoColor.
+    // icoFore and icoBack are each a 5-bit field (0-31), so a value the 17-entry palette has no entry for is a real possibility this reader must not fail the whole document over — see decoration.ts's own readBrc80 note and color.ts's decorativeIcoColor.
     expect(readShd80(0x03e0)).toBeUndefined(); // ipatAuto (bits 10-15 = 0), icoFore 0, icoBack 0x1f (bits 5-9)
     expect(readShd80(0x041f)).toBeUndefined(); // ipatSolid (bits 10-15 = 1), icoFore 0x1f (bits 0-4), icoBack 0
   });

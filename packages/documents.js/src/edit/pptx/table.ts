@@ -21,7 +21,7 @@ export interface PptxTableInit {
   readonly columnWidthsPt?: readonly number[];
 }
 
-// Matches docx/odt's own DEFAULT_TABLE_WIDTH_TWIPS/DEFAULT_TABLE_WIDTH_PT convention (468pt, US Letter width minus 1in margins either side) -- the content width a new table defaults to when no explicit column widths are given.
+// Matches docx/odt's own DEFAULT_TABLE_WIDTH_TWIPS/DEFAULT_TABLE_WIDTH_PT convention (468pt, US Letter width minus 1in margins either side) — the content width a new table defaults to when no explicit column widths are given.
 const DEFAULT_TABLE_WIDTH_PT = 468;
 // PowerPoint always writes a real measured row height; nothing in this writer's own callers (buildPptxPackage's appendShape) currently supplies one, so every row gets this single-line placeholder.
 const DEFAULT_ROW_HEIGHT_PT = 20;
@@ -29,7 +29,7 @@ const DEFAULT_ROW_HEIGHT_PT = 20;
 const TABLE_GRAPHIC_URI =
   "http://schemas.openxmlformats.org/drawingml/2006/table";
 
-// ContentTableCell.verticalAlign's own top/center/bottom vocabulary written as a:tcPr/@anchor's t/ctr/b -- the pptx-side counterpart to odf.js's own ODF_VERTICAL_ALIGN_BY_PIVOT (typed/shared/table.ts) for the identical concept.
+// ContentTableCell.verticalAlign's own top/center/bottom vocabulary written as a:tcPr/@anchor's t/ctr/b — the pptx-side counterpart to odf.js's own ODF_VERTICAL_ALIGN_BY_PIVOT (typed/shared/table.ts) for the identical concept.
 const PPTX_TABLE_CELL_VERTICAL_ALIGN_ANCHOR = {
   top: "t",
   center: "ctr",
@@ -49,7 +49,7 @@ const ANCHOR_TABLE_CELL_VERTICAL_ALIGN: ReadonlyMap<
   ["b", "bottom"],
 ]);
 
-// A live view over a DrawingML table cell (a:tc) -- the ContentTable-cell-shaped counterpart to DocxTableCell/OdtTableCell (src/edit/docx/table.ts, src/edit/odt/table.ts), but for a table living inside a slide's own p:graphicFrame rather than a document body. Unlike docx's gridSpan-collapses-the-row model, and matching ODF's covered-table-cell model in spirit, a DrawingML table's own a:tr always carries exactly `columns` a:tc elements regardless of merges (ooxml.js's own readTable confirms this: every row is `childrenWithTag(tr, "a:tc").map(readTableCell)` with no gridSpan-based skipping) -- a merge is expressed purely via attributes on the covered cell's own a:tc (hMerge/vMerge, boolean "1"), never by omitting or replacing the element the way docx/ODF each do in their own way.
+// A live view over a DrawingML table cell (a:tc) — the ContentTable-cell-shaped counterpart to DocxTableCell/OdtTableCell (src/edit/docx/table.ts, src/edit/odt/table.ts), but for a table living inside a slide's own p:graphicFrame rather than a document body. Unlike docx's gridSpan-collapses-the-row model, and matching ODF's covered-table-cell model in spirit, a DrawingML table's own a:tr always carries exactly `columns` a:tc elements regardless of merges (ooxml.js's own readTable confirms this: every row is `childrenWithTag(tr, "a:tc").map(readTableCell)` with no gridSpan-based skipping) — a merge is expressed purely via attributes on the covered cell's own a:tc (hMerge/vMerge, boolean "1"), never by omitting or replacing the element the way docx/ODF each do in their own way.
 export class PptxTableCell {
   constructor(private readonly node: XmlElement) {}
 
@@ -101,7 +101,7 @@ export class PptxTableCell {
     }
   }
 
-  // a:tcPr is the cell's own properties container (ECMA-376 21.1.3.8) -- find-or-create it, since every setter below either reads from or writes into it. buildTableCellElement already creates an empty a:tcPr as the cell's last child, so this is find-most-of-the-time rather than create-often.
+  // a:tcPr is the cell's own properties container (ECMA-376 21.1.3.8) — find-or-create it, since every setter below either reads from or writes into it. buildTableCellElement already creates an empty a:tcPr as the cell's last child, so this is find-most-of-the-time rather than create-often.
   private tcPrElement(create: true): XmlElement;
   private tcPrElement(create: false): XmlElement | undefined;
   private tcPrElement(create: boolean): XmlElement | undefined {
@@ -114,7 +114,7 @@ export class PptxTableCell {
     return created;
   }
 
-  // a:tcPr/a:solidFill/a:srgbClr@val -- the cell's fill colour, read back by ooxml.js's own readTableCell (typed/pptx/read.ts) via readSolidFillColor. The hex is uppercase to match what real PowerPoint itself emits (a:srgbClr/@val is case-insensitive); rgbHexToColor parses either case identically.
+  // a:tcPr/a:solidFill/a:srgbClr@val — the cell's fill colour, read back by ooxml.js's own readTableCell (typed/pptx/read.ts) via readSolidFillColor. The hex is uppercase to match what real PowerPoint itself emits (a:srgbClr/@val is case-insensitive); rgbHexToColor parses either case identically.
   get background(): Color | undefined {
     const tcPr = this.tcPrElement(false);
     if (tcPr === undefined) {
@@ -145,7 +145,7 @@ export class PptxTableCell {
     );
   }
 
-  // a:tcPr children a:lnL/a:lnR/a:lnT/a:lnB (ECMA-376 21.1.3.2/3/4/5) -- the four cell-border edges. Each a:lnX carries @w in EMU and an a:solidFill/a:srgbClr child naming the border colour. ooxml.js's own readTableCell reads these too (its own readTableCellBorders, resolved through the scheme-colour-aware readSolidFillColor rather than this setter's own srgbClr-only shortcut), so a border's colour and width written here round-trip through both this package's own reader below and ooxml.js's. A border's stroke style (dashed/dotted/etc, ContentStrokeStyle) does not round-trip: the setter below never writes an a:prstDash child, and this package's own readBorder has no style field to read one back into even were it present.
+  // a:tcPr children a:lnL/a:lnR/a:lnT/a:lnB (ECMA-376 21.1.3.2/3/4/5) — the four cell-border edges. Each a:lnX carries @w in EMU and an a:solidFill/a:srgbClr child naming the border colour. ooxml.js's own readTableCell reads these too (its own readTableCellBorders, resolved through the scheme-colour-aware readSolidFillColor rather than this setter's own srgbClr-only shortcut), so a border's colour and width written here round-trip through both this package's own reader below and ooxml.js's. A border's stroke style (dashed/dotted/etc, ContentStrokeStyle) does not round-trip: the setter below never writes an a:prstDash child, and this package's own readBorder has no style field to read one back into even were it present.
   get borders(): ContentCellBorders | undefined {
     const tcPr = this.tcPrElement(false);
     if (tcPr === undefined) {
@@ -214,7 +214,7 @@ export class PptxTableCell {
     }
   }
 
-  // a:tcPr/@anchor (ECMA-376 21.1.3.8, ST_TextAnchoringType) -- read back by ooxml.js's own readTableCellVerticalAlign (typed/pptx/read.ts), which this setter's vocabulary mirrors exactly. ST_TextAnchoringType's other two members, just/dist, describe how multiple lines fill the cell rather than a position among three discrete slots and have no member in ContentTableCell.verticalAlign's own three-value vocabulary to write from, matching odf.js's own PIVOT_VERTICAL_ALIGN_BY_ODF/ODF_VERTICAL_ALIGN_BY_PIVOT pair (typed/shared/table.ts) for the identical top/center/bottom concept.
+  // a:tcPr/@anchor (ECMA-376 21.1.3.8, ST_TextAnchoringType) — read back by ooxml.js's own readTableCellVerticalAlign (typed/pptx/read.ts), which this setter's vocabulary mirrors exactly. ST_TextAnchoringType's other two members, just/dist, describe how multiple lines fill the cell rather than a position among three discrete slots and have no member in ContentTableCell.verticalAlign's own three-value vocabulary to write from, matching odf.js's own PIVOT_VERTICAL_ALIGN_BY_ODF/ODF_VERTICAL_ALIGN_BY_PIVOT pair (typed/shared/table.ts) for the identical top/center/bottom concept.
   get verticalAlign(): ContentTableCell["verticalAlign"] {
     const tcPr = this.tcPrElement(false);
     if (tcPr === undefined) {
@@ -268,11 +268,11 @@ export class PptxTableCell {
     };
   }
 
-  // Replaces this cell's own a:txBody paragraph content -- mirrors PptxShape.setParagraphs (shape.ts) exactly, since a:tc's own a:txBody is the identical CT_TextBody content model a p:sp's is.
+  // Replaces this cell's own a:txBody paragraph content — mirrors PptxShape.setParagraphs (shape.ts) exactly, since a:tc's own a:txBody is the identical CT_TextBody content model a p:sp's is.
   setParagraphs(paragraphs: readonly DrawingParagraphInit[]): void {
     const txBody = directChildElement(this.node, "a:txBody");
     if (txBody === undefined) {
-      return; // unreachable in practice -- buildTableCellElement always creates one.
+      return; // unreachable in practice — buildTableCellElement always creates one.
     }
     const nonParagraphChildren = txBody.children.filter(
       (c) => !(c.type === "element" && c.tag === "a:p"),
@@ -298,7 +298,7 @@ export class PptxTableRow {
   }
 }
 
-// A live view over a DrawingML table (a:tbl) living inside a slide's own p:graphicFrame -- built via PptxSlide.addTable (slide.ts), the pptx-side counterpart to a document-level DocxTable/OdtTable.
+// A live view over a DrawingML table (a:tbl) living inside a slide's own p:graphicFrame — built via PptxSlide.addTable (slide.ts), the pptx-side counterpart to a document-level DocxTable/OdtTable.
 export class PptxTable {
   constructor(private readonly node: XmlElement) {}
 
@@ -367,7 +367,7 @@ export function buildDrawingTable(init: PptxTableInit): XmlElement {
   ]);
 }
 
-// Builds the p:graphicFrame wrapping a DrawingML table -- a genuinely different shape kind from PptxShape's own p:sp/p:pic (its own frame lives on a direct p:xfrm child, not nested inside a p:spPr the way p:sp/p:pic's does; see ooxml.js's own readGraphicFrameShape), which is why table shapes get their own PptxTable/PptxTableCell view rather than being squeezed into PptxShape's existing frame/rotationDeg accessors. rotationDeg follows the identical a:xfrm/@rot convention PptxShape.rotationDeg already documents (see shape.ts).
+// Builds the p:graphicFrame wrapping a DrawingML table — a genuinely different shape kind from PptxShape's own p:sp/p:pic (its own frame lives on a direct p:xfrm child, not nested inside a p:spPr the way p:sp/p:pic's does; see ooxml.js's own readGraphicFrameShape), which is why table shapes get their own PptxTable/PptxTableCell view rather than being squeezed into PptxShape's existing frame/rotationDeg accessors. rotationDeg follows the identical a:xfrm/@rot convention PptxShape.rotationDeg already documents (see shape.ts).
 export function buildTableGraphicFrame(
   frame: Box,
   tableElement: XmlElement,
@@ -400,7 +400,7 @@ export function buildTableGraphicFrame(
   ]);
 }
 
-// The read-side inverse of buildTableGraphicFrame: given a p:graphicFrame, returns its a:tbl element if -- and only if -- its a:graphic/a:graphicData carries the table URI, exactly the same uri === TABLE_GRAPHIC_URI check ooxml.js's own readGraphicFrameShape (typed/pptx/read.ts) already makes when deciding whether a graphic frame is a table. Returns undefined for a graphic frame holding a chart, SmartArt, or any other a:graphicData payload -- PptxSlide.tables() uses this to filter p:spTree's children down to real tables only.
+// The read-side inverse of buildTableGraphicFrame: given a p:graphicFrame, returns its a:tbl element if — and only if — its a:graphic/a:graphicData carries the table URI, exactly the same uri === TABLE_GRAPHIC_URI check ooxml.js's own readGraphicFrameShape (typed/pptx/read.ts) already makes when deciding whether a graphic frame is a table. Returns undefined for a graphic frame holding a chart, SmartArt, or any other a:graphicData payload — PptxSlide.tables() uses this to filter p:spTree's children down to real tables only.
 export function findGraphicFrameTable(
   graphicFrame: XmlElement,
 ): XmlElement | undefined {

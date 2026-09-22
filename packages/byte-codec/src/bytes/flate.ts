@@ -2,9 +2,9 @@ import { Unzlib, inflateSync, unzlibSync, zlibSync } from "fflate";
 import { isAsciiWhitespace } from "./reader";
 import { concatBytes } from "./writer";
 
-// The only file in the package that imports fflate -- the direct analogue of ooxml.js's own src/zip.ts ("a thin wrapper over fflate's zipSync/unzipSync, isomorphic and dependency-free"). PDF's FlateDecode filter and PNG's IDAT payload both use zlib-framed DEFLATE (RFC 1950 -- a 2-byte header plus a trailing Adler-32 checksum) -- that is zlibSync/unzlibSync, NOT fflate's deflateSync/inflateSync, which are raw DEFLATE (RFC 1951) with no wrapper. Emitting or expecting the wrong framing produces a stream every conformant PDF/PNG reader rejects.
+// The only file in the package that imports fflate — the direct analogue of ooxml.js's own src/zip.ts ("a thin wrapper over fflate's zipSync/unzipSync, isomorphic and dependency-free"). PDF's FlateDecode filter and PNG's IDAT payload both use zlib-framed DEFLATE (RFC 1950 — a 2-byte header plus a trailing Adler-32 checksum) — that is zlibSync/unzlibSync, NOT fflate's deflateSync/inflateSync, which are raw DEFLATE (RFC 1951) with no wrapper. Emitting or expecting the wrong framing produces a stream every conformant PDF/PNG reader rejects.
 
-// Guards every call in this module against a maliciously or accidentally huge decompressed output -- both PDF and PNG streams here come from arbitrary, potentially adversarial input.
+// Guards every call in this module against a maliciously or accidentally huge decompressed output — both PDF and PNG streams here come from arbitrary, potentially adversarial input.
 export const MAX_INFLATE_OUTPUT_BYTES = 512 * 1024 * 1024;
 
 export type DeflateLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
@@ -46,7 +46,7 @@ export function inflateTolerant(data: Uint8Array<ArrayBuffer>): InflateResult {
   while (isAsciiWhitespace(data[offset])) {
     offset++;
   }
-  // Retried unconditionally, even when offset is still 0 (no whitespace prefix was found): inflate() is a deterministic pure function, so re-running it on data.subarray(0) -- the identical bytes the try block above already threw on -- fails the same way and falls through to the next recovery tier, exactly as if this attempt had been skipped.
+  // Retried unconditionally, even when offset is still 0 (no whitespace prefix was found): inflate() is a deterministic pure function, so re-running it on data.subarray(0) — the identical bytes the try block above already threw on — fails the same way and falls through to the next recovery tier, exactly as if this attempt had been skipped.
   try {
     return { bytes: inflate(data.subarray(offset)), recovered: true };
   } catch {
@@ -64,7 +64,7 @@ export function inflateTolerant(data: Uint8Array<ArrayBuffer>): InflateResult {
     chunks.push(chunk);
   });
   try {
-    // Pushed as NOT final: fflate only flushes decoded output incrementally as it's produced when a push is not marked as the stream's end -- marking truncated data `final: true` instead makes it run the end-of-stream/checksum finalisation path, which throws atomically before emitting anything at all (verified empirically against fflate 0.8.3). Since this is already the last-resort recovery tier, skipping checksum verification here is an acceptable trade.
+    // Pushed as NOT final: fflate only flushes decoded output incrementally as it's produced when a push is not marked as the stream's end — marking truncated data `final: true` instead makes it run the end-of-stream/checksum finalisation path, which throws atomically before emitting anything at all (verified empirically against fflate 0.8.3). Since this is already the last-resort recovery tier, skipping checksum verification here is an acceptable trade.
     unzlib.push(data, false);
   } catch {
     // whatever chunks were emitted before the throw are still valid partial output

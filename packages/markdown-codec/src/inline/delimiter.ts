@@ -1,6 +1,6 @@
-// CommonMark's delimiter-run machinery: left/right-flanking classification, and the single `processEmphasis` pass that resolves EVERY delimiter-based construct this package supports -- `*` and `_` emphasis/strong emphasis (CommonMark 0.31.2, "Emphasis and strong emphasis") and GFM `~` strikethrough. Strikethrough is deliberately NOT a second implementation: it is one more delimiter character with its own open/close predicate and its own "how many delimiters does a match consume" answer, both expressed as branches inside the shared matcher below, so the notoriously subtle stack walk exists exactly once.
+// CommonMark's delimiter-run machinery: left/right-flanking classification, and the single `processEmphasis` pass that resolves EVERY delimiter-based construct this package supports — `*` and `_` emphasis/strong emphasis (CommonMark 0.31.2, "Emphasis and strong emphasis") and GFM `~` strikethrough. Strikethrough is deliberately NOT a second implementation: it is one more delimiter character with its own open/close predicate and its own "how many delimiters does a match consume" answer, both expressed as branches inside the shared matcher below, so the notoriously subtle stack walk exists exactly once.
 //
-// The flanking rules and the "rule of three" are transcribed directly from the spec rather than approximated. This is the single hardest part of CommonMark to get right -- the conformance corpus devotes 132 of its 652 examples to emphasis alone -- and every simplification that looks harmless (treating left-flanking as "not followed by whitespace", skipping the rule of three, keeping one shared openers floor instead of one per delimiter signature) fails a real example in that corpus.
+// The flanking rules and the "rule of three" are transcribed directly from the spec rather than approximated. This is the single hardest part of CommonMark to get right — the conformance corpus devotes 132 of its 652 examples to emphasis alone — and every simplification that looks harmless (treating left-flanking as "not followed by whitespace", skipping the rule of three, keeping one shared openers floor instead of one per delimiter signature) fails a real example in that corpus.
 
 import {
   codePointAt,
@@ -17,7 +17,7 @@ const MAX_STRIKETHROUGH_RUN = 2;
 
 export interface Delimiter {
   readonly char: DelimiterChar;
-  // Delimiters still unconsumed in this run -- decremented as matches consume them, and the delimiter is dropped from the stack when it reaches zero.
+  // Delimiters still unconsumed in this run — decremented as matches consume them, and the delimiter is dropped from the stack when it reaches zero.
   count: number;
   // The run's ORIGINAL length, which the rule of three is defined against and which therefore must survive every partial consumption of `count`.
   readonly origCount: number;
@@ -39,7 +39,7 @@ export interface DelimiterRun {
 //
 // left-flanking  = not followed by Unicode whitespace, AND (not followed by Unicode punctuation OR preceded by Unicode whitespace or punctuation) right-flanking = not preceded by Unicode whitespace, AND (not preceded by Unicode punctuation OR followed by Unicode whitespace or punctuation)
 //
-// with the start and end of the block counting as whitespace. `*` may open whenever it is left-flanking and close whenever it is right-flanking; `_` is additionally restricted so intraword emphasis is impossible -- an `_` run that is both left- and right-flanking (i.e. sits between two word characters) can only open if it is preceded by punctuation, and can only close if it is followed by punctuation. That asymmetry is the whole reason `foo_bar_baz` is not emphasised while `foo*bar*baz` is.
+// with the start and end of the block counting as whitespace. `*` may open whenever it is left-flanking and close whenever it is right-flanking; `_` is additionally restricted so intraword emphasis is impossible — an `_` run that is both left- and right-flanking (i.e. sits between two word characters) can only open if it is preceded by punctuation, and can only close if it is followed by punctuation. That asymmetry is the whole reason `foo_bar_baz` is not emphasised while `foo*bar*baz` is.
 export function scanDelimiterRun(
   text: string,
   start: number,
@@ -80,7 +80,7 @@ export function scanDelimiterRun(
   return { count, canOpen: leftFlanking, canClose: rightFlanking };
 }
 
-// The delimiter stack itself: a doubly-linked list whose TOP is `top`. A linked list rather than an array because a delimiter is routinely removed from the middle (every time a match consumes the delimiters between an opener and a closer), and because a bracket entry (src/inline/inline.ts) holds a live reference to whichever delimiter was on top when it was pushed, as the floor for its own emphasis pass -- a reference that must stay valid across arbitrary removals elsewhere in the stack.
+// The delimiter stack itself: a doubly-linked list whose TOP is `top`. A linked list rather than an array because a delimiter is routinely removed from the middle (every time a match consumes the delimiters between an opener and a closer), and because a bracket entry (src/inline/inline.ts) holds a live reference to whichever delimiter was on top when it was pushed, as the floor for its own emphasis pass — a reference that must stay valid across arbitrary removals elsewhere in the stack.
 export class DelimiterStack {
   top: Delimiter | undefined;
 
@@ -113,14 +113,14 @@ export class DelimiterStack {
   }
 }
 
-// A closer's "signature" for the openers-floor map below. The rule-of-three predicate depends only on the closer's own delimiter character, whether it can also open, and its original length modulo three -- so once a closer with a given signature has failed to find any opener above a position, no LATER closer with that same signature can succeed below it either, and the search floor can be raised permanently. Keying by all three (rather than cmark's coarser "one bucket for every `_`") keeps the pruning exactly sound: a coarser key would raise the floor for closers whose predicate differs from the one that failed.
+// A closer's "signature" for the openers-floor map below. The rule-of-three predicate depends only on the closer's own delimiter character, whether it can also open, and its original length modulo three — so once a closer with a given signature has failed to find any opener above a position, no LATER closer with that same signature can succeed below it either, and the search floor can be raised permanently. Keying by all three (rather than cmark's coarser "one bucket for every `_`") keeps the pruning exactly sound: a coarser key would raise the floor for closers whose predicate differs from the one that failed.
 //
 // Exported for direct testing: the string's own exact shape (which literal marks the canOpen branch, `% 3` rather than any other reduction) has no effect processEmphasis's own black-box behaviour can distinguish — every reachable pair of distinct signatures is already provably distinct by char or by the raw fields isRuleOfThreeBlocked reads regardless of the exact spelling used to encode them here, so the only way to pin the concrete encoding this comment documents is to assert this function's own return value.
 export function closerSignature(closer: Delimiter): string {
   return `${closer.char}${closer.canOpen ? "1" : "0"}${String(closer.origCount % 3)}`;
 }
 
-// spec 0.31.2, emphasis rules 9 and 10 -- the "rule of three": if one of the delimiters can both open and close, a match is forbidden when the sum of the two run lengths is a multiple of three, unless both lengths are themselves multiples of three. Expressed here in the equivalent form cmark uses, testing the closer's own length against 3 rather than both.
+// spec 0.31.2, emphasis rules 9 and 10 — the "rule of three": if one of the delimiters can both open and close, a match is forbidden when the sum of the two run lengths is a multiple of three, unless both lengths are themselves multiples of three. Expressed here in the equivalent form cmark uses, testing the closer's own length against 3 rather than both.
 function isRuleOfThreeBlocked(opener: Delimiter, closer: Delimiter): boolean {
   return (
     (closer.canOpen || opener.canClose) &&
@@ -167,7 +167,7 @@ export type EmphasisWrapperFactory = (
 
 // The single emphasis-resolution pass, run once at the end of a block and once per successfully-closed link/image bracket (with that bracket's own saved stack top as `stackBottom`, so a link's inner emphasis resolves without ever pairing across the link's boundary).
 //
-// Walks upward from the first delimiter above `stackBottom` looking for closers; for each closer, walks BACK down for the nearest opener that `canMatch` accepts, stopping at `stackBottom` or at the floor already established for that closer's signature. On a match it truncates both delimiter runs by the number consumed, moves every node strictly between the two delimiter text nodes into a fresh wrapper, and drops any delimiters that sat between them (they can no longer pair with anything). On no match it raises that signature's floor, and discards the closer entirely unless it can also open -- a delimiter that can only close and found nothing will never match anything later either.
+// Walks upward from the first delimiter above `stackBottom` looking for closers; for each closer, walks BACK down for the nearest opener that `canMatch` accepts, stopping at `stackBottom` or at the floor already established for that closer's signature. On a match it truncates both delimiter runs by the number consumed, moves every node strictly between the two delimiter text nodes into a fresh wrapper, and drops any delimiters that sat between them (they can no longer pair with anything). On no match it raises that signature's floor, and discards the closer entirely unless it can also open — a delimiter that can only close and found nothing will never match anything later either.
 export function processEmphasis(
   stack: DelimiterStack,
   stackBottom: Delimiter | undefined,

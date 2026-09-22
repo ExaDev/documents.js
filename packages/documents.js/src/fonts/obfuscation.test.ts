@@ -21,10 +21,10 @@ const SFNT_SIGNATURES: Readonly<Record<string, readonly number[]>> = {
   OTTO: [0x4f, 0x54, 0x54, 0x4f],
 };
 
-// A TrueType Collection, which looksLikeSfnt deliberately does NOT accept -- see its own comment for why the accepted set is exactly what pdf-codec can build a face from rather than every tag the sfnt container permits.
+// A TrueType Collection, which looksLikeSfnt deliberately does NOT accept — see its own comment for why the accepted set is exactly what pdf-codec can build a face from rather than every tag the sfnt container permits.
 const TTCF_SIGNATURE: readonly number[] = [0x74, 0x74, 0x63, 0x66];
 
-// A 12-byte sfnt table directory header with zero tables, prefixed by the given signature -- the smallest thing parseSfnt accepts, for exercising the signature sniff without dragging a real font in.
+// A 12-byte sfnt table directory header with zero tables, prefixed by the given signature — the smallest thing parseSfnt accepts, for exercising the signature sniff without dragging a real font in.
 function sfntHeader(signature: readonly number[]): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(64);
   bytes.set(signature, 0);
@@ -103,7 +103,7 @@ describe("looksLikeSfnt", () => {
 });
 
 describe("deobfuscateEmbeddedFont", () => {
-  // The end-to-end claim this module exists to make: bytes obfuscated with the specification's own literal key bytes come back byte-identical when deobfuscated with the GUID those bytes were quoted for. The fixture never calls deriveFontKey, so this fails outright if the derivation is wrong -- the recovered prefix would be noise and the sfnt check would reject it.
+  // The end-to-end claim this module exists to make: bytes obfuscated with the specification's own literal key bytes come back byte-identical when deobfuscated with the GUID those bytes were quoted for. The fixture never calls deriveFontKey, so this fails outright if the derivation is wrong — the recovered prefix would be noise and the sfnt check would reject it.
   it("recovers a real font from bytes obfuscated with the specification worked-example key", () => {
     const original = caladeaRegularBytes();
     const recovered = deobfuscateEmbeddedFont(

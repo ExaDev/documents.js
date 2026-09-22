@@ -41,14 +41,14 @@ export function nextMediaIndex(
     const n = Number.parseInt(digits, 10);
     // Math.max, not an if/comparison: the two ever differ observably only on a tie, and every
     // path here is keyed by its own literal numeric suffix, so no two iterations of this loop can
-    // ever see the same n twice -- a tie can only be n against its own already-recorded max, which
+    // ever see the same n twice — a tie can only be n against its own already-recorded max, which
     // assigns the identical value back, an if-based '>' vs '>=' comparison could never distinguish.
     max = Math.max(max, n);
   }
   return max + 1;
 }
 
-// Adds a binary image part, ensures its extension has a [Content_Types].xml Default entry, and adds a relationship from the referencing part to it -- the three package-level effects a new inline image needs, performed together so a caller can never end up with only some of them (e.g. a media part with no content-type entry, which is the single most common reason a hand-built OOXML package fails to open). The caller is still responsible for inserting the format-specific drawing fragment (w:drawing / p:pic) that references the returned relationship id -- that part is docx/pptx-specific and lives in src/edit/*/image.ts.
+// Adds a binary image part, ensures its extension has a [Content_Types].xml Default entry, and adds a relationship from the referencing part to it — the three package-level effects a new inline image needs, performed together so a caller can never end up with only some of them (e.g. a media part with no content-type entry, which is the single most common reason a hand-built OOXML package fails to open). The caller is still responsible for inserting the format-specific drawing fragment (w:drawing / p:pic) that references the returned relationship id — that part is docx/pptx-specific and lives in src/edit/*/image.ts.
 export function addImageMedia(
   pkg: Package,
   fromPartPath: string,

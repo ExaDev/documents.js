@@ -54,7 +54,7 @@ async function runBin(
 describe("bin", () => {
   it("strips the node/script argv[0..1] before resolving dispatch, not the full argv", () => {
     return runBin(["mcp"], "npm/10.2.4 node/v20", 0).then(({ call }) => {
-      // Without process.argv.slice(2), argv[0] would be "node" (not "mcp"), never triggering the mcp dispatch path -- this only resolves to document-mcp because the strip happened.
+      // Without process.argv.slice(2), argv[0] would be "node" (not "mcp"), never triggering the mcp dispatch path — this only resolves to document-mcp because the strip happened.
       expect(call.command).toBe("npx");
       expect(call.args).toEqual(["-y", "document-mcp"]);
     });

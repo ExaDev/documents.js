@@ -144,7 +144,7 @@ describe("insertInSchemaOrder", () => {
     const inserted = el("w:b", { id: "inserted" });
     const parent = el("w:rPr", {}, [existing]);
     insertInSchemaOrder(parent, inserted, RPR_ORDER);
-    // Same tag on both sides means the tag sequence alone reads identically either way an equal-rank sibling could be placed -- a distinguishing attribute on each element is what actually tells "appended after" apart from "inserted before".
+    // Same tag on both sides means the tag sequence alone reads identically either way an equal-rank sibling could be placed — a distinguishing attribute on each element is what actually tells "appended after" apart from "inserted before".
     expect(
       parent.children.map((c) => (c.type === "element" ? attr(c, "id") : c)),
     ).toEqual(["existing", "inserted"]);

@@ -21,7 +21,7 @@ describe("serialToIsoDate", () => {
   });
 
   it("refuses the 1900 system's phantom leap day", () => {
-    // Serial 60 is 1900-02-29, a date that never existed -- Lotus 1-2-3 treated 1900 as a leap year and Excel reproduced the bug for compatibility. Emitting an ISO date for it would put an impossible day in the document.
+    // Serial 60 is 1900-02-29, a date that never existed — Lotus 1-2-3 treated 1900 as a leap year and Excel reproduced the bug for compatibility. Emitting an ISO date for it would put an impossible day in the document.
     expect(serialToIsoDate(60, false)).toBeUndefined();
   });
 
@@ -76,7 +76,7 @@ describe("serialToIsoTime", () => {
   });
 
   it("reads a fraction just short of a full day as the last second of it", () => {
-    // 0.9999999 * 86400000 is 86399991.36 ms, which rounds to 86399991 -- genuinely 23:59:59, not a roll-over.
+    // 0.9999999 * 86400000 is 86399991.36 ms, which rounds to 86399991 — genuinely 23:59:59, not a roll-over.
     expect(serialToIsoTime(0.9999999)).toBe("23:59:59");
   });
 
@@ -153,7 +153,7 @@ describe("isoDateToSerial", () => {
   });
 
   it("writes 1899-12-31 itself as serial 0, the one day this epoch's own strict/non-strict boundary check must not also refuse", () => {
-    // days < 0 must throw and days === 0 must not -- a boundary this narrow (0 itself, not some day comfortably below it) is what tells a `<` refusal apart from a `<=` one; the sibling test below is well below the epoch either way and cannot distinguish them.
+    // days < 0 must throw and days === 0 must not — a boundary this narrow (0 itself, not some day comfortably below it) is what tells a `<` refusal apart from a `<=` one; the sibling test below is well below the epoch either way and cannot distinguish them.
     expect(isoDateToSerial("1899-12-31", false)).toBe(0);
   });
 
@@ -217,7 +217,7 @@ describe("isoDateTimeToSerial", () => {
   });
 
   it("refuses a string with no 'T' separator at the expected position, naming the offending value and the expected spelling in the message", () => {
-    // Bypassing this check entirely still throws SOME BiffWriteError for this particular malformed input -- the mis-sliced date half ("2024-01-01 12:00:0", missing its own last character) fails ISO_DATE_PATTERN on its own -- so only the EXACT message (naming the dateTime shape, not the date shape) tells a genuine refusal here apart from an incidental one raised downstream after the check was skipped.
+    // Bypassing this check entirely still throws SOME BiffWriteError for this particular malformed input — the mis-sliced date half ("2024-01-01 12:00:0", missing its own last character) fails ISO_DATE_PATTERN on its own — so only the EXACT message (naming the dateTime shape, not the date shape) tells a genuine refusal here apart from an incidental one raised downstream after the check was skipped.
     expect(() => isoDateTimeToSerial("2024-01-01 12:00:00", false)).toThrow(
       `dateTime value ${JSON.stringify("2024-01-01 12:00:00")} is not an ISO 8601 combined date and time (YYYY-MM-DDTHH:MM:SS), which is the only spelling document-schema.js's 'dateTime' cell value permits`,
     );

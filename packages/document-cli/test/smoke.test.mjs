@@ -1,4 +1,4 @@
-// Smoke test: the real built dist/cli.js runs correctly as a genuine subprocess -- argv parsing, exit codes, and stdout/stderr separation, not just the in-process command tree. Run only via `pnpm test:smoke` (tsdown, then vitest scoped to the "smoke" project), never part of the default `pnpm test` file set, since it requires a fresh build to mean anything. Every test here spawns dist/cli.js with node:child_process rather than importing it (it is a bin script, not designed to be imported) or calling src/program.ts's createProgram() directly (that would exercise the in-process command tree, not the actual shipped CLI's argv/exit-code/stdio behaviour this file exists to prove).
+// Smoke test: the real built dist/cli.js runs correctly as a genuine subprocess — argv parsing, exit codes, and stdout/stderr separation, not just the in-process command tree. Run only via `pnpm test:smoke` (tsdown, then vitest scoped to the "smoke" project), never part of the default `pnpm test` file set, since it requires a fresh build to mean anything. Every test here spawns dist/cli.js with node:child_process rather than importing it (it is a bin script, not designed to be imported) or calling src/program.ts's createProgram() directly (that would exercise the in-process command tree, not the actual shipped CLI's argv/exit-code/stdio behaviour this file exists to prove).
 import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -6,12 +6,12 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { createDocx, createFontRegistry, createOdg, createOds } from 'documents.js';
-// dist/index.js is this package's own deliberately-importable barrel (see its own top-of-file comment: "so an external consumer -- or a test -- can call this CLI's conversion logic directly"), unlike dist/cli.js -- pulling the exit-code constants from the built artifact avoids hardcoding magic exit-code numbers in this file while still proving the barrel build itself is sound.
+// dist/index.js is this package's own deliberately-importable barrel (see its own top-of-file comment: "so an external consumer — or a test — can call this CLI's conversion logic directly"), unlike dist/cli.js — pulling the exit-code constants from the built artifact avoids hardcoding magic exit-code numbers in this file while still proving the barrel build itself is sound.
 import { EXIT_INPUT_ERROR, EXIT_NEEDS_INFO, EXIT_SUCCESS, EXIT_USAGE_ERROR } from '../dist/index.js';
 
 const CLI_PATH = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 
-// Every invocation in this file goes through this one helper: spawns `node dist/cli.js <args>` as a real child process (via process.execPath rather than relying on the shebang/chmod bit, so this doesn't depend on the host OS honouring executable permissions), collects stdout/stderr as raw Buffers (never decoded as text up front -- the PDF-piping test below needs the exact bytes), and resolves once the process exits.
+// Every invocation in this file goes through this one helper: spawns `node dist/cli.js <args>` as a real child process (via process.execPath rather than relying on the shebang/chmod bit, so this doesn't depend on the host OS honouring executable permissions), collects stdout/stderr as raw Buffers (never decoded as text up front — the PDF-piping test below needs the exact bytes), and resolves once the process exits.
 function spawnCli(args, { input } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [CLI_PATH, ...args], { stdio: ['pipe', 'pipe', 'pipe'] });
@@ -31,7 +31,7 @@ function isPdfBytes(bytes) {
   return new TextDecoder('latin1').decode(bytes.subarray(0, 5)) === '%PDF-';
 }
 
-// A tiny, real docx fixture built through documents.js's own live-view editor (already a dependency of this package) -- exercised as genuine input bytes, not a hand-crafted stub, for both the file-based round trip and the stdin-piping test below.
+// A tiny, real docx fixture built through documents.js's own live-view editor (already a dependency of this package) — exercised as genuine input bytes, not a hand-crafted stub, for both the file-based round trip and the stdin-piping test below.
 function buildFixtureDocxBytes() {
   const editor = createDocx();
   editor.body.appendParagraph().appendRun({ text: 'Hello from the document-cli smoke test' });
@@ -43,7 +43,7 @@ describe('dist/cli.js --help', () => {
     const { code, stdout } = await spawnCli(['--help']);
     expect(code).toBe(EXIT_SUCCESS);
     const text = stdout.toString('utf8');
-    // markdown-to-pdf is not registered by any code in this package -- it exists only because documents.js's own createLocalDocumentConverter().conversions now includes a markdown edge, and registerConversionCommands (src/commands/convert.ts) loops over that array unmodified. Its presence here is the end-to-end proof that registering a new format entirely inside documents.js is enough.
+    // markdown-to-pdf is not registered by any code in this package — it exists only because documents.js's own createLocalDocumentConverter().conversions now includes a markdown edge, and registerConversionCommands (src/commands/convert.ts) loops over that array unmodified. Its presence here is the end-to-end proof that registering a new format entirely inside documents.js is enough.
     for (const name of ['docx-to-pdf', 'markdown-to-pdf', 'convert', 'formats', 'odm-to-pdf', 'odb-tables', 'odb-forms', 'odb-reports', 'pdf-inspect', 'outline', 'tui']) {
       expect(text).toContain(name);
     }
@@ -54,7 +54,7 @@ describe('dist/cli.js --version', () => {
   it('exits 0 and prints a real version string', async () => {
     const { code, stdout } = await spawnCli(['--version']);
     expect(code).toBe(EXIT_SUCCESS);
-    // Not a fixed literal -- semantic-release rewrites package.json's version at release time, so only the shape is checked, not a specific value.
+    // Not a fixed literal — semantic-release rewrites package.json's version at release time, so only the shape is checked, not a specific value.
     expect(stdout.toString('utf8').trim()).toMatch(/^\d+\.\d+\.\d+/);
   });
 });
@@ -101,7 +101,7 @@ describe('dist/cli.js docx-to-pdf -: stdin/stdout piping', () => {
     expect(isPdfBytes(stdout)).toBe(true);
     expect(stderr.length).toBeGreaterThan(0);
 
-    // The single most important guarantee this CLI's stdout/stderr separation depends on: stdout is the PDF bytes and nothing else. Cross-checked against the byte count the summary line itself reports on stderr, rather than merely trusting the %PDF- prefix above -- if any diagnostic text had leaked into stdout, this count would no longer match stdout's own actual length.
+    // The single most important guarantee this CLI's stdout/stderr separation depends on: stdout is the PDF bytes and nothing else. Cross-checked against the byte count the summary line itself reports on stderr, rather than merely trusting the %PDF- prefix above — if any diagnostic text had leaked into stdout, this count would no longer match stdout's own actual length.
     const stderrText = stderr.toString('utf8');
     const summaryMatch = /wrote (\d+) bytes to -/.exec(stderrText);
     expect(summaryMatch).not.toBeNull();
@@ -177,7 +177,7 @@ describe('dist/cli.js docx-to-markdown: real file round trip', () => {
       const { code } = await spawnCli(['docx-to-markdown', inputPath, outputPath]);
       expect(code).toBe(EXIT_SUCCESS);
 
-      // Markdown is the one directly human-readable target format in this whole family -- unlike a PDF or an OOXML/ODF zip, the output can be asserted on as plain text, so this is the one round-trip test in this file that checks the actual converted CONTENT rather than only a byte-signature/length check.
+      // Markdown is the one directly human-readable target format in this whole family — unlike a PDF or an OOXML/ODF zip, the output can be asserted on as plain text, so this is the one round-trip test in this file that checks the actual converted CONTENT rather than only a byte-signature/length check.
       const outputText = await readFile(outputPath, 'utf8');
       expect(outputText).toContain('DocxToMarkdownSmokeMarker');
     } finally {
@@ -199,7 +199,7 @@ describe('dist/cli.js docx-to-pdf: a nonexistent input file', () => {
       const stderrText = stderr.toString('utf8');
       const lines = stderrText.split('\n').filter((line) => line.length > 0);
       expect(lines).toHaveLength(1);
-      // A raw, unhandled Node stack trace always includes a "    at <name> (<file>:<line>:<col>)" frame line -- absence of that shape is the simple heuristic distinguishing this CLI's own one-line formatError output from an escaped exception.
+      // A raw, unhandled Node stack trace always includes a "    at <name> (<file>:<line>:<col>)" frame line — absence of that shape is the simple heuristic distinguishing this CLI's own one-line formatError output from an escaped exception.
       expect(stderrText).not.toMatch(/at .*:\d+:\d+/);
     } finally {
       await rm(tmpDir, { recursive: true, force: true });
@@ -234,7 +234,7 @@ describe('dist/cli.js docx-to-pdf --font-file', () => {
     try {
       const inputPath = join(tmpDir, 'caladea.docx');
       const fontPath = join(tmpDir, 'face.ttf');
-      // Caladea is deliberately a family documents.js has NO vendored substitute for (its table maps Calibri and Cambria, not Caladea), so without a --font-file this run has nothing to fall back to but a standard-14 face -- which is exactly what makes the two outputs below distinguishable.
+      // Caladea is deliberately a family documents.js has NO vendored substitute for (its table maps Calibri and Cambria, not Caladea), so without a --font-file this run has nothing to fall back to but a standard-14 face — which is exactly what makes the two outputs below distinguishable.
       await writeFile(inputPath, docxAskingFor('Caladea'));
       await writeFile(fontPath, vendoredCaladeaFaceBytes());
 
@@ -381,7 +381,7 @@ describe('dist/cli.js outline: real file round trip', () => {
 });
 
 describe('dist/cli.js outline: multi-page odg', () => {
-  // Regression coverage for multi-page odg outlining: outline used to bridge every source to a same-variant sibling purely to obtain a package (OUTLINE_CONVERSION_TARGET), and odg's own bridge target, svg, refuses a multi-page document outright (SvgMultiPageNotSpecifiedError) since outline has no --page flag to answer it with -- every multi-page .odg failed outright. outline now reads a source's own native tree directly (readNativeDocumentTree, documents.js), so there is no bridge and no per-page write constraint to dodge at all -- each drawing page reports as its own "Page N" draw-page group, document-outline.js's own drawing-variant convention, straight off odg's own native 'drawing' content.
+  // Regression coverage for multi-page odg outlining: outline used to bridge every source to a same-variant sibling purely to obtain a package (OUTLINE_CONVERSION_TARGET), and odg's own bridge target, svg, refuses a multi-page document outright (SvgMultiPageNotSpecifiedError) since outline has no --page flag to answer it with — every multi-page .odg failed outright. outline now reads a source's own native tree directly (readNativeDocumentTree, documents.js), so there is no bridge and no per-page write constraint to dodge at all — each drawing page reports as its own "Page N" draw-page group, document-outline.js's own drawing-variant convention, straight off odg's own native 'drawing' content.
   it('outlines a multi-page odg as one group per page, with no --page flag needed', async () => {
     const tmpDir = await mkdtemp(join(tmpdir(), 'document-cli-smoke-'));
     try {

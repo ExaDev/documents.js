@@ -4,7 +4,7 @@ import { encodePng } from "byte-codec";
 import { describe, expect, it } from "vitest";
 import { collectImageFrames } from "./detect";
 
-// A genuine, decodable 2x2 PNG (not just a bare magic-number stub) -- mirrors src/test-support/odp.ts's own tinyPngBase64 reasoning: readDrawImageBlock sniffs the actual bytes and returns undefined for anything it cannot recognise as a real image format.
+// A genuine, decodable 2x2 PNG (not just a bare magic-number stub) — mirrors src/test-support/odp.ts's own tinyPngBase64 reasoning: readDrawImageBlock sniffs the actual bytes and returns undefined for anything it cannot recognise as a real image format.
 function tinyPngBase64(): string {
   return bytesToBase64(
     encodePng({
@@ -88,7 +88,7 @@ describe("collectImageFrames", () => {
         "Pictures/image1.png": { kind: "binary", base64: tinyPngBase64() },
       },
     };
-    // A real formula/embedded-object frame: draw:object plus its own GDI-metafile preview bitmap as a bare sibling draw:image -- never wrapped in a draw:frame of its own, exactly the shape a real ODF producer writes.
+    // A real formula/embedded-object frame: draw:object plus its own GDI-metafile preview bitmap as a bare sibling draw:image — never wrapped in a draw:frame of its own, exactly the shape a real ODF producer writes.
     const formulaFrame = el(
       "draw:frame",
       { "svg:width": "30pt", "svg:height": "20pt" },
@@ -154,7 +154,7 @@ describe("collectImageFrames", () => {
 
 describe("collectImageFrames: floatPosition (ExaDev/documents.js#1094, the odt half of #1087)", () => {
   it.each(["page", "frame", "paragraph"] as const)(
-    "reads a text:anchor-type=\"%s\" frame's own svg:x/svg:y into ContentImageBlock.floatPosition, both axes offset-based -- ODF has no alignment-keyword concept the way docx's wp:align is",
+    "reads a text:anchor-type=\"%s\" frame's own svg:x/svg:y into ContentImageBlock.floatPosition, both axes offset-based — ODF has no alignment-keyword concept the way docx's wp:align is",
     (anchorType) => {
       const pkg = packageWithImage();
       const frame = el(
@@ -176,7 +176,7 @@ describe("collectImageFrames: floatPosition (ExaDev/documents.js#1094, the odt h
     },
   );
 
-  it('has no floatPosition for a text:anchor-type="as-char" frame -- inline in text flow, no position of its own to record', () => {
+  it('has no floatPosition for a text:anchor-type="as-char" frame — inline in text flow, no position of its own to record', () => {
     const pkg = packageWithImage();
     const frame = el(
       "draw:frame",

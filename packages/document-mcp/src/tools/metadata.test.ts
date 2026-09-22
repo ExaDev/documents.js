@@ -26,7 +26,7 @@ import {
 import { createServer } from "../server";
 import { buildDocxWithExtras } from "../test-support/docx-extras-fixture";
 
-// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip -- not the tool callbacks in isolation -- so this proves the wiring: that `metadata_read`/`metadata_write` are registered under those names, that they reach documents.js's real readDocumentMetadata/setDocumentMetadata, and that a rejection documents.js throws (an unsupported xlsx target, say) reaches the caller as an isError result carrying documents.js's own message text verbatim. Mirrors src/tools/docx-extras.test.ts's own connection harness.
+// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip — not the tool callbacks in isolation — so this proves the wiring: that `metadata_read`/`metadata_write` are registered under those names, that they reach documents.js's real readDocumentMetadata/setDocumentMetadata, and that a rejection documents.js throws (an unsupported xlsx target, say) reaches the caller as an isError result carrying documents.js's own message text verbatim. Mirrors src/tools/docx-extras.test.ts's own connection harness.
 
 interface ConnectedPair {
   readonly client: Client;
@@ -96,7 +96,7 @@ describe("metadata_read / metadata_write", () => {
     expect(metadata.subject).toBeUndefined();
     expect(metadata.keywords).toBeUndefined();
 
-    // content mirrors structuredContent as JSON text -- the same "content is JSON.stringify(structuredContent)" convention every other tool in this package follows. toEqual (not toStrictEqual): JSON.stringify drops metadata's own explicit-undefined title/author/subject/keywords/creator keys, so the parsed text legitimately has fewer keys than structuredContent while still being value-equal.
+    // content mirrors structuredContent as JSON text — the same "content is JSON.stringify(structuredContent)" convention every other tool in this package follows. toEqual (not toStrictEqual): JSON.stringify drops metadata's own explicit-undefined title/author/subject/keywords/creator keys, so the parsed text legitimately has fewer keys than structuredContent while still being value-equal.
     const [block] = result.content;
     expect(block?.type).toBe("text");
     expect(block?.type === "text" ? JSON.parse(block.text) : undefined).toEqual(
@@ -152,7 +152,7 @@ describe("metadata_read / metadata_write", () => {
     expect(typeof readMetadata.modifiedIso).toBe("string");
   });
 
-  // ExaDev/documents.js#966/#1007: metadata_write reaches documents.js's setDocumentMetadata, whose docx/docx branch patches docProps/core.xml directly on the decoded Package rather than rebuilding from a ContentDocument -- so comments, footnotes, headers/footers, and numbering definitions (everything readDocxExtras covers) survive a metadata_write call through this MCP tool too, with no special-casing needed in this package's own tool implementation.
+  // ExaDev/documents.js#966/#1007: metadata_write reaches documents.js's setDocumentMetadata, whose docx/docx branch patches docProps/core.xml directly on the decoded Package rather than rebuilding from a ContentDocument — so comments, footnotes, headers/footers, and numbering definitions (everything readDocxExtras covers) survive a metadata_write call through this MCP tool too, with no special-casing needed in this package's own tool implementation.
   it("preserves docx-extras data (comments, footnotes, headers/footers, numbering) when patching a docx's metadata", async () => {
     const sourceBytes = buildDocxWithExtras();
     const before = readDocxExtras(decodePackage(sourceBytes));
@@ -185,7 +185,7 @@ describe("metadata_read / metadata_write", () => {
   });
 
   it("patches an xlsx file in place now that documents.js wires a real xlsx content codec, leaving its cells untouched", async () => {
-    // xlsx used to be rejected outright here -- documents.js's own DOCUMENT_FORMAT_CODECS registry gained a real xlsx content codec, and setDocumentMetadata now rebuilds xlsx through the identical readXContent -> buildXPackage shape every other REBUILD_FORMATS member already used.
+    // xlsx used to be rejected outright here — documents.js's own DOCUMENT_FORMAT_CODECS registry gained a real xlsx content codec, and setDocumentMetadata now rebuilds xlsx through the identical readXContent -> buildXPackage shape every other REBUILD_FORMATS member already used.
     const sheetCellText =
       "A cell surviving an xlsx metadata patch via document-mcp";
     const odsEditor = createOds();
@@ -232,7 +232,7 @@ describe("metadata_read / metadata_write", () => {
     });
   });
 
-  it("still rejects a cross-format request into xlsx -- metadata_write patches metadata in place, it does not convert format", async () => {
+  it("still rejects a cross-format request into xlsx — metadata_write patches metadata in place, it does not convert format", async () => {
     const bytes = createDocx().toBytes();
 
     const result = await pair.client.callTool({

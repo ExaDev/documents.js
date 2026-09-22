@@ -47,7 +47,7 @@ describe("cloneAndCollectTransferableBuffers", () => {
     expect(message.bytes).not.toBe(original);
     expect(Array.from(message.bytes)).toEqual([1, 2, 3]);
     expect(transfer).toEqual([message.bytes.buffer]);
-    // The caller's own reference must still be a live, attached buffer -- reusable in a later call.
+    // The caller's own reference must still be a live, attached buffer — reusable in a later call.
     expect(original.buffer.byteLength).toBe(3);
   });
 

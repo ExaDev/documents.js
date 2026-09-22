@@ -29,13 +29,13 @@ describe("deflate / inflate", () => {
 
   it("deflate output is genuinely zlib-framed (starts with a valid CMF/FLG header)", () => {
     const compressed = deflate(sample);
-    // A zlib header's first byte's low nibble must be 8 (the DEFLATE compression method), and the 16-bit big-endian header must be a multiple of 31 -- the check the zlib spec itself defines.
+    // A zlib header's first byte's low nibble must be 8 (the DEFLATE compression method), and the 16-bit big-endian header must be a multiple of 31 — the check the zlib spec itself defines.
     expect(compressed[0]! & 0x0f).toBe(8);
     expect(((compressed[0]! << 8) + compressed[1]!) % 31).toBe(0);
   });
 
   it("an explicit level is actually passed through to zlibSync, not discarded", () => {
-    // Level 0 is stored (no compression), so it round-trips correctly but produces output far larger than the default level's compressed size for this same, highly repetitive sample -- a difference only observable if the level option genuinely reaches zlibSync rather than being dropped.
+    // Level 0 is stored (no compression), so it round-trips correctly but produces output far larger than the default level's compressed size for this same, highly repetitive sample — a difference only observable if the level option genuinely reaches zlibSync rather than being dropped.
     const stored = deflate(sample, 0);
     const defaultLevel = deflate(sample);
     expect(stored.length).toBeGreaterThan(defaultLevel.length);

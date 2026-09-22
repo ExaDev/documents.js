@@ -29,7 +29,7 @@ import {
   type SheetGroupNode,
 } from "./package-node";
 
-// The bijection laws (bijection.test.ts) pin round-trip fidelity, not grouping semantics -- a degenerate decompose whose section groups carried flat, ungrouped children would satisfy every law just as well. These tests pin the TREE SHAPE itself: mandatory section groups, per-container stacks, the never-cross-a-shape-boundary rule, and the ownership discipline. Ported from document-outline.js's phase-1 decompose tests, adapted to schema 4 (decompose takes the flat ContentDocument; the envelope rides the package root).
+// The bijection laws (bijection.test.ts) pin round-trip fidelity, not grouping semantics — a degenerate decompose whose section groups carried flat, ungrouped children would satisfy every law just as well. These tests pin the TREE SHAPE itself: mandatory section groups, per-container stacks, the never-cross-a-shape-boundary rule, and the ownership discipline. Ported from document-outline.js's phase-1 decompose tests, adapted to schema 4 (decompose takes the flat ContentDocument; the envelope rides the package root).
 
 const SECTION_GEOMETRY = {
   pageSize: { widthPt: 595, heightPt: 842 },
@@ -50,7 +50,7 @@ function paragraph(
     ...(options.headingLevel !== undefined
       ? { headingLevel: options.headingLevel }
       : {}),
-    // numId omitted deliberately on list paragraphs: schema 4.0.0 made it optional, and OOXML drawing paragraphs carry only a level -- the exact slide-body shape the presentation decomposition nests by.
+    // numId omitted deliberately on list paragraphs: schema 4.0.0 made it optional, and OOXML drawing paragraphs carry only a level — the exact slide-body shape the presentation decomposition nests by.
     ...(options.listLevel !== undefined
       ? { list: { level: options.listLevel } }
       : {}),
@@ -197,8 +197,8 @@ describe("wordprocessing decomposition", () => {
     ]);
   });
 
-  it("pops a single open heading of equal level -- two consecutive H1s are siblings, not nested", () => {
-    // With exactly one heading on the stack when the second H1 arrives, the pop loop must read that one entry (stack top, not stack[1] -- an empty read past a single-element stack would never enter the loop at all, leaving the first H1 wrongly still open).
+  it("pops a single open heading of equal level — two consecutive H1s are siblings, not nested", () => {
+    // With exactly one heading on the stack when the second H1 arrives, the pop loop must read that one entry (stack top, not stack[1] — an empty read past a single-element stack would never enter the loop at all, leaving the first H1 wrongly still open).
     const h1a = paragraph("First", { headingLevel: 1 });
     const h1b = paragraph("Second", { headingLevel: 1 });
     const doc = wordprocessingDoc([[h1a, h1b]]);
@@ -213,8 +213,8 @@ describe("wordprocessing decomposition", () => {
     ]);
   });
 
-  it("pops two open headings in a row -- the pop loop's own re-check (not just its first read) must see the stack shrink to one element and keep popping", () => {
-    // H1 -> H2 (nested under it) -> H1: the second H1 must pop BOTH the H2 and the first H1, ending as a sibling of the first H1 at the section root. After the loop's first pop (H2 gone, stack now [h1a], length 1), the loop's own re-check re-reads the stack top -- a wrong index there (reading position 1 of a 1-element array) would see undefined and stop after only one pop, wrongly leaving the new H1 nested under the first one instead of a sibling of it.
+  it("pops two open headings in a row — the pop loop's own re-check (not just its first read) must see the stack shrink to one element and keep popping", () => {
+    // H1 -> H2 (nested under it) -> H1: the second H1 must pop BOTH the H2 and the first H1, ending as a sibling of the first H1 at the section root. After the loop's first pop (H2 gone, stack now [h1a], length 1), the loop's own re-check re-reads the stack top — a wrong index there (reading position 1 of a 1-element array) would see undefined and stop after only one pop, wrongly leaving the new H1 nested under the first one instead of a sibling of it.
     const h1a = paragraph("First", { headingLevel: 1 });
     const h2 = paragraph("Nested", { headingLevel: 2 });
     const h1b = paragraph("Second", { headingLevel: 1 });
@@ -230,7 +230,7 @@ describe("wordprocessing decomposition", () => {
     ]);
   });
 
-  it("pops a single open list item of equal level -- two consecutive same-level items are siblings, not nested", () => {
+  it("pops a single open list item of equal level — two consecutive same-level items are siblings, not nested", () => {
     const first = paragraph("First item", { listLevel: 0 });
     const second = paragraph("Second item", { listLevel: 0 });
     const doc = wordprocessingDoc([[first, second]]);
@@ -245,7 +245,7 @@ describe("wordprocessing decomposition", () => {
     ]);
   });
 
-  it("pops two open list items in a row -- the pop loop's own re-check must see the stack shrink to one element and keep popping", () => {
+  it("pops two open list items in a row — the pop loop's own re-check must see the stack shrink to one element and keep popping", () => {
     // level0 -> level1 (nested) -> level0: the same multi-pop boundary as the heading test above, on the list stack this time.
     const first = paragraph("First", { listLevel: 0 });
     const nested = paragraph("Nested", { listLevel: 1 });
@@ -263,7 +263,7 @@ describe("wordprocessing decomposition", () => {
   });
 
   it("attaches a non-paragraph leaf inside a single open list item's own children, not at the section root", () => {
-    // Exactly one list item open (stack length 1) when the leaf is encountered -- the same single-element-stack boundary the heading/list pop loops above are pinned against, this time for the plain top-of-stack read walkSectionBlocks uses to route a non-paragraph leaf.
+    // Exactly one list item open (stack length 1) when the leaf is encountered — the same single-element-stack boundary the heading/list pop loops above are pinned against, this time for the plain top-of-stack read walkSectionBlocks uses to route a non-paragraph leaf.
     const item = paragraph("Item", { listLevel: 0 });
     const img: ContentBlock = {
       kind: "image",
@@ -480,7 +480,7 @@ describe("spreadsheet decomposition", () => {
         children: [],
       },
     ]);
-    // A present-but-empty embeddedObjects array round-trips to the field ABSENT: decompose concatenated images and embedded objects into one children array, so a declared-empty field is indistinguishable from an absent one -- the bijection's one declared normalisation, pinned here in its stripping direction. (images rebuilds as the always-present empty array because the flat form requires it.)
+    // A present-but-empty embeddedObjects array round-trips to the field ABSENT: decompose concatenated images and embedded objects into one children array, so a declared-empty field is indistinguishable from an absent one — the bijection's one declared normalisation, pinned here in its stripping direction. (images rebuilds as the always-present empty array because the flat form requires it.)
     const flat = flattenTree({
       kind: "spreadsheet",
       metadata: {},
@@ -494,8 +494,8 @@ describe("spreadsheet decomposition", () => {
     expect(flat.sheets[2]).toHaveProperty("images");
   });
 
-  it("refuses a style ref on a sheet group loudly -- a sheet holds no block flow to resolve it onto", () => {
-    // The schema permits style on every group node, but the spreadsheet arm builds no resolution chain (a sheet's children are images and embedded objects, not paragraphs), so a ref there could only be passed by silently -- losing the styled content with no signal. The refusal mirrors entryOf's missing-table rule: resolution runs completely or not at all. Minting never stamps such a ref (a sheet group's extent is always empty); this guard is for hand-built trees.
+  it("refuses a style ref on a sheet group loudly — a sheet holds no block flow to resolve it onto", () => {
+    // The schema permits style on every group node, but the spreadsheet arm builds no resolution chain (a sheet's children are images and embedded objects, not paragraphs), so a ref there could only be passed by silently — losing the styled content with no signal. The refusal mirrors entryOf's missing-table rule: resolution runs completely or not at all. Minting never stamps such a ref (a sheet group's extent is always empty); this guard is for hand-built trees.
     const sheet: SheetGroupNode = {
       node: {
         kind: "sheet",
@@ -520,7 +520,7 @@ describe("spreadsheet decomposition", () => {
   });
 });
 
-// document-schema.js 4.1.0 added SectionConstructGroupNode/ShapeConstructGroupNode (docx SDTs, ODF fields, tracked changes, and the rest of document-schema.js#22's fidelity-construct vocabulary) to the tree; 4.2.0 gave ContentBlock the matching flat carrier, the constructStart/constructEnd marker pair, so the boundary is now a promotion like every other grouping signal rather than a shape only a hand-built tree could hold. These tests pin the promotion's SHAPE -- which scope a construct attaches at, what its interior groups by, and what the outer stacks do while it is open. Round-trip fidelity itself is the bijection suite's job (bijection.test.ts carries the construct corpus entries).
+// document-schema.js 4.1.0 added SectionConstructGroupNode/ShapeConstructGroupNode (docx SDTs, ODF fields, tracked changes, and the rest of document-schema.js#22's fidelity-construct vocabulary) to the tree; 4.2.0 gave ContentBlock the matching flat carrier, the constructStart/constructEnd marker pair, so the boundary is now a promotion like every other grouping signal rather than a shape only a hand-built tree could hold. These tests pin the promotion's SHAPE — which scope a construct attaches at, what its interior groups by, and what the outer stacks do while it is open. Round-trip fidelity itself is the bijection suite's job (bijection.test.ts carries the construct corpus entries).
 describe("construct-boundary promotion", () => {
   it("promotes a marker pair into one group whose children are the delimited region decomposed on its own", () => {
     const insideHeading = paragraph("inside", { headingLevel: 1 });
@@ -581,7 +581,7 @@ describe("construct-boundary promotion", () => {
         children: [
           {
             node: h1,
-            // A no longer holds the construct, and B no longer nests under A: constructStart closed the list stack before the bookmark group attached, so the bookmark group and B both land as H1's own direct children -- B reopens its own list nesting from scratch, which is exactly why its own listLevel of 1 does not nest it under anything here (there is nothing shallower still open to nest under). Document order survives regardless, which is what flatten actually depends on.
+            // A no longer holds the construct, and B no longer nests under A: constructStart closed the list stack before the bookmark group attached, so the bookmark group and B both land as H1's own direct children — B reopens its own list nesting from scratch, which is exactly why its own listLevel of 1 does not nest it under anything here (there is nothing shallower still open to nest under). Document order survives regardless, which is what flatten actually depends on.
             children: [
               { node: first, children: [] },
               {
@@ -597,7 +597,7 @@ describe("construct-boundary promotion", () => {
   });
 
   it("attaches a construct at the tail of a list beside the item it follows, not nested inside it (ExaDev/document-schema.js#1022)", () => {
-    // Nothing follows the construct's own close marker to signal the list continues -- the same shape epub-codec's own footnote-after-list reproduction in #1022 hit -- so constructStart closes the list scope first, exactly like a plain paragraph would, and the group promotes as a SectionConstructGroupNode (headings admitted in its own interior) rather than the list-flow ShapeConstructGroupNode a genuinely-nested construct gets. headingInside's own headingLevel is therefore a real heading group here, not ordinary content the way it would be inside a list item's own subtree.
+    // Nothing follows the construct's own close marker to signal the list continues — the same shape epub-codec's own footnote-after-list reproduction in #1022 hit — so constructStart closes the list scope first, exactly like a plain paragraph would, and the group promotes as a SectionConstructGroupNode (headings admitted in its own interior) rather than the list-flow ShapeConstructGroupNode a genuinely-nested construct gets. headingInside's own headingLevel is therefore a real heading group here, not ordinary content the way it would be inside a list item's own subtree.
     const item = paragraph("A", { listLevel: 0 });
     const headingInside = paragraph(
       "a heading-styled paragraph groups here, since this construct's interior is section flow, not list flow",
@@ -630,7 +630,7 @@ describe("construct-boundary promotion", () => {
   });
 
   it("attaches a footnote's own out-of-flow body at the section root rather than inside the list item its reference sat in (ExaDev/document-schema.js#1022's own repro)", () => {
-    // epub-codec's writeList/writeSectionChildren hit exactly this shape: a footnote reference rides the list item's own paragraph as a run-level construct extent (ContentParagraph.constructs, unrelated to the block-level marker pair below and never touched by list-stack handling), while the footnote's own body is a SEPARATE, later, block-level constructStart/constructEnd region -- a ranged anchor, not the point anchor a bare reference would be. Before the fix, that body promoted as a child of the list item purely because nothing between the item and the constructStart had popped the list stack; the item's own paragraph carrying a run-level extent already proves the two mechanisms are independent; the item never carried a block-level marker of its own.
+    // epub-codec's writeList/writeSectionChildren hit exactly this shape: a footnote reference rides the list item's own paragraph as a run-level construct extent (ContentParagraph.constructs, unrelated to the block-level marker pair below and never touched by list-stack handling), while the footnote's own body is a SEPARATE, later, block-level constructStart/constructEnd region — a ranged anchor, not the point anchor a bare reference would be. Before the fix, that body promoted as a child of the list item purely because nothing between the item and the constructStart had popped the list stack; the item's own paragraph carrying a run-level extent already proves the two mechanisms are independent; the item never carried a block-level marker of its own.
     const item = paragraph("before", { listLevel: 0 });
     const itemWithReference: ContentBlock = {
       kind: "paragraph",
@@ -800,7 +800,7 @@ describe("construct-boundary promotion", () => {
   });
 
   it("groups a heading shallower than the outer scope, opened inside the extent and never closed inside it, against nothing but the extent's own interior (ExaDev/documents.js#1122)", () => {
-    // The crossing case content.ts's own BALANCE comment names directly: an H2 is open outside when the pair starts, an H1 -- shallower than the H2 -- opens inside the extent and is still the innermost open heading when constructEnd is reached. Under a hoisting reading, that H1 would pop the H2 scope and "content after" would nest under the H1 instead; decompose's actual, deliberate resolution leaves the outer H2 stack undisturbed by anything inside the extent, in both directions, so "content after" lands back under H2 exactly where a plain paragraph following the construct would.
+    // The crossing case content.ts's own BALANCE comment names directly: an H2 is open outside when the pair starts, an H1 — shallower than the H2 — opens inside the extent and is still the innermost open heading when constructEnd is reached. Under a hoisting reading, that H1 would pop the H2 scope and "content after" would nest under the H1 instead; decompose's actual, deliberate resolution leaves the outer H2 stack undisturbed by anything inside the extent, in both directions, so "content after" lands back under H2 exactly where a plain paragraph following the construct would.
     const h2 = paragraph("Section A", { headingLevel: 2 });
     const h1 = paragraph("New top", { headingLevel: 1 });
     const source: ContentSection = {
@@ -836,7 +836,7 @@ describe("construct-boundary promotion", () => {
         },
       ],
     });
-    // The tree shape above is only half the claim -- flatten's own reconstruction is the other half, since headingLevel rides each anchor paragraph directly rather than being inferred from tree depth, so this crossing shape round-trips exactly like every other.
+    // The tree shape above is only half the claim — flatten's own reconstruction is the other half, since headingLevel rides each anchor paragraph directly rather than being inferred from tree depth, so this crossing shape round-trips exactly like every other.
     const flat = flattenTree({
       kind: "wordprocessing",
       metadata: {},
@@ -850,7 +850,7 @@ describe("construct-boundary promotion", () => {
   });
 });
 
-// Promotion is defined only over a balanced marker stream, so an unbalanced one is refused outright rather than repaired into a plausible tree -- the same "fail loudly, never silently skip" rule the sheet-group style-ref guard above follows. The thrown error carries document-schema.js's own ConstructMarkerImbalance payload, so a caller gets the offending block index without parsing a message.
+// Promotion is defined only over a balanced marker stream, so an unbalanced one is refused outright rather than repaired into a plausible tree — the same "fail loudly, never silently skip" rule the sheet-group style-ref guard above follows. The thrown error carries document-schema.js's own ConstructMarkerImbalance payload, so a caller gets the offending block index without parsing a message.
 describe("construct marker imbalance", () => {
   it("refuses a close marker that closes no open construct", () => {
     const doc = wordprocessingDoc([[paragraph("before"), CONSTRUCT_END]]);
@@ -886,7 +886,7 @@ describe("construct marker imbalance", () => {
     }
   });
 
-  it("refuses an unbalanced shape flow too -- the check runs per container block stream, not per document", () => {
+  it("refuses an unbalanced shape flow too — the check runs per container block stream, not per document", () => {
     const doc: ContentDocument = {
       kind: "presentation",
       metadata: {},
@@ -950,7 +950,7 @@ describe("drawing and formula decomposition", () => {
   });
 });
 
-// The ownership rule as a positive identity check: decompose embeds the document's own objects (leaves are the same references, never copies), and flatten emits those same objects back into block flow. The bijection laws deliberately never use toBe; this one deliberately does, because sharing IS the contract being pinned -- a consumer holding both views sees an edit through either.
+// The ownership rule as a positive identity check: decompose embeds the document's own objects (leaves are the same references, never copies), and flatten emits those same objects back into block flow. The bijection laws deliberately never use toBe; this one deliberately does, because sharing IS the contract being pinned — a consumer holding both views sees an edit through either.
 describe("ownership", () => {
   it("embeds the source nodes themselves, not copies", () => {
     const heading = paragraph("Chapter", { headingLevel: 1 });

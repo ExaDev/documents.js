@@ -3,7 +3,7 @@ import { loadMathFont } from "./math-font";
 import type * as SfntModule from "./sfnt";
 import type * as CmapTableModule from "./cmap-table";
 
-// loadMathFont() caches its result in a module-scoped variable, so exercising its "the embedded font is unreadable" guards -- invariant checks on this package's own build output, never reachable through the real vendored font -- needs a fresh, unmocked module per test: vi.resetModules() plus a dynamic re-import gets a clean, uncached loadMathFont, and vi.doMock lets exactly one of its own real dependencies fail while every other real parser still runs underneath it.
+// loadMathFont() caches its result in a module-scoped variable, so exercising its "the embedded font is unreadable" guards — invariant checks on this package's own build output, never reachable through the real vendored font — needs a fresh, unmocked module per test: vi.resetModules() plus a dynamic re-import gets a clean, uncached loadMathFont, and vi.doMock lets exactly one of its own real dependencies fail while every other real parser still runs underneath it.
 describe("loadMathFont against a deliberately broken parse (module-level cache reset per test)", () => {
   afterEach(() => {
     vi.doUnmock("./sfnt");
@@ -57,7 +57,7 @@ describe("loadMathFont against a deliberately broken parse (module-level cache r
   });
 });
 
-// Every expected value below was independently verified against the real vendored assets/fonts/STIXTwoMath-Regular.otf's own raw bytes while building math-table.ts/cmap-table.ts/hmtx-table.ts (a standalone Node script reading the sfnt table directory directly, not this package's own parser) -- these are real, external cross-checks, not values derived from and re-asserted against this module's own output.
+// Every expected value below was independently verified against the real vendored assets/fonts/STIXTwoMath-Regular.otf's own raw bytes while building math-table.ts/cmap-table.ts/hmtx-table.ts (a standalone Node script reading the sfnt table directory directly, not this package's own parser) — these are real, external cross-checks, not values derived from and re-asserted against this module's own output.
 describe("loadMathFont", () => {
   it("parses the embedded font header metrics", () => {
     const { font } = loadMathFont();
@@ -168,7 +168,7 @@ describe("loadMathFont", () => {
   });
 });
 
-// The font's own nominal vertical metrics, the uniform extent every glyph in the face shares: hhea ascent 762 and descent -238 at unitsPerEm 1000, i.e. 0.762/0.238 per em. Per-glyph ink bounds are what a caller sizing a box around PARTICULAR characters uses instead -- see cff-bounds.test.ts for the outline walk itself, cross-checked there against fontTools over the font's whole repertoire.
+// The font's own nominal vertical metrics, the uniform extent every glyph in the face shares: hhea ascent 762 and descent -238 at unitsPerEm 1000, i.e. 0.762/0.238 per em. Per-glyph ink bounds are what a caller sizing a box around PARTICULAR characters uses instead — see cff-bounds.test.ts for the outline walk itself, cross-checked there against fontTools over the font's whole repertoire.
 describe("per-glyph ink bounds", () => {
   it("exposes a real ink box in design units for a glyph, and none for one that draws nothing", () => {
     const { font } = loadMathFont();
@@ -213,7 +213,7 @@ describe("per-glyph ink bounds", () => {
   });
 
   it("reports a negative ink descent for a glyph drawing nothing below the baseline, rather than clamping it away", () => {
-    // 'x' sits exactly on the baseline (yMin 0) and 'y' descends to -235. A glyph whose lowest ink were above the baseline would report a negative descent, which is the honest number for it -- a consumer wanting a box that never crosses the baseline clamps at its own layer.
+    // 'x' sits exactly on the baseline (yMin 0) and 'y' descends to -235. A glyph whose lowest ink were above the baseline would report a negative descent, which is the honest number for it — a consumer wanting a box that never crosses the baseline clamps at its own layer.
     const metrics = loadMathFont().metricsAt(10);
     expect(metrics.glyph(0x78, 10)!.inkDescentPt).toBeCloseTo(0, 10); // arithmetically zero: negating a yMin of 0 leaves -0, which compares equal to 0 everywhere but through Object.is
     expect(metrics.glyph(0x79, 10)!.inkDescentPt).toBeCloseTo(
@@ -242,7 +242,7 @@ describe("per-glyph ink bounds", () => {
   });
 });
 
-// MathFontMetrics.stretch is the port documents.js's own MathML layout engine reaches stretchy glyphs through: math-stretch.ts already picks the variant or assembles the parts (and is tested against the real font in math-stretch.test.ts), so what is checked here is the layer this module adds on top -- converting to points at the caller's size, and MEASURING the resulting construction's real ink so a caller can place it. Every design-unit figure quoted below comes from the same raw-font values math-stretch.test.ts asserts, or from the glyph ink bounds cff-bounds.ts reads; the arithmetic is worked through in the comments rather than recorded from a run.
+// MathFontMetrics.stretch is the port documents.js's own MathML layout engine reaches stretchy glyphs through: math-stretch.ts already picks the variant or assembles the parts (and is tested against the real font in math-stretch.test.ts), so what is checked here is the layer this module adds on top — converting to points at the caller's size, and MEASURING the resulting construction's real ink so a caller can place it. Every design-unit figure quoted below comes from the same raw-font values math-stretch.test.ts asserts, or from the glyph ink bounds cff-bounds.ts reads; the arithmetic is worked through in the comments rather than recorded from a run.
 describe("MathFontMetrics.stretch", () => {
   const SIZE_PT = 12; // 1000 units/em, so exactly 0.012pt per design unit
   const PAREN = 0x28;
@@ -256,7 +256,7 @@ describe("MathFontMetrics.stretch", () => {
     // 20pt is 1666.67 design units, which the 1667-unit variant (glyph 1303) just covers.
     expect(result!.placements).toEqual([{ glyphId: 1303, offsetPt: 0 }]);
     expect(result!.sizePt).toBeCloseTo(1667 * 0.012, 9);
-    // That variant's own ink runs -563..1103 and its advance width is 427 -- all three genuinely differ from the base glyph's (-196..736, 357), which is the point of selecting a variant at all.
+    // That variant's own ink runs -563..1103 and its advance width is 427 — all three genuinely differ from the base glyph's (-196..736, 357), which is the point of selecting a variant at all.
     expect(result!.inkAscentPt).toBeCloseTo(1103 * 0.012, 9);
     expect(result!.inkDescentPt).toBeCloseTo(563 * 0.012, 9);
     expect(result!.advanceWidthPt).toBeCloseTo(427 * 0.012, 9);
@@ -279,7 +279,7 @@ describe("MathFontMetrics.stretch", () => {
       .stretch(PAREN, "vertical", 80, SIZE_PT);
     expect(result).toBeDefined();
     expect(result!.kind).toBe("assembly");
-    // 80pt is 6666.67 design units: four repetitions of the 1252-unit extender between the 1273-unit hooks (7554 raw across six parts), with the five seams free to widen from the font's own 100-unit minimum up to the 250 the hooks' connectors allow -- (7554 - 6666.67) / 5 = 177.47 falls inside that range, so the construction lands exactly on the target.
+    // 80pt is 6666.67 design units: four repetitions of the 1252-unit extender between the 1273-unit hooks (7554 raw across six parts), with the five seams free to widen from the font's own 100-unit minimum up to the 250 the hooks' connectors allow — (7554 - 6666.67) / 5 = 177.47 falls inside that range, so the construction lands exactly on the target.
     expect(result!.sizePt).toBeCloseTo(80, 9);
     expect(result!.placements.map((placement) => placement.glyphId)).toEqual([
       4862, 4861, 4861, 4861, 4861, 4860,
@@ -290,7 +290,7 @@ describe("MathFontMetrics.stretch", () => {
       (1273 + 4 * 1252 - 5 * ((7554 - 6666 - 2 / 3) / 5)) * 0.012,
       6,
     );
-    // The topmost ink is the upper hook's own yMax (1272) lifted by that last offset; the lowest is the lower hook's own yMin, which is 0 -- so the construction's ink sits entirely at or above its drawing origin, which is exactly why a caller cannot centre it by assuming a symmetric extent.
+    // The topmost ink is the upper hook's own yMax (1272) lifted by that last offset; the lowest is the lower hook's own yMin, which is 0 — so the construction's ink sits entirely at or above its drawing origin, which is exactly why a caller cannot centre it by assuming a symmetric extent.
     expect(result!.inkAscentPt).toBeCloseTo(
       result!.placements[5]!.offsetPt + 1272 * 0.012,
       6,
@@ -315,13 +315,13 @@ describe("MathFontMetrics.stretch", () => {
 
   it("returns undefined for a glyph this font does not stretch, and for one it has no glyph for at all", () => {
     const metrics = loadMathFont().metricsAt(SIZE_PT);
-    expect(metrics.stretch(0x78, "vertical", 40, SIZE_PT)).toBeUndefined(); // 'x' -- not stretchy on either axis in this font
+    expect(metrics.stretch(0x78, "vertical", 40, SIZE_PT)).toBeUndefined(); // 'x' — not stretchy on either axis in this font
     expect(metrics.stretch(0x28, "horizontal", 40, SIZE_PT)).toBeUndefined(); // a parenthesis stretches vertically only
     expect(metrics.stretch(0x1_0000, "vertical", 40, SIZE_PT)).toBeUndefined(); // an unassigned code point
   });
 
   it("measures a HORIZONTAL construction across the axis it is NOT stretched along", () => {
-    // The over-brace assembles left to right, so a part's own offset shifts it in x and leaves the ink extent purely vertical -- the opposite of the vertical case above, and the reason measureConstruction has to know which axis it is on.
+    // The over-brace assembles left to right, so a part's own offset shifts it in x and leaves the ink extent purely vertical — the opposite of the vertical case above, and the reason measureConstruction has to know which axis it is on.
     const result = loadMathFont()
       .metricsAt(SIZE_PT)
       .stretch(0x23de, "horizontal", 60, SIZE_PT);

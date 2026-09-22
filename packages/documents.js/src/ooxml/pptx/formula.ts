@@ -5,7 +5,7 @@ import { buildFormulaBlock } from "../../model/formula";
 import type { OmmlDiagnostic } from "../../omml/shared";
 import { readOfficeMath } from "../../omml/read";
 
-// pptx-side embedded-formula detection (ExaDev/documents.js#563), the counterpart to src/odf/formula/detect.ts's own collectSlideFormulaFrames -- same "one shape, one formula" granularity as odp (not docx's finer, inline-within-flowing-text splice, src/ooxml/docx/embedded-objects.ts, which a pptx shape has no structural equivalent of: a PowerPoint equation lives inside its own text box, not spliced into running prose the way an inline Word equation is). A shape mixing a real equation alongside ordinary text runs is out of this module's scope -- see formulaOnlyEquation's own comment -- and is read back as plain text, its OMML markup never inspected.
+// pptx-side embedded-formula detection (ExaDev/documents.js#563), the counterpart to src/odf/formula/detect.ts's own collectSlideFormulaFrames — same "one shape, one formula" granularity as odp (not docx's finer, inline-within-flowing-text splice, src/ooxml/docx/embedded-objects.ts, which a pptx shape has no structural equivalent of: a PowerPoint equation lives inside its own text box, not spliced into running prose the way an inline Word equation is). A shape mixing a real equation alongside ordinary text runs is out of this module's scope — see formulaOnlyEquation's own comment — and is read back as plain text, its OMML markup never inspected.
 
 export type OmmlDiagnosticSink = (
   diagnostic: OmmlDiagnostic,
@@ -21,7 +21,7 @@ interface FoundFormulaShape {
   readonly equation: XmlElement;
 }
 
-// A p:sp shape whose ENTIRE p:txBody is exactly one a:p holding nothing but a single m:oMathPara -- exactly what src/edit/pptx/shape.ts's own PptxShape.appendOfficeMath writes, so a formula this package wrote itself always reads straight back. m:oMathPara (OMML's own display-equation container) is what buildOfficeMathParagraph always wraps its output in, so that is what this looks for, not a bare m:oMath -- readOfficeMath (src/omml/read.ts) accepts either form directly.
+// A p:sp shape whose ENTIRE p:txBody is exactly one a:p holding nothing but a single m:oMathPara — exactly what src/edit/pptx/shape.ts's own PptxShape.appendOfficeMath writes, so a formula this package wrote itself always reads straight back. m:oMathPara (OMML's own display-equation container) is what buildOfficeMathParagraph always wraps its output in, so that is what this looks for, not a bare m:oMath — readOfficeMath (src/omml/read.ts) accepts either form directly.
 function formulaOnlyEquation(shape: XmlElement): XmlElement | undefined {
   const txBody = childrenWithTag(shape, "p:txBody")[0];
   if (txBody === undefined) {
@@ -82,7 +82,7 @@ function collectFormulaShapes(
   }
 }
 
-// Rebuilds a slide's own shapes array, replacing each formula-only p:sp's blocks with a real formula-kind embedded object. Must run BEFORE src/ooxml/pptx/vector.ts's own collapseVectorShapeRuns -- that pass can shrink the shapes array (collapsing several empty shape slots into one synthetic shape), which would invalidate the shapeIndex correspondence this function's own walk depends on, mirroring src/odf/odp/read.ts's own identical ordering rationale for its formula-then-vector two-pass structure. Returns `slide` unchanged when nothing was recovered.
+// Rebuilds a slide's own shapes array, replacing each formula-only p:sp's blocks with a real formula-kind embedded object. Must run BEFORE src/ooxml/pptx/vector.ts's own collapseVectorShapeRuns — that pass can shrink the shapes array (collapsing several empty shape slots into one synthetic shape), which would invalidate the shapeIndex correspondence this function's own walk depends on, mirroring src/odf/odp/read.ts's own identical ordering rationale for its formula-then-vector two-pass structure. Returns `slide` unchanged when nothing was recovered.
 export function spliceSlideFormulas(
   slide: ContentSlide,
   slideIndex: number,
@@ -107,7 +107,7 @@ export function spliceSlideFormulas(
     for (const diagnostic of diagnostics) {
       onMathDiagnostic?.(diagnostic, { sourcePath });
     }
-    // An equation whose OMML produced no MathML at all leaves the shape's existing (ordinary-text) reading in place -- mirroring src/ooxml/docx/embedded-objects.ts's own identical narrowing for the same case.
+    // An equation whose OMML produced no MathML at all leaves the shape's existing (ordinary-text) reading in place — mirroring src/ooxml/docx/embedded-objects.ts's own identical narrowing for the same case.
     if (mathml.length === 0) {
       continue;
     }

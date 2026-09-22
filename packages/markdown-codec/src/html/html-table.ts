@@ -1,6 +1,6 @@
-// A raw HTML <table> block -> ContentTable: the read-side half of the HTML-table fallback (ExaDev/documents.js#1089), the exact structural inverse of src/emit/html-table.ts. GFM's own pipe-table syntax has no grammar for a cell's colSpan/rowSpan/background, or for a non-inlinable block (a nested table, say) inside a cell (github.github.com/gfm, "Tables (extension)" -- a cell holds inline content only); this module recognises the one shape src/emit/html-table.ts writes for that case back into a real ContentTable, so the write-side fallback is a genuine round trip rather than a one-way improvement. A raw HTML `<table>` block is legal CommonMark (spec 0.31.2, "HTML blocks", start condition 6 names `table` directly -- https://spec.commonmark.org/0.31.2/#html-blocks), and src/html/html.ts's own top comment states this package's html_block handling never parses such a block's content as markup; this module is the one place that changes, for exactly one recognised shape, in the same bounded-recogniser spirit html.ts already establishes for raw HTML generally -- table/tr/td/th and their colspan/rowspan/style attributes specifically, never a general HTML-to-DOM parser. Content inside a raw HTML block is never reprocessed as markdown either (the same top comment), so a cell's own inline formatting is read back from real HTML tags (<strong>/<em>/<del>/<code>/<a href>) rather than markdown syntax.
+// A raw HTML <table> block -> ContentTable: the read-side half of the HTML-table fallback (ExaDev/documents.js#1089), the exact structural inverse of src/emit/html-table.ts. GFM's own pipe-table syntax has no grammar for a cell's colSpan/rowSpan/background, or for a non-inlinable block (a nested table, say) inside a cell (github.github.com/gfm, "Tables (extension)" — a cell holds inline content only); this module recognises the one shape src/emit/html-table.ts writes for that case back into a real ContentTable, so the write-side fallback is a genuine round trip rather than a one-way improvement. A raw HTML `<table>` block is legal CommonMark (spec 0.31.2, "HTML blocks", start condition 6 names `table` directly — https://spec.commonmark.org/0.31.2/#html-blocks), and src/html/html.ts's own top comment states this package's html_block handling never parses such a block's content as markup; this module is the one place that changes, for exactly one recognised shape, in the same bounded-recogniser spirit html.ts already establishes for raw HTML generally — table/tr/td/th and their colspan/rowspan/style attributes specifically, never a general HTML-to-DOM parser. Content inside a raw HTML block is never reprocessed as markdown either (the same top comment), so a cell's own inline formatting is read back from real HTML tags (<strong>/<em>/<del>/<code>/<a href>) rather than markdown syntax.
 //
-// Whatever shape this parser refuses -- multiple top-level tables in one block, stray text alongside a table, an unrecognised or unquoted attribute, an unterminated element -- is left for src/lower/lower.ts's own existing opaque-preservation path to handle exactly as it always has; this module returns undefined rather than guessing, and never throws.
+// Whatever shape this parser refuses — multiple top-level tables in one block, stray text alongside a table, an unrecognised or unquoted attribute, an unterminated element — is left for src/lower/lower.ts's own existing opaque-preservation path to handle exactly as it always has; this module returns undefined rather than guessing, and never throws.
 
 import type {
   Alignment,
@@ -18,7 +18,7 @@ import { placeAnchorTableRows, rgbHexToColor } from "document-schema.js";
 import { resolveMarkdownImage } from "../lower/image";
 import { MONOSPACE_FONT_FAMILY } from "../shared/style-constants";
 
-// --- Bounded balanced-tag scanning -- the one primitive every level of this parser (table -> tr -> td/th -> nested table) shares. ---
+// --- Bounded balanced-tag scanning — the one primitive every level of this parser (table -> tr -> td/th -> nested table) shares. ---
 
 interface HtmlElement {
   // The tag this element was opened with, lowercased. td and th share one extraction pass, and which of the two a cell was written as is the only thing that says the row is a header row, so the pass records it rather than discarding it.
@@ -59,7 +59,7 @@ function findBalancedClose(
   }
 }
 
-// Every top-level (not nested inside another same-class element) <tagName ...>...</tagName> in `text`, tolerating only whitespace between and around them -- any other stray content refuses the whole parse rather than guessing which parts to keep. `tagNames` lets td/th share one pass, and each element carries back the tag it was opened with, which is what lets parseTableRows recognise a header row (ExaDev/documents.js#1377) rather than assuming row position states it.
+// Every top-level (not nested inside another same-class element) <tagName ...>...</tagName> in `text`, tolerating only whitespace between and around them — any other stray content refuses the whole parse rather than guessing which parts to keep. `tagNames` lets td/th share one pass, and each element carries back the tag it was opened with, which is what lets parseTableRows recognise a header row (ExaDev/documents.js#1377) rather than assuming row position states it.
 function extractTopLevelElements(
   text: string,
   tagNames: readonly string[],
@@ -93,7 +93,7 @@ function extractTopLevelElements(
   return elements;
 }
 
-// --- Attribute reading -- double-quoted values only, matching exactly what src/emit/html-table.ts itself always writes; a single-quoted or unquoted attribute value is a real HTML shape this bounded recogniser simply does not attempt (the same deliberate boundary html.ts draws around a general parser). ---
+// --- Attribute reading — double-quoted values only, matching exactly what src/emit/html-table.ts itself always writes; a single-quoted or unquoted attribute value is a real HTML shape this bounded recogniser simply does not attempt (the same deliberate boundary html.ts draws around a general parser). ---
 
 function readAttr(attrs: string, name: string): string | undefined {
   const pattern = new RegExp(`\\b${name}\\s*=\\s*"([^"]*)"`, "i");
@@ -109,7 +109,7 @@ function readPositiveIntAttr(attrs: string, name: string): number | undefined {
   return Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
-// A `style="...background-color: #rrggbb..."` declaration -- the one CSS shape src/emit/html-table.ts's own writer ever produces for a cell's solid ContentCellFill, and the only one this reader recognises back; a pattern fill has no such CSS equivalent to begin with (see that module's own top comment) so there is nothing here for a pattern to round-trip through. The 3-digit shorthand (#rgb) is accepted too since it is completely unambiguous, even though the writer itself always emits the 6-digit form.
+// A `style="...background-color: #rrggbb..."` declaration — the one CSS shape src/emit/html-table.ts's own writer ever produces for a cell's solid ContentCellFill, and the only one this reader recognises back; a pattern fill has no such CSS equivalent to begin with (see that module's own top comment) so there is nothing here for a pattern to round-trip through. The 3-digit shorthand (#rgb) is accepted too since it is completely unambiguous, even though the writer itself always emits the 6-digit form.
 const BACKGROUND_COLOR_PATTERN =
   /background-color\s*:\s*#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/i;
 
@@ -133,7 +133,7 @@ function readBackgroundFill(attrs: string): ContentCellFill | undefined {
   return { kind: "solid", color };
 }
 
-// A `style="...text-align: <value>..."` declaration -- src/emit/html-table.ts's own exact mirror of the alignment it reads from a cell's own paragraph, richer than a plain GFM table's single per-column marker (see that module's own top comment) so it is read back per cell here too, applied onto whichever block ends up as the cell's own sole/first content when that block is a paragraph.
+// A `style="...text-align: <value>..."` declaration — src/emit/html-table.ts's own exact mirror of the alignment it reads from a cell's own paragraph, richer than a plain GFM table's single per-column marker (see that module's own top comment) so it is read back per cell here too, applied onto whichever block ends up as the cell's own sole/first content when that block is a paragraph.
 const TEXT_ALIGN_PATTERN = /text-align\s*:\s*(left|right|center|justify)\b/i;
 
 function readTextAlign(attrs: string): Alignment | undefined {
@@ -155,7 +155,7 @@ function readTextAlign(attrs: string): Alignment | undefined {
   }
 }
 
-// --- HTML entity decoding -- the fixed handful src/emit/html-table.ts's own escapeHtmlText/escapeHtmlAttribute ever produce, decoded in an order that never double-unescapes an already-literal "&amp;lt;" back into "<". ---
+// --- HTML entity decoding — the fixed handful src/emit/html-table.ts's own escapeHtmlText/escapeHtmlAttribute ever produce, decoded in an order that never double-unescapes an already-literal "&amp;lt;" back into "<". ---
 
 function unescapeHtml(text: string): string {
   return text
@@ -166,7 +166,7 @@ function unescapeHtml(text: string): string {
     .replaceAll("&amp;", "&");
 }
 
-// --- Inline content: the small, closed HTML tag vocabulary mirroring exactly what src/emit/inline.ts already spells in markdown syntax for a plain GFM table cell (bold/italic/strike/hyperlink/Courier-New-as-code-span -- see that module's own top comment) -- retargeted to real HTML tags here because raw HTML block content is never reprocessed as markdown (this module's own top comment). Recognised tags nest in any order and any combination; a run's own accumulated style merges every enclosing recognised tag's flag regardless of nesting order, so the write side is free to pick one fixed order (src/emit/html-table.ts does) without this reader depending on it. ---
+// --- Inline content: the small, closed HTML tag vocabulary mirroring exactly what src/emit/inline.ts already spells in markdown syntax for a plain GFM table cell (bold/italic/strike/hyperlink/Courier-New-as-code-span — see that module's own top comment) — retargeted to real HTML tags here because raw HTML block content is never reprocessed as markdown (this module's own top comment). Recognised tags nest in any order and any combination; a run's own accumulated style merges every enclosing recognised tag's flag regardless of nesting order, so the write side is free to pick one fixed order (src/emit/html-table.ts does) without this reader depending on it. ---
 
 type RunStyle = Pick<
   ContentRun,
@@ -242,7 +242,7 @@ function parseInlineHtml(text: string, style: RunStyle): ContentRun[] {
   }
 }
 
-// --- Block content: an <img> tag on its own recognises as an image block (reusing src/lower/image.ts's own data: URI decoder, the identical mechanism a markdown image destination already resolves through); anything else splits on the same literal <br> src/emit/html-table.ts's own writer joins multiple blocks with, one paragraph per segment; a cell whose ENTIRE content is one nested <table> recognises as that nested ContentTable directly, recursing through this module's own top-level table parser -- the one shape a nested block in a cell is bounded to (see this module's own top comment and ExaDev/documents.js#1089's own issue text). ---
+// --- Block content: an <img> tag on its own recognises as an image block (reusing src/lower/image.ts's own data: URI decoder, the identical mechanism a markdown image destination already resolves through); anything else splits on the same literal <br> src/emit/html-table.ts's own writer joins multiple blocks with, one paragraph per segment; a cell whose ENTIRE content is one nested <table> recognises as that nested ContentTable directly, recursing through this module's own top-level table parser — the one shape a nested block in a cell is bounded to (see this module's own top comment and ExaDev/documents.js#1089's own issue text). ---
 
 const IMG_TAG_PATTERN = /^<img\b([^>]*?)\/?>$/i;
 
@@ -293,7 +293,7 @@ function parseCellBlocks(
   return blocks;
 }
 
-// Applies a cell's own `text-align` (see readTextAlign above) onto its first block, when that block is a paragraph -- the same "first block only" scope src/emit/html-table.ts's own textAlignStyleAttr reads from on the way out, so this is a genuine inverse rather than a wider or narrower one.
+// Applies a cell's own `text-align` (see readTextAlign above) onto its first block, when that block is a paragraph — the same "first block only" scope src/emit/html-table.ts's own textAlignStyleAttr reads from on the way out, so this is a genuine inverse rather than a wider or narrower one.
 function applyTextAlign(
   blocks: ContentBlock[],
   alignment: Alignment | undefined,
@@ -369,7 +369,7 @@ function buildContentTable(
   return { kind: "table", rows, columnWidthsPt };
 }
 
-// Whether `text`, in its ENTIRETY (only surrounding whitespace tolerated), is exactly one <table>...</table> element -- shared by parseHtmlTable's own top-level entry point and parseCellBlocks' "is this cell's whole content one nested table" check above, since both ask the identical question.
+// Whether `text`, in its ENTIRETY (only surrounding whitespace tolerated), is exactly one <table>...</table> element — shared by parseHtmlTable's own top-level entry point and parseCellBlocks' "is this cell's whole content one nested table" check above, since both ask the identical question.
 function parseWholeTable(
   text: string,
   contentWidthPt: number,

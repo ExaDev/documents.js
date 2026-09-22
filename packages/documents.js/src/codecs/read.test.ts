@@ -48,7 +48,7 @@ describe("readDocumentLayout", () => {
   it("forwards the signal option through to readPdf, which checks it before parsing", () => {
     const controller = new AbortController();
     controller.abort();
-    // A real "%PDF-" header but otherwise garbage bytes: readPdf checks the header first, then the abort signal, before it ever opens the document -- if the signal were not forwarded (an empty options object), this would fail trying to parse the document instead.
+    // A real "%PDF-" header but otherwise garbage bytes: readPdf checks the header first, then the abort signal, before it ever opens the document — if the signal were not forwarded (an empty options object), this would fail trying to parse the document instead.
     const bytes = new TextEncoder().encode("%PDF-1.4\n%garbage");
     let caught: unknown;
     try {

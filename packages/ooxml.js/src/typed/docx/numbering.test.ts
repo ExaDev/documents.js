@@ -237,7 +237,7 @@ describe("buildNumberingElement", () => {
   });
 
   it("still sorts by genuine numeric value for a non-canonical ilvl string a plain object would not itself enumerate in ascending order (ilvl '00' before '10')", () => {
-    // Object property enumeration order hoists CANONICAL non-negative-integer string keys ('2', '10', ...) into ascending numeric order on its own, with no sort needed -- which is exactly why the '10'/'2' case above cannot, by itself, distinguish a real numeric sort from no sort at all, or from a broken comparator. '00' is not a canonical integer key (String(Number('00')) !== '00'), so it is enumerated in plain insertion order instead, after every canonical key -- letting a genuinely numeric comparator (rather than none, or a nonsensical one) show through.
+    // Object property enumeration order hoists CANONICAL non-negative-integer string keys ('2', '10', ...) into ascending numeric order on its own, with no sort needed — which is exactly why the '10'/'2' case above cannot, by itself, distinguish a real numeric sort from no sort at all, or from a broken comparator. '00' is not a canonical integer key (String(Number('00')) !== '00'), so it is enumerated in plain insertion order instead, after every canonical key — letting a genuinely numeric comparator (rather than none, or a nonsensical one) show through.
     const definitions = {
       "1": {
         levels: {

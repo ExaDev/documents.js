@@ -19,7 +19,7 @@ function contentPackage(
   };
 }
 
-// Like contentPackage above, but ALSO populates content.xml's own office:styles container -- the real placement of a named draw resource (<draw:gradient>/<draw:hatch>/<draw:fill-image>/<draw:stroke-dash>, OASIS ODF 1.3 section 16.42: "usable within the following element: <office:styles>"), a genuinely separate ODF vocabulary from style:style that a shape's own draw:fill-gradient-name/draw:fill-hatch-name/draw:fill-image-name/draw:stroke-dash attribute references by name rather than nests inside.
+// Like contentPackage above, but ALSO populates content.xml's own office:styles container — the real placement of a named draw resource (<draw:gradient>/<draw:hatch>/<draw:fill-image>/<draw:stroke-dash>, OASIS ODF 1.3 section 16.42: "usable within the following element: <office:styles>"), a genuinely separate ODF vocabulary from style:style that a shape's own draw:fill-gradient-name/draw:fill-hatch-name/draw:fill-image-name/draw:stroke-dash attribute references by name rather than nests inside.
 function contentPackageWithResources(
   automaticStyleChildren: XmlElement[],
   namedResourceChildren: XmlElement[],
@@ -47,7 +47,7 @@ function graphicStyle(
   );
 }
 
-// Only the PNG magic-byte signature matters to sniffImageFormat -- the rest is arbitrary filler, not a real encoded image, matching ooxml.js's own read.test.ts convention.
+// Only the PNG magic-byte signature matters to sniffImageFormat — the rest is arbitrary filler, not a real encoded image, matching ooxml.js's own read.test.ts convention.
 function tinyPngBase64(): string {
   return bytesToBase64(
     new Uint8Array([
@@ -111,7 +111,7 @@ describe("readDrawFrame: insets from the graphic-family style cascade", () => {
     expect(shape?.insetTopPt).toBeCloseTo(0.125 * (72 / 2.54), 6);
   });
 
-  it("inherits padding via style:parent-style-name -- the real LibreOffice pattern where a shape's own automatic style rarely repeats \"standard\"'s own padding declaration", () => {
+  it("inherits padding via style:parent-style-name — the real LibreOffice pattern where a shape's own automatic style rarely repeats \"standard\"'s own padding declaration", () => {
     const standard = graphicStyle("standard", {
       "fo:padding-left": "0.25cm",
       "fo:padding-top": "0.125cm",
@@ -194,7 +194,7 @@ describe("readDrawFrame: content dispatch", () => {
     ]);
   });
 
-  it("reads a text:list's own text:list-item > text:p paragraphs with list membership attached -- one minted numId across nesting, level read off the XML nesting depth (unstyled, so the numId carries no kind prefix)", () => {
+  it("reads a text:list's own text:list-item > text:p paragraphs with list membership attached — one minted numId across nesting, level read off the XML nesting depth (unstyled, so the numId carries no kind prefix)", () => {
     const list = el("text:list", {}, [
       el("text:list-item", {}, [el("text:p", {}, [txt("item one")])]),
       el("text:list-item", {}, [
@@ -220,7 +220,7 @@ describe("readDrawFrame: content dispatch", () => {
     ]);
   });
 
-  it("does not mint a spurious list numId for a draw:text-box child that is neither text:p nor text:list -- only a genuine text:list consumes the numId counter", () => {
+  it("does not mint a spurious list numId for a draw:text-box child that is neither text:p nor text:list — only a genuine text:list consumes the numId counter", () => {
     const list = el("text:list", {}, [
       el("text:list-item", {}, [el("text:p", {}, [txt("item")])]),
     ]);
@@ -258,7 +258,7 @@ describe("readDrawFrame: content dispatch", () => {
     ]);
   });
 
-  it("reads the frame's own svg:title as the image block's altText -- alt text lives on the FRAME, not the draw:image element", () => {
+  it("reads the frame's own svg:title as the image block's altText — alt text lives on the FRAME, not the draw:image element", () => {
     const pkg: Package = {
       parts: {
         "Pictures/img1.png": { kind: "binary", base64: tinyPngBase64() },
@@ -305,7 +305,7 @@ describe("readDrawFrame: content dispatch", () => {
     );
   });
 
-  it("falls back to svg:desc when svg:title is present but empty -- an empty title carries no real alt text", () => {
+  it("falls back to svg:desc when svg:title is present but empty — an empty title carries no real alt text", () => {
     const pkg: Package = {
       parts: {
         "Pictures/img1.png": { kind: "binary", base64: tinyPngBase64() },
@@ -393,7 +393,7 @@ describe("readDrawFrame: content dispatch", () => {
     expect(shape?.blocks[0]?.kind).toBe("table");
   });
 
-  it("prefers table:table over a sibling draw:image fallback preview -- the real LibreOffice-generated shape both a table frame and its own .svm preview image share", () => {
+  it("prefers table:table over a sibling draw:image fallback preview — the real LibreOffice-generated shape both a table frame and its own .svm preview image share", () => {
     const table = el("table:table", {}, [
       el("table:table-row", {}, [
         el("table:table-cell", {}, [el("text:p", {}, [txt("cell")])]),
@@ -422,7 +422,7 @@ describe("readDrawFrame: embedded objects (embeddedFormat opt-in)", () => {
     "svg:height": "50pt",
   };
 
-  it("attaches a chart embedded object's own residue as the block's source -- the one embedded kind whose sub-reader quarantines presentation-specific XML", () => {
+  it("attaches a chart embedded object's own residue as the block's source — the one embedded kind whose sub-reader quarantines presentation-specific XML", () => {
     const chartElement = el("chart:chart", {}, [
       el("table:table", {}, [el("table:table-row")]),
     ]);
@@ -454,7 +454,7 @@ describe("readDrawFrame: embedded objects (embeddedFormat opt-in)", () => {
     ).not.toBeUndefined();
   });
 
-  it("carries no source at all for an embedded kind other than chart -- residue is genuinely absent, not an empty placeholder", () => {
+  it("carries no source at all for an embedded kind other than chart — residue is genuinely absent, not an empty placeholder", () => {
     const pkg: Package = {
       parts: {
         "Object 1/content.xml": {
@@ -509,7 +509,7 @@ describe("readDrawFrame: flowPositioning opt-in", () => {
 });
 
 describe("readDrawFrame: rotation via draw:transform", () => {
-  it("composes into a center-pivoting frame + rotationDeg -- see transform.test.ts for the pixel-verified geometry this delegates to", () => {
+  it("composes into a center-pivoting frame + rotationDeg — see transform.test.ts for the pixel-verified geometry this delegates to", () => {
     const frame = el("draw:frame", {
       "svg:width": "200pt",
       "svg:height": "60pt",
@@ -567,7 +567,7 @@ describe("walkDrawShapes: flat, non-grouped content", () => {
 });
 
 describe("walkDrawShapes: draw:g group flattening", () => {
-  it("flattens a group's children into the parent's own flat shape list -- a real LibreOffice-generated group carries NO draw:transform of its own, so children keep their own literal, already-page-space coordinates unchanged", () => {
+  it("flattens a group's children into the parent's own flat shape list — a real LibreOffice-generated group carries NO draw:transform of its own, so children keep their own literal, already-page-space coordinates unchanged", () => {
     const shapeA = el("draw:frame", {
       "draw:name": "A",
       "svg:x": "50pt",
@@ -596,7 +596,7 @@ describe("walkDrawShapes: draw:g group flattening", () => {
     });
   });
 
-  it("composes a group's own draw:transform onto each child -- a concrete before/after example: child center (90,70) rotated+translated by the group becomes center (170,10)", () => {
+  it("composes a group's own draw:transform onto each child — a concrete before/after example: child center (90,70) rotated+translated by the group becomes center (170,10)", () => {
     // Before: child A's own box is x:50 y:50 w:80 h:40 -> local center (90, 70).
     const shapeA = el("draw:frame", {
       "svg:x": "50pt",
@@ -604,7 +604,7 @@ describe("walkDrawShapes: draw:g group flattening", () => {
       "svg:width": "80pt",
       "svg:height": "40pt",
     });
-    // Group transform: rotate(pi/2) translate(100pt 100pt) -- verified against a real render in transform.test.ts.
+    // Group transform: rotate(pi/2) translate(100pt 100pt) — verified against a real render in transform.test.ts.
     const group = el(
       "draw:g",
       { "draw:transform": "rotate(1.5707963267948966) translate(100pt 100pt)" },
@@ -616,7 +616,7 @@ describe("walkDrawShapes: draw:g group flattening", () => {
     // After: applyOdfTransform(groupFunctions, {90,70}) -> rotate: (70,-90) -> translate: (170,10) -> frame top-left = center - halfSize = (170-40, 10-20) = (130,-10).
     expect(out[0]?.frame.xPt).toBeCloseTo(130, 6);
     expect(out[0]?.frame.yPt).toBeCloseTo(-10, 6);
-    expect(out[0]?.frame.widthPt).toBeCloseTo(80, 6); // unchanged -- no scale in ODF's own group model
+    expect(out[0]?.frame.widthPt).toBeCloseTo(80, 6); // unchanged — no scale in ODF's own group model
     expect(out[0]?.frame.heightPt).toBeCloseTo(40, 6);
     expect(out[0]?.rotationDeg).toBeCloseTo(-90, 6);
   });
@@ -648,7 +648,7 @@ describe("walkDrawShapes: draw:g group flattening", () => {
   });
 });
 
-// Vector primitives (odg) -- fixtures below reuse real geometry/attribute shapes verified against genuine LibreOffice 26.2 .odg output (a StarBasic macro run headlessly via the UNO API, NOT hand-authored guesses -- see typed/shared/path.ts's own top-of-file note for the exact verification method and the real svg:d/draw:points strings these fixtures are drawn from).
+// Vector primitives (odg) — fixtures below reuse real geometry/attribute shapes verified against genuine LibreOffice 26.2 .odg output (a StarBasic macro run headlessly via the UNO API, NOT hand-authored guesses — see typed/shared/path.ts's own top-of-file note for the exact verification method and the real svg:d/draw:points strings these fixtures are drawn from).
 
 function vectorPackage(pkg: Package = { parts: {} }): Package {
   return pkg;
@@ -681,7 +681,7 @@ describe("readDrawPageContent: draw:rect / draw:ellipse / draw:circle", () => {
     expect(vector.stroke?.widthPt).toBeCloseTo(0.05 * (72 / 2.54), 6);
   });
 
-  it("reads draw:ellipse and draw:circle into the SAME ellipse variant -- real LibreOffice output writes draw:circle instead of draw:ellipse specifically when width equals height, with no other attribute-shape difference", () => {
+  it("reads draw:ellipse and draw:circle into the SAME ellipse variant — real LibreOffice output writes draw:circle instead of draw:ellipse specifically when width equals height, with no other attribute-shape difference", () => {
     const ellipse = el("draw:ellipse", {
       "svg:x": "0pt",
       "svg:y": "0pt",
@@ -698,7 +698,7 @@ describe("readDrawPageContent: draw:rect / draw:ellipse / draw:circle", () => {
     expect(vectors.map((v) => v.kind)).toEqual(["ellipse", "ellipse"]);
   });
 
-  it("reads no fill/no stroke when the style carries neither -- a real draw:line's own automatic style has no draw:fill-color at all", () => {
+  it("reads no fill/no stroke when the style carries neither — a real draw:line's own automatic style has no draw:fill-color at all", () => {
     const rect = el("draw:rect", {
       "svg:x": "0pt",
       "svg:y": "0pt",
@@ -714,7 +714,7 @@ describe("readDrawPageContent: draw:rect / draw:ellipse / draw:circle", () => {
     expect(vector.stroke).toBeUndefined();
   });
 
-  it('honours an explicit draw:fill="none"/draw:stroke="none" override -- confirmed real LibreOffice output for a shape with FillStyle/LineStyle explicitly set to NONE', () => {
+  it('honours an explicit draw:fill="none"/draw:stroke="none" override — confirmed real LibreOffice output for a shape with FillStyle/LineStyle explicitly set to NONE', () => {
     const gr1 = graphicStyle("gr1", {
       "draw:fill": "none",
       "draw:stroke": "none",
@@ -784,7 +784,7 @@ describe("readDrawPageContent: non-flat fills (gradient/bitmap/hatch) and fill o
     });
   });
 
-  it("a direct draw:fill-color alongside a \"gradient\" fill mode wins as the flat swatch over the gradient's own start colour -- real LibreOffice output sometimes writes both, per this file's own top-of-file note", () => {
+  it("a direct draw:fill-color alongside a \"gradient\" fill mode wins as the flat swatch over the gradient's own start colour — real LibreOffice output sometimes writes both, per this file's own top-of-file note", () => {
     const gradient = el("draw:gradient", {
       "draw:name": "grad1",
       "draw:style": "linear",
@@ -1211,7 +1211,7 @@ describe("readDrawPageContent: stroke opacity and the real dash run-length patte
     expect(vector.stroke?.dashPattern).toBeUndefined();
   });
 
-  it("a resolved dash definition with a non-positive draw:dots1 leaves dashPattern undefined -- dots1/dots1-length/distance are jointly required", () => {
+  it("a resolved dash definition with a non-positive draw:dots1 leaves dashPattern undefined — dots1/dots1-length/distance are jointly required", () => {
     const dash = el("draw:stroke-dash", {
       "draw:name": "dash1",
       "draw:style": "rect",
@@ -1277,7 +1277,7 @@ describe("readDrawPageContent: stroke opacity and the real dash run-length patte
     expect(vector.stroke?.dashPattern).toBeUndefined();
   });
 
-  it("a resolved dash definition with a negative draw:distance leaves dashPattern undefined -- a zero distance is itself valid (dots touching)", () => {
+  it("a resolved dash definition with a negative draw:distance leaves dashPattern undefined — a zero distance is itself valid (dots touching)", () => {
     const dash = el("draw:stroke-dash", {
       "draw:name": "dash1",
       "draw:style": "rect",
@@ -1373,7 +1373,7 @@ describe("readDrawPageContent: draw:line", () => {
     expect(vector.stroke.color).toEqual({ r: 0, g: 0, b: 1 });
   });
 
-  it("drops a line with no resolvable stroke -- an invisible line has nothing to paint, matching ContentVectorSchema requiring stroke on the line variant", () => {
+  it("drops a line with no resolvable stroke — an invisible line has nothing to paint, matching ContentVectorSchema requiring stroke on the line variant", () => {
     const line = el("draw:line", {
       "svg:x1": "0pt",
       "svg:y1": "0pt",
@@ -1440,7 +1440,7 @@ describe("readDrawPageContent: draw:path (svg:d) and draw:polygon/draw:polyline 
     ]);
   });
 
-  it("the SAME geometry from an OPEN source shape omits the closing z -- closed reads false", () => {
+  it("the SAME geometry from an OPEN source shape omits the closing z — closed reads false", () => {
     const path = el("draw:path", {
       "svg:x": "0pt",
       "svg:y": "0pt",
@@ -1478,7 +1478,7 @@ describe("readDrawPageContent: draw:path (svg:d) and draw:polygon/draw:polyline 
     });
   });
 
-  it('reads draw:polygon\'s own draw:points list (real LibreOffice output, comma/space-delimited "x,y" pairs -- a completely different grammar from svg:d) into a single CLOSED straight-line-only subpath', () => {
+  it('reads draw:polygon\'s own draw:points list (real LibreOffice output, comma/space-delimited "x,y" pairs — a completely different grammar from svg:d) into a single CLOSED straight-line-only subpath', () => {
     const polygon = el("draw:polygon", {
       "svg:x": "0pt",
       "svg:y": "0pt",
@@ -1518,7 +1518,7 @@ describe("readDrawPageContent: draw:path (svg:d) and draw:polygon/draw:polyline 
     expect(vector.subpaths[0]?.closed).toBe(false);
   });
 
-  it("drops a path/polygon/polyline with no resolvable svg:viewBox -- there is no way to scale the raw numbers into the frame's own point space", () => {
+  it("drops a path/polygon/polyline with no resolvable svg:viewBox — there is no way to scale the raw numbers into the frame's own point space", () => {
     const path = el("draw:path", {
       "svg:x": "0pt",
       "svg:y": "0pt",
@@ -1555,7 +1555,7 @@ describe("readDrawPageContent: draw:custom-shape presets", () => {
     );
   }
 
-  it('recognises the "rectangle" preset -- maps to the rect variant using the shape\'s own frame, without evaluating draw:enhanced-path', () => {
+  it('recognises the "rectangle" preset — maps to the rect variant using the shape\'s own frame, without evaluating draw:enhanced-path', () => {
     const { vectors } = readDrawPageContent(
       [customShape("CustomRect1", "rectangle")],
       { parts: {} },
@@ -1566,7 +1566,7 @@ describe("readDrawPageContent: draw:custom-shape presets", () => {
     });
   });
 
-  it('recognises the "round-rectangle" preset -- also approximates to the plain rect variant (no rounded-corner concept in ContentVectorSchema)', () => {
+  it('recognises the "round-rectangle" preset — also approximates to the plain rect variant (no rounded-corner concept in ContentVectorSchema)', () => {
     const { vectors } = readDrawPageContent(
       [customShape("CustomRoundRect1", "round-rectangle")],
       { parts: {} },
@@ -1574,7 +1574,7 @@ describe("readDrawPageContent: draw:custom-shape presets", () => {
     expect(vectors[0]).toMatchObject({ kind: "rect" });
   });
 
-  it('recognises the "ellipse" preset -- maps to the ellipse variant', () => {
+  it('recognises the "ellipse" preset — maps to the ellipse variant', () => {
     const { vectors } = readDrawPageContent(
       [customShape("CustomEllipse1", "ellipse")],
       { parts: {} },
@@ -1609,7 +1609,7 @@ describe("readDrawPageContent: draw:custom-shape presets", () => {
     });
   });
 
-  // readCustomShapeAsTextShape's own draw:name read goes through readDrawName, not a bare attrValue -- a second call site of the same fix draw:frame's own readDrawFrame already had (S3, ExaDev/documents.js#900), pinned here since mutating this call site back to attrValue left the whole odf.js suite green.
+  // readCustomShapeAsTextShape's own draw:name read goes through readDrawName, not a bare attrValue — a second call site of the same fix draw:frame's own readDrawFrame already had (S3, ExaDev/documents.js#900), pinned here since mutating this call site back to attrValue left the whole odf.js suite green.
   it("decodes an unrecognised preset's own draw:name the same way draw:frame does", () => {
     const shape = el(
       "draw:custom-shape",
@@ -1657,7 +1657,7 @@ describe("readDrawPageContent: draw:custom-shape presets", () => {
     expect(shapes[0]?.source?.xml).toContain('draw:type="smiley"');
   });
 
-  it("a recognised preset's vector carries no residue -- the approximation replaces the enhanced-geometry wholesale", () => {
+  it("a recognised preset's vector carries no residue — the approximation replaces the enhanced-geometry wholesale", () => {
     const { vectors } = readDrawPageContent(
       [customShape("CustomRect1", "rectangle")],
       { parts: {} },
@@ -1665,7 +1665,7 @@ describe("readDrawPageContent: draw:custom-shape presets", () => {
     expect(vectors[0]?.source).toBeUndefined();
   });
 
-  it("an unrecognised preset with NO real text content is skipped entirely -- nothing worth preserving", () => {
+  it("an unrecognised preset with NO real text content is skipped entirely — nothing worth preserving", () => {
     const { shapes, vectors } = readDrawPageContent(
       [customShape("CustomSmiley1", "smiley")],
       { parts: {} },
@@ -1754,7 +1754,7 @@ describe("readDrawPageContent: draw:custom-shape presets", () => {
           {
             "svg:viewBox": "0 0 21600 21600",
             "draw:type": "round-rectangle",
-            "draw:modifiers": "21600", // the whole viewBox width -- wildly beyond any sane radius
+            "draw:modifiers": "21600", // the whole viewBox width — wildly beyond any sane radius
           },
           [el("draw:handle", { "draw:handle-position": "$0 0" })],
         ),
@@ -1778,7 +1778,7 @@ describe("readDrawPageContent: draw:custom-shape presets", () => {
     ["hexagon", 6],
     ["octagon", 8],
   ])(
-    'recognises the "%s" preset -- builds a closed, straight-line-only path with %i vertices inscribed in the shape\'s own frame',
+    'recognises the "%s" preset — builds a closed, straight-line-only path with %i vertices inscribed in the shape\'s own frame',
     (type, vertexCount) => {
       const { vectors } = readDrawPageContent(
         [customShape(`Custom${type}`, type)],
@@ -1791,7 +1791,7 @@ describe("readDrawPageContent: draw:custom-shape presets", () => {
       expect(vector.subpaths).toHaveLength(1);
       const subpath = vector.subpaths[0];
       expect(subpath?.closed).toBe(true);
-      // One vertex is `start`, the rest are line segments -- together they total the vertex count.
+      // One vertex is `start`, the rest are line segments — together they total the vertex count.
       expect((subpath?.segments.length ?? 0) + 1).toBe(vertexCount);
       expect(subpath?.segments.every((s) => s.kind === "line")).toBe(true);
     },
@@ -1820,7 +1820,7 @@ describe("readDrawPageContent: draw:custom-shape presets", () => {
     ]);
   });
 
-  it("a fixed-polygon preset's vector carries no residue, same as rectangle/round-rectangle/ellipse -- the approximation replaces the enhanced-geometry wholesale", () => {
+  it("a fixed-polygon preset's vector carries no residue, same as rectangle/round-rectangle/ellipse — the approximation replaces the enhanced-geometry wholesale", () => {
     const { vectors } = readDrawPageContent(
       [customShape("CustomDiamond1", "diamond")],
       { parts: {} },
@@ -1828,7 +1828,7 @@ describe("readDrawPageContent: draw:custom-shape presets", () => {
     expect(vectors[0]?.source).toBeUndefined();
   });
 
-  it("'parallelogram'/'trapezoid' stay unrecognised -- deliberately excluded pending real slant-handle evaluation, per this file's own top-of-file note", () => {
+  it("'parallelogram'/'trapezoid' stay unrecognised — deliberately excluded pending real slant-handle evaluation, per this file's own top-of-file note", () => {
     const shape = el(
       "draw:custom-shape",
       {
@@ -1852,7 +1852,7 @@ describe("readDrawPageContent: draw:custom-shape presets", () => {
 });
 
 describe("readDrawPageContent: draw:z-index paint order", () => {
-  it("sorts vectors by an EXPLICIT draw:z-index, overriding raw document order -- a shape written FIRST in the XML but with the HIGHEST z-index paints LAST (on top)", () => {
+  it("sorts vectors by an EXPLICIT draw:z-index, overriding raw document order — a shape written FIRST in the XML but with the HIGHEST z-index paints LAST (on top)", () => {
     // Three rects, distinguished by fill colour (ContentVectorSchema's rect variant carries no name field). Document order: red, green, blue. z-index order: green(0) < blue(1) < red(2).
     const styles = [
       graphicStyle("red", { "draw:fill-color": "#ff0000" }),
@@ -1892,7 +1892,7 @@ describe("readDrawPageContent: draw:z-index paint order", () => {
       ],
       pkg,
     );
-    // Sorted by z-index ascending (bottom to top): green(0), blue(1), red(2) -- NOT document order (red, green, blue).
+    // Sorted by z-index ascending (bottom to top): green(0), blue(1), red(2) — NOT document order (red, green, blue).
     expect(
       vectors.map((v) => (v.kind === "rect" ? v.fill : undefined)),
     ).toEqual([
@@ -1902,7 +1902,7 @@ describe("readDrawPageContent: draw:z-index paint order", () => {
     ]);
   });
 
-  it("falls back to document-encounter order when draw:z-index is absent -- the REAL LibreOffice case (its own writer never emits draw:z-index; document order already IS paint order after any UI-side reordering)", () => {
+  it("falls back to document-encounter order when draw:z-index is absent — the REAL LibreOffice case (its own writer never emits draw:z-index; document order already IS paint order after any UI-side reordering)", () => {
     const rectA = el("draw:rect", {
       "svg:x": "0pt",
       "svg:y": "0pt",
@@ -2000,7 +2000,7 @@ describe("readDrawPageContent: unhandled node kinds", () => {
     });
   });
 
-  it("ignores an element tag this reader has no vocabulary for (e.g. dr3d:scene, draw:connector) -- skipped entirely, not an error", () => {
+  it("ignores an element tag this reader has no vocabulary for (e.g. dr3d:scene, draw:connector) — skipped entirely, not an error", () => {
     const scene = el("dr3d:scene", {
       "svg:x": "0pt",
       "svg:y": "0pt",
@@ -2021,7 +2021,7 @@ describe("readDrawPageContent: unhandled node kinds", () => {
   });
 });
 
-describe("readDrawPageContent: vector rotation via draw:transform -- reuses the SAME geometry machinery draw:frame already resolves rotation through", () => {
+describe("readDrawPageContent: vector rotation via draw:transform — reuses the SAME geometry machinery draw:frame already resolves rotation through", () => {
   it("reads a rotated draw:rect's own rotationDeg, not just its unrotated frame", () => {
     const rect = el("draw:rect", {
       "svg:width": "200pt",
@@ -2187,7 +2187,7 @@ describe("readDrawPageContent / walkDrawShapes: paintOrder stamping", () => {
     });
     const out: ContentShape[] = [];
     walkDrawShapes([frameA, frameB], [], { parts: {} }, out);
-    // Document order is unchanged (A then B) -- only the stamped value reflects the real z-index.
+    // Document order is unchanged (A then B) — only the stamped value reflects the real z-index.
     expect(out.map((s) => s.name)).toEqual(["A", "B"]);
     expect(out.map((s) => s.paintOrder)).toEqual([5, 1]);
   });
@@ -2214,7 +2214,7 @@ describe("readDrawPageContent / walkDrawShapes: paintOrder stamping", () => {
   });
 });
 
-describe("readDrawPageContent: svg:fill-rule (path vectors only -- rect/ellipse have no fillRule field at all)", () => {
+describe("readDrawPageContent: svg:fill-rule (path vectors only — rect/ellipse have no fillRule field at all)", () => {
   function pathWithProps(
     extra: Record<string, string> = {},
     styleAttrs: Record<string, string> = {},
@@ -2257,7 +2257,7 @@ describe("readDrawPageContent: svg:fill-rule (path vectors only -- rect/ellipse 
     expect(vector.fillRule).toBe("nonzero");
   });
 
-  it("leaves fillRule undefined when the style carries no svg:fill-rule at all -- defaults to nonzero downstream, but is not fabricated here", () => {
+  it("leaves fillRule undefined when the style carries no svg:fill-rule at all — defaults to nonzero downstream, but is not fabricated here", () => {
     const { path, pkg } = pathWithProps();
     const { vectors } = readDrawPageContent([path], pkg);
     const vector = vectors[0];
@@ -2267,7 +2267,7 @@ describe("readDrawPageContent: svg:fill-rule (path vectors only -- rect/ellipse 
     expect(vector.fillRule).toBeUndefined();
   });
 
-  // A genuine two-subpath "letter O" shape: an outer square and an inner square "hole", both wound in the SAME rotational direction (right, down, left, up from each one's own top-left corner). This is the real-world case svg:fill-rule actually distinguishes -- with two same-direction subpaths, 'nonzero' fills the inner square too (winding number 2 there, still != 0, so no hole at all), while 'evenodd' toggles at every boundary crossing and genuinely punches the hole (winding parity 0 inside the inner square). Both subpaths' own points are read back correctly regardless of fillRule -- this test's real assertion is that reading the attribute itself survives the full readDrawPageContent path, not just a synthetic single-loop svg:d.
+  // A genuine two-subpath "letter O" shape: an outer square and an inner square "hole", both wound in the SAME rotational direction (right, down, left, up from each one's own top-left corner). This is the real-world case svg:fill-rule actually distinguishes — with two same-direction subpaths, 'nonzero' fills the inner square too (winding number 2 there, still != 0, so no hole at all), while 'evenodd' toggles at every boundary crossing and genuinely punches the hole (winding parity 0 inside the inner square). Both subpaths' own points are read back correctly regardless of fillRule — this test's real assertion is that reading the attribute itself survives the full readDrawPageContent path, not just a synthetic single-loop svg:d.
   it('reads svg:fill-rule="evenodd" from a real two-subpath donut/letter-O path with a hole', () => {
     const gr1 = graphicStyle("gr1", {
       "draw:fill-color": "#000000",
@@ -2281,7 +2281,7 @@ describe("readDrawPageContent: svg:fill-rule (path vectors only -- rect/ellipse 
       "svg:width": "100pt",
       "svg:height": "100pt",
       "svg:viewBox": "0 0 4000 4000",
-      // Outer square (0,0)-(4000,4000), then inner square (1000,1000)-(3000,3000) -- both traced right/down/left/up, i.e. the identical winding direction.
+      // Outer square (0,0)-(4000,4000), then inner square (1000,1000)-(3000,3000) — both traced right/down/left/up, i.e. the identical winding direction.
       "svg:d": "M0 0H4000V4000H0ZM1000 1000H3000V3000H1000Z",
     });
     const { vectors } = readDrawPageContent([path], pkg);
@@ -2293,7 +2293,7 @@ describe("readDrawPageContent: svg:fill-rule (path vectors only -- rect/ellipse 
     expect(vector.subpaths).toHaveLength(2);
     expect(vector.subpaths[0]?.closed).toBe(true);
     expect(vector.subpaths[1]?.closed).toBe(true);
-    // The inner subpath's own points survive intact (scaled from the shared 4000x4000 viewBox onto the 100pt x 100pt frame -- 1000/4000 * 100 = 25, 3000/4000 * 100 = 75).
+    // The inner subpath's own points survive intact (scaled from the shared 4000x4000 viewBox onto the 100pt x 100pt frame — 1000/4000 * 100 = 25, 3000/4000 * 100 = 75).
     expect(vector.subpaths[1]?.start).toEqual({ xPt: 25, yPt: 25 });
   });
 });
@@ -2343,7 +2343,7 @@ describe("readDrawPageContent: stroke style (solid/dashed) from draw:stroke", ()
     expect(vector.stroke?.style).toBe("solid");
   });
 
-  it("leaves style undefined when draw:stroke is absent -- no fabricated default", () => {
+  it("leaves style undefined when draw:stroke is absent — no fabricated default", () => {
     const gr1 = graphicStyle("gr1", {
       "svg:stroke-color": "#000000",
       "svg:stroke-width": "1pt",
@@ -2364,7 +2364,7 @@ describe("readDrawPageContent: stroke style (solid/dashed) from draw:stroke", ()
     expect(vector.stroke?.style).toBeUndefined();
   });
 
-  it("applies to draw:line strokes too, since readOdfFillAndStroke is shared -- not just rect/ellipse/path", () => {
+  it("applies to draw:line strokes too, since readOdfFillAndStroke is shared — not just rect/ellipse/path", () => {
     const gr1 = graphicStyle("gr1", {
       "svg:stroke-color": "#000000",
       "svg:stroke-width": "1pt",

@@ -80,7 +80,7 @@ describe("gatherListUsage", () => {
       { numId: "1", level: 0, format: "decimal" },
       { numId: "1", level: 0, format: "bullet" },
     ]);
-    // First occurrence wins -- the level is already present, so the second paragraph's own format is never consulted.
+    // First occurrence wins — the level is already present, so the second paragraph's own format is never consulted.
     expect(usage.definitions["1"]?.levels["0"]?.format).toBe("decimal");
   });
 
@@ -123,7 +123,7 @@ describe("buildNumberingTables", () => {
   });
 
   it("rejects definition keys that collide once converted to a number, even though they are distinct object keys", () => {
-    // "1" and "01" are distinct string keys (Object.keys never canonicalises "01" the way it does a true integer-index key like "1"), but Number("1") === Number("01") === 1 -- so both would mint the identical lsid, violating [MS-DOC] 2.9.147's "MUST be unique for each LSTF" and making numbering.ts's own lsid-matching readNumberingDefinitions unable to tell the two lists apart.
+    // "1" and "01" are distinct string keys (Object.keys never canonicalises "01" the way it does a true integer-index key like "1"), but Number("1") === Number("01") === 1 — so both would mint the identical lsid, violating [MS-DOC] 2.9.147's "MUST be unique for each LSTF" and making numbering.ts's own lsid-matching readNumberingDefinitions unable to tell the two lists apart.
     const definitions: NumberingDefinitions = {
       "1": { levels: { "0": SIMPLE_LEVEL } },
       "01": { levels: { "0": SIMPLE_LEVEL } },
@@ -155,7 +155,7 @@ describe("buildNumberingTables", () => {
   });
 
   it("sorts ilfos numerically even for keys large enough that JS's own object key enumeration would not reorder them", () => {
-    // Every key below is at or past 2^32 - 1, so it is not a canonical array-index key -- unlike "5"/"2" above, plain-object enumeration here preserves this descending insertion order rather than auto-sorting it, so this is the one case that genuinely depends on buildNumberingTables' own explicit ilfo sort.
+    // Every key below is at or past 2^32 - 1, so it is not a canonical array-index key — unlike "5"/"2" above, plain-object enumeration here preserves this descending insertion order rather than auto-sorting it, so this is the one case that genuinely depends on buildNumberingTables' own explicit ilfo sort.
     const definitions: NumberingDefinitions = {
       "5000000002": { levels: { "0": SIMPLE_LEVEL } },
       "5000000001": { levels: { "0": SIMPLE_LEVEL } },
@@ -172,7 +172,7 @@ describe("buildNumberingTables", () => {
 
   it("writes a multi-byte lsid across all four of its own bytes, not just the first", () => {
     const definitions: NumberingDefinitions = {
-      "16909060": { levels: { "0": SIMPLE_LEVEL } }, // 0x01020304 -- exercises every byte position writeUint32LE writes.
+      "16909060": { levels: { "0": SIMPLE_LEVEL } }, // 0x01020304 — exercises every byte position writeUint32LE writes.
     };
     const tables = buildNumberingTables(definitions);
     if (tables === undefined) {
@@ -183,7 +183,7 @@ describe("buildNumberingTables", () => {
   });
 
   it("throws when a definition's own key is a non-canonical numeric string with no canonical counterpart", () => {
-    // "01" alone (no colliding "1" key) parses to lsid 1, but String(1) is "1", not "01" -- so the definitions object genuinely has no entry at the key this function looks the definition back up by.
+    // "01" alone (no colliding "1" key) parses to lsid 1, but String(1) is "1", not "01" — so the definitions object genuinely has no entry at the key this function looks the definition back up by.
     const definitions: NumberingDefinitions = {
       "01": { levels: { "0": SIMPLE_LEVEL } },
     };
@@ -231,7 +231,7 @@ describe("buildNumberingTables", () => {
   });
 
   it("throws when a level's own key is a non-canonical numeric string with no canonical counterpart", () => {
-    // "00" alone parses to level 0, but String(0) is "0", not "00" -- so the level set genuinely has no entry at the key this function looks it back up by.
+    // "00" alone parses to level 0, but String(0) is "0", not "00" — so the level set genuinely has no entry at the key this function looks it back up by.
     const definitions: NumberingDefinitions = {
       "1": { levels: { "00": SIMPLE_LEVEL } },
     };
@@ -249,7 +249,7 @@ describe("buildNumberingTables", () => {
       },
     };
     expect(() => buildNumberingTables(definitions)).toThrow(
-      /has no \[MS-OSHARED\] 2\.2\.1\.3 MSONFC mapping this writer can state -- only .*"decimal".* round-trip/,
+      /has no \[MS-OSHARED\] 2\.2\.1\.3 MSONFC mapping this writer can state — only .*"decimal".* round-trip/,
     );
   });
 

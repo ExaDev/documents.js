@@ -9,9 +9,9 @@ import {
   parseHsqldbBinaryScript,
 } from "./binary-script";
 
-// The fixtures' own DATE/TIME/TIMESTAMP values were written by a JVM in Europe/London, and -- per src/hsqldb/rowformat.ts's own documented, inherent format limitation -- an epoch-millisecond value only decodes back to its original calendar fields when read in the zone it was written in. Passed explicitly as { timeZone: "Europe/London" } below rather than by mutating process.env.TZ: a runtime TZ mutation is not observed by Date's local getters inside a worker_threads worker (the pool Stryker's vitest-runner forces), so relying on the implicit-local-timezone default here decoded arbitrarily wrong dates under mutation testing.
+// The fixtures' own DATE/TIME/TIMESTAMP values were written by a JVM in Europe/London, and — per src/hsqldb/rowformat.ts's own documented, inherent format limitation — an epoch-millisecond value only decodes back to its original calendar fields when read in the zone it was written in. Passed explicitly as { timeZone: "Europe/London" } below rather than by mutating process.env.TZ: a runtime TZ mutation is not observed by Date's local getters inside a worker_threads worker (the pool Stryker's vitest-runner forces), so relying on the implicit-local-timezone default here decoded arbitrarily wrong dates under mutation testing.
 
-// Exactly what HSQLDB 1.8.0.10 itself reported when it re-opened each generated database and ran SELECT * over every table through its own JDBC driver -- see src/hsqldb/binary-script.ts's own module comment for the generation/oracle account.
+// Exactly what HSQLDB 1.8.0.10 itself reported when it re-opened each generated database and ran SELECT * over every table through its own JDBC driver — see src/hsqldb/binary-script.ts's own module comment for the generation/oracle account.
 const ORACLE_EMPLOYEES = [
   [
     { kind: "number", value: 1 },
@@ -113,7 +113,7 @@ describe("parseHsqldbBinaryScript: the real hsqldb.script_format=1 fixture", () 
     );
     expect(byName.get("EMPLOYEES")?.rows).toEqual(ORACLE_EMPLOYEES);
     expect(byName.get("TYPE_TEST")?.rows).toEqual(ORACLE_TYPE_TEST);
-    // A table with no rows still writes a full init/terminator pair of its own -- the section is present and carries zero rows, not absent.
+    // A table with no rows still writes a full init/terminator pair of its own — the section is present and carries zero rows, not absent.
     expect(byName.get("EMPTY_TABLE")?.rows).toEqual([]);
   });
 

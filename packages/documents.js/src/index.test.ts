@@ -21,9 +21,9 @@ describe("index (placeholder re-exports)", () => {
   });
 });
 
-// readXlsxContent/buildXlsxPackage are ooxml.js's own spreadsheet ContentDocument read/build pair, re-exported directly from this package's public surface (src/index.ts) -- xlsx previously had no standalone content-read entry point of its own, unlike every other DocumentFormat. These tests exercise the re-export itself: both functions are called exactly as a real consumer of the 'documents.js' package would, through the public barrel, never by reaching into './ooxml/xlsx/*' or importing 'ooxml.js' directly.
+// readXlsxContent/buildXlsxPackage are ooxml.js's own spreadsheet ContentDocument read/build pair, re-exported directly from this package's public surface (src/index.ts) — xlsx previously had no standalone content-read entry point of its own, unlike every other DocumentFormat. These tests exercise the re-export itself: both functions are called exactly as a real consumer of the 'documents.js' package would, through the public barrel, never by reaching into './ooxml/xlsx/*' or importing 'ooxml.js' directly.
 describe("readXlsxContent / buildXlsxPackage re-export", () => {
-  it("reads a real xlsx fixture -- genuine OOXML bytes produced by the ods -> xlsx bridge, not a hand-built mock -- into a spreadsheet ContentDocument", () => {
+  it("reads a real xlsx fixture — genuine OOXML bytes produced by the ods -> xlsx bridge, not a hand-built mock — into a spreadsheet ContentDocument", () => {
     const xlsxBytes = odsToXlsx(richOdsBytes());
 
     const content = readXlsxContent(decodeDocumentPackage("xlsx", xlsxBytes));
@@ -35,7 +35,7 @@ describe("readXlsxContent / buildXlsxPackage re-export", () => {
     const sheet = content.sheets[0];
     const cellAt = (row: number, column: number) =>
       sheet?.cells.find((cell) => cell.row === row && cell.column === column);
-    // Known cells from the rich ODS fixture (src/test-support/ods.ts), carried through the real ods -> xlsx bridge -- proving the re-exported reader recovers real content, not just an empty shell.
+    // Known cells from the rich ODS fixture (src/test-support/ods.ts), carried through the real ods -> xlsx bridge — proving the re-exported reader recovers real content, not just an empty shell.
     expect(cellAt(1, 0)?.value).toEqual({ kind: "string", value: "Widget" });
     expect(cellAt(1, 1)?.value).toEqual({ kind: "number", value: 42.5 });
     expect(cellAt(1, 2)?.value).toEqual({ kind: "boolean", value: true });
@@ -96,7 +96,7 @@ describe("readXlsxContent / buildXlsxPackage re-export", () => {
   });
 });
 
-// readRtfContent/writeRtfContent are rtf-codec's own ContentDocument read/write pair, re-exported directly from this package's public surface (src/index.ts) -- rtf, like xlsx, needs no documents.js-local wrapper, since rtf-codec's own functions already read/write a real wordprocessing ContentDocument with no extra transformation this package would layer on. Exercised exactly as a real consumer of the 'documents.js' package would, through the public barrel, never by importing 'rtf-codec' directly.
+// readRtfContent/writeRtfContent are rtf-codec's own ContentDocument read/write pair, re-exported directly from this package's public surface (src/index.ts) — rtf, like xlsx, needs no documents.js-local wrapper, since rtf-codec's own functions already read/write a real wordprocessing ContentDocument with no extra transformation this package would layer on. Exercised exactly as a real consumer of the 'documents.js' package would, through the public barrel, never by importing 'rtf-codec' directly.
 describe("readRtfContent / writeRtfContent re-export", () => {
   it("reads a hand-authored RTF fixture into a wordprocessing ContentDocument", () => {
     const rtfBytes = new TextEncoder().encode(

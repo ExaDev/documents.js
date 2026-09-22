@@ -1,4 +1,4 @@
-// Hand-built sfnt (TrueType/OpenType) fixtures: a table directory wrapping whichever synthetic tables a test needs, plus emitters for the two tables a font's own built-in encoding is recovered through -- 'cmap' (character code -> glyph ID) and 'post' (glyph ID -> glyph name). Built by literal byte layout against ISO/IEC 14496-22, deliberately importing nothing from this package's own sfnt readers, so a reader bug cannot cancel itself out against a fixture built by the same code.
+// Hand-built sfnt (TrueType/OpenType) fixtures: a table directory wrapping whichever synthetic tables a test needs, plus emitters for the two tables a font's own built-in encoding is recovered through — 'cmap' (character code -> glyph ID) and 'post' (glyph ID -> glyph name). Built by literal byte layout against ISO/IEC 14496-22, deliberately importing nothing from this package's own sfnt readers, so a reader bug cannot cancel itself out against a fixture built by the same code.
 
 const DIRECTORY_HEADER_SIZE = 12;
 const RECORD_SIZE = 16;
@@ -41,7 +41,7 @@ export interface CmapSubtableSpec {
 function buildFormat0(mappings: ReadonlyMap<number, number>): Uint8Array {
   const subtable = new Uint8Array(262);
   const view = new DataView(subtable.buffer);
-  // The format field (offset 0) is already 0 from Uint8Array's own zero-initialization -- format 0 is the one subtable format whose own numeric value needs no explicit write.
+  // The format field (offset 0) is already 0 from Uint8Array's own zero-initialization — format 0 is the one subtable format whose own numeric value needs no explicit write.
   view.setUint16(2, subtable.length);
   for (const [code, glyphId] of mappings) {
     subtable[6 + code] = glyphId;
@@ -49,7 +49,7 @@ function buildFormat0(mappings: ReadonlyMap<number, number>): Uint8Array {
   return subtable;
 }
 
-// Format 4 (segment mapping to delta values): emitted as one single-code segment per mapping plus the mandatory 0xFFFF terminator, which is a legal -- if deliberately unoptimised -- encoding of any mapping and exercises the idDelta path rather than the glyph-index-array one.
+// Format 4 (segment mapping to delta values): emitted as one single-code segment per mapping plus the mandatory 0xFFFF terminator, which is a legal — if deliberately unoptimised — encoding of any mapping and exercises the idDelta path rather than the glyph-index-array one.
 function buildFormat4(mappings: ReadonlyMap<number, number>): Uint8Array {
   const codes = [...mappings.keys()].sort((a, b) => a - b);
   const segCount = codes.length + 1;
@@ -160,7 +160,7 @@ export function buildPostV2Table(
   return table;
 }
 
-// A version 3.0 'post' table: the header alone, declaring that the font carries no glyph names at all -- what a subsetting tool emits when it strips them, and the case a reader must recover a glyph's identity some other way for.
+// A version 3.0 'post' table: the header alone, declaring that the font carries no glyph names at all — what a subsetting tool emits when it strips them, and the case a reader must recover a glyph's identity some other way for.
 export function buildPostV3Table(): Uint8Array<ArrayBuffer> {
   const table = new Uint8Array(POST_HEADER_SIZE);
   new DataView(table.buffer).setUint32(0, 0x00030000);
@@ -656,7 +656,7 @@ export function buildGsubTable(
     featureTableAt += featureTables[index]!.length;
   });
   const lookupTables = lookups.map((lookup) => {
-    // No separate "is flag even defined" check is needed: JS's bitwise `&` coerces `undefined` to 0 before operating, so `undefined & 0x0010` is already 0 -- exactly the same as explicitly treating an absent flag as clearing every bit.
+    // No separate "is flag even defined" check is needed: JS's bitwise `&` coerces `undefined` to 0 before operating, so `undefined & 0x0010` is already 0 — exactly the same as explicitly treating an absent flag as clearing every bit.
     const markFilteringSetWidth = ((lookup.flag ?? 0) & 0x0010) !== 0 ? 2 : 0;
     // The Lookup table's own layout: a 6-byte header, the subtable offset array, then — only when the flag selects one — the trailing markFilteringSet index the flag's set number refers to.
     let at = 6 + lookup.subtables.length * 2 + markFilteringSetWidth;

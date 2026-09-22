@@ -24,7 +24,7 @@ import { readWorkbookDefinitions } from "./definitions";
 import { columnWidthCharsToPt } from "./units";
 import { BUILTIN_NUMBER_FORMATS } from "excel-number-format";
 
-// buildXlsxPackageFromContent's own real-LibreOffice validation (`soffice --headless --convert-to ods` against a genuine built .xlsx, confirming Excel/LibreOffice actually open the file rather than merely well-formed XML) is a manual verification step, deliberately NOT wired into this vitest suite -- this package's CI runners have no LibreOffice installed (unlike documents.js's own gitignored, opt-in test:corpus project, which exists for exactly this reason: real-third-party-software checks that need a local tool this repo's CI can't assume). This suite instead verifies everything checkable in-process: the produced Package's own XML structure (parsed back through this package's own lossless parsePackage/encodePackage, never assumed), and that readXlsxContent(buildXlsxPackageFromContent(x)) round-trips the real content.
+// buildXlsxPackageFromContent's own real-LibreOffice validation (`soffice --headless --convert-to ods` against a genuine built .xlsx, confirming Excel/LibreOffice actually open the file rather than merely well-formed XML) is a manual verification step, deliberately NOT wired into this vitest suite — this package's CI runners have no LibreOffice installed (unlike documents.js's own gitignored, opt-in test:corpus project, which exists for exactly this reason: real-third-party-software checks that need a local tool this repo's CI can't assume). This suite instead verifies everything checkable in-process: the produced Package's own XML structure (parsed back through this package's own lossless parsePackage/encodePackage, never assumed), and that readXlsxContent(buildXlsxPackageFromContent(x)) round-trips the real content.
 
 const KITCHEN_SINK_SHEET: ContentSheet = {
   name: "Data",
@@ -73,7 +73,7 @@ const KITCHEN_SINK_SHEET: ContentSheet = {
       formula: "1/0",
       displayText: "#DIV/0!",
     },
-    // A repeated text value -- exercises shared-string deduplication (both cells must intern to the SAME index).
+    // A repeated text value — exercises shared-string deduplication (both cells must intern to the SAME index).
     {
       row: 5,
       column: 0,
@@ -199,7 +199,7 @@ describe("buildXlsxPackageFromContent: produces a structurally valid xlsx packag
     const siCount = sharedStrings.children.filter(
       (node) => node.type === "element" && node.tag === "si",
     ).length;
-    // "Name", "Amount", "Acme Corp" (deduplicated across rows 1 and 5), "Merged Cell", "Tom & Jerry <b>" -- 5 unique strings, not 6.
+    // "Name", "Amount", "Acme Corp" (deduplicated across rows 1 and 5), "Merged Cell", "Tom & Jerry <b>" — 5 unique strings, not 6.
     expect(siCount).toBe(5);
   });
 
@@ -211,7 +211,7 @@ describe("buildXlsxPackageFromContent: produces a structurally valid xlsx packag
     const tags = styles.children
       .filter((node) => node.type === "element")
       .map((node) => node.tag);
-    // numFmts is present because this sheet has a boolean cell, whose TRUE/FALSE display format is a custom one -- see the number-format suite below for the no-custom-formats case.
+    // numFmts is present because this sheet has a boolean cell, whose TRUE/FALSE display format is a custom one — see the number-format suite below for the no-custom-formats case.
     expect(tags).toEqual([
       "numFmts",
       "fonts",
@@ -283,12 +283,12 @@ describe("readXlsxContent(buildXlsxPackageFromContent(x)) round-trips real conte
     const hiddenColumn = data.columns.find((column) => column.index === 1);
     expect(hiddenColumn?.hidden).toBe(true);
     const firstColumn = data.columns.find((column) => column.index === 0);
-    expect(firstColumn?.widthPt).toBeGreaterThan(80); // approximate, not exact -- see units.ts's own documented round-trip caveat
+    expect(firstColumn?.widthPt).toBeGreaterThan(80); // approximate, not exact — see units.ts's own documented round-trip caveat
     expect(firstColumn?.widthPt).toBeLessThan(120);
   });
 
   it("column widths converge to a fixed point rather than drifting on repeated read/write cycles (ExaDev/documents.js#953)", () => {
-    // A dedicated document, not DOCUMENT above: DOCUMENT's own column widths (100pt/60pt) already reproduce write 2 byte-identically from write 2 onward even under the pre-fix rounding, so they would pass this assertion whether or not the fix is present and exercise nothing. These two widthPt values instead come from columnWidthCharsToPt(12.76) and columnWidthCharsToPt(9.7) -- points equivalents of two of kitchen-sink.xlsx's own real, LibreOffice-authored stored widths (see content.test.ts's dataSheetColWidthAttrs suite) -- independently re-verified to keep narrowing across multiple further write cycles under the pre-fix rounding (12.76 chars -> 12.64 -> 12.5 -> 12.36; 9.7 chars -> 9.64 -> 9.5 -> 9.36) rather than settling after the first.
+    // A dedicated document, not DOCUMENT above: DOCUMENT's own column widths (100pt/60pt) already reproduce write 2 byte-identically from write 2 onward even under the pre-fix rounding, so they would pass this assertion whether or not the fix is present and exercise nothing. These two widthPt values instead come from columnWidthCharsToPt(12.76) and columnWidthCharsToPt(9.7) — points equivalents of two of kitchen-sink.xlsx's own real, LibreOffice-authored stored widths (see content.test.ts's dataSheetColWidthAttrs suite) — independently re-verified to keep narrowing across multiple further write cycles under the pre-fix rounding (12.76 chars -> 12.64 -> 12.5 -> 12.36; 9.7 chars -> 9.64 -> 9.5 -> 9.36) rather than settling after the first.
     const drifting: ContentDocument = {
       kind: "spreadsheet",
       metadata: {},
@@ -328,7 +328,7 @@ describe("readXlsxContent(buildXlsxPackageFromContent(x)) round-trips real conte
       return childrenWithTag(colsEl, "col").map((col) => attr(col, "width"));
     }
 
-    const firstWritePkg = buildXlsxPackageFromContent(drifting); // write 1 -- allowed to differ from write 2, since these widthPt values need not already land on the pixel grid the very first write snaps to
+    const firstWritePkg = buildXlsxPackageFromContent(drifting); // write 1 — allowed to differ from write 2, since these widthPt values need not already land on the pixel grid the very first write snaps to
     const firstRead = readXlsxContent(firstWritePkg);
     if (firstRead.kind !== "spreadsheet") {
       throw new Error("expected a spreadsheet ContentDocument");
@@ -630,7 +630,7 @@ describe("buildXlsxPackageFromContent: writes a real number format for every val
     expect(formatCodeOf(pkg, "B1")).toBe("[$GBP]#,##0.00");
   });
 
-  it("writes a currency with no ISO code as a plain amount format -- a documented, deliberate loss of the money semantic", () => {
+  it("writes a currency with no ISO code as a plain amount format — a documented, deliberate loss of the money semantic", () => {
     expect(formatCodeOf(pkg, "C1")).toBe("#,##0.00");
   });
 
@@ -725,7 +725,7 @@ describe("buildXlsxPackageFromContent: a temporal value with no valid serial deg
         value: { kind: "time", value: "PT14H30M00S" },
         displayText: "PT14H30M00S",
       },
-      // A calendar day that does not exist, and a date before the 1900 epoch -- neither has a serial.
+      // A calendar day that does not exist, and a date before the 1900 epoch — neither has a serial.
       {
         row: 0,
         column: 1,
@@ -1916,7 +1916,7 @@ describe("buildXlsxPackageFromContent: cell comments (ExaDev/documents.js#949)",
   });
 });
 
-// ExaDev/documents.js#973's own two one-way rows, closed: a worksheet's own drawing layer (charts and pictures) and the workbook's own definitions table (general defined names and Table/List objects) now both survive buildXlsxPackageFromContent -- typed/xlsx/content.test.ts carries the byte-level decodePackage/encodePackage round trips for the drawing layer (one per anchor spelling); this suite checks the XML shape directly, the same way the comment tests above do, plus one round trip per row through readXlsxContent/readWorkbookDefinitions.
+// ExaDev/documents.js#973's own two one-way rows, closed: a worksheet's own drawing layer (charts and pictures) and the workbook's own definitions table (general defined names and Table/List objects) now both survive buildXlsxPackageFromContent — typed/xlsx/content.test.ts carries the byte-level decodePackage/encodePackage round trips for the drawing layer (one per anchor spelling); this suite checks the XML shape directly, the same way the comment tests above do, plus one round trip per row through readXlsxContent/readWorkbookDefinitions.
 
 function chartEmbeddedObject(): ContentEmbeddedObject {
   return {
@@ -2209,7 +2209,7 @@ describe("buildXlsxPackageFromContent: the definitions option (Table objects) an
       printRange: { startRow: 0, startColumn: 0, endRow: 9, endColumn: 1 },
     };
     wide.names = [
-      // The names array's own refersTo is the higher-fidelity spelling -- the derived Print_Area for sheet 0 must not duplicate or replace it.
+      // The names array's own refersTo is the higher-fidelity spelling — the derived Print_Area for sheet 0 must not duplicate or replace it.
       {
         name: "_xlnm.Print_Area",
         refersTo: "Sheet1!$A$1:$B$10,Sheet1!$D$1:$E$5",
@@ -2415,7 +2415,7 @@ describe("buildXlsxPackageFromContent: [Content_Types].xml carries every part's 
     expect(
       overrides.filter((o) => o.partName?.startsWith("/xl/worksheets/sheet")),
     ).toHaveLength(2);
-    // Only sheet 1 carries a comment, a drawing, and a table -- indices must not leak onto sheet 2.
+    // Only sheet 1 carries a comment, a drawing, and a table — indices must not leak onto sheet 2.
     expect(overrides).toContainEqual({
       partName: "/xl/threadedComments/threadedComment1.xml",
       contentType: "application/vnd.ms-excel.threadedcomments+xml",
@@ -2537,7 +2537,7 @@ describe("buildXlsxPackageFromContent: xl/_rels/workbook.xml.rels numbers worksh
     ]);
   });
 
-  it("writes exactly one worksheet relationship, at rId1, for a single-sheet workbook -- proving the loop runs sheetCount times, not one more or fewer", () => {
+  it("writes exactly one worksheet relationship, at rId1, for a single-sheet workbook — proving the loop runs sheetCount times, not one more or fewer", () => {
     const pkg = buildXlsxPackageFromContent(singleSheetDocument([]));
     const rels = rootElement(pkg.parts["xl/_rels/workbook.xml.rels"]);
     if (rels === undefined) {
@@ -2748,7 +2748,7 @@ describe("computeDimension: each of cells, columns, and rows independently exten
     expect(dimensionRefOf(pkg)).toBe("A1:A5");
   });
 
-  it("takes the larger of cells' and rows'/columns' own extents, not the smaller -- a column/row entry past the last cell still widens the dimension", () => {
+  it("takes the larger of cells' and rows'/columns' own extents, not the smaller — a column/row entry past the last cell still widens the dimension", () => {
     const pkg = buildXlsxPackageFromContent(
       sheetOf({
         cells: [
@@ -3038,7 +3038,7 @@ describe("renderString/renderTemporal: the formula-result and undefined-serial b
     );
     expect(attr(writtenCell(pkg, "A1"), "t")).toBe("str");
     expect(attr(writtenCell(pkg, "B1"), "t")).toBe("s");
-    // Only the literal cell interned into sharedStrings -- the formula's own cached text did not.
+    // Only the literal cell interned into sharedStrings — the formula's own cached text did not.
     const sharedStrings = rootElement(pkg.parts["xl/sharedStrings.xml"]);
     if (sharedStrings === undefined) {
       throw new Error("expected xl/sharedStrings.xml to have a root element");
@@ -4273,7 +4273,7 @@ describe("buildXlsxPackageFromContent: part roots, scope-keyed name suppression,
     const dxfs = requireChild(styles, "dxfs");
     expect(attr(dxfs, "count")).toBe(String(elementsOf(dxfs, "dxf").length));
     expect(elementsOf(dxfs, "dxf").length).toBeGreaterThan(0);
-    // A workbook with no styled rule writes no dxfs element at all (already covered elsewhere) -- this fixture only supplies the count.
+    // A workbook with no styled rule writes no dxfs element at all (already covered elsewhere) — this fixture only supplies the count.
     expect(
       styleSheetOf(pkg).children.filter(
         (c) => c.type === "element" && c.tag === "dxfs",

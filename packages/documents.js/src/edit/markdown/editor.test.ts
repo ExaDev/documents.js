@@ -5,7 +5,7 @@ import { readMarkdownContent } from "../../markdown/read";
 import { buildMarkdownText } from "../../markdown/write";
 import { createMarkdownEditor, MarkdownEditor, openMarkdown } from "./editor";
 
-// MarkdownEditor deliberately exposes no pageSize/margins getter of its own (mirroring every other live editor's constructor-only intake of these fields) -- reaching the private `document` field this way is the only way to prove createMarkdownEditor's own pageSize/margins options genuinely reach readMarkdownContent, since neither field is observable through toMarkdownText() (plain CommonMark/GFM text carries no page-geometry construct at all).
+// MarkdownEditor deliberately exposes no pageSize/margins getter of its own (mirroring every other live editor's constructor-only intake of these fields) — reaching the private `document` field this way is the only way to prove createMarkdownEditor's own pageSize/margins options genuinely reach readMarkdownContent, since neither field is observable through toMarkdownText() (plain CommonMark/GFM text carries no page-geometry construct at all).
 function underlyingDocument(editor: MarkdownEditor): ContentDocument {
   return (editor as unknown as { document: ContentDocument }).document;
 }
@@ -114,7 +114,7 @@ describe("openMarkdown / toMarkdownText round trip", () => {
       ["A1", "B1"],
     ]);
 
-    // markdown-codec's own default emphasisMarker is "_", not the "**"/"*" the fixture happens to use -- CommonMark discards which literal marker an author chose, so the byte-for-byte source text is not expected to survive, only the semantic content it expressed. Re-parsing the emitted output must recover the identical structure the original fixture produced.
+    // markdown-codec's own default emphasisMarker is "_", not the "**"/"*" the fixture happens to use — CommonMark discards which literal marker an author chose, so the byte-for-byte source text is not expected to survive, only the semantic content it expressed. Re-parsing the emitted output must recover the identical structure the original fixture produced.
     const output = editor.toMarkdownText();
     const reopened = openMarkdown(output);
     const [reopenedHeading, reopenedProse] = reopened.paragraphs();
@@ -146,7 +146,7 @@ describe("openMarkdown / toMarkdownText round trip", () => {
   it("produces the documented degradation for a heading level beyond the ATX/setext six-level ceiling", () => {
     const editor = openMarkdown(fixture);
     const [heading] = editor.paragraphs();
-    // Pushed directly through the editor, past MAX_HEADING_STYLE_LEVEL -- markdown-codec's own dist/emit/emit.js clamps this to level 6 on write and reports HEADING_LEVEL_CLAMPED, rather than emitting a seventh "#".
+    // Pushed directly through the editor, past MAX_HEADING_STYLE_LEVEL — markdown-codec's own dist/emit/emit.js clamps this to level 6 on write and reports HEADING_LEVEL_CLAMPED, rather than emitting a seventh "#".
     heading!.headingLevel = 8;
     const diagnosticCodes: string[] = [];
     const output = editor.toMarkdownText({

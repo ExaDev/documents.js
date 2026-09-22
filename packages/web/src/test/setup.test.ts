@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-// setup.ts itself runs as this project's setupFiles entry (vite.config.ts), so by the time this test file runs, window.matchMedia, ResizeObserver, and document.fonts are already installed -- this file tests that installation directly, since nothing else in the suite exercises matchMedia's listener bookkeeping or ResizeObserver's own no-op contract.
+// setup.ts itself runs as this project's setupFiles entry (vite.config.ts), so by the time this test file runs, window.matchMedia, ResizeObserver, and document.fonts are already installed — this file tests that installation directly, since nothing else in the suite exercises matchMedia's listener bookkeeping or ResizeObserver's own no-op contract.
 
 describe("window.matchMedia stub", () => {
   it("reports no match for any query, and echoes the query back on .media", () => {

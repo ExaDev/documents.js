@@ -60,7 +60,7 @@ describe("compoundFile", () => {
   });
 
   it("states every header field's own exact byte value, not just a value archive-codec's reader happens to tolerate", () => {
-    // Two streams (512 and 600 bytes: one exactly one sector, one spanning two) chosen so every derived quantity below -- sector counts, chain links, directory sibling ids -- takes a distinct, hand-checkable value rather than a coincidentally-symmetric one.
+    // Two streams (512 and 600 bytes: one exactly one sector, one spanning two) chosen so every derived quantity below — sector counts, chain links, directory sibling ids — takes a distinct, hand-checkable value rather than a coincidentally-symmetric one.
     const streamA = bytesOf(512, 0x11);
     const streamB = bytesOf(600, 0x22);
     const file = compoundFile([
@@ -82,9 +82,9 @@ describe("compoundFile", () => {
     expect(view.getUint32(0x2c, true)).toBe(1); // fatSectors count
     expect(view.getUint32(0x30, true)).toBe(1); // firstDirectorySector = fatSectors
     expect(view.getUint32(0x38, true)).toBe(64); // miniStreamCutoff
-    expect(view.getUint32(0x3c, true)).toBe(ENDOFCHAIN); // firstMiniFatSector -- no mini stream at all
+    expect(view.getUint32(0x3c, true)).toBe(ENDOFCHAIN); // firstMiniFatSector — no mini stream at all
     expect(view.getUint32(0x40, true)).toBe(0); // miniFatSectorCount
-    expect(view.getUint32(0x44, true)).toBe(ENDOFCHAIN); // firstDifatSector -- every FAT sector fits the header's own 109-entry array
+    expect(view.getUint32(0x44, true)).toBe(ENDOFCHAIN); // firstDifatSector — every FAT sector fits the header's own 109-entry array
     expect(view.getUint32(0x48, true)).toBe(0); // difatSectorCount
 
     // The header DIFAT array: sector 0 (the file's one FAT sector) at entry 0, FREESECT padding after it.
@@ -123,7 +123,7 @@ describe("compoundFile", () => {
     expect(view.getUint8(directoryAt(0) + 0x43)).toBe(1); // colour flag
     expect(view.getUint32(directoryAt(0) + 0x44, true)).toBe(NOSTREAM); // left sibling
     expect(view.getUint32(directoryAt(0) + 0x48, true)).toBe(NOSTREAM); // right sibling
-    expect(view.getUint32(directoryAt(0) + 0x4c, true)).toBe(1); // child -- the first stream
+    expect(view.getUint32(directoryAt(0) + 0x4c, true)).toBe(1); // child — the first stream
     expect(view.getUint32(directoryAt(0) + 0x7c, true)).toBe(0); // size high dword
 
     // First (id 1): right sibling is Second (id 2), since it is not the last stream.
@@ -131,7 +131,7 @@ describe("compoundFile", () => {
     expect(view.getUint8(directoryAt(1) + 0x42)).toBe(2); // OBJECT_TYPE_STREAM
     expect(view.getUint32(directoryAt(1) + 0x44, true)).toBe(NOSTREAM);
     expect(view.getUint32(directoryAt(1) + 0x48, true)).toBe(2);
-    expect(view.getUint32(directoryAt(1) + 0x4c, true)).toBe(NOSTREAM); // no child -- a stream, not a storage
+    expect(view.getUint32(directoryAt(1) + 0x4c, true)).toBe(NOSTREAM); // no child — a stream, not a storage
     expect(view.getUint32(directoryAt(1) + 0x74, true)).toBe(2); // startSector
     expect(view.getUint32(directoryAt(1) + 0x78, true)).toBe(512);
     expect(view.getUint32(directoryAt(1) + 0x7c, true)).toBe(0);
@@ -158,7 +158,7 @@ describe("compoundFile", () => {
   });
 
   it("stays at one FAT sector when the non-FAT sector count exactly fills it", () => {
-    // One FAT sector addresses 128 total sectors including its own: fatSectors * 128 < nonFatSectors + fatSectors is the fixed-point test, and 127 non-FAT sectors is exactly the boundary where 1 * 128 (128) is not less than 127 + 1 (128) -- the one nonFatSectors value where < and <= actually disagree, since either comparison agrees everywhere else. 101 one-sector (64-byte) streams plus their own 26-sector directory (ceil(102 entries / 4 per sector)) is exactly 127.
+    // One FAT sector addresses 128 total sectors including its own: fatSectors * 128 < nonFatSectors + fatSectors is the fixed-point test, and 127 non-FAT sectors is exactly the boundary where 1 * 128 (128) is not less than 127 + 1 (128) — the one nonFatSectors value where < and <= actually disagree, since either comparison agrees everywhere else. 101 one-sector (64-byte) streams plus their own 26-sector directory (ceil(102 entries / 4 per sector)) is exactly 127.
     const streams = Array.from({ length: 101 }, (_unused, index) => ({
       name: `s${index}`,
       bytes: bytesOf(64, index % 256),
@@ -170,7 +170,7 @@ describe("compoundFile", () => {
   });
 
   it("grows to two FAT sectors when the non-FAT sector count needs the growth loop's own +fatSectors term, not -fatSectors", () => {
-    // 128 non-FAT sectors: 1 * 128 (128) IS less than 128 + 1 (129), so growth to 2 FAT sectors is required (1 FAT sector cannot address a 129th sector, itself included). Subtracting fatSectors instead of adding it would compute 128 < 128 - 1 (127), false, wrongly stopping at 1 FAT sector -- too few slots for the file's own 129 sectors. 102 one-sector streams plus their own 26-sector directory is exactly 128.
+    // 128 non-FAT sectors: 1 * 128 (128) IS less than 128 + 1 (129), so growth to 2 FAT sectors is required (1 FAT sector cannot address a 129th sector, itself included). Subtracting fatSectors instead of adding it would compute 128 < 128 - 1 (127), false, wrongly stopping at 1 FAT sector — too few slots for the file's own 129 sectors. 102 one-sector streams plus their own 26-sector directory is exactly 128.
     const streams = Array.from({ length: 102 }, (_unused, index) => ({
       name: `t${index}`,
       bytes: bytesOf(64, index % 256),

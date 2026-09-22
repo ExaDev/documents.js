@@ -1,7 +1,7 @@
 import { isAsciiWhitespace } from "./bytes/reader";
 import type { ByteReader } from "./bytes/reader";
 
-// A byte-level tokenizer over PDF's own lexical syntax (ISO 32000-1 7.2), shared between object parsing (src/pdf/parse.ts) and content-stream interpretation (src/pdf/content-read.ts) -- both are sequences of the identical token vocabulary (numbers, names, strings, delimiters, keywords/operators), just assembled into different higher-level structures by their respective callers. This module produces exactly one token per call and never backtracks itself; the one genuinely ambiguous case in the whole grammar -- "N G R" (a reference) vs "N G obj" (an indirect object header), both starting with two integers -- is resolved by parse.ts using the shared ByteReader's own mark()/reset(), not by anything in here.
+// A byte-level tokenizer over PDF's own lexical syntax (ISO 32000-1 7.2), shared between object parsing (src/pdf/parse.ts) and content-stream interpretation (src/pdf/content-read.ts) — both are sequences of the identical token vocabulary (numbers, names, strings, delimiters, keywords/operators), just assembled into different higher-level structures by their respective callers. This module produces exactly one token per call and never backtracks itself; the one genuinely ambiguous case in the whole grammar — "N G R" (a reference) vs "N G obj" (an indirect object header), both starting with two integers — is resolved by parse.ts using the shared ByteReader's own mark()/reset(), not by anything in here.
 
 export type Token =
   | { readonly kind: "number"; readonly value: number }
@@ -14,7 +14,7 @@ export type Token =
   | { readonly kind: "dictEnd" }
   | { readonly kind: "keyword"; readonly value: string };
 
-// PDF's own delimiter characters (7.2.2): ( ) < > [ ] { } / % -- everything else that isn't whitespace is a "regular" character, the alphabet keywords and names are built from.
+// PDF's own delimiter characters (7.2.2): ( ) < > [ ] { } / % — everything else that isn't whitespace is a "regular" character, the alphabet keywords and names are built from.
 const DELIMITER_BYTES = new Set([
   0x28, 0x29, 0x3c, 0x3e, 0x5b, 0x5d, 0x7b, 0x7d, 0x2f, 0x25,
 ]);
@@ -46,7 +46,7 @@ function hexDigitValue(byte: number): number {
   return byte - 0x61 + 10;
 }
 
-// Comments (% to end of line) are lexically equivalent to whitespace -- they may appear between any two tokens and must never be mistaken for content.
+// Comments (% to end of line) are lexically equivalent to whitespace — they may appear between any two tokens and must never be mistaken for content.
 function skipWhitespaceAndComments(reader: ByteReader): void {
   for (;;) {
     reader.skipWhitespace();
@@ -111,7 +111,7 @@ function readNameToken(reader: ByteReader): Token {
   };
 }
 
-// Balanced-parenthesis nesting, backslash escapes (named escapes, 1-3 digit octal, and line-continuation escapes that produce no byte at all), and unescaped CR/CRLF end-of-line markers normalised to a single LF -- all per 7.3.4.2's own literal-string rules.
+// Balanced-parenthesis nesting, backslash escapes (named escapes, 1-3 digit octal, and line-continuation escapes that produce no byte at all), and unescaped CR/CRLF end-of-line markers normalised to a single LF — all per 7.3.4.2's own literal-string rules.
 function readLiteralStringToken(reader: ByteReader): Token {
   reader.next(); // consume '('
   const bytes: number[] = [];
@@ -119,7 +119,7 @@ function readLiteralStringToken(reader: ByteReader): Token {
   for (;;) {
     const byte = reader.next();
     if (byte === undefined) {
-      break; // truncated input -- return what was read so far; the caller (parse.ts) is responsible for deciding whether that's fatal
+      break; // truncated input — return what was read so far; the caller (parse.ts) is responsible for deciding whether that's fatal
     }
     if (byte === 0x5c) {
       const esc = reader.next();
@@ -142,9 +142,9 @@ function readLiteralStringToken(reader: ByteReader): Token {
         if (reader.peek() === 0x0a) {
           reader.next();
         }
-        // line-continuation escape (\<CR> or \<CRLF>) -- produces no byte
+        // line-continuation escape (\<CR> or \<CRLF>) — produces no byte
       } else if (esc === 0x0a) {
-        // line-continuation escape (\<LF>) -- produces no byte
+        // line-continuation escape (\<LF>) — produces no byte
       } else if (esc >= 0x30 && esc <= 0x37) {
         let value = esc - 0x30;
         for (
@@ -159,7 +159,7 @@ function readLiteralStringToken(reader: ByteReader): Token {
         }
         bytes.push(value & 0xff);
       } else {
-        // "if the character following the REVERSE SOLIDUS is not one of those shown... the REVERSE SOLIDUS shall be ignored" (7.3.4.2) -- the escaped character is emitted literally.
+        // "if the character following the REVERSE SOLIDUS is not one of those shown... the REVERSE SOLIDUS shall be ignored" (7.3.4.2) — the escaped character is emitted literally.
         bytes.push(esc);
       }
       continue;
@@ -212,7 +212,7 @@ function readHexStringToken(reader: ByteReader): Token {
   return { kind: "hexString", value: bytes };
 }
 
-// A keyword is simply the maximal run of regular bytes that isn't a number or a name -- this covers every PDF structural keyword (obj/endobj/stream/xref/trailer/true/false/null/R/...) and every content-stream operator (BT/Tf/Tj/re/cm/Do/...) with the same code, since the lexer has no notion of which keywords are "valid" in a given context; that's entirely parse.ts's and content-read.ts's own concern.
+// A keyword is simply the maximal run of regular bytes that isn't a number or a name — this covers every PDF structural keyword (obj/endobj/stream/xref/trailer/true/false/null/R/...) and every content-stream operator (BT/Tf/Tj/re/cm/Do/...) with the same code, since the lexer has no notion of which keywords are "valid" in a given context; that's entirely parse.ts's and content-read.ts's own concern.
 function readKeywordToken(reader: ByteReader): Token {
   const start = reader.offset;
   while (reader.peek() !== undefined && isRegularByte(reader.peek()!)) {

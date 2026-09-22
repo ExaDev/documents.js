@@ -28,18 +28,18 @@ import {
 } from "./style";
 import { buildSvgPathData, buildSvgViewBox } from "./svg-path";
 
-// Live-view classes over odg's own vector-primitive elements -- draw:rect/draw:ellipse/draw:line/draw:path, the geometry a drawing carries that a presentation typically doesn't (see odf.js's own typed/draw/shapes.ts top-of-file note, which this module's builders are the write-side counterpart to).
+// Live-view classes over odg's own vector-primitive elements — draw:rect/draw:ellipse/draw:line/draw:path, the geometry a drawing carries that a presentation typically doesn't (see odf.js's own typed/draw/shapes.ts top-of-file note, which this module's builders are the write-side counterpart to).
 //
-// ROTATION: a rect/ellipse/path vector carries a genuine rotationDeg, exactly as a draw:frame does. ContentVectorSchema models one on all three variants, odf.js's own readDrawRectVector/readDrawEllipseVector/readDrawPathVector each resolve one through resolveOdfShapeGeometry (the identical function readDrawFrame uses), and this module writes one back through applyOdfGeometry (src/edit/geometry.ts) -- the same shared write-side inverse OdpShape's own rotationDeg setter uses, rather than a second, independently-derived rotation convention. Frame get/set consequently goes through resolveOdfShapeGeometry too, never a bare svg:x/y read: a rotated element carries draw:transform and NO svg:x/svg:y at all, so reading the box attributes directly would silently report a rotated vector as having no frame. draw:line is the exception on every count -- two endpoints rather than a box, no draw:transform in odf.js's own reader, and no rotationDeg field on ContentVectorSchema's 'line' variant to carry one.
+// ROTATION: a rect/ellipse/path vector carries a genuine rotationDeg, exactly as a draw:frame does. ContentVectorSchema models one on all three variants, odf.js's own readDrawRectVector/readDrawEllipseVector/readDrawPathVector each resolve one through resolveOdfShapeGeometry (the identical function readDrawFrame uses), and this module writes one back through applyOdfGeometry (src/edit/geometry.ts) — the same shared write-side inverse OdpShape's own rotationDeg setter uses, rather than a second, independently-derived rotation convention. Frame get/set consequently goes through resolveOdfShapeGeometry too, never a bare svg:x/y read: a rotated element carries draw:transform and NO svg:x/svg:y at all, so reading the box attributes directly would silently report a rotated vector as having no frame. draw:line is the exception on every count — two endpoints rather than a box, no draw:transform in odf.js's own reader, and no rotationDeg field on ContentVectorSchema's 'line' variant to carry one.
 //
-// Every constructed vector element carries an empty <text:p/> child, matching real LibreOffice output for every vector-primitive kind (confirmed against odf.js's own typed/shared/path.ts and typed/odg/read.test.ts ground-truth fixtures, and this package's own test-support/odg.ts) even though odf.js's own reader never actually reads it back for any ContentVector variant -- it is schema-valid, harmless, and keeps a freshly written .odg indistinguishable in shape from a real LibreOffice-authored one.
+// Every constructed vector element carries an empty <text:p/> child, matching real LibreOffice output for every vector-primitive kind (confirmed against odf.js's own typed/shared/path.ts and typed/odg/read.test.ts ground-truth fixtures, and this package's own test-support/odg.ts) even though odf.js's own reader never actually reads it back for any ContentVector variant — it is schema-valid, harmless, and keeps a freshly written .odg indistinguishable in shape from a real LibreOffice-authored one.
 
 function directTextP(): XmlElement {
   return el("text:p");
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// draw:rect / draw:ellipse -- identical attribute shape (svg:x/y/width/height, see shapes.ts's own readDrawRectVector/readDrawEllipseVector, which share this exact geometry resolution), differing only in tag and hence ContentVector.kind. One live-view class serves both; `kind` reflects whichever tag the element actually carries.
+// draw:rect / draw:ellipse — identical attribute shape (svg:x/y/width/height, see shapes.ts's own readDrawRectVector/readDrawEllipseVector, which share this exact geometry resolution), differing only in tag and hence ContentVector.kind. One live-view class serves both; `kind` reflects whichever tag the element actually carries.
 
 export interface BoxVectorInit {
   readonly frame: Box;
@@ -161,7 +161,7 @@ export class OdgBoxVector {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// draw:line -- carries no svg:x/y/width/height box at all, just two endpoints (svg:x1/y1/x2/y2, see shapes.ts's own readDrawLineVector / odf.js's own parseLinePoints). ContentVectorSchema's own 'line' variant REQUIRES a stroke (an invisible line paints nothing worth keeping), so stroke here is a mandatory init field and a mandatory setter argument, unlike the optional fill/stroke on the box/path variants.
+// draw:line — carries no svg:x/y/width/height box at all, just two endpoints (svg:x1/y1/x2/y2, see shapes.ts's own readDrawLineVector / odf.js's own parseLinePoints). ContentVectorSchema's own 'line' variant REQUIRES a stroke (an invisible line paints nothing worth keeping), so stroke here is a mandatory init field and a mandatory setter argument, unlike the optional fill/stroke on the box/path variants.
 
 export interface LineVectorInit {
   readonly from: ContentPathPoint;
@@ -192,7 +192,7 @@ export function buildLineElement(
 }
 
 export class OdgLineVector {
-  // A fixed discriminant, unlike OdgBoxVector's own tag-derived getter -- draw:line is the only element this class ever wraps.
+  // A fixed discriminant, unlike OdgBoxVector's own tag-derived getter — draw:line is the only element this class ever wraps.
   readonly kind = "line";
 
   private readonly container: XmlNode[];
@@ -254,7 +254,7 @@ export class OdgLineVector {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// draw:path -- svg:d (real curves) plus svg:viewBox (see svg-path.ts's own top-of-file note on why this writer always anchors viewBox at "0 0 {widthPt} {heightPt}"). frame's own setter deliberately touches ONLY svg:x/y/width/height, leaving svg:viewBox/svg:d untouched -- this is not an oversight but the correct ODF resize semantics: a real ODF consumer resizing a curved shape leaves its own viewBox/d alone and lets the box's width/height stretch it, exactly what buildOdfSubpaths' own scale factor (frame.widthPt/viewBox.width) already does on any later reparse. ContentVectorSchema's own 'path' variant has no fillRule field ODF populates (odf.js's own readDrawPathVector never sets one -- there is no established ODF attribute for it in this codebase's verified vocabulary), so this writer does not attempt to express one either.
+// draw:path — svg:d (real curves) plus svg:viewBox (see svg-path.ts's own top-of-file note on why this writer always anchors viewBox at "0 0 {widthPt} {heightPt}"). frame's own setter deliberately touches ONLY svg:x/y/width/height, leaving svg:viewBox/svg:d untouched — this is not an oversight but the correct ODF resize semantics: a real ODF consumer resizing a curved shape leaves its own viewBox/d alone and lets the box's width/height stretch it, exactly what buildOdfSubpaths' own scale factor (frame.widthPt/viewBox.width) already does on any later reparse. ContentVectorSchema's own 'path' variant has no fillRule field ODF populates (odf.js's own readDrawPathVector never sets one — there is no established ODF attribute for it in this codebase's verified vocabulary), so this writer does not attempt to express one either.
 
 export interface PathVectorInit {
   readonly frame: Box;
@@ -354,7 +354,7 @@ export class OdgPathVector {
     setGraphicStroke(this.pkg, this.live(), value);
   }
 
-  // Reparses svg:viewBox + svg:d through odf.js's OWN real parser (parseOdfViewBox / parseOdfPathData / buildOdfSubpaths, the exact same functions readDrawPathVector uses) every call, scaled against the CURRENT frame -- rather than caching whatever ContentSubpath[] the caller originally passed to addPath/PathVectorInit. This is both a genuinely live accessor (reflects a later `.frame =` resize, per this class's own frame-setter note) and the round-trip proof this module's own test suite leans on: every read of subpaths re-derives from the real written-and-reparsed XML, never from a cached JS value.
+  // Reparses svg:viewBox + svg:d through odf.js's OWN real parser (parseOdfViewBox / parseOdfPathData / buildOdfSubpaths, the exact same functions readDrawPathVector uses) every call, scaled against the CURRENT frame — rather than caching whatever ContentSubpath[] the caller originally passed to addPath/PathVectorInit. This is both a genuinely live accessor (reflects a later `.frame =` resize, per this class's own frame-setter note) and the round-trip proof this module's own test suite leans on: every read of subpaths re-derives from the real written-and-reparsed XML, never from a cached JS value.
   get subpaths(): ContentSubpath[] {
     const node = this.live();
     const viewBoxValue = attr(node, "svg:viewBox");
@@ -381,13 +381,13 @@ export class OdgPathVector {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// The three classes above as one union, discriminated on `kind` -- the same four-member vocabulary ContentVectorSchema's own variants carry ('rect'/'ellipse'/'line'/'path'), so a caller holding an OdgVector narrows it exactly as it would narrow a ContentVector. OdgBoxVector's own kind is the one member resolved from the live element's tag rather than being fixed per class, since one class serves both draw:rect and draw:ellipse (see its own note above).
+// The three classes above as one union, discriminated on `kind` — the same four-member vocabulary ContentVectorSchema's own variants carry ('rect'/'ellipse'/'line'/'path'), so a caller holding an OdgVector narrows it exactly as it would narrow a ContentVector. OdgBoxVector's own kind is the one member resolved from the live element's tag rather than being fixed per class, since one class serves both draw:rect and draw:ellipse (see its own note above).
 
 export type OdgVectorKind = OdgBoxVectorKind | "line" | "path";
 
 export type OdgVector = OdgBoxVector | OdgLineVector | OdgPathVector;
 
-// Wraps whichever vector-primitive element `node` actually is in its matching live-view class, or reports undefined for an element that is not a vector primitive at all (a draw:frame, most commonly -- draw:page mixes frames and vectors in one children list, since document order IS paint order for both). This is the read-side inverse of buildRectElement/buildEllipseElement/buildLineElement/buildPathElement above, and the single place tag-to-class dispatch lives: OdgPage.vectors (page.ts) is its caller.
+// Wraps whichever vector-primitive element `node` actually is in its matching live-view class, or reports undefined for an element that is not a vector primitive at all (a draw:frame, most commonly — draw:page mixes frames and vectors in one children list, since document order IS paint order for both). This is the read-side inverse of buildRectElement/buildEllipseElement/buildLineElement/buildPathElement above, and the single place tag-to-class dispatch lives: OdgPage.vectors (page.ts) is its caller.
 export function wrapVectorElement(
   container: XmlNode[],
   node: XmlElement,
@@ -407,7 +407,7 @@ export function wrapVectorElement(
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// One ContentVector -> its matching draw:* element, rotation included. The single dispatch point every ODF container that writes vector geometry goes through -- OdgPage.addVector (a drawing page), OdpSlide.addVector (a presentation's draw:page, structurally the same element), and OdtBody.appendVectors (a text document's flow) -- so a rect/ellipse/line/path is built exactly one way regardless of which document kind it lands in. draw:rect/draw:ellipse/draw:line/draw:path carry byte-for-byte the same attribute vocabulary in all three, which is precisely why odt and odp reuse this module rather than growing writers of their own.
+// One ContentVector -> its matching draw:* element, rotation included. The single dispatch point every ODF container that writes vector geometry goes through — OdgPage.addVector (a drawing page), OdpSlide.addVector (a presentation's draw:page, structurally the same element), and OdtBody.appendVectors (a text document's flow) — so a rect/ellipse/line/path is built exactly one way regardless of which document kind it lands in. draw:rect/draw:ellipse/draw:line/draw:path carry byte-for-byte the same attribute vocabulary in all three, which is precisely why odt and odp reuse this module rather than growing writers of their own.
 //
 // `textFlowAnchored` is the one genuine per-container difference: a page-level vector is positioned directly against its page and declares no anchor at all, while one living inside a text:p must say what its coordinates are measured against (see style.ts's own TEXT_FLOW_ANCHOR_ATTRS). text:anchor-type is the element-level half of that pair; the style carries the rest.
 
@@ -485,7 +485,7 @@ function buildUnanchoredVectorElement(
             textFlowAnchored,
           });
   if (vector.rotationDeg !== undefined) {
-    // Rewrites the plain svg:x/svg:y the builder just wrote into the draw:transform form a rotated ODF shape actually uses -- ODF never carries both (see src/edit/geometry.ts's own applyOdfGeometry note).
+    // Rewrites the plain svg:x/svg:y the builder just wrote into the draw:transform form a rotated ODF shape actually uses — ODF never carries both (see src/edit/geometry.ts's own applyOdfGeometry note).
     applyOdfGeometry(element, vector.frame, vector.rotationDeg);
   }
   return element;

@@ -4,11 +4,11 @@ import {
   type ContentSheetCell,
 } from "document-schema.js";
 
-// Region segmentation (ExaDev/documents.js#823, "Ask 2"): a real sheet is a canvas, not a table -- a table in one corner, a column of unrelated prose commentary elsewhere, a sheet that is entirely narrative, label/value pairs scattered in margins. segmentSheetRegions finds the connected components of a sheet's populated cells and gives each a best-effort classification and confidence, PURELY AS AN ADDITIONAL, OPT-IN ARTEFACT alongside the lossless cell data ContentSheetCell[]/SheetDescriptor.cells already carries: this module never mutates its input and a consumer who never calls it loses nothing -- every cell is still there, unclassified. Classification ADDS information; it never gates what is emitted, because the failure mode of a structure-gated reader is silently dropping what it did not recognise, and a consumer cannot tell "the sheet does not say that" from "the reader did not understand that part" (the issue's own words, and the reason a region with no confident classification still comes back as 'unknown' rather than being omitted).
+// Region segmentation (ExaDev/documents.js#823, "Ask 2"): a real sheet is a canvas, not a table — a table in one corner, a column of unrelated prose commentary elsewhere, a sheet that is entirely narrative, label/value pairs scattered in margins. segmentSheetRegions finds the connected components of a sheet's populated cells and gives each a best-effort classification and confidence, PURELY AS AN ADDITIONAL, OPT-IN ARTEFACT alongside the lossless cell data ContentSheetCell[]/SheetDescriptor.cells already carries: this module never mutates its input and a consumer who never calls it loses nothing — every cell is still there, unclassified. Classification ADDS information; it never gates what is emitted, because the failure mode of a structure-gated reader is silently dropping what it did not recognise, and a consumer cannot tell "the sheet does not say that" from "the reader did not understand that part" (the issue's own words, and the reason a region with no confident classification still comes back as 'unknown' rather than being omitted).
 //
 // The input is deliberately just the sparse cell array, not a whole ContentSheet/SheetDescriptor/SheetGroupNode: a consumer holding any one of those three (the flat codec-exchange sheet, its tree-form descriptor, or the tree group wrapper) reaches its own `cells` field and passes that straight through, and this module never needs column widths, print settings, or the sheet's images/embedded objects to do its job.
 //
-// RegionClassification is deliberately NOT spreadsheet-scoped in its name (unlike SheetRegion, whose `range`/`cells` genuinely are sheet-shaped): the issue is explicit that "regions with confidence" is a document-model concept, not a spreadsheet one -- a PDF's columns/tables/figures/captions have the identical shape (a spatial region, a kind, a confidence), and this is the vocabulary a future PDF region pass would reuse rather than re-mint under its own name. `table`, `mixed`, and `unknown` are shared verbatim across both consumers (a PDF page can carry a ruled/gridded table exactly as a sheet can); `prose`/`model` stay spreadsheet-specific signals (narrative text vs. formula-driven calculation, neither of which a PDF page's positioned items can distinguish); `column`/`figure`/`caption` are PDF-specific (see outline/pdf-regions.ts) with no spreadsheet analogue -- a sheet's cells are never grouped into a caption. One union serves both because a consumer of either only ever sees the subset its own segmentation function actually produces.
+// RegionClassification is deliberately NOT spreadsheet-scoped in its name (unlike SheetRegion, whose `range`/`cells` genuinely are sheet-shaped): the issue is explicit that "regions with confidence" is a document-model concept, not a spreadsheet one — a PDF's columns/tables/figures/captions have the identical shape (a spatial region, a kind, a confidence), and this is the vocabulary a future PDF region pass would reuse rather than re-mint under its own name. `table`, `mixed`, and `unknown` are shared verbatim across both consumers (a PDF page can carry a ruled/gridded table exactly as a sheet can); `prose`/`model` stay spreadsheet-specific signals (narrative text vs. formula-driven calculation, neither of which a PDF page's positioned items can distinguish); `column`/`figure`/`caption` are PDF-specific (see outline/pdf-regions.ts) with no spreadsheet analogue — a sheet's cells are never grouped into a caption. One union serves both because a consumer of either only ever sees the subset its own segmentation function actually produces.
 export type RegionClassification =
   | "table"
   | "prose"
@@ -19,7 +19,7 @@ export type RegionClassification =
   | "figure"
   | "caption";
 
-// One connected component of populated cells, its bounding box, and a best-effort classification. `range` is the bounding box of `cells` (min/max row and column actually populated) -- it may itself include blank gap rows/columns the tolerance rule bridged over, so a consumer wanting only the genuinely populated positions should read `cells`, not iterate `range`. `confidence` is this module's own new 0 (no signal either way) to 1 (unambiguous) scale -- there is no prior numeric confidence convention elsewhere in this workspace to match (documents.js's own PDF-reconstruction cell-typing reports a boolean accept/decline per cell, never a score), so 0..1 is introduced here and reused verbatim by deriveNeighbourLabels' own distance-based confidence in labels.ts, for consistency between the two advisory outputs this issue asks for.
+// One connected component of populated cells, its bounding box, and a best-effort classification. `range` is the bounding box of `cells` (min/max row and column actually populated) — it may itself include blank gap rows/columns the tolerance rule bridged over, so a consumer wanting only the genuinely populated positions should read `cells`, not iterate `range`. `confidence` is this module's own new 0 (no signal either way) to 1 (unambiguous) scale — there is no prior numeric confidence convention elsewhere in this workspace to match (documents.js's own PDF-reconstruction cell-typing reports a boolean accept/decline per cell, never a score), so 0..1 is introduced here and reused verbatim by deriveNeighbourLabels' own distance-based confidence in labels.ts, for consistency between the two advisory outputs this issue asks for.
 export interface SheetRegion {
   readonly range: CellRange;
   readonly cells: readonly ContentSheetCell[];
@@ -27,11 +27,11 @@ export interface SheetRegion {
   readonly confidence: number;
 }
 
-// Segments a sheet's populated cells into regions. ADJACENCY RULE (the precise reading of the issue's "tolerating a blank row or column inside a block"): two populated cells connect directly when they share a column and are at most 2 rows apart (0 blank rows between them, i.e. immediately adjacent, or exactly 1 blank row between them), OR share a row and are at most 2 columns apart (the same tolerance on the other axis) -- never both at once. A region is the transitive closure of that relation (ordinary connected-component labelling), so a long unbroken run of same-column or same-row cells chains together even though no single hop in the chain skips more than one gap.
+// Segments a sheet's populated cells into regions. ADJACENCY RULE (the precise reading of the issue's "tolerating a blank row or column inside a block"): two populated cells connect directly when they share a column and are at most 2 rows apart (0 blank rows between them, i.e. immediately adjacent, or exactly 1 blank row between them), OR share a row and are at most 2 columns apart (the same tolerance on the other axis) — never both at once. A region is the transitive closure of that relation (ordinary connected-component labelling), so a long unbroken run of same-column or same-row cells chains together even though no single hop in the chain skips more than one gap.
 //
-// This is a narrower rule than either 4-connectivity or 8-connectivity flood fill, and deliberately so: a pair of cells that are one row AND one column apart (an exact diagonal touch, e.g. (0,0) and (1,1)) shares neither a row nor a column, so it does NOT connect directly under this rule -- and a pair that is two rows AND two columns apart (a "diagonal-only jump across both a blank row and a blank column") does not connect either, for the same reason. Both of those are still reachable transitively through a real block (a dense table's neighbouring cells already provide same-row and same-column hops in every direction), so an ordinary rectangular table is unaffected; what this rule refuses to bridge is two cells that are ONLY diagonally near each other with nothing else populated between them -- exactly the "loose flood fill" the issue's wording warns against, and exactly what keeps a legitimately separate table and an unrelated scattered annotation a few rows and columns away from merging into one region merely because they happen to sit near one another on both axes at once.
+// This is a narrower rule than either 4-connectivity or 8-connectivity flood fill, and deliberately so: a pair of cells that are one row AND one column apart (an exact diagonal touch, e.g. (0,0) and (1,1)) shares neither a row nor a column, so it does NOT connect directly under this rule — and a pair that is two rows AND two columns apart (a "diagonal-only jump across both a blank row and a blank column") does not connect either, for the same reason. Both of those are still reachable transitively through a real block (a dense table's neighbouring cells already provide same-row and same-column hops in every direction), so an ordinary rectangular table is unaffected; what this rule refuses to bridge is two cells that are ONLY diagonally near each other with nothing else populated between them — exactly the "loose flood fill" the issue's wording warns against, and exactly what keeps a legitimately separate table and an unrelated scattered annotation a few rows and columns away from merging into one region merely because they happen to sit near one another on both axes at once.
 //
-// Cell footprints are NOT expanded across a merged cell's rowSpan/colSpan for this connectivity check: a merged cell's `row`/`column` (its anchor position, the only position document-schema.js's sparse cell model actually materialises -- colSpan/rowSpan "are set on the anchor cell only", per ContentSheetCellSchema's own doc comment) is its one position for adjacency purposes, the same way every other per-cell computation in this ecosystem reads a merged cell at its anchor. A real table's own data rows already provide same-row/same-column hops to a merged header regardless (the header's anchor sits at the header row's own gap-tolerant distance from the data below), so this is a scope boundary rather than a gap in a common case: full merged-span occupancy is additional complexity with no concrete case in this issue's test list that needs it.
+// Cell footprints are NOT expanded across a merged cell's rowSpan/colSpan for this connectivity check: a merged cell's `row`/`column` (its anchor position, the only position document-schema.js's sparse cell model actually materialises — colSpan/rowSpan "are set on the anchor cell only", per ContentSheetCellSchema's own doc comment) is its one position for adjacency purposes, the same way every other per-cell computation in this ecosystem reads a merged cell at its anchor. A real table's own data rows already provide same-row/same-column hops to a merged header regardless (the header's anchor sits at the header row's own gap-tolerant distance from the data below), so this is a scope boundary rather than a gap in a common case: full merged-span occupancy is additional complexity with no concrete case in this issue's test list that needs it.
 export function segmentSheetRegions(
   cells: readonly ContentSheetCell[],
 ): SheetRegion[] {
@@ -54,11 +54,11 @@ export function segmentSheetRegions(
 // The row/column gap the adjacency rule tolerates: a difference of 1 (immediately adjacent, 0 blank cells between) or 2 (exactly 1 blank cell between) connects; 3 or more (2+ blank cells between) does not.
 const GAP_TOLERANCE = 2;
 
-// A minimal union-find over cellReference() keys -- string keys rather than a numeric index, since the input is a sparse cell array with no dense id space to allocate from. No path compression: it would only ever change how many hops a FUTURE find() walks, never any value this class returns, so it is unobservable through this class's own public contract and would be untestable dead weight -- a sheet's own adjacency chains (one column or row at a time) are bounded by realistic sheet sizes regardless.
+// A minimal union-find over cellReference() keys — string keys rather than a numeric index, since the input is a sparse cell array with no dense id space to allocate from. No path compression: it would only ever change how many hops a FUTURE find() walks, never any value this class returns, so it is unobservable through this class's own public contract and would be untestable dead weight — a sheet's own adjacency chains (one column or row at a time) are bounded by realistic sheet sizes regardless.
 class DisjointCellSet {
   private readonly parent = new Map<string, string>();
 
-  // Every `parent` entry is created by union() alone, guarded there by `rootA !== rootB` -- so no key is ever mapped to itself, and a chain of `parent.get` calls always terminates by reaching an unmapped root (`undefined`), never by revisiting an already-seen node. That is the whole termination argument for this walk; there is no self-loop or cycle to separately guard against.
+  // Every `parent` entry is created by union() alone, guarded there by `rootA !== rootB` — so no key is ever mapped to itself, and a chain of `parent.get` calls always terminates by reaching an unmapped root (`undefined`), never by revisiting an already-seen node. That is the whole termination argument for this walk; there is no self-loop or cycle to separately guard against.
   private root(key: string): string {
     let current = key;
     let next = this.parent.get(current);
@@ -85,11 +85,11 @@ function keyOf(cell: ContentSheetCell): string {
   return cellReference(cell.row, cell.column);
 }
 
-// Groups populated cells into connected components under the adjacency rule documented on segmentSheetRegions above. Runs in O(n log n): grouping by column/row and sorting each group is the only ordering work, and only CONSECUTIVE pairs within one column's row-sorted list (or one row's column-sorted list) are ever compared -- sufficient because any pair further apart in the same column/row that the tolerance would connect is already bridged transitively through the cells sorted between them, and any pair the tolerance would NOT connect can only become connected (if at all) through a different column/row's own chain, which this same per-group pass also covers.
+// Groups populated cells into connected components under the adjacency rule documented on segmentSheetRegions above. Runs in O(n log n): grouping by column/row and sorting each group is the only ordering work, and only CONSECUTIVE pairs within one column's row-sorted list (or one row's column-sorted list) are ever compared — sufficient because any pair further apart in the same column/row that the tolerance would connect is already bridged transitively through the cells sorted between them, and any pair the tolerance would NOT connect can only become connected (if at all) through a different column/row's own chain, which this same per-group pass also covers.
 function connectedComponents(
   cells: readonly ContentSheetCell[],
 ): ContentSheetCell[][] {
-  // No pre-population step for cells that never participate in a union: root() already returns an unmapped key as its own root (the while loop's own `next !== undefined` guard falls through immediately), the identical result a `parent.set(key, key)` pre-population would produce -- so an isolated cell with no adjacent neighbour resolves to itself as its own component either way, and a cell that does end up unioned gets its parent entry from union()'s own `this.parent.set` regardless of whether it was pre-populated first.
+  // No pre-population step for cells that never participate in a union: root() already returns an unmapped key as its own root (the while loop's own `next !== undefined` guard falls through immediately), the identical result a `parent.set(key, key)` pre-population would produce — so an isolated cell with no adjacent neighbour resolves to itself as its own component either way, and a cell that does end up unioned gets its parent entry from union()'s own `this.parent.set` regardless of whether it was pre-populated first.
   const dsu = new DisjointCellSet();
 
   const byColumn = new Map<number, ContentSheetCell[]>();
@@ -103,7 +103,7 @@ function connectedComponents(
     else row.push(cell);
   }
 
-  // Iterating .entries() rather than a manually bounded `for` loop means `current` is always a real, defined element -- no separately-mutable upper-bound comparison to get subtly wrong. No separate `i === 0` clause: `sorted[i - 1]` for i 0 is `sorted[-1]`, always `undefined`, so `previous !== undefined` immediately below already skips the first element on its own -- a second, explicit check for the identical case would be redundant, not an independent guard.
+  // Iterating .entries() rather than a manually bounded `for` loop means `current` is always a real, defined element — no separately-mutable upper-bound comparison to get subtly wrong. No separate `i === 0` clause: `sorted[i - 1]` for i 0 is `sorted[-1]`, always `undefined`, so `previous !== undefined` immediately below already skips the first element on its own — a second, explicit check for the identical case would be redundant, not an independent guard.
   for (const column of byColumn.values()) {
     const sorted = [...column].sort((a, b) => a.row - b.row);
     for (const [i, current] of sorted.entries()) {
@@ -156,7 +156,7 @@ export function boundingRange(cells: readonly ContentSheetCell[]): CellRange {
 // The value-kind vocabulary treated as "numeric" for classification purposes: the three ContentCellValue variants that carry a computed magnitude. Deliberately excludes 'date'/'time'/'dateTime' (structured, but not what distinguishes a calculation-heavy 'model' region from a plain data 'table') and 'boolean'/'error' (neither is a signal either way for this heuristic).
 const NUMERIC_VALUE_KINDS = new Set(["number", "percentage", "currency"]);
 
-// Exported alongside computeSignals/classifyRegion below purely for direct unit testing: the two functions' own scoring arithmetic (weighted sums, ratios, the rowRegularity coefficient-of-variation formula) has far more branches and boundary constants than a hand-built sheet of cells can economically pin one at a time through segmentSheetRegions alone -- the same "extract for direct testability" rationale hash.ts's own writeBitLength already follows in this package.
+// Exported alongside computeSignals/classifyRegion below purely for direct unit testing: the two functions' own scoring arithmetic (weighted sums, ratios, the rowRegularity coefficient-of-variation formula) has far more branches and boundary constants than a hand-built sheet of cells can economically pin one at a time through segmentSheetRegions alone — the same "extract for direct testability" rationale hash.ts's own writeBitLength already follows in this package.
 export interface RegionSignals {
   readonly cellCount: number;
   readonly rowSpan: number;
@@ -171,7 +171,7 @@ export interface RegionSignals {
   readonly hasHeaderLikeRow: boolean;
 }
 
-// Computes the statistics classifyRegion's heuristics read. Each is a plain, cheap-to-explain measurement over the region's own cells -- no external corpus, no learned weights, just the signals a human skimming the sheet would themselves reach for.
+// Computes the statistics classifyRegion's heuristics read. Each is a plain, cheap-to-explain measurement over the region's own cells — no external corpus, no learned weights, just the signals a human skimming the sheet would themselves reach for.
 export function computeSignals(
   cells: readonly ContentSheetCell[],
 ): RegionSignals {
@@ -199,7 +199,7 @@ export function computeSignals(
   const minColumn = Math.min(...columns);
   const maxColumn = Math.max(...columns);
 
-  // Row regularity: a coefficient-of-variation-style uniformity score over how many populated cells each row carries. A rectangular table's rows all carry the same count (regularity 1); a sheet whose rows carry wildly different counts (a ragged, hand-filled area) scores low. A region spanning at most one populated row is trivially "regular" -- there is nothing to vary.
+  // Row regularity: a coefficient-of-variation-style uniformity score over how many populated cells each row carries. A rectangular table's rows all carry the same count (regularity 1); a sheet whose rows carry wildly different counts (a ragged, hand-filled area) scores low. A region spanning at most one populated row is trivially "regular" — there is nothing to vary.
   const perRowCounts = [...rowCounts.values()];
   const meanRowCount =
     perRowCounts.reduce((sum, count) => sum + count, 0) / perRowCounts.length;
@@ -215,7 +215,7 @@ export function computeSignals(
         meanRowCount,
   );
 
-  // Header-row heuristic: the SIGNAL a table's header row actually provides is that it is text where the rows below it are not -- so this checks the region's own topmost populated row is predominantly text (>= 80%, tolerating one stray non-text header cell) AND at least one other row in the region is predominantly numeric/formula (>= 50%). Neither threshold is load-bearing on its own; the pair together is what separates "the first row happens to be text" (also true of a single-column prose block) from "the first row is uniquely textual among otherwise-numeric rows" (a real header).
+  // Header-row heuristic: the SIGNAL a table's header row actually provides is that it is text where the rows below it are not — so this checks the region's own topmost populated row is predominantly text (>= 80%, tolerating one stray non-text header cell) AND at least one other row in the region is predominantly numeric/formula (>= 50%). Neither threshold is load-bearing on its own; the pair together is what separates "the first row happens to be text" (also true of a single-column prose block) from "the first row is uniquely textual among otherwise-numeric rows" (a real header).
   const topRowCells = cells.filter((cell) => cell.row === minRow);
   const topRowTextFraction =
     topRowCells.filter((cell) => cell.value.kind === "string").length /
@@ -247,11 +247,11 @@ export function computeSignals(
   };
 }
 
-// A region below this many cells carries no structural signal at all -- one populated cell alone could be a title, a stray label, or a lone value, and anything a heuristic reported beyond "unknown" here would be guessing.
+// A region below this many cells carries no structural signal at all — one populated cell alone could be a title, a stray label, or a lone value, and anything a heuristic reported beyond "unknown" here would be guessing.
 const MIN_CELLS_FOR_SIGNAL = 2;
 // The score a candidate classification must clear before it is trusted at all; below this, nothing has enough evidence and the region is 'unknown'.
 const SIGNAL_THRESHOLD = 0.35;
-// How close the top two candidate scores must be (both already having cleared SIGNAL_THRESHOLD) before the region is called 'mixed' rather than confidently the top candidate -- a genuine tie in what the region looks like, not merely "another candidate also had some evidence".
+// How close the top two candidate scores must be (both already having cleared SIGNAL_THRESHOLD) before the region is called 'mixed' rather than confidently the top candidate — a genuine tie in what the region looks like, not merely "another candidate also had some evidence".
 const MIXED_MARGIN = 0.15;
 // A cell whose average string length reaches this many characters is treated as fully "sentence-like" for the prose signal (a short label like a header cell contributes far less prose evidence than a genuine sentence of commentary); chosen as a rough sentence-fragment length, not a corpus-fitted constant.
 const PROSE_LENGTH_NORM = 40;
@@ -266,7 +266,7 @@ export function classifyRegion(signals: RegionSignals): {
 
   const density = signals.cellCount / (signals.rowSpan * signals.colSpan);
 
-  // table: a genuine 2D grid (more than one populated row AND more than one populated column -- a single row or single column is a list, not a table), weighted mostly by row regularity (a table's rows are the same width) and the header-row signal, with density as a smaller tie-breaker (a table with real internal gaps is still a table, just a slightly less certain one).
+  // table: a genuine 2D grid (more than one populated row AND more than one populated column — a single row or single column is a list, not a table), weighted mostly by row regularity (a table's rows are the same width) and the header-row signal, with density as a smaller tie-breaker (a table with real internal gaps is still a table, just a slightly less certain one).
   const tableScore =
     signals.distinctRows > 1 && signals.distinctColumns > 1
       ? clamp01(
@@ -276,18 +276,18 @@ export function classifyRegion(signals: RegionSignals): {
         )
       : 0;
 
-  // prose: long, string-valued cells. A region of short text cells (a single stray label, a column of short codes) scores low even at 100% text fraction -- the averageTextLength factor is what distinguishes "text" from "prose".
+  // prose: long, string-valued cells. A region of short text cells (a single stray label, a column of short codes) scores low even at 100% text fraction — the averageTextLength factor is what distinguishes "text" from "prose".
   const proseScore = clamp01(
     signals.textFraction *
       clamp01(signals.averageTextLength / PROSE_LENGTH_NORM),
   );
 
-  // model: weighted mostly toward formulas (the actual signal of "this is a calculation", not merely "this is a number" -- a plain numeric table full of literal values is still a table) with a smaller numeric contribution, since a region that is heavily formula-driven is virtually always numeric too and a formula-free region of plain numbers alone should not out-score a real table's own structural signal.
+  // model: weighted mostly toward formulas (the actual signal of "this is a calculation", not merely "this is a number" — a plain numeric table full of literal values is still a table) with a smaller numeric contribution, since a region that is heavily formula-driven is virtually always numeric too and a formula-free region of plain numbers alone should not out-score a real table's own structural signal.
   const modelScore = clamp01(
     0.7 * signals.formulaFraction + 0.3 * signals.numericFraction,
   );
 
-  // Typed as a fixed 3-tuple, not a general array, so scored[0]/scored[1] below are known-defined at the type level under noUncheckedIndexedAccess -- Array.prototype.sort's `this`-typed return preserves the tuple shape through the sort, so there is no "what if the array were some other length" case for TypeScript (or a mutation test) to ever have to guard against.
+  // Typed as a fixed 3-tuple, not a general array, so scored[0]/scored[1] below are known-defined at the type level under noUncheckedIndexedAccess — Array.prototype.sort's `this`-typed return preserves the tuple shape through the sort, so there is no "what if the array were some other length" case for TypeScript (or a mutation test) to ever have to guard against.
   const scored: [
     { kind: RegionClassification; score: number },
     { kind: RegionClassification; score: number },
@@ -303,7 +303,7 @@ export function classifyRegion(signals: RegionSignals): {
   if (top.score < SIGNAL_THRESHOLD) {
     return { classification: "unknown", confidence: clamp01(1 - top.score) };
   }
-  // Written as `top < second + MIXED_MARGIN` rather than the algebraically equivalent `top - second < MIXED_MARGIN`: with both scores constrained to [SIGNAL_THRESHOLD, 1], their difference always lands on a coarser floating-point grid (a multiple of the wider of the two operands' own ULP) than MIXED_MARGIN's own stored value needs, so no achievable pair of scores can ever make that subtraction equal MIXED_MARGIN bit-for-bit -- the `<`/`<=` boundary there is unobservable by construction, not by any gap in testing. Comparing against `second + MIXED_MARGIN` instead lets a test construct top as EXACTLY that same sum (the identical expression, so the two sides are bit-identical by construction), making the boundary genuinely reachable.
+  // Written as `top < second + MIXED_MARGIN` rather than the algebraically equivalent `top - second < MIXED_MARGIN`: with both scores constrained to [SIGNAL_THRESHOLD, 1], their difference always lands on a coarser floating-point grid (a multiple of the wider of the two operands' own ULP) than MIXED_MARGIN's own stored value needs, so no achievable pair of scores can ever make that subtraction equal MIXED_MARGIN bit-for-bit — the `<`/`<=` boundary there is unobservable by construction, not by any gap in testing. Comparing against `second + MIXED_MARGIN` instead lets a test construct top as EXACTLY that same sum (the identical expression, so the two sides are bit-identical by construction), making the boundary genuinely reachable.
   if (
     second.score >= SIGNAL_THRESHOLD &&
     top.score < second.score + MIXED_MARGIN

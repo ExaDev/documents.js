@@ -35,7 +35,7 @@ describe("DocxEditor.body", () => {
     editor.body.appendParagraph({ text: "Second" });
     const paragraphs = editor.paragraphs();
     expect(paragraphs.map((p) => p.text)).toEqual(["First", "Second"]);
-    // Round-tripping through encode/decode must still succeed -- proves sectPr is still last.
+    // Round-tripping through encode/decode must still succeed — proves sectPr is still last.
     expect(() => editor.toBytes()).not.toThrow();
   });
 
@@ -96,7 +96,7 @@ describe("live-view fidelity: mutating one run must not change any other part", 
   });
 });
 
-// ExaDev/documents.js#933: an already-open live editor previously exposed no metadata setter at all -- a caller had to re-decode the whole document through setDocumentMetadata/patchDocxMetadata (src/metadata/write.ts) to change it, discarding every other pending edit made through the SAME editor instance. `editor.metadata = {...}` patches the live package directly, the same primitive patchDocxMetadata itself now shares (src/metadata/core-patch.ts's own patchOoxmlCorePropertiesOnPackage).
+// ExaDev/documents.js#933: an already-open live editor previously exposed no metadata setter at all — a caller had to re-decode the whole document through setDocumentMetadata/patchDocxMetadata (src/metadata/write.ts) to change it, discarding every other pending edit made through the SAME editor instance. `editor.metadata = {...}` patches the live package directly, the same primitive patchDocxMetadata itself now shares (src/metadata/core-patch.ts's own patchOoxmlCorePropertiesOnPackage).
 describe("DocxEditor.metadata", () => {
   it("reads an empty object from a package carrying no docProps/core.xml at all", () => {
     const editor = openDocx(minimalDocxBytes());

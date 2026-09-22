@@ -43,14 +43,14 @@ function directChild(parent: XmlElement, tag: string): XmlElement | undefined {
   return undefined;
 }
 
-// Threaded through from DocxEditor so a paragraph can add a new image without every caller having to pass the package/document context by hand -- optional because a paragraph built via a table cell (src/edit/docx/table.ts) doesn't currently carry one; insertImageAfter throws a clear error in that case rather than silently doing nothing.
+// Threaded through from DocxEditor so a paragraph can add a new image without every caller having to pass the package/document context by hand — optional because a paragraph built via a table cell (src/edit/docx/table.ts) doesn't currently carry one; insertImageAfter throws a clear error in that case rather than silently doing nothing.
 export interface ImageMediaContext {
   readonly pkg: Package;
   readonly documentRoot: XmlElement;
   readonly media: MediaContext;
 }
 
-// A live view over a w:p element -- see run.ts's DocxRun for the same live-view rationale.
+// A live view over a w:p element — see run.ts's DocxRun for the same live-view rationale.
 export class DocxParagraph {
   private readonly container: XmlNode[];
   private readonly node: XmlElement;
@@ -110,7 +110,7 @@ export class DocxParagraph {
     return new DocxRun(node.children, runElement);
   }
 
-  // A tab character inside w:t is not the same as a real tab stop advance -- WordprocessingML represents one as its own w:tab element inside a run, never as a literal tab byte in text content.
+  // A tab character inside w:t is not the same as a real tab stop advance — WordprocessingML represents one as its own w:tab element inside a run, never as a literal tab byte in text content.
   appendTab(): void {
     const node = this.live();
     node.children.push(el("w:r", {}, [el("w:tab")]));
@@ -166,7 +166,7 @@ export class DocxParagraph {
     setAlignment(this.pPr(true), value);
   }
 
-  // w:spacing holds before/after/line together in one element (CT_PPrGeneral's own sequence puts it ahead of w:ind, both already in PPR_ORDER), so the three spacing setters share one get-or-create rather than each minting their own -- mirroring how the list setter shares one w:numPr for ilvl+numId. w:before/w:after are twentieths-of-a-point (pt times 20, same as every other WordprocessingML length); w:line is 240ths of a line under w:lineRule="auto", matching LINE_UNITS_PER_LINE. Inlined against this.live() (rather than routed through the literal-only pPr(true)/pPr(false) overload) so a runtime `create: boolean` is accepted.
+  // w:spacing holds before/after/line together in one element (CT_PPrGeneral's own sequence puts it ahead of w:ind, both already in PPR_ORDER), so the three spacing setters share one get-or-create rather than each minting their own — mirroring how the list setter shares one w:numPr for ilvl+numId. w:before/w:after are twentieths-of-a-point (pt times 20, same as every other WordprocessingML length); w:line is 240ths of a line under w:lineRule="auto", matching LINE_UNITS_PER_LINE. Inlined against this.live() (rather than routed through the literal-only pPr(true)/pPr(false) overload) so a runtime `create: boolean` is accepted.
   private spacingElement(create: boolean): XmlElement | undefined {
     const node = this.live();
     const pPr = create
@@ -219,7 +219,7 @@ export class DocxParagraph {
     setAttr(spacing, "w:after", String(ptToTwips(value)));
   }
 
-  // lineSpacing is a line-height multiplier (1.0 = single). It is written as w:line = round(multiplier times 240) with w:lineRule="auto"; ooxml.js's own reader populates lineSpacing ONLY when w:lineRule is "auto" (or absent) -- "exact"/"atLeast" are fixed-point spacing it leaves undefined -- so writing "auto" is what makes the multiplier round-trip rather than collapsing to undefined on read-back.
+  // lineSpacing is a line-height multiplier (1.0 = single). It is written as w:line = round(multiplier times 240) with w:lineRule="auto"; ooxml.js's own reader populates lineSpacing ONLY when w:lineRule is "auto" (or absent) — "exact"/"atLeast" are fixed-point spacing it leaves undefined — so writing "auto" is what makes the multiplier round-trip rather than collapsing to undefined on read-back.
   get lineSpacing(): number | undefined {
     const spacing = this.spacingElement(false);
     if (spacing === undefined) {
@@ -338,10 +338,10 @@ export class DocxParagraph {
       }
       return;
     }
-    // A docx list membership is meaningless without a numId naming the numbering definition that carries its marker -- CT_NumPr's own shape requires w:numId, and schema 4.0.0's optional numId describes memberships from sources that have none (OOXML drawing paragraphs, level-only). Those memberships get a numId minted by buildDocxPackage's numbering pre-pass before they ever reach a DocxParagraph; a live-view caller writing { level } directly gets this loud refusal naming the fix rather than a silently unnumbered bullet.
+    // A docx list membership is meaningless without a numId naming the numbering definition that carries its marker — CT_NumPr's own shape requires w:numId, and schema 4.0.0's optional numId describes memberships from sources that have none (OOXML drawing paragraphs, level-only). Those memberships get a numId minted by buildDocxPackage's numbering pre-pass before they ever reach a DocxParagraph; a live-view caller writing { level } directly gets this loud refusal naming the fix rather than a silently unnumbered bullet.
     if (value.numId === undefined) {
       throw new Error(
-        "DocxParagraph.list requires a numId -- buildDocxPackage mints one for memberships that lack it; set numId explicitly (see src/edit/docx/numbering.ts)",
+        "DocxParagraph.list requires a numId — buildDocxPackage mints one for memberships that lack it; set numId explicitly (see src/edit/docx/numbering.ts)",
       );
     }
     const numPr = getOrCreateChildElement(pPr, "w:numPr", PPR_ORDER, () =>
@@ -354,7 +354,7 @@ export class DocxParagraph {
     ];
   }
 
-  // The canonical heading depth (document-schema.js's headingLevel, 1-based), stored as w:outlineLvl (0-based -- the identical +1 mapping ooxml.js's own docx reader applies reading it back). This is the depth signal Word's navigation pane and TOC fields read; the heading's VISUAL style is a separate fact carried by w:pStyle, which is why both are written for a heading rather than one standing in for the other.
+  // The canonical heading depth (document-schema.js's headingLevel, 1-based), stored as w:outlineLvl (0-based — the identical +1 mapping ooxml.js's own docx reader applies reading it back). This is the depth signal Word's navigation pane and TOC fields read; the heading's VISUAL style is a separate fact carried by w:pStyle, which is why both are written for a heading rather than one standing in for the other.
   get headingLevel(): number | undefined {
     const pPr = this.pPr(false);
     const outlineLvl =
@@ -383,7 +383,7 @@ export class DocxParagraph {
     setAttr(outlineLvl, "w:val", String(value - 1));
   }
 
-  // Appends a real OMML display equation (m:oMathPara > m:oMath) to the end of this paragraph, translated from `mathml` by src/omml/write.ts -- genuinely editable Word math, not a picture and not a plain-text stand-in. m:oMathPara is a member of WordprocessingML's own EG_PContent, so it is a direct child of w:p exactly as a w:r is, and needs no run to sit inside.
+  // Appends a real OMML display equation (m:oMathPara > m:oMath) to the end of this paragraph, translated from `mathml` by src/omml/write.ts — genuinely editable Word math, not a picture and not a plain-text stand-in. m:oMathPara is a member of WordprocessingML's own EG_PContent, so it is a direct child of w:p exactly as a w:r is, and needs no run to sit inside.
   //
   // Returns the translation's own result: `written` is false when the MathML produced no OMML content at all (an empty formula), which is a caller's signal to fall back to its own stand-in rather than leave the paragraph empty; `diagnostics` reports every construct that degraded or was approximated on the way through.
   appendOfficeMath(
@@ -398,7 +398,7 @@ export class DocxParagraph {
     return { ...result, written: true };
   }
 
-  // Appends one run per vector, each carrying a real page-anchored DrawingML shape (src/edit/docx/vector.ts) -- the docx counterpart to OdtBody.appendVectors. Every anchor hangs off this one paragraph, since they came from a single embedded drawing block covering one page's worth of geometry and a floating anchor takes no vertical space of its own; `relativeHeight` is stamped from each vector's own position in the run, so the paint order they were recovered in survives as Word's own floating-object z-order.
+  // Appends one run per vector, each carrying a real page-anchored DrawingML shape (src/edit/docx/vector.ts) — the docx counterpart to OdtBody.appendVectors. Every anchor hangs off this one paragraph, since they came from a single embedded drawing block covering one page's worth of geometry and a floating anchor takes no vertical space of its own; `relativeHeight` is stamped from each vector's own position in the run, so the paint order they were recovered in survives as Word's own floating-object z-order.
   //
   // Requires the paragraph to have been opened through a DocxEditor, for the same reason insertImageAfter below does: the document root is where a document-unique wp:docPr id is allocated from.
   appendVectorAnchors(vectors: readonly ContentVector[]): void {
@@ -422,7 +422,7 @@ export class DocxParagraph {
     });
   }
 
-  // Appends a new run containing an inline image to the end of this paragraph. Requires the paragraph to have been opened through a DocxEditor (table-cell paragraphs currently have no image context -- see ImageMediaContext's own doc comment).
+  // Appends a new run containing an inline image to the end of this paragraph. Requires the paragraph to have been opened through a DocxEditor (table-cell paragraphs currently have no image context — see ImageMediaContext's own doc comment).
   insertImageAfter(image: ImageInit): void {
     const node = this.live();
     if (this.imageContext === undefined) {

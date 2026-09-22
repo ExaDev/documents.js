@@ -6,7 +6,7 @@ import { annotationsPdf, FixtureBuilder } from "./test-support/pdf";
 const HELVETICA_FONT_DICT_FOR_ANNOT_FIXTURES =
   "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
 
-// A minimal one-page PDF whose single /Annots entry is exactly the given raw PDF dict literal (minus its own outer << >>, e.g. "/Type /Annot /Subtype /Highlight /Rect [10 10 50 20] /QuadPoints [1 2 3 4]") -- isolates one annotation-dict shape at a time from annotationsPdf()'s own fixture, whose entries are all otherwise well-formed.
+// A minimal one-page PDF whose single /Annots entry is exactly the given raw PDF dict literal (minus its own outer << >>, e.g. "/Type /Annot /Subtype /Highlight /Rect [10 10 50 20] /QuadPoints [1 2 3 4]") — isolates one annotation-dict shape at a time from annotationsPdf()'s own fixture, whose entries are all otherwise well-formed.
 function pdfWithOneAnnotation(annotDictBody: string): Uint8Array<ArrayBuffer> {
   const b = new FixtureBuilder().header();
   b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
@@ -30,7 +30,7 @@ function markupPdfWithQuadPoints(
   );
 }
 
-// Annotations (#721 phase 4): genuine third-party sticky notes (/Subtype /Text without this package's own presenter-notes marker), FreeText and the /QuadPoints markup family, and the opaque kinds (Stamp, Ink, ...) carried as quarantined residue -- the annotation row's marker-plus-body and residue verdicts. Link, FileAttachment, and Widget annotations are skipped here: they are owned by the link items, the attachments table, and the AcroForm field tree respectively.
+// Annotations (#721 phase 4): genuine third-party sticky notes (/Subtype /Text without this package's own presenter-notes marker), FreeText and the /QuadPoints markup family, and the opaque kinds (Stamp, Ink, ...) carried as quarantined residue — the annotation row's marker-plus-body and residue verdicts. Link, FileAttachment, and Widget annotations are skipped here: they are owned by the link items, the attachments table, and the AcroForm field tree respectively.
 
 describe("readPdf: annotations", () => {
   it("reads a genuine sticky note with its contents, author, and modification date", () => {
@@ -58,9 +58,9 @@ describe("readPdf: annotations", () => {
       contents: "Typed remark",
       author: "Reviewer",
     });
-    // A markup-family subtype's fields, never the opaque-residue fallback's -- pins that FreeText is genuinely recognised via SEMANTIC_SUBTYPES, not merely carrying its own literal subtype string through unaffected by that classification.
+    // A markup-family subtype's fields, never the opaque-residue fallback's — pins that FreeText is genuinely recognised via SEMANTIC_SUBTYPES, not merely carrying its own literal subtype string through unaffected by that classification.
     expect(freeText?.source).toBeUndefined();
-    // FreeText here carries no /QuadPoints at all -- markupFields must tolerate that rather than assuming every semantic subtype has one.
+    // FreeText here carries no /QuadPoints at all — markupFields must tolerate that rather than assuming every semantic subtype has one.
     expect(freeText?.quads).toBeUndefined();
   });
 
@@ -72,7 +72,7 @@ describe("readPdf: annotations", () => {
     expect(highlight?.quads).toBeUndefined();
   });
 
-  it("omits quads for a markup annotation whose /QuadPoints is empty -- a length that is both below 8 and already a multiple of 8, so only the length check (not the multiple-of-8 check) can be what rejects it", () => {
+  it("omits quads for a markup annotation whose /QuadPoints is empty — a length that is both below 8 and already a multiple of 8, so only the length check (not the multiple-of-8 check) can be what rejects it", () => {
     const doc = readPdf(markupPdfWithQuadPoints("[]"));
     const highlight = doc.pages[0]!.annotations?.find(
       (a) => a.subtype === "Highlight",
@@ -228,7 +228,7 @@ describe("readPdf: annotations", () => {
     expect(doc.pages[0]!.annotations).toHaveLength(1);
   });
 
-  it("omits contents, author, and modification date entirely -- not as present keys holding undefined -- when a semantic annotation carries none of /Contents, /T, or /M", () => {
+  it("omits contents, author, and modification date entirely — not as present keys holding undefined — when a semantic annotation carries none of /Contents, /T, or /M", () => {
     const doc = readPdf(
       pdfWithOneAnnotation(
         "/Type /Annot /Subtype /Highlight /Rect [10 10 50 20] /QuadPoints [10 20 50 20 50 10 10 10]",

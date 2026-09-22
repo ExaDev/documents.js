@@ -8,7 +8,7 @@ import {
   resolveOdfShapeGeometry,
 } from "./transform";
 
-// The geometry expectations below are not derived from the OASIS spec text alone -- they are the exact pixel-measured results of a real LibreOffice round trip: a 200pt x 60pt shape at svg:x=100pt/svg:y=100pt was rewritten with draw:transform="rotate(<radians>) translate(100pt 100pt)" for two different angles, converted to PDF via `soffice --headless --convert-to pdf`, rasterised, and its rendered bounding box measured in pixels. See transform.ts's own top-of-file note for why this was necessary (the naive SVG-transform-list reading gets the composition order/sign wrong).
+// The geometry expectations below are not derived from the OASIS spec text alone — they are the exact pixel-measured results of a real LibreOffice round trip: a 200pt x 60pt shape at svg:x=100pt/svg:y=100pt was rewritten with draw:transform="rotate(<radians>) translate(100pt 100pt)" for two different angles, converted to PDF via `soffice --headless --convert-to pdf`, rasterised, and its rendered bounding box measured in pixels. See transform.ts's own top-of-file note for why this was necessary (the naive SVG-transform-list reading gets the composition order/sign wrong).
 
 const closeTo = (value: number, expected: number) => {
   expect(value).toBeCloseTo(expected, 6);
@@ -219,8 +219,8 @@ describe("composeOdfGroupTransform", () => {
     expect(composeOdfGroupTransform([], child)).toBe(child);
   });
 
-  it("composes a group rotate+translate onto a child with no rotation of its own -- a concrete before/after example", () => {
-    // Before: child center is (90, 70) [50+80/2, 50+40/2], no rotation. Group transform: rotate(pi/2) translate(100pt 100pt) -- the SAME transform verified above against a real render, now applied to the child's own center instead of a local (0,0)-anchored box.
+  it("composes a group rotate+translate onto a child with no rotation of its own — a concrete before/after example", () => {
+    // Before: child center is (90, 70) [50+80/2, 50+40/2], no rotation. Group transform: rotate(pi/2) translate(100pt 100pt) — the SAME transform verified above against a real render, now applied to the child's own center instead of a local (0,0)-anchored box.
     const groupFunctions = parseOdfTransform(
       "rotate(1.5707963267948966) translate(100pt 100pt)",
     );
@@ -228,7 +228,7 @@ describe("composeOdfGroupTransform", () => {
     // applyOdfTransform(groupFunctions, {xPt:90, yPt:70}): rotate first -> (70, -90), then translate -> (170, 10).
     closeTo(result.frame.xPt, 170 - 40); // new center x minus half width
     closeTo(result.frame.yPt, 10 - 20); // new center y minus half height
-    closeTo(result.frame.widthPt, 80); // unchanged -- no scale in ODF's own group model
+    closeTo(result.frame.widthPt, 80); // unchanged — no scale in ODF's own group model
     closeTo(result.frame.heightPt, 40);
     closeTo(result.rotationDeg ?? NaN, -90);
   });

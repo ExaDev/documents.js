@@ -36,7 +36,7 @@ describe("OdtList / OdtListItem: structural nesting", () => {
 
     expect(top?.list?.level).toBe(0);
     expect(nested?.list?.level).toBe(1);
-    // Both paragraphs belong to the same top-level list, even though the nested one is one level deeper -- odf.js's own readOdtContent assigns one synthetic numId per top-level text:list and threads it through every nested text:list beneath it.
+    // Both paragraphs belong to the same top-level list, even though the nested one is one level deeper — odf.js's own readOdtContent assigns one synthetic numId per top-level text:list and threads it through every nested text:list beneath it.
     expect(nested?.list?.numId).toBe(top?.list?.numId);
   });
 
@@ -197,7 +197,7 @@ describe("OdtListItem: reading back its own content", () => {
   it("preserves ODF's own whitespace-run elements, which a plain text-node read would silently drop", () => {
     const editor = createOdt();
     const item = editor.body.appendList().addItem();
-    // Two or more literal spaces become a text:s ELEMENT, not text-node characters -- see src/xml/odf-text.ts.
+    // Two or more literal spaces become a text:s ELEMENT, not text-node characters — see src/xml/odf-text.ts.
     item.appendParagraph({ text: "spaced   out" });
 
     expect(item.text).toBe("spaced   out");

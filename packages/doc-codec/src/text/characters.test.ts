@@ -31,7 +31,7 @@ function clx(cps: number[], pcds: number[][]): Uint8Array {
   ]);
 }
 
-// Reproduces [MS-DOC] 2.9.6's own example document end to end: an uncompressed piece at byte offset 0x0C22 carrying "Hello " as UTF-16, a compressed piece at 0x0400 carrying "World.\r" as single bytes, and a compressed piece at 0x0407 carrying one further "\r" -- assembling, as the example states, to "Hello World." followed by two paragraph marks.
+// Reproduces [MS-DOC] 2.9.6's own example document end to end: an uncompressed piece at byte offset 0x0C22 carrying "Hello " as UTF-16, a compressed piece at 0x0400 carrying "World.\r" as single bytes, and a compressed piece at 0x0407 carrying one further "\r" — assembling, as the example states, to "Hello World." followed by two paragraph marks.
 function specExampleStream(): Uint8Array {
   const stream = new Uint8Array(0x1000);
   const view = new DataView(stream.buffer);
@@ -135,7 +135,7 @@ describe("readTextRange", () => {
   });
 
   it("rejects a piece table whose own pieces array does not match its cpKeys, rather than reading past its end", () => {
-    // PieceTable is a plain data shape, not something only parseClx can construct -- a caller assembling one with mismatched arrays (pieces shorter than cpKeys implies) is a real, if unusual, way to reach this guard.
+    // PieceTable is a plain data shape, not something only parseClx can construct — a caller assembling one with mismatched arrays (pieces shorter than cpKeys implies) is a real, if unusual, way to reach this guard.
     const mismatched = {
       pieces: [],
       cpKeys: [0, 5],
@@ -147,7 +147,7 @@ describe("readTextRange", () => {
   });
 
   it("reads text long enough to span String.fromCharCode's own chunking boundary", () => {
-    // A single uncompressed piece of 5000 characters -- comfortably past the 4096-character chunk size fromCodeUnits splits on, so this exercises more than one chunk and the exact boundary between them.
+    // A single uncompressed piece of 5000 characters — comfortably past the 4096-character chunk size fromCodeUnits splits on, so this exercises more than one chunk and the exact boundary between them.
     const length = 5000;
     const stream = new Uint8Array(0x400 + length * 2);
     const view = new DataView(stream.buffer);

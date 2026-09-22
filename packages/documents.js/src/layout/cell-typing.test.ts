@@ -88,7 +88,7 @@ describe("inferCellValue: percentages and currency", () => {
       kind: "currency",
       value: 42,
       currency: undefined,
-    }); // '$' is USD, CAD, AUD and more -- the KIND is certain, the code is not
+    }); // '$' is USD, CAD, AUD and more — the KIND is certain, the code is not
     expect(retyped("¥500")).toEqual({
       kind: "currency",
       value: 500,

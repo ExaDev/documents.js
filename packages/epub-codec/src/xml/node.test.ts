@@ -31,7 +31,7 @@ describe("isXmlNode", () => {
   });
 
   it("rejects a value whose typeof is not object even when it carries every property a text node would need", () => {
-    // A function value with `type`/`value` properties bolted on directly, deliberately keeping `typeof fnMasqueradingAsText === "function"` -- Object.assign/spread would either lose that (spreading into a plain object) or bypass type checking on the source, so the properties are set one at a time on a value cast to the shape isXmlNode expects a text node to have.
+    // A function value with `type`/`value` properties bolted on directly, deliberately keeping `typeof fnMasqueradingAsText === "function"` — Object.assign/spread would either lose that (spreading into a plain object) or bypass type checking on the source, so the properties are set one at a time on a value cast to the shape isXmlNode expects a text node to have.
     const fnMasqueradingAsText = (() => {}) as unknown as {
       type: string;
       value: string;

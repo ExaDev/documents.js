@@ -15,7 +15,7 @@ import {
 } from "../io/document-output";
 import { defineOperation } from "../operation";
 
-// Mirrors document-schema.js's own `Diagnostic` (re-exported as a type-only `Diagnostic` from documents.js, with no accompanying Zod schema) -- the shape every DocumentConverter.convert() result reports through `diagnostics`, regardless of source/target format.
+// Mirrors document-schema.js's own `Diagnostic` (re-exported as a type-only `Diagnostic` from documents.js, with no accompanying Zod schema) — the shape every DocumentConverter.convert() result reports through `diagnostics`, regardless of source/target format.
 const DiagnosticSchema = z.object({
   severity: z.enum(["info", "warning"]),
   code: z.string(),
@@ -23,7 +23,7 @@ const DiagnosticSchema = z.object({
   pageIndex: z.number().optional(),
 });
 
-// Mirrors pdf-codec's own `FontSubstitution`, re-exported as a type-only `FontSubstitution` from documents.js -- reported once per requested family/weight/style that resolved to a different face, when `onSubstitutionDiagnostics` is set below.
+// Mirrors pdf-codec's own `FontSubstitution`, re-exported as a type-only `FontSubstitution` from documents.js — reported once per requested family/weight/style that resolved to a different face, when `onSubstitutionDiagnostics` is set below.
 const FontSubstitutionSchema = z.object({
   requestedFamily: z.string(),
   requestedBold: z.boolean(),
@@ -32,7 +32,7 @@ const FontSubstitutionSchema = z.object({
   resolvedFamily: z.string(),
 });
 
-// Mirrors ../io/document-output's `ResolvedDocumentOutput` union (`WrittenDocumentOutput | InlineDocumentOutput`) -- that module exports the type but not a Zod schema for it.
+// Mirrors ../io/document-output's `ResolvedDocumentOutput` union (`WrittenDocumentOutput | InlineDocumentOutput`) — that module exports the type but not a Zod schema for it.
 const ResolvedDocumentOutputSchema = z.union([
   z.object({ path: z.string(), byteLength: z.number() }),
   z.object({
@@ -42,7 +42,7 @@ const ResolvedDocumentOutputSchema = z.union([
   }),
 ]);
 
-// A caller-supplied extra font face -- pdf-codec's `ProvidedFont` with its raw `bytes` field replaced by `bytesBase64`, matching DocumentInputSchema's own inline-bytes naming convention. Shared verbatim by odb-render-report's own font input.
+// A caller-supplied extra font face — pdf-codec's `ProvidedFont` with its raw `bytes` field replaced by `bytesBase64`, matching DocumentInputSchema's own inline-bytes naming convention. Shared verbatim by odb-render-report's own font input.
 export const FontInputSchema = z.object({
   family: z.string().describe("The font family name this face provides."),
   bold: z.boolean().describe("Whether this face is the bold weight."),
@@ -57,7 +57,7 @@ export const FontInputSchema = z.object({
 const ConvertDocumentInputSchema = z.object({
   source: DocumentInputSchema.describe("The document to convert."),
   targetFormat: DocumentFormatSchema.describe(
-    "The format to convert the document to. Not every (source, targetFormat) pair is supported directly -- call list_document_conversions first to confirm this one is.",
+    "The format to convert the document to. Not every (source, targetFormat) pair is supported directly — call list_document_conversions first to confirm this one is.",
   ),
   output: DocumentOutputSchema.optional().describe(
     "Where to write the converted document. Omit entirely to receive the bytes inline, base64-encoded, instead.",
@@ -72,17 +72,17 @@ const ConvertDocumentInputSchema = z.object({
     .boolean()
     .optional()
     .describe(
-      "When true, additionally report each individual font-substitution event as structured fontSubstitutions (which family/weight/style was requested, what it resolved to instead, and why). Every substitution is always reported as a plain diagnostic in `diagnostics` regardless of this flag -- this only controls whether the fuller, structured event is also collected.",
+      "When true, additionally report each individual font-substitution event as structured fontSubstitutions (which family/weight/style was requested, what it resolved to instead, and why). Every substitution is always reported as a plain diagnostic in `diagnostics` regardless of this flag — this only controls whether the fuller, structured event is also collected.",
     ),
   images: z
     .record(z.string(), z.string())
     .optional()
     .describe(
-      "A map from a markdown image destination (the part in the parentheses of ![](..)) to its base64-encoded PNG/JPEG bytes, for resolving a markdown source's own non-data: images. Only consulted by a markdown-sourced conversion; every other conversion ignores it. A destination absent from the map degrades to alt text, matching documents.js's own MarkdownImageResolver port -- a caller with no filesystem context has no other way to supply a relative path's bytes.",
+      "A map from a markdown image destination (the part in the parentheses of ![](..)) to its base64-encoded PNG/JPEG bytes, for resolving a markdown source's own non-data: images. Only consulted by a markdown-sourced conversion; every other conversion ignores it. A destination absent from the map degrades to alt text, matching documents.js's own MarkdownImageResolver port — a caller with no filesystem context has no other way to supply a relative path's bytes.",
     ),
 });
 
-// The full result shape convert_document returns -- exported so a caller building on top of this module (or a test verifying the operation's real output against its own declared contract) can parse/narrow a result with it directly, rather than re-declaring an equivalent shape.
+// The full result shape convert_document returns — exported so a caller building on top of this module (or a test verifying the operation's real output against its own declared contract) can parse/narrow a result with it directly, rather than re-declaring an equivalent shape.
 export const ConvertDocumentOutputSchema = z.object({
   targetFormat: DocumentFormatSchema,
   output: ResolvedDocumentOutputSchema,
@@ -92,21 +92,21 @@ export const ConvertDocumentOutputSchema = z.object({
 
 const ListDocumentConversionsInputSchema = z.object({});
 
-// The full result shape list_document_conversions returns -- exported for the same reason as ConvertDocumentOutputSchema above.
+// The full result shape list_document_conversions returns — exported for the same reason as ConvertDocumentOutputSchema above.
 export const ListDocumentConversionsOutputSchema = z.object({
   conversions: z.array(
     z.object({ source: DocumentFormatSchema, target: DocumentFormatSchema }),
   ),
 });
 
-// A fresh DocumentConverter at module load, not per call -- createLocalDocumentConverter() builds a plain, stateless dispatch table (see documents.js's own src/convert/local.ts), so there is nothing to gain from rebuilding it on every convert_document/list_document_conversions call, and both operations share the identical `conversions` list.
+// A fresh DocumentConverter at module load, not per call — createLocalDocumentConverter() builds a plain, stateless dispatch table (see documents.js's own src/convert/local.ts), so there is nothing to gain from rebuilding it on every convert_document/list_document_conversions call, and both operations share the identical `conversions` list.
 const converter = createLocalDocumentConverter();
 
 export const convertDocumentOperation = defineOperation({
   name: "convert_document",
   title: "Convert document",
   description:
-    "Converts a document from one supported format to another via documents.js's DocumentConverter port -- docx, pptx, xlsx, odt, odp, ods, odg, odf, markdown, rtf, wpd, doc, xls, ppt, epub, csv, svg, and pdf. Not every (source, targetFormat) pair is supported directly (odf, for instance, only ever converts to pdf); call list_document_conversions first to see which pairs actually are.",
+    "Converts a document from one supported format to another via documents.js's DocumentConverter port — docx, pptx, xlsx, odt, odp, ods, odg, odf, markdown, rtf, wpd, doc, xls, ppt, epub, csv, svg, and pdf. Not every (source, targetFormat) pair is supported directly (odf, for instance, only ever converts to pdf); call list_document_conversions first to see which pairs actually are.",
   inputSchema: ConvertDocumentInputSchema,
   outputSchema: ConvertDocumentOutputSchema,
   async run(
@@ -116,10 +116,10 @@ export const convertDocumentOperation = defineOperation({
     const signal = context?.signal;
     const { bytes, format } = await resolveDocumentInput(source, { signal });
 
-    // Computed once and reused for both the callback wiring below and the output shape at the end of this function, rather than repeating `onSubstitutionDiagnostics === true` at each site independently -- the two must never disagree about whether the caller asked for structured font-substitution diagnostics.
+    // Computed once and reused for both the callback wiring below and the output shape at the end of this function, rather than repeating `onSubstitutionDiagnostics === true` at each site independently — the two must never disagree about whether the caller asked for structured font-substitution diagnostics.
     const wantsFontSubstitutionDiagnostics = onSubstitutionDiagnostics === true;
     const fontSubstitutions: FontSubstitution[] = [];
-    // ConversionOptions.signal is mandatory on the DocumentConverter port (see documents.js's own port.ts: "the contract is async and cancellable regardless of the local implementation's synchronicity"), unlike DocumentOperationContext.signal, which is optional -- a caller with nothing to cancel (a CLI invocation, a test) supplies no context at all. A fresh, never-aborting AbortController's signal satisfies the port's contract in that case without this operation itself needing to care whether cancellation was ever wired up.
+    // ConversionOptions.signal is mandatory on the DocumentConverter port (see documents.js's own port.ts: "the contract is async and cancellable regardless of the local implementation's synchronicity"), unlike DocumentOperationContext.signal, which is optional — a caller with nothing to cancel (a CLI invocation, a test) supplies no context at all. A fresh, never-aborting AbortController's signal satisfies the port's contract in that case without this operation itself needing to care whether cancellation was ever wired up.
     const conversionSignal = signal ?? new AbortController().signal;
     const result = await converter.convert(
       { source: { format, bytes }, targetFormat },
@@ -169,7 +169,7 @@ export const listDocumentConversionsOperation = defineOperation({
   name: "list_document_conversions",
   title: "List document conversions",
   description:
-    "Lists every (source, target) format pair convert_document actually supports, straight from documents.js's own DocumentConverter port -- the definitive source of truth for what convert_document will and will not accept as a (source, targetFormat) combination.",
+    "Lists every (source, target) format pair convert_document actually supports, straight from documents.js's own DocumentConverter port — the definitive source of truth for what convert_document will and will not accept as a (source, targetFormat) combination.",
   inputSchema: ListDocumentConversionsInputSchema,
   outputSchema: ListDocumentConversionsOutputSchema,
   run() {

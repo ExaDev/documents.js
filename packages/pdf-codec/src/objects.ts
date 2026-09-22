@@ -1,14 +1,14 @@
-// The PDF object model: the shared currency between the hand-written writer (write.ts and friends) and the hand-written parser (parse.ts and friends) -- the direct analogue of ooxml.js's XmlNode.
+// The PDF object model: the shared currency between the hand-written writer (write.ts and friends) and the hand-written parser (parse.ts and friends) — the direct analogue of ooxml.js's XmlNode.
 //
-// Deliberately tagged even for scalars (a PDF name and a PDF string are different objects; so are a bare number and the start of a reference), so narrowing is plain TypeScript control flow on the `kind` discriminant -- exactly what keeps the no-`as`-assertions ESLint rule satisfiable without a single guard function of our own writing.
+// Deliberately tagged even for scalars (a PDF name and a PDF string are different objects; so are a bare number and the start of a reference), so narrowing is plain TypeScript control flow on the `kind` discriminant — exactly what keeps the no-`as`-assertions ESLint rule satisfiable without a single guard function of our own writing.
 //
-// No Zod schema wraps this type: it never crosses a public boundary, never round-trips through JSON, and is constructed exclusively by our own parser -- validating it would be validating our own output. The same reasoning ooxml.js applies when it picks a hand-written isXmlNode guard over z.lazy for its own recursive type: pick the mechanism that fits, don't pay for validation you don't need.
+// No Zod schema wraps this type: it never crosses a public boundary, never round-trips through JSON, and is constructed exclusively by our own parser — validating it would be validating our own output. The same reasoning ooxml.js applies when it picks a hand-written isXmlNode guard over z.lazy for its own recursive type: pick the mechanism that fits, don't pay for validation you don't need.
 export type PdfObject =
   | { kind: "null" }
   | { kind: "bool"; value: boolean }
   | { kind: "number"; value: number }
   | { kind: "name"; name: string } // stored without the leading '/'
-  | { kind: "string"; bytes: Uint8Array<ArrayBuffer>; hex: boolean } // raw bytes, never a decoded JS string -- see the module doc below
+  | { kind: "string"; bytes: Uint8Array<ArrayBuffer>; hex: boolean } // raw bytes, never a decoded JS string — see the module doc below
   | { kind: "array"; items: PdfObject[] }
   | { kind: "dict"; entries: Map<string, PdfObject> } // Map, not a plain object: dictionary keys are arbitrary byte sequences and could include '__proto__'
   | { kind: "stream"; dict: PdfDict; raw: Uint8Array<ArrayBuffer> } // raw = still filter-encoded; decoding is lazy (src/pdf/filters.ts)
@@ -91,7 +91,7 @@ export function asArray(obj: PdfObject | undefined): PdfObject[] | undefined {
   return obj?.kind === "array" ? obj.items : undefined;
 }
 
-// A dictionary's own entries, whether `obj` is a plain dict or a stream (whose /-entries live on `dict`) -- the two are interchangeable for key lookup throughout the PDF spec.
+// A dictionary's own entries, whether `obj` is a plain dict or a stream (whose /-entries live on `dict`) — the two are interchangeable for key lookup throughout the PDF spec.
 export function asDict(obj: PdfObject | undefined): PdfDict | undefined {
   if (obj === undefined) {
     return undefined;

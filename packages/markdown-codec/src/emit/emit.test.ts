@@ -1,4 +1,4 @@
-// Construct-by-construct tests for the ContentDocument -> markdown emission stage (src/emit/emit.ts), the structural inverse of src/lower/lower.test.ts. Most tests here build a ContentDocument directly (bypassing src/lower entirely) so each construct -- including a cross-format shape src/lower itself never produces, like a paragraph with indentLeftPt but no quotable styleId -- can be exercised in isolation; a handful round-trip through src/lower/lower.ts first where that is the more natural way to obtain a real value (a code span run, a task-list item).
+// Construct-by-construct tests for the ContentDocument -> markdown emission stage (src/emit/emit.ts), the structural inverse of src/lower/lower.test.ts. Most tests here build a ContentDocument directly (bypassing src/lower entirely) so each construct — including a cross-format shape src/lower itself never produces, like a paragraph with indentLeftPt but no quotable styleId — can be exercised in isolation; a handful round-trip through src/lower/lower.ts first where that is the more natural way to obtain a real value (a code span run, a task-list item).
 
 import type {
   ContentBlock,
@@ -30,7 +30,7 @@ function doc(blocks: readonly ContentBlock[]): ContentDocument {
   };
 }
 
-// The document's own first block's leaf text, concatenated across every run -- used where a round trip is expected to preserve CONTENT but not necessarily the exact run boundaries (entity decoding does not re-merge adjacent plain-text runs on a reparse, since src/lower/inline.ts deliberately attempts no adjacent-run merging of its own).
+// The document's own first block's leaf text, concatenated across every run — used where a round trip is expected to preserve CONTENT but not necessarily the exact run boundaries (entity decoding does not re-merge adjacent plain-text runs on a reparse, since src/lower/inline.ts deliberately attempts no adjacent-run merging of its own).
 function leafText(source: ContentDocument): string {
   if (source.kind !== "wordprocessing") {
     throw new Error("expected a wordprocessing ContentDocument");
@@ -127,7 +127,7 @@ describe("headings", () => {
   });
 
   it("measures the setext underline's length against the CommonMark first line even when its own embedded break is a bare CR, not an LF", () => {
-    // renderSetextHeading's own underline length tracks the heading's rendered FIRST LINE, per LINE_ENDING_PATTERN (LF, CRLF, or a lone CR) -- the same line-ending grammar every other check in this module already agrees on. A bare `text.split("\n")[0]` instead treats a CR-delimited break as ordinary text absent any LF at all, measuring the WHOLE multi-line string as "line one" rather than just its first line -- cosmetically wrong (a setext underline's own length carries no semantic meaning beyond "one or more", so the heading is still valid either way), but inconsistent with how every other line-ending decision in this file is made. The bare CR has to arrive via a markdown-residue soft break (re-emitted verbatim, unescaped) rather than a run's own plain text field: escapeMarkdownText now normalises a bare CR carried there to the same backslash-LF hard-break spelling an ordinary embedded '\n' gets (see the plain-text-run hard-break coverage in the tables describe block below), so a plain-text run can no longer land a raw, un-escaped CR in the assembled text for this check to measure against.
+    // renderSetextHeading's own underline length tracks the heading's rendered FIRST LINE, per LINE_ENDING_PATTERN (LF, CRLF, or a lone CR) — the same line-ending grammar every other check in this module already agrees on. A bare `text.split("\n")[0]` instead treats a CR-delimited break as ordinary text absent any LF at all, measuring the WHOLE multi-line string as "line one" rather than just its first line — cosmetically wrong (a setext underline's own length carries no semantic meaning beyond "one or more", so the heading is still valid either way), but inconsistent with how every other line-ending decision in this file is made. The bare CR has to arrive via a markdown-residue soft break (re-emitted verbatim, unescaped) rather than a run's own plain text field: escapeMarkdownText now normalises a bare CR carried there to the same backslash-LF hard-break spelling an ordinary embedded '\n' gets (see the plain-text-run hard-break coverage in the tables describe block below), so a plain-text run can no longer land a raw, un-escaped CR in the assembled text for this check to measure against.
     expect(
       emitMarkdown(
         doc([
@@ -160,7 +160,7 @@ describe("headings", () => {
   });
 
   describe("a level-1/2 heading whose own text ends in an embedded break (ExaDev/documents.js#940)", () => {
-    // A TRAILING break -- reachable from an ordinary Word heading ending in a manual line break or page break, both of which ooxml.js's docx reader maps to a literal trailing '\n' -- must NOT promote to setext: renderSetextHeading appends its own '\n' plus the underline directly after `text`, so a `text` that already ends in '\n' leaves a genuinely BLANK line between the heading's real last line and the underline. Setext's own grammar (spec 0.31.2) is "one or more lines of text, NOT INTERRUPTED BY A BLANK LINE", so this is unrepresentable -- collapsing to ATX (exactly the existing level-3-6 fallback) is the only safe rendering, not a stylistic choice.
+    // A TRAILING break — reachable from an ordinary Word heading ending in a manual line break or page break, both of which ooxml.js's docx reader maps to a literal trailing '\n' — must NOT promote to setext: renderSetextHeading appends its own '\n' plus the underline directly after `text`, so a `text` that already ends in '\n' leaves a genuinely BLANK line between the heading's real last line and the underline. Setext's own grammar (spec 0.31.2) is "one or more lines of text, NOT INTERRUPTED BY A BLANK LINE", so this is unrepresentable — collapsing to ATX (exactly the existing level-3-6 fallback) is the only safe rendering, not a stylistic choice.
     it.each([
       { level: "Heading1", underlineChar: "=" },
       { level: "Heading2", underlineChar: "-" },
@@ -218,7 +218,7 @@ describe("headings", () => {
           throw new Error("expected a wordprocessing ContentDocument");
         }
         const blocks = reparsed.sections[0]?.blocks ?? [];
-        // Exactly two blocks: the heading (still recognised as one, carrying its own styleId) and the trailing paragraph -- pre-fix, this fractured into THREE (the heading text as a bare paragraph, a spurious "===="/"----" paragraph or thematic break invented from the stray underline, and the trailing paragraph).
+        // Exactly two blocks: the heading (still recognised as one, carrying its own styleId) and the trailing paragraph — pre-fix, this fractured into THREE (the heading text as a bare paragraph, a spurious "===="/"----" paragraph or thematic break invented from the stray underline, and the trailing paragraph).
         expect(blocks).toHaveLength(2);
         const [headingBlock, nextBlock] = blocks;
         if (
@@ -238,7 +238,7 @@ describe("headings", () => {
   });
 
   describe("a level-1/2 heading whose own break is followed by a whitespace-only line, not a literally empty one (ExaDev/documents.js#940)", () => {
-    // CommonMark's own blank-line definition (spec 0.31.2, "Blank lines") is "a line containing no characters, or only spaces or tabs" -- a residual line of pure whitespace is just as unsafe for setext as a literally empty one, whether that whitespace comes from a hard break's own escape spelling (the backslash lands on the line the break TERMINATES, never on the line that follows) or from an un-escaped soft-break residue newline.
+    // CommonMark's own blank-line definition (spec 0.31.2, "Blank lines") is "a line containing no characters, or only spaces or tabs" — a residual line of pure whitespace is just as unsafe for setext as a literally empty one, whether that whitespace comes from a hard break's own escape spelling (the backslash lands on the line the break TERMINATES, never on the line that follows) or from an un-escaped soft-break residue newline.
     it.each([
       {
         level: "Heading1" as const,
@@ -326,7 +326,7 @@ describe("headings", () => {
           throw new Error("expected a wordprocessing ContentDocument");
         }
         const blocks = reparsed.sections[0]?.blocks ?? [];
-        // Exactly two blocks: the heading (still recognised as one, carrying its own styleId) and the trailing paragraph -- pre-fix, a whitespace-only (as opposed to literally empty) residual line slipped past the zero-length-only guard and fractured this into THREE (the heading text as a bare paragraph, a spurious "===="/"----" paragraph or thematic break invented from the stray underline, and the trailing paragraph).
+        // Exactly two blocks: the heading (still recognised as one, carrying its own styleId) and the trailing paragraph — pre-fix, a whitespace-only (as opposed to literally empty) residual line slipped past the zero-length-only guard and fractured this into THREE (the heading text as a bare paragraph, a spurious "===="/"----" paragraph or thematic break invented from the stray underline, and the trailing paragraph).
         expect(blocks).toHaveLength(2);
         const [headingBlock, nextBlock] = blocks;
         if (
@@ -345,7 +345,7 @@ describe("headings", () => {
   });
 
   describe("a level-1/2 heading whose own first content line is indented 4 or more columns never promotes to setext (ExaDev/documents.js#940)", () => {
-    // CommonMark's own setext grammar (spec 0.31.2, "Setext headings") is "one or more lines of text, not interrupted by a blank line, of which the FIRST LINE DOES NOT HAVE MORE THAN 3 SPACES OF INDENTATION, followed by a setext heading underline" -- a wholly separate clause from the blank-line one every other describe block in this file exercises. The spec's own worked example ("Four spaces of indentation is too many") shows exactly this: a would-be setext heading's own first line, indented 4 spaces, reparses as an indented code block instead, with the underline surviving as a stray paragraph or thematic break of its own -- the identical corrupt-reparse shape a blank line produces, via a different CommonMark construct.
+    // CommonMark's own setext grammar (spec 0.31.2, "Setext headings") is "one or more lines of text, not interrupted by a blank line, of which the FIRST LINE DOES NOT HAVE MORE THAN 3 SPACES OF INDENTATION, followed by a setext heading underline" — a wholly separate clause from the blank-line one every other describe block in this file exercises. The spec's own worked example ("Four spaces of indentation is too many") shows exactly this: a would-be setext heading's own first line, indented 4 spaces, reparses as an indented code block instead, with the underline surviving as a stray paragraph or thematic break of its own — the identical corrupt-reparse shape a blank line produces, via a different CommonMark construct.
     it.each([{ level: "Heading1" as const }, { level: "Heading2" as const }])(
       "collapses to ATX with a diagnostic instead of promoting $level to setext when the heading's own first content line is indented 4 spaces",
       ({ level }) => {
@@ -394,7 +394,7 @@ describe("headings", () => {
           throw new Error("expected a wordprocessing ContentDocument");
         }
         const blocks = reparsed.sections[0]?.blocks ?? [];
-        // Exactly two blocks: the heading (still recognised as one, carrying its own styleId) and the trailing paragraph -- pre-fix, the 4-space-indented first line promoted into setext read back as an indented code block, a stray heading carrying only "bar", and the trailing paragraph, splitting the original heading's own content across two blocks.
+        // Exactly two blocks: the heading (still recognised as one, carrying its own styleId) and the trailing paragraph — pre-fix, the 4-space-indented first line promoted into setext read back as an indented code block, a stray heading carrying only "bar", and the trailing paragraph, splitting the original heading's own content across two blocks.
         expect(blocks).toHaveLength(2);
         const [headingBlock, nextBlock] = blocks;
         if (
@@ -411,7 +411,7 @@ describe("headings", () => {
       },
     );
 
-    it("still promotes to setext when the first content line is indented exactly 3 spaces -- the boundary CommonMark's own grammar actually draws", () => {
+    it("still promotes to setext when the first content line is indented exactly 3 spaces — the boundary CommonMark's own grammar actually draws", () => {
       const softBreakRuns = [
         { text: "   foo" },
         { text: " ", source: { format: "markdown" as const, xml: "\n" } },
@@ -447,7 +447,7 @@ describe("headings", () => {
   });
 
   describe("a level-1/2 heading whose own break-following line would itself start an interrupting block construct never promotes to setext (ExaDev/documents.js#940)", () => {
-    // CommonMark's own setext grammar (spec 0.31.2, "Setext headings") has a third clause beyond the blank-line and first-line-indentation ones exercised above, in the same sentence: "The lines of text must be such that, were they not followed by the setext heading underline, they would be interpreted as a paragraph: they cannot be interpretable as a code fence, ATX heading, block quote, thematic break, list item, or HTML block." A bold or strikethrough run that becomes EMPTY immediately after a break lowers to a bare pair of emphasis markers with nothing between them -- "____" (a thematic break, the default '_' emphasisMarker doubled for bold) or "~~~~" (a code-fence opener, GFM's own fixed strikethrough marker) -- and reparsing either one back as its own construct destroys the heading rather than merely losing fidelity: pre-fix, "foo\n____\n===" read back as a plain paragraph "foo" plus TWO thematic breaks (the invented "____" one and the "===" underline, which is itself a valid thematic break once no open paragraph remains for it to become a setext underline of), and "foo\n~~~~\n===" read back as a plain paragraph "foo" plus a fenced code block swallowing the "===" underline whole -- both confirmed directly against the reference CommonMark implementation, and both WORSE than the merge-base's own pre-existing gap for the identical input (which lost fidelity but at least kept the heading level).
+    // CommonMark's own setext grammar (spec 0.31.2, "Setext headings") has a third clause beyond the blank-line and first-line-indentation ones exercised above, in the same sentence: "The lines of text must be such that, were they not followed by the setext heading underline, they would be interpreted as a paragraph: they cannot be interpretable as a code fence, ATX heading, block quote, thematic break, list item, or HTML block." A bold or strikethrough run that becomes EMPTY immediately after a break lowers to a bare pair of emphasis markers with nothing between them — "____" (a thematic break, the default '_' emphasisMarker doubled for bold) or "~~~~" (a code-fence opener, GFM's own fixed strikethrough marker) — and reparsing either one back as its own construct destroys the heading rather than merely losing fidelity: pre-fix, "foo\n____\n===" read back as a plain paragraph "foo" plus TWO thematic breaks (the invented "____" one and the "===" underline, which is itself a valid thematic break once no open paragraph remains for it to become a setext underline of), and "foo\n~~~~\n===" read back as a plain paragraph "foo" plus a fenced code block swallowing the "===" underline whole — both confirmed directly against the reference CommonMark implementation, and both WORSE than the merge-base's own pre-existing gap for the identical input (which lost fidelity but at least kept the heading level).
     it.each([
       {
         level: "Heading1" as const,
@@ -529,7 +529,7 @@ describe("headings", () => {
           throw new Error("expected a wordprocessing ContentDocument");
         }
         const blocks = reparsed.sections[0]?.blocks ?? [];
-        // Exactly two blocks: the heading (still recognised as one, carrying its own styleId and level) and the trailing paragraph -- pre-fix, the heading fractured into a bare paragraph plus either two thematic breaks (bold) or a code block that swallowed the trailing paragraph entirely (strikethrough), losing the heading level and the trailing paragraph both.
+        // Exactly two blocks: the heading (still recognised as one, carrying its own styleId and level) and the trailing paragraph — pre-fix, the heading fractured into a bare paragraph plus either two thematic breaks (bold) or a code block that swallowed the trailing paragraph entirely (strikethrough), losing the heading level and the trailing paragraph both.
         expect(blocks).toHaveLength(2);
         const [headingBlock, nextBlock] = blocks;
         if (
@@ -604,7 +604,7 @@ describe("headings", () => {
           throw new Error("expected a wordprocessing ContentDocument");
         }
         const blocks = reparsed.sections[0]?.blocks ?? [];
-        // Exactly one block, still the heading -- pre-fix, the second line converted the paragraph into a math block or a table, leaving the "===" underline as a stray, unrelated block of its own with the heading gone entirely.
+        // Exactly one block, still the heading — pre-fix, the second line converted the paragraph into a math block or a table, leaving the "===" underline as a stray, unrelated block of its own with the heading gone entirely.
         expect(blocks).toHaveLength(1);
         const [headingBlock] = blocks;
         if (headingBlock?.kind !== "paragraph") {
@@ -616,7 +616,7 @@ describe("headings", () => {
   });
 
   describe("a level-1/2 heading whose own FIRST line would itself start an interrupting block construct never promotes to setext (ExaDev/documents.js#940)", () => {
-    // The same third clause of the setext grammar exercised by the "break-following line" describe block above applies just as much to the run's own FIRST line, not merely to lines after it: a bold or strikethrough run that becomes EMPTY immediately BEFORE a break (rather than after) lowers to the identical bare "____"/"~~~~" emphasis-marker shape, but now as the heading's own opening line, with real heading text only arriving once the break is past. An earlier version of this check skipped the first line entirely on the (read-side) reasoning that a line matching one of these constructs would never have opened as a paragraph to begin with -- backwards for this write-side promotion decision, and pre-fix this exact shape reparsed as a single CodeBlock/HorizontalRule swallowing the heading, its underline, AND the following paragraph -- strictly worse than merely losing the heading level, since a real, unrelated trailing paragraph is consumed too.
+    // The same third clause of the setext grammar exercised by the "break-following line" describe block above applies just as much to the run's own FIRST line, not merely to lines after it: a bold or strikethrough run that becomes EMPTY immediately BEFORE a break (rather than after) lowers to the identical bare "____"/"~~~~" emphasis-marker shape, but now as the heading's own opening line, with real heading text only arriving once the break is past. An earlier version of this check skipped the first line entirely on the (read-side) reasoning that a line matching one of these constructs would never have opened as a paragraph to begin with — backwards for this write-side promotion decision, and pre-fix this exact shape reparsed as a single CodeBlock/HorizontalRule swallowing the heading, its underline, AND the following paragraph — strictly worse than merely losing the heading level, since a real, unrelated trailing paragraph is consumed too.
     it.each([
       {
         level: "Heading1" as const,
@@ -682,7 +682,7 @@ describe("headings", () => {
   });
 
   describe("an explicit headingStyle: 'setext' request against a break-free heading that is unsafe on its own terms is still refused, with a diagnostic (ExaDev/documents.js#940)", () => {
-    // Every OTHER unsafe-for-setext test in this file exercises a heading whose text embeds an actual line break -- the break itself is what makes setext a candidate rendering at all when headingStyle is left at its 'atx' default. This heading has NO embedded break anywhere: headingStyle: 'setext' is the ONLY reason setext is even attempted, and unsafeSetextBreakReason's own first-line-indentation check applies exactly as much to a single-line heading as to a multi-line one. Pre-fix, every heading-related diagnostic sat behind an `embedsLineBreak` guard, so this exact shape silently fell through to a bare, unmarked ATX heading -- an explicit caller preference honoured in appearance (setext was refused, correctly) but with zero signal that it happened.
+    // Every OTHER unsafe-for-setext test in this file exercises a heading whose text embeds an actual line break — the break itself is what makes setext a candidate rendering at all when headingStyle is left at its 'atx' default. This heading has NO embedded break anywhere: headingStyle: 'setext' is the ONLY reason setext is even attempted, and unsafeSetextBreakReason's own first-line-indentation check applies exactly as much to a single-line heading as to a multi-line one. Pre-fix, every heading-related diagnostic sat behind an `embedsLineBreak` guard, so this exact shape silently fell through to a bare, unmarked ATX heading — an explicit caller preference honoured in appearance (setext was refused, correctly) but with zero signal that it happened.
     it("does NOT fire HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT for a break-free, 4+-column-indented level-3 heading even with headingStyle: 'setext' requested — level <= MAX_SETEXT_LEVEL is its own genuine gate, not implied by setextRequested and unsafeForSetext alone", () => {
       const collector = createDiagnosticCollector();
       const written = emitMarkdown(
@@ -777,7 +777,7 @@ describe("headings", () => {
       if (headingBlock?.kind !== "paragraph") {
         throw new Error("expected a paragraph block");
       }
-      // Round-trips as one intact Heading1 -- not, as the setext promotion this test refuses would have produced, an indented code block ("    foo") followed by a stray "====" paragraph with the heading gone entirely.
+      // Round-trips as one intact Heading1 — not, as the setext promotion this test refuses would have produced, an indented code block ("    foo") followed by a stray "====" paragraph with the heading gone entirely.
       expect(headingBlock.styleId).toBe("Heading1");
     });
 
@@ -826,7 +826,7 @@ describe("headings", () => {
     ])(
       "collapses to ATX with HEADING_LINE_BREAK_UNSAFE_FOR_SETEXT when the heading's own single (break-free) line is itself $shape (ExaDev/documents.js#940)",
       ({ level, runs }) => {
-        // A single-run, break-free heading has only ONE line, which is simultaneously its first and its only line -- unsafeSetextBreakReason's own interrupting-construct check must therefore see it via the genuine block-start variant (as the run's first line), not merely rely on a following line ever being reached, since there is no following line at all here. Pre-fix, this exact shape (a heading whose ENTIRE text renders as one of the six interrupting constructs, with headingStyle: 'setext' as the sole reason setext was even attempted) reparsed as a CodeBlock/HorizontalRule/blockquote in place of the heading, with nothing reported to the diagnostic sink at all.
+        // A single-run, break-free heading has only ONE line, which is simultaneously its first and its only line — unsafeSetextBreakReason's own interrupting-construct check must therefore see it via the genuine block-start variant (as the run's first line), not merely rely on a following line ever being reached, since there is no following line at all here. Pre-fix, this exact shape (a heading whose ENTIRE text renders as one of the six interrupting constructs, with headingStyle: 'setext' as the sole reason setext was even attempted) reparsed as a CodeBlock/HorizontalRule/blockquote in place of the heading, with nothing reported to the diagnostic sink at all.
         const collector = createDiagnosticCollector();
         const written = emitMarkdown(
           doc([{ kind: "paragraph", runs, styleId: level }]),
@@ -854,9 +854,9 @@ describe("headings", () => {
   });
 
   describe("a level-1/2 heading whose own text STARTS with an embedded break stays eligible for setext (ExaDev/documents.js#940)", () => {
-    // Unlike a TRAILING break, a LEADING one never leaves a blank line for setext to trip over: it sits BEFORE the heading's own run of text-then-underline lines even begins, so a reparse treats it as ordinary inter-block whitespace ahead of the heading -- exactly as a blank line ahead of any other block already works. Refusing setext here would be a strict regression for the escaped-hard-break spelling specifically: escapeMarkdownText always keeps a non-blank backslash on that first line, so the break survives losslessly through setext today, and collapsing to ATX would destroy it (ATX has no representation for a break at all).
-    it("still promotes to setext when the leading blank line is a genuinely bare one (a soft-break markdown-residue newline, not the escaped hard-break spelling above) -- but, unlike the escaped spelling, absorbs the leading break itself as ordinary space ahead of the heading rather than reproducing it inside the heading (ExaDev/documents.js#940)", () => {
-      // Every OTHER test in this describe block uses runs: [{ text: '\n' }, ...] -- a HARD break, which escapeMarkdownText always spells with a non-blank leading backslash ('\\\n'), so line 0 of the rendered text is never actually blank and never exercises embedsUnsafeBreakForSetext's own leading-run exemption at all. This one instead uses the bare soft-break residue spelling (src/emit/inline.ts's renderLeaf re-emitting run.source.xml verbatim, unescaped) -- the one input shape whose line 0 really is empty, and the only one the leading-run exemption is actually needed for.
+    // Unlike a TRAILING break, a LEADING one never leaves a blank line for setext to trip over: it sits BEFORE the heading's own run of text-then-underline lines even begins, so a reparse treats it as ordinary inter-block whitespace ahead of the heading — exactly as a blank line ahead of any other block already works. Refusing setext here would be a strict regression for the escaped-hard-break spelling specifically: escapeMarkdownText always keeps a non-blank backslash on that first line, so the break survives losslessly through setext today, and collapsing to ATX would destroy it (ATX has no representation for a break at all).
+    it("still promotes to setext when the leading blank line is a genuinely bare one (a soft-break markdown-residue newline, not the escaped hard-break spelling above) — but, unlike the escaped spelling, absorbs the leading break itself as ordinary space ahead of the heading rather than reproducing it inside the heading (ExaDev/documents.js#940)", () => {
+      // Every OTHER test in this describe block uses runs: [{ text: '\n' }, ...] — a HARD break, which escapeMarkdownText always spells with a non-blank leading backslash ('\\\n'), so line 0 of the rendered text is never actually blank and never exercises embedsUnsafeBreakForSetext's own leading-run exemption at all. This one instead uses the bare soft-break residue spelling (src/emit/inline.ts's renderLeaf re-emitting run.source.xml verbatim, unescaped) — the one input shape whose line 0 really is empty, and the only one the leading-run exemption is actually needed for.
       const collector = createDiagnosticCollector();
       const written = emitMarkdown(
         doc([
@@ -877,7 +877,7 @@ describe("headings", () => {
           d.code ===
           MarkdownDiagnosticCodes.HEADING_STYLE_OVERRIDDEN_FOR_LINE_BREAK,
       );
-      // The diagnostic must not claim the break "survives" for this input -- it does not: reparsing below recovers "foo", not "\nfoo".
+      // The diagnostic must not claim the break "survives" for this input — it does not: reparsing below recovers "foo", not "\nfoo".
       expect(diagnostic?.message).toContain("absorbed");
       expect(diagnostic?.message).not.toContain("so the break survives");
 
@@ -886,7 +886,7 @@ describe("headings", () => {
         throw new Error("expected a wordprocessing ContentDocument");
       }
       const blocks = reparsed.sections[0]?.blocks ?? [];
-      // Still exactly one block, still a heading -- no corruption -- but its own text comes back as plain "foo": the leading blank line is genuinely lost, not merely reformatted, which is why the diagnostic above may not claim it survives.
+      // Still exactly one block, still a heading — no corruption — but its own text comes back as plain "foo": the leading blank line is genuinely lost, not merely reformatted, which is why the diagnostic above may not claim it survives.
       expect(blocks).toHaveLength(1);
       const [headingBlock] = blocks;
       if (headingBlock?.kind !== "paragraph") {
@@ -1023,7 +1023,7 @@ describe("headings", () => {
     ])(
       "still promotes $level to setext and round-trips a genuinely bare leading newline (soft-break residue, not the escaped hard-break spelling above) as a list item's own marker line, retaining the item's own list membership",
       ({ level, underline }) => {
-        // Every OTHER list-item test in this describe block uses runs: [{ text: '\n' }, ...] -- a HARD break, whose escaped '\\\n' spelling never leaves line 0 of the rendered text genuinely blank (see this file's own top-level bare-newline test above for why that never exercises the leading-run exemption at all). This one uses the bare soft-break residue spelling instead, the one shape whose line 0 really is empty and genuinely exercises the exemption inside a list item specifically.
+        // Every OTHER list-item test in this describe block uses runs: [{ text: '\n' }, ...] — a HARD break, whose escaped '\\\n' spelling never leaves line 0 of the rendered text genuinely blank (see this file's own top-level bare-newline test above for why that never exercises the leading-run exemption at all). This one uses the bare soft-break residue spelling instead, the one shape whose line 0 really is empty and genuinely exercises the exemption inside a list item specifically.
         const written = emitMarkdown(
           doc([
             {
@@ -1047,7 +1047,7 @@ describe("headings", () => {
           throw new Error("expected a wordprocessing ContentDocument");
         }
         const blocks = reparsed.sections[0]?.blocks ?? [];
-        // Exactly one block, still carrying its own list membership -- a single leading blank line is CommonMark's own documented "a list item can begin with at most one blank line" allowance (spec 0.31.2, section 5.2), so the item's marker line legitimately starts blank without closing the item.
+        // Exactly one block, still carrying its own list membership — a single leading blank line is CommonMark's own documented "a list item can begin with at most one blank line" allowance (spec 0.31.2, section 5.2), so the item's marker line legitimately starts blank without closing the item.
         expect(blocks).toHaveLength(1);
         const [headingBlock] = blocks;
         if (headingBlock?.kind !== "paragraph") {
@@ -1082,7 +1082,7 @@ describe("headings", () => {
             },
           ]),
         );
-        // Never a setext promotion: two leading blank lines in a row inside a list item's own marker line is the exact shape CommonMark's own "at most one blank line" list-item rule (spec 0.31.2, section 5.2) closes the item on -- pre-fix, this wrote a setext heading here, and reparsing it split into an EMPTY list item plus a stray top-level Heading1 that had lost its own list membership entirely.
+        // Never a setext promotion: two leading blank lines in a row inside a list item's own marker line is the exact shape CommonMark's own "at most one blank line" list-item rule (spec 0.31.2, section 5.2) closes the item on — pre-fix, this wrote a setext heading here, and reparsing it split into an EMPTY list item plus a stray top-level Heading1 that had lost its own list membership entirely.
         expect(written).toBe(`- ${level === "Heading1" ? "#" : "##"}   foo`);
 
         const reparsed = lowerMarkdown(written);
@@ -1124,7 +1124,7 @@ describe("headings", () => {
           throw new Error("expected a wordprocessing ContentDocument");
         }
         const blocks = reparsed.sections[0]?.blocks ?? [];
-        // The reparse now carries a real division pair around the quoted heading (ExaDev/document-schema.js#1122) rather than degrading to indent-only structure -- a heading inside a construct's extent groups fine, so the quote's own container fidelity survives alongside the heading's.
+        // The reparse now carries a real division pair around the quoted heading (ExaDev/document-schema.js#1122) rather than degrading to indent-only structure — a heading inside a construct's extent groups fine, so the quote's own container fidelity survives alongside the heading's.
         expect(blocks).toHaveLength(3);
         const [open, headingBlock, close] = blocks;
         expect(open).toEqual({
@@ -1143,7 +1143,7 @@ describe("headings", () => {
   });
 
   describe("a level-1/2 heading whose own rendered text is entirely blank never promotes to setext, even when explicitly requested (ExaDev/documents.js#940)", () => {
-    // The leading-run exemption two describe blocks above only ever exempts a run of blank lines that is followed by later, genuinely non-blank heading content -- when EVERY line renderSetextHeading would treat as the heading's own text is blank (a single whitespace-only run, a single tab, or no runs at all), there is no text left for the underline to attach to, and forcing setext regardless of headingStyle leaves the underline immediately following what a reparse reads as an ordinary blank line ahead of the NEXT block, not a heading of any kind -- the heading itself is silently dropped, not merely reformatted. None of these three inputs embeds an actual CommonMark line ending, so ATX's own single-physical-line limit was never the problem; falling through to a normal (blank-bodied) ATX heading is exactly as safe as any other zero-content heading.
+    // The leading-run exemption two describe blocks above only ever exempts a run of blank lines that is followed by later, genuinely non-blank heading content — when EVERY line renderSetextHeading would treat as the heading's own text is blank (a single whitespace-only run, a single tab, or no runs at all), there is no text left for the underline to attach to, and forcing setext regardless of headingStyle leaves the underline immediately following what a reparse reads as an ordinary blank line ahead of the NEXT block, not a heading of any kind — the heading itself is silently dropped, not merely reformatted. None of these three inputs embeds an actual CommonMark line ending, so ATX's own single-physical-line limit was never the problem; falling through to a normal (blank-bodied) ATX heading is exactly as safe as any other zero-content heading.
     it.each([
       { name: "a single whitespace-only run", runs: [{ text: "   " }] },
       { name: "a single tab run", runs: [{ text: "\t" }] },
@@ -1158,7 +1158,7 @@ describe("headings", () => {
           ]),
           { headingStyle: "setext" },
         );
-        // Never a setext promotion: renderSetextHeading would otherwise produce a blank (or whitespace-only) text line immediately followed by its own underline -- pre-fix, this wrote e.g. "   \n===\n\ntail", which a reparse reads as two plain paragraphs with the Heading1 gone entirely.
+        // Never a setext promotion: renderSetextHeading would otherwise produce a blank (or whitespace-only) text line immediately followed by its own underline — pre-fix, this wrote e.g. "   \n===\n\ntail", which a reparse reads as two plain paragraphs with the Heading1 gone entirely.
         expect(written).not.toMatch(/^[ \t]*\n=+\n/);
 
         const reparsed = lowerMarkdown(written);
@@ -1181,7 +1181,7 @@ describe("headings", () => {
   });
 
   describe("a level-1/2 heading whose own embedded break is a bare CR line ending, not merely LF (ExaDev/documents.js#940)", () => {
-    // CommonMark's own line-ending grammar (spec 0.31.2, "Lines") is LF, CRLF, or a lone CR -- not LF alone. A run's own plain text, or a foreign producer's own markdown residue (src/emit/inline.ts's renderLeaf, the run.source.xml case) can carry a bare CR just as legitimately as an LF, and embedsUnsafeBreakForSetext/the embedsLineBreak detection/the ATX-collapse fallback all have to treat it as a genuine line ending too -- an LF-only check lets a bare CR slip through unescaped and un-collapsed into what is meant to be a single ATX physical line, which the READ side's own line-ending-aware splitter (src/block/block.ts) then reads back as more than one line, fracturing the heading on reparse exactly as an un-caught blank line does.
+    // CommonMark's own line-ending grammar (spec 0.31.2, "Lines") is LF, CRLF, or a lone CR — not LF alone. A run's own plain text, or a foreign producer's own markdown residue (src/emit/inline.ts's renderLeaf, the run.source.xml case) can carry a bare CR just as legitimately as an LF, and embedsUnsafeBreakForSetext/the embedsLineBreak detection/the ATX-collapse fallback all have to treat it as a genuine line ending too — an LF-only check lets a bare CR slip through unescaped and un-collapsed into what is meant to be a single ATX physical line, which the READ side's own line-ending-aware splitter (src/block/block.ts) then reads back as more than one line, fracturing the heading on reparse exactly as an un-caught blank line does.
     it("collapses a CR-delimited interior blank stretch to ordinary ATX heading text instead of leaking a raw CR into a single physical line", () => {
       const written = emitMarkdown(
         doc([
@@ -1200,7 +1200,7 @@ describe("headings", () => {
         throw new Error("expected a wordprocessing ContentDocument");
       }
       const blocks = reparsed.sections[0]?.blocks ?? [];
-      // Exactly two blocks, matching the original document -- pre-fix, the raw CR pair reached the reparse as a genuine interior blank line the write side never accounted for, fracturing the heading into a bare "head" paragraph, a spurious "foo" paragraph carrying none of the heading's own styling, and the trailing "tail" paragraph (three blocks, not two).
+      // Exactly two blocks, matching the original document — pre-fix, the raw CR pair reached the reparse as a genuine interior blank line the write side never accounted for, fracturing the heading into a bare "head" paragraph, a spurious "foo" paragraph carrying none of the heading's own styling, and the trailing "tail" paragraph (three blocks, not two).
       expect(blocks).toHaveLength(2);
       const [headingBlock, tailBlock] = blocks;
       if (
@@ -1215,7 +1215,7 @@ describe("headings", () => {
   });
 
   describe("a level 3-6 heading's own escaped hard break is spelled with a CRLF or bare CR, not merely LF (ExaDev/documents.js#940)", () => {
-    // This package's own escapeMarkdownText always spells an escaped hard break with a trailing LF ('\\\n'), but a foreign producer's own markdown residue (re-emitted verbatim, unescaped, by src/emit/inline.ts's renderLeaf) can carry the identical backslash-escape spelling against a CRLF or lone CR just as legitimately. Stripping only the LF-spelled escape ahead of the LINE_ENDING_PATTERN-based collapse leaves this backslash behind as a stray literal character once that wider split removes the CRLF/CR line ending out from under it -- the collapse consumes the line ending but not the escape that preceded it.
+    // This package's own escapeMarkdownText always spells an escaped hard break with a trailing LF ('\\\n'), but a foreign producer's own markdown residue (re-emitted verbatim, unescaped, by src/emit/inline.ts's renderLeaf) can carry the identical backslash-escape spelling against a CRLF or lone CR just as legitimately. Stripping only the LF-spelled escape ahead of the LINE_ENDING_PATTERN-based collapse leaves this backslash behind as a stray literal character once that wider split removes the CRLF/CR line ending out from under it — the collapse consumes the line ending but not the escape that preceded it.
     it.each([
       { name: "a bare CR", xml: "\\\r" },
       { name: "a CRLF", xml: "\\\r\n" },
@@ -1241,7 +1241,7 @@ describe("headings", () => {
     );
   });
 
-  it("keys canInterruptOpenParagraph off the ACTUAL (ATX-collapsed) rendering of a level-1/2 heading whose own trailing break makes setext unsafe, not just its level -- an unsafe-break heading interrupts an open list-item paragraph cleanly, needing no forced blank line, since it never actually renders as setext (ExaDev/documents.js#940)", () => {
+  it("keys canInterruptOpenParagraph off the ACTUAL (ATX-collapsed) rendering of a level-1/2 heading whose own trailing break makes setext unsafe, not just its level — an unsafe-break heading interrupts an open list-item paragraph cleanly, needing no forced blank line, since it never actually renders as setext (ExaDev/documents.js#940)", () => {
     const source = doc([
       {
         kind: "paragraph",
@@ -1256,7 +1256,7 @@ describe("headings", () => {
       },
     ]);
     const written = emitMarkdown(source);
-    // No forced blank line between "a" and the heading's own ATX line: an ATX heading always interrupts an open paragraph cleanly, and this one really is ATX now (its trailing break made setext unsafe), so requiresBlankLineBefore correctly sees no hazard -- only the list's own loose/tight spacing (not loose here) decides whether a blank line appears at all.
+    // No forced blank line between "a" and the heading's own ATX line: an ATX heading always interrupts an open paragraph cleanly, and this one really is ATX now (its trailing break made setext unsafe), so requiresBlankLineBefore correctly sees no hazard — only the list's own loose/tight spacing (not loose here) decides whether a blank line appears at all.
     expect(written).toBe("- a\n  # h ");
 
     const reparsed = lowerMarkdown(written);
@@ -1711,7 +1711,7 @@ describe("blockquotes", () => {
     ).toBe("> ## foo");
   });
 
-  it('renders a division construct pair as a blockquote wrapper, prefixing "> " on every line and ">" alone on blank lines -- without double-prefixing from the blocks\' own indentLeftPt', () => {
+  it('renders a division construct pair as a blockquote wrapper, prefixing "> " on every line and ">" alone on blank lines — without double-prefixing from the blocks\' own indentLeftPt', () => {
     const markdown = emitMarkdown(
       doc([
         { kind: "constructStart", descriptor: { kind: "division" } },
@@ -1775,7 +1775,7 @@ describe("blockquotes", () => {
     expect(markdown).toBe("> a\n\n> b");
   });
 
-  it("renders a foreign division whose blocks carry no quote indent transparently, reporting CONSTRUCT_UNREPRESENTED -- a named section from another format is not a markdown blockquote", () => {
+  it("renders a foreign division whose blocks carry no quote indent transparently, reporting CONSTRUCT_UNREPRESENTED — a named section from another format is not a markdown blockquote", () => {
     const collector = createDiagnosticCollector();
     const markdown = emitMarkdown(
       doc([
@@ -2364,7 +2364,7 @@ describe("lists", () => {
     expect(itemIds.has(undefined)).toBe(false);
   });
 
-  it("keeps a blockquote directly inside a multi-block list item nested inside that item even when the quote wraps only a NESTED LIST of its own, rather than fracturing the item around it -- ExaDev/documents.js#990", () => {
+  it("keeps a blockquote directly inside a multi-block list item nested inside that item even when the quote wraps only a NESTED LIST of its own, rather than fracturing the item around it — ExaDev/documents.js#990", () => {
     const source = "- before\n\n  > - a\n  > - b\n\n  after\n";
     const written = emitMarkdown(lowerMarkdown(source));
     expect(written).toBe("- before\n\n  > - a\n  > - b\n\n  after");
@@ -2375,13 +2375,13 @@ describe("lists", () => {
     }
     const blocks = reparsed.sections[0]?.blocks ?? [];
     const paragraphs = blocks.filter((block) => block.kind === "paragraph");
-    // Four paragraphs total: "before"/"after" (the outer item) plus "a"/"b" (the quote's own nested list) -- none of them dropped or fused together.
+    // Four paragraphs total: "before"/"after" (the outer item) plus "a"/"b" (the quote's own nested list) — none of them dropped or fused together.
     expect(paragraphs).toHaveLength(4);
     const [before, a, b, after] = paragraphs;
-    // "before" and "after" still share ONE outer itemId across the construct, exactly like the plain-paragraph-in-quote case above -- the construct did not fracture the item.
+    // "before" and "after" still share ONE outer itemId across the construct, exactly like the plain-paragraph-in-quote case above — the construct did not fracture the item.
     expect(before?.list?.itemId).toBeDefined();
     expect(after?.list?.itemId).toBe(before?.list?.itemId);
-    // "a" and "b" are a GENUINELY separate, freshly-minted nested list -- their own itemIds differ from each other and from the outer item's, and their own numId differs from the outer item's numId, proving this is real nesting (a bullet list inside the blockquote) rather than the quote's content being folded into the outer item's own run.
+    // "a" and "b" are a GENUINELY separate, freshly-minted nested list — their own itemIds differ from each other and from the outer item's, and their own numId differs from the outer item's numId, proving this is real nesting (a bullet list inside the blockquote) rather than the quote's content being folded into the outer item's own run.
     expect(a?.list?.itemId).toBeDefined();
     expect(b?.list?.itemId).toBeDefined();
     expect(a?.list?.itemId).not.toBe(before?.list?.itemId);
@@ -2389,7 +2389,7 @@ describe("lists", () => {
     expect(a?.list?.numId).not.toBe(before?.list?.numId);
   });
 
-  it("keeps a blockquote wrapping only a nested list of its own nested inside the item even when it is that item's own LAST block, with nothing after it to look ahead to -- ExaDev/documents.js#990", () => {
+  it("keeps a blockquote wrapping only a nested list of its own nested inside the item even when it is that item's own LAST block, with nothing after it to look ahead to — ExaDev/documents.js#990", () => {
     const source = "- before\n\n  > - a\n  > - b\n";
     const written = emitMarkdown(lowerMarkdown(source));
     expect(written).toBe("- before\n\n  > - a\n  > - b");
@@ -2410,7 +2410,7 @@ describe("lists", () => {
     expect(b?.list?.itemId).not.toBe(a?.list?.itemId);
   });
 
-  it("keeps two constructs sitting back to back, with no paragraph directly between them, both nested inside the item they interrupt -- ExaDev/documents.js#990", () => {
+  it("keeps two constructs sitting back to back, with no paragraph directly between them, both nested inside the item they interrupt — ExaDev/documents.js#990", () => {
     const source = "- before\n\n  > - a\n\n  > - b\n\n  after\n";
     const written = emitMarkdown(lowerMarkdown(source));
     expect(written).toBe("- before\n\n  > - a\n\n  > - b\n\n  after");
@@ -2434,7 +2434,7 @@ describe("lists", () => {
     expect(b?.list?.itemId).not.toBe(a?.list?.itemId);
   });
 
-  it("keeps a construct nested inside the item it interrupts even when a DIFFERENT list item's own paragraph follows it, rather than merging the two items or fracturing the construct out -- ExaDev/documents.js#990", () => {
+  it("keeps a construct nested inside the item it interrupts even when a DIFFERENT list item's own paragraph follows it, rather than merging the two items or fracturing the construct out — ExaDev/documents.js#990", () => {
     const source = "- before\n\n  > - a\n\n- second\n";
     const written = emitMarkdown(lowerMarkdown(source));
     expect(written).toBe("- before\n\n  > - a\n\n- second");
@@ -2451,13 +2451,13 @@ describe("lists", () => {
     expect(before?.list?.itemId).toBeDefined();
     expect(a?.list?.itemId).toBeDefined();
     expect(a?.list?.itemId).not.toBe(before?.list?.itemId);
-    // "second" is a genuinely different, sibling item of the SAME outer list -- same numId, different itemId.
+    // "second" is a genuinely different, sibling item of the SAME outer list — same numId, different itemId.
     expect(second?.list?.itemId).toBeDefined();
     expect(second?.list?.itemId).not.toBe(before?.list?.itemId);
     expect(second?.list?.numId).toBe(before?.list?.numId);
   });
 
-  it("keeps a construct nested inside a NESTED (level 1) item across a reparse, rather than fracturing it out to the outer list's own level -- ExaDev/documents.js#990", () => {
+  it("keeps a construct nested inside a NESTED (level 1) item across a reparse, rather than fracturing it out to the outer list's own level — ExaDev/documents.js#990", () => {
     const source =
       "- outer\n\n  - inner\n\n    > - a\n    > - b\n\n  - inner2\n";
     const written = emitMarkdown(lowerMarkdown(source));
@@ -2483,7 +2483,7 @@ describe("lists", () => {
     expect(a?.list?.numId).not.toBe(inner?.list?.numId);
   });
 
-  it("keeps a construct nested inside the OUTER item when it directly resumes that item right after a NESTED sub-list closes, rather than fracturing the item and rendering the construct with an inverted marker -- a single most-recently-absorbed membership cannot tell this apart from the nested item's own construct, since the nested item's own paragraph was the last one absorbed before the construct is reached -- ExaDev/documents.js#990", () => {
+  it("keeps a construct nested inside the OUTER item when it directly resumes that item right after a NESTED sub-list closes, rather than fracturing the item and rendering the construct with an inverted marker — a single most-recently-absorbed membership cannot tell this apart from the nested item's own construct, since the nested item's own paragraph was the last one absorbed before the construct is reached — ExaDev/documents.js#990", () => {
     const source = "- before\n\n  - nested\n\n  > quoted\n\n  after\n";
     const written = emitMarkdown(lowerMarkdown(source));
 
@@ -2496,20 +2496,20 @@ describe("lists", () => {
     );
     const [before, nested, quoted, after] = paragraphs;
     expect(paragraphs).toHaveLength(4);
-    // "before", "quoted", and "after" all still share the OUTER item's own itemId across the reparse -- the construct resuming the outer item after the nested sub-list closes did not fracture it apart, and the construct's own marker is never inverted (no bullet ends up rendered inside the blockquote).
+    // "before", "quoted", and "after" all still share the OUTER item's own itemId across the reparse — the construct resuming the outer item after the nested sub-list closes did not fracture it apart, and the construct's own marker is never inverted (no bullet ends up rendered inside the blockquote).
     expect(before?.list?.level).toBe(0);
     expect(quoted?.list?.level).toBe(0);
     expect(after?.list?.level).toBe(0);
     expect(before?.list?.itemId).toBeDefined();
     expect(quoted?.list?.itemId).toBe(before?.list?.itemId);
     expect(after?.list?.itemId).toBe(before?.list?.itemId);
-    // "nested" is a genuinely separate, deeper item -- its own itemId at level 1, unrelated to the outer item's.
+    // "nested" is a genuinely separate, deeper item — its own itemId at level 1, unrelated to the outer item's.
     expect(nested?.list?.level).toBe(1);
     expect(nested?.list?.itemId).toBeDefined();
     expect(nested?.list?.itemId).not.toBe(before?.list?.itemId);
   });
 
-  it("keeps a construct nested inside the OUTER item resuming after a NESTED sub-list even when the construct itself wraps a FRESH nested list of its own, not just plain prose -- the owner-tag match (constructCarriesListItemId's numId path) must also be tried against the outer item, not only the nested item most recently absorbed -- ExaDev/documents.js#990", () => {
+  it("keeps a construct nested inside the OUTER item resuming after a NESTED sub-list even when the construct itself wraps a FRESH nested list of its own, not just plain prose — the owner-tag match (constructCarriesListItemId's numId path) must also be tried against the outer item, not only the nested item most recently absorbed — ExaDev/documents.js#990", () => {
     const source = "- before\n\n  - nested\n\n  > - q1\n  > - q2\n\n  after\n";
     const written = emitMarkdown(lowerMarkdown(source));
 
@@ -2527,7 +2527,7 @@ describe("lists", () => {
     // "nested" is the outer item's own deeper sibling list, untouched by the quote resuming past it.
     expect(nested?.list?.level).toBe(1);
     expect(nested?.list?.itemId).not.toBe(before?.list?.itemId);
-    // "q1"/"q2" are their own genuinely separate, freshly-minted nested list -- neither their itemIds nor their numId match the outer item's or "nested"'s own.
+    // "q1"/"q2" are their own genuinely separate, freshly-minted nested list — neither their itemIds nor their numId match the outer item's or "nested"'s own.
     expect(q1?.list?.itemId).toBeDefined();
     expect(q2?.list?.itemId).toBeDefined();
     expect(q1?.list?.itemId).not.toBe(before?.list?.itemId);
@@ -2536,7 +2536,7 @@ describe("lists", () => {
     expect(q1?.list?.numId).not.toBe(nested?.list?.numId);
   });
 
-  it("keeps a construct nested inside the OUTER item resuming after a NESTED sub-list even when it is that outer item's own LAST block, with nothing after it to look ahead to -- ExaDev/documents.js#990", () => {
+  it("keeps a construct nested inside the OUTER item resuming after a NESTED sub-list even when it is that outer item's own LAST block, with nothing after it to look ahead to — ExaDev/documents.js#990", () => {
     const source = "- before\n\n  - nested\n\n  > quoted\n";
     const written = emitMarkdown(lowerMarkdown(source));
 
@@ -2554,7 +2554,7 @@ describe("lists", () => {
     expect(nested?.list?.itemId).not.toBe(before?.list?.itemId);
   });
 
-  it("still fractures a list item around a quote wrapping ONLY a table -- a ContentTable has no ContentListMembership field of its own to carry either a direct itemId or a numId owner tag, so constructCarriesListItemId cannot recognise it -- but LIST_ITEM_BLOCK_UNLISTED already reports the underlying cause at lower time, so the loss is diagnosed rather than silent (LIST_ITEM_MULTI_BLOCK_FLATTENED stays retired: every other shape a blockquote can wrap either carries list-membership data (a paragraph, of any kind decorateParagraph produces, at any list nesting depth and regardless of how many nested sub-list runs intervene before the quote resumes its own enclosing item -- renderItems' own openMemberships stack, not just constructCarriesListItemId's recursion, is what makes that true) or is one of the three block kinds LIST_ITEM_BLOCK_UNLISTED already covers -- table, resolved image, display math)", () => {
+  it("still fractures a list item around a quote wrapping ONLY a table — a ContentTable has no ContentListMembership field of its own to carry either a direct itemId or a numId owner tag, so constructCarriesListItemId cannot recognise it — but LIST_ITEM_BLOCK_UNLISTED already reports the underlying cause at lower time, so the loss is diagnosed rather than silent (LIST_ITEM_MULTI_BLOCK_FLATTENED stays retired: every other shape a blockquote can wrap either carries list-membership data (a paragraph, of any kind decorateParagraph produces, at any list nesting depth and regardless of how many nested sub-list runs intervene before the quote resumes its own enclosing item — renderItems' own openMemberships stack, not just constructCarriesListItemId's recursion, is what makes that true) or is one of the three block kinds LIST_ITEM_BLOCK_UNLISTED already covers — table, resolved image, display math)", () => {
     const source =
       "- before\n\n  > | a | b |\n  > | - | - |\n  > | 1 | 2 |\n\n  after\n";
     const collector = createDiagnosticCollector();
@@ -2564,20 +2564,20 @@ describe("lists", () => {
     ).toBe(true);
 
     const written = emitMarkdown(lowered);
-    // The diagnosed loss: with no list-membership signal anywhere inside the quote, "before" and "after" are no longer recognised as the same item -- the quote renders unindented and "after" starts a fresh item.
+    // The diagnosed loss: with no list-membership signal anywhere inside the quote, "before" and "after" are no longer recognised as the same item — the quote renders unindented and "after" starts a fresh item.
     expect(written).toBe(
       "- before\n\n> | a | b |\n> | --- | --- |\n> | 1 | 2 |\n\n- after",
     );
   });
 
-  it("still renders a blockquote wrapping its own list as separate top-level content when it genuinely sits BETWEEN two unrelated lists, not inside either one's item -- the construct's surrounding itemId differs on both sides, so it must not be absorbed the way the in-item case above is", () => {
+  it("still renders a blockquote wrapping its own list as separate top-level content when it genuinely sits BETWEEN two unrelated lists, not inside either one's item — the construct's surrounding itemId differs on both sides, so it must not be absorbed the way the in-item case above is", () => {
     const source = "- a\n- b\n\n> quote\n\n- c\n- d\n";
     const written = emitMarkdown(lowerMarkdown(source));
     expect(written).toBe("- a\n- b\n\n> quote\n\n- c\n- d");
   });
 
-  // ExaDev/documents.js#1012: a list item whose entire content is a construct, with no leading plain paragraph of its own to trigger renderItems' region-collection scan in the first place -- the simplest shape being a bare `* > quote` with nothing else in the item. Fixed at src/lower/lower.ts's own lowerListItem, which now gives such an item the same empty-placeholder anchor a nested-list-only item already gets (see lower.test.ts's own "carries itemId on an empty placeholder too, when the item's only content is a construct"), rather than at emit.ts: a construct sitting at an item's own head is otherwise indistinguishable, from the flat block data alone, from a genuinely unrelated construct that merely wraps a fresh list of its own (CommonMark spec 0.31.2 example 235, `> - foo\n- bar`, is exactly that unrelated shape -- see the test just below, which must keep rendering unchanged).
-  it("nests a list item's own construct correctly when the item has no other content at all -- the bullet is no longer emitted inside the blockquote (ExaDev/documents.js#1012)", () => {
+  // ExaDev/documents.js#1012: a list item whose entire content is a construct, with no leading plain paragraph of its own to trigger renderItems' region-collection scan in the first place — the simplest shape being a bare `* > quote` with nothing else in the item. Fixed at src/lower/lower.ts's own lowerListItem, which now gives such an item the same empty-placeholder anchor a nested-list-only item already gets (see lower.test.ts's own "carries itemId on an empty placeholder too, when the item's only content is a construct"), rather than at emit.ts: a construct sitting at an item's own head is otherwise indistinguishable, from the flat block data alone, from a genuinely unrelated construct that merely wraps a fresh list of its own (CommonMark spec 0.31.2 example 235, `> - foo\n- bar`, is exactly that unrelated shape — see the test just below, which must keep rendering unchanged).
+  it("nests a list item's own construct correctly when the item has no other content at all — the bullet is no longer emitted inside the blockquote (ExaDev/documents.js#1012)", () => {
     const source = "* > quote\n";
     const written = emitMarkdown(lowerMarkdown(source));
     expect(written).toBe("- \n  > quote");
@@ -2600,13 +2600,13 @@ describe("lists", () => {
     expect(quote?.list?.itemId).toBe(placeholder?.list?.itemId);
   });
 
-  it("still renders a bare blockquote wrapping only a single-item fresh list as itself, with no borrowed outer item to attach it to (CommonMark spec 0.31.2 example 235) -- the exact shape ExaDev/documents.js#1012's own fix must not misidentify as a construct-only list item", () => {
+  it("still renders a bare blockquote wrapping only a single-item fresh list as itself, with no borrowed outer item to attach it to (CommonMark spec 0.31.2 example 235) — the exact shape ExaDev/documents.js#1012's own fix must not misidentify as a construct-only list item", () => {
     const source = "> - foo\n- bar\n";
     const written = emitMarkdown(lowerMarkdown(source));
     expect(written).toBe("> - foo\n\n- bar");
   });
 
-  it("keeps a Quote-styled block and a following plain block of the same item as two separate blocks on write-then-reparse -- Quote is NOT self-delimiting inside a list region: renderListRegion renders every block through renderParagraphBody, which never applies a '> ' prefix, so a Quote-styled block reads back identically to a plain one and the two would otherwise merge into one paragraph via CommonMark's lazy continuation", () => {
+  it("keeps a Quote-styled block and a following plain block of the same item as two separate blocks on write-then-reparse — Quote is NOT self-delimiting inside a list region: renderListRegion renders every block through renderParagraphBody, which never applies a '> ' prefix, so a Quote-styled block reads back identically to a plain one and the two would otherwise merge into one paragraph via CommonMark's lazy continuation", () => {
     const source = doc([
       {
         kind: "paragraph",
@@ -2780,7 +2780,7 @@ describe("lists", () => {
     expect(written).toBe("- a\n  ### h");
   });
 
-  it("inserts a blank line between a paragraph and a following heading that is forced to setext by its OWN embedded line break, even with the default ATX headingStyle -- the interrupt guard must key off what the heading will actually render as, not the configured style, or the preceding paragraph is silently absorbed into it on reparse (ExaDev/documents.js#940)", () => {
+  it("inserts a blank line between a paragraph and a following heading that is forced to setext by its OWN embedded line break, even with the default ATX headingStyle — the interrupt guard must key off what the heading will actually render as, not the configured style, or the preceding paragraph is silently absorbed into it on reparse (ExaDev/documents.js#940)", () => {
     const softBreakRuns = [
       { text: "h1" },
       { text: " ", source: { format: "markdown" as const, xml: "\n" } },
@@ -2887,7 +2887,7 @@ describe("lists", () => {
     );
   });
 
-  it("inserts a blank line before a CodeBlock following an HTMLPreformatted block, even though a fenced code block always interrupts an open PARAGRAPH -- an open HTML block (CommonMark start conditions 6/7) is a different construct that ends only at a blank line, so canInterruptOpenParagraph's answer for the NEXT block is not a valid signal here at all", () => {
+  it("inserts a blank line before a CodeBlock following an HTMLPreformatted block, even though a fenced code block always interrupts an open PARAGRAPH — an open HTML block (CommonMark start conditions 6/7) is a different construct that ends only at a blank line, so canInterruptOpenParagraph's answer for the NEXT block is not a valid signal here at all", () => {
     const source = doc([
       {
         kind: "paragraph",
@@ -2986,7 +2986,7 @@ describe("lists", () => {
     expect(mathBlock?.kind).toBe("embeddedObject");
   });
 
-  it("inserts a blank line before a thematic break rendered with a non-default character ('*') following an HTMLPreformatted block -- '*' is never a setext underline, so canInterruptOpenParagraph accepts it, but an open HTML block absorbs any non-blank line regardless of what that line looks like", () => {
+  it("inserts a blank line before a thematic break rendered with a non-default character ('*') following an HTMLPreformatted block — '*' is never a setext underline, so canInterruptOpenParagraph accepts it, but an open HTML block absorbs any non-blank line regardless of what that line looks like", () => {
     const source = doc([
       {
         kind: "paragraph",
@@ -3056,14 +3056,14 @@ describe("lists", () => {
     expect(fooBlock.runs.map((run) => run.text).join("")).toBe("foo");
     expect(barBlock.runs.map((run) => run.text).join("")).toBe("bar");
     expect(bazBlock.runs.map((run) => run.text).join("")).toBe("baz");
-    // "foo" and "baz" are the SAME outer item -- "baz" resumed the outer item rather than being lazily absorbed into "bar"'s own nested paragraph.
+    // "foo" and "baz" are the SAME outer item — "baz" resumed the outer item rather than being lazily absorbed into "bar"'s own nested paragraph.
     expect(barBlock.list?.level).toBe(1);
     expect(bazBlock.list?.level).toBe(0);
     expect(bazBlock.list?.itemId).toBe(fooBlock.list?.itemId);
     expect(barBlock.list?.itemId).not.toBe(fooBlock.list?.itemId);
   });
 
-  it("keeps a paragraph and a following ATX heading (the default heading style) TIGHT -- an ATX heading always interrupts an open paragraph, in or out of a list", () => {
+  it("keeps a paragraph and a following ATX heading (the default heading style) TIGHT — an ATX heading always interrupts an open paragraph, in or out of a list", () => {
     const source = doc([
       {
         kind: "paragraph",
@@ -3097,7 +3097,7 @@ describe("lists", () => {
     expect(headingBlock.styleId).toBe("Heading1");
   });
 
-  it("keeps a paragraph and a following MathBlock TIGHT -- a $$ line interrupts an open paragraph exactly as a code fence does, in or out of a list", () => {
+  it("keeps a paragraph and a following MathBlock TIGHT — a $$ line interrupts an open paragraph exactly as a code fence does, in or out of a list", () => {
     const source = doc([
       {
         kind: "paragraph",
@@ -3545,7 +3545,7 @@ describe("tables", () => {
   ])(
     "collapses $name residue run to a space rather than a raw line ending that would fracture the row (ExaDev/documents.js#940)",
     ({ xml }) => {
-      // CommonMark's own line-ending grammar (spec 0.31.2, "Lines") is LF, CRLF, or a lone CR -- not LF alone. renderParagraphBody's own ATX-heading collapse already treats all three as a genuine line ending (LINE_ENDING_PATTERN); emitRunsSingleLine has to as well, since a foreign producer's own markdown residue (re-emitted verbatim, unescaped, by src/emit/inline.ts's renderLeaf) can carry a bare CR or CRLF just as legitimately as the LF the existing soft-break test above already covers, and an LF-only collapse would leak either one, un-collapsed, into what must be a single GFM table-row physical line. The residue channel (rather than embedding the CR/CRLF in a run's own plain text field) keeps this test scoped to emitRunsSingleLine's own collapse alone -- a literal CR/CRLF inside a PLAIN text run instead goes through escapeMarkdownText first, which normalises it to the same backslash-LF hard-break spelling a literal '\n' gets (see the plain-text-run describe block below for that path's own coverage).
+      // CommonMark's own line-ending grammar (spec 0.31.2, "Lines") is LF, CRLF, or a lone CR — not LF alone. renderParagraphBody's own ATX-heading collapse already treats all three as a genuine line ending (LINE_ENDING_PATTERN); emitRunsSingleLine has to as well, since a foreign producer's own markdown residue (re-emitted verbatim, unescaped, by src/emit/inline.ts's renderLeaf) can carry a bare CR or CRLF just as legitimately as the LF the existing soft-break test above already covers, and an LF-only collapse would leak either one, un-collapsed, into what must be a single GFM table-row physical line. The residue channel (rather than embedding the CR/CRLF in a run's own plain text field) keeps this test scoped to emitRunsSingleLine's own collapse alone — a literal CR/CRLF inside a PLAIN text run instead goes through escapeMarkdownText first, which normalises it to the same backslash-LF hard-break spelling a literal '\n' gets (see the plain-text-run describe block below for that path's own coverage).
       const table: ContentTable = {
         kind: "table",
         columnWidthsPt: [100],
@@ -3580,7 +3580,7 @@ describe("tables", () => {
   ])(
     "collapses $name residue run to a plain space, not a space plus a leftover literal backslash (ExaDev/documents.js#940)",
     ({ xml }) => {
-      // This package's own escapeMarkdownText always spells an escaped hard break with a trailing LF ('\\\n'), but a foreign producer's own markdown residue can carry the identical backslash-escape spelling against a CRLF or lone CR just as legitimately, re-emitted verbatim (unescaped) by src/emit/inline.ts's renderLeaf. Stripping only the LF-spelled escape (a bare /\\\n/ regex) leaves this backslash unmatched -- the LINE_ENDING_PATTERN split that follows then removes the CRLF/CR line ending out from under it, leaving the backslash behind as a spurious literal character in the row.
+      // This package's own escapeMarkdownText always spells an escaped hard break with a trailing LF ('\\\n'), but a foreign producer's own markdown residue can carry the identical backslash-escape spelling against a CRLF or lone CR just as legitimately, re-emitted verbatim (unescaped) by src/emit/inline.ts's renderLeaf. Stripping only the LF-spelled escape (a bare /\\\n/ regex) leaves this backslash unmatched — the LINE_ENDING_PATTERN split that follows then removes the CRLF/CR line ending out from under it, leaving the backslash behind as a spurious literal character in the row.
       const table: ContentTable = {
         kind: "table",
         columnWidthsPt: [100],
@@ -3615,7 +3615,7 @@ describe("tables", () => {
   ])(
     "collapses $name hard break in a run's own PLAIN text field to a single space, not two (ExaDev/documents.js#940)",
     ({ text }) => {
-      // Unlike the residue-run cases above, this hard break lives in the run's own `text` field and goes through escapeMarkdownText first. That function used to recognise only a bare '\n' as a hard break, leaving a preceding lone CR (from a bare CR, or from the first half of a CRLF) to fall through unescaped as a literal character; ESCAPED_HARD_BREAK_PATTERN then collapsed the backslash-LF pair it produced for the second half into one space, and the LINE_ENDING_PATTERN split immediately after collapsed the still-unescaped, un-consumed CR into a SECOND space -- doubling a single hard break into two spaces in this single-physical-line table-cell context. escapeMarkdownText now recognises a bare CR as a hard break in its own right (and consumes both halves of a CRLF together), so it always spells the break as a single backslash-LF pair regardless of which of the three line-ending forms the source used, leaving nothing for the LINE_ENDING_PATTERN split to double-collapse.
+      // Unlike the residue-run cases above, this hard break lives in the run's own `text` field and goes through escapeMarkdownText first. That function used to recognise only a bare '\n' as a hard break, leaving a preceding lone CR (from a bare CR, or from the first half of a CRLF) to fall through unescaped as a literal character; ESCAPED_HARD_BREAK_PATTERN then collapsed the backslash-LF pair it produced for the second half into one space, and the LINE_ENDING_PATTERN split immediately after collapsed the still-unescaped, un-consumed CR into a SECOND space — doubling a single hard break into two spaces in this single-physical-line table-cell context. escapeMarkdownText now recognises a bare CR as a hard break in its own right (and consumes both halves of a CRLF together), so it always spells the break as a single backslash-LF pair regardless of which of the three line-ending forms the source used, leaving nothing for the LINE_ENDING_PATTERN split to double-collapse.
       const table: ContentTable = {
         kind: "table",
         columnWidthsPt: [100],
@@ -3909,7 +3909,7 @@ describe("link and image titles (the `link` construct annotation)", () => {
     }
   });
 
-  it("preserves a titled link inside emphasis semantically -- the emit side re-spells the emphasis boundaries around the hyperlink group exactly as it already does for an untitled one, and the reparse reproduces the identical document", () => {
+  it("preserves a titled link inside emphasis semantically — the emit side re-spells the emphasis boundaries around the hyperlink group exactly as it already does for an untitled one, and the reparse reproduces the identical document", () => {
     const first = lowerMarkdown('a **b [c](/u "t") d** e');
     const markdown = emitMarkdown(first);
     expect(lowerMarkdown(markdown)).toEqual(first);
@@ -4456,7 +4456,7 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
           diagnostic.code === MarkdownDiagnosticCodes.TABLE_HTML_FALLBACK,
       )?.message,
     ).toBe(
-      "a cell in this table needs colSpan/rowSpan/background, or holds a block a GFM table cell cannot represent at all (most commonly a nested table); GFM's own table extension holds inline content only (github.github.com/gfm, \"Tables (extension)\"), so no single cell can carry an HTML sub-block inside an otherwise pipe-syntax table -- the whole table is rendered as a raw HTML <table> block instead (CommonMark spec 0.31.2, HTML blocks condition 6, https://spec.commonmark.org/0.31.2/#html-blocks), which src/html/html-table.ts's own reader recognises back into an equal ContentTable",
+      "a cell in this table needs colSpan/rowSpan/background, or holds a block a GFM table cell cannot represent at all (most commonly a nested table); GFM's own table extension holds inline content only (github.github.com/gfm, \"Tables (extension)\"), so no single cell can carry an HTML sub-block inside an otherwise pipe-syntax table — the whole table is rendered as a raw HTML <table> block instead (CommonMark spec 0.31.2, HTML blocks condition 6, https://spec.commonmark.org/0.31.2/#html-blocks), which src/html/html-table.ts's own reader recognises back into an equal ContentTable",
     );
     expect(
       collector.has(MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED),

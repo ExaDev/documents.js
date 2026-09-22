@@ -21,7 +21,7 @@ export function formatBytes(bytes: number): string {
 export function reopenTooltipLabel(hasHandle: boolean): string {
   return hasHandle
     ? "Reopen in Convert"
-    : "This browser can't reopen files directly -- pick it again from the tool you need";
+    : "This browser can't reopen files directly — pick it again from the tool you need";
 }
 
 export function RecentFilesPanel() {
@@ -103,7 +103,7 @@ export function RecentFilesPanel() {
               </Stack>
             </Group>
             <Group gap={4} wrap="nowrap">
-              {/* One boolean feeds both the tooltip label and the disabled state -- the disabled assertions already covering both a handle-backed and a handle-less record are what makes this single check observable at all, since the tooltip's own label text never mounts in a render-only test (see reopenTooltipLabel's comment). */}
+              {/* One boolean feeds both the tooltip label and the disabled state — the disabled assertions already covering both a handle-backed and a handle-less record are what makes this single check observable at all, since the tooltip's own label text never mounts in a render-only test (see reopenTooltipLabel's comment). */}
               <Tooltip label={reopenTooltipLabel(hasHandle)}>
                 <ActionIcon
                   variant="subtle"

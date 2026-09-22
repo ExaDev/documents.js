@@ -259,7 +259,7 @@ describe("SheetPreview", () => {
     expect(mounted.container.innerHTML).toContain("secondVal");
     expect(mounted.container.innerHTML).not.toContain("firstVal");
 
-    // Rerender with a single sheet -- the previously-selected index (1) is now out of range, so clampedIndex must fall back to the last real sheet (index 0) rather than leaving the table blank.
+    // Rerender with a single sheet — the previously-selected index (1) is now out of range, so clampedIndex must fall back to the last real sheet (index 0) rather than leaving the table blank.
     mounted.rerender(
       <SheetPreview
         label="L"
@@ -369,7 +369,7 @@ describe("SheetPreview", () => {
     );
   });
 
-  // A number cell already produces the identical right-aligned recipe class, so a shared assertion above would pass even if percentage or currency stopped being recognised at all -- these two cases each render as the sheet's only cell specifically so their alignment is the sole recipe class present, distinguishing "recognised" from "fell through to the left-aligned default".
+  // A number cell already produces the identical right-aligned recipe class, so a shared assertion above would pass even if percentage or currency stopped being recognised at all — these two cases each render as the sheet's only cell specifically so their alignment is the sole recipe class present, distinguishing "recognised" from "fell through to the left-aligned default".
   it("classes a percentage cell as right-aligned on its own, not only alongside a number cell", () => {
     const html = renderPreview({
       label: "L",

@@ -16,7 +16,7 @@ const ESCAPE_KEY = "\x1B";
 
 const ORIGINAL_TEXT = "# Title\n\nOriginal paragraph.\n";
 
-// Opens a real markdown document AND edits it AND pushes viewSource in a single effect, matching odt/list-editor.test.tsx's own OpenAtListEditor convention. The edit (APPEND_PARAGRAPH) happens through the exact same generic reducer action docx/odt use -- this is deliberately not a hand-built MarkdownOpenDocument with a pre-edited editor, since the point of this test is that `originalText` and the live `editor` are genuinely decoupled once a real edit has been dispatched.
+// Opens a real markdown document AND edits it AND pushes viewSource in a single effect, matching odt/list-editor.test.tsx's own OpenAtListEditor convention. The edit (APPEND_PARAGRAPH) happens through the exact same generic reducer action docx/odt use — this is deliberately not a hand-built MarkdownOpenDocument with a pre-edited editor, since the point of this test is that `originalText` and the live `editor` are genuinely decoupled once a real edit has been dispatched.
 function OpenEditAndViewSource(): ReactElement | undefined {
   const dispatch = useAppDispatch();
   useEffect(() => {
@@ -41,7 +41,7 @@ function OpenEditAndViewSource(): ReactElement | undefined {
   return undefined;
 }
 
-// Gated purely on `state.openDocument === undefined`, not on screen kind -- OpenEditAndViewSource must only ever mount ONCE. Gating on screen kind too (re-rendering it whenever `screen.kind !== 'viewSource'`) would remount it the instant Escape pops viewSource off the stack, re-running its effect and immediately re-dispatching OPEN_FILE_SUCCESS/APPEND_PARAGRAPH/PUSH_SCREEN, undoing the very pop the Escape test below means to observe.
+// Gated purely on `state.openDocument === undefined`, not on screen kind — OpenEditAndViewSource must only ever mount ONCE. Gating on screen kind too (re-rendering it whenever `screen.kind !== 'viewSource'`) would remount it the instant Escape pops viewSource off the stack, re-running its effect and immediately re-dispatching OPEN_FILE_SUCCESS/APPEND_PARAGRAPH/PUSH_SCREEN, undoing the very pop the Escape test below means to observe.
 function Harness(): ReactElement {
   const state = useAppState();
   if (state.openDocument === undefined) {

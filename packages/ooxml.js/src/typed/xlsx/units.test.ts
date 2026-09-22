@@ -7,9 +7,9 @@ import {
   ptToColumnWidthChars,
 } from "./units";
 
-// Verifies columnWidthCharsToPt against the documented [MS-OI29500] pixel formula computed BY HAND for a handful of known width values, independent of columnWidthCharsToPt's own implementation -- so a bug in the implementation (an off-by-one in Math.trunc, a swapped operand) would show up as a mismatch against this independently-computed expectation, not just as "whatever the function happens to return".
+// Verifies columnWidthCharsToPt against the documented [MS-OI29500] pixel formula computed BY HAND for a handful of known width values, independent of columnWidthCharsToPt's own implementation — so a bug in the implementation (an off-by-one in Math.trunc, a swapped operand) would show up as a mismatch against this independently-computed expectation, not just as "whatever the function happens to return".
 
-// Truncate(((256 * width + Truncate(128 / MDW)) / 256) * MDW), MDW = 7 -- the exact formula this module's own units.ts cites from [MS-OI29500] Part 1 SS18.3.1.13 and corroborating independent references (ClosedXML's own Cell Dimensions wiki page, SheetJS's own column-properties documentation).
+// Truncate(((256 * width + Truncate(128 / MDW)) / 256) * MDW), MDW = 7 — the exact formula this module's own units.ts cites from [MS-OI29500] Part 1 SS18.3.1.13 and corroborating independent references (ClosedXML's own Cell Dimensions wiki page, SheetJS's own column-properties documentation).
 function expectedPixels(width: number, mdw: number): number {
   const digitWidthAllowance = Math.trunc(128 / mdw);
   return Math.trunc(((256 * width + digitWidthAllowance) / 256) * mdw);
@@ -25,7 +25,7 @@ describe("columnWidthCharsToPt", () => {
 
   it("Excel's own well-known default column width (8.43 characters) resolves to a plausible, positive point width in the right ballpark for a single default-font column", () => {
     const pt = columnWidthCharsToPt(8.43);
-    // 44.25pt (59px at MDW=7, per the exact formula re-verified in the test above) -- a sanity bound on ORDER OF MAGNITUDE, not a re-assertion of the exact formula.
+    // 44.25pt (59px at MDW=7, per the exact formula re-verified in the test above) — a sanity bound on ORDER OF MAGNITUDE, not a re-assertion of the exact formula.
     expect(pt).toBeGreaterThan(30);
     expect(pt).toBeLessThan(60);
   });
@@ -45,7 +45,7 @@ describe("ptToColumnWidthChars: best-effort inverse of columnWidthCharsToPt", ()
   });
 });
 
-// Regression coverage for ExaDev/documents.js#953: a naive round-to-nearest at write time could land the stored "characters" value BELOW columnWidthCharsToPt's own pixel-bucket lower edge, truncating the next read down by one pixel and drifting the width narrower on every further read/write cycle rather than settling. These assert the actual fixed-point property, not mere closeness: once a value has been through one write, a further read/write pair must reproduce byte-identical output, not merely a similar one. Every write below goes through `write`, which reproduces buildColsElement's own `ptToColumnWidthChars(...).toFixed(COLUMN_WIDTH_CHARS_DECIMAL_PLACES)` string-and-reparse step exactly -- calling ptToColumnWidthChars bare would prove nothing here, since its own unrounded algebraic result is already an exact fixed point of the forward formula (it recovers, bit for bit, the same lowest-width-in-bucket value every time) and never exhibits the drift; the drift only appears once that result is quantized down to the two decimal places <col width> is actually stored at, which is what turning it into a string and back reproduces.
+// Regression coverage for ExaDev/documents.js#953: a naive round-to-nearest at write time could land the stored "characters" value BELOW columnWidthCharsToPt's own pixel-bucket lower edge, truncating the next read down by one pixel and drifting the width narrower on every further read/write cycle rather than settling. These assert the actual fixed-point property, not mere closeness: once a value has been through one write, a further read/write pair must reproduce byte-identical output, not merely a similar one. Every write below goes through `write`, which reproduces buildColsElement's own `ptToColumnWidthChars(...).toFixed(COLUMN_WIDTH_CHARS_DECIMAL_PLACES)` string-and-reparse step exactly — calling ptToColumnWidthChars bare would prove nothing here, since its own unrounded algebraic result is already an exact fixed point of the forward formula (it recovers, bit for bit, the same lowest-width-in-bucket value every time) and never exhibits the drift; the drift only appears once that result is quantized down to the two decimal places <col width> is actually stored at, which is what turning it into a string and back reproduces.
 function write(widthPt: number): number {
   return Number(
     ptToColumnWidthChars(widthPt).toFixed(COLUMN_WIDTH_CHARS_DECIMAL_PLACES),
@@ -54,7 +54,7 @@ function write(widthPt: number): number {
 
 describe("column width read/write converges to a fixed point rather than drifting", () => {
   it("read -> write -> read -> write produces byte-identical results for the second read/write pair as for the first", () => {
-    // A spread of real stored <col width> values. Independently re-verified against the pre-fix rounding with this same write-side toFixed(2) step included: 0.08 spirals to a negative width (0.08 -> 0.07 -> -0.07), and 12.76/44.14 each keep narrowing across a further write cycle beyond their first (12.76 -> 12.64 -> 12.5; 44.14 -> 44.07 -> 43.93) before settling. The remaining values (1, 5, 8.43, 10, 15.32, 20, 100) already stabilize on their very first write even pre-fix, so they demonstrate no drift on their own -- they stay in this list purely as ordinary boundary coverage for the fixed behaviour, not as further evidence of the bug.
+    // A spread of real stored <col width> values. Independently re-verified against the pre-fix rounding with this same write-side toFixed(2) step included: 0.08 spirals to a negative width (0.08 -> 0.07 -> -0.07), and 12.76/44.14 each keep narrowing across a further write cycle beyond their first (12.76 -> 12.64 -> 12.5; 44.14 -> 44.07 -> 43.93) before settling. The remaining values (1, 5, 8.43, 10, 15.32, 20, 100) already stabilize on their very first write even pre-fix, so they demonstrate no drift on their own — they stay in this list purely as ordinary boundary coverage for the fixed behaviour, not as further evidence of the bug.
     for (const storedWidth of [
       0.08, 1, 5, 8.43, 10, 12.76, 15.32, 20, 44.14, 100,
     ]) {

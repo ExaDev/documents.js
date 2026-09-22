@@ -10,7 +10,7 @@ import { encodeXmlText } from "./xml/entities";
 import { base64ToBytes } from "byte-codec";
 import { MANIFEST_PART, MIMETYPE_PART } from "./package-io/write";
 
-// odf.js diverges from ooxml.js here deliberately: ooxml.js only ever READS OPC relationships (its own typed readers are one-way; writing new relationships/content-type entries is documents.js's job, a separate downstream package). odf.js has no such downstream package -- it owns both reading AND writing the manifest itself, because META-INF/manifest.xml is the one part every ODF package unconditionally requires, and getting its content right (every part listed, every media type correct, the root entry's type tied to the mimetype part) is exhaustive enough to need first-class support, not something left to a caller to hand-assemble from raw XML.
+// odf.js diverges from ooxml.js here deliberately: ooxml.js only ever READS OPC relationships (its own typed readers are one-way; writing new relationships/content-type entries is documents.js's job, a separate downstream package). odf.js has no such downstream package — it owns both reading AND writing the manifest itself, because META-INF/manifest.xml is the one part every ODF package unconditionally requires, and getting its content right (every part listed, every media type correct, the root entry's type tied to the mimetype part) is exhaustive enough to need first-class support, not something left to a caller to hand-assemble from raw XML.
 
 export const ManifestEntrySchema = z.object({
   fullPath: z.string(),
@@ -21,7 +21,7 @@ export const ManifestEntrySchema = z.object({
 export type ManifestEntry = z.infer<typeof ManifestEntrySchema>;
 
 export const ManifestSchema = z.object({
-  // manifest:manifest's own required manifest:version attribute -- the ODF package format version this manifest conforms to (e.g. "1.3"). Namespace URIs never carry version info (see ns.ts); this attribute is where it actually lives.
+  // manifest:manifest's own required manifest:version attribute — the ODF package format version this manifest conforms to (e.g. "1.3"). Namespace URIs never carry version info (see ns.ts); this attribute is where it actually lives.
   version: z.string(),
   entries: z.array(ManifestEntrySchema),
 });
@@ -60,7 +60,7 @@ function attrValue(element: XmlElement, name: string): string | undefined {
   return element.attributes.find((attribute) => attribute.name === name)?.value;
 }
 
-// One parsed manifest:file-entry, still carrying its own source element -- so a caller that also needs the raw XML (validateManifest's own encryption-data scan, below) can inspect it without a second, independent full-path/media-type re-validation of the same element.
+// One parsed manifest:file-entry, still carrying its own source element — so a caller that also needs the raw XML (validateManifest's own encryption-data scan, below) can inspect it without a second, independent full-path/media-type re-validation of the same element.
 interface ParsedFileEntry {
   element: XmlElement;
   fullPath: string;
@@ -68,7 +68,7 @@ interface ParsedFileEntry {
   version: string | undefined;
 }
 
-// The one place that walks a manifest:manifest root's manifest:file-entry children and enforces the ODF spec's required attributes on each -- both readManifest (which only needs the resulting ManifestEntry values) and validateManifest's own encryption-data scan (which additionally needs each element's own children) build on this single parse rather than repeating the required-attribute check a second time. Throws under the identical condition readManifest documents.
+// The one place that walks a manifest:manifest root's manifest:file-entry children and enforces the ODF spec's required attributes on each — both readManifest (which only needs the resulting ManifestEntry values) and validateManifest's own encryption-data scan (which additionally needs each element's own children) build on this single parse rather than repeating the required-attribute check a second time. Throws under the identical condition readManifest documents.
 function parseFileEntryElements(root: XmlElement): ParsedFileEntry[] {
   const result: ParsedFileEntry[] = [];
   for (const child of root.children) {
@@ -92,7 +92,7 @@ function parseFileEntryElements(root: XmlElement): ParsedFileEntry[] {
   return result;
 }
 
-// Reads META-INF/manifest.xml into a structured Manifest. Throws for a package that has no manifest part, or one whose XML does not carry the elements/attributes the ODF spec requires (no manifest:manifest root, or a manifest:file-entry missing its required manifest:full-path/manifest:media-type) -- unlike validateManifest, this is a strict parse, not a diagnostics collector.
+// Reads META-INF/manifest.xml into a structured Manifest. Throws for a package that has no manifest part, or one whose XML does not carry the elements/attributes the ODF spec requires (no manifest:manifest root, or a manifest:file-entry missing its required manifest:full-path/manifest:media-type) — unlike validateManifest, this is a strict parse, not a diagnostics collector.
 export function readManifest(pkg: Package): Manifest {
   const part = pkg.parts[MANIFEST_PART];
   if (part?.kind !== "xml") {
@@ -118,7 +118,7 @@ export function readManifest(pkg: Package): Manifest {
   return { version, entries };
 }
 
-// A directory earns its own manifest:file-entry only when the package genuinely contains a "<dir>/content.xml" part -- the one real signal (per the OASIS spec and real-world LibreOffice output) that the directory is an embedded sub-document's own root, not just a plain folder of media (e.g. "Pictures/", which real ODF packages never list). Never synthesized for any other directory prefix.
+// A directory earns its own manifest:file-entry only when the package genuinely contains a "<dir>/content.xml" part — the one real signal (per the OASIS spec and real-world LibreOffice output) that the directory is an embedded sub-document's own root, not just a plain folder of media (e.g. "Pictures/", which real ODF packages never list). Never synthesized for any other directory prefix.
 function subdocumentDirectories(partPaths: readonly string[]): string[] {
   const dirs: string[] = [];
   for (const path of partPaths) {
@@ -145,7 +145,7 @@ function resolvePartMediaType(
   }
 
   const dotIndex = baseName.lastIndexOf(".");
-  // No intermediate "extension === '' ? undefined : ..." fallback: mediaTypeForExtension("") already returns undefined on its own (the empty string is never a key in ODF_MEDIA_TYPES), so that check was always redundant. Skipping the lookup entirely when there is no dot at all -- rather than computing an empty-string placeholder and feeding it through the same lookup -- keeps a nameless part from ever being mistaken for one whose whole basename happens to spell a real ODF extension (e.g. a part literally named "odt" with no dot).
+  // No intermediate "extension === '' ? undefined : ..." fallback: mediaTypeForExtension("") already returns undefined on its own (the empty string is never a key in ODF_MEDIA_TYPES), so that check was always redundant. Skipping the lookup entirely when there is no dot at all — rather than computing an empty-string placeholder and feeding it through the same lookup — keeps a nameless part from ever being mistaken for one whose whole basename happens to spell a real ODF extension (e.g. a part literally named "odt" with no dot).
   const byExtension =
     dotIndex === -1
       ? undefined
@@ -170,7 +170,7 @@ function resolvePartMediaType(
     }
   }
 
-  // LibreOffice's own real-world behaviour for a part it cannot otherwise classify -- not "application/octet-stream", which LibreOffice never actually emits here.
+  // LibreOffice's own real-world behaviour for a part it cannot otherwise classify — not "application/octet-stream", which LibreOffice never actually emits here.
   return "";
 }
 
@@ -179,11 +179,11 @@ export interface BuildManifestOptions {
   documentMediaType?: string;
   // manifest:manifest's own manifest:version, and the version stamped on the root entry. Defaults to DEFAULT_MANIFEST_VERSION.
   version?: string;
-  // fullPath -> media type, for any part (including a subdocument directory) whose type buildManifest's automatic resolution cannot determine on its own -- most notably an embedded sub-document's directory entry, whose own ODF variant is not recoverable from its parts without reading its own content.
+  // fullPath -> media type, for any part (including a subdocument directory) whose type buildManifest's automatic resolution cannot determine on its own — most notably an embedded sub-document's directory entry, whose own ODF variant is not recoverable from its parts without reading its own content.
   mediaTypeOverrides?: Readonly<Record<string, string>>;
 }
 
-// Exhaustive derivation of a Manifest from a package's actual parts: a root ("/") entry carrying the package's own media type, one entry per remaining part (excluding manifest.xml and mimetype, which are never self-listed), plus a directory entry for each genuine embedded-subdocument directory (see subdocumentDirectories). Deterministic and side-effect-free -- callers combine it with writeManifest (or call syncManifest, which does both) to actually persist the result.
+// Exhaustive derivation of a Manifest from a package's actual parts: a root ("/") entry carrying the package's own media type, one entry per remaining part (excluding manifest.xml and mimetype, which are never self-listed), plus a directory entry for each genuine embedded-subdocument directory (see subdocumentDirectories). Deterministic and side-effect-free — callers combine it with writeManifest (or call syncManifest, which does both) to actually persist the result.
 export function buildManifest(
   pkg: Package,
   options: BuildManifestOptions = {},
@@ -192,7 +192,7 @@ export function buildManifest(
   const documentMediaType = options.documentMediaType ?? readMimetype(pkg);
   if (documentMediaType === undefined) {
     throw new Error(
-      'buildManifest: package has no "mimetype" part and no documentMediaType override was supplied -- the manifest root entry requires a known document media type',
+      'buildManifest: package has no "mimetype" part and no documentMediaType override was supplied — the manifest root entry requires a known document media type',
     );
   }
 
@@ -258,7 +258,7 @@ function buildManifestNodes(manifest: Manifest): XmlNode[] {
   ];
 }
 
-// Serializes a Manifest to XML and sets (or replaces) the package's META-INF/manifest.xml part. Pure with respect to every other part -- it never touches "mimetype" or any content part.
+// Serializes a Manifest to XML and sets (or replaces) the package's META-INF/manifest.xml part. Pure with respect to every other part — it never touches "mimetype" or any content part.
 export function writeManifest(pkg: Package, manifest: Manifest): void {
   pkg.parts[MANIFEST_PART] = {
     kind: "xml",
@@ -274,7 +274,7 @@ export function syncManifest(
   writeManifest(pkg, buildManifest(pkg, options));
 }
 
-// Non-throwing diagnostics: a manifest that fails to parse, is missing its root entry, whose root entry's media type disagrees with the mimetype part, that lists a part the package doesn't have (or omits one it does), or that carries manifest:encryption-data on any entry (an ODF feature this package does not implement decryption for). Never throws -- every failure mode becomes a problem entry instead.
+// Non-throwing diagnostics: a manifest that fails to parse, is missing its root entry, whose root entry's media type disagrees with the mimetype part, that lists a part the package doesn't have (or omits one it does), or that carries manifest:encryption-data on any entry (an ODF feature this package does not implement decryption for). Never throws — every failure mode becomes a problem entry instead.
 export function validateManifest(pkg: Package): ManifestProblem[] {
   const problems: ManifestProblem[] = [];
 
@@ -343,7 +343,7 @@ export function validateManifest(pkg: Package): ManifestProblem[] {
   );
 
   for (const entry of manifest.entries) {
-    // Root and directory entries have no literal corresponding zip part -- "/" is the package itself (and, being a single "/" character, trivially satisfies endsWith("/") on its own, so it needs no separate check), and a directory entry describes a prefix, not a physical entry.
+    // Root and directory entries have no literal corresponding zip part — "/" is the package itself (and, being a single "/" character, trivially satisfies endsWith("/") on its own, so it needs no separate check), and a directory entry describes a prefix, not a physical entry.
     if (entry.fullPath.endsWith("/")) {
       continue;
     }
@@ -377,7 +377,7 @@ export function validateManifest(pkg: Package): ManifestProblem[] {
     }
     problems.push({
       severity: "warning",
-      message: `entry "${fullPath}" carries manifest:encryption-data -- odf.js does not implement ODF encryption/decryption`,
+      message: `entry "${fullPath}" carries manifest:encryption-data — odf.js does not implement ODF encryption/decryption`,
       path: fullPath,
     });
   }
@@ -385,7 +385,7 @@ export function validateManifest(pkg: Package): ManifestProblem[] {
   return problems;
 }
 
-// Atomically updates BOTH sides of the ODF spec's conditional MUST tying the manifest root entry's media type to the "mimetype" part's own bytes -- and keeps manifest:manifest's own manifest:version and the root entry's manifest:version in step with each other, since real-world ODF packages never let those diverge. Creates a minimal one-entry manifest if the package has none yet.
+// Atomically updates BOTH sides of the ODF spec's conditional MUST tying the manifest root entry's media type to the "mimetype" part's own bytes — and keeps manifest:manifest's own manifest:version and the root entry's manifest:version in step with each other, since real-world ODF packages never let those diverge. Creates a minimal one-entry manifest if the package has none yet.
 export function setDocumentMediaType(
   pkg: Package,
   mediaType: string,

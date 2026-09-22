@@ -4,7 +4,7 @@ import type {
   SaveResult,
 } from "../../ports/fileAccess";
 
-// Chromium only (showOpenFilePicker/showSaveFilePicker). Returns a persistable FileSystemFileHandle so callers can offer "recent files" reopen -- see fallbackFileAccess.ts for the browser that don't support this.
+// Chromium only (showOpenFilePicker/showSaveFilePicker). Returns a persistable FileSystemFileHandle so callers can offer "recent files" reopen — see fallbackFileAccess.ts for the browser that don't support this.
 export function createNativeFileAccess(): FileAccessPort {
   return {
     supportsNativePicker: () => true,
@@ -38,7 +38,7 @@ export function createNativeFileAccess(): FileAccessPort {
               description: "Document",
               accept: {
                 [options.mimeType]: [
-                  // String.split on any input, including one with no '.' at all, always returns at least one element, so pop() here can never be undefined -- there is no genuinely-extension-less case to fall back for.
+                  // String.split on any input, including one with no '.' at all, always returns at least one element, so pop() here can never be undefined — there is no genuinely-extension-less case to fall back for.
                   `.${options.suggestedName.split(".").pop()}`,
                 ],
               },

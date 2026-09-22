@@ -20,7 +20,7 @@ import {
   fixtureCalibriFontBytes,
 } from "../test-support/font-fixture";
 
-// Drives the real assembled commander program end to end -- a real docx/odt asking for Calibri in, a real PDF out, read back and inspected for which typeface actually got embedded. Without --font-file, documents.js's own default behaviour must be untouched by any of this: a Calibri run still resolves through its vendored-substitute table to Carlito, and this CLI adds nothing that could change that. With --font-file, the supplied face wins and is embedded under its own PostScript name -- which also proves the family was derived from the font file's own 'name' table, since nothing on the command line ever said the word "Calibri" about that file. The assertion target is the PDF's own /BaseFont entry (ISO 32000-1 9.6.2.1, "<six-letter subset tag>+<PostScript name>"), read as literal bytes: writePdf leaves font dictionaries uncompressed, so a substring check here is checking the real, shipped font resource rather than a proxy for it.
+// Drives the real assembled commander program end to end — a real docx/odt asking for Calibri in, a real PDF out, read back and inspected for which typeface actually got embedded. Without --font-file, documents.js's own default behaviour must be untouched by any of this: a Calibri run still resolves through its vendored-substitute table to Carlito, and this CLI adds nothing that could change that. With --font-file, the supplied face wins and is embedded under its own PostScript name — which also proves the family was derived from the font file's own 'name' table, since nothing on the command line ever said the word "Calibri" about that file. The assertion target is the PDF's own /BaseFont entry (ISO 32000-1 9.6.2.1, "<six-letter subset tag>+<PostScript name>"), read as literal bytes: writePdf leaves font dictionaries uncompressed, so a substring check here is checking the real, shipped font resource rather than a proxy for it.
 
 const VENDORED_SUBSTITUTE_POSTSCRIPT_NAME = "Carlito";
 
@@ -184,7 +184,7 @@ describe("docx-to-pdf --font-file", () => {
 });
 
 describe("odt-to-pdf --font-file", () => {
-  // The same two halves against the ODF side of the identical wordprocessing pivot -- odtToPdf reaches the same layout engine and the same FontRegistry, so a flag registered per command rather than per format would show up here as a missing option rather than as a wrong font.
+  // The same two halves against the ODF side of the identical wordprocessing pivot — odtToPdf reaches the same layout engine and the same FontRegistry, so a flag registered per command rather than per format would show up here as a missing option rather than as a wrong font.
   it("substitutes Carlito by default and the supplied face when one is given", async () => {
     const defaultOutput = join(workspace, "odt-default.pdf");
     const suppliedOutput = join(workspace, "odt-supplied.pdf");
@@ -301,7 +301,7 @@ describe("font flag registration", () => {
       expect(helpFor(name)).toContain("--font-file");
       expect(helpFor(name)).toContain("--report-font-substitutions");
     }
-    // A reconstruction reads a PDF's own already-positioned glyphs and a bridge runs no layout engine, so neither has any face to resolve -- advertising the flags there would offer an option that could not do anything.
+    // A reconstruction reads a PDF's own already-positioned glyphs and a bridge runs no layout engine, so neither has any face to resolve — advertising the flags there would offer an option that could not do anything.
     for (const name of [
       "pdf-to-docx",
       "pdf-to-odt",

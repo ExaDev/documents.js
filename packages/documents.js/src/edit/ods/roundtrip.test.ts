@@ -37,7 +37,7 @@ function findTableElement(pkg: Package): XmlElement {
   return table;
 }
 
-// The task's own headline requirement: open a REAL ods, set every ContentCellValueSchema variant across several cells, add a formula, save, and reread with odf.js's own readOdsContent -- not this package's own getters -- to prove the bytes on disk (not just this editor's in-memory view of them) are correct.
+// The task's own headline requirement: open a REAL ods, set every ContentCellValueSchema variant across several cells, add a formula, save, and reread with odf.js's own readOdsContent — not this package's own getters — to prove the bytes on disk (not just this editor's in-memory view of them) are correct.
 describe("open -> edit -> save -> reopen: every ContentCellValueSchema variant survives a real readOdsContent cycle", () => {
   it("number/percentage/currency/boolean/date/time/string/empty all round-trip to their correct kind and value", () => {
     const editor = openOds(minimalOdsBytes());
@@ -118,7 +118,7 @@ describe("open -> edit -> save -> reopen: every ContentCellValueSchema variant s
     }
   });
 
-  it("error survives as the documented, deliberate string translation -- ODF has no error value-type to round-trip to", () => {
+  it("error survives as the documented, deliberate string translation — ODF has no error value-type to round-trip to", () => {
     const editor = openOds(minimalOdsBytes());
     const sheet = editor.sheet("Data");
     sheet.cell(20, 0).value = { kind: "error", value: "#DIV/0!" };
@@ -157,7 +157,7 @@ describe("open -> edit -> save -> reopen: every ContentCellValueSchema variant s
 });
 
 describe("write-side repeat-count avoidance: a far-out cell address never materializes the skipped range", () => {
-  it("setting row 500, column 50 on a fresh sheet produces a bounded, small number of XML elements -- never 500 x 50 cell objects", () => {
+  it("setting row 500, column 50 on a fresh sheet produces a bounded, small number of XML elements — never 500 x 50 cell objects", () => {
     const editor = createOds();
     const sheet = editor.sheets()[0]!;
     sheet.cell(500, 50).value = { kind: "number", value: 1 };
@@ -189,7 +189,7 @@ describe("write-side repeat-count avoidance: a far-out cell address never materi
     expect(columnElements.length).toBeLessThanOrEqual(2);
   });
 
-  it("and reading that same file back through odf.js's own readOdsContent is fast -- proof the file itself, not just this editor's in-memory view, stayed compact", () => {
+  it("and reading that same file back through odf.js's own readOdsContent is fast — proof the file itself, not just this editor's in-memory view, stayed compact", () => {
     const editor = createOds();
     const sheet = editor.sheets()[0]!;
     sheet.cell(50000, 500).value = { kind: "string", value: "far away" };

@@ -1,4 +1,4 @@
-// LayoutMetadata -> a leading YAML front matter block, the structural inverse of src/lower/front-matter.ts. Emits every key that side reads (STRING_FIELD_SETTERS, plus `keywords` and `direction`) and nothing else -- `producer` has no front matter key of its own in this package's own mapping and is never emitted, matching the read side's own scope exactly.
+// LayoutMetadata -> a leading YAML front matter block, the structural inverse of src/lower/front-matter.ts. Emits every key that side reads (STRING_FIELD_SETTERS, plus `keywords` and `direction`) and nothing else — `producer` has no front matter key of its own in this package's own mapping and is never emitted, matching the read side's own scope exactly.
 
 import type { LayoutMetadata } from "document-schema.js";
 
@@ -16,7 +16,7 @@ function emitScalar(value: string): string {
   return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 }
 
-// Every string-valued LayoutMetadata field this module emits, paired with the front-matter key src/lower/front-matter.ts's own STRING_FIELD_SETTERS reads it back under -- kept as an explicit list (not derived from that module's own table) so each entry can name its own LayoutMetadata accessor with a real type instead of a string-keyed lookup.
+// Every string-valued LayoutMetadata field this module emits, paired with the front-matter key src/lower/front-matter.ts's own STRING_FIELD_SETTERS reads it back under — kept as an explicit list (not derived from that module's own table) so each entry can name its own LayoutMetadata accessor with a real type instead of a string-keyed lookup.
 const STRING_FIELD_ENTRIES: readonly [
   string,
   (metadata: LayoutMetadata) => string | undefined,

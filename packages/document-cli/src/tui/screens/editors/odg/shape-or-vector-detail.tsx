@@ -22,7 +22,7 @@ import {
   type PageItem,
 } from "./shared.js";
 
-// slide-family's own shape editor (pptx/odp) and this odg screen's `ShapeDetail` below both edit an `OdpShape` (odg shapes reuse that same class -- see documents.js's own README), but the two grew independently and still have not been deduplicated; `ShapeDetail` remains this file's own minimal implementation rather than a reuse of `screens/editors/pptx/shape-editor.tsx`.
+// slide-family's own shape editor (pptx/odp) and this odg screen's `ShapeDetail` below both edit an `OdpShape` (odg shapes reuse that same class — see documents.js's own README), but the two grew independently and still have not been deduplicated; `ShapeDetail` remains this file's own minimal implementation rather than a reuse of `screens/editors/pptx/shape-editor.tsx`.
 
 interface EditableRow {
   readonly label: string;
@@ -30,16 +30,16 @@ interface EditableRow {
   readonly commit: (raw: string) => void;
 }
 
-// The fill/stroke row set for a live vector -- a `line` vector has no fill at all (ContentVectorSchema's own 'line' variant carries none), so that row is simply omitted rather than shown disabled. Kept a plain function (not a component) because both branches of VectorDetail below need the identical row list, one to render it and one only to size the "read-only" fallback's own reserved space consistently with ShapeDetail's.
+// The fill/stroke row set for a live vector — a `line` vector has no fill at all (ContentVectorSchema's own 'line' variant carries none), so that row is simply omitted rather than shown disabled. Kept a plain function (not a component) because both branches of VectorDetail below need the identical row list, one to render it and one only to size the "read-only" fallback's own reserved space consistently with ShapeDetail's.
 function buildVectorRows(
   vector: ContentVector,
   liveVector: OdgVector,
   dispatch: Dispatch<Action>,
 ): readonly EditableRow[] {
   const rows: EditableRow[] = [];
-  // Parity guarantees vector.kind === liveVector.kind (buildPageItems only populates liveVector when they agree), but each side still needs narrowing on its OWN discriminant -- `vector.fill` needs `vector` narrowed, the dispatched `vector` field needs `liveVector` narrowed -- for the reasons noted below.
+  // Parity guarantees vector.kind === liveVector.kind (buildPageItems only populates liveVector when they agree), but each side still needs narrowing on its OWN discriminant — `vector.fill` needs `vector` narrowed, the dispatched `vector` field needs `liveVector` narrowed — for the reasons noted below.
   if (vector.kind !== "line" && liveVector.kind !== "line") {
-    // liveVector is narrowed to OdgBoxVector | OdgPathVector here -- SET_VECTOR_FILL's own `vector` field excludes OdgLineVector (a line has nothing to fill), matching ContentVectorSchema's own 'line' variant, which carries no `fill` field at all.
+    // liveVector is narrowed to OdgBoxVector | OdgPathVector here — SET_VECTOR_FILL's own `vector` field excludes OdgLineVector (a line has nothing to fill), matching ContentVectorSchema's own 'line' variant, which carries no `fill` field at all.
     rows.push({
       label: `Fill: ${vector.fill === undefined ? "none" : formatColor(vector.fill)}`,
       currentValue:
@@ -63,12 +63,12 @@ function buildVectorRows(
         : `${vector.stroke.color.r} ${vector.stroke.color.g} ${vector.stroke.color.b} ${vector.stroke.widthPt}`,
     commit: (raw) => {
       const stroke = parseStrokeField(raw);
-      // SET_VECTOR_STROKE's own `stroke` field is non-optional for every vector kind, not only `line` -- see actions.ts's own comment: a write against the OdgBoxVector | OdgLineVector | OdgPathVector union narrows to the intersection of their setter types, and OdgLineVector.stroke never accepts undefined, so the action itself has nowhere to carry "clear the stroke" regardless of which kind this particular vector is.
+      // SET_VECTOR_STROKE's own `stroke` field is non-optional for every vector kind, not only `line` — see actions.ts's own comment: a write against the OdgBoxVector | OdgLineVector | OdgPathVector union narrows to the intersection of their setter types, and OdgLineVector.stroke never accepts undefined, so the action itself has nowhere to carry "clear the stroke" regardless of which kind this particular vector is.
       if (stroke === undefined) {
         dispatch({
           type: "SET_STATUS",
           severity: "warning",
-          text: 'A vector stroke cannot be cleared to none through this editor -- enter "r g b widthPt" (0-1 colour, pt width) instead',
+          text: 'A vector stroke cannot be cleared to none through this editor — enter "r g b widthPt" (0-1 colour, pt width) instead',
         });
         return;
       }
@@ -119,8 +119,8 @@ function VectorDetail(props: {
         <Text>{describeFillStroke(vector)}</Text>
         <Text color="yellow">
           This page's live vectors (documents.js's `OdgPage.vectors()`) don't
-          line up one-to-one with what odf.js's own reader found here -- likely
-          a `draw:circle`/`polygon`/`polyline`/`custom-shape` element the live
+          line up one-to-one with what odf.js's own reader found here — likely a
+          `draw:circle`/`polygon`/`polyline`/`custom-shape` element the live
           accessor has no wrapper for, sitting alongside a plain
           rect/ellipse/line/path it does. Rather than risk pairing the wrong
           live handle to this row, every vector on this page is shown read-only
@@ -136,7 +136,7 @@ function VectorDetail(props: {
     const row = rows[editingField];
     if (row === undefined) {
       throw new Error(
-        `VectorDetail is editing field index ${editingField}, but there are only ${rows.length} rows -- selecting a row always sets editingField to a valid index from that same rows array, so this indicates a bug in that selection.`,
+        `VectorDetail is editing field index ${editingField}, but there are only ${rows.length} rows — selecting a row always sets editingField to a valid index from that same rows array, so this indicates a bug in that selection.`,
       );
     }
     return (
@@ -291,7 +291,7 @@ function ShapeDetail(props: {
     const row = rows[editingField];
     if (row === undefined) {
       throw new Error(
-        `ShapeDetail is editing field index ${editingField}, but there are only ${rows.length} rows -- selecting a row always sets editingField to a valid index from that same rows array, so this indicates a bug in that selection.`,
+        `ShapeDetail is editing field index ${editingField}, but there are only ${rows.length} rows — selecting a row always sets editingField to a valid index from that same rows array, so this indicates a bug in that selection.`,
       );
     }
     return (
@@ -340,11 +340,11 @@ export function OdgShapeOrVectorDetailScreen(): ReactElement {
   const { pageIndex, itemIndex } = requireShapeOrVectorDetailScreen(state);
   const overlayOpen = anyOverlayOpen(state);
 
-  // Fresh every render, matching page-detail.tsx's own `buildPageItems` call -- there is no cached, stable identity for these items to hold onto across mutations.
+  // Fresh every render, matching page-detail.tsx's own `buildPageItems` call — there is no cached, stable identity for these items to hold onto across mutations.
   const items = buildPageItems(doc, pageIndex);
   const item: PageItem | undefined = items[itemIndex];
 
-  // Only handles Esc/back for the "not found" branch below -- once a real item is found, VectorDetail/ShapeDetail each own their own back navigation via useNavigationInput, and having both active at once would double-dispatch POP_SCREEN on a single Escape press.
+  // Only handles Esc/back for the "not found" branch below — once a real item is found, VectorDetail/ShapeDetail each own their own back navigation via useNavigationInput, and having both active at once would double-dispatch POP_SCREEN on a single Escape press.
   useInput(
     (input, key) => {
       if (key.escape || key.leftArrow || input === "h") {

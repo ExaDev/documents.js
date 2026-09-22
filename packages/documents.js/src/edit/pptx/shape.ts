@@ -26,10 +26,10 @@ function parseEmuAttr(element: XmlElement, name: string): number | undefined {
   return value === undefined ? undefined : Number.parseInt(value, 10);
 }
 
-// a:xfrm/@rot is measured in 60,000ths of a degree, clockwise (ECMA-376 20.1.7.6) -- the DrawingML analogue of ODF's draw:transform rotation (see src/edit/odp/shape.ts's OdpShape.rotationDeg). ContentShape.rotationDeg (document-schema.js) is already clockwise-positive degrees for a top-level, ungrouped shape -- ooxml.js's own composeShapeRotationDeg collapses to a bare passthrough of xfrm.rotationDeg when there is no parent group transform (typed/shared/drawingml.ts) -- so this needs only the literal degree <-> 60,000ths scale, no sign flip or group composition. Exported for src/edit/pptx/table.ts's own buildTableGraphicFrame, whose p:xfrm uses the identical unit.
+// a:xfrm/@rot is measured in 60,000ths of a degree, clockwise (ECMA-376 20.1.7.6) — the DrawingML analogue of ODF's draw:transform rotation (see src/edit/odp/shape.ts's OdpShape.rotationDeg). ContentShape.rotationDeg (document-schema.js) is already clockwise-positive degrees for a top-level, ungrouped shape — ooxml.js's own composeShapeRotationDeg collapses to a bare passthrough of xfrm.rotationDeg when there is no parent group transform (typed/shared/drawingml.ts) — so this needs only the literal degree <-> 60,000ths scale, no sign flip or group composition. Exported for src/edit/pptx/table.ts's own buildTableGraphicFrame, whose p:xfrm uses the identical unit.
 export const ROTATION_UNITS_PER_DEGREE = 60000;
 
-// A live view over a p:sp (text box/autoshape) or p:pic (picture) element -- frame keeps OOXML's own top-left, y-down convention in points (already converted from EMU); the Y-flip into PDF space happens exactly once, in src/layout/slides.ts.
+// A live view over a p:sp (text box/autoshape) or p:pic (picture) element — frame keeps OOXML's own top-left, y-down convention in points (already converted from EMU); the Y-flip into PDF space happens exactly once, in src/layout/slides.ts.
 export class PptxShape {
   private readonly container: XmlNode[];
   private readonly node: XmlElement;
@@ -63,7 +63,7 @@ export class PptxShape {
     return created;
   }
 
-  // p:cNvPr lives under p:nvSpPr for a p:sp and under p:nvPicPr for a p:pic (ECMA-376 19.3.1.12/19.3.1.32); either container holds exactly one p:cNvPr carrying the shape's non-visual identity (id + name). Find-or-create the container first, then the p:cNvPr inside it -- mirroring how spPrElement finds the p:spPr regardless of which shape kind this is.
+  // p:cNvPr lives under p:nvSpPr for a p:sp and under p:nvPicPr for a p:pic (ECMA-376 19.3.1.12/19.3.1.32); either container holds exactly one p:cNvPr carrying the shape's non-visual identity (id + name). Find-or-create the container first, then the p:cNvPr inside it — mirroring how spPrElement finds the p:spPr regardless of which shape kind this is.
   private cNvPrElement(create: true): XmlElement;
   private cNvPrElement(create: false): XmlElement | undefined;
   private cNvPrElement(create: boolean): XmlElement | undefined {
@@ -91,7 +91,7 @@ export class PptxShape {
     return created;
   }
 
-  // a:bodyPr lives as the first child of p:txBody (ECMA-376 21.1.2.2.1), carrying the text-body insets (lIns/tIns/rIns/bIns, all in EMU). Find-or-create the p:txBody first if absent, then ensure the a:bodyPr is its first child -- matching how the `text` setter already ensures a p:txBody exists with an a:bodyPr/a:lstStyle pair.
+  // a:bodyPr lives as the first child of p:txBody (ECMA-376 21.1.2.2.1), carrying the text-body insets (lIns/tIns/rIns/bIns, all in EMU). Find-or-create the p:txBody first if absent, then ensure the a:bodyPr is its first child — matching how the `text` setter already ensures a p:txBody exists with an a:bodyPr/a:lstStyle pair.
   private bodyPrElement(create: true): XmlElement;
   private bodyPrElement(create: false): XmlElement | undefined;
   private bodyPrElement(create: boolean): XmlElement | undefined {
@@ -113,7 +113,7 @@ export class PptxShape {
     return created;
   }
 
-  // p:cNvPr@name (ECMA-376 19.2.1.3) -- the shape's own non-visual name, read back by ooxml.js's own readPptxContent (typed/pptx/read.ts's shapeName) straight off this attribute.
+  // p:cNvPr@name (ECMA-376 19.2.1.3) — the shape's own non-visual name, read back by ooxml.js's own readPptxContent (typed/pptx/read.ts's shapeName) straight off this attribute.
   get name(): string | undefined {
     const cNvPr = this.cNvPrElement(false);
     return cNvPr === undefined ? undefined : attr(cNvPr, "name");
@@ -128,7 +128,7 @@ export class PptxShape {
     setAttr(cNvPr, "name", value);
   }
 
-  // a:bodyPr@lIns/tIns/rIns/bIns are in EMU (ECMA-376 21.1.2.2.1), the same unit a:off/a:ext use -- ooxml.js's own readShapeTextExtras divides each by EMU_PER_POINT, so these setters write the identical EMU value the reader divides back. An absent attribute means PowerPoint's own default (91440 EMU left/right, 45720 EMU top/bottom), not zero -- so undefined removes the attribute rather than writing 0.
+  // a:bodyPr@lIns/tIns/rIns/bIns are in EMU (ECMA-376 21.1.2.2.1), the same unit a:off/a:ext use — ooxml.js's own readShapeTextExtras divides each by EMU_PER_POINT, so these setters write the identical EMU value the reader divides back. An absent attribute means PowerPoint's own default (91440 EMU left/right, 45720 EMU top/bottom), not zero — so undefined removes the attribute rather than writing 0.
   get insetLeftPt(): number | undefined {
     return this.readInsetPt("lIns");
   }
@@ -280,7 +280,7 @@ export class PptxShape {
     txBody.children = [...nonParagraphChildren, paragraph];
   }
 
-  // Replaces the shape's whole text body with multiple styled paragraphs -- the richer counterpart to the flat `text` setter above, for callers (the PDF->pptx reconstruction path) that already have per-run bold/italic/font/size/colour and per-paragraph alignment to place, not just a single plain string.
+  // Replaces the shape's whole text body with multiple styled paragraphs — the richer counterpart to the flat `text` setter above, for callers (the PDF->pptx reconstruction path) that already have per-run bold/italic/font/size/colour and per-paragraph alignment to place, not just a single plain string.
   setParagraphs(paragraphs: readonly DrawingParagraphInit[]): void {
     const node = this.live();
     let txBody = directChild(node, "p:txBody");
@@ -297,7 +297,7 @@ export class PptxShape {
     ];
   }
 
-  // Replaces the shape's whole text body with a single paragraph carrying a real OOXML equation -- the pptx counterpart to src/edit/docx/paragraph.ts's own DocxParagraph.appendOfficeMath, and what closes ExaDev/documents.js#563's "pptx has zero formula support" gap. m:oMathPara/m:oMath share the identical OMML markup Word and PowerPoint both consume (ECMA-376's math markup is host-application-agnostic -- src/omml/write.ts builds no WordprocessingML-specific wrapper around it), so this is genuinely the same translator docx already uses, not a second one. A formula whose MathML produces no OMML content at all (an empty m:oMath) writes nothing and reports written: false, exactly like the docx counterpart -- the caller falls back to a plain-text stand-in (src/edit/pptx/content.ts's own appendShape).
+  // Replaces the shape's whole text body with a single paragraph carrying a real OOXML equation — the pptx counterpart to src/edit/docx/paragraph.ts's own DocxParagraph.appendOfficeMath, and what closes ExaDev/documents.js#563's "pptx has zero formula support" gap. m:oMathPara/m:oMath share the identical OMML markup Word and PowerPoint both consume (ECMA-376's math markup is host-application-agnostic — src/omml/write.ts builds no WordprocessingML-specific wrapper around it), so this is genuinely the same translator docx already uses, not a second one. A formula whose MathML produces no OMML content at all (an empty m:oMath) writes nothing and reports written: false, exactly like the docx counterpart — the caller falls back to a plain-text stand-in (src/edit/pptx/content.ts's own appendShape).
   appendOfficeMath(
     mathml: readonly MathMlNode[],
   ): OmmlWriteResult & { readonly written: boolean } {
@@ -344,13 +344,13 @@ export interface DrawingParagraphInit {
   readonly alignment?: Alignment;
   readonly spacingBeforePt?: number;
   readonly spacingAfterPt?: number;
-  // A line-spacing MULTIPLIER (1.0 = single, 1.5 = one-and-a-half, 2.0 = double) -- the same shape ContentParagraph.lineSpacing carries and ooxml.js's own readPptxContent produces from a:lnSpc/a:spcPct@val / 100000.
+  // A line-spacing MULTIPLIER (1.0 = single, 1.5 = one-and-a-half, 2.0 = double) — the same shape ContentParagraph.lineSpacing carries and ooxml.js's own readPptxContent produces from a:lnSpc/a:spcPct@val / 100000.
   readonly lineSpacing?: number;
   readonly indentLeftPt?: number;
   readonly indentFirstLinePt?: number;
 }
 
-// a:pPr/@algn's own value set (ECMA-376 20.1.10.2) -- distinct spellings from WordprocessingML's w:jc.
+// a:pPr/@algn's own value set (ECMA-376 20.1.10.2) — distinct spellings from WordprocessingML's w:jc.
 const ALIGNMENT_TO_ALGN: Readonly<Record<Alignment, string>> = {
   left: "l",
   center: "ctr",
@@ -361,13 +361,13 @@ const ALIGNMENT_TO_ALGN: Readonly<Record<Alignment, string>> = {
 // a:rPr/@sz is in hundredths of a point (ECMA-376 20.1.10.71), unlike WordprocessingML's half-points.
 const HUNDREDTHS_POINT_PER_POINT = 100;
 
-// a:spcPts/@val is in hundredths of a point (ECMA-376 20.1.10.69) -- the identical unit a:rPr/@sz uses, confirmed against ooxml.js's own readAbsoluteSpacingPt (typed/pptx/read.ts), which divides by DRAWINGML_FONT_SIZE_HUNDREDTHS_PER_POINT (100) to recover points.
+// a:spcPts/@val is in hundredths of a point (ECMA-376 20.1.10.69) — the identical unit a:rPr/@sz uses, confirmed against ooxml.js's own readAbsoluteSpacingPt (typed/pptx/read.ts), which divides by DRAWINGML_FONT_SIZE_HUNDREDTHS_PER_POINT (100) to recover points.
 const SPACING_POINTS_PER_POINT = 100;
 
-// a:spcPct/@val is in thousandths of a percent (ECMA-376 20.1.10.68) -- 100000 = 100% = single spacing. ooxml.js's own readLineSpacingMultiplier divides @val by 100000 to recover the multiplier, so the inverse is multiplier * 100000.
+// a:spcPct/@val is in thousandths of a percent (ECMA-376 20.1.10.68) — 100000 = 100% = single spacing. ooxml.js's own readLineSpacingMultiplier divides @val by 100000 to recover the multiplier, so the inverse is multiplier * 100000.
 const LINE_SPACING_PERCENT_PER_MULTIPLIER = 100000;
 
-// DrawingML run properties are attribute-based toggles (b="1", i="1" on a:rPr itself), not the element-presence toggles WordprocessingML uses (w:b/w:i as child elements) -- the same distinction ooxml.js's readPptxContent documents for the read side, mirrored here on write.
+// DrawingML run properties are attribute-based toggles (b="1", i="1" on a:rPr itself), not the element-presence toggles WordprocessingML uses (w:b/w:i as child elements) — the same distinction ooxml.js's readPptxContent documents for the read side, mirrored here on write.
 function buildDrawingRun(init: DrawingRunInit): XmlElement {
   const rPrAttrs: Record<string, string> = {};
   if (init.bold === true) {
@@ -413,7 +413,7 @@ function buildDrawingRun(init: DrawingRunInit): XmlElement {
   ]);
 }
 
-// Exported for src/edit/pptx/table.ts's own PptxTableCell.setParagraphs -- a:tc's own a:txBody holds the identical a:p/a:r/a:rPr/a:t content model a p:sp's own p:txBody does (ECMA-376 CT_TextBody is shared), so a table cell's paragraphs are built through this exact same function rather than a second implementation.
+// Exported for src/edit/pptx/table.ts's own PptxTableCell.setParagraphs — a:tc's own a:txBody holds the identical a:p/a:r/a:rPr/a:t content model a p:sp's own p:txBody does (ECMA-376 CT_TextBody is shared), so a table cell's paragraphs are built through this exact same function rather than a second implementation.
 export function buildDrawingParagraph(init: DrawingParagraphInit): XmlElement {
   const pPrAttrs: Record<string, string> = {};
   if (init.alignment !== undefined) {
@@ -425,7 +425,7 @@ export function buildDrawingParagraph(init: DrawingParagraphInit): XmlElement {
   if (init.indentFirstLinePt !== undefined) {
     pPrAttrs.indent = String(ptToEmu(init.indentFirstLinePt)); // a:pPr/@indent is in EMU and may be negative (a hanging indent), matching the read direction's own emuToPt(Number(indent)).
   }
-  // CT_TextParagraphProperties element order is lnSpc, spcBef, spcAft (ECMA-376 21.1.2.2.4) -- emit in that sequence so a real consumer never sees the schema's ordered content model violated.
+  // CT_TextParagraphProperties element order is lnSpc, spcBef, spcAft (ECMA-376 21.1.2.2.4) — emit in that sequence so a real consumer never sees the schema's ordered content model violated.
   const pPrChildren: XmlNode[] = [];
   if (init.lineSpacing !== undefined) {
     pPrChildren.push(

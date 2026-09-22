@@ -7,7 +7,7 @@ import type { OpenedFile } from "../ports/fileAccess";
 import { createMockRpcClient } from "../test/mockRpcClient";
 import { mountWithProviders } from "../test/mountComponent";
 
-// A minimal but genuinely schema-valid wordprocessing document, and the tree-form dump PackagePage actually renders for it -- assembleTree is the same structural transform the real content.read handler applies (src/rpc/router.ts), so this fixture's package shape matches what the route really receives rather than an ad hoc stand-in.
+// A minimal but genuinely schema-valid wordprocessing document, and the tree-form dump PackagePage actually renders for it — assembleTree is the same structural transform the real content.read handler applies (src/rpc/router.ts), so this fixture's package shape matches what the route really receives rather than an ad hoc stand-in.
 const sampleContent: ContentDocument = {
   kind: "wordprocessing",
   metadata: {},
@@ -42,7 +42,7 @@ vi.mock("../ui/notify", () => ({
   },
 }));
 
-// Stands in for the real FileUpload (already covered by its own dedicated test suite): PackagePage's own logic -- inferring the format, calling readContent.mutate, rendering/editing the dumped JSON, and restoring it -- is what this file exercises.
+// Stands in for the real FileUpload (already covered by its own dedicated test suite): PackagePage's own logic — inferring the format, calling readContent.mutate, rendering/editing the dumped JSON, and restoring it — is what this file exercises.
 let latestOnFile: ((file: OpenedFile) => void) | undefined;
 vi.mock("../ui/FileUpload", () => ({
   FileUpload: (props: { onFile: (file: OpenedFile) => void }) => {
@@ -67,7 +67,7 @@ function jsonTextarea(container: HTMLElement) {
   return container.querySelector("textarea") ?? undefined;
 }
 
-// React tracks a textarea's last-known value on the DOM node itself and skips its onChange dispatch when a plain `textarea.value = ...` assignment already matches what it already recorded -- going through the native setter (bypassing React's own patched one) keeps its tracked value stale, so the subsequent "input" event is seen as a real change.
+// React tracks a textarea's last-known value on the DOM node itself and skips its onChange dispatch when a plain `textarea.value = ...` assignment already matches what it already recorded — going through the native setter (bypassing React's own patched one) keeps its tracked value stale, so the subsequent "input" event is seen as a real change.
 function typeInto(textarea: HTMLTextAreaElement, value: string) {
   act(() => {
     Object.getOwnPropertyDescriptor(

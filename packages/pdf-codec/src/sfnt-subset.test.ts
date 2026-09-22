@@ -17,7 +17,7 @@ import { subsetSfnt } from "./sfnt-subset";
 import { caladeaRegularBytes, carlitoRegularBytes } from "./test-support/fonts";
 import { base64ToBytes } from "byte-codec";
 
-// A real round trip: subset a genuine vendored face down to the glyphs one short string needs, then read the output back through this package's own sfnt/font-tables/glyf/hmtx parsers and check it against the font it was cut from. The container itself is checked by a second, independent reader written here with a bare DataView -- deliberately not this package's own parseSfnt -- so a directory this subsetter writes wrongly cannot be validated by the same assumptions that wrote it.
+// A real round trip: subset a genuine vendored face down to the glyphs one short string needs, then read the output back through this package's own sfnt/font-tables/glyf/hmtx parsers and check it against the font it was cut from. The container itself is checked by a second, independent reader written here with a bare DataView — deliberately not this package's own parseSfnt — so a directory this subsetter writes wrongly cannot be validated by the same assumptions that wrote it.
 //
 // The test string is chosen for what it forces the subsetter to do rather than for being pretty: 'o' with a diaeresis and 'C' with a cedilla are composite glyphs in these faces, and the digits are composites in Carlito too, so a subset that copied only the glyphs the 'cmap' resolves would emit visibly broken characters. Every component those composites reference has to come along transitively.
 const TEXT = "Hello, wörld! Ça va? 42";
@@ -107,7 +107,7 @@ function sumRegion(view: DataView, offset: number, length: number): number {
 
 const CHECKSUM_ADJUSTMENT_MAGIC = 0xb1b0afba;
 
-// A copy of the font with 'head's own checkSumAdjustment zeroed -- the form every checksum in the file is defined against, both the head record's own and the whole-file sum the adjustment is then derived from (clause 4.1).
+// A copy of the font with 'head's own checkSumAdjustment zeroed — the form every checksum in the file is defined against, both the head record's own and the whole-file sum the adjustment is then derived from (clause 4.1).
 function withZeroedCheckSumAdjustment(
   bytes: Uint8Array<ArrayBuffer>,
   headOffset: number,
@@ -136,7 +136,7 @@ function expectEveryRecordChecksumToVerify(
   }
 }
 
-// A used glyph's own bytes survive verbatim, followed only by the zero bytes that pad it onto the next four-byte boundary. The padding lands inside this glyph's own 'loca' range by construction (the next entry points past it), which is exactly how the format expresses alignment -- a consumer reads the header and contour data and never reaches the padding.
+// A used glyph's own bytes survive verbatim, followed only by the zero bytes that pad it onto the next four-byte boundary. The padding lands inside this glyph's own 'loca' range by construction (the next entry points past it), which is exactly how the format expresses alignment — a consumer reads the header and contour data and never reaches the padding.
 function expectGlyphOutlinePreserved(
   source: GlyfTable,
   subset: GlyfTable,
@@ -197,7 +197,7 @@ describe("subsetSfnt against real Carlito Regular", () => {
     );
     expect(directlyMapped.has(CARLITO_HIGHEST_USED_GLYPH_ID)).toBe(false);
     expect(glyphIds).toContain(CARLITO_HIGHEST_USED_GLYPH_ID);
-    // Every component of every composite the subset carries is itself in the subset -- the property that makes a GID-preserving byte-verbatim copy safe.
+    // Every component of every composite the subset carries is itself in the subset — the property that makes a GID-preserving byte-verbatim copy safe.
     const used = new Set(glyphIds);
     let compositesChecked = 0;
     for (const glyphId of glyphIds) {
@@ -271,7 +271,7 @@ describe("subsetSfnt against real Carlito Regular", () => {
     const { subset } = subsetCarlito();
     const head = parseHead(subset.sfnt);
     const maxp = parseMaxp(subset.sfnt);
-    expect(head?.indexToLocFormat).toBe(1); // long, always -- one code path, legal whatever the source font used
+    expect(head?.indexToLocFormat).toBe(1); // long, always — one code path, legal whatever the source font used
     expect(maxp?.numGlyphs).toBe(subset.numGlyphs);
     const hhea = subset.sfnt.tables.get("hhea");
     expect(hhea?.length).toBe(36);
@@ -393,7 +393,7 @@ describe("subsetSfnt against real Carlito Regular", () => {
     }
     expect(expectedOffset).toBe(subset.bytes.length);
 
-    // Each record's checksum is the sum of its table's own zero-padded uint32s -- for 'head', of the table as it stands with checkSumAdjustment zeroed, which is what the spec defines that one record's checksum against.
+    // Each record's checksum is the sum of its table's own zero-padded uint32s — for 'head', of the table as it stands with checkSumAdjustment zeroed, which is what the spec defines that one record's checksum against.
     expectEveryRecordChecksumToVerify(subset.bytes);
 
     // head.checkSumAdjustment itself: the whole file, with that one field zeroed, must sum to the magic constant once the stored adjustment is added back.
@@ -421,7 +421,7 @@ describe("subsetSfnt against real Carlito Regular", () => {
     expect(source.numGlyphs).toBe(CARLITO_SOURCE_NUM_GLYPHS);
     expect(glyphIds.length).toBeLessThan(source.numGlyphs / 100);
     expect(subset.bytes.length).toBeLessThan(source.bytes.length / 20);
-    // The outlines are what collapses: the source's own 'glyf' is ~500 KB, the subset's a few KB. What remains is dominated by the GID-preserving 'loca'/'hmtx' pair, which stays proportional to the HIGHEST used glyph ID rather than to the number of glyphs kept -- the deliberate, documented cost of never renumbering.
+    // The outlines are what collapses: the source's own 'glyf' is ~500 KB, the subset's a few KB. What remains is dominated by the GID-preserving 'loca'/'hmtx' pair, which stays proportional to the HIGHEST used glyph ID rather than to the number of glyphs kept — the deliberate, documented cost of never renumbering.
     expect(subset.sfnt.tables.get("glyf")!.length).toBeLessThan(
       source.sfnt.tables.get("glyf")!.length / 100,
     );
@@ -432,7 +432,7 @@ describe("subsetSfnt against real Carlito Regular", () => {
 
   it("reports a code point the face has no glyph for rather than dropping it silently", () => {
     const source = load(carlitoRegularBytes());
-    const result = subsetSfnt(source.sfnt, [0x41, 0x4e2d, 0x1d400]); // 'A', a CJK ideograph, and a mathematical bold capital A -- neither of the last two is in Carlito
+    const result = subsetSfnt(source.sfnt, [0x41, 0x4e2d, 0x1d400]); // 'A', a CJK ideograph, and a mathematical bold capital A — neither of the last two is in Carlito
     expect(result).toBeDefined();
     expect(result!.unmappedCodePoints).toEqual([0x4e2d, 0x1d400]);
     expect(result!.glyphIds).toEqual([0, 3]); // .notdef and 'A'
@@ -480,7 +480,7 @@ describe("subsetSfnt against real Caladea Regular, a short-loca source", () => {
     ).toEqual([280]);
     expect(result!.glyphIds).toContain(295);
     expect(result!.glyphIds).toContain(280);
-    // That cedilla carries a zero advance width -- a real value a subsetter must copy rather than treat as a missing metric.
+    // That cedilla carries a zero advance width — a real value a subsetter must copy rather than treat as a missing metric.
     expect(subsetHmtx.advanceWidth(295)).toBe(0);
     // Every record's checksum still verifies for a font whose tables are laid out at completely different lengths from Carlito's.
     expectEveryRecordChecksumToVerify(result!.bytes);
@@ -505,7 +505,7 @@ describe("fonts subsetSfnt declines to subset", () => {
       (record) => record.tag === "hmtx",
     );
     expect(hmtxIndex).toBeGreaterThanOrEqual(0);
-    // Only the record's declared length is cut, so the container still parses and every other table is untouched -- the failure has to come from the subsetter refusing to guess at a metric it cannot read.
+    // Only the record's declared length is cut, so the container still parses and every other table is untouched — the failure has to come from the subsetter refusing to guess at a metric it cannot read.
     new DataView(truncated.buffer).setUint32(12 + hmtxIndex * 16 + 12, 8);
     const font = parseSfnt(truncated);
     expect(font).toBeDefined();

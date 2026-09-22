@@ -16,9 +16,9 @@ import { attr, childrenWithTag, decodeEntities, textContent } from "../util";
 
 // The docx side of document-schema.js's fidelity construct vocabulary (its src/construct.ts): reading a WordprocessingML construct into a ConstructDescriptor, and placing the flat form's constructStart/constructEnd marker pair around the blocks that construct spans. Shared by the reader (typed/docx/read.ts) and the writer (typed/docx/write.ts), so one module owns both the descriptor shapes and the bracket placement rules the two halves must agree on.
 //
-// EXTENT SCOPE, the single constraint that decides which real-world docx constructs are representable here at all: a marker pair brackets whole BLOCKS. document-schema.js states this on the marker schemas themselves -- a construct group wraps a section's, cell's, or shape's block flow, never a sub-sequence of one paragraph's runs, because a run-level extent lives on ContentParagraph's own constructs field instead (RunConstructExtent -- one scope, one encoding). So a field, bookmark, SDT, or tracked change spanning one or more whole paragraphs becomes a marker pair. Of the mid-paragraph cases, a bookmark whose halves both sit inside one paragraph is read onto that paragraph's run-level constructs field (runBookmarkExtents below); a mid-paragraph field, inline SDT, or partial tracked change still has no encoding here -- the text comes through as runs, the construct does not. The reader's own qualification tests below are exactly that distinction, made per construct.
+// EXTENT SCOPE, the single constraint that decides which real-world docx constructs are representable here at all: a marker pair brackets whole BLOCKS. document-schema.js states this on the marker schemas themselves — a construct group wraps a section's, cell's, or shape's block flow, never a sub-sequence of one paragraph's runs, because a run-level extent lives on ContentParagraph's own constructs field instead (RunConstructExtent — one scope, one encoding). So a field, bookmark, SDT, or tracked change spanning one or more whole paragraphs becomes a marker pair. Of the mid-paragraph cases, a bookmark whose halves both sit inside one paragraph is read onto that paragraph's run-level constructs field (runBookmarkExtents below); a mid-paragraph field, inline SDT, or partial tracked change still has no encoding here — the text comes through as runs, the construct does not. The reader's own qualification tests below are exactly that distinction, made per construct.
 
-// The element children of a w:p that carry no visible content of their own: paragraph properties, and the range/annotation markers that punctuate a paragraph without contributing to it. Everything else -- w:r, w:hyperlink, w:fldSimple, w:ins, w:del, w:sdt, w:smartTag, mc:AlternateContent, m:oMath -- is content-bearing. This set is what "first content-bearing child" and "last content-bearing child" mean in the qualification tests below: a bookmark or field marker sitting outside every content-bearing child brackets the whole paragraph, one sitting between them brackets a sub-sequence of its runs and is out of scope.
+// The element children of a w:p that carry no visible content of their own: paragraph properties, and the range/annotation markers that punctuate a paragraph without contributing to it. Everything else — w:r, w:hyperlink, w:fldSimple, w:ins, w:del, w:sdt, w:smartTag, mc:AlternateContent, m:oMath — is content-bearing. This set is what "first content-bearing child" and "last content-bearing child" mean in the qualification tests below: a bookmark or field marker sitting outside every content-bearing child brackets the whole paragraph, one sitting between them brackets a sub-sequence of its runs and is out of scope.
 const NON_CONTENT_PARAGRAPH_CHILDREN: ReadonlySet<string> = new Set([
   "w:pPr",
   "w:bookmarkStart",
@@ -34,7 +34,7 @@ const NON_CONTENT_PARAGRAPH_CHILDREN: ReadonlySet<string> = new Set([
   "w:moveToRangeEnd",
 ]);
 
-// A w:r carrying nothing but its own w:rPr (and Word's own rendering hint) produces no output, so it must not count as content -- otherwise Word's habit of appending a bare formatting run after a field's closing w:fldChar would disqualify every such field from block scope for a run that renders nothing.
+// A w:r carrying nothing but its own w:rPr (and Word's own rendering hint) produces no output, so it must not count as content — otherwise Word's habit of appending a bare formatting run after a field's closing w:fldChar would disqualify every such field from block scope for a run that renders nothing.
 const INERT_RUN_CHILDREN: ReadonlySet<string> = new Set([
   "w:rPr",
   "w:lastRenderedPageBreak",
@@ -83,7 +83,7 @@ export function indexParagraphContent(
   return { elements, firstContentIndex, lastContentIndex };
 }
 
-// The content-bearing children only, in order -- what the field qualification test indexes into ("is the begin fldChar the first of these, and the end fldChar the last").
+// The content-bearing children only, in order — what the field qualification test indexes into ("is the begin fldChar the first of these, and the end fldChar the last").
 export function contentBearingChildren(
   index: ParagraphContentIndex,
 ): XmlElement[] {
@@ -107,7 +107,7 @@ function compareExtents(a: ConstructExtent, b: ConstructExtent): number {
   );
 }
 
-// The flat form pairs markers as balanced brackets, so an extent that starts inside another and ends outside it has no encoding at all: bracket matching would silently re-pair the two into a different nesting than the source meant. WordprocessingML's own marker-paired constructs (w:bookmarkStart/End keyed by w:id, w:fldChar begin/end) are free to overlap that way, so the crossing case is real input rather than a malformed one -- it is dropped here, the drop document-schema.js ratifies for block-scoped crossings (construct.ts's extent-scope note), rather than being emitted as a pair that would decode to the wrong nesting. Within one paragraph, crossing bookmark extents are NOT dropped: run-level ranges are data, not brackets, so both survive as entries on the paragraph's constructs field (runBookmarkExtents below). Structural constructs (w:sdt, w:ins, w:del) are XML elements and so nest by construction; only bookmark and field extents can ever be rejected here.
+// The flat form pairs markers as balanced brackets, so an extent that starts inside another and ends outside it has no encoding at all: bracket matching would silently re-pair the two into a different nesting than the source meant. WordprocessingML's own marker-paired constructs (w:bookmarkStart/End keyed by w:id, w:fldChar begin/end) are free to overlap that way, so the crossing case is real input rather than a malformed one — it is dropped here, the drop document-schema.js ratifies for block-scoped crossings (construct.ts's extent-scope note), rather than being emitted as a pair that would decode to the wrong nesting. Within one paragraph, crossing bookmark extents are NOT dropped: run-level ranges are data, not brackets, so both survive as entries on the paragraph's constructs field (runBookmarkExtents below). Structural constructs (w:sdt, w:ins, w:del) are XML elements and so nest by construction; only bookmark and field extents can ever be rejected here.
 function acceptProperlyNested(
   extents: readonly ConstructExtent[],
 ): ConstructExtent[] {
@@ -131,7 +131,7 @@ function acceptProperlyNested(
   return accepted;
 }
 
-// Splices each extent's constructStart/constructEnd pair into the block list around the blocks it covers, producing the flat encoding document-schema.js's findConstructMarkerImbalance validates: markers balance, and a close always matches the nearest still-open start in the same list. No "extents.length === 0" early return is needed: acceptProperlyNested([]) is [], so openingAt stays empty and the main loop below finds no marker to open or close at any index -- it just walks every block once and re-pushes it, producing an array equal in content to `[...blocks]` (never the SAME array reference, but no caller here or in read.ts relies on referential identity), exactly what the early return would have produced.
+// Splices each extent's constructStart/constructEnd pair into the block list around the blocks it covers, producing the flat encoding document-schema.js's findConstructMarkerImbalance validates: markers balance, and a close always matches the nearest still-open start in the same list. No "extents.length === 0" early return is needed: acceptProperlyNested([]) is [], so openingAt stays empty and the main loop below finds no marker to open or close at any index — it just walks every block once and re-pushes it, producing an array equal in content to `[...blocks]` (never the SAME array reference, but no caller here or in read.ts relies on referential identity), exactly what the early return would have produced.
 export function insertConstructMarkers(
   blocks: readonly ContentBlock[],
   extents: readonly ConstructExtent[],
@@ -172,10 +172,10 @@ export function insertConstructMarkers(
 
 // --- run-level construct extents (a bookmark covering a sub-sequence of one paragraph's runs) ------------------------
 
-// Which id-paired marker family a half belongs to. WordprocessingML spells two of them identically -- w:bookmarkStart/End keyed by w:id naming a bookmark, and w:commentRangeStart/End keyed by w:id naming a comment's extent -- so one pairing mechanism serves both, discriminated only by which descriptor the family's start half mints.
+// Which id-paired marker family a half belongs to. WordprocessingML spells two of them identically — w:bookmarkStart/End keyed by w:id naming a bookmark, and w:commentRangeStart/End keyed by w:id naming a comment's extent — so one pairing mechanism serves both, discriminated only by which descriptor the family's start half mints.
 export type RangeMarkerFamily = "bookmark" | "comment";
 
-// A range-marker half encountered inside a paragraph's own run walk (readParagraphRuns): `runPosition` is the number of runs the walk had emitted when it reached the half -- the half's position among the paragraph's ContentRuns, which is exactly what a RunConstructExtent's startRun/endRun name. `element` is kept so the pairing below can ask the paragraph's content index whether the half sits at block scope or between runs.
+// A range-marker half encountered inside a paragraph's own run walk (readParagraphRuns): `runPosition` is the number of runs the walk had emitted when it reached the half — the half's position among the paragraph's ContentRuns, which is exactly what a RunConstructExtent's startRun/endRun name. `element` is kept so the pairing below can ask the paragraph's content index whether the half sits at block scope or between runs.
 export interface ParagraphRangeMarkerHalf {
   readonly element: XmlElement;
   readonly family: RangeMarkerFamily;
@@ -185,7 +185,7 @@ export interface ParagraphRangeMarkerHalf {
   readonly runPosition: number;
 }
 
-// Whether a half brackets whole blocks rather than a run sub-sequence: a direct paragraph child sitting outside every content-bearing child (leading or trailing) is block-scoped -- the position recordParagraphRangeMarkers gives a block index to -- while a child between content, or a half nested inside a content-bearing container (w:hyperlink, w:ins, an inline w:sdt), sits between runs by construction and is run-scoped. The container case answers "not found among the direct children" rather than being an error: the run walk recurses where the content index does not, and a half inside a container is definitionally interior to the paragraph's run sequence.
+// Whether a half brackets whole blocks rather than a run sub-sequence: a direct paragraph child sitting outside every content-bearing child (leading or trailing) is block-scoped — the position recordParagraphRangeMarkers gives a block index to — while a child between content, or a half nested inside a content-bearing container (w:hyperlink, w:ins, an inline w:sdt), sits between runs by construction and is run-scoped. The container case answers "not found among the direct children" rather than being an error: the run walk recurses where the content index does not, and a half inside a container is definitionally interior to the paragraph's run sequence.
 function isBlockScopedHalf(
   half: ParagraphRangeMarkerHalf,
   index: ParagraphContentIndex,
@@ -194,14 +194,14 @@ function isBlockScopedHalf(
   if (position === -1) {
     return false;
   }
-  // firstContentIndex's own "-1 means no content at all, so everything is leading" case needs its explicit shortcut: position < firstContentIndex alone would read a firstContentIndex of -1 as "nothing is before it", the opposite of what's meant, since position is never negative here (the guard above already excludes it). lastContentIndex's mirror-image shortcut has no such need and is deliberately NOT written the same way: position is guaranteed >= 0 at this point, so position > lastContentIndex ALREADY evaluates true on its own whenever lastContentIndex is -1 (anything non-negative exceeds it) -- an explicit "lastContentIndex === -1 ||" would be checking a case its own right-hand side already covers unaided.
+  // firstContentIndex's own "-1 means no content at all, so everything is leading" case needs its explicit shortcut: position < firstContentIndex alone would read a firstContentIndex of -1 as "nothing is before it", the opposite of what's meant, since position is never negative here (the guard above already excludes it). lastContentIndex's mirror-image shortcut has no such need and is deliberately NOT written the same way: position is guaranteed >= 0 at this point, so position > lastContentIndex ALREADY evaluates true on its own whenever lastContentIndex is -1 (anything non-negative exceeds it) — an explicit "lastContentIndex === -1 ||" would be checking a case its own right-hand side already covers unaided.
   const leading =
     index.firstContentIndex === -1 || position < index.firstContentIndex;
   const trailing = position > index.lastContentIndex;
   return leading || trailing;
 }
 
-// Pairs one paragraph's own range-marker halves (bookmarks and comment extents alike) by family+w:id into run-level construct extents (document-schema.js's RunConstructExtent): a pair whose halves both sit in THIS paragraph and are not both block-scoped becomes an entry on the paragraph's constructs field. A pair with both halves block-scoped is skipped -- that is the block-marker path's extent (recordParagraphRangeMarkers has already emitted its events, and one occurrence must never carry both encodings) -- and everything else about the pairing mirrors the block path's own rules: exactly one start and one end per family+id, a name on a bookmark's start, and an end that does not precede the start. A bookmark is named by its own w:name; a comment extent by its w:id, the key WordprocessingML itself joins the extent to its w:comment body through (the flat model carries that body in DocxDocument.comments under the same id, so the join survives with no second vocabulary). A pair split across two paragraphs is never seen here at all (each paragraph pairs only its own halves), so it stays dropped exactly as before. Crossing pairs need no special case: run ranges are data, not brackets, so two extents that overlap are two entries.
+// Pairs one paragraph's own range-marker halves (bookmarks and comment extents alike) by family+w:id into run-level construct extents (document-schema.js's RunConstructExtent): a pair whose halves both sit in THIS paragraph and are not both block-scoped becomes an entry on the paragraph's constructs field. A pair with both halves block-scoped is skipped — that is the block-marker path's extent (recordParagraphRangeMarkers has already emitted its events, and one occurrence must never carry both encodings) — and everything else about the pairing mirrors the block path's own rules: exactly one start and one end per family+id, a name on a bookmark's start, and an end that does not precede the start. A bookmark is named by its own w:name; a comment extent by its w:id, the key WordprocessingML itself joins the extent to its w:comment body through (the flat model carries that body in DocxDocument.comments under the same id, so the join survives with no second vocabulary). A pair split across two paragraphs is never seen here at all (each paragraph pairs only its own halves), so it stays dropped exactly as before. Crossing pairs need no special case: run ranges are data, not brackets, so two extents that overlap are two entries.
 export function runRangeMarkerExtents(
   halves: readonly ParagraphRangeMarkerHalf[],
   index: ParagraphContentIndex,
@@ -274,10 +274,10 @@ const LOCK_BY_VALUE: ReadonlyMap<string, ContentControlLock> = new Map([
   ["sdtContentLocked", "both"],
 ]);
 
-// The one w:docPartObj gallery that is an index rather than an ordinary building-block container -- document-schema.js's `index` member names docx's TOC-as-SDT explicitly, and every other gallery (Cover Pages, Watermarks, Quick Parts) is a container of arbitrary content with no index semantics, so those degrade to richText with the whole w:docPartObj/w:docPartList element quarantined verbatim in the descriptor's residue (the residue channel's first consumer).
+// The one w:docPartObj gallery that is an index rather than an ordinary building-block container — document-schema.js's `index` member names docx's TOC-as-SDT explicitly, and every other gallery (Cover Pages, Watermarks, Quick Parts) is a container of arbitrary content with no index semantics, so those degrade to richText with the whole w:docPartObj/w:docPartList element quarantined verbatim in the descriptor's residue (the residue channel's first consumer).
 export const TABLE_OF_CONTENTS_GALLERY = "Table of Contents";
 
-// What a w:sdtPr's own type child says the control is, plus the docPart residue when that payload is what degraded to richText: one walk decides both, so the semantic verdict and the quarantined original can never disagree about which element won. The residue carries the element subtree as the lossless layer's own builder serialises it -- the same equivalence class that layer round-trips within, so a same-format writer can re-emit it (write.ts does) without this typed layer ever interpreting the text.
+// What a w:sdtPr's own type child says the control is, plus the docPart residue when that payload is what degraded to richText: one walk decides both, so the semantic verdict and the quarantined original can never disagree about which element won. The residue carries the element subtree as the lossless layer's own builder serialises it — the same equivalence class that layer round-trips within, so a same-format writer can re-emit it (write.ts does) without this typed layer ever interpreting the text.
 interface ControlTypeReading {
   readonly controlType: ContentControlType;
   readonly galleryResidue: SourceResidue | undefined;
@@ -326,7 +326,7 @@ function readListItemOptions(sdtPr: XmlElement): string[] | undefined {
       options.push(decodeEntities(value));
     }
   }
-  // A present-but-empty w:dropDownList/w:comboBox (a real, common shape: a list-type control authored with no items yet) is a list field with zero options, distinct from `list === undefined` above (not a list field at all) -- collapsing both onto `undefined` here would make the two indistinguishable (ExaDev/documents.js#1016).
+  // A present-but-empty w:dropDownList/w:comboBox (a real, common shape: a list-type control authored with no items yet) is a list field with zero options, distinct from `list === undefined` above (not a list field at all) — collapsing both onto `undefined` here would make the two indistinguishable (ExaDev/documents.js#1016).
   return options;
 }
 
@@ -345,7 +345,7 @@ function readCheckboxState(sdtPr: XmlElement): boolean | undefined {
     return false;
   }
   const val = attr(checked, "w14:val") ?? attr(checked, "w:val");
-  // No "val === undefined ||" shortcut is needed: when val IS undefined, every one of the three !== comparisons below is trivially true (undefined is never "0", "false", or "off"), so the AND already evaluates to true on its own -- an explicit shortcut would only be re-deriving what the comparisons already give for free.
+  // No "val === undefined ||" shortcut is needed: when val IS undefined, every one of the three !== comparisons below is trivially true (undefined is never "0", "false", or "off"), so the AND already evaluates to true on its own — an explicit shortcut would only be re-deriving what the comparisons already give for free.
   return val !== "0" && val !== "false" && val !== "off";
 }
 
@@ -407,7 +407,7 @@ export const PROVENANCE_CHANGE_BY_TAG: ReadonlyMap<string, ProvenanceChange> =
     ["w:moveTo", "moveTo"],
   ]);
 
-// Whether a tracked-change element's own content is deleted text -- w:del and w:moveFrom both spell their runs with w:delText rather than w:t, since both mean "this text is gone from the current revision".
+// Whether a tracked-change element's own content is deleted text — w:del and w:moveFrom both spell their runs with w:delText rather than w:t, since both mean "this text is gone from the current revision".
 export function isDeletedChange(change: ProvenanceChange): boolean {
   return change === "deletion" || change === "moveFrom";
 }
@@ -457,7 +457,7 @@ export function fieldCharType(run: XmlElement): string | undefined {
 
 // --- legacy form fields (w:ffData on the run carrying a field's opening w:fldChar) ------------------------------------
 
-// WordprocessingML's pre-SDT form-field vocabulary, spelled as form controls in document-schema.js's harmonised set: a checkbox maps to 'checkbox', a drop-down list to 'dropDown', and a text input to 'plainText' -- the three members construct.ts's own control-type comments name w:ffData for. Anything else inside w:ffData (w:calcOnExit, macro hooks, help/status text, sizes) has no descriptor field and is quarantined verbatim in the descriptor's residue with the whole element, so a same-format writer can restore the control exactly; the FORMCHECKBOX/FORMTEXT/FORMDROPDOWN instruction is NOT additionally recorded -- it is mechanically derivable from the control type, and a form field is ONE construct (a contentControl), never a field construct beside it.
+// WordprocessingML's pre-SDT form-field vocabulary, spelled as form controls in document-schema.js's harmonised set: a checkbox maps to 'checkbox', a drop-down list to 'dropDown', and a text input to 'plainText' — the three members construct.ts's own control-type comments name w:ffData for. Anything else inside w:ffData (w:calcOnExit, macro hooks, help/status text, sizes) has no descriptor field and is quarantined verbatim in the descriptor's residue with the whole element, so a same-format writer can restore the control exactly; the FORMCHECKBOX/FORMTEXT/FORMDROPDOWN instruction is NOT additionally recorded — it is mechanically derivable from the control type, and a form field is ONE construct (a contentControl), never a field construct beside it.
 const FORM_CONTROL_TYPE_BY_TAG: ReadonlyMap<string, ContentControlType> =
   new Map([
     ["w:checkBox", "checkbox"],
@@ -475,7 +475,7 @@ function readOnOff(element: XmlElement | undefined): boolean | undefined {
   return val !== "0" && val !== "false" && val !== "off";
 }
 
-// The run carrying a field's opening w:fldChar, when that field is a legacy form field: the w:ffData child names the control. Returns undefined for an ordinary field (no w:ffData) -- the caller keeps its plain field descriptor.
+// The run carrying a field's opening w:fldChar, when that field is a legacy form field: the w:ffData child names the control. Returns undefined for an ordinary field (no w:ffData) — the caller keeps its plain field descriptor.
 export function readFormControlDescriptor(
   beginRun: XmlElement,
 ): ContentControlDescriptor | undefined {
@@ -510,13 +510,13 @@ export function readFormControlDescriptor(
     } else if (child.tag === "w:ddList") {
       const options: string[] = [];
       for (const item of childrenWithTag(child, "w:listItem")) {
-        // CT_FFDDListEntry spells its value attribute w:val -- unlike the SDT vocabulary's otherwise-identical CT_DdlListItem, whose value attribute is w:value (readListItemOptions above).
+        // CT_FFDDListEntry spells its value attribute w:val — unlike the SDT vocabulary's otherwise-identical CT_DdlListItem, whose value attribute is w:value (readListItemOptions above).
         const value = attr(item, "w:displayText") ?? attr(item, "w:val");
         if (value !== undefined) {
           options.push(decodeEntities(value));
         }
       }
-      // Reaching this branch at all already means the field is w:ddList -- a list-type field with zero w:listItem children is still a list field, so options is always set here, never gated on length (ExaDev/documents.js#1016).
+      // Reaching this branch at all already means the field is w:ddList — a list-type field with zero w:listItem children is still a list field, so options is always set here, never gated on length (ExaDev/documents.js#1016).
       descriptor.options = options;
     }
     break;

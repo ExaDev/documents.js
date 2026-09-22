@@ -3,7 +3,7 @@ import { readPropertySetStream } from "./read";
 import type { PropertyValue } from "./wire";
 import { PropertySetWriteError, writePropertySetStream } from "./write";
 
-// Coverage for the generic [MS-OLEPS] Property Set Stream writer (src/oleps/write.ts): round trips through this package's own reader (matching how every other write-side feature in this session is verified -- against the package's own reader, proving genuine conformance rather than internal self-consistency alone) for every type the writer supports, plus the deliberate VT_LPSTR refusal.
+// Coverage for the generic [MS-OLEPS] Property Set Stream writer (src/oleps/write.ts): round trips through this package's own reader (matching how every other write-side feature in this session is verified — against the package's own reader, proving genuine conformance rather than internal self-consistency alone) for every type the writer supports, plus the deliberate VT_LPSTR refusal.
 
 const FMTID_SUMMARY_INFORMATION = "{F29F85E0-4FF9-1068-AB91-08002B27B3D9}";
 
@@ -78,7 +78,7 @@ describe("writePropertySetStream", () => {
   });
 
   it("writes the PropertyIdentifierAndOffset dictionary itself in ascending PID order on the wire, not merely insertion order", () => {
-    // readPropertySetStream inserts properties into its own Map in whatever order the dictionary lists them, but a Map's key order is never asserted on above (the previous test re-sorts before comparing) -- this reads the three dictionary entries' own PID fields directly off the wire instead.
+    // readPropertySetStream inserts properties into its own Map in whatever order the dictionary lists them, but a Map's key order is never asserted on above (the previous test re-sorts before comparing) — this reads the three dictionary entries' own PID fields directly off the wire instead.
     const properties = new Map<number, PropertyValue>([
       [12, { type: "VT_I4", value: 3 }],
       [2, { type: "VT_I4", value: 1 }],
@@ -110,7 +110,7 @@ describe("writePropertySetStream", () => {
   });
 
   it("round-trips a title long enough to need mini-FAT-scale, multi-sector-scale content and characters needing surrogate pairs", () => {
-    const value = `${"x".repeat(2000)}\u{1F600}`; // an emoji is a UTF-16 surrogate pair -- charCodeAt-based encoding must carry both units through unchanged
+    const value = `${"x".repeat(2000)}\u{1F600}`; // an emoji is a UTF-16 surrogate pair — charCodeAt-based encoding must carry both units through unchanged
     const bytes = writePropertySetStream({
       formatId: FMTID_SUMMARY_INFORMATION,
       properties: new Map<number, PropertyValue>([
@@ -139,7 +139,7 @@ describe("writePropertySetStream", () => {
     expect(caught).toBeInstanceOf(PropertySetWriteError);
     expect((caught as Error).name).toBe("PropertySetWriteError");
     expect((caught as Error).message).toBe(
-      "writePropertySetStream cannot write a VT_LPSTR property: this writer emits Unicode (VT_LPWSTR) strings only, since encoding to an arbitrary ANSI codepage is out of scope -- see the package README's OLEPS scope note",
+      "writePropertySetStream cannot write a VT_LPSTR property: this writer emits Unicode (VT_LPWSTR) strings only, since encoding to an arbitrary ANSI codepage is out of scope — see the package README's OLEPS scope note",
     );
   });
 });

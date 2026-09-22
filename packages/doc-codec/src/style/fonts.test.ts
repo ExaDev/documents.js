@@ -22,7 +22,7 @@ describe("buildFontTable / parseFontTable round trip", () => {
   });
 });
 
-// Builds a minimal SttbfFfn by hand -- cData(2) + cbExtra(2), then one entry of a 1-byte cch followed by `record` verbatim -- so a malformed FFN record's own read-side rejection (too short, no terminator) can be tested independently of buildFontTable, which only ever produces well-formed ones.
+// Builds a minimal SttbfFfn by hand — cData(2) + cbExtra(2), then one entry of a 1-byte cch followed by `record` verbatim — so a malformed FFN record's own read-side rejection (too short, no terminator) can be tested independently of buildFontTable, which only ever produces well-formed ones.
 function sttbfFfnWithRecord(record: readonly number[]): Uint8Array {
   const bytes = new Uint8Array(4 + 1 + record.length);
   const view = new DataView(bytes.buffer);
@@ -52,7 +52,7 @@ describe("parseFontTable", () => {
   });
 
   it("rejects an FFN record whose xszFfn runs to the end with no null terminator", () => {
-    // Fixed head (39 zero bytes) then a name with every code unit non-zero, all the way to the record's own end -- no terminating zero pair anywhere.
+    // Fixed head (39 zero bytes) then a name with every code unit non-zero, all the way to the record's own end — no terminating zero pair anywhere.
     const record = [...new Array<number>(39).fill(0), 0x41, 0x00, 0x42, 0x00];
     const table = sttbfFfnWithRecord(record);
     expect(() => parseFontTable(table)).toThrow(

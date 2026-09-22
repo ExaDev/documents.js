@@ -1,4 +1,4 @@
-// Fixture builders for every tree-form DocumentTree kind, shaped against the real document-schema.js 4.0.0 field requirements -- every builder's output is asserted to pass DocumentTreeSchema.parse in the tests that use it, so a schema change in document-schema.js breaks these fixtures loudly instead of silently testing against a shape that no longer exists. Two layers: the leaf builders (paragraphs, tables, images, vectors, ...) and the group/package builders (headingGroup/sectionGroup/wordprocessingPackage/...), mirroring the tree's own two vocabularies. Never imported by src/index.ts and never reaching dist/ -- test-only, mirroring the family's test-support convention.
+// Fixture builders for every tree-form DocumentTree kind, shaped against the real document-schema.js 4.0.0 field requirements — every builder's output is asserted to pass DocumentTreeSchema.parse in the tests that use it, so a schema change in document-schema.js breaks these fixtures loudly instead of silently testing against a shape that no longer exists. Two layers: the leaf builders (paragraphs, tables, images, vectors, ...) and the group/package builders (headingGroup/sectionGroup/wordprocessingPackage/...), mirroring the tree's own two vocabularies. Never imported by src/index.ts and never reaching dist/ — test-only, mirroring the family's test-support convention.
 import type {
   ContentCellValue,
   ContentEmbeddedObject,
@@ -53,7 +53,7 @@ export interface ParagraphOptions {
   bold?: boolean;
 }
 
-// A bare paragraph LEAF (ContentParagraph): no headingLevel, no list membership -- exactly the payload that sits at a leaf position in a tree. The heading/list anchors are separate builders below, because in the tree vocabulary an anchored paragraph lives on its group's node, never as a leaf.
+// A bare paragraph LEAF (ContentParagraph): no headingLevel, no list membership — exactly the payload that sits at a leaf position in a tree. The heading/list anchors are separate builders below, because in the tree vocabulary an anchored paragraph lives on its group's node, never as a leaf.
 export function paragraph(
   text: string,
   options: ParagraphOptions = {},
@@ -61,11 +61,11 @@ export function paragraph(
   return {
     kind: "paragraph",
     runs: [textRun(text, { bold: options.bold })],
-    // headingLevel/listLevel here are for paragraphs that must carry the signal while sitting OUTSIDE a matching group (the heading-styled presentation leaf, the effective-resolution anchor variants), not for leaf-position grouping -- buildOutline reads signals only from group anchors.
+    // headingLevel/listLevel here are for paragraphs that must carry the signal while sitting OUTSIDE a matching group (the heading-styled presentation leaf, the effective-resolution anchor variants), not for leaf-position grouping — buildOutline reads signals only from group anchors.
     ...(options.headingLevel !== undefined
       ? { headingLevel: options.headingLevel }
       : {}),
-    // numId omitted deliberately on list paragraphs: since schema 3.3.0 it is optional, and OOXML drawing paragraphs carry only a level -- exactly the slide-body shape the presentation outline nests by.
+    // numId omitted deliberately on list paragraphs: since schema 3.3.0 it is optional, and OOXML drawing paragraphs carry only a level — exactly the slide-body shape the presentation outline nests by.
     ...(options.listLevel !== undefined
       ? { list: { level: options.listLevel } }
       : {}),
@@ -112,7 +112,7 @@ export function layoutFrame(
   return { pageIndex, xPt, yPt, widthPt, heightPt };
 }
 
-// A paragraph whose single run carries more than one frame -- the wrapped-run case: the run's content renders in two places without the node being split or duplicated.
+// A paragraph whose single run carries more than one frame — the wrapped-run case: the run's content renders in two places without the node being split or duplicated.
 export function wrappedRunParagraph(
   text: string,
   frames: LayoutFrame[],
@@ -135,7 +135,7 @@ export function sheetImage(altText?: string): ContentSheetImage {
   };
 }
 
-// An embedded whole wordprocessing document, block-flow-shaped via embeddedObjectBlock below or sheet-anchored as-is -- the recursive arm stays one intact leaf whichever container holds it. The payload is a flat ContentDocument, not a DocumentTree: schema 4 promotes the TOP-LEVEL package to tree form, but an embedded document stays the flat codec-exchange shape it always was.
+// An embedded whole wordprocessing document, block-flow-shaped via embeddedObjectBlock below or sheet-anchored as-is — the recursive arm stays one intact leaf whichever container holds it. The payload is a flat ContentDocument, not a DocumentTree: schema 4 promotes the TOP-LEVEL package to tree form, but an embedded document stays the flat codec-exchange shape it always was.
 export function embeddedObject(): ContentEmbeddedObject {
   return {
     objectKind: "wordprocessing",
@@ -213,12 +213,12 @@ export function vectorRect(): ContentVector {
   };
 }
 
-// A group's optional style ref into the package's styles table -- the field effectivePackage exists to consume. Plain {} at every call site keeps the anchor fixtures readable while the effective tests spell the ref out.
+// A group's optional style ref into the package's styles table — the field effectivePackage exists to consume. Plain {} at every call site keeps the anchor fixtures readable while the effective tests spell the ref out.
 interface GroupOptions {
   style?: string;
 }
 
-// The anchor paragraphs are built literally rather than through paragraph(), whose return type is the loose ContentParagraph with the grouping signal optional -- a group anchor's signal is structurally required, and the literal spread keeps it required without a cast.
+// The anchor paragraphs are built literally rather than through paragraph(), whose return type is the loose ContentParagraph with the grouping signal optional — a group anchor's signal is structurally required, and the literal spread keeps it required without a cast.
 export function headingGroup(
   text: string,
   headingLevel: number,
@@ -245,7 +245,7 @@ export function listGroup(
   };
 }
 
-// A construct group's node is a ConstructDescriptor, never a paragraph -- richText is the simplest member of the discriminated union (kind + controlType only), which is all these fixtures need since the outline builder never reads a construct's descriptor fields, only its kind (to recognise the wrapper) and its children.
+// A construct group's node is a ConstructDescriptor, never a paragraph — richText is the simplest member of the discriminated union (kind + controlType only), which is all these fixtures need since the outline builder never reads a construct's descriptor fields, only its kind (to recognise the wrapper) and its children.
 export function sectionConstructGroup(
   children: SectionChild[],
   options: GroupOptions = {},
@@ -370,7 +370,7 @@ export function drawPageGroup(
   };
 }
 
-// The envelope options every package builder shares -- exactly the DocumentTree fields outside `kind` and `children`, so a fixture can prove any envelope field survives alongside the tree without a second bespoke builder per kind.
+// The envelope options every package builder shares — exactly the DocumentTree fields outside `kind` and `children`, so a fixture can prove any envelope field survives alongside the tree without a second bespoke builder per kind.
 export interface PackageOptions {
   metadata?: LayoutMetadata;
   symbolTable?: SymbolTable;
@@ -382,7 +382,7 @@ export interface PackageOptions {
   destinations?: DefinitionsTable;
 }
 
-// The four tenant-generic root tables every package builder spreads in when present, in the schema's own field order -- one helper so a fixture can prove any envelope field beside the tree without a bespoke builder per kind.
+// The four tenant-generic root tables every package builder spreads in when present, in the schema's own field order — one helper so a fixture can prove any envelope field beside the tree without a bespoke builder per kind.
 function genericTableOptions(options: PackageOptions): Record<string, unknown> {
   return {
     ...(options.definitions !== undefined

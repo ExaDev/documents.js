@@ -1,6 +1,6 @@
 import { defineConfig } from "vitest/config";
 
-// The smoke project spawns the real built dist/bin.js as a child process (a genuine HTTP round trip, not just an in-process createRestServer() call), so it needs more headroom than an in-process unit test -- process spawn + waiting for the listening line on stderr.
+// The smoke project spawns the real built dist/bin.js as a child process (a genuine HTTP round trip, not just an in-process createRestServer() call), so it needs more headroom than an in-process unit test — process spawn + waiting for the listening line on stderr.
 const UNIT_TEST_TIMEOUT_MS = 10_000;
 const SMOKE_TEST_TIMEOUT_MS = 15_000;
 

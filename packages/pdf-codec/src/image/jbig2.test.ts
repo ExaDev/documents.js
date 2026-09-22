@@ -165,7 +165,7 @@ describe("decodeJbig2Embedded: failure policy", () => {
     stream: Uint8Array<ArrayBuffer>,
     type: number,
   ): Uint8Array<ArrayBuffer> {
-    // The page information segment is 11 header bytes plus 19 of data, so the second segment's own flags byte -- which carries its type in the low six bits -- sits at offset 34.
+    // The page information segment is 11 header bytes plus 19 of data, so the second segment's own flags byte — which carries its type in the low six bits — sits at offset 34.
     const patched = new Uint8Array(stream);
     patched[34] = type;
     return patched;

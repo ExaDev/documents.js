@@ -16,7 +16,7 @@ import type {
   XlsEditor,
 } from "documents.js";
 
-// RULE FOR EVERY SCREEN BUILT ON THIS STATE: documents.js's editor objects (DocxRun, OdtParagraph, PptxShape, OdsCell, OdgBoxVector, ...) are LIVE VIEWS over the mutable XML tree inside the decoded package -- `run.bold = true` edits that tree in place and produces no new object reference anywhere. Call the accessors (`editor.paragraphs()`, `slide.shapes()`, `sheet.cell(r, c)`) FRESH on every render and never cache their results in useState/useMemo: any mutation, from any screen, silently invalidates an array captured on an earlier render, and nothing in the type system or in React will tell you. `AppState.hasUnsavedChanges` flipping (and the new outer state object the reducer returns with it) is the ONLY re-render signal a mutation produces -- see the deliberate-impurity note in reducer.ts.
+// RULE FOR EVERY SCREEN BUILT ON THIS STATE: documents.js's editor objects (DocxRun, OdtParagraph, PptxShape, OdsCell, OdgBoxVector, ...) are LIVE VIEWS over the mutable XML tree inside the decoded package — `run.bold = true` edits that tree in place and produces no new object reference anywhere. Call the accessors (`editor.paragraphs()`, `slide.shapes()`, `sheet.cell(r, c)`) FRESH on every render and never cache their results in useState/useMemo: any mutation, from any screen, silently invalidates an array captured on an earlier render, and nothing in the type system or in React will tell you. `AppState.hasUnsavedChanges` flipping (and the new outer state object the reducer returns with it) is the ONLY re-render signal a mutation produces — see the deliberate-impurity note in reducer.ts.
 
 export type Screen =
   | { readonly kind: "launcher" }
@@ -130,7 +130,7 @@ export interface OdgOpenDocument {
 
 // `.odb` carries no editor: documents.js reads its embedded database's tables and offers no write direction at all, so `path` is always known (it was read from disk) and the document is permanently read-only.
 //
-// All three collections are resolved once, at open time, from the same decoded package -- `tables` from the embedded database's own storage, `forms`/`reports` from the static ODF sub-documents inside the package. They are plain immutable values rather than live views, so unlike an editor format's accessors (see the RULE at the top of this file) they are safe to hold on to across renders.
+// All three collections are resolved once, at open time, from the same decoded package — `tables` from the embedded database's own storage, `forms`/`reports` from the static ODF sub-documents inside the package. They are plain immutable values rather than live views, so unlike an editor format's accessors (see the RULE at the top of this file) they are safe to hold on to across renders.
 export interface OdbOpenDocument {
   readonly format: "odb";
   readonly tables: readonly HsqldbTable[];
@@ -139,7 +139,7 @@ export interface OdbOpenDocument {
   readonly path: string;
 }
 
-// Markdown now carries a genuine live-view editor: documents.js's `MarkdownEditor` (openMarkdown/createMarkdownEditor) mutates a real, mutable `ContentDocument` in memory -- `paragraph.appendRun({ text })` edits that document in place, the same live-view contract every other editor here follows, even though there is no `XmlElement` tree underneath it the way there is for docx/odt (see documents.js's own README, "src/edit/markdown/" architecture entry, and `MarkdownEditor.toMarkdownText()`, which re-serialises the whole document fresh on every call rather than exposing a `toBytes()`). `originalText` is the literal text this document was opened/saved with, kept ONLY for the read-only `:view-source` screen -- it is never mutated and never written back directly, so it stays decoupled from whatever `editor` currently holds. `path` is optional, matching every other writable format (`undefined` for a document created fresh with no path yet, including through the "new markdown document" picker entry, which seeds `originalText: undefined` too since a freshly created document was never opened from real source text).
+// Markdown now carries a genuine live-view editor: documents.js's `MarkdownEditor` (openMarkdown/createMarkdownEditor) mutates a real, mutable `ContentDocument` in memory — `paragraph.appendRun({ text })` edits that document in place, the same live-view contract every other editor here follows, even though there is no `XmlElement` tree underneath it the way there is for docx/odt (see documents.js's own README, "src/edit/markdown/" architecture entry, and `MarkdownEditor.toMarkdownText()`, which re-serialises the whole document fresh on every call rather than exposing a `toBytes()`). `originalText` is the literal text this document was opened/saved with, kept ONLY for the read-only `:view-source` screen — it is never mutated and never written back directly, so it stays decoupled from whatever `editor` currently holds. `path` is optional, matching every other writable format (`undefined` for a document created fresh with no path yet, including through the "new markdown document" picker entry, which seeds `originalText: undefined` too since a freshly created document was never opened from real source text).
 export interface MarkdownOpenDocument {
   readonly format: "markdown";
   readonly editor: MarkdownEditor;
@@ -147,7 +147,7 @@ export interface MarkdownOpenDocument {
   readonly path: string | undefined;
 }
 
-// A PDF opens through documents.js's own live-view `PdfEditor` (openPdf/createPdf) -- `layout` is `editor.toLayoutDocument()`, the exact same `LayoutDocument` object the editor mutates in place, kept alongside so every existing reader of `doc.layout` (the pdf/xlsx page-list/page-items/item-detail screen family, shared with XlsxOpenDocument below) keeps working unmodified: a mutation through `editor` is a mutation of the identical object `layout` already points to, not a separate snapshot that could drift out of sync. `path` is `undefined` for a freshly created blank PDF (`createPdf()`), matching every other EditableOpenDocument variant.
+// A PDF opens through documents.js's own live-view `PdfEditor` (openPdf/createPdf) — `layout` is `editor.toLayoutDocument()`, the exact same `LayoutDocument` object the editor mutates in place, kept alongside so every existing reader of `doc.layout` (the pdf/xlsx page-list/page-items/item-detail screen family, shared with XlsxOpenDocument below) keeps working unmodified: a mutation through `editor` is a mutation of the identical object `layout` already points to, not a separate snapshot that could drift out of sync. `path` is `undefined` for a freshly created blank PDF (`createPdf()`), matching every other EditableOpenDocument variant.
 export interface PdfOpenDocument {
   readonly format: "pdf";
   readonly editor: PdfEditor;
@@ -155,7 +155,7 @@ export interface PdfOpenDocument {
   readonly path: string | undefined;
 }
 
-// documents.js has no XlsxEditor at all -- there is no live-view object to hold, the way there is a `DocxEditor`/`OdtEditor`, and no `readXlsxContent` re-exported from documents.js's own public surface for this TUI to read a sheet grid from directly (see that package's own README: deliberately not re-exported, mirroring the readDocx/readPptx choice). What documents.js does have is a genuine `xlsxToPdf` conversion, so opening a .xlsx converts it through that once at open time and reads the result back with `readPdf`, exactly the same `LayoutDocument` shape a real .pdf opens as -- `layout` is what the pdf page-list/page-items/item-detail screens browse (see screens/editors/pdf/shared.ts's own broadened guard), reusing that whole screen family with no xlsx-specific viewer code at all. `bytes` is kept alongside so a real export re-runs `xlsxToPdf` with the caller's own fonts/diagnostics options at export time, rather than writing back the fixed preview conversion computed here.
+// documents.js has no XlsxEditor at all — there is no live-view object to hold, the way there is a `DocxEditor`/`OdtEditor`, and no `readXlsxContent` re-exported from documents.js's own public surface for this TUI to read a sheet grid from directly (see that package's own README: deliberately not re-exported, mirroring the readDocx/readPptx choice). What documents.js does have is a genuine `xlsxToPdf` conversion, so opening a .xlsx converts it through that once at open time and reads the result back with `readPdf`, exactly the same `LayoutDocument` shape a real .pdf opens as — `layout` is what the pdf page-list/page-items/item-detail screens browse (see screens/editors/pdf/shared.ts's own broadened guard), reusing that whole screen family with no xlsx-specific viewer code at all. `bytes` is kept alongside so a real export re-runs `xlsxToPdf` with the caller's own fonts/diagnostics options at export time, rather than writing back the fixed preview conversion computed here.
 export interface XlsxOpenDocument {
   readonly format: "xlsx";
   readonly layout: LayoutDocument;
@@ -163,7 +163,7 @@ export interface XlsxOpenDocument {
   readonly path: string;
 }
 
-// csv is the same read-only-preview story as xlsx one variant over: documents.js has no csv editor (a csv file is one sheet of raw RFC 4180 text, not a package with an XML tree to hold a live view into), but it does have `csvToPdf`, so a .csv opens as that conversion's own `readPdf` result and browses through the identical pdf page-list family. A multi-sheet source never reaches here -- a csv file is exactly one sheet by construction, so no sheet selection is needed at open time the way a spreadsheet-to-csv conversion needs one at write time.
+// csv is the same read-only-preview story as xlsx one variant over: documents.js has no csv editor (a csv file is one sheet of raw RFC 4180 text, not a package with an XML tree to hold a live view into), but it does have `csvToPdf`, so a .csv opens as that conversion's own `readPdf` result and browses through the identical pdf page-list family. A multi-sheet source never reaches here — a csv file is exactly one sheet by construction, so no sheet selection is needed at open time the way a spreadsheet-to-csv conversion needs one at write time.
 export interface CsvOpenDocument {
   readonly format: "csv";
   readonly layout: LayoutDocument;
@@ -187,7 +187,7 @@ export interface RtfOpenDocument {
   readonly path: string;
 }
 
-// wpd mirrors rtf: no editor -- wpd-codec is read-only, so there is no XmlElement tree and could never be a live view even in principle -- but a genuine `wpd -> pdf` layout-engine edge (documents.js's own composition engine, hasLayoutPath: true), opened read-only as its own `readPdf` result through the shared pdf screen family. Unlike rtf, there is no `wpdToPdf` named convenience function (wpd has no reverse direction to pair it with, and documents.js's own README states named forwarders are ergonomic sugar over `convertDocument`, not a requirement of a pair being routable), so `open-document.ts` reaches the identical edge through `convertDocument("wpd", "pdf", bytes)` directly.
+// wpd mirrors rtf: no editor — wpd-codec is read-only, so there is no XmlElement tree and could never be a live view even in principle — but a genuine `wpd -> pdf` layout-engine edge (documents.js's own composition engine, hasLayoutPath: true), opened read-only as its own `readPdf` result through the shared pdf screen family. Unlike rtf, there is no `wpdToPdf` named convenience function (wpd has no reverse direction to pair it with, and documents.js's own README states named forwarders are ergonomic sugar over `convertDocument`, not a requirement of a pair being routable), so `open-document.ts` reaches the identical edge through `convertDocument("wpd", "pdf", bytes)` directly.
 export interface WpdOpenDocument {
   readonly format: "wpd";
   readonly layout: LayoutDocument;
@@ -195,14 +195,14 @@ export interface WpdOpenDocument {
   readonly path: string;
 }
 
-// doc carries a genuine live-view editor: documents.js's `DocEditor` (openDoc/createDoc) holds the mutable wordprocessing ContentDocument doc-codec's own reader produces -- `paragraph.appendRun({ text })` edits that document in place, the same live-view contract every editor here follows, with no XmlElement tree underneath it the way docx/odt have (mirroring MarkdownEditor over the identical pivot shape). Saving is `editor.toBytes()`, a full re-serialisation through doc-codec's writer -- so, like markdown, the written bytes can legitimately differ from what was on disk wherever the writer's own round-trip normalises (a trailing empty paragraph on an empty section, twip-quantised page geometry). Unlike markdown, doc round-trips multiple sections: the paragraph screens browse the first section's blocks (the editor's own `paragraphs()` forwards), and every later section survives a save untouched.
+// doc carries a genuine live-view editor: documents.js's `DocEditor` (openDoc/createDoc) holds the mutable wordprocessing ContentDocument doc-codec's own reader produces — `paragraph.appendRun({ text })` edits that document in place, the same live-view contract every editor here follows, with no XmlElement tree underneath it the way docx/odt have (mirroring MarkdownEditor over the identical pivot shape). Saving is `editor.toBytes()`, a full re-serialisation through doc-codec's writer — so, like markdown, the written bytes can legitimately differ from what was on disk wherever the writer's own round-trip normalises (a trailing empty paragraph on an empty section, twip-quantised page geometry). Unlike markdown, doc round-trips multiple sections: the paragraph screens browse the first section's blocks (the editor's own `paragraphs()` forwards), and every later section survives a save untouched.
 export interface DocOpenDocument {
   readonly format: "doc";
   readonly editor: DocEditor;
   readonly path: string | undefined;
 }
 
-// xls carries a genuine live-view editor too: documents.js's `XlsEditor` (openXls/createXls) over the spreadsheet ContentDocument xls-codec reads and writes directly. `sheet.cell(r, c)` is find-or-create over the schema's own sparse cells array (the live-view RULE at the top of this file applies unchanged), and saving is `editor.toBytes()` through xls-codec's writer -- with the same writer-scope honesty the editor itself applies: formulas are readable but never written back.
+// xls carries a genuine live-view editor too: documents.js's `XlsEditor` (openXls/createXls) over the spreadsheet ContentDocument xls-codec reads and writes directly. `sheet.cell(r, c)` is find-or-create over the schema's own sparse cells array (the live-view RULE at the top of this file applies unchanged), and saving is `editor.toBytes()` through xls-codec's writer — with the same writer-scope honesty the editor itself applies: formulas are readable but never written back.
 export interface XlsOpenDocument {
   readonly format: "xls";
   readonly editor: XlsEditor;
@@ -224,7 +224,7 @@ export interface EpubOpenDocument {
   readonly path: string;
 }
 
-// The formats that have a live-view editor, and therefore support every mutating action, `editor.toBytes()` saving, undo snapshots. `odb`/`xlsx`/`csv`/`svg`/`rtf`/`wpd`/`epub` are read-only sources; `pdf` joined this union once documents.js gained a real live-view `PdfEditor` -- see PdfOpenDocument's own doc comment -- and `doc`/`xls`/`ppt` joined it when their codecs' writers gained live-view editors over the ContentDocument pivot (see DocOpenDocument's own doc comment). `pdf` is deliberately excluded from exportToPdf's own conversion set even though it is editable now: there is no docxToPdf-equivalent "convert a PDF to a PDF" function, and there does not need to be one -- editing and saving a PDF in place needs no conversion step at all.
+// The formats that have a live-view editor, and therefore support every mutating action, `editor.toBytes()` saving, undo snapshots. `odb`/`xlsx`/`csv`/`svg`/`rtf`/`wpd`/`epub` are read-only sources; `pdf` joined this union once documents.js gained a real live-view `PdfEditor` — see PdfOpenDocument's own doc comment — and `doc`/`xls`/`ppt` joined it when their codecs' writers gained live-view editors over the ContentDocument pivot (see DocOpenDocument's own doc comment). `pdf` is deliberately excluded from exportToPdf's own conversion set even though it is editable now: there is no docxToPdf-equivalent "convert a PDF to a PDF" function, and there does not need to be one — editing and saving a PDF in place needs no conversion step at all.
 export type EditableOpenDocument =
   | DocxOpenDocument
   | PptxOpenDocument
@@ -237,7 +237,7 @@ export type EditableOpenDocument =
   | XlsOpenDocument
   | PptOpenDocument;
 
-// Every format that can be written back to disk at all: the seven live-view-editor formats above, plus markdown through its own live-view MarkdownEditor. This is a strictly broader question than "does this have a `.editor` object" -- markdown genuinely does have one now, but `MarkdownEditor` has no `toBytes()` (it re-serialises the whole document fresh via `toMarkdownText()` instead, see MarkdownOpenDocument's own doc comment), which is exactly why markdown is NOT folded into EditableOpenDocument itself: every EditableOpenDocument call site (`reopenEditable` in reducer.ts, the `.editor.toBytes()` branches in exportToPdf/saveDocumentTo) assumes `.editor.toBytes()` exists verbatim. `mutate`/`mutateGuarded` (reducer.ts) DO take the wider `WritableOpenDocument`, via a small `toUndoSnapshot` helper that branches on the one place the two byte<->text boundaries genuinely differ. Screens that only need "can this be saved, and what extension does it get" (file-picker.tsx, save-as-prompt.tsx) should check WritableOpenDocument/isWritableDocument instead of EditableOpenDocument/isEditableDocument.
+// Every format that can be written back to disk at all: the seven live-view-editor formats above, plus markdown through its own live-view MarkdownEditor. This is a strictly broader question than "does this have a `.editor` object" — markdown genuinely does have one now, but `MarkdownEditor` has no `toBytes()` (it re-serialises the whole document fresh via `toMarkdownText()` instead, see MarkdownOpenDocument's own doc comment), which is exactly why markdown is NOT folded into EditableOpenDocument itself: every EditableOpenDocument call site (`reopenEditable` in reducer.ts, the `.editor.toBytes()` branches in exportToPdf/saveDocumentTo) assumes `.editor.toBytes()` exists verbatim. `mutate`/`mutateGuarded` (reducer.ts) DO take the wider `WritableOpenDocument`, via a small `toUndoSnapshot` helper that branches on the one place the two byte<->text boundaries genuinely differ. Screens that only need "can this be saved, and what extension does it get" (file-picker.tsx, save-as-prompt.tsx) should check WritableOpenDocument/isWritableDocument instead of EditableOpenDocument/isEditableDocument.
 export type WritableOpenDocument = EditableOpenDocument | MarkdownOpenDocument;
 
 export type OpenDocument =
@@ -333,7 +333,7 @@ export interface ErrorDetail {
   readonly detail: string | undefined;
 }
 
-// Cross-screen list cursors, keyed by `selectionKeyFor(screen)` so each screen INSTANCE (slide 3's shape list, slide 4's shape list) keeps its own cursor and navigating back restores where you were. A flat string-keyed map rather than a per-screen-kind union of shapes because the alternative -- a field per screen kind -- would need a reducer case per screen kind for what is one number, and because a screen with per-instance coordinates (slideDetail, cellDetail) needs those coordinates IN the key regardless. Absence means "not visited yet", which reads as index 0; use `selectedIndexFor` rather than indexing directly.
+// Cross-screen list cursors, keyed by `selectionKeyFor(screen)` so each screen INSTANCE (slide 3's shape list, slide 4's shape list) keeps its own cursor and navigating back restores where you were. A flat string-keyed map rather than a per-screen-kind union of shapes because the alternative — a field per screen kind — would need a reducer case per screen kind for what is one number, and because a screen with per-instance coordinates (slideDetail, cellDetail) needs those coordinates IN the key regardless. Absence means "not visited yet", which reads as index 0; use `selectedIndexFor` rather than indexing directly.
 export type SelectionState = Readonly<Record<string, number>>;
 
 export function selectionKeyFor(screen: Screen): string {
@@ -417,7 +417,7 @@ export interface AppState {
   readonly errorDetail: ErrorDetail | undefined;
   // Set by CONFIRM_QUIT (or by REQUEST_QUIT when there is nothing unsaved to confirm); the app shell watches it and calls Ink's `exit()`. A state flag rather than calling `exit()` from the reducer so quitting stays testable without rendering.
   readonly isExiting: boolean;
-  // The file picker's own starting directory (launcher.tsx reads this rather than calling process.cwd() itself), seeded from RunTuiOptions.cwd at startup -- lets an embedding caller (or a future `document-cli tui --cwd <dir>` flag) launch the picker somewhere other than the real process cwd.
+  // The file picker's own starting directory (launcher.tsx reads this rather than calling process.cwd() itself), seeded from RunTuiOptions.cwd at startup — lets an embedding caller (or a future `document-cli tui --cwd <dir>` flag) launch the picker somewhere other than the real process cwd.
   readonly cwd: string;
 }
 
@@ -460,7 +460,7 @@ export function currentScreen(state: AppState): Screen {
   return screen;
 }
 
-// True whenever something layered over the current screen owns the keyboard, INCLUDING the error-detail overlay (which has no `overlays` flag of its own -- `errorDetail` being set is what makes it visible). Every screen must pass `isActive: !anyOverlayOpen(state)` to its own `useInput`/`useNavigationInput` calls, because the app shell keeps the screen mounted underneath an open overlay and both would otherwise react to the same key press.
+// True whenever something layered over the current screen owns the keyboard, INCLUDING the error-detail overlay (which has no `overlays` flag of its own — `errorDetail` being set is what makes it visible). Every screen must pass `isActive: !anyOverlayOpen(state)` to its own `useInput`/`useNavigationInput` calls, because the app shell keeps the screen mounted underneath an open overlay and both would otherwise react to the same key press.
 export function anyOverlayOpen(state: AppState): boolean {
   const { overlays } = state;
   return (

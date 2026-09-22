@@ -16,7 +16,7 @@ describe("parseSvgColor", () => {
     expect(parseSvgColor("#f00")).toEqual({ r: 1, g: 0, b: 0 });
     expect(parseSvgColor("#f00f")).toEqual({ r: 1, g: 0, b: 0 });
     expect(parseSvgColor("#ff0000")).toEqual({ r: 1, g: 0, b: 0 });
-    // The 8-digit form\'s alpha is parsed for validity but not returned -- transparency is the reader\'s own diagnostic channel, never a flattened colour.
+    // The 8-digit form\'s alpha is parsed for validity but not returned — transparency is the reader\'s own diagnostic channel, never a flattened colour.
     expect(parseSvgColor("#ff000080")).toEqual({ r: 1, g: 0, b: 0 });
   });
 

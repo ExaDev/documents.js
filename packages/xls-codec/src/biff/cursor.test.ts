@@ -79,7 +79,7 @@ describe("BlockCursor", () => {
   });
 
   it("rejects a length-prefixed take() before allocating, rather than after reading runs out", () => {
-    // A length field taken straight from untrusted BIFF8 input (e.g. CFEx's own cbDxf, [MS-XLS] 2.4.64) can name up to 4 GiB from a record only a few real bytes long. take() must reject a count larger than the data actually remaining before it allocates, not merely fail partway through copying bytes -- an allocate-then-fail sequence still pays the allocation cost the check exists to avoid. Asserting the up-front check's OWN wording, not just that some BiffFormatError was thrown, is what actually proves this: the later per-byte read inside the copy loop throws a BiffFormatError too, with different wording, so a generic class-only assertion cannot tell the two apart.
+    // A length field taken straight from untrusted BIFF8 input (e.g. CFEx's own cbDxf, [MS-XLS] 2.4.64) can name up to 4 GiB from a record only a few real bytes long. take() must reject a count larger than the data actually remaining before it allocates, not merely fail partway through copying bytes — an allocate-then-fail sequence still pays the allocation cost the check exists to avoid. Asserting the up-front check's OWN wording, not just that some BiffFormatError was thrown, is what actually proves this: the later per-byte read inside the copy loop throws a BiffFormatError too, with different wording, so a generic class-only assertion cannot tell the two apart.
     const cursor = new BlockCursor([bytes(0x01, 0x02, 0x03)]);
 
     expect(() => cursor.take(0xffffffff)).toThrow(
@@ -88,7 +88,7 @@ describe("BlockCursor", () => {
   });
 
   it("computes remaining bytes correctly when the cursor sits exactly on an exhausted block, not just at construction", () => {
-    // A block exhausted by a prior read (offset === that block's own length) is a different unsettled moment than a freshly constructed cursor -- remainingTotal() must still settle from here before totalling, or it would count the already-exhausted block's own length a second time on top of the real remaining block's.
+    // A block exhausted by a prior read (offset === that block's own length) is a different unsettled moment than a freshly constructed cursor — remainingTotal() must still settle from here before totalling, or it would count the already-exhausted block's own length a second time on top of the real remaining block's.
     const cursor = new BlockCursor([
       bytes(0x01, 0x02),
       bytes(0x03, 0x04, 0x05),
@@ -121,7 +121,7 @@ describe("BlockCursor", () => {
   });
 
   it("rejects a u16 read running past the end of the last block on its very first byte, not just its second", () => {
-    // An empty cursor, not a one-byte one: u16() calls nextByte("u16") twice, once for its low byte and once for its high, and a fixture with exactly one byte available only ever exercises the SECOND call's own failure -- the first would have succeeded. Only a cursor with no bytes at all forces the first call itself to fail.
+    // An empty cursor, not a one-byte one: u16() calls nextByte("u16") twice, once for its low byte and once for its high, and a fixture with exactly one byte available only ever exercises the SECOND call's own failure — the first would have succeeded. Only a cursor with no bytes at all forces the first call itself to fail.
     const cursor = new BlockCursor([bytes()]);
 
     expect(() => cursor.u16()).toThrow(/^u16 runs past the end/);
@@ -146,7 +146,7 @@ describe("BlockCursor", () => {
 
     cursor.u8();
 
-    // A cursor with no unread bytes anywhere still rests at a specific, well-defined block index -- one past the single block just consumed, not two past it or further, however many times settle() re-runs afterwards.
+    // A cursor with no unread bytes anywhere still rests at a specific, well-defined block index — one past the single block just consumed, not two past it or further, however many times settle() re-runs afterwards.
     expect(cursor.blockPosition()).toBe(1);
     expect(cursor.blockPosition()).toBe(1);
   });

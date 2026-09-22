@@ -1,7 +1,7 @@
 import type { Alignment, ContentParagraph } from "document-schema.js";
 import { DocFormatError } from "../errors";
 
-// The inverse of pap.ts's applyParagraphSprms: a ContentParagraph's direct paragraph formatting to a PapxInFkp grpprl. Each property emits the LOGICAL sprm pap.ts reads (sprmPJc rather than sprmPJc80, sprmPDxaLeft rather than sprmPDxaLeft80) -- the "80" spellings exist for pre-2000 producers this package has no reason to imitate, and pap.ts's own last-Prl-wins fold means writing only the logical form round-trips exactly.
+// The inverse of pap.ts's applyParagraphSprms: a ContentParagraph's direct paragraph formatting to a PapxInFkp grpprl. Each property emits the LOGICAL sprm pap.ts reads (sprmPJc rather than sprmPJc80, sprmPDxaLeft rather than sprmPDxaLeft80) — the "80" spellings exist for pre-2000 producers this package has no reason to imitate, and pap.ts's own last-Prl-wins fold means writing only the logical form round-trips exactly.
 //
 // Opcodes are restated as local constants rather than imported from pap.ts, for the same reason chp-write.ts restates chp.ts's: this module's exports are coupled to the specification's own opcode table, not to a sibling module's private switch-case names.
 
@@ -18,7 +18,7 @@ const SPRM_P_DYA_AFTER = 0xa414;
 const SPRM_P_DYA_LINE = 0x6412;
 /** sprmPFPageBreakBefore: a 1-byte Bool8. */
 const SPRM_P_F_PAGE_BREAK_BEFORE = 0x2407;
-/** sprmPIlfo: a 2-byte signed one-based index into PlfLfo.rgLfo -- which list membership names. */
+/** sprmPIlfo: a 2-byte signed one-based index into PlfLfo.rgLfo — which list membership names. */
 const SPRM_P_ILFO = 0x460b;
 /** sprmPIlvl: a 1-byte zero-based list level. */
 const SPRM_P_ILVL = 0x260a;
@@ -56,7 +56,7 @@ function int16(value: number, what: string): number[] {
       `${what} is ${rounded} twips, outside the ${MIN_INT16}..${MAX_INT16} range a signed 2-byte sprm operand can hold`,
     );
   }
-  // No separate "add 0x10000 for a negative value" conversion: & and >> operate on the 32-bit two's complement form already, which for any value in MIN_INT16..MAX_INT16 has exactly the same low 16 bits as its unsigned 16-bit equivalent -- rounded & 0xff and (rounded >> 8) & 0xff already read the right two bytes whether rounded is negative or not.
+  // No separate "add 0x10000 for a negative value" conversion: & and >> operate on the 32-bit two's complement form already, which for any value in MIN_INT16..MAX_INT16 has exactly the same low 16 bits as its unsigned 16-bit equivalent — rounded & 0xff and (rounded >> 8) & 0xff already read the right two bytes whether rounded is negative or not.
   return [rounded & 0xff, (rounded >> 8) & 0xff];
 }
 
@@ -74,9 +74,9 @@ function pointsToTwips(pt: number): number {
   return pt * TWIPS_PER_POINT;
 }
 
-// Builds the PapxInFkp grpprl for one paragraph's direct formatting (excluding istd, which write.ts's caller places in GrpPrlAndIstd's own field rather than as a sprm -- see prop/fkp-write.ts). Returns an empty array for a paragraph with no direct formatting at all.
+// Builds the PapxInFkp grpprl for one paragraph's direct formatting (excluding istd, which write.ts's caller places in GrpPrlAndIstd's own field rather than as a sprm — see prop/fkp-write.ts). Returns an empty array for a paragraph with no direct formatting at all.
 //
-// `ilfoOf` resolves a paragraph's own ContentListMembership.numId to the one-based ilfo write.ts's own list/numbering-write.ts minted for it (every distinct numId in the document, in first-occurrence order -- see that module's own top comment) -- required whenever ANY paragraph in the call's document carries `list`, even one whose own numId this particular paragraph does not use, since the caller mints the whole map once up front. A paragraph whose `list` names a level but no numId (document-schema.js's own "a source format carries only a depth" case, e.g. an OOXML drawing paragraph's a:pPr/@lvl) writes neither sprm: [MS-DOC] has no way to state a list level without a list to belong to, so this is a genuine, permanent format gap rather than something to approximate -- the identical silent-drop precedent this writer already applies to hyperlinks and fields (see the README's own Writing scope table).
+// `ilfoOf` resolves a paragraph's own ContentListMembership.numId to the one-based ilfo write.ts's own list/numbering-write.ts minted for it (every distinct numId in the document, in first-occurrence order — see that module's own top comment) — required whenever ANY paragraph in the call's document carries `list`, even one whose own numId this particular paragraph does not use, since the caller mints the whole map once up front. A paragraph whose `list` names a level but no numId (document-schema.js's own "a source format carries only a depth" case, e.g. an OOXML drawing paragraph's a:pPr/@lvl) writes neither sprm: [MS-DOC] has no way to state a list level without a list to belong to, so this is a genuine, permanent format gap rather than something to approximate — the identical silent-drop precedent this writer already applies to hyperlinks and fields (see the README's own Writing scope table).
 export function encodeParagraphGrpprl(
   paragraph: Pick<
     ContentParagraph,
@@ -147,7 +147,7 @@ export function encodeParagraphGrpprl(
         `paragraph lineSpacing ${paragraph.lineSpacing} produces an LSPD.dyaLine of ${dyaLine}, outside the 0..${LSPD_MAX_MULTIPLE_DYA_LINE} range the multiplier form permits`,
       );
     }
-    // Written directly rather than through int16: the range check just above already guarantees dyaLine is 0..LSPD_MAX_MULTIPLE_DYA_LINE (0x7bc0), comfortably inside int16's own -32768..32767, so int16's own error path -- and the label it would report -- could never actually fire for this call.
+    // Written directly rather than through int16: the range check just above already guarantees dyaLine is 0..LSPD_MAX_MULTIPLE_DYA_LINE (0x7bc0), comfortably inside int16's own -32768..32767, so int16's own error path — and the label it would report — could never actually fire for this call.
     pushSprm(bytes, SPRM_P_DYA_LINE, [
       dyaLine & 0xff,
       (dyaLine >> 8) & 0xff,

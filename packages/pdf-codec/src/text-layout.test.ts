@@ -2,7 +2,7 @@ import type { TextMeasurer } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { wrapRunsToWidth, wrapTextToWidth } from "./text-layout";
 
-// A fake monospace measurer: every character is exactly 1pt wide at size 10 (i.e. sizePt/10 pt per character), so wrap-point assertions can be exact integers rather than depending on real font metrics -- this is the whole reason TextMeasurer is an interface (src/pdf/measure.ts).
+// A fake monospace measurer: every character is exactly 1pt wide at size 10 (i.e. sizePt/10 pt per character), so wrap-point assertions can be exact integers rather than depending on real font metrics — this is the whole reason TextMeasurer is an interface (src/pdf/measure.ts).
 function fakeMeasurer(): TextMeasurer {
   return {
     widthOfTextAtSize: (text, _font, sizePt) =>
@@ -28,7 +28,7 @@ function run(
   return { text, font: FONT, sizePt, color: COLOR };
 }
 
-// Fragments carry no text for the glue (space) atoms between them -- spacing is expressed purely via xOffsetPt, not literal space characters -- so reconstructing readable text for assertions means inserting a space wherever a fragment's offset leaves a gap after the previous one, rather than joining fragment text directly.
+// Fragments carry no text for the glue (space) atoms between them — spacing is expressed purely via xOffsetPt, not literal space characters — so reconstructing readable text for assertions means inserting a space wherever a fragment's offset leaves a gap after the previous one, rather than joining fragment text directly.
 const OFFSET_GAP_EPSILON = 1e-6;
 
 function lineTexts(

@@ -5,7 +5,7 @@ import { loadFormAndReportOdbReports } from "../../../../test-support/odb-fixtur
 import { settle, waitForFrame } from "../../../test-support.js";
 import { OdbHarness } from "./test-support.js";
 
-// Same reasoning as form-screens.test.tsx: the real fixture rather than a hand-built OdbReport, because the two things worth proving here -- a group key that is an expression rather than a bare column name, and the detail band sitting at report level -- are exactly the shapes a synthetic value would have got wrong.
+// Same reasoning as form-screens.test.tsx: the real fixture rather than a hand-built OdbReport, because the two things worth proving here — a group key that is an expression rather than a bare column name, and the detail band sitting at report level — are exactly the shapes a synthetic value would have got wrong.
 const REPORTS = loadFormAndReportOdbReports();
 
 const SAMPLE_TABLES: readonly HsqldbTable[] = [
@@ -33,7 +33,7 @@ describe("OdbReportListScreen and OdbReportDetailScreen", () => {
       candidate.includes("Reports (1 of 1)"),
     );
     expect(frame).toContain(
-      'SalesByRegion [reports/Obj11] -- on query "HighValueSales", 2 groups, 13 elements',
+      'SalesByRegion [reports/Obj11] — on query "HighValueSales", 2 groups, 13 elements',
     );
   });
 

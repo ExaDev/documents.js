@@ -15,7 +15,7 @@ const source = {
   format: "docx" as const,
 };
 
-// A byte-level signature unique to each targetFormat's own real output -- checked so a targetFormat branch silently falling through to a DIFFERENT renderer (all three return equally non-empty bytes) is actually caught.
+// A byte-level signature unique to each targetFormat's own real output — checked so a targetFormat branch silently falling through to a DIFFERENT renderer (all three return equally non-empty bytes) is actually caught.
 const FORMAT_SIGNATURES = {
   docx: "word/document.xml",
   odt: "opendocument.text",

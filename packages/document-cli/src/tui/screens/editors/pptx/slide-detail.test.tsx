@@ -24,7 +24,7 @@ const ENTER_KEY = "\r";
 const ESCAPE_KEY = "\x1B";
 const BACKSPACE_KEY = "\x7F";
 
-// The rows/columns TextField starts pre-filled with its own default value and the cursor at the end (see export-options.test.tsx's own comment on this exact TextField behaviour) -- typing a digit appends to that default rather than replacing it, so every test that wants a specific value first clears the single pre-filled default digit with one backspace.
+// The rows/columns TextField starts pre-filled with its own default value and the cursor at the end (see export-options.test.tsx's own comment on this exact TextField behaviour) — typing a digit appends to that default rather than replacing it, so every test that wants a specific value first clears the single pre-filled default digit with one backspace.
 async function replaceField(
   stdin: { readonly write: (data: string) => void },
   value: string,
@@ -76,7 +76,7 @@ function SlideDetailRouter(): ReactElement {
   }
 }
 
-// Reads the LIVE package fresh on every render, through the exact same content pivot real pptx/odp reading uses (readPptxContent/readOdpContent), and renders a one-line summary of slide 0's first shape's table (if any) and its own speaker notes. This is how these tests observe a mutation the reducer applied to the real package -- PptxSlide.shapes() itself never reports a table graphicFrame at all (see slide.tsx's own doc comment), so this probe, not the visible shape list, is the ground truth these tests check against.
+// Reads the LIVE package fresh on every render, through the exact same content pivot real pptx/odp reading uses (readPptxContent/readOdpContent), and renders a one-line summary of slide 0's first shape's table (if any) and its own speaker notes. This is how these tests observe a mutation the reducer applied to the real package — PptxSlide.shapes() itself never reports a table graphicFrame at all (see slide.tsx's own doc comment), so this probe, not the visible shape list, is the ground truth these tests check against.
 function DocumentProbe({
   format,
 }: {
@@ -109,7 +109,7 @@ function DocumentProbe({
   );
 }
 
-// Opens the test document AND pushes slideDetail for its one slide in a single effect -- this file has no interest in exercising the slideList -> slideDetail navigation hop the slide-family suite already covers.
+// Opens the test document AND pushes slideDetail for its one slide in a single effect — this file has no interest in exercising the slideList -> slideDetail navigation hop the slide-family suite already covers.
 function OpenAtSlideDetail({
   format,
   bytes,
@@ -176,7 +176,7 @@ describe('SlideDetailScreen "b" add-table affordance', () => {
       "pptx",
       buildPptxOneSlideBytes(),
     );
-    const initial = await waitForText(lastFrame, "Slide 1 -- 0 shapes");
+    const initial = await waitForText(lastFrame, "Slide 1 — 0 shapes");
     expect(initial).toContain("probe:table=none");
 
     await sendKey(stdin, "a");
@@ -195,9 +195,9 @@ describe('SlideDetailScreen "b" add-table affordance', () => {
     await replaceField(stdin, "2");
     await sendKey(stdin, ENTER_KEY);
 
-    // PptxSlide.shapes() never reports a table graphicFrame at all, so "0 shapes" staying put is the correct, expected read -- the probe line (built from the same content pivot real pptx reading uses) is what proves the table genuinely landed in the package.
+    // PptxSlide.shapes() never reports a table graphicFrame at all, so "0 shapes" staying put is the correct, expected read — the probe line (built from the same content pivot real pptx reading uses) is what proves the table genuinely landed in the package.
     const after = await waitForText(lastFrame, "probe:table=3x2");
-    expect(after).toContain("Slide 1 -- 0 shapes");
+    expect(after).toContain("Slide 1 — 0 shapes");
     expect(after).not.toContain("Rows:");
     expect(after).not.toContain("Columns:");
   });
@@ -207,10 +207,10 @@ describe('SlideDetailScreen "b" add-table affordance', () => {
       "odp",
       buildOdpOneSlideBytes(),
     );
-    await waitForText(lastFrame, "Slide 1 -- 0 shapes");
+    await waitForText(lastFrame, "Slide 1 — 0 shapes");
 
     await sendKey(stdin, "a");
-    // odp additionally offers r/e/n/p vector-primitive kinds here (see this file's own vector-creation describe block below) -- pptx has no equivalent, whose own chooseKind test further down still expects the plain textbox/image/table hint verbatim.
+    // odp additionally offers r/e/n/p vector-primitive kinds here (see this file's own vector-creation describe block below) — pptx has no equivalent, whose own chooseKind test further down still expects the plain textbox/image/table hint verbatim.
     await waitForText(
       lastFrame,
       "Add shape: t textbox, i image, b table, r rect, e ellipse, n line, p path, Esc cancel",
@@ -224,9 +224,9 @@ describe('SlideDetailScreen "b" add-table affordance', () => {
     await replaceField(stdin, "4");
     await sendKey(stdin, ENTER_KEY);
 
-    // OdpSlide.shapes() now excludes a table's own draw:frame (it used to double-expose it as a functionally-dead OdpShape whose .paragraphs()/.text silently returned nothing) -- "0 shapes" staying put is the correct, expected read now, matching pptx's own convention. The probe line (built from the same content pivot real odp reading uses) is what proves the table genuinely landed in the package, exactly as it already is for pptx.
+    // OdpSlide.shapes() now excludes a table's own draw:frame (it used to double-expose it as a functionally-dead OdpShape whose .paragraphs()/.text silently returned nothing) — "0 shapes" staying put is the correct, expected read now, matching pptx's own convention. The probe line (built from the same content pivot real odp reading uses) is what proves the table genuinely landed in the package, exactly as it already is for pptx.
     const after = await waitForText(lastFrame, "probe:table=2x4");
-    expect(after).toContain("Slide 1 -- 0 shapes");
+    expect(after).toContain("Slide 1 — 0 shapes");
   });
 
   it("cancels the add-table wizard on Escape without touching the document", async () => {
@@ -234,7 +234,7 @@ describe('SlideDetailScreen "b" add-table affordance', () => {
       "pptx",
       buildPptxOneSlideBytes(),
     );
-    await waitForText(lastFrame, "Slide 1 -- 0 shapes");
+    await waitForText(lastFrame, "Slide 1 — 0 shapes");
 
     await sendKey(stdin, "a");
     await waitForText(
@@ -245,7 +245,7 @@ describe('SlideDetailScreen "b" add-table affordance', () => {
     await waitForText(lastFrame, "Rows:");
 
     await sendKey(stdin, ESCAPE_KEY);
-    // The footer hint line is rendered unconditionally regardless of addMode (see slide-detail.tsx), so it is not itself a signal that the wizard closed -- the disappearance of the "Rows:" prompt is.
+    // The footer hint line is rendered unconditionally regardless of addMode (see slide-detail.tsx), so it is not itself a signal that the wizard closed — the disappearance of the "Rows:" prompt is.
     const after = await waitForFrame(
       lastFrame,
       (frame) => !frame.includes("Rows:"),
@@ -263,7 +263,7 @@ describe('SlideDetailScreen "n" notes affordance shared between pptx and odp', (
       "pptx",
       buildPptxOneSlideBytes(),
     );
-    await waitForText(lastFrame, "Slide 1 -- 0 shapes");
+    await waitForText(lastFrame, "Slide 1 — 0 shapes");
     expect(lastFrame()).toContain('notes=""');
 
     await sendKey(stdin, "n");
@@ -274,9 +274,9 @@ describe('SlideDetailScreen "n" notes affordance shared between pptx and odp', (
     await waitForText(lastFrame, "Q3 growth is up");
     stdin.write(ENTER_KEY);
 
-    // Back on slide-detail, with the probe now reading the real notes text back off PptxSlide.notes -- SET_SLIDE_NOTES was previously wired to odp only; this is the direct proof it now also commits for a pptx document.
+    // Back on slide-detail, with the probe now reading the real notes text back off PptxSlide.notes — SET_SLIDE_NOTES was previously wired to odp only; this is the direct proof it now also commits for a pptx document.
     const after = await waitForText(lastFrame, 'notes="Q3 growth is up"');
-    expect(after).toContain("Slide 1 -- 0 shapes");
+    expect(after).toContain("Slide 1 — 0 shapes");
   });
 
   it("opens the notes editor for an odp slide exactly as before", async () => {
@@ -284,7 +284,7 @@ describe('SlideDetailScreen "n" notes affordance shared between pptx and odp', (
       "odp",
       buildOdpOneSlideBytes(),
     );
-    await waitForText(lastFrame, "Slide 1 -- 0 shapes");
+    await waitForText(lastFrame, "Slide 1 — 0 shapes");
 
     await sendKey(stdin, "n");
     await waitForText(lastFrame, "Slide 1 notes");

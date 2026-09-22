@@ -1,4 +1,4 @@
-// The Worker-isomorphism proof, run inside a real workerd isolate by `pnpm test:workers` (vitest.workers.config.ts). The point is not the assertions -- the unit suite already covers what these read back -- it is that the whole read path, this package's own parser plus archive-codec's compound-file reader beneath it, executes at all in a runtime with no node:* modules and no Buffer global. A Node-only API anywhere in the graph makes the isolate throw rather than the expectation fail.
+// The Worker-isomorphism proof, run inside a real workerd isolate by `pnpm test:workers` (vitest.workers.config.ts). The point is not the assertions — the unit suite already covers what these read back — it is that the whole read path, this package's own parser plus archive-codec's compound-file reader beneath it, executes at all in a runtime with no node:* modules and no Buffer global. A Node-only API anywhere in the graph makes the isolate throw rather than the expectation fail.
 import { describe, expect, it } from "vitest";
 import {
   buildWpdFile,

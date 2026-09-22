@@ -25,7 +25,7 @@ import { formulaDocument } from "../../model/formula";
 import { buildOdtPackage } from "./content";
 import { createOdt } from "./editor";
 
-// The ODF embedded-formula WRITE path: a real formula sub-document ("Object N/content.xml") inside the odt package, referenced from a draw:frame/draw:object and listed in the manifest -- the structural inverse of odf.js's own readOdfFormulaMathMl, and the ODF-side symmetry of buildDocxPackage's OMML writing. Every assertion below is about the real package that came out, read back through odf.js's own reader rather than through a hand-written expectation of the XML.
+// The ODF embedded-formula WRITE path: a real formula sub-document ("Object N/content.xml") inside the odt package, referenced from a draw:frame/draw:object and listed in the manifest — the structural inverse of odf.js's own readOdfFormulaMathMl, and the ODF-side symmetry of buildDocxPackage's OMML writing. Every assertion below is about the real package that came out, read back through odf.js's own reader rather than through a hand-written expectation of the XML.
 
 function mel(tag: string, children: MathMlNode[] = []): MathMlElement {
   return { type: "element", tag, attributes: [], children };
@@ -160,7 +160,7 @@ describe("OdtBody.appendFormula", () => {
       (object) => attrValue(object, "xlink:href"),
     );
     expect(hrefs).toEqual(["./Object 1", "./Object 2"]);
-    // Both directories keep their real media type -- the second sync re-derives every sub-document's own type rather than blanking the first.
+    // Both directories keep their real media type — the second sync re-derives every sub-document's own type rather than blanking the first.
     const entries = readManifest(pkg).entries;
     expect(
       entries

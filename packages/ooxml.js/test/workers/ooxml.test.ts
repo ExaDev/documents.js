@@ -10,10 +10,10 @@ function assertSpreadsheet(
   expect(document.kind).toBe('spreadsheet');
 }
 
-// Proves ooxml.js's xlsx decode path executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. The path under test -- zipPackage (fflate, pure JS) -> decodePackage -> readXlsxContent (fast-xml-parser, pure JS) -- is deliberately Node-free; if any step touched node:fs/Buffer/process the workerd isolate would throw rather than these passing. The minimal xlsx parts are built inline as a Record<string, Uint8Array> (no node:fs/readFileSync -- workerd has no fs) and round-trip through the same zip/decode path src/typed/xlsx.test.ts already exercises under node. This is the runtime proof for ooxml.js issue #17. The second test extends the same proof to the DocumentTree boundary readXlsx/buildXlsxPackage sit on, since a structural transform is exactly the sort of pure-object code that could quietly acquire a Node dependency without any test noticing under node.
+// Proves ooxml.js's xlsx decode path executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. The path under test — zipPackage (fflate, pure JS) -> decodePackage -> readXlsxContent (fast-xml-parser, pure JS) — is deliberately Node-free; if any step touched node:fs/Buffer/process the workerd isolate would throw rather than these passing. The minimal xlsx parts are built inline as a Record<string, Uint8Array> (no node:fs/readFileSync — workerd has no fs) and round-trip through the same zip/decode path src/typed/xlsx.test.ts already exercises under node. This is the runtime proof for ooxml.js issue #17. The second test extends the same proof to the DocumentTree boundary readXlsx/buildXlsxPackage sit on, since a structural transform is exactly the sort of pure-object code that could quietly acquire a Node dependency without any test noticing under node.
 const enc = (s: string): Uint8Array<ArrayBuffer> => new TextEncoder().encode(s);
 
-// A complete minimal xlsx package: the parts every spreadsheet reader needs (root content-types, root rels, workbook, workbook rels, one worksheet). The worksheet carries a single row with a single inline-string cell (t="inlineStr") so no shared-strings part is required -- the cell's own <is><t> holds its value directly.
+// A complete minimal xlsx package: the parts every spreadsheet reader needs (root content-types, root rels, workbook, workbook rels, one worksheet). The worksheet carries a single row with a single inline-string cell (t="inlineStr") so no shared-strings part is required — the cell's own <is><t> holds its value directly.
 function minimalXlsxParts(): Record<string, Uint8Array<ArrayBuffer>> {
   return {
     '[Content_Types].xml': enc(
@@ -44,7 +44,7 @@ describe('ooxml.js xlsx decode and package assembly under the Cloudflare Workers
     assertSpreadsheet(document);
     expect(document.sheets).toHaveLength(1);
     expect(document.sheets[0]?.name).toBe('Sheet1');
-    // ContentSheet.cells is a flat array indexed by position, each carrying its own row/column indices -- the inline-string cell at A1 reads as a string ContentCellValue at row 0, column 0.
+    // ContentSheet.cells is a flat array indexed by position, each carrying its own row/column indices — the inline-string cell at A1 reads as a string ContentCellValue at row 0, column 0.
     const cell = document.sheets[0]?.cells[0];
     expect(cell?.row).toBe(0);
     expect(cell?.column).toBe(0);
@@ -52,7 +52,7 @@ describe('ooxml.js xlsx decode and package assembly under the Cloudflare Workers
   });
 
   it('assembles and writes the tree-form DocumentTree inside the isolate too', () => {
-    // The DocumentTree boundary (document-schema.js's decompose/factorStyles on the way out, flattenTree on the way back in) is pure structural transformation over plain objects, so it belongs on the Worker-isomorphic side of this package exactly as the codecs do -- asserted rather than assumed, since the whole point of this suite is that nothing in the published path quietly reaches for a Node API.
+    // The DocumentTree boundary (document-schema.js's decompose/factorStyles on the way out, flattenTree on the way back in) is pure structural transformation over plain objects, so it belongs on the Worker-isomorphic side of this package exactly as the codecs do — asserted rather than assumed, since the whole point of this suite is that nothing in the published path quietly reaches for a Node API.
     const pkg = decodePackage(zipPackage(minimalXlsxParts()));
     const document = readXlsx(pkg);
 
@@ -61,7 +61,7 @@ describe('ooxml.js xlsx decode and package assembly under the Cloudflare Workers
     // The tree's inverse, run in the isolate: flattening it back reproduces exactly what the content-level reader returns.
     expect(flattenTree(document)).toEqual(readXlsxContent(pkg));
 
-    // And the write side, all the way back out to bytes. What survives the pair is src/typed/document-tree.test.ts's business, not this suite's -- here the point is only that every step of it executes under workerd, so this asserts the cell rather than the whole package.
+    // And the write side, all the way back out to bytes. What survives the pair is src/typed/document-tree.test.ts's business, not this suite's — here the point is only that every step of it executes under workerd, so this asserts the cell rather than the whole package.
     const rewritten = readXlsx(decodePackage(encodePackage(buildXlsxPackage(document))));
     expect(rewritten.kind === 'spreadsheet' ? rewritten.children[0]?.node.cells[0]?.value : undefined).toEqual({ kind: 'string', value: 'Hello from workerd' });
   });
@@ -94,7 +94,7 @@ describe('ooxml.js pptx OLE embedded-object recovery under the Cloudflare Worker
   };
 
   it('recovers an OLE-embedded xlsx inside a pptx with no Node-only APIs on the path', () => {
-    // The full embedded-object recovery path -- slide relationship resolution -> binary payload part -> archive-codec's isZipArchive -> nested parsePackage -> readXlsxContent -> ContentEmbeddedObjectBlock -- is published runtime src, so it is held to the same Worker-isomorphism contract as the rest of this package. The host pptx is built inline in the Package object model (no fallback picture: the frame's display path is not what this test proves) and its embeddings part carries the same real minimal xlsx bytes the node suites use (src/test-support/embedded.ts), so the nested decode runs over genuine ZIP bytes inside the isolate.
+    // The full embedded-object recovery path — slide relationship resolution -> binary payload part -> archive-codec's isZipArchive -> nested parsePackage -> readXlsxContent -> ContentEmbeddedObjectBlock — is published runtime src, so it is held to the same Worker-isomorphism contract as the rest of this package. The host pptx is built inline in the Package object model (no fallback picture: the frame's display path is not what this test proves) and its embeddings part carries the same real minimal xlsx bytes the node suites use (src/test-support/embedded.ts), so the nested decode runs over genuine ZIP bytes inside the isolate.
     const doc = readPptxContent(pptxWithOlePayload('oleObject1.xlsx', minimalXlsxBytes()));
     const shape = doc.slides[0]?.shapes[0];
     // No fallback picture, so the frame's blocks are the progId stand-in paragraph plus the recovered embedded object.
@@ -105,7 +105,7 @@ describe('ooxml.js pptx OLE embedded-object recovery under the Cloudflare Worker
   });
 
   it('recovers a classic compound-file .bin payload (an OLE-packaged xlsx) inside the isolate too', () => {
-    // The CFB arm of the same recovery -- isCompoundFile -> archive-codec's bounded compound-file reader -> OLE Package unwrapping -> the ZIP path above -- is what makes the whole payload surface Worker-isomorphic, so the .bin spelling gets its own isolate proof rather than inheriting the ZIP one. The mini-stream placement the builder chooses for a payload below the 4096-byte cutoff exercises the mini-FAT walk under workerd as well.
+    // The CFB arm of the same recovery — isCompoundFile -> archive-codec's bounded compound-file reader -> OLE Package unwrapping -> the ZIP path above — is what makes the whole payload surface Worker-isomorphic, so the .bin spelling gets its own isolate proof rather than inheriting the ZIP one. The mini-stream placement the builder chooses for a payload below the 4096-byte cutoff exercises the mini-FAT walk under workerd as well.
     const doc = readPptxContent(pptxWithOlePayload('oleObject1.bin', oleObjectBin(minimalXlsxBytes())));
     const shape = doc.slides[0]?.shapes[0];
     const embedded = shape?.blocks.find((block) => block.kind === 'embeddedObject');
@@ -117,7 +117,7 @@ describe('ooxml.js pptx OLE embedded-object recovery under the Cloudflare Worker
 
 describe('ooxml.js docx OLE embedded-object recovery under the Cloudflare Workers runtime', () => {
   it('recovers an OLE-embedded xlsx inside a docx with no Node-only APIs on the path', () => {
-    // The docx arm of the embedded-object recovery -- document relationship resolution -> binary payload part -> readEmbeddedOoxmlPayload (which cycles back through this reader for a wordprocessing payload) -> ContentEmbeddedObjectBlock lifted beside its paragraph -- adds a new import edge onto the same Worker-isomorphic contract, so it gets its own isolate proof rather than inheriting the pptx one. The host docx is built inline in the Package object model (the VML preview has no reader, so it contributes nothing) and its embeddings part carries the same real minimal xlsx bytes the node suites use.
+    // The docx arm of the embedded-object recovery — document relationship resolution -> binary payload part -> readEmbeddedOoxmlPayload (which cycles back through this reader for a wordprocessing payload) -> ContentEmbeddedObjectBlock lifted beside its paragraph — adds a new import edge onto the same Worker-isomorphic contract, so it gets its own isolate proof rather than inheriting the pptx one. The host docx is built inline in the Package object model (the VML preview has no reader, so it contributes nothing) and its embeddings part carries the same real minimal xlsx bytes the node suites use.
     const objectParagraph = el('w:p', {}, [
       el('w:r', {}, [
         el('w:object', { 'w:dxaOrig': '1920', 'w:dyaOrig': '1200' }, [
@@ -149,7 +149,7 @@ describe('ooxml.js docx OLE embedded-object recovery under the Cloudflare Worker
     const sheet = embedded?.kind === 'embeddedObject' && embedded.document.kind === 'spreadsheet' ? embedded.document.sheets[0] : undefined;
     expect(sheet?.cells[0]?.value).toEqual({ kind: 'string', value: 'Recovered cell' });
 
-    // And the write side of the pair, all the way back out through the nested serialisation: the w:object emitter re-serialises the recovered workbook through buildXlsxPackageFromContent and encodePackage (a second zip, inside the isolate) before the host docx itself is ever assembled -- proving that whole new path is Node-free by executing it here, the same convention the xlsx write-side proof above follows. The re-read recovers the same embedded content from the rewritten package.
+    // And the write side of the pair, all the way back out through the nested serialisation: the w:object emitter re-serialises the recovered workbook through buildXlsxPackageFromContent and encodePackage (a second zip, inside the isolate) before the host docx itself is ever assembled — proving that whole new path is Node-free by executing it here, the same convention the xlsx write-side proof above follows. The re-read recovers the same embedded content from the rewritten package.
     const rewritten = buildDocxPackageFromContent(doc);
     const reEmbedded = readDocxContent(rewritten).sections[0]?.blocks.find((block) => block.kind === 'embeddedObject');
     expect(reEmbedded?.kind === 'embeddedObject' ? reEmbedded.objectKind : undefined).toBe('spreadsheet');

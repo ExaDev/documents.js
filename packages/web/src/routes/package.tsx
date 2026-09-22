@@ -23,7 +23,7 @@ export const Route = createFileRoute("/package")({
   component: PackagePage,
 });
 
-// The Package / JSON tool: a document's internal structure as editable JSON, dump to restore. The dump is the tree-form DocumentTree (stamped with its release-pinned $schema URI) exactly as the reader produced it -- the same artefact a conversion pipeline carries internally, not the preview-normalised form -- and restore round-trips that JSON back into real bytes for the document's own format through the identical validation every other tree consumer applies.
+// The Package / JSON tool: a document's internal structure as editable JSON, dump to restore. The dump is the tree-form DocumentTree (stamped with its release-pinned $schema URI) exactly as the reader produced it — the same artefact a conversion pipeline carries internally, not the preview-normalised form — and restore round-trips that JSON back into real bytes for the document's own format through the identical validation every other tree consumer applies.
 function PackagePage() {
   const [file, setFile] = useState<OpenedFile | undefined>(undefined);
   const [format, setFormat] = useState<DocumentFormat | undefined>(undefined);
@@ -38,11 +38,11 @@ function PackagePage() {
     setFormat(inferred);
     setJson("");
     if (inferred === undefined) {
-      // No mutate() follows for this pick, so nothing else clears a previous file's read result on its own -- without this, isPending from a still-settling previous read would keep showing "Loading document structure…" underneath the "does not identify a known format" alert.
+      // No mutate() follows for this pick, so nothing else clears a previous file's read result on its own — without this, isPending from a still-settling previous read would keep showing "Loading document structure…" underneath the "does not identify a known format" alert.
       readContent.reset();
       return;
     }
-    // A restore still in flight for the previous file belongs to that file, not this one -- left unreset, its own pending state would still show the new file's Restore button as loading the moment this read resolves and the panel reappears.
+    // A restore still in flight for the previous file belongs to that file, not this one — left unreset, its own pending state would still show the new file's Restore button as loading the moment this read resolves and the panel reappears.
     restoreContent.reset();
     readContent.mutate(
       { format: inferred, bytes: opened.bytes },
@@ -67,7 +67,7 @@ function PackagePage() {
       return;
     }
     restoreContent.mutate(
-      // The worker validates the parsed value against the tree schema and re-stamps the artefact's $schema URI -- UI code may not import documents.js's schemas directly, so the whole restore contract lives that side of the RPC boundary.
+      // The worker validates the parsed value against the tree schema and re-stamps the artefact's $schema URI — UI code may not import documents.js's schemas directly, so the whole restore contract lives that side of the RPC boundary.
       { format, package: parsed },
       {
         onSuccess: (result) => {

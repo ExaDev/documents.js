@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ODF_NAMESPACES, xmlnsAttributes } from "./ns";
 
-// Every value here was verified directly against real LibreOffice-produced parts (see ns.ts's own top-of-file comment) -- these tests pin the exact strings so a future edit can't silently regress to a pattern-matched guess.
+// Every value here was verified directly against real LibreOffice-produced parts (see ns.ts's own top-of-file comment) — these tests pin the exact strings so a future edit can't silently regress to a pattern-matched guess.
 describe("ODF_NAMESPACES", () => {
   it("pins the three namespaces that are easy to get wrong by pattern-matching the prefix", () => {
     expect(ODF_NAMESPACES.draw).toBe(
@@ -56,7 +56,7 @@ describe("ODF_NAMESPACES", () => {
     );
   });
 
-  it('every namespace URI is version-pinned at ":1.0" or a fixed "-compatible" suffix, never a document-version-dependent number -- except rpt:, which predates OASIS standardisation and keeps its own openoffice.org-hosted URI unchanged', () => {
+  it('every namespace URI is version-pinned at ":1.0" or a fixed "-compatible" suffix, never a document-version-dependent number — except rpt:, which predates OASIS standardisation and keeps its own openoffice.org-hosted URI unchanged', () => {
     for (const [prefix, uri] of Object.entries(ODF_NAMESPACES)) {
       expect(
         uri.endsWith(":1.0") ||

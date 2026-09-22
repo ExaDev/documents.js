@@ -38,7 +38,7 @@ describe("parseToUnicodeCMap: bfchar", () => {
 
   it("drops a trailing unpaired byte from an odd-length UTF-16BE destination rather than manufacturing an extra code unit", () => {
     const { sink } = collectDiagnostics();
-    // <414243> is 3 raw bytes -- one complete UTF-16BE code unit (0x4142) plus a dangling 0x43 that forms no second pair.
+    // <414243> is 3 raw bytes — one complete UTF-16BE code unit (0x4142) plus a dangling 0x43 that forms no second pair.
     const cmap = parseToUnicodeCMap(
       textBytes("beginbfchar\n<0007> <414243>\nendbfchar"),
       sink,
@@ -107,7 +107,7 @@ describe("parseToUnicodeCMap: bfrange", () => {
 
   it("keeps a shared prefix fixed while only the final code unit increments", () => {
     const { sink } = collectDiagnostics();
-    // Destination is 'X' (0058) + a base unit 0041 -- only the trailing unit increments across the range.
+    // Destination is 'X' (0058) + a base unit 0041 — only the trailing unit increments across the range.
     const cmap = parseToUnicodeCMap(
       textBytes("beginbfrange\n<0000> <0002> <00580041>\nendbfrange"),
       sink,

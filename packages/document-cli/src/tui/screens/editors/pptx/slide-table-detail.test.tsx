@@ -74,7 +74,7 @@ function SlideTableRouter(): ReactElement {
   }
 }
 
-// Reads the LIVE package fresh on every render, through the exact same content pivot real pptx/odp reading uses -- how these tests observe a MERGE_SLIDE_TABLE_CELLS mutation the reducer applied to the real package.
+// Reads the LIVE package fresh on every render, through the exact same content pivot real pptx/odp reading uses — how these tests observe a MERGE_SLIDE_TABLE_CELLS mutation the reducer applied to the real package.
 function DocumentProbe({
   format,
 }: {
@@ -165,7 +165,7 @@ function renderAtSlideDetail(
   );
 }
 
-// Pushes straight to slideTableDetail with the given tableIndex, skipping slide-detail's own Enter-key navigation -- the only way to reach an OUT-OF-RANGE tableIndex, since the real UI never offers one that doesn't already correspond to a live table.
+// Pushes straight to slideTableDetail with the given tableIndex, skipping slide-detail's own Enter-key navigation — the only way to reach an OUT-OF-RANGE tableIndex, since the real UI never offers one that doesn't already correspond to a live table.
 function OpenAtSlideTableDetail({
   format,
   bytes,
@@ -256,8 +256,8 @@ describe.each(["pptx", "odp"] as const)(
       const { lastFrame, stdin } = renderAtSlideDetail(format, bytes);
       const initial = await waitForText(lastFrame, "Tables (1)");
       expect(initial).toContain("probe:anchorColSpan=1 anchorRowSpan=1");
-      // PptxSlide.shapes()/OdpSlide.shapes() never report a table -- "0 shapes" is the correct, expected read, matching the "b" add-table wizard's own tests.
-      expect(initial).toContain("Slide 1 -- 0 shapes");
+      // PptxSlide.shapes()/OdpSlide.shapes() never report a table — "0 shapes" is the correct, expected read, matching the "b" add-table wizard's own tests.
+      expect(initial).toContain("Slide 1 — 0 shapes");
 
       await sendKey(stdin, ENTER_KEY);
       await waitForText(lastFrame, "table 1 (3x3)");
@@ -375,7 +375,7 @@ describe.each(["pptx", "odp"] as const)(
       const atBottomRight = await waitForText(lastFrame, "m/Enter to merge");
       expect(atBottomRight).toContain("table 1 (3x3)");
 
-      // Committing the merge at the clamped bottom-right cell against itself as anchor is a 1x1 merge (a same-cell no-op) -- proves the clamp landed on the last real cell rather than an out-of-bounds one, since a stale unclamped index would target a cell resolveSlideTable's own bounds check would reject.
+      // Committing the merge at the clamped bottom-right cell against itself as anchor is a 1x1 merge (a same-cell no-op) — proves the clamp landed on the last real cell rather than an out-of-bounds one, since a stale unclamped index would target a cell resolveSlideTable's own bounds check would reject.
       await sendKey(stdin, "m");
       const merged = await waitForText(
         lastFrame,

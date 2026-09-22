@@ -17,7 +17,7 @@ export function assertDocxWritableImageFormat(
 ): asserts format is "png" | "jpeg" | "gif" {
   if (format === "svg") {
     throw new Error(
-      "buildDocxPackage: an image block in svg format has no OOXML blip this writer can produce (WordprocessingML's a:blip only references a raster part Word decodes directly -- png/jpeg/gif)",
+      "buildDocxPackage: an image block in svg format has no OOXML blip this writer can produce (WordprocessingML's a:blip only references a raster part Word decodes directly — png/jpeg/gif)",
     );
   }
 }
@@ -96,7 +96,7 @@ export function buildInlineDrawing(
     el("wp:docPr", { id: String(id), name }),
     graphic,
   ]);
-  // Namespace prefixes (wp:/a:/pic:/r:) are declared locally on w:drawing rather than assumed to be declared at the document root -- this fragment is then valid XML on its own regardless of what the enclosing word/document.xml root element does or doesn't declare.
+  // Namespace prefixes (wp:/a:/pic:/r:) are declared locally on w:drawing rather than assumed to be declared at the document root — this fragment is then valid XML on its own regardless of what the enclosing word/document.xml root element does or doesn't declare.
   return el(
     "w:drawing",
     {
@@ -115,7 +115,7 @@ export interface MediaContext {
   readonly mediaDir: string;
 }
 
-// Adds the binary media part + content-type entry + relationship (src/opc/media.ts's addImageMedia), then returns the w:drawing fragment referencing it -- the caller (DocxParagraph) is responsible for inserting the fragment into a w:r at the right place in the document tree.
+// Adds the binary media part + content-type entry + relationship (src/opc/media.ts's addImageMedia), then returns the w:drawing fragment referencing it — the caller (DocxParagraph) is responsible for inserting the fragment into a w:r at the right place in the document tree.
 export function insertImageMedia(
   context: MediaContext,
   documentRoot: XmlElement,

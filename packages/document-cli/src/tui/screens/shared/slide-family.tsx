@@ -72,7 +72,7 @@ export function buildPptSlideFamilyAdapter(
   return buildSlideFamilyAdapter("ppt", editor);
 }
 
-// The one narrowing every pptx/odp screen in this family needs: `state.openDocument` is a nine-member union, but a slide-family screen only ever exists on the stack while a pptx or odp document is open, since every screen in this family is only ever pushed by another screen in this family that already checked this. Throws rather than returning undefined because reaching this function with the wrong document open is a screen-router wiring bug, not a recoverable runtime state -- matching `currentScreen`'s own precedent in state/types.ts.
+// The one narrowing every pptx/odp screen in this family needs: `state.openDocument` is a nine-member union, but a slide-family screen only ever exists on the stack while a pptx or odp document is open, since every screen in this family is only ever pushed by another screen in this family that already checked this. Throws rather than returning undefined because reaching this function with the wrong document open is a screen-router wiring bug, not a recoverable runtime state — matching `currentScreen`'s own precedent in state/types.ts.
 export type PresentationOpenDocument =
   PptxOpenDocument | OdpOpenDocument | PptOpenDocument;
 
@@ -98,7 +98,7 @@ export function assertRichPresentationDocument(
 ): RichPresentationOpenDocument {
   if (doc === undefined || (doc.format !== "pptx" && doc.format !== "odp")) {
     throw new Error(
-      "Expected an open pptx or odp document here; the screen router in app.tsx should only reach this rich slide-family screen for one of those formats -- a ppt document routes to its own narrower detail screen.",
+      "Expected an open pptx or odp document here; the screen router in app.tsx should only reach this rich slide-family screen for one of those formats — a ppt document routes to its own narrower detail screen.",
     );
   }
   return doc;
@@ -107,7 +107,7 @@ export function assertRichPresentationDocument(
 const DEFAULT_FRAME_MARGIN_FRACTION = 0.1;
 const DEFAULT_FRAME_SIZE_FRACTION = 0.3;
 
-// A newly inserted shape needs some starting position and size -- there is no drag-to-place gesture in a terminal, see the shape-editor's own point-value frame fields -- so this derives a modest default from the slide's own declared size (a computable truth) rather than a bare literal point value that would be wrong for a widescreen vs standard-size deck.
+// A newly inserted shape needs some starting position and size — there is no drag-to-place gesture in a terminal, see the shape-editor's own point-value frame fields — so this derives a modest default from the slide's own declared size (a computable truth) rather than a bare literal point value that would be wrong for a widescreen vs standard-size deck.
 export function defaultShapeFrame(slideSize: PageSize): GeometryBox {
   return {
     xPt: slideSize.widthPt * DEFAULT_FRAME_MARGIN_FRACTION,
@@ -123,7 +123,7 @@ function truncate(text: string, maxLength: number): string {
   return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
 }
 
-// PptxShape/OdpShape expose no shape-kind discriminant at all -- no "this is a picture" flag, just `.text` and `.frame` -- and this app only ever creates a shape via ADD_TEXTBOX or ADD_IMAGE, so an empty-text shape is labelled [Image] as an honest best guess rather than a certainty; a real shape read from arbitrary source pptx/odp content could just as easily be a blank text box.
+// PptxShape/OdpShape expose no shape-kind discriminant at all — no "this is a picture" flag, just `.text` and `.frame` — and this app only ever creates a shape via ADD_TEXTBOX or ADD_IMAGE, so an empty-text shape is labelled [Image] as an honest best guess rather than a certainty; a real shape read from arbitrary source pptx/odp content could just as easily be a blank text box.
 export function describeSlideFamilyShape(
   shape: SlideFamilyShapeSummary,
 ): string {
@@ -139,7 +139,7 @@ interface SlideRow {
   readonly notes: string;
 }
 
-// ListView sizes its viewport from item COUNT alone (see list-view.tsx), and each row here renders one heading line plus one line per shape -- a slide with many shapes can therefore run past the computed viewport and scroll imperfectly. Accepted rather than worked around: ListView is a generic, format-agnostic primitive with no notion of variable-height rows, and teaching it that for this one caller would be scope creep into a shared component for a cosmetic edge case.
+// ListView sizes its viewport from item COUNT alone (see list-view.tsx), and each row here renders one heading line plus one line per shape — a slide with many shapes can therefore run past the computed viewport and scroll imperfectly. Accepted rather than worked around: ListView is a generic, format-agnostic primitive with no notion of variable-height rows, and teaching it that for this one caller would be scope creep into a shared component for a cosmetic edge case.
 function SlideRowView({
   row,
   isSelected,
@@ -217,7 +217,7 @@ export function SlideFamilySlideList(
       <ListView
         items={rows}
         selectedIndex={selectedIndex}
-        emptyMessage="No slides yet -- press 'a' to add one"
+        emptyMessage="No slides yet — press 'a' to add one"
         renderItem={(row, isSelected) => (
           <SlideRowView row={row} isSelected={isSelected} />
         )}

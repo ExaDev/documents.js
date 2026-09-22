@@ -71,7 +71,7 @@ describe("ascii85Decode", () => {
   });
 });
 
-// A tiny reference ASCII85 encoder, used only to build a known-good input for the partial-group decode test above -- independent of ascii85Decode itself, the same "independent oracle" pattern test-support/pdf.ts uses for FlateDecode fixtures.
+// A tiny reference ASCII85 encoder, used only to build a known-good input for the partial-group decode test above — independent of ascii85Decode itself, the same "independent oracle" pattern test-support/pdf.ts uses for FlateDecode fixtures.
 function ascii85DecodeRoundTripFixture(): string {
   const bytes = [0x00, 0x01];
   const padded = [...bytes, 0, 0];
@@ -114,9 +114,9 @@ describe("runLengthDecode", () => {
   });
 });
 
-// A minimal reference LZW encoder, test-only: an independent second implementation of the same ISO 32000-1 7.4.4 algorithm, used to build known-good bitstreams for lzwDecode to decode -- the same "independent oracle" reasoning as test-support/pdf.ts's own FlateDecode fixtures (built directly against fflate rather than through src/pdf/write.ts).
+// A minimal reference LZW encoder, test-only: an independent second implementation of the same ISO 32000-1 7.4.4 algorithm, used to build known-good bitstreams for lzwDecode to decode — the same "independent oracle" reasoning as test-support/pdf.ts's own FlateDecode fixtures (built directly against fflate rather than through src/pdf/write.ts).
 //
-// Deliberately tracks two separate counters, not one: `dictNextCode` (the code number assigned to each newly-recognised pattern, which can and must grow starting from the very first emitted code, since the encoder has one-symbol lookahead) and `widthNextCode` (which governs only the transmitted code WIDTH, and must stay one step behind -- because a decoder can never add a new dictionary entry until it has processed a *second* code to supply the "+1 byte" that completes the pattern, a real encoder's code-width schedule has to match that lag, not its own, earlier, lookahead-driven dictionary growth). Conflating the two into a single counter (the naive textbook-pseudocode reading) desyncs the code width from a standards-conformant decoder the first time growth crosses a threshold -- caught empirically via this very test.
+// Deliberately tracks two separate counters, not one: `dictNextCode` (the code number assigned to each newly-recognised pattern, which can and must grow starting from the very first emitted code, since the encoder has one-symbol lookahead) and `widthNextCode` (which governs only the transmitted code WIDTH, and must stay one step behind — because a decoder can never add a new dictionary entry until it has processed a *second* code to supply the "+1 byte" that completes the pattern, a real encoder's code-width schedule has to match that lag, not its own, earlier, lookahead-driven dictionary growth). Conflating the two into a single counter (the naive textbook-pseudocode reading) desyncs the code width from a standards-conformant decoder the first time growth crosses a threshold — caught empirically via this very test.
 function referenceLzwEncode(
   bytes: Uint8Array<ArrayBuffer>,
   earlyChange: boolean,
@@ -208,7 +208,7 @@ describe("lzwDecode", () => {
 
   it('decodes the "code equals next available code" (KwK) case', () => {
     const { sink } = collectDiagnostics();
-    // After 'A','B', dict[258]="AB" is assigned but code 259 is not yet -- decoding 259 must reconstruct it as prevEntry + prevEntry[0] ("BB").
+    // After 'A','B', dict[258]="AB" is assigned but code 259 is not yet — decoding 259 must reconstruct it as prevEntry + prevEntry[0] ("BB").
     const packed = packBits([
       { code: 65, width: 9 },
       { code: 66, width: 9 },
@@ -267,7 +267,7 @@ describe("decodeStream", () => {
 
   it("decodes FlateDecode combined with a PNG predictor (Predictor 12)", () => {
     const { sink } = collectDiagnostics();
-    // Two rows of 3 samples each, both "None" (filter type 0) -- pre-predictor bytes are the raw samples with a leading 0 per row.
+    // Two rows of 3 samples each, both "None" (filter type 0) — pre-predictor bytes are the raw samples with a leading 0 per row.
     const predicted = new Uint8Array([0, 1, 2, 3, 0, 4, 5, 6]);
     const compressed = zlibSync(predicted);
     const dict = pdfDict({
@@ -312,7 +312,7 @@ describe("decodeStream", () => {
   });
 
   it("passes JPXDecode bytes through unchanged, flagged as the remaining filter", () => {
-    // A JPEG 2000 codestream decodes to samples whose component count and depth come from the codestream rather than the image dictionary, so it is handed on undecoded for src/images-read.ts to deal with -- the same treatment DCTDecode gets, and for the same reason DecodedStream cannot express the result.
+    // A JPEG 2000 codestream decodes to samples whose component count and depth come from the codestream rather than the image dictionary, so it is handed on undecoded for src/images-read.ts to deal with — the same treatment DCTDecode gets, and for the same reason DecodedStream cannot express the result.
     const { sink, diagnostics } = collectDiagnostics();
     const raw = new Uint8Array([0xff, 0x4f, 0xff, 0x51]);
     const dict = pdfDict({ Filter: pdfName("JPXDecode") });

@@ -6,7 +6,7 @@ import {
   isMathMlNode,
 } from "./mathml";
 
-// A verbatim transcription of odf.js's own src/model/node.ts declarations (Attribute/XmlText/XmlCdata/XmlComment/XmlDeclaration/XmlPi/XmlElement/XmlNode), reproduced here rather than imported because odf.js is not a dependency of this package and must never become one -- this package sits below it in the dependency graph. The assignments below are the actual guarantee under test: an odf.js XmlNode (what readOdfFormula returns) must land in a MathMlNode field with no cast, wrapper, or field loss, which is only true while these two declarations stay structurally identical. If odf.js ever changes its node shape, this file is where that shows up.
+// A verbatim transcription of odf.js's own src/model/node.ts declarations (Attribute/XmlText/XmlCdata/XmlComment/XmlDeclaration/XmlPi/XmlElement/XmlNode), reproduced here rather than imported because odf.js is not a dependency of this package and must never become one — this package sits below it in the dependency graph. The assignments below are the actual guarantee under test: an odf.js XmlNode (what readOdfFormula returns) must land in a MathMlNode field with no cast, wrapper, or field loss, which is only true while these two declarations stay structurally identical. If odf.js ever changes its node shape, this file is where that shows up.
 interface OdfAttribute {
   name: string;
   value: string;

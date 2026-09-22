@@ -30,7 +30,7 @@ function pptFile(
   ]);
 }
 
-/** The same synthetic presentation pptFile builds, with a real "\x05SummaryInformation" stream added beside it -- composed with archive-codec's own writeSummaryInformationStream rather than by extending test-support/compound-file.ts, which stays a pure [MS-CFB]-only fixture builder. */
+/** The same synthetic presentation pptFile builds, with a real "\x05SummaryInformation" stream added beside it — composed with archive-codec's own writeSummaryInformationStream rather than by extending test-support/compound-file.ts, which stays a pure [MS-CFB]-only fixture builder. */
 function pptFileWithMetadata(
   metadata: Parameters<typeof writeSummaryInformationStream>[0],
   options: Parameters<typeof syntheticPresentation>[0] = {},
@@ -55,7 +55,7 @@ describe("readPptStreams", () => {
       currentUserStream,
       powerPointDocumentStream,
     ).slides;
-    // 5760 and 4320 master units at 576 per inch are 10 x 7.5 inches, the classic 4:3 slide -- 720 x 540 points.
+    // 5760 and 4320 master units at 576 per inch are 10 x 7.5 inches, the classic 4:3 slide — 720 x 540 points.
     expect(slide?.size).toEqual({ widthPt: 720, heightPt: 540 });
   });
 
@@ -111,7 +111,7 @@ describe("readPptStreams", () => {
   });
 
   it("splits the default body text's own carriage return into two paragraphs", () => {
-    // No bodyText option given at all, unlike every other test in this file that exercises paragraph-splitting behaviour -- this is the one test pinning the fixture's own default value, "First point\rSecond point", rather than a value a test supplied explicitly.
+    // No bodyText option given at all, unlike every other test in this file that exercises paragraph-splitting behaviour — this is the one test pinning the fixture's own default value, "First point\rSecond point", rather than a value a test supplied explicitly.
     const { currentUserStream, powerPointDocumentStream } =
       syntheticPresentation();
     const [slide] = readPptStreams(
@@ -125,7 +125,7 @@ describe("readPptStreams", () => {
   });
 
   it("states no rotationDeg at all for an unrotated plain shape, rather than an explicit undefined", () => {
-    // toEqual treats an explicit rotationDeg: undefined as equal to the key being absent, so an object-shape comparison alone can't tell the two apart -- only checking the key's own presence can.
+    // toEqual treats an explicit rotationDeg: undefined as equal to the key being absent, so an object-shape comparison alone can't tell the two apart — only checking the key's own presence can.
     const { currentUserStream, powerPointDocumentStream } =
       syntheticPresentation();
     const [slide] = readPptStreams(
@@ -143,7 +143,7 @@ describe("readPptStreams", () => {
       currentUserStream,
       powerPointDocumentStream,
     ).slides;
-    // The title placeholder's own text carries no StyleTextPropAtom at all (see syntheticPresentation's own construction) -- every field below comes from the master's TITLE-type TextMasterStyleAtom level 0, not from the run itself.
+    // The title placeholder's own text carries no StyleTextPropAtom at all (see syntheticPresentation's own construction) — every field below comes from the master's TITLE-type TextMasterStyleAtom level 0, not from the run itself.
     expect(slide?.shapes[0]?.blocks).toEqual([
       {
         kind: "paragraph",
@@ -151,7 +151,7 @@ describe("readPptStreams", () => {
           {
             text: "Quarterly review",
             bold: true,
-            // Accent 1 (colour-scheme slot 0x05) resolved against the master's own colour scheme -- see MASTER_COLOR_SCHEME's own comment in test-support/presentation.ts.
+            // Accent 1 (colour-scheme slot 0x05) resolved against the master's own colour scheme — see MASTER_COLOR_SCHEME's own comment in test-support/presentation.ts.
             color: { r: 0x1a / 255, g: 0x4b / 255, b: 0x8c / 255 },
           },
         ],
@@ -185,7 +185,7 @@ describe("readPptStreams", () => {
         currentUserStream,
         powerPointDocumentStream,
       ).slides;
-      // The third shape of the fixture: the picture, anchored top 360 left 1440 right 2160 bottom 2880 master units -- 45pt down, 180pt across, 100pt wide, 90pt tall.
+      // The third shape of the fixture: the picture, anchored top 360 left 1440 right 2160 bottom 2880 master units — 45pt down, 180pt across, 100pt wide, 90pt tall.
       expect(slide?.shapes[2]).toEqual({
         frame: { xPt: 180, yPt: 45, widthPt: 100, heightPt: 90 },
         insetLeftPt: 0,
@@ -306,7 +306,7 @@ describe("readPptStreams", () => {
     });
 
     it("derives the grid from each cell's own rectangle, not from the document order the cells arrive in, and ignores gridline shapes among them", () => {
-      // The cells are emitted in reverse document order (row 2 before row 1, and within each row, its second column before its first) -- if the grid were read off document order rather than sorted by each cell's own top/left, this would come back transposed or reversed. Two degenerate gridline shapes (the real spelling a genuine PowerPoint-authored table carries) sit among them; a reader that treated them as cells would plant a phantom row or column.
+      // The cells are emitted in reverse document order (row 2 before row 1, and within each row, its second column before its first) — if the grid were read off document order rather than sorted by each cell's own top/left, this would come back transposed or reversed. Two degenerate gridline shapes (the real spelling a genuine PowerPoint-authored table carries) sit among them; a reader that treated them as cells would plant a phantom row or column.
       const { currentUserStream, powerPointDocumentStream } =
         syntheticPresentation({
           table: {
@@ -398,7 +398,7 @@ describe("readPptStreams", () => {
     });
 
     it("states no rotationDeg at all for an unrotated table, rather than an explicit undefined", () => {
-      // toEqual treats an explicit rotationDeg: undefined as equal to the key being absent, so an object-shape comparison alone can't tell the two apart -- only checking the key's own presence can.
+      // toEqual treats an explicit rotationDeg: undefined as equal to the key being absent, so an object-shape comparison alone can't tell the two apart — only checking the key's own presence can.
       const { currentUserStream, powerPointDocumentStream } =
         syntheticPresentation({
           table: { rows: [["x"]] },
@@ -433,7 +433,7 @@ describe("readPptStreams", () => {
   });
 
   it("rejects a document whose CurrentUserAtom claims encryption but whose current UserEditAtom carries no encryptSessionPersistIdRef", () => {
-    // `encrypted: true` alone flips only the headerToken, never adding the trailing UserEditAtom field a genuine RC4 CryptoAPI session needs -- supplying a password here reaches past the missing-password check into this one instead.
+    // `encrypted: true` alone flips only the headerToken, never adding the trailing UserEditAtom field a genuine RC4 CryptoAPI session needs — supplying a password here reaches past the missing-password check into this one instead.
     const { currentUserStream, powerPointDocumentStream } =
       syntheticPresentation({ encrypted: true });
     expect(() =>
@@ -530,7 +530,7 @@ describe("readPptStreams", () => {
     it("rejects a slide whose SlideAtom names a masterIdRef the master list does not contain", () => {
       const { currentUserStream, powerPointDocumentStream } =
         syntheticPresentation({ slideMasterIdRefMismatch: true });
-      // Pins the exact stated value, not just that some rejection fires: the fixture's own masterIdRef is the real master ID (0x80000000, [MS-PPT] 2.2.13's own MasterId minimum) plus one, 2147483649 -- a regex matching only the surrounding words would pass identically for any other wrong value, including the real master ID minus one.
+      // Pins the exact stated value, not just that some rejection fires: the fixture's own masterIdRef is the real master ID (0x80000000, [MS-PPT] 2.2.13's own MasterId minimum) plus one, 2147483649 — a regex matching only the surrounding words would pass identically for any other wrong value, including the real master ID minus one.
       expect(() =>
         readPptStreams(currentUserStream, powerPointDocumentStream),
       ).toThrow(
@@ -691,7 +691,7 @@ describe("readPptContent", () => {
 });
 
 describe("the shared schema accepts what the reader produces", () => {
-  // toEqual on a plain object proves the reader built what this suite expected; parsing proves it built what document-schema.js actually requires -- a missing ContentShape inset, or a slide without its required notes, would satisfy the first check and fail this one.
+  // toEqual on a plain object proves the reader built what this suite expected; parsing proves it built what document-schema.js actually requires — a missing ContentShape inset, or a slide without its required notes, would satisfy the first check and fail this one.
   it("parses the flat form as a presentation ContentDocument", () => {
     const { metadata, slides } = readPptContent(pptFile());
     expect(() =>

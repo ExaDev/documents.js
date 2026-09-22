@@ -16,7 +16,7 @@ import {
   carlitoRegularBytes,
 } from "./test-support/fonts";
 
-// Every expected value below was read out of the real vendored .ttf files (assets/fonts/{carlito,caladea}/) by a standalone Node script walking the sfnt table directory with a bare DataView -- not by this package's own parsers -- so these are external cross-checks rather than this module's output asserted against itself.
+// Every expected value below was read out of the real vendored .ttf files (assets/fonts/{carlito,caladea}/) by a standalone Node script walking the sfnt table directory with a bare DataView — not by this package's own parsers — so these are external cross-checks rather than this module's output asserted against itself.
 function parse(bytes: Uint8Array<ArrayBuffer>): SfntFont {
   const font = parseSfnt(bytes);
   if (font === undefined) {
@@ -189,7 +189,7 @@ describe("parseName", () => {
   });
 });
 
-// A minimal, hand-built 'name' table wrapped in a real sfnt directory. Every vendored font here carries Windows/Unicode records, so the Macintosh/Roman fallback and the "the family name is missing entirely" branch have no real font to exercise them -- these bytes are built to the spec's own record layout (clause 5.2.7) to cover exactly those two paths.
+// A minimal, hand-built 'name' table wrapped in a real sfnt directory. Every vendored font here carries Windows/Unicode records, so the Macintosh/Roman fallback and the "the family name is missing entirely" branch have no real font to exercise them — these bytes are built to the spec's own record layout (clause 5.2.7) to cover exactly those two paths.
 function buildFontWithNameTable(
   records: readonly {
     platformId: number;

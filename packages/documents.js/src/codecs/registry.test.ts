@@ -21,7 +21,7 @@ import { richMarkdownText } from "../test-support/markdown";
 import { decodeDocumentPackage } from "../package-codec";
 import { DOCUMENT_FORMAT_CODECS } from "./registry";
 
-// Proves each DOCUMENT_FORMAT_CODECS entry's own read/write pair is wired correctly on its own terms -- not merely that readDocumentMetadata/setDocumentMetadata/buildDocumentBytes happen to still work after being refactored onto this registry (their own test files cover that). Every format with both a content.read and a content.write is exercised as a genuine read -> write -> read round trip: the content a fresh read produces after writing back out must equal the content that went in.
+// Proves each DOCUMENT_FORMAT_CODECS entry's own read/write pair is wired correctly on its own terms — not merely that readDocumentMetadata/setDocumentMetadata/buildDocumentBytes happen to still work after being refactored onto this registry (their own test files cover that). Every format with both a content.read and a content.write is exercised as a genuine read -> write -> read round trip: the content a fresh read produces after writing back out must equal the content that went in.
 
 function requireContentCodec(
   format:
@@ -48,7 +48,7 @@ function requireContentCodec(
   return content;
 }
 
-// Every buildXPackage function mints a fresh createdIso/modifiedIso when the source ContentDocument carries none (a real, pre-existing property of those builders, independent of this registry) -- normalized out here so the round-trip assertion below is checking wiring correctness, not re-asserting that unrelated, already-covered behavior.
+// Every buildXPackage function mints a fresh createdIso/modifiedIso when the source ContentDocument carries none (a real, pre-existing property of those builders, independent of this registry) — normalized out here so the round-trip assertion below is checking wiring correctness, not re-asserting that unrelated, already-covered behavior.
 function withReferenceTimestamps(
   rebuilt: ContentDocument,
   reference: ContentDocument,
@@ -63,7 +63,7 @@ function withReferenceTimestamps(
   };
 }
 
-// A handful of formats' own buildXPackage carries other pre-existing, already-documented lossiness beyond timestamps (a shape's own `name` synthesized fresh on rebuild for pptx/odp, page geometry reset to a US Letter default for odt, an extra blank table row inserted for odp) -- none of it introduced by this registry, all of it a property of builders this task did not touch and that already have their own dedicated fidelity tests elsewhere. For these formats a black-box substantive-text check is the right-scoped proof of wiring: if content.read/content.write were wired to the wrong underlying functions, the round-tripped ContentDocument would not contain this exact source text at all.
+// A handful of formats' own buildXPackage carries other pre-existing, already-documented lossiness beyond timestamps (a shape's own `name` synthesized fresh on rebuild for pptx/odp, page geometry reset to a US Letter default for odt, an extra blank table row inserted for odp) — none of it introduced by this registry, all of it a property of builders this task did not touch and that already have their own dedicated fidelity tests elsewhere. For these formats a black-box substantive-text check is the right-scoped proof of wiring: if content.read/content.write were wired to the wrong underlying functions, the round-tripped ContentDocument would not contain this exact source text at all.
 function containsText(content: ContentDocument, expected: string): boolean {
   return JSON.stringify(content).includes(expected);
 }
@@ -117,7 +117,7 @@ describe("DOCUMENT_FORMAT_CODECS: content read/write round trips", () => {
     );
   });
 
-  // odg's own round trip is not byte-for-byte exact even setting timestamps aside -- buildOdgPackage/readOdgContent lose a text frame's `name` and carry ordinary floating-point drift through real geometry recomputation (rotation resolution), both pre-existing, documented properties of that pair (see this package's own README gotchas on odg reconstruction), not something this registry wiring could introduce or fix. Structural fields prove the write -> read half is genuinely wired and produced a real, valid drawing.
+  // odg's own round trip is not byte-for-byte exact even setting timestamps aside — buildOdgPackage/readOdgContent lose a text frame's `name` and carry ordinary floating-point drift through real geometry recomputation (rotation resolution), both pre-existing, documented properties of that pair (see this package's own README gotchas on odg reconstruction), not something this registry wiring could introduce or fix. Structural fields prove the write -> read half is genuinely wired and produced a real, valid drawing.
   it("odg: read -> write -> read round-trips the structural shape of the ContentDocument", () => {
     const codec = requireContentCodec("odg");
     const content = codec.read(minimalOdgBytes());
@@ -143,7 +143,7 @@ describe("DOCUMENT_FORMAT_CODECS: content read/write round trips", () => {
     expect(codec.read(rebuiltBytes)).toEqual(content);
   });
 
-  // csv's round trip is exact-equality like markdown's, for the same stability reason: write emits each cell's displayText, and read re-types that text heuristically -- but re-typing a cell that already went through inferCellValue once lands on the identical value again (a re-typed number prints back as the same digits, a declined string stays a string), so a second read cannot drift from the first.
+  // csv's round trip is exact-equality like markdown's, for the same stability reason: write emits each cell's displayText, and read re-types that text heuristically — but re-typing a cell that already went through inferCellValue once lands on the identical value again (a re-typed number prints back as the same digits, a declined string stays a string), so a second read cannot drift from the first.
   it("csv: read -> write -> read round-trips the ContentDocument", () => {
     const codec = requireContentCodec("csv");
     const csvBytes = new TextEncoder().encode(
@@ -154,7 +154,7 @@ describe("DOCUMENT_FORMAT_CODECS: content read/write round trips", () => {
     expect(codec.read(rebuiltBytes)).toEqual(content);
   });
 
-  // xlsx's own column-width unit conversion (ooxml.js's ptToColumnWidthChars/columnWidthCharsToPt, src/typed/xlsx/units.ts) is a best-effort algebraic inverse, not an exact one -- src/convert/bridges.test.ts's own COLUMN_WIDTH_TOLERANCE_PT documents up to ~1pt of drift per pt<->character-width hop. This registry round trip is a second such hop on top of whatever odsToXlsx's own bridge already introduced building the fixture, so widths are checked within tolerance rather than exact equality; every other field (sheet name, cell values/kinds/formula/merges) is checked exactly, since none of those go through a lossy unit conversion.
+  // xlsx's own column-width unit conversion (ooxml.js's ptToColumnWidthChars/columnWidthCharsToPt, src/typed/xlsx/units.ts) is a best-effort algebraic inverse, not an exact one — src/convert/bridges.test.ts's own COLUMN_WIDTH_TOLERANCE_PT documents up to ~1pt of drift per pt<->character-width hop. This registry round trip is a second such hop on top of whatever odsToXlsx's own bridge already introduced building the fixture, so widths are checked within tolerance rather than exact equality; every other field (sheet name, cell values/kinds/formula/merges) is checked exactly, since none of those go through a lossy unit conversion.
   it("xlsx: read -> write -> read carries sheet cell values, kinds, formulas, and merges through exactly, and column widths within tolerance", () => {
     const codec = requireContentCodec("xlsx");
     const xlsxBytes = odsToXlsx(richOdsBytes());
@@ -196,7 +196,7 @@ describe("DOCUMENT_FORMAT_CODECS: content read/write round trips", () => {
     }
   });
 
-  // Hand-authored literal RTF source, matching this suite's own csv/markdown fixtures rather than generating it through writeRtfContent (the very function under test here) -- a heading-styled paragraph, a bold run, and a plain paragraph, exercising the font/colour/heading tables writeRtfContent mints on write. rtf-codec's writer is deterministic and its \info group carries only title/author/subject/keywords (no created/modified timestamps to mint), so -- unlike docx/ods above -- this round trip needs no withReferenceTimestamps normalisation.
+  // Hand-authored literal RTF source, matching this suite's own csv/markdown fixtures rather than generating it through writeRtfContent (the very function under test here) — a heading-styled paragraph, a bold run, and a plain paragraph, exercising the font/colour/heading tables writeRtfContent mints on write. rtf-codec's writer is deterministic and its \info group carries only title/author/subject/keywords (no created/modified timestamps to mint), so — unlike docx/ods above — this round trip needs no withReferenceTimestamps normalisation.
   it("rtf: read -> write -> read round-trips the ContentDocument", () => {
     const codec = requireContentCodec("rtf");
     const rtfBytes = new TextEncoder().encode(
@@ -212,7 +212,7 @@ describe("DOCUMENT_FORMAT_CODECS: content read/write round trips", () => {
     expect(codec.read(rebuiltBytes)).toEqual(content);
   });
 
-  // doc-codec's own writer covers a single wordprocessing section, character/paragraph formatting, and tables (no images -- see that package's README scope note), so this fixture is deliberately plain: one heading paragraph and one bold run, exercising exactly what writeDocContent can express -- a table exercises real content-scope boundaries elsewhere (doc-codec's own write.test.ts), not this registry-wiring round trip. doc-codec always reads back metadata as {} regardless of what was written (readDocContent's own scope note), so -- like rtf above -- no withReferenceTimestamps normalisation is needed, but for the opposite reason: there is no timestamp field for either side to disagree on. readDocContent's own return type is ContentDocument widened by one further field, numbering (doc-codec's own DocContent, read-only list-formatting definitions keyed by listId) -- this fixture declares no lists, so the round trip's own numbering resolves to {} rather than nothing at all.
+  // doc-codec's own writer covers a single wordprocessing section, character/paragraph formatting, and tables (no images — see that package's README scope note), so this fixture is deliberately plain: one heading paragraph and one bold run, exercising exactly what writeDocContent can express — a table exercises real content-scope boundaries elsewhere (doc-codec's own write.test.ts), not this registry-wiring round trip. doc-codec always reads back metadata as {} regardless of what was written (readDocContent's own scope note), so — like rtf above — no withReferenceTimestamps normalisation is needed, but for the opposite reason: there is no timestamp field for either side to disagree on. readDocContent's own return type is ContentDocument widened by one further field, numbering (doc-codec's own DocContent, read-only list-formatting definitions keyed by listId) — this fixture declares no lists, so the round trip's own numbering resolves to {} rather than nothing at all.
   it("doc: read -> write -> read round-trips the ContentDocument", () => {
     const codec = requireContentCodec("doc");
     const content: ContentDocument = {
@@ -246,7 +246,7 @@ describe("DOCUMENT_FORMAT_CODECS: content read/write round trips", () => {
     });
   });
 
-  // Mirrors xls-codec's own write.test.ts fixture shape (its `sheet`/`cell` helpers, restated inline here rather than imported -- that test-support is not part of xls-codec's published surface). writeXlsContent's own scope covers cell values, merges, row/column sizing, and number formats (no formulas/decoration -- see that package's README scope note), so this fixture sticks to plain cell values. A cell written with no explicit number format gains 'General' on the way back (XF 15's own ifmt resolving through the built-in table) -- the same pre-existing, documented stamping xls-codec's own write.test.ts pins, not something this registry wiring introduces -- so the expected content states it explicitly rather than asserting exact equality against the unformatted input.
+  // Mirrors xls-codec's own write.test.ts fixture shape (its `sheet`/`cell` helpers, restated inline here rather than imported — that test-support is not part of xls-codec's published surface). writeXlsContent's own scope covers cell values, merges, row/column sizing, and number formats (no formulas/decoration — see that package's README scope note), so this fixture sticks to plain cell values. A cell written with no explicit number format gains 'General' on the way back (XF 15's own ifmt resolving through the built-in table) — the same pre-existing, documented stamping xls-codec's own write.test.ts pins, not something this registry wiring introduces — so the expected content states it explicitly rather than asserting exact equality against the unformatted input.
   it("xls: read -> write -> read round-trips the ContentDocument", () => {
     const codec = requireContentCodec("xls");
     const printSettings: ContentSheetPrintSettings = {
@@ -312,7 +312,7 @@ describe("DOCUMENT_FORMAT_CODECS: content read/write round trips", () => {
     );
   });
 
-  // Mirrors ppt-codec's own write.test.ts fixture shape. The writer's own scope is text-box slides only (see that package's README scope note); like pptx/odp above, a black-box substantive-text check is the right-scoped proof of wiring here rather than exact equality -- ppt-codec's own reader always reports PowerPoint's fixed default text insets (0.1in left/right, 0.05in top/bottom) regardless of what a shape actually carries, since it does not yet read a shape's own OfficeArtFOPT inset override (see read.ts's own DEFAULT_INSET_LEFT_RIGHT_PT/DEFAULT_INSET_TOP_BOTTOM_PT comment), a pre-existing, documented gap this registry wiring did not introduce.
+  // Mirrors ppt-codec's own write.test.ts fixture shape. The writer's own scope is text-box slides only (see that package's README scope note); like pptx/odp above, a black-box substantive-text check is the right-scoped proof of wiring here rather than exact equality — ppt-codec's own reader always reports PowerPoint's fixed default text insets (0.1in left/right, 0.05in top/bottom) regardless of what a shape actually carries, since it does not yet read a shape's own OfficeArtFOPT inset override (see read.ts's own DEFAULT_INSET_LEFT_RIGHT_PT/DEFAULT_INSET_TOP_BOTTOM_PT comment), a pre-existing, documented gap this registry wiring did not introduce.
   it("ppt: read -> write -> read carries the source slide text through", () => {
     const codec = requireContentCodec("ppt");
     const content: ContentDocument = {

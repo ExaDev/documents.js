@@ -237,7 +237,7 @@ describe("provenanceDescriptors", () => {
     const state: RevisionState = {
       ...NO_REVISION,
       revised: true,
-      revisedDateTime: 0, // day 0, month 0 -- "no time recorded"
+      revisedDateTime: 0, // day 0, month 0 — "no time recorded"
     };
     const [descriptor] = provenanceDescriptors(state, authors);
     expect(descriptor).not.toHaveProperty("dateIso");
@@ -462,7 +462,7 @@ describe("formFieldContentControl", () => {
     });
 
     it("sets no options on a plain-text field even when its own listItems is non-empty", () => {
-      // controlType==="checkbox" is its own separate if-branch above, so a plainText field (neither checkbox nor dropDown) is what actually reaches this else-if's own condition -- listItems being non-empty must not be sufficient on its own to enter the dropDown branch without controlType actually being "dropDown".
+      // controlType==="checkbox" is its own separate if-branch above, so a plainText field (neither checkbox nor dropDown) is what actually reaches this else-if's own condition — listItems being non-empty must not be sufficient on its own to enter the dropDown branch without controlType actually being "dropDown".
       expect(
         formFieldContentControl(
           "FORMTEXT",
@@ -542,7 +542,7 @@ describe("formFieldContentControl", () => {
     });
 
     it("sets no value when the selected index names a genuine hole in a sparse listItems array", () => {
-      // A genuinely sparse array (index 1 has no own property at all, not merely an undefined value), not a simulated one -- listItems.length is still 3.
+      // A genuinely sparse array (index 1 has no own property at all, not merely an undefined value), not a simulated one — listItems.length is still 3.
       const listItems = new Array<string>(3);
       listItems[0] = "a";
       listItems[2] = "c";
@@ -630,7 +630,7 @@ describe("coalesceRunConstructs", () => {
   });
 
   it("sorts by startRun ascending, breaking a tie by endRun ascending", () => {
-    // Two descriptors open on the same run (tied startRun) but close at different runs -- the second call site (the end-of-paragraph cleanup, not the per-run close) inserts them in Map iteration order, which need not already be endRun-ascending.
+    // Two descriptors open on the same run (tied startRun) but close at different runs — the second call site (the end-of-paragraph cleanup, not the per-run close) inserts them in Map iteration order, which need not already be endRun-ascending.
     const result = coalesceRunConstructs([[other, anchor], [other]]);
     expect(result).toEqual([
       { descriptor: anchor, startRun: 0, endRun: 1 },
@@ -638,8 +638,8 @@ describe("coalesceRunConstructs", () => {
     ]);
   });
 
-  it("sorts two overlapping extents by startRun even though the shorter one closes -- and is pushed -- first", () => {
-    // "a" opens at run 0 and stays open the whole time; "b" opens at run 1 and closes at run 2, before "a" does at run 3 -- so the per-run close pushes b's extent onto `out` before a's own extent reaches the end-of-paragraph cleanup, making raw insertion order [b, a], the reverse of the startRun order the sort must produce.
+  it("sorts two overlapping extents by startRun even though the shorter one closes — and is pushed — first", () => {
+    // "a" opens at run 0 and stays open the whole time; "b" opens at run 1 and closes at run 2, before "a" does at run 3 — so the per-run close pushes b's extent onto `out` before a's own extent reaches the end-of-paragraph cleanup, making raw insertion order [b, a], the reverse of the startRun order the sort must produce.
     const result = coalesceRunConstructs([
       [anchor],
       [anchor, other],

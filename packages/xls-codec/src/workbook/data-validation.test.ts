@@ -7,11 +7,11 @@ import { record, u16, u32, xlUnicodeString } from "../test-support/biff";
 import { RECORD_DV } from "../biff/record-types";
 import { readDv } from "./data-validation";
 
-// Dv ([MS-XLS] 2.4.95): https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/862bbc7c-009a-4fd6-a93e-3e32e591c2f8. Every byte layout exercised here is built directly to that published field table (flags DWORD, four XLUnicodeStrings, one or two DVParsedFormula structures, a trailing SqRefU range list) -- this is a real Microsoft-published binary grammar, not a producer-specific convention transcribed from LibreOffice source the way odf.js's own calcext:condition reading needed.
+// Dv ([MS-XLS] 2.4.95): https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/862bbc7c-009a-4fd6-a93e-3e32e591c2f8. Every byte layout exercised here is built directly to that published field table (flags DWORD, four XLUnicodeStrings, one or two DVParsedFormula structures, a trailing SqRefU range list) — this is a real Microsoft-published binary grammar, not a producer-specific convention transcribed from LibreOffice source the way odf.js's own calcext:condition reading needed.
 
 const NO_SHEETS: FormulaSheetContext = { sheets: [], sheetRanges: [] };
 
-/** PtgInt ([MS-XLS] 2.5.198.66): opcode 0x1E then an unsigned 16-bit value -- the simplest possible formula token, used here only to prove formula bytes are read and handed to parseFormulaText, not to exercise that parser's own grammar (biff/ptg.test.ts already does that exhaustively). */
+/** PtgInt ([MS-XLS] 2.5.198.66): opcode 0x1E then an unsigned 16-bit value — the simplest possible formula token, used here only to prove formula bytes are read and handed to parseFormulaText, not to exercise that parser's own grammar (biff/ptg.test.ts already does that exhaustively). */
 function ptgInt(value: number): number[] {
   return [0x1e, ...u16(value)];
 }

@@ -38,7 +38,7 @@ function asImage(block: ContentBlock | undefined): ContentImageBlock {
   return block;
 }
 
-// A depth-first search for the first element named tag whose own attribute attrName equals attrValue -- used to mutate one specific p:cNvPr in place within buildFixturePackage's already-parsed slide tree, rather than duplicating the whole fixture to exercise a single attribute variant.
+// A depth-first search for the first element named tag whose own attribute attrName equals attrValue — used to mutate one specific p:cNvPr in place within buildFixturePackage's already-parsed slide tree, rather than duplicating the whole fixture to exercise a single attribute variant.
 function findElementByTagAndAttr(
   nodes: readonly XmlNode[],
   tag: string,
@@ -111,7 +111,7 @@ function rels(
   );
 }
 
-// Only the PNG magic-byte signature matters to sniffImageFormat -- the rest is arbitrary filler, not a real encoded image.
+// Only the PNG magic-byte signature matters to sniffImageFormat — the rest is arbitrary filler, not a real encoded image.
 function tinyPngBase64(): string {
   const bytes = new Uint8Array([
     0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0,
@@ -133,7 +133,7 @@ function buildFixturePackage(): Package {
       el("p:cNvSpPr"),
       el("p:nvPr", {}, [el("p:ph", { type: "title" })]),
     ]),
-    el("p:spPr"), // no own xfrm -- must inherit from layout
+    el("p:spPr"), // no own xfrm — must inherit from layout
     el("p:txBody", {}, [titlePara]),
   ]);
 
@@ -242,7 +242,7 @@ function buildFixturePackage(): Package {
     el("a:tcPr", {}, [
       el("a:lnL", { w: "0" }, [
         el("a:solidFill", {}, [el("a:srgbClr", { val: "0000FF" })]),
-      ]), // resolved width is zero -- not visually a border
+      ]), // resolved width is zero — not visually a border
       el("a:lnR", { w: "12700" }, [
         el("a:solidFill", {}, [el("a:srgbClr", { val: "0000FF" })]),
         el("a:prstDash", { val: "notARealPrstDashValue" }),
@@ -256,7 +256,7 @@ function buildFixturePackage(): Package {
     el("a:tcPr", {}, [
       el("a:lnL", { w: "abc" }, [
         el("a:solidFill", {}, [el("a:srgbClr", { val: "0000FF" })]),
-      ]), // @w is not a number at all -- not just zero
+      ]), // @w is not a number at all — not just zero
       el("a:lnR", { w: "12700" }, [
         el("a:solidFill", {}, [el("a:srgbClr", { val: "FF00FF" })]),
       ]),
@@ -1274,7 +1274,7 @@ describe("readPptxContent: rotation composed through rotated/flipped ancestor gr
     );
     expect(shape?.frame.xPt).toBeCloseTo(230, 9);
     expect(shape?.frame.yPt).toBeCloseTo(130, 9);
-    // 90 (group) - 30 (own) = 60, not 90 + 30 = 120 -- the group's flipH negates the sign of the shape's own rotation.
+    // 90 (group) - 30 (own) = 60, not 90 + 30 = 120 — the group's flipH negates the sign of the shape's own rotation.
     expect(shape?.rotationDeg).toBe(60);
   });
 
@@ -1357,7 +1357,7 @@ describe("readPptxContent: notes", () => {
   });
 });
 
-// A chart graphic frame's c:chart child resolves through the slide's own relationships to a chart part, whose cached series/category model reads as the same table block shape an a:tbl frame produces (readChartTable in src/typed/pptx/chart.ts). Series 1 is named through a cached c:strRef and stops at two categories; series 2 is named through an inline c:v literal and carries a third category series 1 never labels -- exercising both name forms and the category union.
+// A chart graphic frame's c:chart child resolves through the slide's own relationships to a chart part, whose cached series/category model reads as the same table block shape an a:tbl frame produces (readChartTable in src/typed/pptx/chart.ts). Series 1 is named through a cached c:strRef and stops at two categories; series 2 is named through an inline c:v literal and carries a third category series 1 never labels — exercising both name forms and the category union.
 function chartFixturePackage(): Package {
   const revenue = el("c:ser", {}, [
     el("c:tx", {}, [
@@ -1593,7 +1593,7 @@ describe("readPptxContent: internal slide-jump links (a:hlinkClick to a slide)",
       { id: "rId1", type: SLIDE_REL, target: "slides/slide1.xml" },
       { id: "rId2", type: SLIDE_REL, target: "slides/slide2.xml" },
     ]);
-    // The slide-jump relationship lives in the SLIDE's own rels (a sibling part), exactly where PresentationML spells it -- not in the presentation's.
+    // The slide-jump relationship lives in the SLIDE's own rels (a sibling part), exactly where PresentationML spells it — not in the presentation's.
     const slide1Rels = rels([
       { id: "rIdJump", type: SLIDE_REL, target: "slide2.xml" },
     ]);
@@ -1634,7 +1634,7 @@ describe("readPptxContent: internal slide-jump links (a:hlinkClick to a slide)",
     ]);
   });
 
-  it("leaves the jumping run's own flat hyperlink field unset -- the internal target is the construct's, never a URI", () => {
+  it("leaves the jumping run's own flat hyperlink field unset — the internal target is the construct's, never a URI", () => {
     const doc = readPptxContent(slideJumpFixturePackage());
     const paragraph = asParagraph(doc.slides[0]?.shapes[0]?.blocks[0]);
     expect(paragraph.runs[1]?.hyperlink).toBeUndefined();
@@ -1658,7 +1658,7 @@ describe("readPptxContent: chart graphic frames", () => {
     expect(cellText(table, 0, 2)).toBe("Cost");
   });
 
-  it("marks the cached-model table origin: 'chart' -- a chart's numbers, not an authored data table", () => {
+  it("marks the cached-model table origin: 'chart' — a chart's numbers, not an authored data table", () => {
     const doc = readPptxContent(chartFixturePackage());
     const chartShape = doc.slides[0]?.shapes.find((s) => s.name === "Chart 1");
     const table = asTable(chartShape?.blocks[0]);
@@ -1745,7 +1745,7 @@ describe("readPptxContent: chart graphic frames", () => {
     );
   });
 
-  it("quarantines the whole chart part -- type, axes, colours, everything readChartTable itself does not read -- as pptx residue on the table", () => {
+  it("quarantines the whole chart part — type, axes, colours, everything readChartTable itself does not read — as pptx residue on the table", () => {
     const doc = readPptxContent(chartFixturePackage());
     const chartShape = doc.slides[0]?.shapes.find((s) => s.name === "Chart 1");
     const table = asTable(chartShape?.blocks[0]);
@@ -1755,7 +1755,7 @@ describe("readPptxContent: chart graphic frames", () => {
   });
 });
 
-// A SmartArt graphic frame's dgm:relIds carries four relationship ids; only r:dm (the data model -- the semantic graph of nodes and text) is read. The tree below: doc -> [Strategy (node 1, srcOrd 0), Cost (node 2, srcOrd 1), textless (node 4, srcOrd 2), Assistant (asst 5, srcOrd 3)], with Strategy -> [Quality/Details (node 3), a parTrans point whose text must not surface]. cxnLst order is deliberately scrambled against srcOrd to prove the sort, and a presOf edge to node 2 must not duplicate its text (readDiagramText in src/typed/pptx/diagram.ts).
+// A SmartArt graphic frame's dgm:relIds carries four relationship ids; only r:dm (the data model — the semantic graph of nodes and text) is read. The tree below: doc -> [Strategy (node 1, srcOrd 0), Cost (node 2, srcOrd 1), textless (node 4, srcOrd 2), Assistant (asst 5, srcOrd 3)], with Strategy -> [Quality/Details (node 3), a parTrans point whose text must not surface]. cxnLst order is deliberately scrambled against srcOrd to prove the sort, and a presOf edge to node 2 must not duplicate its text (readDiagramText in src/typed/pptx/diagram.ts).
 function smartArtFixturePackage(): Package {
   const para = (...runs: XmlElement[]) => el("a:p", {}, runs);
   const r = (text: string) => el("a:r", {}, [el("a:t", {}, [txt(text)])]);
@@ -1877,7 +1877,7 @@ describe("readPptxContent: SmartArt graphic frames", () => {
     ]);
   });
 
-  it("marks the shape origin: 'diagram' -- the diagram's own node text, not freeform slide prose", () => {
+  it("marks the shape origin: 'diagram' — the diagram's own node text, not freeform slide prose", () => {
     const doc = readPptxContent(smartArtFixturePackage());
     const diagramShape = doc.slides[0]?.shapes.find(
       (s) => s.name === "Diagram 1",
@@ -1931,7 +1931,7 @@ describe("readPptxContent: SmartArt graphic frames", () => {
       kind: "xml",
       nodes: [quickStyle],
     };
-    // Replaces the fixture's own dm-only relationships with dm+lo+qs -- rIdCs is deliberately left unresolved (no relationship, no part) to prove residue quarantines whichever parts actually resolve rather than requiring all three.
+    // Replaces the fixture's own dm-only relationships with dm+lo+qs — rIdCs is deliberately left unresolved (no relationship, no part) to prove residue quarantines whichever parts actually resolve rather than requiring all three.
     pkg.parts["ppt/slides/_rels/slide1.xml.rels"] = {
       kind: "xml",
       nodes: [
@@ -1967,7 +1967,7 @@ describe("readPptxContent: SmartArt graphic frames", () => {
   });
 });
 
-// An OLE graphic frame's a:graphicData wraps an mc:AlternateContent: the mc:Choice side's p:oleObj names the embedded payload, while the mc:Fallback side repeats the p:oleObj carrying the raster picture every renderer actually displays. The payload target is parameterised so a test can point rIdOle at whatever part shape it needs (the ZIP-payload case reuses the default .xlsx target; the classic-OLE case retargets to a .bin part), and frameCount emits that many frames all pointing at the SAME payload relationship -- the copy-pasted-object shape -- while the fixture still ships no embeddings part, so the default fixture keeps exercising exactly the fallback/progId paths.
+// An OLE graphic frame's a:graphicData wraps an mc:AlternateContent: the mc:Choice side's p:oleObj names the embedded payload, while the mc:Fallback side repeats the p:oleObj carrying the raster picture every renderer actually displays. The payload target is parameterised so a test can point rIdOle at whatever part shape it needs (the ZIP-payload case reuses the default .xlsx target; the classic-OLE case retargets to a .bin part), and frameCount emits that many frames all pointing at the SAME payload relationship — the copy-pasted-object shape — while the fixture still ships no embeddings part, so the default fixture keeps exercising exactly the fallback/progId paths.
 function oleFixturePackage(
   payloadTarget = "../embeddings/oleObject1.xlsx",
   frameCount = 1,
@@ -2196,7 +2196,7 @@ describe("readPptxContent: OLE graphic frames", () => {
   });
 
   it("keeps a malformed compound-file .bin payload on exactly the fallback-picture behaviour, with no embedded block and no slide-read failure", () => {
-    // rIdOle retargeted at a part whose bytes carry the OLE/CFB magic but no walkable structure -- the named CompoundFileFormatError the decode throws is a property of the embedded payload, degraded to nothing rather than poisoning the host slide read (the #737 failure policy extended to the CFB gate).
+    // rIdOle retargeted at a part whose bytes carry the OLE/CFB magic but no walkable structure — the named CompoundFileFormatError the decode throws is a property of the embedded payload, degraded to nothing rather than poisoning the host slide read (the #737 failure policy extended to the CFB gate).
     const pkg = oleFixturePackage("../embeddings/oleObject1.bin");
     pkg.parts["ppt/embeddings/oleObject1.bin"] = {
       kind: "binary",
@@ -2214,7 +2214,7 @@ describe("readPptxContent: OLE graphic frames", () => {
   });
 
   it("keeps the fallback-picture behaviour when the payload is a ZIP but not a recognisable package, so the host read is never poisoned", () => {
-    // A ZIP payload that fails to decode as one of the three OOXML flavours (here: a plain archive) must be a non-event for the host slide, exactly like a non-ZIP payload -- one bad embedded object can never fail the whole document read.
+    // A ZIP payload that fails to decode as one of the three OOXML flavours (here: a plain archive) must be a non-event for the host slide, exactly like a non-ZIP payload — one bad embedded object can never fail the whole document read.
     const pkg = oleFixturePackage("../embeddings/payload.zip");
     pkg.parts["ppt/embeddings/payload.zip"] = {
       kind: "binary",
@@ -2316,7 +2316,7 @@ function outlineParagraph(text: string): ContentParagraph {
 }
 
 describe("readPptxContent: paragraph outline levels", () => {
-  it("reads a:pPr/@lvl into list.level, with no numId -- DrawingML paragraphs carry no numbering identity", () => {
+  it("reads a:pPr/@lvl into list.level, with no numId — DrawingML paragraphs carry no numbering identity", () => {
     const para = outlineParagraph("level two");
     expect(para.list).toEqual({ level: 2 });
     expect(para.list?.numId).toBeUndefined();
@@ -2332,7 +2332,7 @@ describe("readPptxContent: paragraph outline levels", () => {
     expect(outlineParagraph("pPr without lvl").list).toBeUndefined();
   });
 
-  it('emits { level: 0 } for an explicit lvl="0" -- present-and-valid, unlike the absent default', () => {
+  it('emits { level: 0 } for an explicit lvl="0" — present-and-valid, unlike the absent default', () => {
     expect(outlineParagraph("explicit zero").list).toEqual({ level: 0 });
   });
 
@@ -2363,7 +2363,7 @@ describe("readPptxContent: paragraph outline levels", () => {
   });
 });
 
-// A single-slide deck with no layout/master/theme at all -- readSlide tolerates a slide whose own relationships name no slideLayout, simply resolving no cascade/geometry inheritance, so these minimal packages isolate one shape's own paragraph/run/table-cell properties without needing the full cascade chain buildFixturePackage sets up.
+// A single-slide deck with no layout/master/theme at all — readSlide tolerates a slide whose own relationships name no slideLayout, simply resolving no cascade/geometry inheritance, so these minimal packages isolate one shape's own paragraph/run/table-cell properties without needing the full cascade chain buildFixturePackage sets up.
 function minimalSlidePackage(shapes: ReturnType<typeof el>[]): Package {
   const slide = el("p:sld", {}, [
     el("p:cSld", {}, [el("p:spTree", {}, shapes)]),
@@ -2421,7 +2421,7 @@ describe("readPptxContent: slide size falls back to the widescreen default when 
     const pkg = minimalSlidePackage([
       textShape(el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("x")])])])),
     ]);
-    // Overwrite the presentation part with one whose sldSz has no cx, after construction, to isolate exactly this one field -- a real cx of 9144000 EMU (720pt) would be observably different from the 960pt default this missing-cx case must fall back to.
+    // Overwrite the presentation part with one whose sldSz has no cx, after construction, to isolate exactly this one field — a real cx of 9144000 EMU (720pt) would be observably different from the 960pt default this missing-cx case must fall back to.
     const presentation = el("p:presentation", {}, [
       el("p:sldIdLst", {}, [el("p:sldId", { id: "256", "r:id": "rIdSlide1" })]),
       el("p:sldSz", { cy: "6858000" }),

@@ -19,7 +19,7 @@ const PAGE = {
   margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
 };
 
-// A minimal wordprocessing ContentDocument wrapping one section holding the given blocks -- for exercising collectFormulas's table/embeddedObject traversal directly, without going through markdown lowering.
+// A minimal wordprocessing ContentDocument wrapping one section holding the given blocks — for exercising collectFormulas's table/embeddedObject traversal directly, without going through markdown lowering.
 function wordDoc(blocks: ContentBlock[]): ContentDocument {
   return {
     kind: "wordprocessing",
@@ -42,7 +42,7 @@ function formulaEmbed(content: MathExpression): ContentBlock {
   };
 }
 
-// The end-to-end integration test #794 asks for: markdown -> markdown-codec's own $$ recognition (a fenced-style block, the opening/closing "$$" each on their own line -- see that package's MATH_BLOCK_MARKER_PATTERN) -> documents.js's lowerMarkdownMath (the "LaTeX lowering" the issue names as the natural source of worked examples) -> this harness. A devDependency-only pairing (markdown-codec, documents.js): both sit above document-compute.js in the family's own dependency order, so neither can be a runtime dependency of this package without a cycle -- exactly why this package's own README describes itself as "not wired into the conversion pipeline". A small, hand-authored starter corpus lives here rather than a large real-world one: see this package's README on extending it locally via a gitignored test/corpus/, matching the family's own pdf-codec convention.
+// The end-to-end integration test #794 asks for: markdown -> markdown-codec's own $$ recognition (a fenced-style block, the opening/closing "$$" each on their own line — see that package's MATH_BLOCK_MARKER_PATTERN) -> documents.js's lowerMarkdownMath (the "LaTeX lowering" the issue names as the natural source of worked examples) -> this harness. A devDependency-only pairing (markdown-codec, documents.js): both sit above document-compute.js in the family's own dependency order, so neither can be a runtime dependency of this package without a cycle — exactly why this package's own README describes itself as "not wired into the conversion pipeline". A small, hand-authored starter corpus lives here rather than a large real-world one: see this package's README on extending it locally via a gitignored test/corpus/, matching the family's own pdf-codec convention.
 
 function lowerDocument(markdown: string) {
   const { document } = readMarkdownContent(markdown);
@@ -276,11 +276,11 @@ describe("formatCorpusReport: exact text formatting", () => {
       }),
     );
     const lines = text.split("\n");
-    expect(lines).toContain("  MISMATCH: G -- expected 6, got 7");
+    expect(lines).toContain("  MISMATCH: G — expected 6, got 7");
     expect(lines).toContain(
-      "  GAP (unbound-symbol): x -- symbol 'x' has no entry in the supplied bindings.",
+      "  GAP (unbound-symbol): x — symbol 'x' has no entry in the supplied bindings.",
     );
-    expect(lines).toContain("  unresolved: y -- y was never restated.");
+    expect(lines).toContain("  unresolved: y — y was never restated.");
     expect(text).not.toContain("match: F");
     expect(text).not.toMatch(/^match:/m);
   });

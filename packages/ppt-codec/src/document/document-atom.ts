@@ -2,7 +2,7 @@ import { PptFormatError } from "../errors";
 import { type PptRecord } from "../record/tree";
 import { RT_DocumentAtom } from "../record/types";
 
-// DocumentAtom: the document-wide facts a reader needs before any slide -- above all the slide size, which every shape rectangle is positioned within. [MS-PPT] 2.4.2: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/121f2728-3497-4a0a-829e-6f416fee2ee6
+// DocumentAtom: the document-wide facts a reader needs before any slide — above all the slide size, which every shape rectangle is positioned within. [MS-PPT] 2.4.2: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/121f2728-3497-4a0a-829e-6f416fee2ee6
 
 // [MS-PPT] 2.4.2: "rh.recLen MUST be 0x00000028."
 const DOCUMENT_ATOM_LEN = 0x00000028;

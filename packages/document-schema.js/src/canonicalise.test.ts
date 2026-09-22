@@ -24,7 +24,7 @@ describe("canonicalise", () => {
     expect(canonicalise(input)).toStrictEqual([{ a: 2, b: 1 }, 3, "text"]);
   });
 
-  it("does not treat an array as a record -- array elements are mapped, never treated as object keys", () => {
+  it("does not treat an array as a record — array elements are mapped, never treated as object keys", () => {
     const input = [1, 2, 3];
     const result = canonicalise(input);
     expect(Array.isArray(result)).toBe(true);

@@ -7,7 +7,7 @@ const PNG_BYTES = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4,
 ]);
 
-// The first draw:page's own children, navigated directly from a live Package -- returns the SAME array reference the slide's own live view holds, so mutating it (as the document-order test below does) is visible through that slide.
+// The first draw:page's own children, navigated directly from a live Package — returns the SAME array reference the slide's own live view holds, so mutating it (as the document-order test below does) is visible through that slide.
 function firstDrawPageChildren(pkg: Package): XmlElement["children"] {
   const part = pkg.parts["content.xml"];
   const root =
@@ -33,7 +33,7 @@ function firstDrawPageChildren(pkg: Package): XmlElement["children"] {
 }
 
 describe("OdpSlide.shapes / tables", () => {
-  it("shapes() excludes a table frame (a draw:frame whose direct content is table:table) -- only the text box and picture come back", () => {
+  it("shapes() excludes a table frame (a draw:frame whose direct content is table:table) — only the text box and picture come back", () => {
     const editor = createOdp();
     const slide = editor.addSlide();
     slide.addTextBox({
@@ -84,7 +84,7 @@ describe("OdpSlide.shapes / tables", () => {
     expect(reopenedTable?.table.cell(1, 1).text).toContain("B2");
   });
 
-  it("tables() reflects true document position, not addTable call order -- swapping the two table frames in the raw XML tree reorders tables()", () => {
+  it("tables() reflects true document position, not addTable call order — swapping the two table frames in the raw XML tree reorders tables()", () => {
     const editor = createOdp();
     const slide = editor.addSlide();
     // Distinguishable by column count, so which table is which can be told apart after reordering.
@@ -107,7 +107,7 @@ describe("OdpSlide.shapes / tables", () => {
       slide.tables().map((t) => t.table.rows()[0]?.cells().length),
     ).toEqual([3, 1]);
 
-    // firstDrawPageChildren navigates the SAME live Package the editor/slide already hold, so mutating this array is visible through `slide` itself on its next tables() call -- no re-decoding, no separate snapshot to go stale.
+    // firstDrawPageChildren navigates the SAME live Package the editor/slide already hold, so mutating this array is visible through `slide` itself on its next tables() call — no re-decoding, no separate snapshot to go stale.
     const pageChildren = firstDrawPageChildren(editor.toPackage());
     const tableFrameIndices: number[] = [];
     pageChildren.forEach((c, i) => {

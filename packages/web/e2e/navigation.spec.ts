@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-// The five real tools (Sidebar.tsx's own NAV_ITEMS) and the heading each one's route renders once loaded -- proves the whole route tree actually mounts a real page for every link, not just that the link exists.
+// The five real tools (Sidebar.tsx's own NAV_ITEMS) and the heading each one's route renders once loaded — proves the whole route tree actually mounts a real page for every link, not just that the link exists.
 const REAL_TOOLS: readonly { label: string; heading: string }[] = [
   { label: "Convert", heading: "Convert a document" },
   { label: "Metadata", heading: "Document metadata" },
@@ -13,7 +13,7 @@ const REAL_TOOLS: readonly { label: string; heading: string }[] = [
   { label: ".odm", heading: "Render an .odm master document" },
 ];
 
-// The former PLANNED_ITEMS (Editors, .odm) are real tools since #1096 -- they sit in REAL_TOOLS above with their routes' own headings.
+// The former PLANNED_ITEMS (Editors, .odm) are real tools since #1096 — they sit in REAL_TOOLS above with their routes' own headings.
 
 test("the root route redirects straight into the Convert tool, the flagship page (no separate marketing landing)", async ({
   page,

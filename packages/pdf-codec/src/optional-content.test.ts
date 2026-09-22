@@ -31,7 +31,7 @@ function str(text: string): PdfObject {
   return pdfLiteralString(new TextEncoder().encode(text));
 }
 
-// Optional content (#721 phase 3): /OCProperties groups with the default configuration's visibility state, /OC membership from BDC spans (both the named-property-list and inline-dict forms) stamped onto extracted items as a layer name, and /ActualText from a marked-content property dict. The visibility state is what fixes the active bug the issue names: content an author placed in an OFF layer no longer extracts as if unconditionally visible -- the membership is now on the item for a consumer to act on.
+// Optional content (#721 phase 3): /OCProperties groups with the default configuration's visibility state, /OC membership from BDC spans (both the named-property-list and inline-dict forms) stamped onto extracted items as a layer name, and /ActualText from a marked-content property dict. The visibility state is what fixes the active bug the issue names: content an author placed in an OFF layer no longer extracts as if unconditionally visible — the membership is now on the item for a consumer to act on.
 
 describe("readPdf: optional content groups", () => {
   it("reads each OCG with its name and default-configuration visibility", () => {
@@ -105,7 +105,7 @@ describe("readOptionalContent, driven directly against a synthetic catalog", () 
   });
 
   it("mints the next free layerN name, skipping one a real /Name already claimed", () => {
-    // Group 1 carries a real /Name of "layer1"; group 2 carries no /Name at all, so mintLayerName must skip the already-taken "layer1" and mint "layer2" -- landing on "layer1" a second time (an unmutated loop that never advances n, or a broken template literal) would collide two distinct OCGs onto the same layer name.
+    // Group 1 carries a real /Name of "layer1"; group 2 carries no /Name at all, so mintLayerName must skip the already-taken "layer1" and mint "layer2" — landing on "layer1" a second time (an unmutated loop that never advances n, or a broken template literal) would collide two distinct OCGs onto the same layer name.
     const namedGroup = pdfDict({ Name: str("layer1") });
     const unnamedGroup = pdfDict({});
     const objects = new Map<number, PdfObject>([

@@ -3,7 +3,7 @@ import { bytesToBase64 } from "byte-codec";
 import { zipPackage } from "../zip";
 import { hasUtf8Bom, parsePackage } from "./read";
 
-// parsePackage's own XML-vs-binary routing (looksLikeXml) is not exported, so every case here drives it indirectly through a real zip part's classification. The function's own contract note explains why a misclassification can only ever go one way: no standard ODF binary part starts with '<', so a false positive here would misparse a binary part as XML, while a false negative just stores an XML part losslessly as base64 instead -- these tests pin both directions and every byte-level boundary the scan's own whitespace/'<' checks depend on. hasUtf8Bom itself is exported and tested directly below, since a wrongly-detected BOM and a correctly-rejected one can otherwise happen to produce the same XML/binary verdict downstream (a too-short array still ends the scan at the same byte either way), making the boundary untestable through parsePackage alone.
+// parsePackage's own XML-vs-binary routing (looksLikeXml) is not exported, so every case here drives it indirectly through a real zip part's classification. The function's own contract note explains why a misclassification can only ever go one way: no standard ODF binary part starts with '<', so a false positive here would misparse a binary part as XML, while a false negative just stores an XML part losslessly as base64 instead — these tests pin both directions and every byte-level boundary the scan's own whitespace/'<' checks depend on. hasUtf8Bom itself is exported and tested directly below, since a wrongly-detected BOM and a correctly-rejected one can otherwise happen to produce the same XML/binary verdict downstream (a too-short array still ends the scan at the same byte either way), making the boundary untestable through parsePackage alone.
 
 function packageWithOnePart(bytes: Uint8Array<ArrayBuffer>) {
   const zipBytes = zipPackage([["part", { bytes }]]);
@@ -47,12 +47,12 @@ describe("parsePackage: XML vs binary part classification", () => {
     expect(pkg.parts.part?.kind).toBe("xml");
   });
 
-  it("classifies an empty part as binary -- the scan loop never runs at all", () => {
+  it("classifies an empty part as binary — the scan loop never runs at all", () => {
     const pkg = packageWithOnePart(new Uint8Array(0));
     expect(pkg.parts.part?.kind).toBe("binary");
   });
 
-  it("classifies a part that is entirely whitespace as binary -- the loop runs to completion without ever finding a non-whitespace byte", () => {
+  it("classifies a part that is entirely whitespace as binary — the loop runs to completion without ever finding a non-whitespace byte", () => {
     const pkg = packageWithOnePart(new Uint8Array([0x20, 0x09, 0x0a, 0x0d]));
     expect(pkg.parts.part?.kind).toBe("binary");
   });

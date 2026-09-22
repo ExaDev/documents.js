@@ -26,7 +26,7 @@ export const Route = createFileRoute("/metadata")({
 function MetadataPage() {
   const [file, setFile] = useState<OpenedFile | undefined>(undefined);
   const [format, setFormat] = useState<DocumentFormat | undefined>(undefined);
-  // An override that wins once the user edits the field, otherwise the read's own value -- this avoids echoing the read result into a second piece of state (which would need a placeholder initial value with no real meaning, since it is always overwritten the moment a read succeeds).
+  // An override that wins once the user edits the field, otherwise the read's own value — this avoids echoing the read result into a second piece of state (which would need a placeholder initial value with no real meaning, since it is always overwritten the moment a read succeeds).
   const [titleOverride, setTitleOverride] = useState<string | undefined>(
     undefined,
   );
@@ -47,11 +47,11 @@ function MetadataPage() {
     setTitleOverride(undefined);
     setAuthorOverride(undefined);
     if (inferred === undefined) {
-      // No mutate() follows for this pick, so nothing else clears a previous file's read result on its own -- without this, the old data table and title/author fields would stay visible underneath the "could not recognise" alert.
+      // No mutate() follows for this pick, so nothing else clears a previous file's read result on its own — without this, the old data table and title/author fields would stay visible underneath the "could not recognise" alert.
       readMetadata.reset();
       return;
     }
-    // A write still in flight for the previous file belongs to that file, not this one -- left unreset, its own pending state would still show the new file's Save button as loading the moment this read resolves and the panel reappears.
+    // A write still in flight for the previous file belongs to that file, not this one — left unreset, its own pending state would still show the new file's Save button as loading the moment this read resolves and the panel reappears.
     writeMetadata.reset();
     readMetadata.mutate(
       { format: inferred, bytes: opened.bytes },

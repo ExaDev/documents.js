@@ -33,7 +33,7 @@ describe("computeFormulaOperation", () => {
   });
 
   it("propagates an already-aborted signal through to resolving a path source's own bytes", async () => {
-    // A path that does not exist, so a real fs error (not the tree-read's own abort check) would result if resolveDocumentInput's own signal forwarding were ever dropped -- distinguishing this call site's abort handling from readNativeDocumentTree's, which would otherwise mask the difference (a real file's read would succeed either way, and the SAME signal would still abort the downstream tree read).
+    // A path that does not exist, so a real fs error (not the tree-read's own abort check) would result if resolveDocumentInput's own signal forwarding were ever dropped — distinguishing this call site's abort handling from readNativeDocumentTree's, which would otherwise mask the difference (a real file's read would succeed either way, and the SAME signal would still abort the downstream tree read).
     const controller = new AbortController();
     controller.abort();
 

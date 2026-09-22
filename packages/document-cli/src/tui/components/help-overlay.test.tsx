@@ -11,7 +11,7 @@ import {
 import { settle, waitForFrame } from "../test-support.js";
 import { HelpOverlay } from "./help-overlay.js";
 
-// Opens the help overlay itself on mount, matching app.tsx's own gating (HelpOverlay is only ever rendered while `overlays.help` is true) -- this lets a close test start from a genuinely-open overlay and prove the close actually flipped it, rather than the flag trivially already reading false before any key was ever sent.
+// Opens the help overlay itself on mount, matching app.tsx's own gating (HelpOverlay is only ever rendered while `overlays.help` is true) — this lets a close test start from a genuinely-open overlay and prove the close actually flipped it, rather than the flag trivially already reading false before any key was ever sent.
 function Harness(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();

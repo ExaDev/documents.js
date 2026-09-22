@@ -11,9 +11,9 @@ import {
 } from "./escher-constants";
 import { childrenOfType, readEscherRecords, type EscherRecord } from "./escher";
 
-// The Blip Store ([MS-ODRAW] OfficeArtBstoreContainer -- see escher-constants.ts for citations): the workbook-wide table of embedded images every worksheet's picture shapes reference by a 1-based index (their own Opt property table's `pib` value), read once from the workbook globals substream's own MsoDrawingGroup stream and shared across every sheet, exactly as [MS-ODRAW] documents the Blip Store as a property of the drawing DOCUMENT rather than of any one sheet's drawing.
+// The Blip Store ([MS-ODRAW] OfficeArtBstoreContainer — see escher-constants.ts for citations): the workbook-wide table of embedded images every worksheet's picture shapes reference by a 1-based index (their own Opt property table's `pib` value), read once from the workbook globals substream's own MsoDrawingGroup stream and shared across every sheet, exactly as [MS-ODRAW] documents the Blip Store as a property of the drawing DOCUMENT rather than of any one sheet's drawing.
 
-/** One resolved image: the bytes document-schema.js's ContentImageBlockSchema can actually carry (png/jpeg only -- see readBlipImage below), base64-encoded. */
+/** One resolved image: the bytes document-schema.js's ContentImageBlockSchema can actually carry (png/jpeg only — see readBlipImage below), base64-encoded. */
 export interface BlipImage {
   readonly format: "png" | "jpeg";
   readonly base64: string;
@@ -22,10 +22,10 @@ export interface BlipImage {
 const RGB_UID_SIZE = 16;
 const BLIP_TAG_SIZE = 1;
 
-/** [MS-ODRAW] OfficeArtFBSE's own fixed fields up to and including unused3, before the optional nameData and the nested embedded blip -- btWin32(1) + btMacOS(1) + rgbUid(16) + tag(2) + size(4) + cRef(4) + foDelay(4) + unused1(1) + cbName(1) + unused2(1) + unused3(1). */
+/** [MS-ODRAW] OfficeArtFBSE's own fixed fields up to and including unused3, before the optional nameData and the nested embedded blip — btWin32(1) + btMacOS(1) + rgbUid(16) + tag(2) + size(4) + cRef(4) + foDelay(4) + unused1(1) + cbName(1) + unused2(1) + unused3(1). */
 const BSE_FIXED_SIZE = 1 + 1 + RGB_UID_SIZE + 2 + 4 + 4 + 4 + 1 + 1 + 1 + 1;
 
-/** A Blip record's own recInstance, mapped to how many 16-byte rgbUid fields precede its `tag` byte and the raw file bytes -- one UID for a blip embedded once, two when [MS-ODRAW] also records a second, "printer" representation's own hash. Only PNG/JPEG instances are named: every other blip type resolves to no image at all (see readBlipImage), so its own UID count is never needed. */
+/** A Blip record's own recInstance, mapped to how many 16-byte rgbUid fields precede its `tag` byte and the raw file bytes — one UID for a blip embedded once, two when [MS-ODRAW] also records a second, "printer" representation's own hash. Only PNG/JPEG instances are named: every other blip type resolves to no image at all (see readBlipImage), so its own UID count is never needed. */
 const BLIP_UID_COUNTS: ReadonlyMap<number, number> = new Map([
   [0x6e0, 1], // PNG, 1 UID
   [0x6e1, 2], // PNG, 2 UIDs
@@ -35,12 +35,12 @@ const BLIP_UID_COUNTS: ReadonlyMap<number, number> = new Map([
   [0x6e3, 2], // JPEG (CMYK), 2 UIDs
 ]);
 
-/** Reads every BSE entry the workbook's own drawing-group Escher stream declares, keyed by its 1-based position in the Blip Store array -- the same index a picture shape's `pib` property names. A BSE this reader cannot turn into a real image (no embedded blip, or a blip type document-schema.js's ContentImageBlockSchema has no lossless slot for -- DIB, EMF, WMF, PICT, TIFF) is simply absent from the map, exactly like any other unsupported construct elsewhere in this package: a picture shape whose `pib` resolves to one of these is recognised as a picture but produces no ContentSheetImage, rather than a fabricated or mistranscoded one. */
+/** Reads every BSE entry the workbook's own drawing-group Escher stream declares, keyed by its 1-based position in the Blip Store array — the same index a picture shape's `pib` property names. A BSE this reader cannot turn into a real image (no embedded blip, or a blip type document-schema.js's ContentImageBlockSchema has no lossless slot for — DIB, EMF, WMF, PICT, TIFF) is simply absent from the map, exactly like any other unsupported construct elsewhere in this package: a picture shape whose `pib` resolves to one of these is recognised as a picture but produces no ContentSheetImage, rather than a fabricated or mistranscoded one. */
 export function readBlipStore(
   drawingGroupBytes: Uint8Array<ArrayBuffer>,
 ): ReadonlyMap<number, BlipImage> {
   const store = new Map<number, BlipImage>();
-  // No explicit empty-input guard: readEscherRecords already returns no records at all for a zero-length stream, which flows straight into the dgg-not-found return below -- the same empty store this function would otherwise have special-cased.
+  // No explicit empty-input guard: readEscherRecords already returns no records at all for a zero-length stream, which flows straight into the dgg-not-found return below — the same empty store this function would otherwise have special-cased.
   const roots = readEscherRecords(drawingGroupBytes);
   const dgg = roots.find(
     (record): record is Extract<EscherRecord, { kind: "container" }> =>
@@ -66,7 +66,7 @@ export function readBlipStore(
   return store;
 }
 
-/** One BSE atom's own body ([MS-ODRAW] OfficeArtFBSE): the fixed fields, an optional nameData string, then the nested embedded blip record -- present whenever the image is stored inline rather than only linked externally (foDelay !== 0xFFFFFFFF), which is the only case this reader can recover bytes for at all. */
+/** One BSE atom's own body ([MS-ODRAW] OfficeArtFBSE): the fixed fields, an optional nameData string, then the nested embedded blip record — present whenever the image is stored inline rather than only linked externally (foDelay !== 0xFFFFFFFF), which is the only case this reader can recover bytes for at all. */
 function readBseImage(data: Uint8Array<ArrayBuffer>): BlipImage | undefined {
   let cbName: number;
   try {
@@ -82,12 +82,12 @@ function readBseImage(data: Uint8Array<ArrayBuffer>): BlipImage | undefined {
     // cbName (a u8) is never negative, so it already IS the exact skip count with no separate zero-floor needed. unused2/unused3 are never skipped past: embeddedStart below is computed from BSE_FIXED_SIZE and cbName alone, not from the cursor's own position, so nothing ever reads through the cursor again after this line.
     cbName = cursor.u8();
   } catch (err) {
-    // A BSE entry truncated before its own fixed fields even end (shorter than the 34 bytes needed to reach cbName) is exactly like any other malformed record elsewhere in this package: absent from the result, not a thrown error. There is no separate numeric length pre-check for this -- the cursor's own bounds-checked reads already throw BiffFormatError at precisely the byte where truncation actually bites, which is a tighter and more honest boundary than restating BSE_FIXED_SIZE (a length that itself is never actually reachable-but-still-too-short, since any BSE this size or larger already has room to read past its own fixed fields) as a second, redundant check here.
+    // A BSE entry truncated before its own fixed fields even end (shorter than the 34 bytes needed to reach cbName) is exactly like any other malformed record elsewhere in this package: absent from the result, not a thrown error. There is no separate numeric length pre-check for this — the cursor's own bounds-checked reads already throw BiffFormatError at precisely the byte where truncation actually bites, which is a tighter and more honest boundary than restating BSE_FIXED_SIZE (a length that itself is never actually reachable-but-still-too-short, since any BSE this size or larger already has room to read past its own fixed fields) as a second, redundant check here.
     recoverFromFormatError(err, undefined);
     return;
   }
   const embeddedStart = BSE_FIXED_SIZE + cbName;
-  // No explicit "past the end" guard: an externally-linked reference (foDelay carries a delay-stream offset instead of an embedded blip, which this reader has no delay stream to resolve against) leaves nothing at or past embeddedStart, and subarray on an out-of-range start already yields an empty slice -- readEscherRecords finds no records in it, so blip below is undefined and this function still returns undefined, the identical outcome an explicit guard here would have produced.
+  // No explicit "past the end" guard: an externally-linked reference (foDelay carries a delay-stream offset instead of an embedded blip, which this reader has no delay stream to resolve against) leaves nothing at or past embeddedStart, and subarray on an out-of-range start already yields an empty slice — readEscherRecords finds no records in it, so blip below is undefined and this function still returns undefined, the identical outcome an explicit guard here would have produced.
   const embeddedBytes = data.subarray(embeddedStart);
   const blipRecords = readEscherRecords(embeddedBytes);
   const blip = blipRecords[0];
@@ -97,7 +97,7 @@ function readBseImage(data: Uint8Array<ArrayBuffer>): BlipImage | undefined {
   return readBlipImage(blip.recType, blip.recInstance, blip.data);
 }
 
-/** One embedded OfficeArtBlip record's own body -- one or two 16-byte rgbUid fields, a one-byte tag, then the literal image file bytes to the end of the record. PNG and JPEG blips carry their literal file bytes verbatim ([MS-ODRAW] OfficeArtBlipPNG/OfficeArtBlipJPEG); every other recognised blip type (DIB -- an in-memory Windows DIB, not a standalone .bmp file, and carrying no BITMAPFILEHEADER of its own to become one) has no lossless target in document-schema.js's ContentImageBlockSchema (png/jpeg/svg/gif only) and resolves to undefined rather than a mistranscoded image. */
+/** One embedded OfficeArtBlip record's own body — one or two 16-byte rgbUid fields, a one-byte tag, then the literal image file bytes to the end of the record. PNG and JPEG blips carry their literal file bytes verbatim ([MS-ODRAW] OfficeArtBlipPNG/OfficeArtBlipJPEG); every other recognised blip type (DIB — an in-memory Windows DIB, not a standalone .bmp file, and carrying no BITMAPFILEHEADER of its own to become one) has no lossless target in document-schema.js's ContentImageBlockSchema (png/jpeg/svg/gif only) and resolves to undefined rather than a mistranscoded image. */
 function readBlipImage(
   recType: number,
   recInstance: number,

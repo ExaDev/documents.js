@@ -1,10 +1,10 @@
 import { base64ToBytes } from "byte-codec";
 
-// Real JBIG2 embedded streams -- the exact byte sequence a PDF /JBIG2Decode filter carries -- produced by jbig2enc 0.32 (Adam Langley's encoder, the one behind essentially every JBIG2 image in a real PDF), by libtiff 4.7.2 for the MMR-coded region, and, for the two generic-region templates jbig2enc never emits, by a hand-written T.88 Annex E arithmetic encoder in scripts/generate-jbig2-fixtures.mjs. Embedded as base64 so the suite needs no filesystem access.
+// Real JBIG2 embedded streams — the exact byte sequence a PDF /JBIG2Decode filter carries — produced by jbig2enc 0.32 (Adam Langley's encoder, the one behind essentially every JBIG2 image in a real PDF), by libtiff 4.7.2 for the MMR-coded region, and, for the two generic-region templates jbig2enc never emits, by a hand-written T.88 Annex E arithmetic encoder in scripts/generate-jbig2-fixtures.mjs. Embedded as base64 so the suite needs no filesystem access.
 //
-// Every stream here, hand-encoded ones included, was decoded by jbig2dec (Ghostscript's own independent JBIG2 implementation) before being written out, and `expected` below is jbig2dec's decoded bitmap -- not this package's. See the generator script's header for why that matters and for how the TPGDON-bearing hand-encoded fixtures pin the template context bit ordering specifically.
+// Every stream here, hand-encoded ones included, was decoded by jbig2dec (Ghostscript's own independent JBIG2 implementation) before being written out, and `expected` below is jbig2dec's decoded bitmap — not this package's. See the generator script's header for why that matters and for how the TPGDON-bearing hand-encoded fixtures pin the template context bit ordering specifically.
 //
-// `expected` is one string per row, '#' for a black pixel -- JBIG2's own 1 bit, and the inverse of what a PDF /DeviceGray image stores.
+// `expected` is one string per row, '#' for a black pixel — JBIG2's own 1 bit, and the inverse of what a PDF /DeviceGray image stores.
 
 export interface Jbig2Fixture {
   readonly name: string;

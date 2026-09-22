@@ -82,7 +82,7 @@ describe("decodeCcittFax: real libtiff-encoded streams", () => {
   }
 
   it("stops at the end-of-block marker when the row count is not known in advance", () => {
-    // Every stream here ends with its own terminator -- T.6's EOFB (two EOLs) for Group 4, T.4's RTC (six EOLs) for Group 3 -- so a decode given no /Rows must still land on exactly the encoded row count.
+    // Every stream here ends with its own terminator — T.6's EOFB (two EOLs) for Group 4, T.4's RTC (six EOLs) for Group 3 — so a decode given no /Rows must still land on exactly the encoded row count.
     for (const fixture of CCITT_FAX_FIXTURES) {
       for (const encoding of ENCODINGS) {
         const result = decodeCcittFax(

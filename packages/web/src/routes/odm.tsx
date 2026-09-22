@@ -21,7 +21,7 @@ export const Route = createFileRoute("/odm")({
   component: OdmPage,
 });
 
-// The .odm rendering tool. A master document's chapters are external .odt references by design, so rendering in the browser is a two-file-kind flow: pick the .odm, then pick whichever of its linked chapter .odt files you have -- hrefs resolve by basename, and the procedure answers the named list of unresolved hrefs when chapters are missing, which is the whole UX ("add these files") rather than an error to hide. Everything runs in the worker through the same oRPC boundary as every other tool; the rendered PDF previews in the browser's native viewer.
+// The .odm rendering tool. A master document's chapters are external .odt references by design, so rendering in the browser is a two-file-kind flow: pick the .odm, then pick whichever of its linked chapter .odt files you have — hrefs resolve by basename, and the procedure answers the named list of unresolved hrefs when chapters are missing, which is the whole UX ("add these files") rather than an error to hide. Everything runs in the worker through the same oRPC boundary as every other tool; the rendered PDF previews in the browser's native viewer.
 function OdmPage() {
   const [master, setMaster] = useState<OpenedFile | undefined>(undefined);
   const [chapters, setChapters] = useState<OpenedFile[]>([]);
@@ -38,7 +38,7 @@ function OdmPage() {
     chapterFiles: OpenedFile[],
   ) => {
     if (masterFile === undefined) return;
-    // useMutation's own "pending" dispatch already clears the previous data/error before this call's result settles -- a separate reset() call immediately beforehand would only repeat that, never add a state transition of its own.
+    // useMutation's own "pending" dispatch already clears the previous data/error before this call's result settles — a separate reset() call immediately beforehand would only repeat that, never add a state transition of its own.
     renderOdm.mutate(
       {
         master: masterFile.bytes,
@@ -76,7 +76,7 @@ function OdmPage() {
         <Title order={2}>Render an .odm master document</Title>
         <Text c="dimmed">
           A master document links its chapters as external .odt files. Pick the
-          .odm, then add whichever chapter files you have -- the named list of
+          .odm, then add whichever chapter files you have — the named list of
           still-missing chapters tells you what else to add.
         </Text>
         <FileUpload
@@ -94,7 +94,7 @@ function OdmPage() {
           }}
           formatHint={
             chapters.length > 0
-              ? `chapters: ${chapters.map((file) => file.name).join(", ")} -- add more or re-pick to replace`
+              ? `chapters: ${chapters.map((file) => file.name).join(", ")} — add more or re-pick to replace`
               : "the linked chapter .odt files"
           }
         />

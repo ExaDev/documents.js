@@ -15,7 +15,7 @@ import {
 import { createServer } from "../server";
 import { buildMultiPagePdf } from "../test-support/pdf-fixture";
 
-// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip -- not the tool callback in isolation -- so this proves the wiring: that `pdf_inspect` is registered under that name on the server createServer() returns, that it reads a real PDF through documents.js's own readPdf, and that both the summary and the full parsed LayoutDocument reach the caller as structuredContent.
+// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip — not the tool callback in isolation — so this proves the wiring: that `pdf_inspect` is registered under that name on the server createServer() returns, that it reads a real PDF through documents.js's own readPdf, and that both the summary and the full parsed LayoutDocument reach the caller as structuredContent.
 
 interface ConnectedPair {
   readonly client: Client;
@@ -37,12 +37,12 @@ async function connect(): Promise<ConnectedPair> {
   return { client, close: async () => client.close() };
 }
 
-// result.structuredContent is typed unknown by the client SDK (SEP-2106) -- narrowed here rather than cast, per this repo's own "no type assertions" convention.
+// result.structuredContent is typed unknown by the client SDK (SEP-2106) — narrowed here rather than cast, per this repo's own "no type assertions" convention.
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// Array.isArray itself narrows `unknown` to `any[]`, not `readonly unknown[]` -- destructuring straight out of that trips @typescript-eslint/no-unsafe-assignment. This local guard keeps the element type honestly `unknown` instead.
+// Array.isArray itself narrows `unknown` to `any[]`, not `readonly unknown[]` — destructuring straight out of that trips @typescript-eslint/no-unsafe-assignment. This local guard keeps the element type honestly `unknown` instead.
 function isUnknownArray(value: unknown): value is readonly unknown[] {
   return Array.isArray(value);
 }
@@ -71,7 +71,7 @@ describe("pdf_inspect", () => {
     await pair.close();
   });
 
-  it("summarises page count, per-page item-kind histogram, metadata, and image formats -- via a filesystem path", async () => {
+  it("summarises page count, per-page item-kind histogram, metadata, and image formats — via a filesystem path", async () => {
     const result = await pair.client.callTool({
       name: "pdf_inspect",
       arguments: { source: { path: pdfPath } },
@@ -128,7 +128,7 @@ describe("pdf_inspect", () => {
     }
     expect(imagesByFormat.png).toBe(1);
 
-    // content mirrors structuredContent as JSON text -- the same convention every other tool in this package follows. toEqual, not toStrictEqual: a JSON round trip cannot distinguish an explicitly-undefined optional metadata field (readPdf's own in-memory LayoutMetadata carries title/author/subject/creator/keywords as explicit `undefined`) from a genuinely missing key (what JSON.stringify/JSON.parse produces for it instead) -- an inherent property of JSON, not a defect. Mirrors document-cli's own src/commands/pdf-inspect.test.ts note on the identical distinction.
+    // content mirrors structuredContent as JSON text — the same convention every other tool in this package follows. toEqual, not toStrictEqual: a JSON round trip cannot distinguish an explicitly-undefined optional metadata field (readPdf's own in-memory LayoutMetadata carries title/author/subject/creator/keywords as explicit `undefined`) from a genuinely missing key (what JSON.stringify/JSON.parse produces for it instead) — an inherent property of JSON, not a defect. Mirrors document-cli's own src/commands/pdf-inspect.test.ts note on the identical distinction.
     const [block] = result.content;
     expect(block?.type).toBe("text");
     expect(block?.type === "text" ? JSON.parse(block.text) : undefined).toEqual(
@@ -153,7 +153,7 @@ describe("pdf_inspect", () => {
         "expected pdf_inspect --full to return a structured LayoutDocument object",
       );
     }
-    // No $schema any more: the layout-document schema family moved to pdf-codec in the schema-4 major and pdf-codec publishes no .schema.json URI to stamp -- the value's own formatVersion literal (still 1) is its version marker.
+    // No $schema any more: the layout-document schema family moved to pdf-codec in the schema-4 major and pdf-codec publishes no .schema.json URI to stamp — the value's own formatVersion literal (still 1) is its version marker.
     expect(layout.$schema).toBeUndefined();
     expect(layout.formatVersion).toBe(1);
 

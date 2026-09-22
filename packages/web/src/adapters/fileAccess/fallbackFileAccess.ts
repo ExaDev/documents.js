@@ -4,7 +4,7 @@ import type {
   SaveResult,
 } from "../../ports/fileAccess";
 
-// <input type="file"> open + Blob-URL <a download> save, for browsers without the File System Access API (Firefox, Safari). No FileSystemFileHandle is ever returned -- "recent files" for these callers is metadata-only history, not a reopenable reference.
+// <input type="file"> open + Blob-URL <a download> save, for browsers without the File System Access API (Firefox, Safari). No FileSystemFileHandle is ever returned — "recent files" for these callers is metadata-only history, not a reopenable reference.
 export function createFallbackFileAccess(): FileAccessPort {
   return {
     supportsNativePicker: () => false,

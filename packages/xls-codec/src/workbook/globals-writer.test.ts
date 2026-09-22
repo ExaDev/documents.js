@@ -27,7 +27,7 @@ function recordsOf(plan: WorkbookGlobalsPlan) {
 }
 
 describe("buildWorkbookGlobals", () => {
-  it("writes exactly fifteen STYLE records -- the fixed built-in style table, unconditionally", () => {
+  it("writes exactly fifteen STYLE records — the fixed built-in style table, unconditionally", () => {
     const styleRecords = recordsOf(BASE_PLAN).filter(
       (record) => record.type === RECORD_STYLE,
     );

@@ -15,9 +15,9 @@ import {
   readXmlBool,
 } from "./util";
 
-// Reads a worksheet's own <pageSetup>/<printOptions>/<pageMargins>/<rowBreaks>/<colBreaks>, plus its sheet-scoped _xlnm.Print_Area/_xlnm.Print_Titles defined names (see defined-names.ts), into a ContentSheetPrintSettings. Every attribute name and structural shape below was confirmed against real LibreOffice output (typed/xlsx/content.test.ts's own kitchen-sink.xlsx fixture, itself a genuine LibreOffice xlsx-export of odf.js's own kitchen-sink.ods -- see that test file's own top-of-file note), not assumed from memory.
+// Reads a worksheet's own <pageSetup>/<printOptions>/<pageMargins>/<rowBreaks>/<colBreaks>, plus its sheet-scoped _xlnm.Print_Area/_xlnm.Print_Titles defined names (see defined-names.ts), into a ContentSheetPrintSettings. Every attribute name and structural shape below was confirmed against real LibreOffice output (typed/xlsx/content.test.ts's own kitchen-sink.xlsx fixture, itself a genuine LibreOffice xlsx-export of odf.js's own kitchen-sink.ods — see that test file's own top-of-file note), not assumed from memory.
 
-// Excel's own "Normal" margin preset -- the fallback used only when a worksheet has no <pageMargins> element at all (real producers always write one; this covers a hand-built or minimally-conformant xlsx). Confirmed via multiple independent references (e.g. XlsxWriter's own Page Setup documentation, which documents Excel's Normal/Wide/Narrow presets identically): top/bottom 0.75in, left/right 0.7in, header/footer 0.3in. This module models only top/right/bottom/left (Margins has no header/footer fields of its own); the header/footer distance is not read at all -- ContentSheetPrintSettings has no field for it.
+// Excel's own "Normal" margin preset — the fallback used only when a worksheet has no <pageMargins> element at all (real producers always write one; this covers a hand-built or minimally-conformant xlsx). Confirmed via multiple independent references (e.g. XlsxWriter's own Page Setup documentation, which documents Excel's Normal/Wide/Narrow presets identically): top/bottom 0.75in, left/right 0.7in, header/footer 0.3in. This module models only top/right/bottom/left (Margins has no header/footer fields of its own); the header/footer distance is not read at all — ContentSheetPrintSettings has no field for it.
 const DEFAULT_MARGINS: Margins = {
   topPt: 0.75 * POINTS_PER_INCH,
   rightPt: 0.7 * POINTS_PER_INCH,
@@ -25,13 +25,13 @@ const DEFAULT_MARGINS: Margins = {
   leftPt: 0.7 * POINTS_PER_INCH,
 };
 
-// The SAME Normal-preset header/footer distance (0.3in), exported for typed/xlsx/build.ts -- pageMargins' header/footer attributes are REQUIRED by CT_PageMargins even though ContentSheetPrintSettings has no field to source a real value from, so the writer needs this identical constant rather than inventing its own.
+// The SAME Normal-preset header/footer distance (0.3in), exported for typed/xlsx/build.ts — pageMargins' header/footer attributes are REQUIRED by CT_PageMargins even though ContentSheetPrintSettings has no field to source a real value from, so the writer needs this identical constant rather than inventing its own.
 export const DEFAULT_HEADER_FOOTER_MARGIN_PT = 0.3 * POINTS_PER_INCH;
 
 // fitToWidth/fitToHeight both default to 1 per ECMA-376's own CT_PageSetup when the attribute is absent but fitToPage mode is active.
 const DEFAULT_FIT_TO_PAGES = 1;
 
-// pageSetup@orientation ("portrait" | "landscape" | "default", ECMA-376's own default being "default" i.e. printer-decided, treated here as portrait) tells a reader whether the paper size it just resolved (via paperSize code or explicit paperWidth/paperHeight, both of which are defined in the paper's own PORTRAIT dimensions) needs its width/height swapped to reflect the sheet's actual printed orientation -- confirmed necessary for round-trip consistency with this module's own write side, which derives pageSetup@orientation the opposite direction (from whether widthPt > heightPt) in typed/xlsx/build.ts.
+// pageSetup@orientation ("portrait" | "landscape" | "default", ECMA-376's own default being "default" i.e. printer-decided, treated here as portrait) tells a reader whether the paper size it just resolved (via paperSize code or explicit paperWidth/paperHeight, both of which are defined in the paper's own PORTRAIT dimensions) needs its width/height swapped to reflect the sheet's actual printed orientation — confirmed necessary for round-trip consistency with this module's own write side, which derives pageSetup@orientation the opposite direction (from whether widthPt > heightPt) in typed/xlsx/build.ts.
 function applyOrientation(
   pageSize: PageSize,
   pageSetup: XmlElement | undefined,
@@ -69,7 +69,7 @@ function readPageSize(pageSetup: XmlElement | undefined): PageSize {
     : applyOrientation({ widthPt, heightPt }, pageSetup);
 }
 
-// xlsx's own <pageMargins> is always expressed in inches (unitless numeric attribute values, per ECMA-376 CT_PageMargins) -- unlike <pageSetup>'s paperWidth/paperHeight, which carry an explicit ST_PositiveUniversalMeasure unit suffix.
+// xlsx's own <pageMargins> is always expressed in inches (unitless numeric attribute values, per ECMA-376 CT_PageMargins) — unlike <pageSetup>'s paperWidth/paperHeight, which carry an explicit ST_PositiveUniversalMeasure unit suffix.
 function readMargins(pageMargins: XmlElement | undefined): Margins {
   if (pageMargins === undefined) {
     return DEFAULT_MARGINS;
@@ -116,7 +116,7 @@ function readManualBreaks(
   return rows.length > 0 || columns.length > 0 ? { rows, columns } : undefined;
 }
 
-// Per ECMA-376 Part 1 SS18.3.1.2 (brk, CT_Break): "id" is the zero-based row/column index the break occurs immediately above/left of -- the SAME 0-based, break-precedes-this-index convention document-schema.js's own ContentSheetPrintSettings.manualBreaks already documents for its own rows/columns arrays (mirroring ODF's fo:break-before semantics), so no index translation is needed in either direction.
+// Per ECMA-376 Part 1 SS18.3.1.2 (brk, CT_Break): "id" is the zero-based row/column index the break occurs immediately above/left of — the SAME 0-based, break-precedes-this-index convention document-schema.js's own ContentSheetPrintSettings.manualBreaks already documents for its own rows/columns arrays (mirroring ODF's fo:break-before semantics), so no index translation is needed in either direction.
 function readBreakIndices(container: XmlElement): number[] {
   const indices: number[] = [];
   for (const brk of childrenWithTag(container, "brk")) {

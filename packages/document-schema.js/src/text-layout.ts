@@ -1,7 +1,7 @@
 import type { Color } from "./color";
 import type { LayoutFont } from "./style";
 
-// The text-layout port contracts a layout engine consumes, independent of any concrete font backend. pdf-codec implements TextMeasurer (over the standard-14 AFM widths and any caller/embedded faces); a layout engine (documents.js's src/layout/) takes a TextMeasurer as an injected parameter and depends only on this interface, never on the implementation. Kept here -- the neutral shared-schema package, already home to LayoutFont/Color these reference -- so a layout engine never reaches into a specific rendering backend for its contracts. Mirrors src/codec.ts's own precedent of hosting behavioural ports alongside the Zod schemas.
+// The text-layout port contracts a layout engine consumes, independent of any concrete font backend. pdf-codec implements TextMeasurer (over the standard-14 AFM widths and any caller/embedded faces); a layout engine (documents.js's src/layout/) takes a TextMeasurer as an injected parameter and depends only on this interface, never on the implementation. Kept here — the neutral shared-schema package, already home to LayoutFont/Color these reference — so a layout engine never reaches into a specific rendering backend for its contracts. Mirrors src/codec.ts's own precedent of hosting behavioural ports alongside the Zod schemas.
 
 // The metrics an underline drawn under a run at one size needs: where (relative to the baseline; negative is below it) and how thick.
 export interface UnderlineMetrics {
@@ -16,7 +16,7 @@ export interface TextMeasurer {
   ascenderAtSize(font: LayoutFont, sizePt: number): number;
   descenderAtSize(font: LayoutFont, sizePt: number): number;
   underlineAtSize(font: LayoutFont, sizePt: number): UnderlineMetrics;
-  // The horizontal scaling value (1.0 = no scaling) this font's actual glyphs must be drawn at so the rendered text lines up with what widthOfTextAtSize measured. Must come from the same measurer instance driving layout -- measuring at one font's metrics and drawing at another's would wrap text at positions that do not match what is painted.
+  // The horizontal scaling value (1.0 = no scaling) this font's actual glyphs must be drawn at so the rendered text lines up with what widthOfTextAtSize measured. Must come from the same measurer instance driving layout — measuring at one font's metrics and drawing at another's would wrap text at positions that do not match what is painted.
   horizontalScaleFor(font: LayoutFont): number;
 }
 
@@ -31,7 +31,7 @@ export interface StyledRun {
   readonly sourcePath?: string;
 }
 
-// A wrapped fragment of a StyledRun -- the same fields, produced by the line-breaker. Distinct from StyledRun (rather than `StyledRun & { xOffsetPt }`) so the input and output of wrapping read as different things at the type level.
+// A wrapped fragment of a StyledRun — the same fields, produced by the line-breaker. Distinct from StyledRun (rather than `StyledRun & { xOffsetPt }`) so the input and output of wrapping read as different things at the type level.
 export interface StyledFragment {
   readonly text: string;
   readonly font: LayoutFont;

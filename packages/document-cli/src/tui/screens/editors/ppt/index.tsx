@@ -15,7 +15,7 @@ import { useNavigationInput } from "../../../keybindings/use-navigation-input.js
 import { useAppDispatch, useAppState } from "../../../state/context.js";
 import { anyOverlayOpen, type PptOpenDocument } from "../../../state/types.js";
 
-// The ppt root screens. The slide list is the shared slide-family list (PptSlide/PptShape carry the identical summary subset it reads); the detail screen is deliberately NOT the shared rich one -- that screen's shape/table/image editing runs on PptxSlide/OdpSlide's full API, while a ppt slide carries the text-box-and-notes subset [MS-PPT]'s own writer supports -- so this narrower companion exists beside it, editing exactly what a .ppt can state: shape text and frames, speaker notes, and adding text boxes.
+// The ppt root screens. The slide list is the shared slide-family list (PptSlide/PptShape carry the identical summary subset it reads); the detail screen is deliberately NOT the shared rich one — that screen's shape/table/image editing runs on PptxSlide/OdpSlide's full API, while a ppt slide carries the text-box-and-notes subset [MS-PPT]'s own writer supports — so this narrower companion exists beside it, editing exactly what a .ppt can state: shape text and frames, speaker notes, and adding text boxes.
 
 function pptDocument(state: ReturnType<typeof useAppState>): PptOpenDocument {
   const doc = state.openDocument;

@@ -10,7 +10,7 @@ import type {
 } from "document-schema.js";
 import type { MathMlElement, MathMlNode } from "./nodes";
 
-// Real font metrics throughout -- src/mathml itself has zero dependency on pdf-codec (see this module's own README/architecture note), but its OWN test suite reaching into the real embedded font for realistic, non-synthetic assertions is a pragmatic, test-only exception: MathFontMetrics is a plain interface (metrics.ts), and pdf-codec's loadMathFont() is simply the most realistic implementation available to verify layout.ts's own geometry against.
+// Real font metrics throughout — src/mathml itself has zero dependency on pdf-codec (see this module's own README/architecture note), but its OWN test suite reaching into the real embedded font for realistic, non-synthetic assertions is a pragmatic, test-only exception: MathFontMetrics is a plain interface (metrics.ts), and pdf-codec's loadMathFont() is simply the most realistic implementation available to verify layout.ts's own geometry against.
 const SIZE_PT = 12;
 function metrics() {
   return loadMathFont().metricsAt(SIZE_PT);
@@ -40,7 +40,7 @@ function mtext(value: string): MathMlElement {
   return el("mtext", [text(value)]);
 }
 
-// Wraps the real embedded font's own metrics, overriding the ink bounds for two codepoints that are otherwise unrelated to their real glyph outlines -- '.' (PERIOD, U+002E) standing in for a visually short glyph, '[' (LEFT SQUARE BRACKET, U+005B) for a visually tall one -- while leaving every other measurement (advance width, italic correction, topAccentXPt) exactly as the real font reports it. pdf-codec's own font backend does populate inkAscentPt/inkDescentPt from real glyph outlines now (see metrics.ts's own doc comment), so this override exists purely for deterministic, easy-to-eyeball test values (1pt/0.3pt and 10pt/4pt) rather than to compensate for a missing capability -- the real per-glyph figures (period ~1.37pt/0.10pt, bracket ~8.83pt/2.35pt at this size) would exercise the identical union logic just as validly, only with less legible assertions.
+// Wraps the real embedded font's own metrics, overriding the ink bounds for two codepoints that are otherwise unrelated to their real glyph outlines — '.' (PERIOD, U+002E) standing in for a visually short glyph, '[' (LEFT SQUARE BRACKET, U+005B) for a visually tall one — while leaving every other measurement (advance width, italic correction, topAccentXPt) exactly as the real font reports it. pdf-codec's own font backend does populate inkAscentPt/inkDescentPt from real glyph outlines now (see metrics.ts's own doc comment), so this override exists purely for deterministic, easy-to-eyeball test values (1pt/0.3pt and 10pt/4pt) rather than to compensate for a missing capability — the real per-glyph figures (period ~1.37pt/0.10pt, bracket ~8.83pt/2.35pt at this size) would exercise the identical union logic just as validly, only with less legible assertions.
 const PERIOD_INK = { inkAscentPt: 1, inkDescentPt: 0.3 } as const; // well inside the font's own nominal ascent/descent at SIZE_PT (9.144pt / 2.856pt)
 const BRACKET_INK = { inkAscentPt: 10, inkDescentPt: 4 } as const; // deliberately taller than the font's own nominal ascent/descent at SIZE_PT
 function metricsWithInk(): MathFontMetrics {
@@ -128,7 +128,7 @@ describe("layoutFormula: mi/mn/mo tokens", () => {
       sizePt: SIZE_PT,
       color: BLACK,
     }).box;
-    // The '+'-bearing row must be wider than "x" and "y" alone by more than the '+' glyph's own advance width -- the extra is the lspace/rspace this package's own operator dictionary assigns '+'.
+    // The '+'-bearing row must be wider than "x" and "y" alone by more than the '+' glyph's own advance width — the extra is the lspace/rspace this package's own operator dictionary assigns '+'.
     const plusOnly = layoutFormula([mo("+")], {
       metrics: metrics(),
       sizePt: SIZE_PT,
@@ -204,7 +204,7 @@ describe("layoutFormula: msqrt/mroot", () => {
   });
 
   it("falls back to a hand-drawn hooked stroke when the font offers no radical construction", () => {
-    // A metrics port whose stretch returns undefined for every code point -- a font backend with no √ MathVariants data -- must keep rendering a real radical via the hand-drawn hook rather than vanishing.
+    // A metrics port whose stretch returns undefined for every code point — a font backend with no √ MathVariants data — must keep rendering a real radical via the hand-drawn hook rather than vanishing.
     const noStretch: MathFontMetrics = {
       ...metrics(),
       stretch: () => undefined,
@@ -241,7 +241,7 @@ describe("layoutFormula: msqrt/mroot", () => {
 
 describe("layoutFormula: msub/msup/msubsup", () => {
   it("shifts a superscript up and a subscript down relative to the base, both starting after the base's own width", () => {
-    // <msubsup> base subscript superscript </msubsup> -- MathML's own fixed child order (MathML3 3.4.4).
+    // <msubsup> base subscript superscript </msubsup> — MathML's own fixed child order (MathML3 3.4.4).
     const { box, diagnostics } = layoutFormula(
       [el("msubsup", [mi("y"), mn("1"), mn("2")])],
       { metrics: metrics(), sizePt: SIZE_PT, color: BLACK },
@@ -263,7 +263,7 @@ describe("layoutFormula: msub/msup/msubsup", () => {
   });
 
   it("a movablelimits operator (sum) renders as ordinary sub/sup, not stacked over/under, outside display style", () => {
-    // munder/mover in a nested (non-displaystyle) context -- see layoutUnderOverElement's own displayStyle branch.
+    // munder/mover in a nested (non-displaystyle) context — see layoutUnderOverElement's own displayStyle branch.
     const nested = el("mfrac", [el("munder", [mo("∑"), mn("0")]), mi("n")]); // sum symbol
     const { box } = layoutFormula([nested], {
       metrics: metrics(),
@@ -296,13 +296,13 @@ describe("layoutFormula: munder/mover/munderover (display style)", () => {
 
 describe("layoutFormula: munder/mover/munderover accent-attachment centring", () => {
   it('centres a genuine accent="true" overscript at the base glyph\'s own font-declared top-accent-attachment point, not the geometric centre of the combined box', () => {
-    // A classic vector accent: an italic v with a rightwards-arrow accent above it. The arrow (11.376pt wide) is wider than the italic 'v' (6.048pt wide), so geometric centring and attachment-point centring genuinely disagree here -- STIX Two Math's own MathTopAccentAttachment entry for italic v (3.84pt from its own left origin) sits right of that glyph's geometric half-width (3.024pt), because the glyph slants.
+    // A classic vector accent: an italic v with a rightwards-arrow accent above it. The arrow (11.376pt wide) is wider than the italic 'v' (6.048pt wide), so geometric centring and attachment-point centring genuinely disagree here — STIX Two Math's own MathTopAccentAttachment entry for italic v (3.84pt from its own left origin) sits right of that glyph's geometric half-width (3.024pt), because the glyph slants.
     const construct = el(
       "mover",
       [mi("v"), mo("→")],
       [{ name: "accent", value: "true" }],
     );
-    const geometric = el("mover", [mi("v"), mo("→")]); // no accent="true" -- must fall back to plain geometric centring
+    const geometric = el("mover", [mi("v"), mo("→")]); // no accent="true" — must fall back to plain geometric centring
 
     const { box: accentBox, diagnostics } = layoutFormula([construct], {
       metrics: metrics(),
@@ -333,7 +333,7 @@ describe("layoutFormula: munder/mover/munderover accent-attachment centring", ()
     expect(geometricOver.xPt).toBeCloseTo(0, 6);
 
     // Attachment-point centring shifts the arrow right, so its own horizontal centre lands under the italic v's own font-declared attachment point rather than the box's geometric centre.
-    expect(accentOver.xPt).toBeGreaterThan(geometricOver.xPt + 0.5); // a real, non-trivial offset -- not rounding noise
+    expect(accentOver.xPt).toBeGreaterThan(geometricOver.xPt + 0.5); // a real, non-trivial offset — not rounding noise
     expect(accentOver.xPt).toBeCloseTo(0.816, 2); // baseXPt (2.664) + topAccentXPt (3.84) - arrow.widthPt / 2 (5.688)
   });
 
@@ -425,7 +425,7 @@ describe("layoutFormula: diagnostics and graceful degradation", () => {
       { kind: "unsupported-element", detail: "mphantom" },
     ]);
     const [run] = glyphRuns(box.items);
-    // The fallback renders the element's own raw extracted text content upright (mathvariant 'normal'), not re-resolving nested mi's own italic default -- it degrades to plain text, not a re-run of the full layout algorithm on the unsupported subtree.
+    // The fallback renders the element's own raw extracted text content upright (mathvariant 'normal'), not re-resolving nested mi's own italic default — it degrades to plain text, not a re-run of the full layout algorithm on the unsupported subtree.
     expect(run!.text).toBe("x");
     expect(run!.text.codePointAt(0)).toBe(0x78);
   });
@@ -473,14 +473,14 @@ describe("layoutFormula: token box height from real per-glyph ink bounds", () =>
       color: BLACK,
     }).box;
 
-    // Before this change every token box shared the identical nominal height (ascentPerEm + descentPerEm) * SIZE_PT regardless of glyph -- these must now be the real, distinct injected ink bounds, not the nominal ones.
+    // Before this change every token box shared the identical nominal height (ascentPerEm + descentPerEm) * SIZE_PT regardless of glyph — these must now be the real, distinct injected ink bounds, not the nominal ones.
     expect(shortBox.ascentPt).toBeCloseTo(PERIOD_INK.inkAscentPt, 6);
     expect(shortBox.descentPt).toBeCloseTo(PERIOD_INK.inkDescentPt, 6);
     expect(tallBox.ascentPt).toBeCloseTo(BRACKET_INK.inkAscentPt, 6);
     expect(tallBox.descentPt).toBeCloseTo(BRACKET_INK.inkDescentPt, 6);
 
     expect(tallBox.heightPt).toBeGreaterThan(shortBox.heightPt);
-    // A real, non-trivial numeric gap -- (10 + 4) - (1 + 0.3) = 12.7pt -- not rounding noise.
+    // A real, non-trivial numeric gap — (10 + 4) - (1 + 0.3) = 12.7pt — not rounding noise.
     expect(tallBox.heightPt - shortBox.heightPt).toBeCloseTo(12.7, 6);
   });
 
@@ -493,7 +493,7 @@ describe("layoutFormula: token box height from real per-glyph ink bounds", () =>
     expect(shortThenTall.ascentPt).toBeCloseTo(BRACKET_INK.inkAscentPt, 6); // max(1, 10)
     expect(shortThenTall.descentPt).toBeCloseTo(BRACKET_INK.inkDescentPt, 6); // max(0.3, 4)
 
-    // Order-independent: the taller glyph's own bounds win whether it is the first or second character -- proving this is a real union, not "use the first character's metric".
+    // Order-independent: the taller glyph's own bounds win whether it is the first or second character — proving this is a real union, not "use the first character's metric".
     const tallThenShort = layoutFormula([mtext("[.")], {
       metrics: metricsWithInk(),
       sizePt: SIZE_PT,
@@ -529,10 +529,10 @@ describe("layoutFormula: token box height from real per-glyph ink bounds", () =>
   });
 });
 
-// Stretchy fences drawn from the font's own OpenType MATH MathVariants data. Every glyph ID asserted below is looked up from the real font by the Unicode name of the piece it is -- LEFT PARENTHESIS LOWER HOOK (U+239D) and friends -- rather than hardcoded, which makes these assertions an external cross-check on which pieces the engine picked and in which order, not a restatement of whatever it produced. The bracket family is the one family whose assembly pieces Unicode gives code points to at all (the U+239B..U+23AD block); every other stretchy construction's pieces are unencoded, which is exactly why a placement carries a glyph ID rather than text.
+// Stretchy fences drawn from the font's own OpenType MATH MathVariants data. Every glyph ID asserted below is looked up from the real font by the Unicode name of the piece it is — LEFT PARENTHESIS LOWER HOOK (U+239D) and friends — rather than hardcoded, which makes these assertions an external cross-check on which pieces the engine picked and in which order, not a restatement of whatever it produced. The bracket family is the one family whose assembly pieces Unicode gives code points to at all (the U+239B..U+23AD block); every other stretchy construction's pieces are unencoded, which is exactly why a placement carries a glyph ID rather than text.
 describe("layoutFormula: stretchy fences", () => {
   const font = loadMathFont().font;
-  const LEFT_PAREN_PIECES = [0x239d, 0x239c, 0x239b]; // lower hook, extension, upper hook -- bottom to top
+  const LEFT_PAREN_PIECES = [0x239d, 0x239c, 0x239b]; // lower hook, extension, upper hook — bottom to top
   const RIGHT_PAREN_PIECES = [0x239e, 0x239f, 0x23a0]; // upper hook, extension, lower hook (Unicode names the right-hand pieces top-first)
   const LEFT_BRACKET_PIECES = [0x23a3, 0x23a2, 0x23a1]; // LEFT SQUARE BRACKET LOWER CORNER / EXTENSION / UPPER CORNER
 
@@ -543,7 +543,7 @@ describe("layoutFormula: stretchy fences", () => {
   ): MathMlElement {
     return el("mrow", [mo(open), inner, mo(close)]);
   }
-  // A fraction whose numerator is itself a fraction, nested `depth` times -- the tallest thing this test can build out of ordinary MathML, and the only way to push a fence past the largest pre-built variant the font offers (3821 design units, 45.85pt at 12pt) into a genuine part assembly.
+  // A fraction whose numerator is itself a fraction, nested `depth` times — the tallest thing this test can build out of ordinary MathML, and the only way to push a fence past the largest pre-built variant the font offers (3821 design units, 45.85pt at 12pt) into a genuine part assembly.
   function nestedFraction(depth: number): MathMlElement {
     let numerator: MathMlElement = mn("1");
     for (let i = 0; i < depth; i++) {
@@ -561,7 +561,7 @@ describe("layoutFormula: stretchy fences", () => {
 
   it("leaves an ordinary inline fence as a text glyph run, since the base glyph already covers its content", () => {
     const box = layout(fenced(mi("x")));
-    // Nothing to assemble: 'x' is well inside the base parenthesis, so the operator keeps its real Unicode text -- which is what keeps a plain (x) extracting as "(x)" from the resulting PDF.
+    // Nothing to assemble: 'x' is well inside the base parenthesis, so the operator keeps its real Unicode text — which is what keeps a plain (x) extracting as "(x)" from the resulting PDF.
     expect(assembled(box.items)).toHaveLength(0);
     expect(glyphRuns(box.items).map((run) => run.text)).toContain("(");
     expect(glyphRuns(box.items).map((run) => run.text)).toContain(")");
@@ -571,7 +571,7 @@ describe("layoutFormula: stretchy fences", () => {
     const box = layout(fenced(nestedFraction(1)));
     const items = assembled(box.items);
     expect(items).toHaveLength(2);
-    // One glyph each: a pre-built variant, not an assembly -- a single-level fraction is well within the sizes STIX Two Math draws by hand.
+    // One glyph each: a pre-built variant, not an assembly — a single-level fraction is well within the sizes STIX Two Math draws by hand.
     expect(items.map((item) => item.placements.length)).toEqual([1, 1]);
     expect(items.map((item) => item.text)).toEqual(["(", ")"]);
     // A genuinely different glyph from the base parenthesis, and from each other (the font draws left and right separately).
@@ -587,7 +587,7 @@ describe("layoutFormula: stretchy fences", () => {
     expect(open).toBeDefined();
     expect(close).toBeDefined();
 
-    // Bottom hook, one or more extension pieces, top hook -- identified by the Unicode code points of the pieces themselves, so this checks the engine picked the real parenthesis parts in the real bottom-to-top order the font lists them in.
+    // Bottom hook, one or more extension pieces, top hook — identified by the Unicode code points of the pieces themselves, so this checks the engine picked the real parenthesis parts in the real bottom-to-top order the font lists them in.
     const openGlyphs = open!.placements.map((placement) => placement.glyphId);
     expect(openGlyphs.length).toBeGreaterThan(2);
     expect(openGlyphs[0]).toBe(font.glyphId(LEFT_PAREN_PIECES[0]!));
@@ -647,7 +647,7 @@ describe("layoutFormula: stretchy fences", () => {
   });
 
   it("centres a stretched fence on the maths axis rather than on the text baseline", () => {
-    // A symmetric fence's own ascent and descent are (axis + h/2) and (h/2 - axis), so their difference is twice the axis height whatever h turns out to be -- and because a symmetric fence always covers the content on both sides of the axis, the whole fenced row inherits that same difference. A baseline-aligned fence would instead show almost all of its height as ascent, so this is a real discriminator, not a tautology.
+    // A symmetric fence's own ascent and descent are (axis + h/2) and (h/2 - axis), so their difference is twice the axis height whatever h turns out to be — and because a symmetric fence always covers the content on both sides of the axis, the whole fenced row inherits that same difference. A baseline-aligned fence would instead show almost all of its height as ascent, so this is a real discriminator, not a tautology.
     //
     // The residual tolerance is one font design unit (0.012pt at 12pt): a construction's own measured INK is a design unit or two shorter than the nominal advance the assembly model reaches its target with, so the fence can end up a hair shorter than the content's own descent on one side, which the row's own max() then keeps.
     const oneDesignUnitPt = SIZE_PT / loadMathFont().font.descriptor.unitsPerEm;
@@ -718,14 +718,14 @@ describe("layoutFormula: stretchy fences", () => {
   });
 });
 
-// Horizontal stretchy-glyph assembly for an over/under-brace (U+23DE/U+23DF) spanning its own munder/mover/munderover base -- stretchOperator/stretchedBox's horizontal-axis sibling, stretchHorizontalOperator/horizontallyStretchedBox, exercised via layoutUnderOverChild.
+// Horizontal stretchy-glyph assembly for an over/under-brace (U+23DE/U+23DF) spanning its own munder/mover/munderover base — stretchOperator/stretchedBox's horizontal-axis sibling, stretchHorizontalOperator/horizontallyStretchedBox, exercised via layoutUnderOverChild.
 //
-// The over/under script of a munder/mover is laid out in scriptContext (a reduced sizePt, scriptPercentScaleDown of the outer size -- see layoutUnderOverElement), so the base/variant/assembly breakpoints below are NOT the same target widths that would trigger each outcome for a bare mo at the outer sizePt: the font's own base-glyph advance and every pre-built variant size are all measured at that SAME reduced size, which this suite's own breakpoint probing (against the real embedded font, not guessed) confirmed shifts every threshold narrower. `wideBase(charCount)` mirrors nestedFraction's own "make a real MathML construct wide/tall enough to force a stretch" trick, but growing WIDTH via a flat mrow of single-character mi's rather than height via nested fractions.
+// The over/under script of a munder/mover is laid out in scriptContext (a reduced sizePt, scriptPercentScaleDown of the outer size — see layoutUnderOverElement), so the base/variant/assembly breakpoints below are NOT the same target widths that would trigger each outcome for a bare mo at the outer sizePt: the font's own base-glyph advance and every pre-built variant size are all measured at that SAME reduced size, which this suite's own breakpoint probing (against the real embedded font, not guessed) confirmed shifts every threshold narrower. `wideBase(charCount)` mirrors nestedFraction's own "make a real MathML construct wide/tall enough to force a stretch" trick, but growing WIDTH via a flat mrow of single-character mi's rather than height via nested fractions.
 describe("layoutFormula: horizontal stretchy over/under-brace", () => {
   const OVER = "⏞"; // U+23DE TOP CURLY BRACKET
   const UNDER = "⏟"; // U+23DF BOTTOM CURLY BRACKET
 
-  // A flat row of `charCount` single-character mi's -- width grows roughly linearly with charCount, with no ceiling the way a fixed-glyph base would have, letting this reach clean base/variant/assembly breakpoints purely by choosing charCount.
+  // A flat row of `charCount` single-character mi's — width grows roughly linearly with charCount, with no ceiling the way a fixed-glyph base would have, letting this reach clean base/variant/assembly breakpoints purely by choosing charCount.
   function wideBase(charCount: number): MathMlElement {
     const letters = "xyzabcuvwpqrstklmn";
     const children: MathMlElement[] = [];
@@ -770,7 +770,7 @@ describe("layoutFormula: horizontal stretchy over/under-brace", () => {
   });
 
   it("assembles the brace from real multi-part construction once the base is wide enough", () => {
-    // wideBase(5) already crosses into 'assembly' (empirically confirmed against the real font -- the pre-built variants top out well before this width), giving several placements sharing one y and strictly increasing x, the first at x=0.
+    // wideBase(5) already crosses into 'assembly' (empirically confirmed against the real font — the pre-built variants top out well before this width), giving several placements sharing one y and strictly increasing x, the first at x=0.
     const box = layout(over(wideBase(5)));
     const [item] = assembled(box.items);
     expect(item).toBeDefined();
@@ -797,7 +797,7 @@ describe("layoutFormula: horizontal stretchy over/under-brace", () => {
   });
 
   it("gives the brace a small, shallow vertical footprint regardless of how far it stretches", () => {
-    // horizontallyStretchedBox's own ascentPt/descentPt come directly from the construction's real, unclamped ink -- which stays a small, roughly constant vertical extent (a handful of points) however wide the assembly grows, since only the WIDTH axis is being stretched. Recovered indirectly: layoutUnderOver's own ascentPt is base.ascentPt + stackGapMinPt + over.heightPt, so subtracting the bare base's own ascent and the font's own stackGapMinPt from the combined box's ascent recovers the brace's own heightPt without any internal export.
+    // horizontallyStretchedBox's own ascentPt/descentPt come directly from the construction's real, unclamped ink — which stays a small, roughly constant vertical extent (a handful of points) however wide the assembly grows, since only the WIDTH axis is being stretched. Recovered indirectly: layoutUnderOver's own ascentPt is base.ascentPt + stackGapMinPt + over.heightPt, so subtracting the bare base's own ascent and the font's own stackGapMinPt from the combined box's ascent recovers the brace's own heightPt without any internal export.
     const gapPt = metrics().stackGapMinPt;
     for (const n of [1, 5, 10, 20, 30]) {
       const base = wideBase(n);
@@ -810,7 +810,7 @@ describe("layoutFormula: horizontal stretchy over/under-brace", () => {
   });
 
   it("mirrors the over-brace on the opposite side of the base, with the opposite ink-sign convention", () => {
-    // Verified empirically against the real font rather than assumed: the over-brace's own ink sits almost entirely ABOVE its natural drawing origin (a positive ascent, a NEGATIVE descent), while the under-brace's sits almost entirely BELOW its own origin (a negative ascent, a positive descent) -- genuinely opposite fields, not a mirrored pair of the same sign.
+    // Verified empirically against the real font rather than assumed: the over-brace's own ink sits almost entirely ABOVE its natural drawing origin (a positive ascent, a NEGATIVE descent), while the under-brace's sits almost entirely BELOW its own origin (a negative ascent, a positive descent) — genuinely opposite fields, not a mirrored pair of the same sign.
     const overResult = metrics().stretch(
       OVER.codePointAt(0)!,
       "horizontal",
@@ -865,7 +865,7 @@ describe("layoutFormula: horizontal stretchy over/under-brace", () => {
     expect(overItem).toBeDefined();
     expect(underItem).toBeDefined();
     expect(overItem!.placements.length).toBeGreaterThan(1);
-    // Both scripts stretch to the identical target (the base's own width), independently -- no shared/synchronised sizing between munderover's two scripts is needed for them to land on the same part count.
+    // Both scripts stretch to the identical target (the base's own width), independently — no shared/synchronised sizing between munderover's two scripts is needed for them to land on the same part count.
     expect(underItem!.placements.length).toBe(overItem!.placements.length);
     const overSpanPt = overItem!.placements.at(-1)!.xPt;
     const underSpanPt = underItem!.placements.at(-1)!.xPt;
@@ -899,7 +899,7 @@ describe("layoutFormula: horizontal stretchy over/under-brace", () => {
   });
 
   it("composes with a nested vertical stretchy fence in its own base, proving the two stretch mechanisms do not interfere", () => {
-    // A vertical fence around the same wideBase(10) that already forces horizontal assembly on its own (see the part-count-growth test) -- both mechanisms must fire together: the parenthesis pair stretches vertically to the row's own content height, and the over-brace stretches horizontally to the whole base's own width, in the same layout pass.
+    // A vertical fence around the same wideBase(10) that already forces horizontal assembly on its own (see the part-count-growth test) — both mechanisms must fire together: the parenthesis pair stretches vertically to the row's own content height, and the over-brace stretches horizontally to the whole base's own width, in the same layout pass.
     const base = wideBase(10);
     const fencedBase = el("mrow", [mo("("), base, mo(")")]);
     const { box, diagnostics } = layoutFormula([over(fencedBase)], {

@@ -76,9 +76,9 @@ import {
 import { createLocalDocumentConverter } from "./local";
 import type { DocumentFormat } from "./port";
 
-// A single table-driven test matrix covering representative (source, target) pairs the composition engine routes -- the deep round-trip entries below exercise the pairs that carry meaningful recoverable content, and a separate lightweight sweep ("every supported conversion produces valid output") covers the full SUPPORTED_CONVERSIONS set the DocumentConverter port exposes, including pairs the pathfinder newly routes that did not exist as hand-written edges before. Each MatrixEntry names the exact pair(s) its own round trip exercises; the completeness check below asserts every declared edge is a real supported conversion (a subset of the port's own conversions list), and the lightweight sweep iterates that list directly so a future capability-graph change (a new bridge, a newly composed pair) cannot silently go uncovered.
+// A single table-driven test matrix covering representative (source, target) pairs the composition engine routes — the deep round-trip entries below exercise the pairs that carry meaningful recoverable content, and a separate lightweight sweep ("every supported conversion produces valid output") covers the full SUPPORTED_CONVERSIONS set the DocumentConverter port exposes, including pairs the pathfinder newly routes that did not exist as hand-written edges before. Each MatrixEntry names the exact pair(s) its own round trip exercises; the completeness check below asserts every declared edge is a real supported conversion (a subset of the port's own conversions list), and the lightweight sweep iterates that list directly so a future capability-graph change (a new bridge, a newly composed pair) cannot silently go uncovered.
 //
-// Each deep entry converts a real fixture (reused from src/test-support/ wherever one already exists) from its own source format to its target format and back, then asserts the RECOVERABLE subset of content survives -- text, structure, specific known fields -- rather than byte-identity, per this package's own README Fidelity section: PDF-pivot conversions are a best-effort geometric reconstruction (no table/vector-shape recovery on the wordprocessing/presentation side), the ods<->xlsx and odg<->pdf pairs have their own documented, narrower format-boundary limits, and odf->pdf is a genuine one-way edge with no reverse at all (see port.ts's own note on why there is no pdf->odf). None of this duplicates the deep, multi-assertion fidelity suites already in convert.test.ts/bridges.test.ts/formula.test.ts -- those remain the authority on any one pair's exact boundary -- this file's job is breadth: proving every supported pair has at least one genuine, passing conversion, with no pair silently missing coverage.
+// Each deep entry converts a real fixture (reused from src/test-support/ wherever one already exists) from its own source format to its target format and back, then asserts the RECOVERABLE subset of content survives — text, structure, specific known fields — rather than byte-identity, per this package's own README Fidelity section: PDF-pivot conversions are a best-effort geometric reconstruction (no table/vector-shape recovery on the wordprocessing/presentation side), the ods<->xlsx and odg<->pdf pairs have their own documented, narrower format-boundary limits, and odf->pdf is a genuine one-way edge with no reverse at all (see port.ts's own note on why there is no pdf->odf). None of this duplicates the deep, multi-assertion fidelity suites already in convert.test.ts/bridges.test.ts/formula.test.ts — those remain the authority on any one pair's exact boundary — this file's job is breadth: proving every supported pair has at least one genuine, passing conversion, with no pair silently missing coverage.
 
 function edgeKey(edge: {
   readonly source: DocumentFormat;
@@ -89,7 +89,7 @@ function edgeKey(edge: {
 
 interface MatrixEntry {
   readonly name: string;
-  // The exact pair(s) this round trip exercises, both hops -- used only by the completeness check below, never to drive the round trip itself (each entry's own `run` calls the real convert.ts functions directly).
+  // The exact pair(s) this round trip exercises, both hops — used only by the completeness check below, never to drive the round trip itself (each entry's own `run` calls the real convert.ts functions directly).
   readonly edges: readonly {
     readonly source: DocumentFormat;
     readonly target: DocumentFormat;
@@ -104,7 +104,7 @@ const MATRIX_ENTRIES: readonly MatrixEntry[] = [
       { source: "docx", target: "pdf" },
       { source: "pdf", target: "docx" },
     ],
-    // minimalDocxBytes (test-support/docx.ts): one paragraph ("Hello, world!") plus a 2x1 table (A1/B1). PDF<->docx reconstruction has no table recovery (README Fidelity), so the table's own cell text survives only as plain reconstructed paragraph text, not as a table block -- checked as substrings of the full recovered text, not table structure.
+    // minimalDocxBytes (test-support/docx.ts): one paragraph ("Hello, world!") plus a 2x1 table (A1/B1). PDF<->docx reconstruction has no table recovery (README Fidelity), so the table's own cell text survives only as plain reconstructed paragraph text, not as a table block — checked as substrings of the full recovered text, not table structure.
     run: () => {
       const pdfBytes = docxToPdf(minimalDocxBytes());
       const roundTrippedBytes = pdfToDocx(pdfBytes);
@@ -124,7 +124,7 @@ const MATRIX_ENTRIES: readonly MatrixEntry[] = [
       { source: "docx", target: "odt" },
       { source: "odt", target: "docx" },
     ],
-    // The PDF-bypassing bridge preserves table structure completely (see bridges.test.ts's own dedicated deep test) -- unlike the PDF-pivot pair above, so this asserts the table survives AS a table, not merely as flattened text.
+    // The PDF-bypassing bridge preserves table structure completely (see bridges.test.ts's own dedicated deep test) — unlike the PDF-pivot pair above, so this asserts the table survives AS a table, not merely as flattened text.
     run: () => {
       const odtBytes = docxToOdt(minimalDocxBytes());
       const roundTrippedBytes = odtToDocx(odtBytes);
@@ -225,7 +225,7 @@ const MATRIX_ENTRIES: readonly MatrixEntry[] = [
       { source: "xlsx", target: "pdf" },
       { source: "pdf", target: "xlsx" },
     ],
-    // xlsxToPdf/pdfToXlsx compose the ods<->xlsx bridge with the ods<->pdf layout edge internally (capability.ts's own FORMAT_CAPABILITIES.xlsx) -- gridOdsBytes gives odsToXlsx a real gridline-and-headers-enabled sheet to build genuine xlsx bytes from, exactly the same fixture pdfToOds's own gridline-lattice test uses.
+    // xlsxToPdf/pdfToXlsx compose the ods<->xlsx bridge with the ods<->pdf layout edge internally (capability.ts's own FORMAT_CAPABILITIES.xlsx) — gridOdsBytes gives odsToXlsx a real gridline-and-headers-enabled sheet to build genuine xlsx bytes from, exactly the same fixture pdfToOds's own gridline-lattice test uses.
     run: () => {
       const xlsxBytes = odsToXlsx(gridOdsBytes());
 
@@ -266,7 +266,7 @@ const MATRIX_ENTRIES: readonly MatrixEntry[] = [
       { source: "xlsx", target: "markdown" },
       { source: "markdown", target: "xlsx" },
     ],
-    // xlsx and markdown share no ContentDocument variant, so this pair routes through PDF internally (xlsxToPdf + pdfToMarkdown; markdownToPdf + pdfToXlsx) -- the single lossiest path in the package, but the only single-call route. gridOdsBytes gives odsToXlsx a real gridline-and-headers-enabled sheet to start from; the round trip is asserted structurally (a readable spreadsheet) rather than cell-for-cell, since two stacked lossy hops shed too much to compare values against the source.
+    // xlsx and markdown share no ContentDocument variant, so this pair routes through PDF internally (xlsxToPdf + pdfToMarkdown; markdownToPdf + pdfToXlsx) — the single lossiest path in the package, but the only single-call route. gridOdsBytes gives odsToXlsx a real gridline-and-headers-enabled sheet to start from; the round trip is asserted structurally (a readable spreadsheet) rather than cell-for-cell, since two stacked lossy hops shed too much to compare values against the source.
     run: () => {
       const xlsxBytes = odsToXlsx(gridOdsBytes());
 
@@ -287,7 +287,7 @@ const MATRIX_ENTRIES: readonly MatrixEntry[] = [
       { source: "ods", target: "xlsx" },
       { source: "xlsx", target: "ods" },
     ],
-    // richOdsBytes: string/number/boolean cells, a verbatim formula, and a merged cell -- all confirmed stable across a full ods -> xlsx -> ods double hop by bridges.test.ts's own dedicated double-hop test. This checks the same stable subset, not the percentage/currency/time cells that double-hop test documents as genuinely, permanently downgraded.
+    // richOdsBytes: string/number/boolean cells, a verbatim formula, and a merged cell — all confirmed stable across a full ods -> xlsx -> ods double hop by bridges.test.ts's own dedicated double-hop test. This checks the same stable subset, not the percentage/currency/time cells that double-hop test documents as genuinely, permanently downgraded.
     run: () => {
       const original = readOdsContent(decodeOdfPackage(richOdsBytes()));
       if (original.kind !== "spreadsheet") {
@@ -323,7 +323,7 @@ const MATRIX_ENTRIES: readonly MatrixEntry[] = [
       { source: "csv", target: "ods" },
       { source: "ods", target: "csv" },
     ],
-    // The csv <-> ods bridge is a direct ContentDocument pivot copy like xlsx <-> ods above -- no layout engine, no reconstruction. The one csv-boundary transformation is read-side re-typing: '42.5' parses into a number cell whose displayText prints back as the identical digits, so a plain-text fixture round-trips field-for-field. The source text is parsed here rather than compared as a raw string, because the writer emits the RFC 4180 CRLF line breaks the fixture's \n spelling is equivalent to.
+    // The csv <-> ods bridge is a direct ContentDocument pivot copy like xlsx <-> ods above — no layout engine, no reconstruction. The one csv-boundary transformation is read-side re-typing: '42.5' parses into a number cell whose displayText prints back as the identical digits, so a plain-text fixture round-trips field-for-field. The source text is parsed here rather than compared as a raw string, because the writer emits the RFC 4180 CRLF line breaks the fixture's \n spelling is equivalent to.
     run: () => {
       const csvText = "Name,Amount\nWidget,42.5\nGadget,7\n";
       const odsBytes = csvToOds(encodeCsvText(csvText));
@@ -339,7 +339,7 @@ const MATRIX_ENTRIES: readonly MatrixEntry[] = [
       { source: "ods", target: "pdf" },
       { source: "pdf", target: "ods" },
     ],
-    // gridOdsBytes: three fully visible columns, three rows, gridlines and headers enabled -- odsToPdf genuinely draws the LayoutLine lattice reconstructSpreadsheet's own gridline-detection path needs, so this proves the lattice path ran, not the text-clustering fallback, and that every recovered cell is an honest bare string (README's own "recovers what was printed, not what was entered").
+    // gridOdsBytes: three fully visible columns, three rows, gridlines and headers enabled — odsToPdf genuinely draws the LayoutLine lattice reconstructSpreadsheet's own gridline-detection path needs, so this proves the lattice path ran, not the text-clustering fallback, and that every recovered cell is an honest bare string (README's own "recovers what was printed, not what was entered").
     run: () => {
       const pdfBytes = odsToPdf(gridOdsBytes());
       const roundTrippedBytes = pdfToOds(pdfBytes);
@@ -376,7 +376,7 @@ const MATRIX_ENTRIES: readonly MatrixEntry[] = [
       { source: "odg", target: "pdf" },
       { source: "pdf", target: "odg" },
     ],
-    // minimalOdgBytes: two fill-only unrotated rects, a filled+stroked rect, an ellipse, a line, a genuine Bezier curve, and a text label. PDF records none of those kinds directly -- it has only `re` and the general path operators -- but pdf-codec's own shape-pattern detection recovers rect/ellipse/line back out of the recovered geometry, so every one of this fixture's kinds survives the round trip. src/convert/convert.test.ts's own pdfToOdg suite is where each kind's geometry and paint are checked in detail; this matrix entry just pins that the full set comes back.
+    // minimalOdgBytes: two fill-only unrotated rects, a filled+stroked rect, an ellipse, a line, a genuine Bezier curve, and a text label. PDF records none of those kinds directly — it has only `re` and the general path operators — but pdf-codec's own shape-pattern detection recovers rect/ellipse/line back out of the recovered geometry, so every one of this fixture's kinds survives the round trip. src/convert/convert.test.ts's own pdfToOdg suite is where each kind's geometry and paint are checked in detail; this matrix entry just pins that the full set comes back.
     run: () => {
       const original = readOdgContent(decodeOdfPackage(minimalOdgBytes()));
       if (original.kind !== "drawing") {
@@ -462,7 +462,7 @@ const MATRIX_ENTRIES: readonly MatrixEntry[] = [
   {
     name: "odf -> pdf (one-way; no pdf -> odf edge exists at all)",
     edges: [{ source: "odf", target: "pdf" }],
-    // odf's own one-way exception (port.ts's own note, FORMAT_CAPABILITIES.odf): recovering structured MathML from rendered glyphs is a categorically different, OCR-adjacent problem, not attempted anywhere in this package -- so there is no reverse hop to round-trip through at all. What this asserts instead: real embedded STIX Two Math font typesetting (a genuine /Type0/Identity-H/CIDFontType0C font resource in the output PDF), not a static image or placeholder, mirroring formula.test.ts's own construction.
+    // odf's own one-way exception (port.ts's own note, FORMAT_CAPABILITIES.odf): recovering structured MathML from rendered glyphs is a categorically different, OCR-adjacent problem, not attempted anywhere in this package — so there is no reverse hop to round-trip through at all. What this asserts instead: real embedded STIX Two Math font typesetting (a genuine /Type0/Identity-H/CIDFontType0C font resource in the output PDF), not a static image or placeholder, mirroring formula.test.ts's own construction.
     run: () => {
       const bytes = odfToPdf(odfFormulaBytes(FRACTION_FORMULA));
       expect(new TextDecoder().decode(bytes.subarray(0, 5))).toBe("%PDF-");
@@ -510,7 +510,7 @@ const MATRIX_ENTRIES: readonly MatrixEntry[] = [
       expect(odpBytes.length).toBeGreaterThan(0);
       const odtBack = odpToOdt(odpBytes);
       expect(odtBack.length).toBeGreaterThan(0);
-      // The bridge's named heading edge: a heading carried straight into a slide's text box cannot keep its depth (a draw:text-box's content model carries no text:h) but keeps its weight -- the text:p lands on the scaffold's Heading_20_N reference, which resolves through the cascade back to the heading's own bold and size.
+      // The bridge's named heading edge: a heading carried straight into a slide's text box cannot keep its depth (a draw:text-box's content model carries no text:h) but keeps its weight — the text:p lands on the scaffold's Heading_20_N reference, which resolves through the cascade back to the heading's own bold and size.
       const editor = createOdt();
       editor.body
         .appendParagraph({ headingLevel: 2 })
@@ -550,7 +550,7 @@ describe("round-trip matrix: deep entries cover representative supported pairs",
   });
 });
 
-// --- Lightweight sweep: every pair the port exposes produces valid output of the target format without throwing. The pathfinder routes many pairs the deep entries above do not individually cover (e.g. odg -> docx via PDF, markdown -> pptx via the cross-variant transform, xlsx -> odp via three hops); this sweep proves none of those newly-exposed pairs errors or produces empty/garbage output. Pairs routed through multiple PDF hops are inherently lossy (geometry-based reconstruction stacked two or three deep), so the assertion here is "valid output of the target format", not content recovery -- the deep entries above remain the authority on recoverable content for the pairs they cover. ---
+// --- Lightweight sweep: every pair the port exposes produces valid output of the target format without throwing. The pathfinder routes many pairs the deep entries above do not individually cover (e.g. odg -> docx via PDF, markdown -> pptx via the cross-variant transform, xlsx -> odp via three hops); this sweep proves none of those newly-exposed pairs errors or produces empty/garbage output. Pairs routed through multiple PDF hops are inherently lossy (geometry-based reconstruction stacked two or three deep), so the assertion here is "valid output of the target format", not content recovery — the deep entries above remain the authority on recoverable content for the pairs they cover. ---
 
 function fixtureBytes(format: DocumentFormat): Uint8Array<ArrayBuffer> {
   switch (format) {
@@ -567,7 +567,7 @@ function fixtureBytes(format: DocumentFormat): Uint8Array<ArrayBuffer> {
     case "odg":
       return minimalOdgBytes();
     case "svg":
-      // A viewBox-sized root with a title, one filled rect, and one stroked path -- enough geometry that every svg-sourced sweep pair carries real vector content through the drawing variant, and a metadata title the round trips can genuinely recover.
+      // A viewBox-sized root with a title, one filled rect, and one stroked path — enough geometry that every svg-sourced sweep pair carries real vector content through the drawing variant, and a metadata title the round trips can genuinely recover.
       return encodeSvgText(
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 60"><title>Sweep fixture</title><rect x="10" y="10" width="80" height="40" fill="#ff0000"/><path d="M 10 10 L 90 50" stroke="#0000ff" fill="none"/></svg>',
       );
@@ -578,7 +578,7 @@ function fixtureBytes(format: DocumentFormat): Uint8Array<ArrayBuffer> {
     case "csv":
       return encodeCsvText("Name,Amount\nWidget,42.5\nGadget,7\n");
     case "rtf":
-      // Hand-authored literal RTF source, matching this switch's own markdown/csv cases rather than generating it through writeRtfContent (the very write path several sweep pairs exercise) -- a heading-styled paragraph and a plain paragraph, minimal but real enough that every rtf-sourced sweep pair carries recognisable text through.
+      // Hand-authored literal RTF source, matching this switch's own markdown/csv cases rather than generating it through writeRtfContent (the very write path several sweep pairs exercise) — a heading-styled paragraph and a plain paragraph, minimal but real enough that every rtf-sourced sweep pair carries recognisable text through.
       return requireArrayBufferBytes(
         rtfBytesFromLatin1(
           "{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0\\froman Times New Roman;}}" +
@@ -590,7 +590,7 @@ function fixtureBytes(format: DocumentFormat): Uint8Array<ArrayBuffer> {
     case "odf":
       return odfFormulaBytes(FRACTION_FORMULA);
     case "doc":
-      // Built through doc-codec's own writeDocContent directly (not through this package's FORMAT_NODES.doc.build, the very wiring several sweep pairs exercise) -- a bold heading paragraph and a plain paragraph, matching this switch's own rtf case in spirit: minimal but real enough that every doc-sourced sweep pair carries recognisable text through.
+      // Built through doc-codec's own writeDocContent directly (not through this package's FORMAT_NODES.doc.build, the very wiring several sweep pairs exercise) — a bold heading paragraph and a plain paragraph, matching this switch's own rtf case in spirit: minimal but real enough that every doc-sourced sweep pair carries recognisable text through.
       return writeDocContent({
         kind: "wordprocessing",
         metadata: {},
@@ -609,7 +609,7 @@ function fixtureBytes(format: DocumentFormat): Uint8Array<ArrayBuffer> {
         ],
       });
     case "epub":
-      // Built through epub-codec's own writeEpubContent directly (not through this package's FORMAT_NODES.epub.build, the very wiring several sweep pairs exercise), matching doc's own independence-from-the-wiring-under-test rationale above -- a heading paragraph and a plain paragraph.
+      // Built through epub-codec's own writeEpubContent directly (not through this package's FORMAT_NODES.epub.build, the very wiring several sweep pairs exercise), matching doc's own independence-from-the-wiring-under-test rationale above — a heading paragraph and a plain paragraph.
       return writeEpubContent({
         kind: "wordprocessing",
         metadata: {},
@@ -628,7 +628,7 @@ function fixtureBytes(format: DocumentFormat): Uint8Array<ArrayBuffer> {
         ],
       });
     case "xls":
-      // Built through xls-codec's own writeXlsContent directly, matching doc's own independence-from-the-wiring-under-test rationale above -- one sheet, two plain cells.
+      // Built through xls-codec's own writeXlsContent directly, matching doc's own independence-from-the-wiring-under-test rationale above — one sheet, two plain cells.
       return writeXlsContent({
         kind: "spreadsheet",
         metadata: {},
@@ -663,7 +663,7 @@ function fixtureBytes(format: DocumentFormat): Uint8Array<ArrayBuffer> {
         ],
       });
     case "ppt":
-      // Built through this package's own src/ppt/write.ts (ppt-codec's own writePptContent, wrapped -- see that module's own comment), matching doc/xls's own independence-from-the-wiring-under-test rationale: one slide, one text-box shape, one paragraph.
+      // Built through this package's own src/ppt/write.ts (ppt-codec's own writePptContent, wrapped — see that module's own comment), matching doc/xls's own independence-from-the-wiring-under-test rationale: one slide, one text-box shape, one paragraph.
       return writePptContent({
         kind: "presentation",
         metadata: {},
@@ -697,7 +697,7 @@ function fixtureBytes(format: DocumentFormat): Uint8Array<ArrayBuffer> {
   }
 }
 
-// No default branch, matching fixtureBytes above: a DocumentFormat member with no case here is a compile error ("not all code paths return a value"), not a silent fall-through to a default result -- confirmed directly by adding "rtf" to DocumentFormatSchema before this case existed, per this file's own TDD note (this switch, unlike fixtureBytes, previously carried a `default: return false;` that would have masked exactly that failure at every rtf-targeted sweep pair with a wrong-but-not-red "output isn't valid" result instead of a compile error, so the default was removed as part of adding the rtf case rather than merely added alongside it).
+// No default branch, matching fixtureBytes above: a DocumentFormat member with no case here is a compile error ("not all code paths return a value"), not a silent fall-through to a default result — confirmed directly by adding "rtf" to DocumentFormatSchema before this case existed, per this file's own TDD note (this switch, unlike fixtureBytes, previously carried a `default: return false;` that would have masked exactly that failure at every rtf-targeted sweep pair with a wrong-but-not-red "output isn't valid" result instead of a compile error, so the default was removed as part of adding the rtf case rather than merely added alongside it).
 function isValidOutput(
   format: DocumentFormat,
   bytes: Uint8Array<ArrayBuffer>,
@@ -716,7 +716,7 @@ function isValidOutput(
     case "ods":
     case "odg":
     case "epub": {
-      // All package formats are ZIP containers (PK magic bytes) -- epub joins them here too, since epub-codec's own EpubBytesSchema checks the identical signature.
+      // All package formats are ZIP containers (PK magic bytes) — epub joins them here too, since epub-codec's own EpubBytesSchema checks the identical signature.
       return bytes[0] === 0x50 && bytes[1] === 0x4b;
     }
     case "markdown":
@@ -725,27 +725,27 @@ function isValidOutput(
     case "svg":
       return new TextDecoder().decode(bytes).includes("<svg");
     case "rtf":
-      // The <File> production's own magic bytes -- rtf-codec's RtfBytesSchema checks the identical signature.
+      // The <File> production's own magic bytes — rtf-codec's RtfBytesSchema checks the identical signature.
       return (
         new TextDecoder("latin1").decode(bytes.subarray(0, 5)) === "{\\rtf"
       );
     case "odf":
-      // odf has no content.write and is never a sweep target -- ALL_SUPPORTED_PAIRS is derived from the port's own conversions, which excludes every odf-target pair (see local.ts's own odf/pdf special case). Present here only so the switch is exhaustive over every DocumentFormat member, matching fixtureBytes' own coverage.
+      // odf has no content.write and is never a sweep target — ALL_SUPPORTED_PAIRS is derived from the port's own conversions, which excludes every odf-target pair (see local.ts's own odf/pdf special case). Present here only so the switch is exhaustive over every DocumentFormat member, matching fixtureBytes' own coverage.
       return false;
     case "doc":
     case "xls":
     case "ppt":
-      // All three legacy binary formats are [MS-CFB] compound files -- the identical container docx/pptx/ods et al. wrap in a ZIP, but the classic OLE signature instead. isCompoundFile is archive-codec's own detector, the same one doc-codec's/xls-codec's own isDocBytes/isXlsFile build on.
+      // All three legacy binary formats are [MS-CFB] compound files — the identical container docx/pptx/ods et al. wrap in a ZIP, but the classic OLE signature instead. isCompoundFile is archive-codec's own detector, the same one doc-codec's/xls-codec's own isDocBytes/isXlsFile build on.
       return isCompoundFile(bytes);
     case "wpd":
-      // wpd is read-only (READ_ONLY_FORMATS) and is never a sweep target for the identical reason odf above is not -- ALL_SUPPORTED_PAIRS excludes every wpd-target pair since wpd-codec ships no writer. Present here only for the same exhaustiveness reason as odf's own case.
+      // wpd is read-only (READ_ONLY_FORMATS) and is never a sweep target for the identical reason odf above is not — ALL_SUPPORTED_PAIRS excludes every wpd-target pair since wpd-codec ships no writer. Present here only for the same exhaustiveness reason as odf's own case.
       return false;
   }
 }
 
 const ALL_SUPPORTED_PAIRS = createLocalDocumentConverter().conversions;
 
-// svg -> csv and svg -> markdown are the one pair family whose honest output is EMPTY: svg's read scope is vector graphics only (text is out of scope by design, reported as svg/text-unsupported), and neither csv nor markdown has any vector vocabulary, so there is literally nothing these two targets can carry. The conversion still runs and still produces a valid zero-record csv / zero-block markdown -- pinned here as the pair's own expected result, with every text-carrying source keeping the non-empty requirement unchanged.
+// svg -> csv and svg -> markdown are the one pair family whose honest output is EMPTY: svg's read scope is vector graphics only (text is out of scope by design, reported as svg/text-unsupported), and neither csv nor markdown has any vector vocabulary, so there is literally nothing these two targets can carry. The conversion still runs and still produces a valid zero-record csv / zero-block markdown — pinned here as the pair's own expected result, with every text-carrying source keeping the non-empty requirement unchanged.
 const EMPTY_OUTPUT_PAIRS = new Set(["svg->csv", "svg->markdown"]);
 
 describe.each(

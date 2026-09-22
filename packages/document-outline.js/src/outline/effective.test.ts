@@ -31,7 +31,7 @@ import {
   wordprocessingPackage,
 } from "../test-support/fixtures";
 
-// 'outer' carries both halves (paragraph geometry + run weight); 'inner' carries a paragraph half that conflicts with outer's on indentLeftPt -- enough surface to prove gap-filling, own-property precedence, nearest-wins overlay, and the run half with one table.
+// 'outer' carries both halves (paragraph geometry + run weight); 'inner' carries a paragraph half that conflicts with outer's on indentLeftPt — enough surface to prove gap-filling, own-property precedence, nearest-wins overlay, and the run half with one table.
 const styles: StylesTable = {
   outer: { paragraph: { indentLeftPt: 24 }, run: { bold: true } },
   inner: { paragraph: { indentLeftPt: 48 } },
@@ -416,7 +416,7 @@ describe("effectivePackage", () => {
   });
 
   it("rebuilds a section construct group with no own style whose children genuinely changed via an inherited ref", () => {
-    // The construct group itself carries no style ref (its own clause is trivially satisfied), but its child paragraph resolves against the OUTER section's inherited "outer" chain and genuinely changes -- proving the children clause is actually evaluated, not just assumed true because the group has no ref of its own.
+    // The construct group itself carries no style ref (its own clause is trivially satisfied), but its child paragraph resolves against the OUTER section's inherited "outer" chain and genuinely changes — proving the children clause is actually evaluated, not just assumed true because the group has no ref of its own.
     const pkg = wordprocessingPackage(
       [
         sectionGroup([sectionConstructGroup([paragraph("Body")])], {
@@ -567,7 +567,7 @@ describe("effectivePackage", () => {
   });
 
   it("rebuilds a list group whose own anchor and inherited entry are both unaffected, but whose children genuinely changed", () => {
-    // Mirrors the heading Grandparent/Parent/Child test above: Parent has no own style but inherits Grandparent's "emptyEntry" chain (a real, non-empty chain that nonetheless resolves to no actual change to Parent's own anchor). Child, nested inside Parent, carries its own REAL style ref and so genuinely changes -- which must still rebuild Parent's own children array, and therefore Parent itself, even though Parent's own anchor/style clauses are both trivially satisfied.
+    // Mirrors the heading Grandparent/Parent/Child test above: Parent has no own style but inherits Grandparent's "emptyEntry" chain (a real, non-empty chain that nonetheless resolves to no actual change to Parent's own anchor). Child, nested inside Parent, carries its own REAL style ref and so genuinely changes — which must still rebuild Parent's own children array, and therefore Parent itself, even though Parent's own anchor/style clauses are both trivially satisfied.
     const pkg = wordprocessingPackage(
       [
         sectionGroup([
@@ -677,7 +677,7 @@ describe("effectivePackage", () => {
   });
 
   it("rebuilds a heading group whose own anchor and inherited entry are both unaffected, but whose children genuinely changed", () => {
-    // Parent has no own style but inherits Grandparent's "emptyEntry" chain (a real, non-empty chain that nonetheless resolves to no actual change to Parent's own anchor). Child, nested inside Parent, carries its own REAL style ref and so genuinely changes -- which must still rebuild Parent's own children array, and therefore Parent itself, even though Parent's own anchor/style clauses are both trivially satisfied.
+    // Parent has no own style but inherits Grandparent's "emptyEntry" chain (a real, non-empty chain that nonetheless resolves to no actual change to Parent's own anchor). Child, nested inside Parent, carries its own REAL style ref and so genuinely changes — which must still rebuild Parent's own children array, and therefore Parent itself, even though Parent's own anchor/style clauses are both trivially satisfied.
     const pkg = wordprocessingPackage(
       [
         sectionGroup([
@@ -775,7 +775,7 @@ describe("effectivePackage", () => {
 });
 
 describe("assertResolvedHeadingAnchor", () => {
-  it("throws if a resolved heading anchor ever comes back without its headingLevel -- a document-schema.js fill-only contract regression, never reachable through effectivePackage's own construction", () => {
+  it("throws if a resolved heading anchor ever comes back without its headingLevel — a document-schema.js fill-only contract regression, never reachable through effectivePackage's own construction", () => {
     const droppedHeadingLevel: ContentParagraph = {
       kind: "paragraph",
       runs: [{ text: "orphaned" }],
@@ -800,7 +800,7 @@ describe("assertResolvedHeadingAnchor", () => {
 });
 
 describe("assertResolvedListAnchor", () => {
-  it("throws if a resolved list anchor ever comes back without its list membership -- a document-schema.js fill-only contract regression, never reachable through effectivePackage's own construction", () => {
+  it("throws if a resolved list anchor ever comes back without its list membership — a document-schema.js fill-only contract regression, never reachable through effectivePackage's own construction", () => {
     const droppedListMembership: ContentParagraph = {
       kind: "paragraph",
       runs: [{ text: "orphaned" }],

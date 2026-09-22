@@ -1,6 +1,6 @@
 import { DocFormatError } from "./errors";
 
-// Bounds-checked little-endian integer reads over a raw stream. Every [MS-DOC] structure is little-endian ([MS-DOC] 1.3.1 "all values are stored in little-endian byte order"), and every offset in the format is attacker-controlled data read out of the file itself -- an FKP page number, a Clx offset, a Plc element count -- so a read that runs past the end must fail loudly rather than return a partial or wrapped value. DataView already throws a RangeError for that; these wrappers exist to convert it into this package's own named error class with the offset that caused it, so a consumer catching DocFormatError catches every structural failure rather than two unrelated error types.
+// Bounds-checked little-endian integer reads over a raw stream. Every [MS-DOC] structure is little-endian ([MS-DOC] 1.3.1 "all values are stored in little-endian byte order"), and every offset in the format is attacker-controlled data read out of the file itself — an FKP page number, a Clx offset, a Plc element count — so a read that runs past the end must fail loudly rather than return a partial or wrapped value. DataView already throws a RangeError for that; these wrappers exist to convert it into this package's own named error class with the offset that caused it, so a consumer catching DocFormatError catches every structural failure rather than two unrelated error types.
 
 function checkRange(
   bytes: Uint8Array,
@@ -20,7 +20,7 @@ function checkRange(
   }
 }
 
-// DataView.prototype.getUint8 rather than a plain bytes[offset] index: checkRange has already proven offset is a valid, in-bounds position, but a typed-array index still types as `number | undefined` under this project's noUncheckedIndexedAccess -- DataView's own accessor returns a bare number instead, with no absent case left to guard against, matching how every sibling read in this file already goes through `view(bytes)` rather than indexing directly.
+// DataView.prototype.getUint8 rather than a plain bytes[offset] index: checkRange has already proven offset is a valid, in-bounds position, but a typed-array index still types as `number | undefined` under this project's noUncheckedIndexedAccess — DataView's own accessor returns a bare number instead, with no absent case left to guard against, matching how every sibling read in this file already goes through `view(bytes)` rather than indexing directly.
 export function readUint8(bytes: Uint8Array, offset: number): number {
   checkRange(bytes, offset, 1, "uint8");
   return view(bytes).getUint8(offset);

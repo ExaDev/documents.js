@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Diagnostic } from "../shared/diagnostics";
 import { mountWithMantine } from "../test/mountComponent";
 
-// jsdom has no real layout engine, so Mantine's real Spoiler (DiagnosticsPanel.test.tsx's own top-of-file comment explains this) never measures an overflow and never renders its showLabel/hideLabel text at all, regardless of item count -- this file mocks just Spoiler to capture the exact label strings DiagnosticsPanel passes it, since that's the only way to observe them at all under jsdom.
+// jsdom has no real layout engine, so Mantine's real Spoiler (DiagnosticsPanel.test.tsx's own top-of-file comment explains this) never measures an overflow and never renders its showLabel/hideLabel text at all, regardless of item count — this file mocks just Spoiler to capture the exact label strings DiagnosticsPanel passes it, since that's the only way to observe them at all under jsdom.
 let latestShowLabel: string | undefined;
 vi.mock("@mantine/core", async (importOriginal) => {
   const actual = await importOriginal<typeof MantineCore>();

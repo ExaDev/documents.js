@@ -14,7 +14,7 @@ import { findDescendantElement } from "../../xml/query";
 import { buildPptxPackage } from "./content";
 import { PptxEditor } from "./editor";
 
-// pptx's own embedded-formula read/write path (ExaDev/documents.js#563's "pptx has zero formula support" gap): PptxShape.appendOfficeMath (shape.ts) writes a real m:oMathPara/m:oMath OOXML equation -- the identical src/omml/write.ts translator buildDocxPackage already uses -- and src/ooxml/pptx/formula.ts's spliceSlideFormulas reads it straight back, mirroring odp's own "one shape, one formula" granularity (src/edit/odp/formula.test.ts).
+// pptx's own embedded-formula read/write path (ExaDev/documents.js#563's "pptx has zero formula support" gap): PptxShape.appendOfficeMath (shape.ts) writes a real m:oMathPara/m:oMath OOXML equation — the identical src/omml/write.ts translator buildDocxPackage already uses — and src/ooxml/pptx/formula.ts's spliceSlideFormulas reads it straight back, mirroring odp's own "one shape, one formula" granularity (src/edit/odp/formula.test.ts).
 
 function mel(tag: string, children: MathMlNode[] = []): MathMlElement {
   return { type: "element", tag, attributes: [], children };
@@ -191,7 +191,7 @@ describe("buildPptxPackage: an embedded formula block", () => {
   });
 
   it("reports an onMathDiagnostic for a construct src/omml/write.ts cannot translate", () => {
-    // A positive-width mspace has no OMML counterpart that preserves its width -- src/omml/write.ts approximates it as a literal space and reports an 'approximated-element' diagnostic, exactly as it does for buildDocxPackage.
+    // A positive-width mspace has no OMML counterpart that preserves its width — src/omml/write.ts approximates it as a literal space and reports an 'approximated-element' diagnostic, exactly as it does for buildDocxPackage.
     const mspace: MathMlElement = {
       type: "element",
       tag: "mspace",

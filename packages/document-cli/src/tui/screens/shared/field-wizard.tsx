@@ -10,7 +10,7 @@ export interface FieldSpec {
   readonly defaultValue: string;
 }
 
-// A field wizard walks every field of its own field list in order and always records a value (its own default at minimum) before advancing, so a missing key at build time indicates a bug in that walk, not a legitimate empty state -- throwing here, rather than substituting a silent default, surfaces that bug instead of building a wrong action from it.
+// A field wizard walks every field of its own field list in order and always records a value (its own default at minimum) before advancing, so a missing key at build time indicates a bug in that walk, not a legitimate empty state — throwing here, rather than substituting a silent default, surfaces that bug instead of building a wrong action from it.
 export function requireFieldValue(
   values: Readonly<Record<string, string>>,
   key: string,
@@ -33,10 +33,10 @@ export function FieldWizard(props: {
   const field = props.fields[stepIndex];
   if (field === undefined) {
     throw new Error(
-      `FieldWizard stepIndex ${stepIndex} is out of range for ${props.fields.length} fields -- onComplete always fires before stepIndex can advance past the last field, so this indicates a bug in that advance.`,
+      `FieldWizard stepIndex ${stepIndex} is out of range for ${props.fields.length} fields — onComplete always fires before stepIndex can advance past the last field, so this indicates a bug in that advance.`,
     );
   }
-  // Checked above, before this state is even declared, so `field` is already known defined here on every render that reaches this line -- stepIndex starts at 0, matching the index `field` itself is read at on this same first render, so there is no separate "initial field" to fall back from.
+  // Checked above, before this state is even declared, so `field` is already known defined here on every render that reaches this line — stepIndex starts at 0, matching the index `field` itself is read at on this same first render, so there is no separate "initial field" to fall back from.
   const [collected, setCollected] = useState<Record<string, string>>({});
   const [draft, setDraft] = useState(field.defaultValue);
 
@@ -62,7 +62,7 @@ export function FieldWizard(props: {
         }}
       />
       <Text dimColor>
-        Step {stepIndex + 1} of {props.fields.length} -- Enter to continue, Esc
+        Step {stepIndex + 1} of {props.fields.length} — Enter to continue, Esc
         to cancel
       </Text>
     </Box>

@@ -22,7 +22,7 @@ describe("withoutRotation", () => {
     ]);
   });
 
-  it("leaves a line vector, which has no rotationDeg field at all, untouched -- not spread with an explicit rotationDeg: undefined key added", () => {
+  it("leaves a line vector, which has no rotationDeg field at all, untouched — not spread with an explicit rotationDeg: undefined key added", () => {
     // toStrictEqual, not toEqual: toEqual treats an explicit `rotationDeg: undefined` key as indistinguishable from the key being absent altogether, which is exactly the difference this test needs to catch.
     expect(withoutRotation([line])).toStrictEqual([line]);
   });

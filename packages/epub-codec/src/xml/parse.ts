@@ -1,7 +1,7 @@
 import { XMLParser } from "fast-xml-parser";
 import type { Attribute, XmlNode } from "./node";
 
-// preserveOrder keeps child order and mixed content -- load-bearing for XHTML content documents, where text and inline elements interleave; processEntities:false keeps the original entity encoding (e.g. &amp;) so this layer stays lossless, matching ooxml.js's and odf.js's own identical wrapper configuration. EPUB 3.3's own content documents are well-formed XML by spec (not tag-soup HTML), so this one parser configuration covers OPF, nav.xhtml/NCX, and every XHTML content document -- no separate HTML parser is needed anywhere in this package.
+// preserveOrder keeps child order and mixed content — load-bearing for XHTML content documents, where text and inline elements interleave; processEntities:false keeps the original entity encoding (e.g. &amp;) so this layer stays lossless, matching ooxml.js's and odf.js's own identical wrapper configuration. EPUB 3.3's own content documents are well-formed XML by spec (not tag-soup HTML), so this one parser configuration covers OPF, nav.xhtml/NCX, and every XHTML content document — no separate HTML parser is needed anywhere in this package.
 const PARSER = new XMLParser({
   preserveOrder: true,
   attributeNamePrefix: "@_",
@@ -22,7 +22,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// Array.isArray narrows unknown to any[], not unknown[] -- lib.es5.d.ts types its parameter as `any`, so TypeScript can't do better even after the check. This guard exists so indexing the result stays unknown rather than silently reintroducing any.
+// Array.isArray narrows unknown to any[], not unknown[] — lib.es5.d.ts types its parameter as `any`, so TypeScript can't do better even after the check. This guard exists so indexing the result stays unknown rather than silently reintroducing any.
 function isUnknownArray(value: unknown): value is unknown[] {
   return Array.isArray(value);
 }
@@ -41,7 +41,7 @@ export function parseNodes(raw: unknown): XmlNode[] {
   return raw.map(parseNode);
 }
 
-// Exported alongside parseAttributes and scalarText below purely so a test can drive each of this module's own runtime shape checks directly with an adversarial `unknown` value: fast-xml-parser's own `.parse()` return type is `any`, so nothing upstream of parseXml can guarantee these shapes at compile time, and no syntactically valid XML string reaches most of these branches through fast-xml-parser's own preserveOrder output (its shape is the library's own internal invariant, not something malformed input can violate) -- these are the same kind of runtime boundary check as node.ts's own isXmlNode, which is exported and unit-tested the identical way.
+// Exported alongside parseAttributes and scalarText below purely so a test can drive each of this module's own runtime shape checks directly with an adversarial `unknown` value: fast-xml-parser's own `.parse()` return type is `any`, so nothing upstream of parseXml can guarantee these shapes at compile time, and no syntactically valid XML string reaches most of these branches through fast-xml-parser's own preserveOrder output (its shape is the library's own internal invariant, not something malformed input can violate) — these are the same kind of runtime boundary check as node.ts's own isXmlNode, which is exported and unit-tested the identical way.
 export function parseNode(raw: unknown): XmlNode {
   if (!isRecord(raw)) {
     throw new Error("fast-xml-parser node was not an object");

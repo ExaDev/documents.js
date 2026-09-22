@@ -4,7 +4,7 @@ import {
   Jpeg2000UnsupportedError,
 } from "./jpeg2000-errors";
 
-// The EBCOT tier-1 code-block decoder of ISO/IEC 15444-1 Annex D: three coding passes per bit-plane (significance propagation, magnitude refinement, cleanup) driven by the same MQ arithmetic decoder JBIG2 uses. T.800 Annex C and T.88 Annex E specify the identical coder -- same Qe state table, same INITDEC/BYTEIN/DECODE/RENORMD -- so src/image/jbig2-arith.ts's MqDecoder is reused verbatim here rather than duplicated. The only JPEG 2000-specific part of the entropy layer is which contexts start in a non-zero state (Table D.7), applied below.
+// The EBCOT tier-1 code-block decoder of ISO/IEC 15444-1 Annex D: three coding passes per bit-plane (significance propagation, magnitude refinement, cleanup) driven by the same MQ arithmetic decoder JBIG2 uses. T.800 Annex C and T.88 Annex E specify the identical coder — same Qe state table, same INITDEC/BYTEIN/DECODE/RENORMD — so src/image/jbig2-arith.ts's MqDecoder is reused verbatim here rather than duplicated. The only JPEG 2000-specific part of the entropy layer is which contexts start in a non-zero state (Table D.7), applied below.
 //
 // This module has no codestream knowledge at all: it is handed one code-block's bytes, its dimensions, which subband it belongs to, and how many bit-planes and coding passes were coded, and it hands back one signed integer per coefficient.
 
@@ -115,7 +115,7 @@ function zeroCodingContext(
   return diagonal >= 2 ? 2 : diagonal === 1 ? 1 : 0;
 }
 
-// T.800 Table D.3, indexed by the clamped horizontal and vertical sign contributions offset to 0..2. The value packs the context label in its low bits and the XOR bit -- the sign the decoded decision is to be flipped by -- in bit 3.
+// T.800 Table D.3, indexed by the clamped horizontal and vertical sign contributions offset to 0..2. The value packs the context label in its low bits and the XOR bit — the sign the decoded decision is to be flipped by — in bit 3.
 const SIGN_CONTEXT_TABLE: readonly number[] = (() => {
   // Table D.3 rows, as (horizontal, vertical, contextOffset, xorBit). The offsets are relative to SIGN_CONTEXT_BASE, i.e. context 9 is offset 0.
   const rows: readonly (readonly [number, number, number, number])[] = [

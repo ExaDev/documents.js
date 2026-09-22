@@ -14,13 +14,13 @@ import {
   type WorkedExampleUnresolved,
 } from "./worked-example";
 
-// The three outcome kinds formatCorpusReport ever actually formats -- it deliberately never calls formatOutcome for a "match" (see the loop below), so formatOutcome's own parameter type reflects that rather than accepting the full WorkedExampleOutcome union and carrying a switch branch nothing can ever reach.
+// The three outcome kinds formatCorpusReport ever actually formats — it deliberately never calls formatOutcome for a "match" (see the loop below), so formatOutcome's own parameter type reflects that rather than accepting the full WorkedExampleOutcome union and carrying a switch branch nothing can ever reach.
 type NonMatchOutcome =
   WorkedExampleMismatch | WorkedExampleGapResult | WorkedExampleUnresolved;
 
-// The corpus-scale half of ExaDev/documents.js#794: extracts the already-lowered formula sequence out of a wordprocessing ContentDocument (the shape a markdown-authored worked-example document actually reads as -- markdown-codec's own $$/\( \) recognition plus documents.js's lowerMarkdownMath, per that pass's own header comment) and runs it through worked-example.ts, then aggregates the same across a whole corpus of documents into one coverage report naming, per document, exactly where its evaluation diverged from what the document itself said the answer was.
+// The corpus-scale half of ExaDev/documents.js#794: extracts the already-lowered formula sequence out of a wordprocessing ContentDocument (the shape a markdown-authored worked-example document actually reads as — markdown-codec's own $$/\( \) recognition plus documents.js's lowerMarkdownMath, per that pass's own header comment) and runs it through worked-example.ts, then aggregates the same across a whole corpus of documents into one coverage report naming, per document, exactly where its evaluation diverged from what the document itself said the answer was.
 //
-// Scoped to wordprocessing documents' own block flow, table cells included -- presentation/spreadsheet/drawing formulae (a docx/pptx/xlsx producer's native OMML/MathML equation, as opposed to a markdown-authored LaTeX one) are a different corpus with a different lowering path and are out of scope for this pass, matching #573/#794's own worked-example framing, which was specifically about markdown-sourced formulae.
+// Scoped to wordprocessing documents' own block flow, table cells included — presentation/spreadsheet/drawing formulae (a docx/pptx/xlsx producer's native OMML/MathML equation, as opposed to a markdown-authored LaTeX one) are a different corpus with a different lowering path and are out of scope for this pass, matching #573/#794's own worked-example framing, which was specifically about markdown-sourced formulae.
 
 function collectFormulasFromBlocks(
   blocks: readonly ContentBlock[],
@@ -44,7 +44,7 @@ function collectFormulasFromBlocks(
   }
 }
 
-// The document-order formula sequence a wordprocessing ContentDocument carries -- empty for any other ContentDocument kind, per this module's own scope note above.
+// The document-order formula sequence a wordprocessing ContentDocument carries — empty for any other ContentDocument kind, per this module's own scope note above.
 export function collectFormulas(
   document: ContentDocument,
 ): readonly ContentFormula[] {
@@ -59,7 +59,7 @@ export function collectFormulas(
 }
 
 export interface CorpusDocument {
-  // A caller-chosen label identifying this document in the report -- typically its file path, so a miss can be traced back to the source file without a second lookup.
+  // A caller-chosen label identifying this document in the report — typically its file path, so a miss can be traced back to the source file without a second lookup.
   readonly label: string;
   readonly document: ContentDocument;
 }
@@ -76,7 +76,7 @@ export interface CorpusReport {
   readonly mismatched: number;
   readonly gaps: number;
   readonly unresolved: number;
-  // matched / (matched + mismatched) across every document in the corpus combined -- undefined (never a fabricated 0 or 1) when nothing in the whole corpus had a resolvable stated answer.
+  // matched / (matched + mismatched) across every document in the corpus combined — undefined (never a fabricated 0 or 1) when nothing in the whole corpus had a resolvable stated answer.
   readonly coverage: number | undefined;
 }
 
@@ -120,20 +120,20 @@ function sumBy<T>(items: readonly T[], project: (item: T) => number): number {
 function formatOutcome(outcome: NonMatchOutcome): string {
   switch (outcome.outcome) {
     case "mismatch":
-      return `MISMATCH: ${outcome.targetSymbol} -- expected ${formatEvaluationResult(outcome.expected)}, got ${formatEvaluationResult(outcome.actual)}`;
+      return `MISMATCH: ${outcome.targetSymbol} — expected ${formatEvaluationResult(outcome.expected)}, got ${formatEvaluationResult(outcome.actual)}`;
     case "gap":
-      return `GAP (${outcome.gap}): ${outcome.targetSymbol} -- ${outcome.message}`;
+      return `GAP (${outcome.gap}): ${outcome.targetSymbol} — ${outcome.message}`;
     case "unresolved":
-      return `unresolved: ${outcome.targetSymbol} -- ${outcome.message}`;
+      return `unresolved: ${outcome.targetSymbol} — ${outcome.message}`;
   }
 }
 
-// Takes a Quantity specifically, not the broader EvaluationResult (Quantity | Interval) -- its only call site is formatOutcome's "mismatch" case, formatting WorkedExampleMismatch's own `expected`/`actual` fields, which are typed as Quantity (this harness is scoped to point-valued answers only, per worked-example.ts's own module header comment), so there is no Interval case to render here.
+// Takes a Quantity specifically, not the broader EvaluationResult (Quantity | Interval) — its only call site is formatOutcome's "mismatch" case, formatting WorkedExampleMismatch's own `expected`/`actual` fields, which are typed as Quantity (this harness is scoped to point-valued answers only, per worked-example.ts's own module header comment), so there is no Interval case to render here.
 function formatEvaluationResult(value: Quantity): string {
   return `${value.magnitude}`;
 }
 
-// A plain-text rendering of a corpus report for a CLI/console consumer -- one line per document naming its own coverage, one line per non-matching outcome naming the specific gap, and a combined total. Not the only way to consume a CorpusReport (every field is public data a caller can format its own way), just the family's own convention of shipping a formatter alongside a report type that will otherwise get re-formatted slightly differently by every caller.
+// A plain-text rendering of a corpus report for a CLI/console consumer — one line per document naming its own coverage, one line per non-matching outcome naming the specific gap, and a combined total. Not the only way to consume a CorpusReport (every field is public data a caller can format its own way), just the family's own convention of shipping a formatter alongside a report type that will otherwise get re-formatted slightly differently by every caller.
 export function formatCorpusReport(report: CorpusReport): string {
   const lines: string[] = [];
   for (const { label, report: documentReport } of report.documents) {

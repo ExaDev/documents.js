@@ -77,7 +77,7 @@ describe("readDocxExtras", () => {
     expect(extras.comments).toEqual([]);
     expect(extras.footnotes).toEqual([]);
     expect(extras.headerFooterParts).toEqual([]);
-    // Positional by section: one entry per section, {} when that section spells no references -- the fixture's single sectPr spells none.
+    // Positional by section: one entry per section, {} when that section spells no references — the fixture's single sectPr spells none.
     expect(extras.sectionHeaderFooters).toEqual([{}]);
     expect(extras.numbering).toEqual({});
   });

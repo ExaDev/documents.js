@@ -4,7 +4,7 @@ import { icoColor, readColorRef } from "../color";
 import { DocFormatError } from "../errors";
 import { SGC, type Prl } from "./sprm";
 
-// Character properties, [MS-DOC] 2.6.1 -- the subset of the character-property sprm table this reader converts. Every opcode below was read off the specification's own table rather than recalled, and the ones this package does not yet act on (font selection through the font table, spacing, kerning, borders, revision marks, East Asian typography) are simply absent: an opcode present but ignored would read as support this package does not have.
+// Character properties, [MS-DOC] 2.6.1 — the subset of the character-property sprm table this reader converts. Every opcode below was read off the specification's own table rather than recalled, and the ones this package does not yet act on (font selection through the font table, spacing, kerning, borders, revision marks, East Asian typography) are simply absent: an opcode present but ignored would read as support this package does not have.
 
 /** sprmCFBold: a ToggleOperand switching bold. */
 const SPRM_C_F_BOLD = 0x0835;
@@ -22,7 +22,7 @@ const SPRM_C_ISTD = 0x4a30;
 const SPRM_C_ICO = 0x2a42;
 /** sprmCCv: a COLORREF, the richer colour sprm that supersedes sprmCIco where both appear. */
 const SPRM_C_CV = 0x6870;
-/** sprmCRgFtc0: a 2-byte signed index into the font table (SttbfFfn) naming the font used "only if the conditions for using [sprmCRgFtc1/sprmCRgFtc2/sprmCFtcBi] do not apply" -- the default (non-East-Asian, non-complex-script) font, which is the only one this package reads or writes. */
+/** sprmCRgFtc0: a 2-byte signed index into the font table (SttbfFfn) naming the font used "only if the conditions for using [sprmCRgFtc1/sprmCRgFtc2/sprmCFtcBi] do not apply" — the default (non-East-Asian, non-complex-script) font, which is the only one this package reads or writes. */
 const SPRM_C_RG_FTC_0 = 0x4a4f;
 
 /** ToggleOperand, [MS-DOC] 2.9.336. 0x80 and 0x81 are relative to the style's own value rather than absolute. */
@@ -52,7 +52,7 @@ function toggle(operand: Uint8Array, current: boolean | undefined): boolean {
       return false;
     case TOGGLE_ON:
       return true;
-    // "The Boolean property is set to match the value of the property in the current style that is applied to the text" -- since properties are layered style-first, the style's value is already what `current` holds.
+    // "The Boolean property is set to match the value of the property in the current style that is applied to the text" — since properties are layered style-first, the style's value is already what `current` holds.
     case TOGGLE_INHERIT_FROM_STYLE:
       return current ?? false;
     // "The Boolean property is set to the opposite of the value of the property in the current style."
@@ -71,7 +71,7 @@ function toggle(operand: Uint8Array, current: boolean | undefined): boolean {
 export function applyCharacterSprms(
   prls: readonly Prl[],
   into: CharacterProperties,
-  // The font table (SttbfFfn, see ../style/fonts.ts) sprmCRgFtc0's operand indexes into. Threaded through rather than resolved by the caller after the fact, because folding is the one place every character sprm's precedence rule (last Prl wins) is already applied -- resolving fontFamily anywhere else would need this same in-order walk repeated.
+  // The font table (SttbfFfn, see ../style/fonts.ts) sprmCRgFtc0's operand indexes into. Threaded through rather than resolved by the caller after the fact, because folding is the one place every character sprm's precedence rule (last Prl wins) is already applied — resolving fontFamily anywhere else would need this same in-order walk repeated.
   fonts?: readonly string[],
 ): CharacterProperties {
   for (const prl of prls) {
@@ -114,7 +114,7 @@ export function applyCharacterSprms(
   return into;
 }
 
-// The istd of the character style sprmCIstd applies to this run, if any -- the last one wins, matching every other property's own last-Prl-wins fold. Scanned ahead of applyCharacterSprms's own fold rather than read from its result, since the caller needs the style's own formatting resolved and folded in BEFORE the run's direct exceptions apply, and applyCharacterSprms only produces into.istd as part of that same fold it would then need to have already run.
+// The istd of the character style sprmCIstd applies to this run, if any — the last one wins, matching every other property's own last-Prl-wins fold. Scanned ahead of applyCharacterSprms's own fold rather than read from its result, since the caller needs the style's own formatting resolved and folded in BEFORE the run's direct exceptions apply, and applyCharacterSprms only produces into.istd as part of that same fold it would then need to have already run.
 export function characterIstdFromGrpprl(
   prls: readonly Prl[],
 ): number | undefined {

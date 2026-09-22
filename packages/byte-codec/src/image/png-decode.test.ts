@@ -129,7 +129,7 @@ describe("decodePng: chunk-stream parsing edge cases", () => {
       ...realChunk("IHDR", ihdrData(1, 1, 8, 0)),
       ...idatChunk([0, 7]),
       ...realChunk("IEND", []),
-      // Garbage that declares an impossible length -- if the loop failed to stop at IEND, this would throw a length-overrun error instead of the whole call succeeding.
+      // Garbage that declares an impossible length — if the loop failed to stop at IEND, this would throw a length-overrun error instead of the whole call succeeding.
       ...u32(0xffff),
       0x62,
       0x61,

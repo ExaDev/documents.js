@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 
 import { getRpcClient } from "../rpc/client";
 
-// The Editors tool's five mutations, one per rpc procedure. All four snapshot-returning mutations answer the whole fresh paragraph list (the worker re-reads its live accessors per call), so the page state is nothing but the latest snapshot -- there is no client-side per-paragraph state to keep coherent.
+// The Editors tool's five mutations, one per rpc procedure. All four snapshot-returning mutations answer the whole fresh paragraph list (the worker re-reads its live accessors per call), so the page state is nothing but the latest snapshot — there is no client-side per-paragraph state to keep coherent.
 export function useOpenEditor() {
   return useMutation({
     mutationFn: (

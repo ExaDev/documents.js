@@ -198,7 +198,7 @@ describe("writeSlideDrawing: rotation and pib", () => {
   it("sets fBid on the pib property, distinctly from rotation's own plain value", () => {
     const shapes: DrawingShape[] = [
       {
-        // Insets matching the picture's own zero default (as the sibling "uses zero..." test above relies on too) so pib is the property table's only entry -- otherwise insetProperties would add entries of its own, and sorting by opid could put one ahead of pib.
+        // Insets matching the picture's own zero default (as the sibling "uses zero..." test above relies on too) so pib is the property table's only entry — otherwise insetProperties would add entries of its own, and sorting by opid could put one ahead of pib.
         shape: textShape({
           insetLeftPt: 0,
           insetTopPt: 0,
@@ -774,7 +774,7 @@ describe("writeSlideDrawing: block planning", () => {
   });
 
   it("does not silently skip a paragraph block merely because the shape carries OLE client data", () => {
-    // hasOleClientData only ever silently skips an embeddedObject block specifically -- a shape that also carries real text must keep it regardless.
+    // hasOleClientData only ever silently skips an embeddedObject block specifically — a shape that also carries real text must keep it regardless.
     const written = writeSlideDrawing(
       [
         {

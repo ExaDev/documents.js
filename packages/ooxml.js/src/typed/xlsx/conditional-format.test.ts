@@ -1019,7 +1019,7 @@ describe("buildConditionalFormattingElements: range grouping and priority assign
         (rule) => rule.attributes.find((a) => a.name === "priority")?.value,
       ),
     );
-    // The unpriorised rule must NOT reuse "1" (already explicitly claimed) -- it gets the next free integer, "2".
+    // The unpriorised rule must NOT reuse "1" (already explicitly claimed) — it gets the next free integer, "2".
     expect(
       [...priorities].sort((a, b) => (a ?? "").localeCompare(b ?? "")),
     ).toEqual(["1", "2"]);

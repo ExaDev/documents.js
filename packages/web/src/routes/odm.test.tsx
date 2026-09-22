@@ -6,7 +6,7 @@ import { mountWithProviders } from "../test/mountComponent";
 
 vi.mock("../rpc/client", () => ({ getRpcClient: vi.fn() }));
 
-// Stands in for the real FileUpload (already covered by its own dedicated test suite): OdmPage's own logic -- rendering against whichever chapters are on hand, replacing a re-picked chapter rather than duplicating it, and surfacing the unresolved-hrefs/error/rendered-PDF states -- is what this file exercises. The two FileUpload instances are told apart by their own `accept` key, exactly as a real reader would tell them apart by which file type each one names.
+// Stands in for the real FileUpload (already covered by its own dedicated test suite): OdmPage's own logic — rendering against whichever chapters are on hand, replacing a re-picked chapter rather than duplicating it, and surfacing the unresolved-hrefs/error/rendered-PDF states — is what this file exercises. The two FileUpload instances are told apart by their own `accept` key, exactly as a real reader would tell them apart by which file type each one names.
 let latestMasterProps:
   | {
       onFile: (file: OpenedFile) => void;
@@ -149,7 +149,7 @@ describe("OdmPage", () => {
     });
     await vi.waitFor(() => {
       expect(latestChapterProps?.formatHint).toBe(
-        "chapters: ch1.odt -- add more or re-pick to replace",
+        "chapters: ch1.odt — add more or re-pick to replace",
       );
     });
     const secondInput = vi.mocked(client.odm.render).mock.calls[1]![0];
@@ -163,9 +163,9 @@ describe("OdmPage", () => {
       name: "ch2.odt",
     });
     await vi.waitFor(() => {
-      // A real comma-space join, not a bare concatenation -- proves the separator, not just that both names appear.
+      // A real comma-space join, not a bare concatenation — proves the separator, not just that both names appear.
       expect(latestChapterProps?.formatHint).toBe(
-        "chapters: ch1.odt, ch2.odt -- add more or re-pick to replace",
+        "chapters: ch1.odt, ch2.odt — add more or re-pick to replace",
       );
     });
 

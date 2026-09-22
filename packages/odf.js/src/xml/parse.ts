@@ -22,7 +22,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// Array.isArray narrows unknown to any[], not unknown[] -- lib.es5.d.ts types its parameter as `any`, so TypeScript can't do better even after the check. This guard exists so indexing the result stays unknown rather than silently reintroducing any.
+// Array.isArray narrows unknown to any[], not unknown[] — lib.es5.d.ts types its parameter as `any`, so TypeScript can't do better even after the check. This guard exists so indexing the result stays unknown rather than silently reintroducing any.
 function isUnknownArray(value: unknown): value is unknown[] {
   return Array.isArray(value);
 }

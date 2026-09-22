@@ -193,7 +193,7 @@ function expectRedBlackTree(
     }
     const left = blackHeight(entry.left, entry.colour);
     const right = blackHeight(entry.right, entry.colour);
-    // Every path from a node down to a leaf holds the same number of black nodes -- the defining red-black property, and the one a chain of right siblings (the naive "sorted linked list" shape) fails.
+    // Every path from a node down to a leaf holds the same number of black nodes — the defining red-black property, and the one a chain of right siblings (the naive "sorted linked list" shape) fails.
     expect(left).toBe(right);
     return left + (entry.colour === 1 ? 1 : 0);
   };
@@ -201,7 +201,7 @@ function expectRedBlackTree(
 }
 
 describe("writeCompoundFile header and sector layout", () => {
-  // One 5-byte stream: small enough for the mini stream, so the file is the minimal shape that still exercises every structure -- header, one FAT sector, one directory sector, the mini stream, and the mini FAT. Every expectation below is derived from the spec's field tables, then checked against the layout this writer commits to: sector 0 FAT, sector 1 directory, sector 2 mini stream, sector 3 mini FAT. Built fresh inside each it() rather than shared at describe-top-level: a shared const built once at module/describe setup time runs before any specific test, so Stryker's per-test coverage tracker cannot attribute a mutation in writeCompoundFile's own body to whichever assertion below would actually catch it, and every mutant it introduces there is misreported as surviving regardless of whether a real test kills it.
+  // One 5-byte stream: small enough for the mini stream, so the file is the minimal shape that still exercises every structure — header, one FAT sector, one directory sector, the mini stream, and the mini FAT. Every expectation below is derived from the spec's field tables, then checked against the layout this writer commits to: sector 0 FAT, sector 1 directory, sector 2 mini stream, sector 3 mini FAT. Built fresh inside each it() rather than shared at describe-top-level: a shared const built once at module/describe setup time runs before any specific test, so Stryker's per-test coverage tracker cannot attribute a mutation in writeCompoundFile's own body to whichever assertion below would actually catch it, and every mutant it introduces there is misreported as surviving regardless of whether a real test kills it.
   const minimalFixture = (): Uint8Array<ArrayBuffer> =>
     writeCompoundFile([stream("Foo", enc("hello"))]);
 
@@ -311,7 +311,7 @@ describe("writeCompoundFile header and sector layout", () => {
       expect(u32(minimal, base + 0x44)).toBe(NOSTREAM);
       expect(u32(minimal, base + 0x48)).toBe(NOSTREAM);
       expect(u32(minimal, base + 0x4c)).toBe(NOSTREAM);
-      // Nothing ever explicitly writes an unallocated entry's own size fields, so 0x78/0x7c must still read the zero the allocation started with. Slot 3's own 0x7c sits at this fixture's absolute offset 1532 -- one past where a with-DIFAT file's own chained-DIFAT-sector loop, run one sector too far, would land its stray terminator write, so this is also where such an overrun would first become visible.
+      // Nothing ever explicitly writes an unallocated entry's own size fields, so 0x78/0x7c must still read the zero the allocation started with. Slot 3's own 0x7c sits at this fixture's absolute offset 1532 — one past where a with-DIFAT file's own chained-DIFAT-sector loop, run one sector too far, would land its stray terminator write, so this is also where such an overrun would first become visible.
       expect(u32(minimal, base + 0x78)).toBe(0);
       expect(u32(minimal, base + 0x7c)).toBe(0);
     }
@@ -358,7 +358,7 @@ describe("writeCompoundFile round-trips through readCompoundFile", () => {
   });
 
   it("round-trips a FAT-resident stream at exactly the cutoff", () => {
-    // 4096 is >= the cutoff, so the stream is allocated from the FAT rather than the mini FAT ([MS-CFB] 2.2) -- the exact boundary the comparison has to get right.
+    // 4096 is >= the cutoff, so the stream is allocated from the FAT rather than the mini FAT ([MS-CFB] 2.2) — the exact boundary the comparison has to get right.
     const payload = enc("B".repeat(4096));
     const streams = readCompoundFile(
       writeCompoundFile([stream("AtCutoff", payload)]),
@@ -393,7 +393,7 @@ describe("writeCompoundFile round-trips through readCompoundFile", () => {
   });
 
   it("round-trips the mix of mini- and FAT-resident streams the four binary-format codecs actually write", () => {
-    // The real shape: one large content stream plus a small companion. 'Current User' is a few dozen bytes in a genuine .ppt, so the mini path is not a corner case for these consumers -- it is the normal case for half their streams.
+    // The real shape: one large content stream plus a small companion. 'Current User' is a few dozen bytes in a genuine .ppt, so the mini path is not a corner case for these consumers — it is the normal case for half their streams.
     const document = enc("D".repeat(20000));
     const currentUser = enc("E".repeat(48));
     const table = enc("F".repeat(9000));
@@ -729,7 +729,7 @@ describe("deepestDepth", () => {
 
 describe("writeCompoundFile sibling-name case mapping", () => {
   it("sorts by the simple (single-code-point) uppercase mapping, not the lowercase one", () => {
-    // The Kelvin sign (U+212A) uppercases to itself (0x212A) but lowercases to plain 'k' (0x6B) -- verified directly against V8's own Intl-backed toUpperCase/toLowerCase. Comparing it against 'L' (0x4C upper, 0x6C lower) gives opposite orderings under the two mappings: uppercase puts the Kelvin sign after 'L' (0x212A > 0x4C), lowercase would put it before (0x6B < 0x6C).
+    // The Kelvin sign (U+212A) uppercases to itself (0x212A) but lowercases to plain 'k' (0x6B) — verified directly against V8's own Intl-backed toUpperCase/toLowerCase. Comparing it against 'L' (0x4C upper, 0x6C lower) gives opposite orderings under the two mappings: uppercase puts the Kelvin sign after 'L' (0x212A > 0x4C), lowercase would put it before (0x6B < 0x6C).
     const streams = readCompoundFile(
       writeCompoundFile([stream("L", enc("1")), stream("K", enc("2"))]),
     );
@@ -771,7 +771,7 @@ describe("writeCompoundFile mini-stream sector allocation", () => {
   });
 
   it("needs a second mini FAT sector once the mini stream passes 128 mini sectors, dividing not multiplying to compute it", () => {
-    // entriesPerFatSector is sectorSize / 4 = 128 for a version 3 (512-byte-sector) file, so a mini stream of exactly 129 mini sectors needs ceil(129 / 128) = 2 mini FAT sectors, not 1 -- and a multiplication in that division would instead compute an enormous, clearly-wrong sector count.
+    // entriesPerFatSector is sectorSize / 4 = 128 for a version 3 (512-byte-sector) file, so a mini stream of exactly 129 mini sectors needs ceil(129 / 128) = 2 mini FAT sectors, not 1 — and a multiplication in that division would instead compute an enormous, clearly-wrong sector count.
     const miniSectorsNeeded = 129;
     const streams = Array.from(
       { length: miniSectorsNeeded },
@@ -788,7 +788,7 @@ describe("writeCompoundFile mini-stream sector allocation", () => {
 describe("writeCompoundFile FAT, mini-FAT, and DIFAT region padding", () => {
   // 24 MiB forces three chained DIFAT sectors past the header's own 109-entry array ([MS-CFB] 2.5), not just one or two: the DIFAT-chaining loop's own next-sector arithmetic (difatStart + sector + 1) needs a NON-LAST sector at an index past 0 to distinguish from a subtly wrong variant, since at sector 0 every candidate formula agrees (any term multiplied, divided, or negated by 0 is 0), and a fixture with only two DIFAT sectors has no non-last sector other than 0.
   //
-  // Built fresh inside each test, not shared via a describe-level beforeAll: Stryker's per-test coverage analysis only attributes code executed inside an it() body to that test -- a beforeAll hook runs outside every individual test's own tracked window, so a mutant reachable only through it (as this fixture's own DIFAT-chaining arithmetic is, nowhere else in this suite) gets no usable per-test coverage at all, confirmed directly against a live mutation run. Recomputing the same 24 MiB write per test costs a fraction of a second and buys correct attribution.
+  // Built fresh inside each test, not shared via a describe-level beforeAll: Stryker's per-test coverage analysis only attributes code executed inside an it() body to that test — a beforeAll hook runs outside every individual test's own tracked window, so a mutant reachable only through it (as this fixture's own DIFAT-chaining arithmetic is, nowhere else in this suite) gets no usable per-test coverage at all, confirmed directly against a live mutation run. Recomputing the same 24 MiB write per test costs a fraction of a second and buys correct attribution.
   const sectorSize = 512;
   const sectorOffset = (sector: number): number => (sector + 1) * sectorSize;
   function bigDifatFixture(): {
@@ -817,7 +817,7 @@ describe("writeCompoundFile FAT, mini-FAT, and DIFAT region padding", () => {
   });
 
   it("marks every FAT sector as FATSECT and every DIFAT sector as DIFSECT in the FAT table itself", () => {
-    // The FAT's own entry for each of its own sectors and each DIFAT sector is a role marker, never a chain continuation -- read directly from the FAT table (not merely inferred from the file round-tripping), since no reader ever follows a chain onto one of these sectors to notice a wrong marker there.
+    // The FAT's own entry for each of its own sectors and each DIFAT sector is a role marker, never a chain continuation — read directly from the FAT table (not merely inferred from the file round-tripping), since no reader ever follows a chain onto one of these sectors to notice a wrong marker there.
     const { bytes, fatSectorCount, difatSectorCount, difatStart } =
       bigDifatFixture();
     const entriesPerFatSector = sectorSize / 4;
@@ -871,7 +871,7 @@ describe("writeCompoundFile FAT, mini-FAT, and DIFAT region padding", () => {
         if (fatIndex < fatSectorCount) {
           expect(u32(bytes, base + i * 4)).toBe(fatIndex);
         } else {
-          // Past the last real FAT sector, this slot is never written by the chaining loop below and must still read the FREESECT the DIFAT region's own initial fill leaves there -- this fixture's last DIFAT sector genuinely has such trailing slots, since 24 MiB does not divide evenly into whole DIFAT sectors of FAT-sector references.
+          // Past the last real FAT sector, this slot is never written by the chaining loop below and must still read the FREESECT the DIFAT region's own initial fill leaves there — this fixture's last DIFAT sector genuinely has such trailing slots, since 24 MiB does not divide evenly into whole DIFAT sectors of FAT-sector references.
           expect(u32(bytes, base + i * 4)).toBe(FREESECT);
         }
       }
@@ -885,7 +885,7 @@ describe("writeCompoundFile FAT, mini-FAT, and DIFAT region padding", () => {
   });
 
   it("needs no mini FAT sector at all when nothing is mini-resident", () => {
-    // This fixture's one stream is well past the mini-stream cutoff, so miniSectorCount is 0 and miniFatSectorCount (ceil(0 / 128)) must be 0 too -- a division-to-multiplication mutant on that same ceil would instead compute a large, clearly-wrong sector count from a genuinely zero numerator.
+    // This fixture's one stream is well past the mini-stream cutoff, so miniSectorCount is 0 and miniFatSectorCount (ceil(0 / 128)) must be 0 too — a division-to-multiplication mutant on that same ceil would instead compute a large, clearly-wrong sector count from a genuinely zero numerator.
     const { bytes, miniFatSectorCount } = bigDifatFixture();
     expect(miniFatSectorCount).toBe(0);
     expect(u32(bytes, 0x3c)).toBe(ENDOFCHAIN); // first mini FAT sector: none needed

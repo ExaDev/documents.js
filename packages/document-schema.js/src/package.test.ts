@@ -4,7 +4,7 @@ import { type DocumentTree, DocumentTreeSchema } from "./package";
 const PAGE = { widthPt: 612, heightPt: 792 };
 const MARGINS = { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 };
 
-// A wordprocessing package in the tree form: the root carries kind/metadata/pages, and one section group per section with the section's own blocks grouped inside it -- a heading group wrapping a leaf paragraph, plus the section's own trailing leaf.
+// A wordprocessing package in the tree form: the root carries kind/metadata/pages, and one section group per section with the section's own blocks grouped inside it — a heading group wrapping a leaf paragraph, plus the section's own trailing leaf.
 function wordprocessingPackage(): DocumentTree {
   return {
     kind: "wordprocessing",
@@ -21,7 +21,7 @@ function wordprocessingPackage(): DocumentTree {
               runs: [
                 {
                   text: "Hello, package.",
-                  // A run rendered onto a single page -- the frame's own pageIndex matches the root pages array's own index.
+                  // A run rendered onto a single page — the frame's own pageIndex matches the root pages array's own index.
                   frames: [
                     {
                       pageIndex: 0,
@@ -50,7 +50,7 @@ function wordprocessingPackage(): DocumentTree {
   };
 }
 
-// A spreadsheet package whose sheet group carries its grid on the node and an anchored image child -- the other end of the per-kind children typing.
+// A spreadsheet package whose sheet group carries its grid on the node and an anchored image child — the other end of the per-kind children typing.
 function spreadsheetPackage(): DocumentTree {
   return {
     kind: "spreadsheet",
@@ -158,7 +158,7 @@ describe("DocumentTreeSchema round trips (tree form)", () => {
     expect("$schema" in parsed).toBe(false);
   });
 
-  it("rejects the retired 3.x flat shape -- a value with no children and no tree kind at the root", () => {
+  it("rejects the retired 3.x flat shape — a value with no children and no tree kind at the root", () => {
     const oldShape = {
       formatVersion: 2,
       content: {
@@ -211,7 +211,7 @@ describe("DocumentTreeSchema round trips (tree form)", () => {
     );
   });
 
-  it("rejects an unknown key on a group wrapper and a style ref on a bare leaf -- the runtime guard matches the published JSON Schema fragments key for key", () => {
+  it("rejects an unknown key on a group wrapper and a style ref on a bare leaf — the runtime guard matches the published JSON Schema fragments key for key", () => {
     const withJunkWrapperKey = {
       kind: "wordprocessing",
       metadata: {},
@@ -242,7 +242,7 @@ describe("DocumentTreeSchema round trips (tree form)", () => {
     expect(DocumentTreeSchema.safeParse(withLeafStyleRef).success).toBe(false);
   });
 
-  it("pins the formula package to exactly one child -- decompose emits one ContentFormula and flatten requires one", () => {
+  it("pins the formula package to exactly one child — decompose emits one ContentFormula and flatten requires one", () => {
     const empty = { kind: "formula", metadata: {}, children: [] };
     expect(DocumentTreeSchema.safeParse(empty).success).toBe(false);
     const two = {
@@ -303,7 +303,7 @@ describe("the construct tables at the package root", () => {
     });
   });
 
-  it("lets one name appear in more than one table without collision -- separate root fields are separate namespaces", () => {
+  it("lets one name appear in more than one table without collision — separate root fields are separate namespaces", () => {
     const withTables = {
       ...wordprocessingPackage(),
       layers: { x: { kind: "layer", name: "Layer x" } },
@@ -364,10 +364,10 @@ describe("the package-level source residue table at the root", () => {
     });
   });
 
-  it("rejects a malformed residue value -- the table validates the channel's shape, it does not tenant it", () => {
+  it("rejects a malformed residue value — the table validates the channel's shape, it does not tenant it", () => {
     const broken = {
       ...wordprocessingPackage(),
-      // 'ooxml' is a package name, never a format name, so it can never join the enum the way 'rtf' since has -- which is what makes it a stable stand-in for a value outside the closed vocabulary.
+      // 'ooxml' is a package name, never a format name, so it can never join the enum the way 'rtf' since has — which is what makes it a stable stand-in for a value outside the closed vocabulary.
       source: { s: { format: "ooxml", xml: "<x/>" } },
     };
     expect(DocumentTreeSchema.safeParse(broken).success).toBe(false);
@@ -378,7 +378,7 @@ describe("the package-level source residue table at the root", () => {
     expect(DocumentTreeSchema.safeParse(shapeless).success).toBe(false);
   });
 
-  it("is its own root field, not a definitions tenant -- a residue key and a definitions key never collide because they are separate namespaces", () => {
+  it("is its own root field, not a definitions tenant — a residue key and a definitions key never collide because they are separate namespaces", () => {
     const parsed = DocumentTreeSchema.parse({
       ...wordprocessingPackage(),
       definitions: {
@@ -472,7 +472,7 @@ describe("the construct kinds are additive over 4.0.0", () => {
     expect(DocumentTreeSchema.parse(roundTripped)).toEqual(withConstructs);
   });
 
-  it("still rejects a construct group at the root children position -- a package holds containers, not extents", () => {
+  it("still rejects a construct group at the root children position — a package holds containers, not extents", () => {
     const broken = {
       kind: "wordprocessing",
       metadata: {},

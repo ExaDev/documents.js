@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        The most useful requests here name a specific document construct that does not survive a conversion, and say which direction matters. Each package's README documents what it deliberately does not do -- worth a look first, since some gaps are decisions rather than omissions.
+        The most useful requests here name a specific document construct that does not survive a conversion, and say which direction matters. Each package's README documents what it deliberately does not do — worth a look first, since some gaps are decisions rather than omissions.
 
   - type: dropdown
     id: package
@@ -47,7 +47,7 @@ body:
     id: blocker
     attributes:
       label: Why the current API cannot do it
-      description: What you tried and where it stopped -- a construct that comes back empty, a format pair that is not offered, a type that will not express what you need.
+      description: What you tried and where it stopped — a construct that comes back empty, a format pair that is not offered, a type that will not express what you need.
     validations:
       required: true
 
@@ -55,6 +55,6 @@ body:
     id: proposal
     attributes:
       label: What you have in mind
-      description: Optional. A signature, a schema field, a CLI flag -- whatever shape you were expecting.
+      description: Optional. A signature, a schema field, a CLI flag — whatever shape you were expecting.
     validations:
       required: false

@@ -36,10 +36,10 @@ const CELL_WIDTH = 11;
 const PAGE_JUMP_ROWS = 10;
 // Wide enough for the longest address a compact-list row is likely to show (e.g. "AA100") plus a space.
 const COMPACT_ADDRESS_WIDTH = 8;
-// This screen's own chrome beyond ListView's default reserved-rows count: a title line, a column-header line, the cell-info line below the grid, one hint line, and the app shell's StatusLine underneath everything -- the compact list view reuses this same figure via ListView's `reservedRows`.
+// This screen's own chrome beyond ListView's default reserved-rows count: a title line, a column-header line, the cell-info line below the grid, one hint line, and the app shell's StatusLine underneath everything — the compact list view reuses this same figure via ListView's `reservedRows`.
 const GRID_CHROME_ROWS = 5;
 
-// 'h'/'j'/'k'/'l' move the cursor, 'p'/'t' open print settings / toggle the compact view, 'm' anchors/commits a range-select merge, 'f' opens formula editing, and 'i' opens the floating-image wizard -- all nine are claimed before the printable-character check below, so none of them can seed a type-to-edit. A real, honest, vim-shaped limitation: reach the editor with Enter first, then those letters type as ordinary characters like any other.
+// 'h'/'j'/'k'/'l' move the cursor, 'p'/'t' open print settings / toggle the compact view, 'm' anchors/commits a range-select merge, 'f' opens formula editing, and 'i' opens the floating-image wizard — all nine are claimed before the printable-character check below, so none of them can seed a type-to-edit. A real, honest, vim-shaped limitation: reach the editor with Enter first, then those letters type as ordinary characters like any other.
 const RESERVED_LETTERS: ReadonlySet<string> = new Set([
   "h",
   "j",
@@ -63,7 +63,7 @@ function inferSheetImageFormat(path: string): "png" | "jpeg" | undefined {
   return IMAGE_EXTENSION_TO_FORMAT[extension];
 }
 
-// The sheet-image wizard's own field list -- unlike ADD_TEXTBOX/ADD_IMAGE's page-absolute frame, a spreadsheet floating image is anchored to a cell (see documents.js's own OdsSheet.addImage doc comment), so the anchor row/column come from the grid's own current cursor position (see applyAddSheetImage below) rather than being fields a caller types in here; only the cell-relative offset, the rendered size, and alt text are collected.
+// The sheet-image wizard's own field list — unlike ADD_TEXTBOX/ADD_IMAGE's page-absolute frame, a spreadsheet floating image is anchored to a cell (see documents.js's own OdsSheet.addImage doc comment), so the anchor row/column come from the grid's own current cursor position (see applyAddSheetImage below) rather than being fields a caller types in here; only the cell-relative offset, the rendered size, and alt text are collected.
 const SHEET_IMAGE_FIELDS: readonly FieldSpec[] = [
   { key: "path", label: "Image file path (.png/.jpg/.jpeg)", defaultValue: "" },
   { key: "widthPt", label: "Width (pt)", defaultValue: "100" },
@@ -95,7 +95,7 @@ async function applyAddSheetImage(
     dispatch({
       type: "SET_STATUS",
       severity: "warning",
-      text: `${path} is not a .png or .jpg/.jpeg file -- image not added`,
+      text: `${path} is not a .png or .jpg/.jpeg file — image not added`,
     });
     return;
   }
@@ -190,7 +190,7 @@ export function OdsSpreadsheetGridScreen(): ReactElement {
   const [mergeAnchor, setMergeAnchor] = useState<CellAddress | undefined>(
     undefined,
   );
-  // Formula editing is a genuinely separate edit mode from `editSession` above, not a variant of it -- a real ODF cell carries a formula and a typed value as two independent, coexisting attributes (see actions.ts's own SET_CELL_FORMULA doc comment), so this never reuses the value-kind-cycle UI OdsCellEditor drives.
+  // Formula editing is a genuinely separate edit mode from `editSession` above, not a variant of it — a real ODF cell carries a formula and a typed value as two independent, coexisting attributes (see actions.ts's own SET_CELL_FORMULA doc comment), so this never reuses the value-kind-cycle UI OdsCellEditor drives.
   const [formulaEditing, setFormulaEditing] = useState(false);
   const [formulaDraft, setFormulaDraft] = useState("");
   const [imageWizardOpen, setImageWizardOpen] = useState(false);
@@ -222,7 +222,7 @@ export function OdsSpreadsheetGridScreen(): ReactElement {
     setEditSession({ seedText, seedKind });
   }
 
-  // Commits the rectangle between `anchor` and the current cursor cell (whichever corner is which -- 'm' can be pressed anywhere relative to the anchor) as a real MERGE_CELLS dispatch, then clears the pending anchor.
+  // Commits the rectangle between `anchor` and the current cursor cell (whichever corner is which — 'm' can be pressed anywhere relative to the anchor) as a real MERGE_CELLS dispatch, then clears the pending anchor.
   function commitMerge(anchor: CellAddress): void {
     const startRow = Math.min(anchor.row, clampedRow);
     const startColumn = Math.min(anchor.column, clampedColumn);
@@ -256,7 +256,7 @@ export function OdsSpreadsheetGridScreen(): ReactElement {
     { isActive: !overlayOpen && !editingAnything },
   );
 
-  // Grid-mode cursor movement and type-to-edit -- inactive while the compact list owns the keyboard instead.
+  // Grid-mode cursor movement and type-to-edit — inactive while the compact list owns the keyboard instead.
   useInput(
     (input, key) => {
       if (key.upArrow || input === "k") {
@@ -421,7 +421,7 @@ export function OdsSpreadsheetGridScreen(): ReactElement {
           items={filteredCompactRows}
           selectedIndex={compactSelectedIndex}
           reservedRows={GRID_CHROME_ROWS}
-          emptyMessage="No populated cells yet -- press 't' to go back to the grid and start typing."
+          emptyMessage="No populated cells yet — press 't' to go back to the grid and start typing."
           renderItem={(row, isSelected) => (
             <Text color={selectedColor(isSelected)} inverse={isSelected}>
               {padCell(row.address, COMPACT_ADDRESS_WIDTH)}[{row.badge}]{" "}

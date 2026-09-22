@@ -23,7 +23,7 @@ export function readOptionalContent(
     return { layers: [], layerNameOf: () => undefined };
   }
 
-  // Identity-keyed so an /OC reference to the same OCG resolves to the same name from any content stream -- the object store caches, so a ref and the dict it names are one instance.
+  // Identity-keyed so an /OC reference to the same OCG resolves to the same name from any content stream — the object store caches, so a ref and the dict it names are one instance.
   const nameByGroup = new Map<PdfDict, string>();
   const groups: { dict: PdfDict; name: string }[] = [];
   const ocgs = asArray(resolver.resolve(dictGet(ocProperties, "OCGs"))) ?? [];

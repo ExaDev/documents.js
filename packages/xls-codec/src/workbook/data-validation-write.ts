@@ -10,7 +10,7 @@ import { writeXLUnicodeString } from "../biff/string-writer";
 import { RecordBuilder } from "../biff/builder";
 import type { SheetRuleOperator } from "document-schema.js";
 
-// The write-side inverse of data-validation.ts's readDv ([MS-XLS] 2.4.95): one Dv record per ContentSheetDataValidation rule, preceded by the one Dval record ([MS-XLS] 2.4.96) the worksheet substream's own DataValidationTable grammar names as its wrapper. Everything here is the exact mirror of the reader's own field walk -- the flags word bit-for-bit, the four XLUnicodeStrings in their declared order, the two DVParsedFormula structures (cce, the unused word, then the rgce bytes compileFormulaText produces), and the trailing SqRefU range list -- so a Dv this writer emits reads back through readDv with every field intact.
+// The write-side inverse of data-validation.ts's readDv ([MS-XLS] 2.4.95): one Dv record per ContentSheetDataValidation rule, preceded by the one Dval record ([MS-XLS] 2.4.96) the worksheet substream's own DataValidationTable grammar names as its wrapper. Everything here is the exact mirror of the reader's own field walk — the flags word bit-for-bit, the four XLUnicodeStrings in their declared order, the two DVParsedFormula structures (cce, the unused word, then the rgce bytes compileFormulaText produces), and the trailing SqRefU range list — so a Dv this writer emits reads back through readDv with every field intact.
 
 const VAL_TYPE_BY_TYPE: ReadonlyMap<
   ContentSheetDataValidation["type"],
@@ -22,11 +22,11 @@ const VAL_TYPE_BY_TYPE: ReadonlyMap<
   ["date", 0x4],
   ["time", 0x5],
   ["textLength", 0x6],
-  // The schema's 'custom' covers both of the reader's own no-real-type-signal values: 0x0 ("any type, no check") and 0x7 (custom). The write side states the genuinely custom one -- 0x0 names no check at all, which would weaken a rule whose formula the schema does carry.
+  // The schema's 'custom' covers both of the reader's own no-real-type-signal values: 0x0 ("any type, no check") and 0x7 (custom). The write side states the genuinely custom one — 0x0 names no check at all, which would weaken a rule whose formula the schema does carry.
   ["custom", 0x7],
 ]);
 
-// Dv's own typOperator enumeration is ZERO-based ([MS-XLS] 2.4.95's own field table: 0x0 Between through 0x7 Less than or equal) -- deliberately unlike a CF record's own 1-based cp, a distinction the reader's own OPERATOR_BY_TYP_OPERATOR already encodes and this inverse mirrors.
+// Dv's own typOperator enumeration is ZERO-based ([MS-XLS] 2.4.95's own field table: 0x0 Between through 0x7 Less than or equal) — deliberately unlike a CF record's own 1-based cp, a distinction the reader's own OPERATOR_BY_TYP_OPERATOR already encodes and this inverse mirrors.
 const TYP_OPERATOR_BY_OPERATOR: ReadonlyMap<SheetRuleOperator, number> =
   new Map([
     ["between", 0x0],
@@ -48,7 +48,7 @@ const ERR_STYLE_CODE: ReadonlyMap<
   ["information", 0x2],
 ]);
 
-// A DVParsedFormula ([MS-XLS] 2.2.2): cce (2 bytes), an unused 2-byte word, then the rgce bytes. cce 0 states "no formula" outright -- the spelling the reader trusts rather than inferring from valType/typOperator -- so an absent formula writes exactly that.
+// A DVParsedFormula ([MS-XLS] 2.2.2): cce (2 bytes), an unused 2-byte word, then the rgce bytes. cce 0 states "no formula" outright — the spelling the reader trusts rather than inferring from valType/typOperator — so an absent formula writes exactly that.
 function writeDvParsedFormula(
   text: string | undefined,
 ): [Uint8Array<ArrayBuffer>, Uint8Array<ArrayBuffer>] {
@@ -117,7 +117,7 @@ function writeDvRecord(
 
   const writer = new RecordBuilder();
   writer.u32(flags);
-  // The four strings in the reader's own declared order: PromptTitle, ErrorTitle, Prompt, Error -- absent schema fields write the empty string, which mapDataValidations maps straight back to absent.
+  // The four strings in the reader's own declared order: PromptTitle, ErrorTitle, Prompt, Error — absent schema fields write the empty string, which mapDataValidations maps straight back to absent.
   writer.bytes(writeXLUnicodeString(validation.promptTitle ?? ""));
   writer.bytes(writeXLUnicodeString(validation.errorTitle ?? ""));
   writer.bytes(writeXLUnicodeString(validation.prompt ?? ""));
@@ -136,7 +136,7 @@ function writeDvRecord(
   return writeRecord(RECORD_DV, writer.build());
 }
 
-// The Dval wrapper, its 18-byte body mirrored byte-for-byte from a real producer's own output (LibreOffice 26.8.0.3, Excel 97 export filter): a zero wArrange word, eight zero bytes, the no-active-dropdown 0xFFFFFFFF word, then the count of Dv records that follow. The spec's own field table for the UI-state fields this record carries is not independently confirmed here, but these exact bytes are what a real, Excel-interoperable implementation writes for the no-dropdown state -- and this package's own reader skips the record entirely, so the round trip is indifferent to it while real Excel sees the wrapper its grammar names.
+// The Dval wrapper, its 18-byte body mirrored byte-for-byte from a real producer's own output (LibreOffice 26.8.0.3, Excel 97 export filter): a zero wArrange word, eight zero bytes, the no-active-dropdown 0xFFFFFFFF word, then the count of Dv records that follow. The spec's own field table for the UI-state fields this record carries is not independently confirmed here, but these exact bytes are what a real, Excel-interoperable implementation writes for the no-dropdown state — and this package's own reader skips the record entirely, so the round trip is indifferent to it while real Excel sees the wrapper its grammar names.
 function writeDvalRecord(ruleCount: number): Uint8Array<ArrayBuffer> {
   const writer = new RecordBuilder()
     .u16(0)

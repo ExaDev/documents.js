@@ -6,7 +6,7 @@ import { el, txt } from "../../xml/fragment";
 import { childrenWithTag, rootElement, textContent } from "../util";
 import { findRootRelatedPartPath } from "../opc";
 
-// docProps/core.xml (Dublin Core + extended properties) and docProps/app.xml (the originating application name) use the identical convention across every OOXML format -- docx, pptx, and xlsx alike -- so this reader lives outside any one format's own read.ts rather than being duplicated per format. Ported from documents.js's src/ooxml/core-properties.ts.
+// docProps/core.xml (Dublin Core + extended properties) and docProps/app.xml (the originating application name) use the identical convention across every OOXML format — docx, pptx, and xlsx alike — so this reader lives outside any one format's own read.ts rather than being duplicated per format. Ported from documents.js's src/ooxml/core-properties.ts.
 
 export const DocumentMetadataSchema = z.object({
   title: z.string().optional(),
@@ -19,7 +19,7 @@ export const DocumentMetadataSchema = z.object({
 });
 export type DocumentMetadata = z.infer<typeof DocumentMetadataSchema>;
 
-// The conventional names for the two metadata parts. OPC names each of them through a relationship the package ROOT declares -- core-properties and extended-properties -- so each is used only as the fallback for a package declaring no usable one, exactly as the main part is resolved (typed/opc.ts, ExaDev/documents.js#1314).
+// The conventional names for the two metadata parts. OPC names each of them through a relationship the package ROOT declares — core-properties and extended-properties — so each is used only as the fallback for a package declaring no usable one, exactly as the main part is resolved (typed/opc.ts, ExaDev/documents.js#1314).
 const CONVENTIONAL_CORE_PROPERTIES_PATH = "docProps/core.xml";
 const CONVENTIONAL_APP_PROPERTIES_PATH = "docProps/app.xml";
 // The core-properties relationship lives in the OPC package namespace, not the officeDocument one every other relationship here uses, which is why only its final segment is matched (as everywhere else in this package) rather than a full URI.
@@ -41,7 +41,7 @@ function appPropertiesPartPath(pkg: Package): string {
   );
 }
 
-// The namespace URIs the two prefixes patchCoreProperties/setElementText might newly introduce onto a source document actually resolve to -- the identical values documents.js's own addCoreProperties declares when building a core.xml part from scratch. This module never creates a dcterms:-prefixed element (dcterms:created/modified are read-only here), so dcterms/xsi are deliberately not in this table.
+// The namespace URIs the two prefixes patchCoreProperties/setElementText might newly introduce onto a source document actually resolve to — the identical values documents.js's own addCoreProperties declares when building a core.xml part from scratch. This module never creates a dcterms:-prefixed element (dcterms:created/modified are read-only here), so dcterms/xsi are deliberately not in this table.
 const CORE_PROPERTIES_NAMESPACE_URI_FOR_PREFIX: Readonly<
   Record<string, string>
 > = {
@@ -77,7 +77,7 @@ function readKeywords(core: XmlElement | undefined): string[] | undefined {
   return parts.length > 0 ? parts : undefined;
 }
 
-// Reads a package's docProps into a DocumentMetadata. `author` is the human author (dc:creator); `creator` is the originating application (docProps/app.xml's Application element, e.g. "Microsoft Office PowerPoint") -- NOT the same OOXML field despite the name overlap with dc:creator. There is no `producer` field: that is a PDF-specific concept (the tool that produced a PDF) with no OOXML equivalent.
+// Reads a package's docProps into a DocumentMetadata. `author` is the human author (dc:creator); `creator` is the originating application (docProps/app.xml's Application element, e.g. "Microsoft Office PowerPoint") — NOT the same OOXML field despite the name overlap with dc:creator. There is no `producer` field: that is a PDF-specific concept (the tool that produced a PDF) with no OOXML equivalent.
 export function readCoreProperties(pkg: Package): DocumentMetadata {
   const core = rootElement(pkg.parts[corePropertiesPartPath(pkg)]);
   const app = rootElement(pkg.parts[appPropertiesPartPath(pkg)]);
@@ -92,7 +92,7 @@ export function readCoreProperties(pkg: Package): DocumentMetadata {
   };
 }
 
-// True when the package already carries a real docProps/core.xml XML part -- the precondition patchCoreProperties requires below. A package that has never had any metadata set genuinely lacks this part (documents.js's createDocx() with no options.metadata, for one), and creating one from nothing needs more than a text-node patch -- a content-type override and a package-root relationship, which is a distinct concern from patching an existing part's text -- so a caller reaching for patchCoreProperties should check this first and fall back to building a fresh part (e.g. documents.js's own addCoreProperties) when it answers false.
+// True when the package already carries a real docProps/core.xml XML part — the precondition patchCoreProperties requires below. A package that has never had any metadata set genuinely lacks this part (documents.js's createDocx() with no options.metadata, for one), and creating one from nothing needs more than a text-node patch — a content-type override and a package-root relationship, which is a distinct concern from patching an existing part's text — so a caller reaching for patchCoreProperties should check this first and fall back to building a fresh part (e.g. documents.js's own addCoreProperties) when it answers false.
 export function hasCoreProperties(pkg: Package): boolean {
   return pkg.parts[corePropertiesPartPath(pkg)]?.kind === "xml";
 }
@@ -104,12 +104,12 @@ export interface CorePropertiesOverrides {
   readonly keywords?: readonly string[];
 }
 
-// The namespace prefix a tag is qualified with ("dc:title" -> "dc"). No "no colon" branch: this is only ever called, via ensureNamespaceDeclared below, with one of "dc:title" / "dc:creator" / "dc:subject" / "cp:keywords" -- every one of them colon-qualified -- so colonIndex is always >= 0 in practice and a branch handling its absence would be unreachable.
+// The namespace prefix a tag is qualified with ("dc:title" -> "dc"). No "no colon" branch: this is only ever called, via ensureNamespaceDeclared below, with one of "dc:title" / "dc:creator" / "dc:subject" / "cp:keywords" — every one of them colon-qualified — so colonIndex is always >= 0 in practice and a branch handling its absence would be unreachable.
 function namespacePrefixOf(tag: string): string {
   return tag.slice(0, tag.indexOf(":"));
 }
 
-// Ensures `root` declares the xmlns binding a newly appended element's prefix needs. A legally-minimal docProps/core.xml declaring only the cp namespace (every core-properties child is optional, so a real producer writing only cp:keywords has no reason to ever declare dc) would otherwise gain an unbound dc:title/dc:creator/dc:subject child -- a fatal XML namespace well-formedness error real consumers (Word, LibreOffice) reject outright. Only called from the "create a new element" branch below: an EXISTING element's prefix was already legally bound by whatever produced the source document, so patching its text alone never needs this. Idempotent -- patching two dc-prefixed fields that both need creating (title and author, say) declares xmlns:dc once, not twice.
+// Ensures `root` declares the xmlns binding a newly appended element's prefix needs. A legally-minimal docProps/core.xml declaring only the cp namespace (every core-properties child is optional, so a real producer writing only cp:keywords has no reason to ever declare dc) would otherwise gain an unbound dc:title/dc:creator/dc:subject child — a fatal XML namespace well-formedness error real consumers (Word, LibreOffice) reject outright. Only called from the "create a new element" branch below: an EXISTING element's prefix was already legally bound by whatever produced the source document, so patching its text alone never needs this. Idempotent — patching two dc-prefixed fields that both need creating (title and author, say) declares xmlns:dc once, not twice.
 function ensureNamespaceDeclared(root: XmlElement, tag: string): void {
   const prefix = namespacePrefixOf(tag);
   const uri = CORE_PROPERTIES_NAMESPACE_URI_FOR_PREFIX[prefix];
@@ -123,7 +123,7 @@ function ensureNamespaceDeclared(root: XmlElement, tag: string): void {
   root.attributes.push({ name: attrName, value: uri });
 }
 
-// Replaces (or creates) one direct child element's sole text content, in place -- the live-view mutation primitive patchCoreProperties below is built from. Every other child of `parent`, and every attribute already on the matched element, is left exactly as it was. `parent` is always the coreProperties root itself in this module's own callers, so a newly created element's namespace is declared directly on it -- see ensureNamespaceDeclared above.
+// Replaces (or creates) one direct child element's sole text content, in place — the live-view mutation primitive patchCoreProperties below is built from. Every other child of `parent`, and every attribute already on the matched element, is left exactly as it was. `parent` is always the coreProperties root itself in this module's own callers, so a newly created element's namespace is declared directly on it — see ensureNamespaceDeclared above.
 function setElementText(parent: XmlElement, tag: string, value: string): void {
   const existing = childrenWithTag(parent, tag)[0];
   const textNode = txt(encodeXmlText(value));
@@ -142,7 +142,7 @@ function removeChildrenWithTag(parent: XmlElement, tag: string): void {
   );
 }
 
-// Patches docProps/core.xml IN PLACE: for each of title/author/subject/keywords present on `overrides`, this replaces (or creates) the matching element's text content and leaves every other element on the part -- dcterms:created, dcterms:modified, cp:lastModifiedBy, cp:revision, and anything else the source producer wrote -- completely untouched. This is the write-side counterpart to readCoreProperties above, but a patch rather than a from-scratch rebuild: the one caller that needs it (documents.js's docx-only setDocumentMetadata fast path, ExaDev/documents.js#966) needs everything else in the package -- comments, footnotes, header/footer parts, section header/footer references, numbering -- to survive byte-faithful, which a ContentDocument round trip through buildDocxPackageFromContent cannot do. Mirrors buildCorePropertiesPart's own field-by-field semantics (typed/docx/write.ts): title/author/subject write even when the override is an empty string, while an empty keywords array removes the element entirely rather than writing an empty one, matching how a from-scratch build never emits cp:keywords for an empty list. Throws if the package has no docProps/core.xml XML part at all -- see hasCoreProperties above.
+// Patches docProps/core.xml IN PLACE: for each of title/author/subject/keywords present on `overrides`, this replaces (or creates) the matching element's text content and leaves every other element on the part — dcterms:created, dcterms:modified, cp:lastModifiedBy, cp:revision, and anything else the source producer wrote — completely untouched. This is the write-side counterpart to readCoreProperties above, but a patch rather than a from-scratch rebuild: the one caller that needs it (documents.js's docx-only setDocumentMetadata fast path, ExaDev/documents.js#966) needs everything else in the package — comments, footnotes, header/footer parts, section header/footer references, numbering — to survive byte-faithful, which a ContentDocument round trip through buildDocxPackageFromContent cannot do. Mirrors buildCorePropertiesPart's own field-by-field semantics (typed/docx/write.ts): title/author/subject write even when the override is an empty string, while an empty keywords array removes the element entirely rather than writing an empty one, matching how a from-scratch build never emits cp:keywords for an empty list. Throws if the package has no docProps/core.xml XML part at all — see hasCoreProperties above.
 export function patchCoreProperties(
   pkg: Package,
   overrides: CorePropertiesOverrides,
@@ -151,7 +151,7 @@ export function patchCoreProperties(
   const part = pkg.parts[corePath];
   if (part?.kind !== "xml") {
     throw new Error(
-      `patchCoreProperties: package has no '${corePath}' XML part to patch -- check hasCoreProperties first, or build one from scratch instead`,
+      `patchCoreProperties: package has no '${corePath}' XML part to patch — check hasCoreProperties first, or build one from scratch instead`,
     );
   }
   const core = rootElement(part);

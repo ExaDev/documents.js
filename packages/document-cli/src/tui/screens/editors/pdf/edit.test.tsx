@@ -52,7 +52,7 @@ async function flush(): Promise<void> {
   );
 }
 
-// Clears a TextField's own pre-filled draft (the cursor starts at its end) with `count` backspaces, then types `value` fresh and waits for it to actually reach the rendered frame before returning -- see paragraph-detail.test.tsx's own identical helper for the empirically-observed races this closes.
+// Clears a TextField's own pre-filled draft (the cursor starts at its end) with `count` backspaces, then types `value` fresh and waits for it to actually reach the rendered frame before returning — see paragraph-detail.test.tsx's own identical helper for the empirically-observed races this closes.
 async function replaceField(
   stdin: Stdin,
   lastFrame: LastFrame,
@@ -69,7 +69,7 @@ async function replaceField(
   });
 }
 
-// Navigates a fresh harness from pdfPageList all the way down to pdfItemDetail for the fixture's one item, then moves the selection down `rowsDown` rows -- shared by every test below so each one starts from an identical, freshly-rendered state rather than chaining edits (and their own settle()/race-avoidance overhead) across a single long-running test. Row order in EditableItemDetail's own rows for a text item: 0 Text, 1 X, 2 Y, 3 Font family, 4 Font weight, 5 Font style, 6 Size, 7 Colour, 8 Width, 9 Rotation, 10 Underline.
+// Navigates a fresh harness from pdfPageList all the way down to pdfItemDetail for the fixture's one item, then moves the selection down `rowsDown` rows — shared by every test below so each one starts from an identical, freshly-rendered state rather than chaining edits (and their own settle()/race-avoidance overhead) across a single long-running test. Row order in EditableItemDetail's own rows for a text item: 0 Text, 1 X, 2 Y, 3 Font family, 4 Font weight, 5 Font style, 6 Size, 7 Colour, 8 Width, 9 Rotation, 10 Underline.
 async function openItemDetailRow(
   stdin: Stdin,
   lastFrame: LastFrame,
@@ -106,7 +106,7 @@ describe("PDF item editing via PdfItemDetailScreen", () => {
     await waitForFrame(lastFrame, (candidate) =>
       candidate.includes("Text: Hi"),
     ); // the field-edit box's own title line, seeded from the row's label
-    await settle(); // entering edit mode toggles EditableItemDetail's own useNavigationInput inactive, re-subscribing Ink's raw-mode listener -- settle before typing, matching the documented swap race in ../../../test-support.js.
+    await settle(); // entering edit mode toggles EditableItemDetail's own useNavigationInput inactive, re-subscribing Ink's raw-mode listener — settle before typing, matching the documented swap race in ../../../test-support.js.
     await replaceField(stdin, lastFrame, "Hi".length, "Goodbye");
     stdin.write(ENTER);
     await waitForFrame(lastFrame, (candidate) =>
@@ -148,7 +148,7 @@ describe("PDF item editing via PdfItemDetailScreen", () => {
     );
   }, 20000);
 
-  it("toggles underline via an activate-based row -- Enter dispatches immediately, no TextField or edit-mode transition involved at all", async () => {
+  it("toggles underline via an activate-based row — Enter dispatches immediately, no TextField or edit-mode transition involved at all", async () => {
     const { lastFrame, stdin } = render(<PdfHarness layout={SAMPLE_LAYOUT} />);
     await openItemDetailRow(stdin, lastFrame, 10);
 
@@ -195,10 +195,10 @@ describe("PdfPageItemsScreen add and delete flow", () => {
       candidate.includes("Page 1 items (2 of 2)"),
     );
     expect(lastFrame()).toContain("2. rect");
-    // The add flow completing swaps AddItemFlow back out for the main list JSX, re-activating PdfPageItemsScreen's own useNavigationInput/delete useInput (see the documented swap race above) -- settle before the next keystroke.
+    // The add flow completing swaps AddItemFlow back out for the main list JSX, re-activating PdfPageItemsScreen's own useNavigationInput/delete useInput (see the documented swap race above) — settle before the next keystroke.
     await settle();
 
-    // The list's own selection was never moved during the add flow (AddItemFlow owns its own separate cursor), so it is still resting on row 0 (the fixture's text item) -- move down once to reach the freshly added rect before deleting it.
+    // The list's own selection was never moved during the add flow (AddItemFlow owns its own separate cursor), so it is still resting on row 0 (the fixture's text item) — move down once to reach the freshly added rect before deleting it.
     stdin.write("j");
     await settle();
     stdin.write("d");

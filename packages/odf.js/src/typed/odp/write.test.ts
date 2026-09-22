@@ -20,7 +20,7 @@ import {
 import { assertMimetypeEntryLayout } from "../../test-support/zip";
 import { writeOdpContent } from "./write";
 
-// The write side's XML-shape suite: what writeOdpContent actually emits, construct by construct -- the presentation mirror of typed/odt/write.test.ts (that file's own top-of-file note states why this suite exists alongside the round-trip one: a writer and reader that agree with each other and with nobody else would round-trip perfectly and open nowhere).
+// The write side's XML-shape suite: what writeOdpContent actually emits, construct by construct — the presentation mirror of typed/odt/write.test.ts (that file's own top-of-file note states why this suite exists alongside the round-trip one: a writer and reader that agree with each other and with nobody else would round-trip perfectly and open nowhere).
 
 // A 1x1 PNG, genuinely decodable (sniffImageFormat reads real magic bytes, not a name), matching typed/odt/write-round-trip.test.ts's own fixture.
 const PNG_BASE64 =
@@ -244,7 +244,7 @@ describe("writeOdpContent: shape geometry", () => {
     expect(attrValue(frame, "draw:name")).toBe("Q&amp;A &lt;draft&gt;");
   });
 
-  // The ODF `length` datatype has no exponent form at all (typed/shared/units.ts's own LENGTH_PATTERN), so an svg:*/translate() component in JavaScript's own exponent spelling is invalid ODF that this package's reader silently discards -- taking the translate(), or the whole shape, with it. A frame sitting at the page origin is the ordinary way to reach that magnitude: the rotation inverse's own terms cancel to trig rounding dust rather than to a clean zero. This exact case (a 100x100 frame at the origin, rotated 270 degrees) writes translate(7.105427357601002e-15pt ...) without the fix.
+  // The ODF `length` datatype has no exponent form at all (typed/shared/units.ts's own LENGTH_PATTERN), so an svg:*/translate() component in JavaScript's own exponent spelling is invalid ODF that this package's reader silently discards — taking the translate(), or the whole shape, with it. A frame sitting at the page origin is the ordinary way to reach that magnitude: the rotation inverse's own terms cancel to trig rounding dust rather than to a clean zero. This exact case (a 100x100 frame at the origin, rotated 270 degrees) writes translate(7.105427357601002e-15pt ...) without the fix.
   it("writes no exponent-notation length for a rotated frame at the page origin, where the translate() components cancel to rounding dust", () => {
     const pkg = writeOdpContent(
       documentOf([
@@ -265,7 +265,7 @@ describe("writeOdpContent: shape geometry", () => {
     );
   });
 
-  // The rotate() ANGLE is a bare radians value with no unit suffix, distinct from the translate() lengths the test above covers -- a tiny non-zero rotationDeg (never zero, which collapses to no transform at all) drives angleRad itself into JavaScript's own exponent spelling (rotationDeg: 1e-9 emits rotate(-1.7453292519943295e-11) without the fix), which is exactly as invalid to the ODF `length`/number grammar as an exponent-form translate() component.
+  // The rotate() ANGLE is a bare radians value with no unit suffix, distinct from the translate() lengths the test above covers — a tiny non-zero rotationDeg (never zero, which collapses to no transform at all) drives angleRad itself into JavaScript's own exponent spelling (rotationDeg: 1e-9 emits rotate(-1.7453292519943295e-11) without the fix), which is exactly as invalid to the ODF `length`/number grammar as an exponent-form translate() component.
   it("writes no exponent-notation angle in draw:transform's rotate() for a very small non-zero rotationDeg", () => {
     const pkg = writeOdpContent(
       documentOf([slide([shape({ rotationDeg: 1e-9 })])]),
@@ -534,7 +534,7 @@ describe("writeOdpContent: shape paint order", () => {
     ]);
   });
 
-  // Number.isInteger(1e21) is true, and String(1e21) is "1e+21" -- an integer beyond Number.isSafeInteger's 2^53 bound reaches JavaScript's own exponent-notation threshold before it reaches any bound xsd:nonNegativeInteger itself states, the exact failure class formatOdfLength's own expandExponential exists to close for lengths. odfZIndexOf must refuse one rather than writing a draw:z-index no XML integer datatype can spell.
+  // Number.isInteger(1e21) is true, and String(1e21) is "1e+21" — an integer beyond Number.isSafeInteger's 2^53 bound reaches JavaScript's own exponent-notation threshold before it reaches any bound xsd:nonNegativeInteger itself states, the exact failure class formatOdfLength's own expandExponential exists to close for lengths. odfZIndexOf must refuse one rather than writing a draw:z-index no XML integer datatype can spell.
   it("writes draw:z-index as the shape's own document-encounter index for a paintOrder beyond Number.isSafeInteger's own bound, rather than emitting exponent notation", () => {
     const pkg = writeOdpContent(
       documentOf([slide([shape({ paintOrder: 1e21 })])]),

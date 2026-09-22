@@ -16,9 +16,9 @@ import { readCellStyleDecoration } from "../shared/table";
 import { takeExpression } from "../shared/expression";
 import { decodeXmlText } from "../../xml/entities";
 
-// calcext:conditional-formats reading -- LibreOffice's own vendor extension for ODF conditional formatting (there is no OASIS-published grammar for it at all, unlike most of this reader's own targets), one calcext:conditional-formats element per table:table, sibling to its own table:table-row children (confirmed against real LibreOffice output, see typed/ods/read.ts's own collectOdsExtensionElementResidue note). Every element/attribute name and the calcext:condition value mini-language below are transcribed directly from LibreOffice's own reader (sc/source/filter/xml/xmlcondformat.cxx: ScXMLConditionalFormatsContext, ScXMLConditionalFormatContext, ScXMLConditionContext's own GetConditionData, ScXMLColorScaleFormatContext, ScXMLDataBarFormatContext, ScXMLIconSetFormatContext, ScXMLDateIsContext, and the shared setColorEntryType helper), the same "producer-specific attribute value not otherwise pinned down by any published spec is handled by reading the real implementation, not guessed at" precedent typed/ods/data-validation.ts's own table:condition reading already established.
+// calcext:conditional-formats reading — LibreOffice's own vendor extension for ODF conditional formatting (there is no OASIS-published grammar for it at all, unlike most of this reader's own targets), one calcext:conditional-formats element per table:table, sibling to its own table:table-row children (confirmed against real LibreOffice output, see typed/ods/read.ts's own collectOdsExtensionElementResidue note). Every element/attribute name and the calcext:condition value mini-language below are transcribed directly from LibreOffice's own reader (sc/source/filter/xml/xmlcondformat.cxx: ScXMLConditionalFormatsContext, ScXMLConditionalFormatContext, ScXMLConditionContext's own GetConditionData, ScXMLColorScaleFormatContext, ScXMLDataBarFormatContext, ScXMLIconSetFormatContext, ScXMLDateIsContext, and the shared setColorEntryType helper), the same "producer-specific attribute value not otherwise pinned down by any published spec is handled by reading the real implementation, not guessed at" precedent typed/ods/data-validation.ts's own table:condition reading already established.
 //
-// One calcext:conditional-format wraps a target-range-address plus one or more rule children (condition/color-scale/data-bar/icon-set/date-is), each promoted into its own ContentSheetConditionalFormat sharing that wrapper's own parsed ranges -- the identical "one wrapper, several rules, ranges copied onto each" modelling ooxml.js's own xlsx conditionalFormatting/cfRule reading already uses (ExaDev/documents.js#758), which is exactly the shape ContentSheetConditionalFormatSchema was designed around. A rule this reader cannot promote (an unrecognised condition value, a colour-scale/data-bar/icon-set entry type this format's own closed union has no member for, or a target-range-address that parses to no range at all) is left for the caller to hand to the pre-existing whole-element residue mechanism, as a synthetic single-rule calcext:conditional-format clone carrying the original wrapper's own target-range-address so the range that clone needs to reconstruct from survives alongside it.
+// One calcext:conditional-format wraps a target-range-address plus one or more rule children (condition/color-scale/data-bar/icon-set/date-is), each promoted into its own ContentSheetConditionalFormat sharing that wrapper's own parsed ranges — the identical "one wrapper, several rules, ranges copied onto each" modelling ooxml.js's own xlsx conditionalFormatting/cfRule reading already uses (ExaDev/documents.js#758), which is exactly the shape ContentSheetConditionalFormatSchema was designed around. A rule this reader cannot promote (an unrecognised condition value, a colour-scale/data-bar/icon-set entry type this format's own closed union has no member for, or a target-range-address that parses to no range at all) is left for the caller to hand to the pre-existing whole-element residue mechanism, as a synthetic single-rule calcext:conditional-format clone carrying the original wrapper's own target-range-address so the range that clone needs to reconstruct from survives alongside it.
 
 export interface ConditionalFormatReadResult {
   formats: ContentSheetConditionalFormat[];
@@ -27,7 +27,7 @@ export interface ConditionalFormatReadResult {
 
 type CfvoType = "num" | "percent" | "max" | "min" | "formula" | "percentile";
 
-// calcext's own color-scale-entry/formatting-entry/data-bar-entry "type" vocabulary (LibreOffice's shared setColorEntryType helper) -- "auto-minimum"/"auto-maximum" (an automatically-computed scale endpoint with no explicit value, a LibreOffice-specific concept ECMA-376's own closed cfvo type enum has no member for) are deliberately absent from this map, exactly mirroring how ooxml.js's own isCfvoType leaves an unrecognised xlsx cfvo @type unpromoted -- a rule using either falls back to residue rather than being silently narrowed to a plain "min"/"max".
+// calcext's own color-scale-entry/formatting-entry/data-bar-entry "type" vocabulary (LibreOffice's shared setColorEntryType helper) — "auto-minimum"/"auto-maximum" (an automatically-computed scale endpoint with no explicit value, a LibreOffice-specific concept ECMA-376's own closed cfvo type enum has no member for) are deliberately absent from this map, exactly mirroring how ooxml.js's own isCfvoType leaves an unrecognised xlsx cfvo @type unpromoted — a rule using either falls back to residue rather than being silently narrowed to a plain "min"/"max".
 const CFVO_TYPE_BY_CALCEXT_TYPE: ReadonlyMap<string, CfvoType> = new Map([
   ["minimum", "min"],
   ["maximum", "max"],
@@ -39,7 +39,7 @@ const CFVO_TYPE_BY_CALCEXT_TYPE: ReadonlyMap<string, CfvoType> = new Map([
 export function readTargetRangeList(value: string): ContentSheetRange[] {
   const ranges: ContentSheetRange[] = [];
   for (const part of value.split(" ")) {
-    // No separate `part.length === 0` guard: a genuinely empty part (from a run of consecutive spaces) has no ':' to find either, so it already falls through the very next check below -- an explicit length guard here would only ever fire on input the next line already handles identically.
+    // No separate `part.length === 0` guard: a genuinely empty part (from a run of consecutive spaces) has no ':' to find either, so it already falls through the very next check below — an explicit length guard here would only ever fire on input the next line already handles identically.
     const separatorIndex = part.indexOf(":");
     if (separatorIndex === -1) {
       continue;
@@ -62,7 +62,7 @@ export function readTargetRangeList(value: string): ContentSheetRange[] {
 function parseA1WithOptionalSheetPrefix(
   cellPart: string,
 ): { column: number; row: number } | undefined {
-  // No separate "has a sheet prefix at all" branch: when there is no '.', lastIndexOf returns -1, and slice(-1 + 1) = slice(0) returns cellPart unchanged -- exactly what a bare reference needs, with no ternary required to state it.
+  // No separate "has a sheet prefix at all" branch: when there is no '.', lastIndexOf returns -1, and slice(-1 + 1) = slice(0) returns cellPart unchanged — exactly what a bare reference needs, with no ternary required to state it.
   const dotIndex = cellPart.lastIndexOf(".");
   const bareReference = cellPart.slice(dotIndex + 1);
   return parseCellReference(bareReference);
@@ -77,7 +77,7 @@ function readConditionalFormatStyle(
   }
   // No separate "chain resolved to nothing" guard: readCellStyleDecoration and resolveStyle both fold over `elements` and yield undefined background/color for an empty chain exactly as they would for a chain that resolved but carried neither property, so an empty chain already falls through to the "genuinely no styling" check below with the identical result.
   const { elements } = resolveStyleElementChain(styleName, "table-cell", pkg);
-  // ContentSheetConditionalFormatStyleSchema.background is a plain colour (the two properties actually observed on a real dxf, per that schema's own top comment); readCellStyleDecoration's own background is the richer solid/pattern ContentCellFill a regular cell can carry, so only the 'solid' case narrows down to a colour here -- a pattern fill on the referenced style has no representation in this narrower schema and is simply not carried through, matching the schema's own documented scope.
+  // ContentSheetConditionalFormatStyleSchema.background is a plain colour (the two properties actually observed on a real dxf, per that schema's own top comment); readCellStyleDecoration's own background is the richer solid/pattern ContentCellFill a regular cell can carry, so only the 'solid' case narrows down to a colour here — a pattern fill on the referenced style has no representation in this narrower schema and is simply not carried through, matching the schema's own documented scope.
   const { background: fill } = readCellStyleDecoration(elements);
   const background = fill?.kind === "solid" ? fill.color : undefined;
   const { properties } = resolveStyle(styleName, "table-cell", pkg);
@@ -91,7 +91,7 @@ function readConditionalFormatStyle(
   };
 }
 
-// calcext:condition's own "value" mini-language (e.g. "between(1,10)", "=formula", "unique", "top-elements(5)") -- transcribed directly from xmlcondformat.cxx's own GetConditionData, which matches by literal prefix (longest real match wins by construction: every prefix below is distinct and none is itself a prefix of an earlier-checked one) then extracts 0-2 paren/comma-delimited operands via ScXMLConditionHelper::getExpression, the same balanced-paren/quote-aware algorithm typed/shared/expression.ts already carries for table:condition's own unrelated mini-language.
+// calcext:condition's own "value" mini-language (e.g. "between(1,10)", "=formula", "unique", "top-elements(5)") — transcribed directly from xmlcondformat.cxx's own GetConditionData, which matches by literal prefix (longest real match wins by construction: every prefix below is distinct and none is itself a prefix of an earlier-checked one) then extracts 0-2 paren/comma-delimited operands via ScXMLConditionHelper::getExpression, the same balanced-paren/quote-aware algorithm typed/shared/expression.ts already carries for table:condition's own unrelated mini-language.
 type ConditionMode =
   | "unique"
   | "duplicate"
@@ -214,7 +214,7 @@ export function parseConditionValue(
   return undefined;
 }
 
-// The operand list always starts at mode.length + 1: every mode string handled here is immediately followed, with no whitespace, by the '(' that opens its own operand list (confirmed against every real pStr + N offset in xmlcondformat.cxx's own GetConditionData -- N is mechanically strlen(prefix) + 1 in every single case). Deriving it from `mode` itself here, rather than repeating each prefix's own length as a hardcoded literal per call site, is what caught a real off-by-one in this function's own first draft: "not-contains-text" -- 18 real characters -- was originally paired with a hand-counted 19.
+// The operand list always starts at mode.length + 1: every mode string handled here is immediately followed, with no whitespace, by the '(' that opens its own operand list (confirmed against every real pStr + N offset in xmlcondformat.cxx's own GetConditionData — N is mechanically strlen(prefix) + 1 in every single case). Deriving it from `mode` itself here, rather than repeating each prefix's own length as a hardcoded literal per call site, is what caught a real off-by-one in this function's own first draft: "not-contains-text" — 18 real characters — was originally paired with a hand-counted 19.
 function parseOneOperand(value: string, mode: ConditionMode): ParsedCondition {
   const { value: expr1 } = takeExpression(value, mode.length + 1, ")");
   return { mode, expr1, expr2: undefined };
@@ -238,7 +238,7 @@ const COMPARISON_OPERATOR_BY_MODE: ReadonlyMap<
   ["greater", "greaterThan"],
 ]);
 
-// decodeXmlText on every attribute value read here, not just this one: this package parses with processEntities:false (xml/parse.ts), so an attribute value is stored exactly as the source XML spelled it -- a real LibreOffice-produced calcext:value of ">3" is confirmed (typed/ods/fixtures/conditional-format.ods's own content.xml) to serialise as calcext:value="&gt;3", literally, on disk. Reading it via a bare attrValue() would hand ">3"'s own comparison-operator prefix match a literal "&gt;3" instead, silently failing to match any of this mini-language's own prefixes and quarantining a real, well-formed rule as unpromotable residue.
+// decodeXmlText on every attribute value read here, not just this one: this package parses with processEntities:false (xml/parse.ts), so an attribute value is stored exactly as the source XML spelled it — a real LibreOffice-produced calcext:value of ">3" is confirmed (typed/ods/fixtures/conditional-format.ods's own content.xml) to serialise as calcext:value="&gt;3", literally, on disk. Reading it via a bare attrValue() would hand ">3"'s own comparison-operator prefix match a literal "&gt;3" instead, silently failing to match any of this mini-language's own prefixes and quarantining a real, well-formed rule as unpromotable residue.
 function readCondition(
   conditionEl: XmlElement,
   ranges: ContentSheetRange[],
@@ -304,7 +304,7 @@ function readCondition(
     case "bottom-elements":
     case "top-percent":
     case "bottom-percent": {
-      // No separate `parsed.expr1 === undefined` guard: Number(undefined) is NaN, which the Number.isFinite check right below already rejects -- a missing operand and a non-numeric one degrade to the identical "not a valid rank" outcome, so there is nothing this earlier check catches that the next line doesn't already catch on its own.
+      // No separate `parsed.expr1 === undefined` guard: Number(undefined) is NaN, which the Number.isFinite check right below already rejects — a missing operand and a non-numeric one degrade to the identical "not a valid rank" outcome, so there is nothing this earlier check catches that the next line doesn't already catch on its own.
       const rank = Number(parsed.expr1);
       if (!Number.isFinite(rank) || rank <= 0) {
         return undefined;
@@ -362,7 +362,7 @@ function readCondition(
       return { type, ranges, text: parsed.expr1, ...styleField };
     }
     case "formula-is":
-      // ECMA-376's own 'expression' cfRule type has no closed-form structure to model without a general formula engine, and ContentSheetConditionalFormatSchema deliberately excludes it (see that schema's own top comment) -- calcext:condition's own formula-is is the identical concept, so it is left unpromoted here for exactly the same reason.
+      // ECMA-376's own 'expression' cfRule type has no closed-form structure to model without a general formula engine, and ContentSheetConditionalFormatSchema deliberately excludes it (see that schema's own top comment) — calcext:condition's own formula-is is the identical concept, so it is left unpromoted here for exactly the same reason.
       return undefined;
   }
 }
@@ -618,7 +618,7 @@ export function readConditionalFormats(
 //
 // Each synthesiser below inverts its reading twin over the identical LibreOffice-transcribed grammar, so a rule this package itself promoted round-trips through the writer back to the same rule. calcext:value operands and formula text stay raw in both directions, the same "structure yes, formula content no" boundary every rule schema draws.
 
-// The inverse of CFVO_TYPE_BY_CALCEXT_TYPE: the calcext entry @type for a schema cfvo kind. 'num' is deliberately absent -- the read side maps no calcext type onto it, so a writer receiving one has nothing faithful to emit and its caller refuses the rule by name rather than guessing a stand-in.
+// The inverse of CFVO_TYPE_BY_CALCEXT_TYPE: the calcext entry @type for a schema cfvo kind. 'num' is deliberately absent — the read side maps no calcext type onto it, so a writer receiving one has nothing faithful to emit and its caller refuses the rule by name rather than guessing a stand-in.
 const CALCEXT_TYPE_BY_CFVO_TYPE: ReadonlyMap<string, string> = new Map([
   ["min", "minimum"],
   ["max", "maximum"],
@@ -654,7 +654,7 @@ export function formatTargetRangeList(
     .join(" ");
 }
 
-/** The calcext:condition @value for one closed-form rule, the exact inverse of parseConditionValue above for every type that grammar can state. Returns undefined for the two schema members that grammar has no spelling for at all -- containsBlanks/notContainsBlanks -- whose caller refuses the rule by name rather than emitting a rule that would read back as something else. */
+/** The calcext:condition @value for one closed-form rule, the exact inverse of parseConditionValue above for every type that grammar can state. Returns undefined for the two schema members that grammar has no spelling for at all — containsBlanks/notContainsBlanks — whose caller refuses the rule by name rather than emitting a rule that would read back as something else. */
 export function synthesiseConditionValue(
   format: ContentSheetConditionalFormat,
 ): string | undefined {
@@ -704,7 +704,7 @@ export function synthesiseConditionValue(
       return `contains-text(${format.text})`;
     case "notContainsText":
       return `not-contains-text(${format.text})`;
-    // containsBlanks/notContainsBlanks: calcext:condition's own grammar has no spelling for either (see this function's own top-of-file note). colorScale/dataBar/iconSet/timePeriod: not calcext:condition rules at all -- each is its own child element, built by the writer's own element builders. One shared return rather than two identical ones per group: a duplicate `return undefined` on its own case label is indistinguishable at runtime from falling through into the next label's identical return, so splitting them apart bought no real coverage.
+    // containsBlanks/notContainsBlanks: calcext:condition's own grammar has no spelling for either (see this function's own top-of-file note). colorScale/dataBar/iconSet/timePeriod: not calcext:condition rules at all — each is its own child element, built by the writer's own element builders. One shared return rather than two identical ones per group: a duplicate `return undefined` on its own case label is indistinguishable at runtime from falling through into the next label's identical return, so splitting them apart bought no real coverage.
     case "containsBlanks":
     case "notContainsBlanks":
     case "colorScale":
@@ -715,7 +715,7 @@ export function synthesiseConditionValue(
   }
 }
 
-/** The calcext:date value for a timePeriod rule: the inverse of TIME_PERIOD_BY_CALCEXT_DATE, as an explicit closed map rather than string munging -- the two spellings differ only case/hyphen-wise, but a regex that has to know "last7Days" gains a hyphen on both sides of the 7 while "thisWeek" gains one only at the W is exactly the kind of half-right cleverness an explicit table cannot be. */
+/** The calcext:date value for a timePeriod rule: the inverse of TIME_PERIOD_BY_CALCEXT_DATE, as an explicit closed map rather than string munging — the two spellings differ only case/hyphen-wise, but a regex that has to know "last7Days" gains a hyphen on both sides of the 7 while "thisWeek" gains one only at the W is exactly the kind of half-right cleverness an explicit table cannot be. */
 const CALCEXT_DATE_BY_TIME_PERIOD: ReadonlyMap<string, string> = new Map(
   [...TIME_PERIOD_BY_CALCEXT_DATE].map(([calextDate, timePeriod]) => [
     timePeriod,
@@ -726,7 +726,7 @@ const CALCEXT_DATE_BY_TIME_PERIOD: ReadonlyMap<string, string> = new Map(
 export function calextDateForTimePeriod(timePeriod: string): string {
   const calextDate = CALCEXT_DATE_BY_TIME_PERIOD.get(timePeriod);
   if (calextDate === undefined) {
-    // The schema's enum is closed and fully covered by the table above, so this is unreachable for a schema-valid rule -- stated as a throw rather than a passthrough so a future enum member fails loudly here instead of silently emitting a calcext value no reader recognises.
+    // The schema's enum is closed and fully covered by the table above, so this is unreachable for a schema-valid rule — stated as a throw rather than a passthrough so a future enum member fails loudly here instead of silently emitting a calcext value no reader recognises.
     throw new Error(
       `calextDateForTimePeriod: no calcext:date spelling for '${timePeriod}'`,
     );

@@ -7,7 +7,7 @@ import {
   formatFirebirdTimestamp,
 } from "./date";
 
-// The MJD-epoch day-count algorithm (decodeFirebirdDate) and the 1/10000-second tick algorithm (decodeFirebirdTime) are both restated directly from Firebird's own open-source NoThrowTimeStamp.cpp -- these tests check the algorithm in isolation against known reference points, independent of the real-fixture end-to-end proof in backup.test.ts (whose own HIRE_DATE values already cross-checked correctly against real LibreOffice output, but only for dates in the 2019-2024 range).
+// The MJD-epoch day-count algorithm (decodeFirebirdDate) and the 1/10000-second tick algorithm (decodeFirebirdTime) are both restated directly from Firebird's own open-source NoThrowTimeStamp.cpp — these tests check the algorithm in isolation against known reference points, independent of the real-fixture end-to-end proof in backup.test.ts (whose own HIRE_DATE values already cross-checked correctly against real LibreOffice output, but only for dates in the 2019-2024 range).
 
 describe("decodeFirebirdDate", () => {
   it("decodes day 0 as the Modified Julian Date epoch, 17 November 1858", () => {
@@ -37,7 +37,7 @@ describe("decodeFirebirdDate", () => {
   });
 
   it("excludes 1700 from the leap years despite being divisible by 4, since it isn't divisible by 400", () => {
-    // The century-based correction term (the 4-year rule minus a further exception every 100 years, restored every 400) is exactly what distinguishes this from a naive 4-year-only leap rule -- 1700 is the case that rule exists for.
+    // The century-based correction term (the 4-year rule minus a further exception every 100 years, restored every 400) is exactly what distinguishes this from a naive 4-year-only leap rule — 1700 is the case that rule exists for.
     const days = Math.round(
       (Date.UTC(1700, 1, 28) - Date.UTC(1858, 10, 17)) / 86400000,
     );
@@ -87,7 +87,7 @@ describe("decodeFirebirdTime", () => {
   });
 
   it("converts a non-zero fraction of a tick-second to milliseconds by dividing, not multiplying", () => {
-    // 5000 ticks (of 10000 ticks/second) is half a second -- 500ms, not the 50000 a fractions * 10 mutant would produce.
+    // 5000 ticks (of 10000 ticks/second) is half a second — 500ms, not the 50000 a fractions * 10 mutant would produce.
     const ticks = 5000;
     expect(formatFirebirdTime(ticks)).toBe("00:00:00.500");
   });

@@ -52,7 +52,7 @@ import {
   readNativeDocumentTree,
 } from "./from-pdf";
 
-// Each case proves readDocumentMetadata(format, bytes) dispatches to exactly the same underlying reader every ergonomic conversion in this package already uses for that format, matching its own .metadata output exactly -- the underlying readers' own metadata extraction is already covered elsewhere (their own read.test.ts files), so this file's job is the dispatch table, not metadata resolution itself.
+// Each case proves readDocumentMetadata(format, bytes) dispatches to exactly the same underlying reader every ergonomic conversion in this package already uses for that format, matching its own .metadata output exactly — the underlying readers' own metadata extraction is already covered elsewhere (their own read.test.ts files), so this file's job is the dispatch table, not metadata resolution itself.
 
 describe("readDocumentMetadata", () => {
   it("docx: matches readDocxContent(...).metadata", () => {
@@ -107,7 +107,7 @@ describe("readDocumentMetadata", () => {
   });
 
   it("markdown: matches readMarkdownContent(...).metadata, with front-matter now surfaced by default", () => {
-    // readMarkdownContent now defaults frontMatter: true (src/markdown/read.ts), so a leading YAML front-matter block's title/author reach ContentDocument.metadata by default -- readDocumentMetadata dispatches through readMarkdownContent, so the title from the fixture's front matter is genuinely surfaced here, not dropped.
+    // readMarkdownContent now defaults frontMatter: true (src/markdown/read.ts), so a leading YAML front-matter block's title/author reach ContentDocument.metadata by default — readDocumentMetadata dispatches through readMarkdownContent, so the title from the fixture's front matter is genuinely surfaced here, not dropped.
     const text = richMarkdownTextWithFrontMatter();
     const bytes = encodeMarkdownText(text);
     expect(readDocumentMetadata("markdown", bytes)).toEqual(
@@ -121,7 +121,7 @@ describe("readDocumentMetadata", () => {
     expect(readDocumentMetadata("pdf", bytes)).toEqual(readPdf(bytes).metadata);
   });
 
-  // xlsx now reads its own docProps the way every other content format does (#744) -- the PDF-preview exception is gone. The preview never reported workbook facts at all: for a file carrying no timestamps of its own it stamped createdIso/modifiedIso at the render moment and a producer naming the preview PDF's writer, which is why this case's predecessor needed fake timers to pass -- a metadata read whose answer changes with wall-clock is reporting its own execution, not the document. What a workbook genuinely declares still arrives: ooxml.js maps docProps/core.xml's dcterms:created/dcterms:modified straight through and app.xml's Application onto creator, while producer stays unset (the schema's own rule: a PDF-only concept no semantic reader ever sets).
+  // xlsx now reads its own docProps the way every other content format does (#744) — the PDF-preview exception is gone. The preview never reported workbook facts at all: for a file carrying no timestamps of its own it stamped createdIso/modifiedIso at the render moment and a producer naming the preview PDF's writer, which is why this case's predecessor needed fake timers to pass — a metadata read whose answer changes with wall-clock is reporting its own execution, not the document. What a workbook genuinely declares still arrives: ooxml.js maps docProps/core.xml's dcterms:created/dcterms:modified straight through and app.xml's Application onto creator, while producer stays unset (the schema's own rule: a PDF-only concept no semantic reader ever sets).
   it("xlsx: matches readXlsxContent(...).metadata", () => {
     const bytes = odsToXlsx(minimalOdsBytes());
     expect(readDocumentMetadata("xlsx", bytes)).toEqual(
@@ -179,7 +179,7 @@ describe("readDocumentMetadata", () => {
   });
 });
 
-// Each case proves readNativeDocumentTree(format, bytes) dispatches to exactly the same underlying reader every ergonomic conversion in this package already uses for that format, decomposed into tree form via assembleTree with no bridging, no cross-variant transform, and (for every format but pdf) no layout pass at all -- unlike ConversionResult.package/onDocument, which report whatever hop actually produced a REQUESTED conversion's output (see this file's own from-pdf.ts module comment, and ExaDev/documents.js#823, for why that can be a different, lossy shape).
+// Each case proves readNativeDocumentTree(format, bytes) dispatches to exactly the same underlying reader every ergonomic conversion in this package already uses for that format, decomposed into tree form via assembleTree with no bridging, no cross-variant transform, and (for every format but pdf) no layout pass at all — unlike ConversionResult.package/onDocument, which report whatever hop actually produced a REQUESTED conversion's output (see this file's own from-pdf.ts module comment, and ExaDev/documents.js#823, for why that can be a different, lossy shape).
 describe("readNativeDocumentTree", () => {
   it("docx: matches assembleTree(readDocxContent(...))", () => {
     const bytes = minimalDocxBytes();
@@ -247,14 +247,14 @@ describe("readNativeDocumentTree", () => {
     );
   });
 
-  it("xlsx: matches assembleTree(readXlsxContent(...)) -- the direct dispatch path, no bridging hop of any kind", () => {
+  it("xlsx: matches assembleTree(readXlsxContent(...)) — the direct dispatch path, no bridging hop of any kind", () => {
     const bytes = odsToXlsx(minimalOdsBytes());
     expect(readNativeDocumentTree("xlsx", bytes)).toEqual(
       assembleTree(readXlsxContent(decodeOoxmlPackage(bytes))),
     );
   });
 
-  it("odf: reads the formula content directly with no invented page geometry -- unlike odfToPdf's own onDocument report, whose one A4 page is an artefact of the rendering pass, not a fact about the formula document itself", () => {
+  it("odf: reads the formula content directly with no invented page geometry — unlike odfToPdf's own onDocument report, whose one A4 page is an artefact of the rendering pass, not a fact about the formula document itself", () => {
     const bytes = odfFormulaBytes(FRACTION_FORMULA);
     const tree = readNativeDocumentTree("odf", bytes);
     expect(tree.kind).toBe("formula");
@@ -264,7 +264,7 @@ describe("readNativeDocumentTree", () => {
     );
   });
 
-  it("pdf: reconstructs the identical wordprocessing tree pdfToDocx's own onDocument capture reports, pages/frames and document-level tables included -- pdf is the one format whose native representation genuinely IS positioned layout", () => {
+  it("pdf: reconstructs the identical wordprocessing tree pdfToDocx's own onDocument capture reports, pages/frames and document-level tables included — pdf is the one format whose native representation genuinely IS positioned layout", () => {
     const pdfBytes = docxToPdf(minimalDocxBytes());
 
     let captured: DocumentTree | undefined;
@@ -281,7 +281,7 @@ describe("readNativeDocumentTree", () => {
     expect(captured.pages).toBeDefined();
   });
 
-  // A PDF built directly through pdf-codec's own writePdf (bypassing every documents.js writer) with a bare, destination-less outline entry -- a minimalDocxBytes()-derived pdf carries no outline at all, so that fixture alone cannot distinguish readNativeDocumentTree actually calling stampPdfPackageTables from silently skipping it. This one can: stampPdfPackageTables only ever populates pkg.destinations when layout.outline (or layout.destinations) is non-empty, so its own presence here proves the call happened.
+  // A PDF built directly through pdf-codec's own writePdf (bypassing every documents.js writer) with a bare, destination-less outline entry — a minimalDocxBytes()-derived pdf carries no outline at all, so that fixture alone cannot distinguish readNativeDocumentTree actually calling stampPdfPackageTables from silently skipping it. This one can: stampPdfPackageTables only ever populates pkg.destinations when layout.outline (or layout.destinations) is non-empty, so its own presence here proves the call happened.
   it("pdf: stamps the outline table onto the reported tree, not just the pages", () => {
     const doc: LayoutDocument = {
       formatVersion: LAYOUT_FORMAT_VERSION,
@@ -298,7 +298,7 @@ describe("readNativeDocumentTree", () => {
     });
   });
 
-  // reconstructWordprocessing's own signal check independently throws AbortError for an already-aborted signal, so a test only asserting readNativeDocumentTree throws when aborted cannot tell whether readPdf itself genuinely received the signal (and sink) or was called with neither -- both produce the identical outer throw. Spying on the call is what makes the forwarding observable.
+  // reconstructWordprocessing's own signal check independently throws AbortError for an already-aborted signal, so a test only asserting readNativeDocumentTree throws when aborted cannot tell whether readPdf itself genuinely received the signal (and sink) or was called with neither — both produce the identical outer throw. Spying on the call is what makes the forwarding observable.
   it("pdf: passes the given signal and sink through to readPdf itself, not just to reconstructWordprocessing", () => {
     const pdfBytes = docxToPdf(minimalDocxBytes());
     const controller = new AbortController();
@@ -371,7 +371,7 @@ describe("readNativeDocumentTree", () => {
     expect(called?.[0]).toBe("img.png");
   });
 
-  // The regression test for ExaDev/documents.js#823's Ask 1: a real xlsx workbook with cell values, a formula, a merged range, and a comment -- exactly the data the issue reports the OLD --dump-package path losing entirely once a cross-variant bridge (here, xlsx -> markdown, which shares no ContentDocument variant and so composes through a pdf pivot) is in the picture. buildXlsxPackageFromContent/OdsSheet have no write path for a comment (see ooxml.js's own documented cell-comment asymmetry, "read but do not write"), so the comment part is spliced onto the real xlsx package by hand, mirroring ooxml.js's own comments.test.ts synthetic-package convention -- every other fact (cells, the merge, the formula) comes from the real xlsx writer, unedited.
+  // The regression test for ExaDev/documents.js#823's Ask 1: a real xlsx workbook with cell values, a formula, a merged range, and a comment — exactly the data the issue reports the OLD --dump-package path losing entirely once a cross-variant bridge (here, xlsx -> markdown, which shares no ContentDocument variant and so composes through a pdf pivot) is in the picture. buildXlsxPackageFromContent/OdsSheet have no write path for a comment (see ooxml.js's own documented cell-comment asymmetry, "read but do not write"), so the comment part is spliced onto the real xlsx package by hand, mirroring ooxml.js's own comments.test.ts synthetic-package convention — every other fact (cells, the merge, the formula) comes from the real xlsx writer, unedited.
   const REL_COMMENTS =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments";
 
@@ -433,7 +433,7 @@ describe("readNativeDocumentTree", () => {
   it("xlsx: returns the native spreadsheet tree with real A1/formula/merged-range/comment data, unlike the wordprocessing tree a cross-variant bridge to markdown reports for the identical bytes (ExaDev/documents.js#823)", () => {
     const bytes = buildRichXlsxFixture();
 
-    // The bug as reported: composing through a pdf pivot (xlsx and markdown share no ContentDocument variant) reports the PIVOT's own wordprocessing-shaped tree, not the workbook -- confirming the contrast readNativeDocumentTree exists to fix is real, not assumed.
+    // The bug as reported: composing through a pdf pivot (xlsx and markdown share no ContentDocument variant) reports the PIVOT's own wordprocessing-shaped tree, not the workbook — confirming the contrast readNativeDocumentTree exists to fix is real, not assumed.
     let bridged: DocumentTree | undefined;
     convertDocument("xlsx", "markdown", bytes, {
       onDocument: (pkg) => {
@@ -444,7 +444,7 @@ describe("readNativeDocumentTree", () => {
 
     const tree = readNativeDocumentTree("xlsx", bytes);
     expect(tree.kind).toBe("spreadsheet");
-    expect(tree.pages).toBeUndefined(); // content-only -- no layout pass ran, regardless of any --to target
+    expect(tree.pages).toBeUndefined(); // content-only — no layout pass ran, regardless of any --to target
 
     const flat = flattenTree(tree);
     if (flat.kind !== "spreadsheet") {

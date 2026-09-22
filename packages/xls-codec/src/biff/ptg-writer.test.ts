@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { compileFormulaText } from "./ptg-writer";
 
-// PTG opcode values mirrored from ptg-writer.ts's own private constants ([MS-XLS] 2.5.198's own token enumeration) -- the module exports only compileFormulaText itself, so this is the reference the byte-level assertions below check the writer's actual output against.
+// PTG opcode values mirrored from ptg-writer.ts's own private constants ([MS-XLS] 2.5.198's own token enumeration) — the module exports only compileFormulaText itself, so this is the reference the byte-level assertions below check the writer's actual output against.
 const PTG_ADD = 0x03;
 const PTG_SUB = 0x04;
 const PTG_MUL = 0x05;
@@ -195,7 +195,7 @@ describe("compileFormulaText", () => {
     });
 
     it("recognises an error literal mid-formula, matched from its own offset rather than the start of the whole text", () => {
-      // ERROR_RE is anchored with `^`, so matching it against the FULL source text (rather than the slice starting at this token's own offset) would only ever succeed when the error literal happens to be the formula's first character -- every test above puts the literal first, which cannot tell the two apart.
+      // ERROR_RE is anchored with `^`, so matching it against the FULL source text (rather than the slice starting at this token's own offset) would only ever succeed when the error literal happens to be the formula's first character — every test above puts the literal first, which cannot tell the two apart.
       expect(compiled("1+#N/A")).toStrictEqual([
         PTG_INT,
         ...u16le(1),
@@ -385,19 +385,19 @@ describe("compileFormulaText", () => {
     });
 
     it("accepts a two-letter column with no row digits of its own, split from its row by an explicit dollar sign", () => {
-      // The bare-column check accepts 1 TO 3 letters, not exactly one -- a single-letter column ("A$1", already covered above) cannot tell an exact-one-letter check apart from a 1-3 range; a genuinely multi-letter column here is what needs the wider range to still be accepted at all.
+      // The bare-column check accepts 1 TO 3 letters, not exactly one — a single-letter column ("A$1", already covered above) cannot tell an exact-one-letter check apart from a 1-3 range; a genuinely multi-letter column here is what needs the wider range to still be accepted at all.
       expect(() => compileFormulaText("AB$1")).not.toThrow();
     });
 
     it("refuses a bare column letter followed directly by an operator, rather than wrongly consuming that operator as this reference's own row-absolute dollar sign", () => {
-      // With no dollar sign actually present after the column, the row must be read from whatever token genuinely follows -- here that's "+" (not a number), so this must fail on ITS OWN, well before the "1" one token further on ever comes into it.
+      // With no dollar sign actually present after the column, the row must be read from whatever token genuinely follows — here that's "+" (not a number), so this must fail on ITS OWN, well before the "1" one token further on ever comes into it.
       expect(() => compileFormulaText("A+1")).toThrow(
         /expected a number but found "\+"/,
       );
     });
 
     it("accepts a two-digit row number after an explicit dollar sign, not just a single digit", () => {
-      // A single-digit row ("A$1", already covered above) cannot tell "one or more digits" apart from "exactly one digit" -- a genuinely multi-digit row is what needs the wider quantifier to still be accepted.
+      // A single-digit row ("A$1", already covered above) cannot tell "one or more digits" apart from "exactly one digit" — a genuinely multi-digit row is what needs the wider quantifier to still be accepted.
       expect(() => compileFormulaText("A$12")).not.toThrow();
     });
   });
@@ -489,7 +489,7 @@ describe("compileFormulaText", () => {
     });
   });
 
-  // Every operator-loop guard above (comparison, concat, additive, multiplicative, power, percent, unary) checks BOTH a token's own type ("op") and its text -- but every formula used to prove the operator itself works also happens to hand it a genuine "op" token, so a mutant that drops the type half of the check and keeps only the text comparison reads identically for all of them. A string literal whose own text happens to equal one of these operator spellings (`"+"`, `"&"`, and so on) is the one input where the two checks disagree: type is "string", not "op", so the real guard must reject it on the type alone, while a text-only guard would wrongly treat the quoted literal as the operator itself.
+  // Every operator-loop guard above (comparison, concat, additive, multiplicative, power, percent, unary) checks BOTH a token's own type ("op") and its text — but every formula used to prove the operator itself works also happens to hand it a genuine "op" token, so a mutant that drops the type half of the check and keeps only the text comparison reads identically for all of them. A string literal whose own text happens to equal one of these operator spellings (`"+"`, `"&"`, and so on) is the one input where the two checks disagree: type is "string", not "op", so the real guard must reject it on the type alone, while a text-only guard would wrongly treat the quoted literal as the operator itself.
   describe("operator guards check a token's own type, not merely its text", () => {
     it('does not treat a string literal reading "=" as a comparison operator', () => {
       expect(() => compileFormulaText('1"="')).toThrow(
@@ -522,7 +522,7 @@ describe("compileFormulaText", () => {
     });
 
     it('does not treat a string literal reading "%" as the percent operator', () => {
-      // Unlike the binary operators above, percent takes no right operand at all -- so wrongly accepting the string literal as a percent sign here does not even leave a malformed remainder to report: the whole formula would falsely finish parsing clean.
+      // Unlike the binary operators above, percent takes no right operand at all — so wrongly accepting the string literal as a percent sign here does not even leave a malformed remainder to report: the whole formula would falsely finish parsing clean.
       expect(() => compileFormulaText('1"%"')).toThrow(
         /expected a eof but found/,
       );
@@ -745,7 +745,7 @@ describe("compileFormulaText", () => {
   });
 
   describe("rgce length ceiling", () => {
-    // Every additional "+1" term after the first costs 4 bytes (a 3-byte PtgInt operand plus a 1-byte PtgAdd), and the first term alone costs 3 bytes -- so a chain of 16384 terms compiles to exactly 3 + 4*(16384-1) = 65535 bytes, MAX_RGCE_LENGTH itself, and 16385 terms compiles to 65539, four bytes over it.
+    // Every additional "+1" term after the first costs 4 bytes (a 3-byte PtgInt operand plus a 1-byte PtgAdd), and the first term alone costs 3 bytes — so a chain of 16384 terms compiles to exactly 3 + 4*(16384-1) = 65535 bytes, MAX_RGCE_LENGTH itself, and 16385 terms compiles to 65539, four bytes over it.
     const TERMS_AT_CEILING = 16384;
 
     function chainOf(termCount: number): string {

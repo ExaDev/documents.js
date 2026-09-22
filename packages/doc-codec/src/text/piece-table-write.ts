@@ -1,4 +1,4 @@
-// The inverse of piece-table.ts's parseClx: builds a Clx ([MS-DOC] 2.9.4) describing the logical text stream as a SINGLE uncompressed (16-bit) piece. One piece is the simplest genuinely-conformant Clx a producer can write -- [MS-DOC] never requires more than one, "fast save" (fComplex) incremental edits are what fragment a real document's text into many, and this package never performs one -- and uncompressed characters sidestep characters.ts's own COMPRESSED_CHARACTER_MAP entirely: every UTF-16 code unit round-trips through a 16-bit piece with no byte-mapping table to invert, where a compressed (8-bit) piece could not represent a code unit outside Windows-1252's own range at all.
+// The inverse of piece-table.ts's parseClx: builds a Clx ([MS-DOC] 2.9.4) describing the logical text stream as a SINGLE uncompressed (16-bit) piece. One piece is the simplest genuinely-conformant Clx a producer can write — [MS-DOC] never requires more than one, "fast save" (fComplex) incremental edits are what fragment a real document's text into many, and this package never performs one — and uncompressed characters sidestep characters.ts's own COMPRESSED_CHARACTER_MAP entirely: every UTF-16 code unit round-trips through a 16-bit piece with no byte-mapping table to invert, where a compressed (8-bit) piece could not represent a code unit outside Windows-1252's own range at all.
 //
 // clxt-Prc (a leading property-modification array) is never written: [MS-DOC] 2.9.4 permits "zero, 1, or more Prcs" before the Pcdt, and this package's writer applies no piece-scoped property beyond what its own PAPX/CHPX bin tables already carry.
 
@@ -27,7 +27,7 @@ export function buildTextClx(
     );
   }
 
-  // Two 4-byte keys (aCp[0], aCp[1]) plus one 8-byte Pcd -- a fixed sequence of pushes below, never a computed or looped count, so this is unconditionally the one-piece PlcPcd the comment above describes; there is no input this function's own characterCount/textFc validation lets through that could ever produce a different shape.
+  // Two 4-byte keys (aCp[0], aCp[1]) plus one 8-byte Pcd — a fixed sequence of pushes below, never a computed or looped count, so this is unconditionally the one-piece PlcPcd the comment above describes; there is no input this function's own characterCount/textFc validation lets through that could ever produce a different shape.
   const plcPcd: number[] = [];
   push32(plcPcd, 0); // aCp[0].
   push32(plcPcd, characterCount); // aCp[1].

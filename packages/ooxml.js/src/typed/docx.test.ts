@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { decodePackage, zipPackage } from "../index";
 import { readDocxContent } from "./docx/read";
 
-// Integration-level coverage for readDocxContent, exercised through a real zip round trip (decodePackage(zipPackage(...))) rather than raw Package/XmlElement fixtures -- the deep style-cascade, table-merge, and section-boundary coverage lives in ./docx/read.test.ts and ./docx/styles.test.ts. This file replaces the pre-existing flat-shape (paragraphs/tables/hyperlinks) test suite, which asserted a shape readDocxContent no longer has -- see the BREAKING CHANGE described in DocxDocument's own doc comment.
+// Integration-level coverage for readDocxContent, exercised through a real zip round trip (decodePackage(zipPackage(...))) rather than raw Package/XmlElement fixtures — the deep style-cascade, table-merge, and section-boundary coverage lives in ./docx/read.test.ts and ./docx/styles.test.ts. This file replaces the pre-existing flat-shape (paragraphs/tables/hyperlinks) test suite, which asserted a shape readDocxContent no longer has — see the BREAKING CHANGE described in DocxDocument's own doc comment.
 
 function enc(s: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(s);
@@ -61,7 +61,7 @@ describe("readDocxContent", () => {
   });
 });
 
-// A representative package exercising the expanded constructs: a 2x2 table, a hyperlink resolved through the document rels, a header, a footer, a comment, a real footnote plus a separator footnote, and a numbered list paragraph -- all still document-order-preserved through readDocxContent's sections, unlike the old flat paragraphs/tables/hyperlinks arrays.
+// A representative package exercising the expanded constructs: a 2x2 table, a hyperlink resolved through the document rels, a header, a footer, a comment, a real footnote plus a separator footnote, and a numbered list paragraph — all still document-order-preserved through readDocxContent's sections, unlike the old flat paragraphs/tables/hyperlinks arrays.
 const RICH_CONTENT_TYPES = enc(
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/comments.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"/><Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>',
 );
@@ -145,7 +145,7 @@ describe("readDocxContent expanded constructs", () => {
   });
 
   it("reads header and footer parts as block flow, unreferenced ones included", () => {
-    // This fixture's header/footer parts carry no relationships at all (RICH_DOCUMENT_RELS holds only the hyperlink) -- the part walk still surfaces them.
+    // This fixture's header/footer parts carry no relationships at all (RICH_DOCUMENT_RELS holds only the hyperlink) — the part walk still surfaces them.
     const result = readDocxContent(decodePackage(zipPackage(richDocxParts())));
     expect(result.headerFooterParts).toEqual([
       {
@@ -236,7 +236,7 @@ describe("readDocxContent expanded constructs", () => {
     ).toBe("Cell paragraph");
   });
 
-  // Regression guard: a paragraph wrapped in a w:sdt content control (not inside a table) is genuine body-level reading-order content and must still appear among the section's own blocks -- now bracketed by the contentControl construct's own marker pair rather than unwrapped anonymously.
+  // Regression guard: a paragraph wrapped in a w:sdt content control (not inside a table) is genuine body-level reading-order content and must still appear among the section's own blocks — now bracketed by the contentControl construct's own marker pair rather than unwrapped anonymously.
   it("still includes a paragraph nested inside a w:sdt content control", () => {
     const documentXml = enc(
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:sdt><w:sdtContent><w:p><w:r><w:t>SDT paragraph</w:t></w:r></w:p></w:sdtContent></w:sdt></w:body></w:document>',

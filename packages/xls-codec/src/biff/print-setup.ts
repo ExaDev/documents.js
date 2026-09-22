@@ -2,7 +2,7 @@ import type { PageSize } from "document-schema.js";
 
 import { inchesToPoints, millimetresToPoints } from "../units";
 
-// The Setup record's own page-format vocabulary ([MS-XLS] 2.4.257) and the WsBool flag that decides how to read it ([MS-XLS] 2.4.351), plus the paper-size code table Setup addresses paper through. This is the one place that vocabulary is packed or unpacked -- workbook/sheet.ts's readPrintSettings unpacks it on read, workbook/sheet-writer.ts's print-record writers pack it on write -- so the two directions cannot silently disagree about which bit means what, exactly as biff/xf-colors.ts does for the XF payload's own border/fill layout.
+// The Setup record's own page-format vocabulary ([MS-XLS] 2.4.257) and the WsBool flag that decides how to read it ([MS-XLS] 2.4.351), plus the paper-size code table Setup addresses paper through. This is the one place that vocabulary is packed or unpacked — workbook/sheet.ts's readPrintSettings unpacks it on read, workbook/sheet-writer.ts's print-record writers pack it on write — so the two directions cannot silently disagree about which bit means what, exactly as biff/xf-colors.ts does for the XF payload's own border/fill layout.
 //
 // BIFF8 spreads one sheet's print settings across nine records in the worksheet substream (Setup, the four margins, PrintGrid, PrintRowCol, and the two page-break records) plus, in the GLOBALS substream, two built-in defined names carrying the print range and the repeated header bands (see workbook/print-names.ts). This module covers the vocabulary of the first group; the record framing itself stays with the readers and writers that walk the substream.
 
@@ -12,7 +12,7 @@ const SETUP_FLAG_PORTRAIT = 0x0002;
 const SETUP_FLAG_NO_PLS = 0x0004;
 const SETUP_FLAG_NO_ORIENT = 0x0040;
 
-/** WsBool's own fFitToPage bit -- field G of [MS-XLS] 2.4.351, the ninth bit of its single 16-bit field (fShowAutoBreaks, reserved1 (3 bits), fDialog, fApplyStyles, fRowSumsBelow, fColSumsRight, fFitToPage, ...). */
+/** WsBool's own fFitToPage bit — field G of [MS-XLS] 2.4.351, the ninth bit of its single 16-bit field (fShowAutoBreaks, reserved1 (3 bits), fDialog, fApplyStyles, fRowSumsBelow, fColSumsRight, fFitToPage, ...). */
 export const WSBOOL_FLAG_FIT_TO_PAGE = 0x0100;
 
 /**
@@ -31,11 +31,11 @@ export interface SetupFields {
   readonly fitHeight: number;
   /** fLeftToRight: pages printed left-to-right first (true) or top-to-bottom first (false). */
   readonly leftToRight: boolean;
-  /** fPortrait. Undefined and to be ignored when `noPls` or `noOrientation` is true -- in the latter case [MS-XLS] states the sheet prints portrait regardless. */
+  /** fPortrait. Undefined and to be ignored when `noPls` or `noOrientation` is true — in the latter case [MS-XLS] states the sheet prints portrait regardless. */
   readonly portrait: boolean;
   /** fNoPls: the paper size, scale, resolution, copy count, and both orientation bits are undefined. */
   readonly noPls: boolean;
-  /** fNoOrient: "whether the paper orientation is set" -- when true, fPortrait is undefined and "Pages are printed using portrait mode". */
+  /** fNoOrient: "whether the paper orientation is set" — when true, fPortrait is undefined and "Pages are printed using portrait mode". */
   readonly noOrientation: boolean;
 }
 
@@ -80,7 +80,7 @@ export function pageSizeFromSetup(fields: SetupFields): PageSize | undefined {
     : { widthPt: portraitSize.heightPt, heightPt: portraitSize.widthPt };
 }
 
-/** How close two page dimensions must be, in points, to count as the same paper. Half a point is about 0.18mm -- far below any real paper-size difference, and wide enough to absorb the hundredth-of-a-point rounding the table below applies and the unit conversions a page size picks up crossing between codecs. The same tolerance ooxml.js's own pageSizeToPaperSizeCode uses for the identical decision on xlsx's paperSize attribute. */
+/** How close two page dimensions must be, in points, to count as the same paper. Half a point is about 0.18mm — far below any real paper-size difference, and wide enough to absorb the hundredth-of-a-point rounding the table below applies and the unit conversions a page size picks up crossing between codecs. The same tolerance ooxml.js's own pageSizeToPaperSizeCode uses for the identical decision on xlsx's paperSize attribute. */
 const PAPER_SIZE_TOLERANCE_PT = 0.5;
 
 /** How a Setup record can name a given page size: the paper code, and whether the sheet must be declared portrait or landscape for that code's own portrait dimensions to come out as the size asked for. */
@@ -92,7 +92,7 @@ export interface PaperSelection {
 /**
  * The write-side inverse of pageSizeFromSetup: the paper code and orientation whose resolved page size matches this one, or undefined when no code in the table does.
  *
- * Undefined is a real answer with no fallback behind it. Unlike xlsx's own pageSetup element, which can state an explicit paperWidth/paperHeight pair when no code fits, [MS-XLS] 2.4.257's Setup record addresses paper only by code -- its own escape hatch for a size outside the table is a printer-defined custom size carried in a separate Pls record ([MS-XLS] 2.4.199), a printer driver's opaque DEVMODE blob rather than a pair of dimensions any reader could recover the size from. So a page size no code names genuinely cannot be written; the caller refuses rather than silently substituting a paper the document never asked for.
+ * Undefined is a real answer with no fallback behind it. Unlike xlsx's own pageSetup element, which can state an explicit paperWidth/paperHeight pair when no code fits, [MS-XLS] 2.4.257's Setup record addresses paper only by code — its own escape hatch for a size outside the table is a printer-defined custom size carried in a separate Pls record ([MS-XLS] 2.4.199), a printer driver's opaque DEVMODE blob rather than a pair of dimensions any reader could recover the size from. So a page size no code names genuinely cannot be written; the caller refuses rather than silently substituting a paper the document never asked for.
  *
  * A portrait match is preferred over a landscape one wherever both exist, which is what keeps the choice deterministic for the handful of codes in the table that are each other's transpose (US Tabloid 11x17in and US Ledger 17x11in are the same sheet of paper entered twice, once each way round).
  */
@@ -144,7 +144,7 @@ function millimetrePaper(widthMm: number, heightMm: number): PageSize {
 /**
  * Setup.iPaperSize's own code table ([MS-XLS] 2.4.257), restricted to the codes whose entry states a real, unambiguous sheet size in inches or millimetres, and with each size derived from those stated dimensions rather than from a table of pre-converted points.
  *
- * The full enumeration runs to 118 entries, most of them envelopes, rotated variants, and regional stationery sizes; the ones here are the office paper sizes a spreadsheet is realistically printed on, entered exactly as [MS-XLS]'s own table names them. A code outside this table -- including 0 and everything at 256 or above, which the spec reserves for "custom printer paper sizes" no reader can resolve without the printer's own Pls record -- resolves to no page size at all, and content.ts falls back to its documented default rather than guessing a size the file never stated.
+ * The full enumeration runs to 118 entries, most of them envelopes, rotated variants, and regional stationery sizes; the ones here are the office paper sizes a spreadsheet is realistically printed on, entered exactly as [MS-XLS]'s own table names them. A code outside this table — including 0 and everything at 256 or above, which the spec reserves for "custom printer paper sizes" no reader can resolve without the printer's own Pls record — resolves to no page size at all, and content.ts falls back to its documented default rather than guessing a size the file never stated.
  */
 const PAPER_SIZE_BY_CODE: ReadonlyMap<number, PageSize> = new Map<
   number,

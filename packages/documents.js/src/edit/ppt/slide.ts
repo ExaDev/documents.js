@@ -11,7 +11,7 @@ export interface TextBoxInit {
   readonly text?: string;
 }
 
-// A live view over one ContentShape object inside a slide's own shapes array. ppt-codec's writer covers plain text-box shapes with basic character formatting (see that package's own README), so the paragraph surface here reuses DocParagraph directly -- the identical ContentParagraph node under a presentation shape as under a doc section, the same reuse ODP's editor applies when it shares OdtParagraph/OdtRun for a draw:text-box's own text:p model.
+// A live view over one ContentShape object inside a slide's own shapes array. ppt-codec's writer covers plain text-box shapes with basic character formatting (see that package's own README), so the paragraph surface here reuses DocParagraph directly — the identical ContentParagraph node under a presentation shape as under a doc section, the same reuse ODP's editor applies when it shares OdtParagraph/OdtRun for a draw:text-box's own text:p model.
 //
 // The schema's four inset fields default to 0 for a shape this editor creates: [MS-PPT]'s writer has no per-shape inset concept at all (ppt-codec's reader never reads one), so the model's required fields carry the neutral value rather than inventing a margin the format cannot state.
 export class PptShape {
@@ -67,7 +67,7 @@ export class PptShape {
       .join("\n");
   }
 
-  // Clears the shape's existing blocks and replaces them with a single paragraph carrying a single run -- the same clear-and-replace convention OdpShape.text's own setter uses.
+  // Clears the shape's existing blocks and replaces them with a single paragraph carrying a single run — the same clear-and-replace convention OdpShape.text's own setter uses.
   set text(value: string) {
     this.live().blocks = [buildParagraph({ text: value })];
   }
@@ -148,7 +148,7 @@ export class PptSlide {
   }
 }
 
-// Builds a fresh empty ContentSlide (not a live view) -- the shape the editor's own addSlide appends, kept next to the classes that view it.
+// Builds a fresh empty ContentSlide (not a live view) — the shape the editor's own addSlide appends, kept next to the classes that view it.
 export function buildSlide(size: ContentSlide["size"]): ContentSlide {
   return { size, shapes: [], notes: "" };
 }

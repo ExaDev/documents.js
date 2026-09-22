@@ -68,7 +68,7 @@ describe("residualAttributesFor", () => {
   });
 
   it("refuses a two-element residue even when the first element alone would otherwise match", () => {
-    // The first parsed node's own type and tag both match here -- only the node-count check itself can tell this apart from a genuine single-element residue.
+    // The first parsed node's own type and tag both match here — only the node-count check itself can tell this apart from a genuine single-element residue.
     expect(
       residualAttributesFor(
         { format: "xlsx", xml: '<cfRule pivot="1"/><cfRule id="{B}"/>' },

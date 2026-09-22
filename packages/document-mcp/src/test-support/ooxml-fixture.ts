@@ -1,6 +1,6 @@
 import type { XmlElement, XmlNode } from "documents.js";
 
-// A tiny, local stand-in for ooxml.js's own `el`/`txt`/declaration-node builders, needed because ooxml.js itself is not a direct dependency of this repo -- only its types are, re-exported through documents.js. `XmlElement`/`XmlNode` are plain data shapes, so constructing them as object literals here is not reimplementing ooxml.js, it is just satisfying the same public schema documents.js already re-exports. Ported from document-cli's own src/test-support/ooxml-fixture.ts.
+// A tiny, local stand-in for ooxml.js's own `el`/`txt`/declaration-node builders, needed because ooxml.js itself is not a direct dependency of this repo — only its types are, re-exported through documents.js. `XmlElement`/`XmlNode` are plain data shapes, so constructing them as object literals here is not reimplementing ooxml.js, it is just satisfying the same public schema documents.js already re-exports. Ported from document-cli's own src/test-support/ooxml-fixture.ts.
 
 export function xmlDeclaration(): XmlNode {
   return {

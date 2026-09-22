@@ -43,9 +43,9 @@ import {
   type OdfListEntry,
 } from "./list";
 
-// Reads a table:table element into document-schema.js's ContentTable -- the same table:table/table:table-row/table:table-cell/table:covered-table-cell markup ODF uses identically across odt/ods/odp (verified against real LibreOffice output: a presentation's own draw:frame-wrapped table uses the exact grammar below, including table:number-columns-spanned/table:covered-table-cell for merged cells), so this module is shared rather than living inside typed/draw/shapes.ts: odt's own office:text walk reads a top-level table:table straight through it, and typed/draw/shapes.ts/typed/draw/embedded.ts read the identical grammar for a table nested inside an odp/odg draw:frame or an embedded chart's own local data cache.
+// Reads a table:table element into document-schema.js's ContentTable — the same table:table/table:table-row/table:table-cell/table:covered-table-cell markup ODF uses identically across odt/ods/odp (verified against real LibreOffice output: a presentation's own draw:frame-wrapped table uses the exact grammar below, including table:number-columns-spanned/table:covered-table-cell for merged cells), so this module is shared rather than living inside typed/draw/shapes.ts: odt's own office:text walk reads a top-level table:table straight through it, and typed/draw/shapes.ts/typed/draw/embedded.ts read the identical grammar for a table nested inside an odp/odg draw:frame or an embedded chart's own local data cache.
 //
-// Column widths and row heights are dimensional/decorative properties (style:table-column-properties/@style:column-width, style:table-row-properties/@style:row-height) that styles/properties.ts deliberately does not model (see its own top-of-file note: this package's StyleProperties covers only paragraph/run-level text-document formatting) -- so this module resolves them directly via cascade.ts's findStyleElement, a single-level (family, name) lookup with no parent-chain walk, matching how real ODF table-column/table-row/table-cell automatic styles are standalone with no style:parent-style-name chain of their own in practice.
+// Column widths and row heights are dimensional/decorative properties (style:table-column-properties/@style:column-width, style:table-row-properties/@style:row-height) that styles/properties.ts deliberately does not model (see its own top-of-file note: this package's StyleProperties covers only paragraph/run-level text-document formatting) — so this module resolves them directly via cascade.ts's findStyleElement, a single-level (family, name) lookup with no parent-chain walk, matching how real ODF table-column/table-row/table-cell automatic styles are standalone with no style:parent-style-name chain of their own in practice.
 
 function readRepeatCount(element: XmlElement, attrName: string): number {
   const raw = attrValue(element, attrName);
@@ -57,7 +57,7 @@ function readRepeatCount(element: XmlElement, attrName: string): number {
   return parsed > 0 ? parsed : 1;
 }
 
-// A column with no resolvable width (no table:style-name, no matching style, or a style with no style:table-column-properties/@style:column-width) defaults to 0pt, mirroring ooxml.js's own readTable (`emuToPt(Number(attr(col, 'w') ?? '0'))`) -- an established, deliberate sibling-reader convention, not a fallback invented here.
+// A column with no resolvable width (no table:style-name, no matching style, or a style with no style:table-column-properties/@style:column-width) defaults to 0pt, mirroring ooxml.js's own readTable (`emuToPt(Number(attr(col, 'w') ?? '0'))`) — an established, deliberate sibling-reader convention, not a fallback invented here.
 function resolveColumnWidthPt(columnElement: XmlElement, pkg: Package): number {
   const styleName = attrValue(columnElement, "table:style-name");
   const styleElement =
@@ -73,7 +73,7 @@ function resolveColumnWidthPt(columnElement: XmlElement, pkg: Package): number {
   return widthValue === undefined ? 0 : (parseOdfLength(widthValue) ?? 0);
 }
 
-// Unlike column width, ContentTableRow.heightPt is optional -- an unresolvable row height is genuinely "no height specified" (the layout engine measures content instead), not zero, mirroring ooxml.js's own readTable row-height treatment.
+// Unlike column width, ContentTableRow.heightPt is optional — an unresolvable row height is genuinely "no height specified" (the layout engine measures content instead), not zero, mirroring ooxml.js's own readTable row-height treatment.
 function resolveRowHeightPt(
   rowElement: XmlElement,
   pkg: Package,
@@ -92,9 +92,9 @@ function resolveRowHeightPt(
   return heightValue === undefined ? undefined : parseOdfLength(heightValue);
 }
 
-// style:table-cell-properties/@fo:background-color is the standard, portable OASIS attribute for a cell's own fill, and the one this reader resolves. Real LibreOffice-generated PRESENTATION tables specifically favour their own loext:graphic-properties/@draw:fill-color extension instead when SAVING (confirmed via a controlled round trip: a cell written with the standard fo:background-color came back re-serialized under loext: on the very next LibreOffice save) -- a private, unstable vendor namespace this package deliberately does not chase (this package's own convention is OASIS-spec-grounded; see this repository's README on "ground truth over memory"). A cell whose only fill information lives in that loext: extension reads with no background here: a real, verified, narrow gap, not a silently guessed one.
+// style:table-cell-properties/@fo:background-color is the standard, portable OASIS attribute for a cell's own fill, and the one this reader resolves. Real LibreOffice-generated PRESENTATION tables specifically favour their own loext:graphic-properties/@draw:fill-color extension instead when SAVING (confirmed via a controlled round trip: a cell written with the standard fo:background-color came back re-serialized under loext: on the very next LibreOffice save) — a private, unstable vendor namespace this package deliberately does not chase (this package's own convention is OASIS-spec-grounded; see this repository's README on "ground truth over memory"). A cell whose only fill information lives in that loext: extension reads with no background here: a real, verified, narrow gap, not a silently guessed one.
 //
-// BORDERS/ALIGNMENT/VERTICAL-ALIGNMENT (added alongside background for document-schema.js 2.0.0's Release A, which gave ContentTableCell a `borders` field and ContentSheetCell its own `borders`/`alignment`/`verticalAlignment` fields): fo:border and its four per-edge siblings (fo:border-left/right/top/bottom) share ODF's fixed-order XSL-FO border shorthand -- see typed/shared/border.ts's own top-of-file note for the grammar and parseBorderEdge/formatBorderEdge, now shared with styles/properties.ts's paragraph-level border reading and typed/ods/write.ts's sheet-cell border writing. style:vertical-align is enumerated to "top"/"middle"/"bottom"/"automatic" per the OASIS schema; "automatic" has no member in ContentSheetCell's own three-value verticalAlignment enum, so it is left unread (undefined) rather than guessed at. fo:text-align on a table-cell style's OWN style:paragraph-properties child (confirmed as real, valid structure against real LibreOffice 26.2 output -- style:default-style style:family="table-cell" in a genuine .ods's styles.xml carries a style:paragraph-properties child directly, setting the cell's own default paragraph formatting) is that same four-value vocabulary properties.ts's parseParagraphProperties already restricts to (left/center/right/justify) -- anything else (ODF's own "start"/"end" logical values included) is left unread rather than guessed at. A narrowing guard rather than a Set-membership check + type assertion (this package's own established "no type assertions" convention -- see registry.ts's isStyleFamily for the identical pattern applied to StyleFamily).
+// BORDERS/ALIGNMENT/VERTICAL-ALIGNMENT (added alongside background for document-schema.js 2.0.0's Release A, which gave ContentTableCell a `borders` field and ContentSheetCell its own `borders`/`alignment`/`verticalAlignment` fields): fo:border and its four per-edge siblings (fo:border-left/right/top/bottom) share ODF's fixed-order XSL-FO border shorthand — see typed/shared/border.ts's own top-of-file note for the grammar and parseBorderEdge/formatBorderEdge, now shared with styles/properties.ts's paragraph-level border reading and typed/ods/write.ts's sheet-cell border writing. style:vertical-align is enumerated to "top"/"middle"/"bottom"/"automatic" per the OASIS schema; "automatic" has no member in ContentSheetCell's own three-value verticalAlignment enum, so it is left unread (undefined) rather than guessed at. fo:text-align on a table-cell style's OWN style:paragraph-properties child (confirmed as real, valid structure against real LibreOffice 26.2 output — style:default-style style:family="table-cell" in a genuine .ods's styles.xml carries a style:paragraph-properties child directly, setting the cell's own default paragraph formatting) is that same four-value vocabulary properties.ts's parseParagraphProperties already restricts to (left/center/right/justify) — anything else (ODF's own "start"/"end" logical values included) is left unread rather than guessed at. A narrowing guard rather than a Set-membership check + type assertion (this package's own established "no type assertions" convention — see registry.ts's isStyleFamily for the identical pattern applied to StyleFamily).
 function isVerticalAlign(value: string): value is "top" | "middle" | "bottom" {
   return value === "top" || value === "middle" || value === "bottom";
 }
@@ -118,7 +118,7 @@ const ODF_VERTICAL_ALIGN_BY_PIVOT = {
   NonNullable<CellStyleDecoration["verticalAlignment"]>
 >;
 
-// Applies one style:table-cell-properties element's own fo:border/fo:border-* onto the running per-edge accumulator: the shorthand (if present) seeds all four edges first, then each per-edge attribute (if present on this SAME element) overrides just that one edge -- matching how a single real style element can legitimately carry both (three sides via the shorthand, one side overridden individually).
+// Applies one style:table-cell-properties element's own fo:border/fo:border-* onto the running per-edge accumulator: the shorthand (if present) seeds all four edges first, then each per-edge attribute (if present on this SAME element) overrides just that one edge — matching how a single real style element can legitimately carry both (three sides via the shorthand, one side overridden individually).
 function applyBorderEdgeUpdates(
   accumulated: Partial<Record<BorderEdgeKey, ContentBorder>>,
   cellProperties: XmlElement,
@@ -180,7 +180,7 @@ function bordersFromAccumulated(
   return borders;
 }
 
-// background is always a 'solid' ContentCellFill, never a 'pattern' -- style:table-cell-properties/@fo:background-color is OASIS's own flat-colour attribute, with no two-colour pattern-fill vocabulary at all (unlike WordprocessingML's w:shd or SpreadsheetML's patternFill, ExaDev/documents.js#951). tableCellStyle below writes the inverse: resolveCellFillColor's own single-colour approximation for a 'pattern' fill this format has no way to state.
+// background is always a 'solid' ContentCellFill, never a 'pattern' — style:table-cell-properties/@fo:background-color is OASIS's own flat-colour attribute, with no two-colour pattern-fill vocabulary at all (unlike WordprocessingML's w:shd or SpreadsheetML's patternFill, ExaDev/documents.js#951). tableCellStyle below writes the inverse: resolveCellFillColor's own single-colour approximation for a 'pattern' fill this format has no way to state.
 export interface CellStyleDecoration {
   background?: ContentCellFill;
   borders?: ContentCellBorders;
@@ -188,7 +188,7 @@ export interface CellStyleDecoration {
   verticalAlignment?: "top" | "middle" | "bottom";
 }
 
-// Folds a cell's own table-cell-family style chain into background/borders/alignment/verticalAlignment, later elements in `elements` always overriding an earlier one's value for whichever attribute they actually carry (the same fold cascade.ts's own resolveStyle applies for paragraph/run StyleProperties, just over a property vocabulary -- table-cell dimensional/decorative properties -- that module deliberately does not model). Deliberately generic over how many elements are passed and in what order they were resolved: readTableCell below passes a ONE-ELEMENT array from findStyleElement's single-level lookup (this file's own established "table-cell styles are standalone in practice" convention for odt/odp), while ods's readOdsContent passes the FULL root-to-target array from cascade.ts's resolveStyleElementChain (real-world spreadsheet cell styles routinely DO chain via style:parent-style-name -- confirmed against this package's own kitchen-sink.ods fixture, where every cell style sets style:parent-style-name="Default") -- one fold, two callers, each supplying whatever chain its own family's real-world usage actually needs resolved.
+// Folds a cell's own table-cell-family style chain into background/borders/alignment/verticalAlignment, later elements in `elements` always overriding an earlier one's value for whichever attribute they actually carry (the same fold cascade.ts's own resolveStyle applies for paragraph/run StyleProperties, just over a property vocabulary — table-cell dimensional/decorative properties — that module deliberately does not model). Deliberately generic over how many elements are passed and in what order they were resolved: readTableCell below passes a ONE-ELEMENT array from findStyleElement's single-level lookup (this file's own established "table-cell styles are standalone in practice" convention for odt/odp), while ods's readOdsContent passes the FULL root-to-target array from cascade.ts's resolveStyleElementChain (real-world spreadsheet cell styles routinely DO chain via style:parent-style-name — confirmed against this package's own kitchen-sink.ods fixture, where every cell style sets style:parent-style-name="Default") — one fold, two callers, each supplying whatever chain its own family's real-world usage actually needs resolved.
 export function readCellStyleDecoration(
   elements: readonly XmlElement[],
 ): CellStyleDecoration {
@@ -288,7 +288,7 @@ function readTableCell(
   pkg: Package,
   listIdState: OdfListIdState,
 ): ContentTableCell {
-  // A cell's block content mirrors the general block-content reading every other shared/odt-specific walker here applies: text:p/text:h read as paragraphs/headings (a heading paragraph set in a cell is a real text:h under the same convention office:text uses -- typed/shared/paragraph.ts's readParagraphOrHeading derives its identity), text:list reads through the SAME shared list walker (typed/shared/list.ts's readOdfListParagraphs/mintOdfListNumId) office:text and a slide text-box both use, and table:table recurses back into readOdfTable -- a table nested inside a cell is still just a table:table element, read by the identical function that reads a top-level one. All four are walked in document order rather than tag-filtered, so a heading or a nested list/table between two paragraphs stays between them.
+  // A cell's block content mirrors the general block-content reading every other shared/odt-specific walker here applies: text:p/text:h read as paragraphs/headings (a heading paragraph set in a cell is a real text:h under the same convention office:text uses — typed/shared/paragraph.ts's readParagraphOrHeading derives its identity), text:list reads through the SAME shared list walker (typed/shared/list.ts's readOdfListParagraphs/mintOdfListNumId) office:text and a slide text-box both use, and table:table recurses back into readOdfTable — a table nested inside a cell is still just a table:table element, read by the identical function that reads a top-level one. All four are walked in document order rather than tag-filtered, so a heading or a nested list/table between two paragraphs stays between them.
   const blocks: ContentBlock[] = [];
   for (const child of cellElement.children) {
     if (child.type !== "element") {
@@ -358,7 +358,7 @@ function tableColumnStyle(
   widthPt: number,
   registry: StyleRegistry,
 ): string | undefined {
-  // A column with no positive width states nothing -- readOdfTable's own fallback for a column with no resolvable width is 0pt, so a zero-width column and a column with no style are the same fact and only one of them needs a style minted.
+  // A column with no positive width states nothing — readOdfTable's own fallback for a column with no resolvable width is 0pt, so a zero-width column and a column with no style are the same fact and only one of them needs a style minted.
   if (widthPt <= 0) {
     return undefined;
   }
@@ -396,7 +396,7 @@ function tableCellStyle(
   registry: StyleRegistry,
 ): string | undefined {
   const attributes: Record<string, string> = {};
-  // ODF's fo:background-color states one flat colour with no pattern-fill vocabulary at all, so a 'pattern' fill approximates through resolveCellFillColor's own single representative colour (its foreground, falling back to its background) -- the same degradation this schema function exists for, rather than a bespoke one-off here. A pattern stating neither colour resolves to undefined and writes no attribute at all, exactly like an absent background.
+  // ODF's fo:background-color states one flat colour with no pattern-fill vocabulary at all, so a 'pattern' fill approximates through resolveCellFillColor's own single representative colour (its foreground, falling back to its background) — the same degradation this schema function exists for, rather than a bespoke one-off here. A pattern stating neither colour resolves to undefined and writes no attribute at all, exactly like an absent background.
   const backgroundColor =
     cell.background === undefined
       ? undefined
@@ -427,19 +427,19 @@ function tableCellStyle(
   });
 }
 
-// What writeOdfTable needs beyond the registry, to write a cell's own nested content back exactly as readOdfTable's own recursive read reads it: a table nested inside a cell needs a document-unique table:name from the SAME counter a top-level table's name comes from (never a cell-local counter, which could mint a name a sibling top-level table already used), and consecutive list-membership paragraphs grouped into a text:list need the SAME named list-style a top-level list run would reuse or mint (never a second, cell-local style for the identical kind). Both callers -- typed/odt/write.ts's writeSectionBlocks and typed/draw/write-shapes.ts's writeDrawFrame -- already own exactly this state (OdtWriteState.nextTable/listStyleByKind, DrawShapeWriteState's own identically-shaped fields) for their own top-level tables and lists, so this context is built from that existing state rather than duplicating it.
+// What writeOdfTable needs beyond the registry, to write a cell's own nested content back exactly as readOdfTable's own recursive read reads it: a table nested inside a cell needs a document-unique table:name from the SAME counter a top-level table's name comes from (never a cell-local counter, which could mint a name a sibling top-level table already used), and consecutive list-membership paragraphs grouped into a text:list need the SAME named list-style a top-level list run would reuse or mint (never a second, cell-local style for the identical kind). Both callers — typed/odt/write.ts's writeSectionBlocks and typed/draw/write-shapes.ts's writeDrawFrame — already own exactly this state (OdtWriteState.nextTable/listStyleByKind, DrawShapeWriteState's own identically-shaped fields) for their own top-level tables and lists, so this context is built from that existing state rather than duplicating it.
 export interface OdfTableWriteContext {
   readonly registry: StyleRegistry;
-  // Mints the next document-unique table:name -- called once per table:table element this function writes, including a nested table found inside a cell, off the caller's own document-wide counter.
+  // Mints the next document-unique table:name — called once per table:table element this function writes, including a nested table found inside a cell, off the caller's own document-wide counter.
   mintTableName(): string;
-  // Mints (or reuses) the named text:list-style for one list kind, off the caller's own memoized cache -- one text:list-style per kind for the WHOLE document, not one per table.
+  // Mints (or reuses) the named text:list-style for one list kind, off the caller's own memoized cache — one text:list-style per kind for the WHOLE document, not one per table.
   mintListStyleName(kind: "ordered" | "bullet"): string;
   // The construct-writing context a cell's own paragraphs resolve their run-level construct extents against, identical to the body-paragraph and shape-text threading: the definitions table note/comment anchors resolve against and the tracked-change id map (ExaDev/documents.js#969 closed the last allowConstructs=false gap these close). Absent means the caller has no tree context and the paragraph writer itself refuses the construct kinds that need one.
   readonly definitions?: Readonly<Record<string, DefinitionEntry>>;
   readonly changeIds?: ReadonlyMap<ProvenanceDescriptor, string>;
 }
 
-// A cell's own block content, mirroring readTableCell's own recursive scope (typed/shared/table.ts's read side): a paragraph writes as itself; consecutive paragraphs sharing one list membership group into a single text:list, nested per level via typed/shared/list.ts's own writeOdfList -- the identical grouping typed/odt/write.ts's writeSectionBlocks and typed/draw/write-shapes.ts's writeShapeTextBox already apply at their own top level; and a nested table writes by recursing back into writeOdfTable itself, the identical function that writes a top-level one. Any other block kind is refused outright, naming it, rather than written and lost -- exactly what readTableCell's own scope stops it from reading back.
+// A cell's own block content, mirroring readTableCell's own recursive scope (typed/shared/table.ts's read side): a paragraph writes as itself; consecutive paragraphs sharing one list membership group into a single text:list, nested per level via typed/shared/list.ts's own writeOdfList — the identical grouping typed/odt/write.ts's writeSectionBlocks and typed/draw/write-shapes.ts's writeShapeTextBox already apply at their own top level; and a nested table writes by recursing back into writeOdfTable itself, the identical function that writes a top-level one. Any other block kind is refused outright, naming it, rather than written and lost — exactly what readTableCell's own scope stops it from reading back.
 function writeCellBlocks(
   cell: ContentTableCell,
   context: OdfTableWriteContext,
@@ -475,7 +475,7 @@ function writeCellBlocks(
     }
     if (block.kind !== "paragraph") {
       throw new Error(
-        `writeOdfTable: a table cell carrying a "${block.kind}" block cannot be written -- odf.js's table reader reads only paragraphs, headings, lists, and nested tables out of a cell, so writing one would lose it on the way back in`,
+        `writeOdfTable: a table cell carrying a "${block.kind}" block cannot be written — odf.js's table reader reads only paragraphs, headings, lists, and nested tables out of a cell, so writing one would lose it on the way back in`,
       );
     }
     const element = writeOdfParagraph(block, context.registry, {
@@ -507,7 +507,7 @@ function writeCellBlocks(
   return out;
 }
 
-// Writes one ContentTable as the table:table element readOdfTable reads back. Its own table:name is minted by context.mintTableName() -- the caller's document-wide counter, shared with every nested table this call's own cells may recurse into (see writeCellBlocks), so uniqueness holds across the whole document regardless of nesting depth.
+// Writes one ContentTable as the table:table element readOdfTable reads back. Its own table:name is minted by context.mintTableName() — the caller's document-wide counter, shared with every nested table this call's own cells may recurse into (see writeCellBlocks), so uniqueness holds across the whole document regardless of nesting depth.
 export function writeOdfTable(
   table: ContentTable,
   context: OdfTableWriteContext,
@@ -660,7 +660,7 @@ function flattenTableParts(
   return leaves;
 }
 
-// `listIdState` mints numId identity for a text:list found inside one of this table's own cells (readTableCell's own recursive walk), threaded through every nested table the same way -- so two lists in two different cells (or in a cell of a table nested inside another cell) get different identities exactly as two lists in different sections of an odt body do. Defaults to a fresh per-call counter, matching typed/draw/shapes.ts's own readDrawFrame convention, so every pre-existing call site that has no document-wide state to thread (a chart's own local data table, this module's own tests) keeps working unchanged; a caller walking a whole document threads its own state so identities stay unique across the whole read.
+// `listIdState` mints numId identity for a text:list found inside one of this table's own cells (readTableCell's own recursive walk), threaded through every nested table the same way — so two lists in two different cells (or in a cell of a table nested inside another cell) get different identities exactly as two lists in different sections of an odt body do. Defaults to a fresh per-call counter, matching typed/draw/shapes.ts's own readDrawFrame convention, so every pre-existing call site that has no document-wide state to thread (a chart's own local data table, this module's own tests) keeps working unchanged; a caller walking a whole document threads its own state so identities stay unique across the whole read.
 export function readOdfTable(
   tableElement: XmlElement,
   pkg: Package,

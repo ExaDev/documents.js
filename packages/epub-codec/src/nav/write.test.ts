@@ -106,7 +106,7 @@ describe("writeNav3Document", () => {
   });
 });
 
-// Walks down to the nav document's single <a> element's own text content -- a small local helper rather than repeating the same body/nav/ol/li/a descent inline in every test that only cares about the link's final text.
+// Walks down to the nav document's single <a> element's own text content — a small local helper rather than repeating the same body/nav/ol/li/a descent inline in every test that only cares about the link's final text.
 function findLinkText(html: XmlElement) {
   const body = findChildElement(html.children, "body");
   const nav =

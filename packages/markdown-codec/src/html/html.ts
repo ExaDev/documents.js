@@ -1,12 +1,12 @@
-// Raw-HTML-in-markdown recognition. CommonMark does not require raw HTML to be balanced, well-formed, or even to name a real element -- an html_block/html_inline node carries its literal HTML text verbatim and is never parsed as markup. So this module is a bounded RECOGNISER (does a tag start here, and where does it end?), not an HTML parser, and pulls in no HTML-parsing dependency of any kind.
+// Raw-HTML-in-markdown recognition. CommonMark does not require raw HTML to be balanced, well-formed, or even to name a real element — an html_block/html_inline node carries its literal HTML text verbatim and is never parsed as markup. So this module is a bounded RECOGNISER (does a tag start here, and where does it end?), not an HTML parser, and pulls in no HTML-parsing dependency of any kind.
 //
-// Both halves live here: the inline half (CommonMark 0.31.2, "Raw HTML"), consumed by src/inline/inline.ts, and the block half (0.31.2, "HTML blocks") -- seven kinds of block, each defined by a start condition and a matching end condition -- consumed by src/block/block.ts. They share the open-tag/closing-tag grammar below, which is exactly why the block half belongs in this module rather than in src/block/: block start condition 7 IS "a complete open tag or closing tag, alone on its line", so restating that grammar there would be a second copy of the hardest part of this file.
+// Both halves live here: the inline half (CommonMark 0.31.2, "Raw HTML"), consumed by src/inline/inline.ts, and the block half (0.31.2, "HTML blocks") — seven kinds of block, each defined by a start condition and a matching end condition — consumed by src/block/block.ts. They share the open-tag/closing-tag grammar below, which is exactly why the block half belongs in this module rather than in src/block/: block start condition 7 IS "a complete open tag or closing tag, alone on its line", so restating that grammar there would be a second copy of the hardest part of this file.
 
 // spec 0.31.2, "Raw HTML" grammar, transcribed clause by clause:
 //
-// tag name                 -- an ASCII letter followed by zero or more ASCII letters, digits, or hyphens attribute name           -- an ASCII letter, `_`, or `:`, followed by zero or more ASCII letters, digits, `_`, `.`, `:`, or `-` unquoted attribute value -- a nonempty run excluding whitespace, `"`, `'`, `=`, `<`, `>`, and backtick attribute value spec     -- optional whitespace, `=`, optional whitespace, then an unquoted/single-quoted/double-quoted value attribute                -- whitespace, an attribute name, and an optional value spec open tag                 -- `<`, tag name, zero or more attributes, optional whitespace, optional `/`, `>` closing tag              -- `</`, tag name, optional whitespace, `>` HTML comment             -- `<!-->`, `<!--->`, or `<!--` ... `-->` (the two degenerate forms are new in 0.31.x) processing instruction   -- `<?` ... `?>` declaration              -- `<!`, an ASCII letter, characters other than `>`, `>` CDATA section            -- `<![CDATA[` ... `]]>`
+// tag name                 — an ASCII letter followed by zero or more ASCII letters, digits, or hyphens attribute name           — an ASCII letter, `_`, or `:`, followed by zero or more ASCII letters, digits, `_`, `.`, `:`, or `-` unquoted attribute value — a nonempty run excluding whitespace, `"`, `'`, `=`, `<`, `>`, and backtick attribute value spec     — optional whitespace, `=`, optional whitespace, then an unquoted/single-quoted/double-quoted value attribute                — whitespace, an attribute name, and an optional value spec open tag                 — `<`, tag name, zero or more attributes, optional whitespace, optional `/`, `>` closing tag              — `</`, tag name, optional whitespace, `>` HTML comment             — `<!-->`, `<!--->`, or `<!--` ... `-->` (the two degenerate forms are new in 0.31.x) processing instruction   — `<?` ... `?>` declaration              — `<!`, an ASCII letter, characters other than `>`, `>` CDATA section            — `<![CDATA[` ... `]]>`
 //
-// The spec's own wording for the whitespace inside a tag is "spaces, tabs, and up to one line ending"; `\s` here is marginally laxer (it also admits a form feed and a second line ending). That laxity is unreachable for inline content, because a blank line ends the containing block before any inline scanning happens -- so a second line ending can never appear inside one inline tag to begin with.
+// The spec's own wording for the whitespace inside a tag is "spaces, tabs, and up to one line ending"; `\s` here is marginally laxer (it also admits a form feed and a second line ending). That laxity is unreachable for inline content, because a blank line ends the containing block before any inline scanning happens — so a second line ending can never appear inside one inline tag to begin with.
 const TAG_NAME = "[A-Za-z][A-Za-z0-9-]*";
 const ATTRIBUTE_NAME = "[a-zA-Z_:][a-zA-Z0-9:._-]*";
 const UNQUOTED_VALUE = "[^\"'=<>`\\x00-\\x20]+";
@@ -26,7 +26,7 @@ const HTML_TAG_PATTERN = new RegExp(
   `^(?:${OPEN_TAG}|${CLOSING_TAG}|${HTML_COMMENT}|${PROCESSING_INSTRUCTION}|${DECLARATION}|${CDATA_SECTION})`,
 );
 
-// Matches an inline HTML tag starting at `start` (which must be the `<`), returning its literal source text, or undefined when what follows is not a tag at all -- a bare `<` is ordinary text, never an error.
+// Matches an inline HTML tag starting at `start` (which must be the `<`), returning its literal source text, or undefined when what follows is not a tag at all — a bare `<` is ordinary text, never an error.
 //
 // No separate "does text[start] even open with '<'?" guard: every one of HTML_TAG_PATTERN's own alternatives (OPEN_TAG, CLOSING_TAG, HTML_COMMENT, PROCESSING_INSTRUCTION, DECLARATION, CDATA_SECTION) already begins with a literal '<' in its own regex source, and the pattern as a whole is anchored at `^` — so a slice that doesn't start with '<' can never match any alternative regardless, and a guard duplicating that fact ahead of the real check would only ever agree with it.
 export function matchHtmlTag(text: string, start: number): string | undefined {
@@ -39,7 +39,7 @@ export function matchHtmlTag(text: string, start: number): string | undefined {
 // The seven kinds of HTML block, numbered exactly as the spec numbers them so a `htmlBlockType` field carried on a block node reads directly against the spec text rather than against a local renaming.
 export type HtmlBlockType = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
-// spec 0.31.2, condition 6's own tag list, verbatim and in the spec's own order. Note `search` (added in 0.31.x) and `menuitem` (never a real HTML element, but in the list regardless) -- this is a fixed literal list the spec states, not "block-level HTML elements" as any HTML specification would define them, so it is transcribed rather than derived.
+// spec 0.31.2, condition 6's own tag list, verbatim and in the spec's own order. Note `search` (added in 0.31.x) and `menuitem` (never a real HTML element, but in the list regardless) — this is a fixed literal list the spec states, not "block-level HTML elements" as any HTML specification would define them, so it is transcribed rather than derived.
 const HTML_BLOCK_TAG_NAMES = [
   "address",
   "article",
@@ -148,7 +148,7 @@ export function matchHtmlBlockStart(
   return undefined;
 }
 
-// Whether `line` meets the end condition for an already-open block of `type`. Types 6 and 7 always answer false here -- they end at a blank line, which is not a property of this line's own text (see HTML_BLOCK_END_PATTERNS above).
+// Whether `line` meets the end condition for an already-open block of `type`. Types 6 and 7 always answer false here — they end at a blank line, which is not a property of this line's own text (see HTML_BLOCK_END_PATTERNS above).
 export function matchesHtmlBlockEnd(
   line: string,
   type: HtmlBlockType,

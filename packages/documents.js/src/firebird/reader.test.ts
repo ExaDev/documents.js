@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FirebirdBackupReader, XdrReader } from "./reader";
 
-// Isolated, synthetic-byte-sequence tests for the two primitive readers -- FirebirdBackupReader's attribute framing and XdrReader's per-type XDR decoding -- independent of the real-fixture end-to-end proof in backup.test.ts. Byte sequences here are hand-constructed against the documented wire shapes (this module's own top-of-file note), not lifted from a real file, since the point is to pin down each primitive's own isolated behaviour (including edge cases a real fixture may not happen to exercise, like RLE runs and int16 truncation).
+// Isolated, synthetic-byte-sequence tests for the two primitive readers — FirebirdBackupReader's attribute framing and XdrReader's per-type XDR decoding — independent of the real-fixture end-to-end proof in backup.test.ts. Byte sequences here are hand-constructed against the documented wire shapes (this module's own top-of-file note), not lifted from a real file, since the point is to pin down each primitive's own isolated behaviour (including edge cases a real fixture may not happen to exercise, like RLE runs and int16 truncation).
 
 describe("FirebirdBackupReader: attribute framing", () => {
   it("reads a tag, a length-prefixed int32 attribute (little-endian), and detects end-of-stream", () => {
@@ -100,7 +100,7 @@ describe("XdrReader: per-type big-endian decoding", () => {
   });
 
   it("readInt16 truncates a 4-byte XDR long to a signed 16-bit value (Firebird has no native 16-bit XDR type)", () => {
-    // 4-byte value 0x00000000_0064 (100) widened -- still just 4 bytes on the wire.
+    // 4-byte value 0x00000000_0064 (100) widened — still just 4 bytes on the wire.
     const xdr = new XdrReader(new Uint8Array([0x00, 0x00, 0x00, 0x64]));
     expect(xdr.readInt16()).toBe(100);
   });

@@ -58,7 +58,7 @@ function directChild(parent: XmlElement, tag: string): XmlElement | undefined {
   return undefined;
 }
 
-// styles.xml's own office:automatic-styles/office:master-styles and content.xml's own office:automatic-styles are guaranteed to already exist on any package this editor's own createEmptyOdsPackage scaffolded (scaffold.ts's buildStylesXml/buildContentXml both create them unconditionally) -- so, unlike odt/automatic-styles.ts's own ensureAutomaticStyles (which DOES need create-if-missing logic, since a docx-derived package's own content.xml has no such guarantee), a plain find-or-throw is enough here.
+// styles.xml's own office:automatic-styles/office:master-styles and content.xml's own office:automatic-styles are guaranteed to already exist on any package this editor's own createEmptyOdsPackage scaffolded (scaffold.ts's buildStylesXml/buildContentXml both create them unconditionally) — so, unlike odt/automatic-styles.ts's own ensureAutomaticStyles (which DOES need create-if-missing logic, since a docx-derived package's own content.xml has no such guarantee), a plain find-or-throw is enough here.
 function findStylesAutomaticStyles(pkg: Package): XmlElement {
   const found = directChild(
     findRoot(pkg, STYLES_PART_PATH),
@@ -96,7 +96,7 @@ function findContentAutomaticStyles(pkg: Package): XmlElement {
   return found;
 }
 
-// 2cm in points -- LibreOffice Calc's own real out-of-the-box default page margin, matching scaffold.ts's own DEFAULT_MARGIN and its identical justification there. Used only as readSheetPrintSettings' own fallback for the pathological case of a table:table whose own style chain fails to resolve a page-layout at all -- never true for a package this editor itself built, since addSheet/writeSheetPrintSettings always mint one.
+// 2cm in points — LibreOffice Calc's own real out-of-the-box default page margin, matching scaffold.ts's own DEFAULT_MARGIN and its identical justification there. Used only as readSheetPrintSettings' own fallback for the pathological case of a table:table whose own style chain fails to resolve a page-layout at all — never true for a package this editor itself built, since addSheet/writeSheetPrintSettings always mint one.
 const DEFAULT_MARGIN_PT = 56.69291338582677;
 const DEFAULT_MARGINS: Margins = {
   topPt: DEFAULT_MARGIN_PT,
@@ -107,7 +107,7 @@ const DEFAULT_MARGINS: Margins = {
 
 // --- repeatColumns/repeatRows/manualBreak* cursor tracking -------------------------------------
 //
-// Mirrors odf.js's own private readTable (typed/ods/read.ts) exactly for the structural walk it does BEFORE ever calling its own readPrintSettings: a running columnCursor/rowCursor incremented by each table:table-column/table:table-row's own repeat count, with a table:table-header-columns/table:table-header-rows wrapper recorded as a { start, end } range spanning whatever it covers. This file does not need readTable's own cell-level TableCursor at all (no cells are read here), only the column/row structural cursor -- so this is a scoped-down mirror of that one piece, not the whole function.
+// Mirrors odf.js's own private readTable (typed/ods/read.ts) exactly for the structural walk it does BEFORE ever calling its own readPrintSettings: a running columnCursor/rowCursor incremented by each table:table-column/table:table-row's own repeat count, with a table:table-header-columns/table:table-header-rows wrapper recorded as a { start, end } range spanning whatever it covers. This file does not need readTable's own cell-level TableCursor at all (no cells are read here), only the column/row structural cursor — so this is a scoped-down mirror of that one piece, not the whole function.
 
 interface TableStructure {
   readonly repeatColumns: ContentSheetRepeatRange | undefined;
@@ -208,7 +208,7 @@ function scanTableStructure(
 
 // --- printRange (table:print-ranges) parsing/formatting ----------------------------------------
 //
-// Mirrors odf.js's own private parsePrintRanges/parseA1WithOptionalSheetPrefix (typed/ods/read.ts): table:print-ranges can carry several space-separated ranges, but ContentSheetPrintSettings.printRange is a single range, so -- exactly like odf.js's own reader -- only the FIRST is read; a cell reference may carry an optional "SheetName." prefix, stripped before parsing.
+// Mirrors odf.js's own private parsePrintRanges/parseA1WithOptionalSheetPrefix (typed/ods/read.ts): table:print-ranges can carry several space-separated ranges, but ContentSheetPrintSettings.printRange is a single range, so — exactly like odf.js's own reader — only the FIRST is read; a cell reference may carry an optional "SheetName." prefix, stripped before parsing.
 
 function parseA1WithOptionalSheetPrefix(
   cellPart: string,
@@ -241,7 +241,7 @@ function parsePrintRanges(value: string): ContentSheetPrintRange | undefined {
   };
 }
 
-// The write-side inverse of parsePrintRanges above: "SheetName.A1:SheetName.D10", the exact shape odf.js's own reader (and real LibreOffice output) expects. Requires tableElement to already carry a table:name (true for every sheet this editor creates -- OdsEditor.addSheet always sets it before returning the OdsSheet a caller could reach writeSheetPrintSettings through).
+// The write-side inverse of parsePrintRanges above: "SheetName.A1:SheetName.D10", the exact shape odf.js's own reader (and real LibreOffice output) expects. Requires tableElement to already carry a table:name (true for every sheet this editor creates — OdsEditor.addSheet always sets it before returning the OdsSheet a caller could reach writeSheetPrintSettings through).
 function formatPrintRange(
   sheetName: string,
   range: ContentSheetPrintRange,
@@ -274,7 +274,7 @@ function parseNonNegativeInteger(
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
-// Mirrors odf.js's own private readPrintSettings (typed/ods/read.ts) for every field ContentSheetPrintSettingsSchema carries: pageSize/margins/gridlines/headers/pageOrder resolve through the table:style-name -> style:style[family="table"] -> style:master-page-name -> style:master-page -> style:page-layout -> style:page-layout-properties chain (odf.js's own exported findStyleElement/resolvePageLayoutProperties/parsePageSize/parseMargins); scale/fitToPages read style:scale-to/style:scale-to-X/style:scale-to-Y off that same page-layout-properties element; printRange reads table:print-ranges directly off tableElement; repeatColumns/repeatRows/manualBreaks come from scanTableStructure above -- the same table-wide repeated-column/row cursor tracking odf.js's own readTable does before ever calling its own readPrintSettings, mirrored rather than reinvented.
+// Mirrors odf.js's own private readPrintSettings (typed/ods/read.ts) for every field ContentSheetPrintSettingsSchema carries: pageSize/margins/gridlines/headers/pageOrder resolve through the table:style-name -> style:style[family="table"] -> style:master-page-name -> style:master-page -> style:page-layout -> style:page-layout-properties chain (odf.js's own exported findStyleElement/resolvePageLayoutProperties/parsePageSize/parseMargins); scale/fitToPages read style:scale-to/style:scale-to-X/style:scale-to-Y off that same page-layout-properties element; printRange reads table:print-ranges directly off tableElement; repeatColumns/repeatRows/manualBreaks come from scanTableStructure above — the same table-wide repeated-column/row cursor tracking odf.js's own readTable does before ever calling its own readPrintSettings, mirrored rather than reinvented.
 export function readSheetPrintSettings(
   pkg: Package,
   tableElement: XmlElement,
@@ -357,7 +357,7 @@ export function readSheetPrintSettings(
 
 // --- repeatColumns/repeatRows structural wrapping --------------------------------------------
 
-// Dissolves any existing wrapperTag element back into tableElement's own direct children at the wrapper's own position -- called unconditionally before applying a fresh repeatRows/repeatColumns so a second writeSheetPrintSettings call on the same sheet never leaves a stale wrapper from an earlier call sitting alongside (or nested inside) a new one.
+// Dissolves any existing wrapperTag element back into tableElement's own direct children at the wrapper's own position — called unconditionally before applying a fresh repeatRows/repeatColumns so a second writeSheetPrintSettings call on the same sheet never leaves a stale wrapper from an earlier call sitting alongside (or nested inside) a new one.
 function unwrapHeaderGroup(tableElement: XmlElement, wrapperTag: string): void {
   const index = tableElement.children.findIndex(
     (child) => child.type === "element" && child.tag === wrapperTag,
@@ -377,7 +377,7 @@ interface RangeElement {
   readonly element: XmlElement;
 }
 
-// Every `tag` member (with its own array position within `children`) whose full repeat-run lies entirely within [start, end] -- used only after replaceRun has already individuated both boundaries, so a run genuinely spanning the range never gets split mid-wrap.
+// Every `tag` member (with its own array position within `children`) whose full repeat-run lies entirely within [start, end] — used only after replaceRun has already individuated both boundaries, so a run genuinely spanning the range never gets split mid-wrap.
 function collectRangeElements(
   children: XmlNode[],
   tag: string,
@@ -400,7 +400,7 @@ function collectRangeElements(
   return found;
 }
 
-// Moves the real table:table-column/table:table-row elements covering [range.start, range.end] into a fresh table:table-header-columns/table:table-header-rows wrapper -- the structural transform odf.js's own readTable recognises as repeatColumns/repeatRows on the way back in. Individuates both boundaries first (replaceRun, exactly as every other column/row write in this editor does) so the range's own element runs align precisely with the requested indices before anything is moved. Stamps a real default width/height on every range element that lacks one before the move, so a repeatColumns/repeatRows range set beyond any cell a caller has touched does not produce the "explicit but unstyled" zero-width/height columns/rows (src/edit/ods/column-row.ts's own top-of-file note) the cell()-materialisation fix already closed for cell()/mergeCells()/setColumnHidden()/setRowHidden() -- the same hazard, reachable through print settings instead. Callers are responsible for having already dissolved any stale prior wrapper of the same tag (writeSheetPrintSettings's own unconditional unwrapHeaderGroup call, below) -- this function only ever builds a fresh one, never merges into an existing one.
+// Moves the real table:table-column/table:table-row elements covering [range.start, range.end] into a fresh table:table-header-columns/table:table-header-rows wrapper — the structural transform odf.js's own readTable recognises as repeatColumns/repeatRows on the way back in. Individuates both boundaries first (replaceRun, exactly as every other column/row write in this editor does) so the range's own element runs align precisely with the requested indices before anything is moved. Stamps a real default width/height on every range element that lacks one before the move, so a repeatColumns/repeatRows range set beyond any cell a caller has touched does not produce the "explicit but unstyled" zero-width/height columns/rows (src/edit/ods/column-row.ts's own top-of-file note) the cell()-materialisation fix already closed for cell()/mergeCells()/setColumnHidden()/setRowHidden() — the same hazard, reachable through print settings instead. Callers are responsible for having already dissolved any stale prior wrapper of the same tag (writeSheetPrintSettings's own unconditional unwrapHeaderGroup call, below) — this function only ever builds a fresh one, never merges into an existing one.
 function wrapRepeatRange(
   tableElement: XmlElement,
   memberTag: string,
@@ -424,7 +424,7 @@ function wrapRepeatRange(
     repeatAttr,
     buildEmpty,
   );
-  // Stamp a real default width/height on EVERY member element from position 0 through range.end, not only the in-range ones the move collects below -- replaceRun's gap-fill (case 3, address.ts) appends a bare, unstyled run for any positions between the table's prior coverage and range.start, and those exterior gap-fills lie OUTSIDE [range.start, range.end] so the move's own collectRangeElements never reaches them. ensureColumnElementDefaultWidth/ensureRowElementDefaultHeight no-op on an element that already carries a width/height (a real source column/row, or one cell() already individuated), so scanning the whole [0, range.end] span stamps only the genuinely unstyled gap-fills -- the in-range ones AND the exterior ones alike.
+  // Stamp a real default width/height on EVERY member element from position 0 through range.end, not only the in-range ones the move collects below — replaceRun's gap-fill (case 3, address.ts) appends a bare, unstyled run for any positions between the table's prior coverage and range.start, and those exterior gap-fills lie OUTSIDE [range.start, range.end] so the move's own collectRangeElements never reaches them. ensureColumnElementDefaultWidth/ensureRowElementDefaultHeight no-op on an element that already carries a width/height (a real source column/row, or one cell() already individuated), so scanning the whole [0, range.end] span stamps only the genuinely unstyled gap-fills — the in-range ones AND the exterior ones alike.
   for (const entry of collectRangeElements(
     tableElement.children,
     memberTag,
@@ -457,9 +457,9 @@ function wrapRepeatRange(
   tableElement.children.splice(firstPosition, 0, el(wrapperTag, {}, elements));
 }
 
-// Mints a fresh, uniquely-named style:page-layout (styles.xml/office:automatic-styles) carrying pageSize/margins/gridlines/headers/pageOrder/scalePercent/fitToPages, a fresh style:master-page (styles.xml/office:master-styles) referencing it, and a fresh style:style[family="table"] (content.xml/office:automatic-styles) referencing THAT -- then repoints tableElement's own table:style-name to the new table-style, writes table:print-ranges directly on tableElement for printRange, structurally wraps repeatColumns/repeatRows (wrapRepeatRange above, dissolving any stale wrapper from an earlier call first), and applies manualBreaks to each named row/column's own style (writeRowManualBreak/writeColumnManualBreak, column-row.ts -- these preserve any width/height a prior writeColumnWidth/writeRowHeight call already set on that same index, see that file's own top-of-file note). Always mints fresh page-layout/master-page/table-style names rather than searching for a reusable match: the same append-only "a setter always mints a fresh style:style and repoints, never mutates an existing entry" convention src/edit/odg/style.ts's own top-of-file note already documents and every other StyleRegistry-backed setter in this package shares -- a later call for a DIFFERENT sheet with different settings can never accidentally perturb an earlier sheet's own already-written style chain.
+// Mints a fresh, uniquely-named style:page-layout (styles.xml/office:automatic-styles) carrying pageSize/margins/gridlines/headers/pageOrder/scalePercent/fitToPages, a fresh style:master-page (styles.xml/office:master-styles) referencing it, and a fresh style:style[family="table"] (content.xml/office:automatic-styles) referencing THAT — then repoints tableElement's own table:style-name to the new table-style, writes table:print-ranges directly on tableElement for printRange, structurally wraps repeatColumns/repeatRows (wrapRepeatRange above, dissolving any stale wrapper from an earlier call first), and applies manualBreaks to each named row/column's own style (writeRowManualBreak/writeColumnManualBreak, column-row.ts — these preserve any width/height a prior writeColumnWidth/writeRowHeight call already set on that same index, see that file's own top-of-file note). Always mints fresh page-layout/master-page/table-style names rather than searching for a reusable match: the same append-only "a setter always mints a fresh style:style and repoints, never mutates an existing entry" convention src/edit/odg/style.ts's own top-of-file note already documents and every other StyleRegistry-backed setter in this package shares — a later call for a DIFFERENT sheet with different settings can never accidentally perturb an earlier sheet's own already-written style chain.
 //
-// manualBreaks is the one field this function does not make fully idempotent across repeated calls on the SAME sheet: each call only ADDS the breaks named in `settings.manualBreaks` (if any), rather than first clearing every break a PRIOR call may have set on some other row/column -- doing that fully would mean scanning and clearing fo:break-before off every row/column this sheet has ever touched, not just the ones named this time. A documented, bounded gap, not a silent one: buildOdsPackage (content.ts) only ever calls this once per sheet, so the common case is unaffected; a caller setting printSettings twice with different manualBreaks each time ends up with the union of both calls' breaks.
+// manualBreaks is the one field this function does not make fully idempotent across repeated calls on the SAME sheet: each call only ADDS the breaks named in `settings.manualBreaks` (if any), rather than first clearing every break a PRIOR call may have set on some other row/column — doing that fully would mean scanning and clearing fo:break-before off every row/column this sheet has ever touched, not just the ones named this time. A documented, bounded gap, not a silent one: buildOdsPackage (content.ts) only ever calls this once per sheet, so the common case is unaffected; a caller setting printSettings twice with different manualBreaks each time ends up with the union of both calls' breaks.
 export function writeSheetPrintSettings(
   pkg: Package,
   tableElement: XmlElement,

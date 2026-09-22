@@ -19,7 +19,7 @@ import {
   treeEmbeddedFontsOf,
 } from "./registry";
 
-// A character no Latin-only face carries -- Caladea's cmap genuinely has no glyph for CJK, so a run containing this is the honest "the embedded face is right for the document but lacks this one synthesised character" case.
+// A character no Latin-only face carries — Caladea's cmap genuinely has no glyph for CJK, so a run containing this is the honest "the embedded face is right for the document but lacks this one synthesised character" case.
 const UNMAPPED_CHARACTER = "中";
 
 function textPage(text: string, family: string): LayoutDocument {
@@ -155,7 +155,7 @@ describe("createDocumentFontRegistry", () => {
     ).toBe("Caladea-Italic");
   });
 
-  // A package that embeds nothing must still produce a usable registry rather than an error -- that is the ordinary case for a document saved without font embedding.
+  // A package that embeds nothing must still produce a usable registry rather than an error — that is the ordinary case for a document saved without font embedding.
   it("produces a working registry for a package that embeds no fonts at all", () => {
     const registry = createDocumentFontRegistry({
       kind: "docx",
@@ -190,7 +190,7 @@ describe("createDocumentFontRegistry", () => {
     ]);
   });
 
-  // A registry built from an ODF package must be interchangeable with one built from an OOXML package -- same resolution, different extractor.
+  // A registry built from an ODF package must be interchangeable with one built from an OOXML package — same resolution, different extractor.
   it("resolves an ODF-sourced face identically to its OOXML-sourced equivalent", () => {
     const odf = createDocumentFontRegistry({
       kind: "odf",

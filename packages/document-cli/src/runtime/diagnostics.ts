@@ -14,7 +14,7 @@ export interface DiagnosticReporter {
   }): void;
 }
 
-// Always stderr, never stdout -- stdout is reserved for the converted bytes/payload in every conversion command, so mixing a diagnostic line into it would corrupt piped output.
+// Always stderr, never stdout — stdout is reserved for the converted bytes/payload in every conversion command, so mixing a diagnostic line into it would corrupt piped output.
 export function createDiagnosticReporter(options: {
   readonly json: boolean;
   readonly quiet: boolean;
@@ -60,7 +60,7 @@ export function createDiagnosticReporter(options: {
   };
 }
 
-// What --report-font-substitutions writes, once per face that resolved to something other than what the document asked for, at the moment documents.js's own onFontSubstitution callback fires rather than after the conversion has finished. The local converter ALREADY records every one of these as a `font/substituted` Diagnostic the reporter above prints afterwards -- this is deliberately the other channel: the structured FontSubstitution value (which family was asked for, at which weight/slope, what it resolved to, and why), emitted live, which is what a caller diagnosing "why does this PDF not look like my document" actually needs and what a rendered diagnostic message has already flattened away.
+// What --report-font-substitutions writes, once per face that resolved to something other than what the document asked for, at the moment documents.js's own onFontSubstitution callback fires rather than after the conversion has finished. The local converter ALREADY records every one of these as a `font/substituted` Diagnostic the reporter above prints afterwards — this is deliberately the other channel: the structured FontSubstitution value (which family was asked for, at which weight/slope, what it resolved to, and why), emitted live, which is what a caller diagnosing "why does this PDF not look like my document" actually needs and what a rendered diagnostic message has already flattened away.
 //
 // Stderr and the json/quiet conventions are the diagnostic reporter's above, verbatim: stdout belongs to the converted bytes, and a substitution report is diagnostic output like any other, so --quiet suppresses it and --json makes it one more NDJSON record on the same stream.
 export function createFontSubstitutionReporter(options: {
@@ -116,7 +116,7 @@ export function fontSubstitutionToDiagnostic(
   };
 }
 
-// Adapter for the same direct-call commands' PdfDiagnosticSink callback -- PdfDiagnostic (pdf-codec) and Diagnostic (document-schema.js) happen to share an identical field shape today, but this is written as an explicit field-by-field mapping rather than a bare pass-through so the two stay decoupled if either one's shape ever diverges.
+// Adapter for the same direct-call commands' PdfDiagnosticSink callback — PdfDiagnostic (pdf-codec) and Diagnostic (document-schema.js) happen to share an identical field shape today, but this is written as an explicit field-by-field mapping rather than a bare pass-through so the two stay decoupled if either one's shape ever diverges.
 export function pdfDiagnosticToDiagnostic(
   diagnostic: PdfDiagnostic,
 ): Diagnostic {

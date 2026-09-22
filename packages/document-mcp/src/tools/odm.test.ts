@@ -9,7 +9,7 @@ import { createServer } from "../server";
 import { chapterOdtBytes, odmBytes } from "../test-support/odm-fixture";
 import { OdmToPdfOutputSchema } from "document-operations";
 
-// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip -- not the tool callback in isolation -- so this proves the wiring: that `odm_to_pdf` is registered under that name on the server createServer() returns, that it reads a real .odm plus its chapter .odt files through documents.js's own odmToPdf, and that a real PDF (or a named OdmUnresolvedSectionError) reaches the caller.
+// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip — not the tool callback in isolation — so this proves the wiring: that `odm_to_pdf` is registered under that name on the server createServer() returns, that it reads a real .odm plus its chapter .odt files through documents.js's own odmToPdf, and that a real PDF (or a named OdmUnresolvedSectionError) reaches the caller.
 
 interface ConnectedPair {
   readonly client: Client;

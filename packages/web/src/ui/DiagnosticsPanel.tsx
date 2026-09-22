@@ -6,7 +6,7 @@ export interface DiagnosticsPanelProps {
   diagnostics: readonly Diagnostic[];
 }
 
-// Info-severity diagnostics collapse behind a Spoiler once there are more than a handful -- a user scanning for what needs attention shouldn't have to read past advisory noise to find it. Warnings always render expanded: they're the ones with real consequences for whether the output can be trusted.
+// Info-severity diagnostics collapse behind a Spoiler once there are more than a handful — a user scanning for what needs attention shouldn't have to read past advisory noise to find it. Warnings always render expanded: they're the ones with real consequences for whether the output can be trusted.
 const INFO_COLLAPSE_THRESHOLD = 5;
 
 function DiagnosticRow({ diagnostic }: { diagnostic: Diagnostic }) {

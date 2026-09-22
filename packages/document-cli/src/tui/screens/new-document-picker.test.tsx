@@ -26,7 +26,7 @@ describe("NewDocumentPickerScreen", () => {
     ]) {
       expect(frame).toContain(`.${extension}`);
     }
-    // `.odb` has no create<X>() editor at all and `.pdf` is only ever opened, never created from nothing -- both must be absent, not merely present-and-disabled.
+    // `.odb` has no create<X>() editor at all and `.pdf` is only ever opened, never created from nothing — both must be absent, not merely present-and-disabled.
     expect(frame).not.toMatch(/\bodb\b/);
     expect(frame).not.toMatch(/\.pdf\b/);
   });
@@ -83,7 +83,7 @@ describe("NewDocumentPickerScreen", () => {
       </AppStateProvider>,
     );
 
-    // markdown is the last entry in CREATABLE_FORMATS -- nine "down" presses reach it from the first row. Each press's own state update must actually commit before the next is sent (see test-support.ts's settle()), or a later press reads a stale selectedIndex closure.
+    // markdown is the last entry in CREATABLE_FORMATS — nine "down" presses reach it from the first row. Each press's own state update must actually commit before the next is sent (see test-support.ts's settle()), or a later press reads a stale selectedIndex closure.
     for (let step = 0; step < 9; step += 1) {
       stdin.write("j");
       await settle();

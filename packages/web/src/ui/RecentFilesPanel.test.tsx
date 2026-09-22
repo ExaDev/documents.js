@@ -32,7 +32,7 @@ vi.mock("./reopenMailbox", () => ({
 const { formatBytes, reopenTooltipLabel, RecentFilesPanel } =
   await import("./RecentFilesPanel");
 
-// handleReopen chains several real awaits (queryPermission, maybe requestPermission, getFile, arrayBuffer) before it calls setPendingReopen/navigate, so a fixed count of Promise.resolve() ticks is fragile against a chain this long -- flushing on a real macrotask boundary (setTimeout) guarantees every already-queued microtask has drained first, regardless of how many awaits the chain happens to have.
+// handleReopen chains several real awaits (queryPermission, maybe requestPermission, getFile, arrayBuffer) before it calls setPendingReopen/navigate, so a fixed count of Promise.resolve() ticks is fragile against a chain this long — flushing on a real macrotask boundary (setTimeout) guarantees every already-queued microtask has drained first, regardless of how many awaits the chain happens to have.
 function flushPromises(): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, 0);
@@ -317,7 +317,7 @@ describe("reopenTooltipLabel", () => {
 
   it("explains why a handle-less record can't be reopened directly", () => {
     expect(reopenTooltipLabel(false)).toBe(
-      "This browser can't reopen files directly -- pick it again from the tool you need",
+      "This browser can't reopen files directly — pick it again from the tool you need",
     );
   });
 });

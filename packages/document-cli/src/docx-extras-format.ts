@@ -8,9 +8,9 @@ import type {
   NumberingLevel,
 } from "documents.js";
 
-// The one place a docx's own comments/footnotes/headers/footers/numbering definitions turn into text, shared by the `docx-extras` command and the TUI's own `docxExtras` screen -- the same relationship `odb-structure.ts` has to `odb-forms`/`odb-reports` and to the TUI's own form/report detail screens, and for the same reason: the CLI renders these lines joined by newlines while the TUI renders one per `ListView` row, so a flat `readonly string[]` of already-indented lines is the shape that genuinely serves both without either owning the other's rendering.
+// The one place a docx's own comments/footnotes/headers/footers/numbering definitions turn into text, shared by the `docx-extras` command and the TUI's own `docxExtras` screen — the same relationship `odb-structure.ts` has to `odb-forms`/`odb-reports` and to the TUI's own form/report detail screens, and for the same reason: the CLI renders these lines joined by newlines while the TUI renders one per `ListView` row, so a flat `readonly string[]` of already-indented lines is the shape that genuinely serves both without either owning the other's rendering.
 //
-// This module never touches a package, a file, or documents.js's readers -- it is a pure function of the `DocxExtras` value `readDocxExtras` hands back, which is what lets both layers' tests assert against real fixture-derived structure with no I/O of their own.
+// This module never touches a package, a file, or documents.js's readers — it is a pure function of the `DocxExtras` value `readDocxExtras` hands back, which is what lets both layers' tests assert against real fixture-derived structure with no I/O of their own.
 
 const INDENT = "  ";
 
@@ -18,7 +18,7 @@ function indent(depth: number): string {
   return INDENT.repeat(depth);
 }
 
-// Neither `Comment` nor `Footnote` (ooxml.js, re-exported by documents.js) carries an id field of its own, so both are addressed by their 1-based position in the array `readDocxExtras` returned -- the position a reader would count off while looking at the list, not any XML-internal `w:id`.
+// Neither `Comment` nor `Footnote` (ooxml.js, re-exported by documents.js) carries an id field of its own, so both are addressed by their 1-based position in the array `readDocxExtras` returned — the position a reader would count off while looking at the list, not any XML-internal `w:id`.
 function commentLine(comment: Comment, position: number): string {
   const author = comment.author ?? "(no author)";
   return `${indent(1)}[${position}] ${author}: ${comment.text}`;
@@ -49,7 +49,7 @@ function footnotesSection(footnotes: readonly Footnote[]): readonly string[] {
   ];
 }
 
-// One part's own text: every paragraph's run text concatenated with no separator, recursing into table cells. Run text is ooxml.js's readRunText fold of the run's XML children (w:t and w:delText alike, w:tab as '\t', w:br/w:cr as '\n'), so tabs and line breaks survive as literal characters and tracked-deletion text is included, while content with no block-flow spelling -- a header textbox's text -- contributes nothing.
+// One part's own text: every paragraph's run text concatenated with no separator, recursing into table cells. Run text is ooxml.js's readRunText fold of the run's XML children (w:t and w:delText alike, w:tab as '\t', w:br/w:cr as '\n'), so tabs and line breaks survive as literal characters and tracked-deletion text is included, while content with no block-flow spelling — a header textbox's text — contributes nothing.
 function partText(blocks: readonly ContentBlock[]): string {
   let text = "";
   for (const block of blocks) {
@@ -66,7 +66,7 @@ function partText(blocks: readonly ContentBlock[]): string {
   return text;
 }
 
-// Headers and footers share the identical shape once read (each part its own block flow, listed in package-key order) -- one function renders either kind, labelled by the caller; filtering by kind upstream preserves that order within a kind.
+// Headers and footers share the identical shape once read (each part its own block flow, listed in package-key order) — one function renders either kind, labelled by the caller; filtering by kind upstream preserves that order within a kind.
 function headerOrFooterSection(
   label: string,
   parts: readonly HeaderFooterPart[],
@@ -88,7 +88,7 @@ function numberingLevelLine(ilvl: string, level: NumberingLevel): string {
   return `${indent(2)}level ${ilvl}: ${level.format} ${JSON.stringify(level.text)} starting at ${level.startAt}${restartSuffix}`;
 }
 
-// NumberingDefinitions is keyed by w:numId, each definition's own levels keyed by zero-based w:ilvl (both stringified -- see ooxml.js's own numbering.ts) -- levels are printed in ascending numeric order. No explicit sort is needed for that: every ilvl key is a canonical non-negative integer string, and JS object property enumeration (Object.keys included) always visits such "array index" keys in ascending numeric order first, ahead of any other string keys, regardless of insertion order -- ECMA-262's own OrdinaryOwnPropertyKeys. A `.sort((a, b) => Number(a) - Number(b))` here would only ever re-produce the order Object.keys already returns.
+// NumberingDefinitions is keyed by w:numId, each definition's own levels keyed by zero-based w:ilvl (both stringified — see ooxml.js's own numbering.ts) — levels are printed in ascending numeric order. No explicit sort is needed for that: every ilvl key is a canonical non-negative integer string, and JS object property enumeration (Object.keys included) always visits such "array index" keys in ascending numeric order first, ahead of any other string keys, regardless of insertion order — ECMA-262's own OrdinaryOwnPropertyKeys. A `.sort((a, b) => Number(a) - Number(b))` here would only ever re-produce the order Object.keys already returns.
 function numberingSection(numbering: NumberingDefinitions): readonly string[] {
   const numIds = Object.keys(numbering);
   if (numIds.length === 0) {
@@ -133,7 +133,7 @@ export function formatDocxExtrasLines(extras: DocxExtras): readonly string[] {
       "This document carries no comments, footnotes, headers, footers, or numbering definitions.",
     ];
   }
-  // A blank line between sections, never before the first one -- readable as a CLI report and as a flat ListView row list alike (a blank row renders as an empty line either way).
+  // A blank line between sections, never before the first one — readable as a CLI report and as a flat ListView row list alike (a blank row renders as an empty line either way).
   return nonEmptySections.flatMap((section, index) =>
     index === 0 ? section : ["", ...section],
   );

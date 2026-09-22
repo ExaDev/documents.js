@@ -5,7 +5,7 @@ export function dirname(path: string): string {
   return slash === -1 ? "" : path.slice(0, slash);
 }
 
-// Resolves a relative reference against a base directory, honouring "./" and "../" segments -- a manifest href like "../images/cover.png" from an OPF at "OEBPS/content.opf" (base directory "OEBPS") resolves to "images/cover.png". An absolute-looking reference (starting with "/") or one already carrying a URI scheme is returned unchanged: the former is not how this format's relative package paths are spelled (and this package should not invent a leading-slash convention no real producer uses), the latter is an external/absolute link no zip-entry lookup could resolve regardless.
+// Resolves a relative reference against a base directory, honouring "./" and "../" segments — a manifest href like "../images/cover.png" from an OPF at "OEBPS/content.opf" (base directory "OEBPS") resolves to "images/cover.png". An absolute-looking reference (starting with "/") or one already carrying a URI scheme is returned unchanged: the former is not how this format's relative package paths are spelled (and this package should not invent a leading-slash convention no real producer uses), the latter is an external/absolute link no zip-entry lookup could resolve regardless.
 export function resolvePackagePath(baseDir: string, relative: string): string {
   if (relative.startsWith("/") || /^[a-z][a-z0-9+.-]*:/iu.test(relative)) {
     return relative;

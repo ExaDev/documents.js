@@ -13,7 +13,7 @@ describe("openOdp / createOdp", () => {
     const editor = openOdp(minimalOdpBytes());
     const slides = editor.slides();
     expect(slides).toHaveLength(2);
-    // Only the Title frame is a DIRECT child of draw:page -- shapes() (like pptx's own PptxSlide.shapes()) does not flatten a draw:g group's own children into the slide's flat shape list; that flattening is odf.js's own readOdpContent/walkDrawShapes concern (the ContentDocument-reading path), not this live-view editor's.
+    // Only the Title frame is a DIRECT child of draw:page — shapes() (like pptx's own PptxSlide.shapes()) does not flatten a draw:g group's own children into the slide's flat shape list; that flattening is odf.js's own readOdpContent/walkDrawShapes concern (the ContentDocument-reading path), not this live-view editor's.
     expect(slides[0]?.shapes().map((s) => s.name)).toEqual(["Title"]);
   });
 
@@ -224,7 +224,7 @@ describe("full editor round trip: build a presentation from scratch, save, rerea
     const reopenedRotated = reopenedShapes.find((s) => s.text === "Rotated");
     expect(reopenedRotated?.rotationDeg).toBeCloseTo(45, 6);
 
-    // ...then, independently, via odf.js's own readOdpContent -- the actual downstream reader this package's ContentDocument pipeline depends on, proving the written package is genuinely valid ODF, not merely self-consistent with this package's own reader.
+    // ...then, independently, via odf.js's own readOdpContent — the actual downstream reader this package's ContentDocument pipeline depends on, proving the written package is genuinely valid ODF, not merely self-consistent with this package's own reader.
     const { slides } = readOdpContent(decodePackage(bytes));
     expect(slides).toHaveLength(1);
     const [readSlide] = slides;
@@ -273,7 +273,7 @@ describe("OdpEditor.metadata", () => {
     expect(editor.metadata.title).toBe("My Presentation");
   });
 
-  it("patches author onto an existing meta.xml that declared only dc:, not meta: -- exercising the namespace-declaration edge case", () => {
+  it("patches author onto an existing meta.xml that declared only dc:, not meta: — exercising the namespace-declaration edge case", () => {
     const editor = openOdp(minimalOdpBytes());
     editor.metadata = { author: "New author" };
     expect(editor.metadata.author).toBe("New author");

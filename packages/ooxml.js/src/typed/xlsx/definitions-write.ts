@@ -9,7 +9,7 @@ import { encodeXmlText } from "../../xml/entities";
 
 // The write-side inverse of typed/xlsx/definitions.ts and of the names half of typed/xlsx/defined-names.ts: a workbook's own table objects back into real xl/tables/tableN.xml parts, and the ContentDocument's own names array back into xl/workbook.xml's general <definedNames>. The definitions module's own header states the split this mirrors; this module owns only the entry validation and element construction, never part/relationship wiring, which stays in build.ts alongside every other part this writer assembles.
 //
-// SECURITY BOUNDARY: a name's refersTo is only ever written when it matches INTERNAL_RANGE_PATTERN below -- a sheet-qualified internal A1 reference and nothing else. A defined name is live formula context in every real spreadsheet application, so writing an attacker-shaped refersTo verbatim (a WEBSERVICE call, an external-workbook reference, a formula) would restore executable content the moment a recipient opens or recalculates the output, the exfiltration shape SECURITY.md's formula paragraph names. Refused values throw by name rather than degrading.
+// SECURITY BOUNDARY: a name's refersTo is only ever written when it matches INTERNAL_RANGE_PATTERN below — a sheet-qualified internal A1 reference and nothing else. A defined name is live formula context in every real spreadsheet application, so writing an attacker-shaped refersTo verbatim (a WEBSERVICE call, an external-workbook reference, a formula) would restore executable content the moment a recipient opens or recalculates the output, the exfiltration shape SECURITY.md's formula paragraph names. Refused values throw by name rather than degrading.
 
 function asString(value: unknown, field: string, kind: string): string {
   if (typeof value !== "string") {
@@ -32,7 +32,7 @@ function asStringArray(value: unknown, field: string, kind: string): string[] {
   return value;
 }
 
-// The one shape of refersTo this writer will place into an ACTIVE workbook defined-name context: a sheet-qualified internal A1 reference (a cell, a cell range, a column range, or a row range), optionally a comma-separated union of them, every area carrying its own sheet qualifier. Everything else is refused -- and "everything else" is exactly the executable-formula surface: parentheses carry function calls (a preserved WEBSERVICE(...&A1) name restores network exfiltration the moment a recipient recalculates), square brackets carry external-workbook references, and a bare unqualified range depends on whatever sheet context the opening application happens to resolve it in. XML escaping protects markup, not formula semantics; this boundary protects formula semantics.
+// The one shape of refersTo this writer will place into an ACTIVE workbook defined-name context: a sheet-qualified internal A1 reference (a cell, a cell range, a column range, or a row range), optionally a comma-separated union of them, every area carrying its own sheet qualifier. Everything else is refused — and "everything else" is exactly the executable-formula surface: parentheses carry function calls (a preserved WEBSERVICE(...&A1) name restores network exfiltration the moment a recipient recalculates), square brackets carry external-workbook references, and a bare unqualified range depends on whatever sheet context the opening application happens to resolve it in. XML escaping protects markup, not formula semantics; this boundary protects formula semantics.
 const SHEET_QUALIFIER_SOURCE = "(?:'[^']*'|[A-Za-z0-9_.]+)!";
 const AREA_SOURCE =
   "(?:\\$?[A-Za-z]{1,3}\\$?[0-9]+(?::\\$?[A-Za-z]{1,3}\\$?[0-9]+)?|\\$?[A-Za-z]{1,3}:\\$?[A-Za-z]{1,3}|\\$?[0-9]+:\\$?[0-9]+)";
@@ -43,7 +43,7 @@ const INTERNAL_RANGE_PATTERN = new RegExp(
 function asInternalRangeRefersTo(value: string, name: string): string {
   if (!INTERNAL_RANGE_PATTERN.test(value)) {
     throw new Error(
-      `buildXlsxPackageFromContent: the defined name "${name}"'s refersTo must be a sheet-qualified internal A1 reference (a cell, cell range, column range, or row range, optionally a comma-separated union) -- '${value}' carries formula or external-reference content this writer refuses to place into an active defined-name context`,
+      `buildXlsxPackageFromContent: the defined name "${name}"'s refersTo must be a sheet-qualified internal A1 reference (a cell, cell range, column range, or row range, optionally a comma-separated union) — '${value}' carries formula or external-reference content this writer refuses to place into an active defined-name context`,
     );
   }
   return value;
@@ -62,7 +62,7 @@ function definitionEntries(
   return definitions === undefined ? [] : Object.values(definitions);
 }
 
-// Every 'table' definitions entry (typed/xlsx/definitions.ts's own readTableEntries), validated field-by-field rather than trusted -- a caller-constructed DefinitionsTable is only schema-checked down to DefinitionEntry's own loose `{kind: string}` shape, so a malformed per-tenant field fails loudly here instead of writing a workbook that silently drops or mis-types the range.
+// Every 'table' definitions entry (typed/xlsx/definitions.ts's own readTableEntries), validated field-by-field rather than trusted — a caller-constructed DefinitionsTable is only schema-checked down to DefinitionEntry's own loose `{kind: string}` shape, so a malformed per-tenant field fails loudly here instead of writing a workbook that silently drops or mis-types the range.
 export function collectTableEntries(
   definitions: DefinitionsTable | undefined,
 ): TableEntry[] {
@@ -81,7 +81,7 @@ export function collectTableEntries(
   return entries;
 }
 
-// xl/workbook.xml <definedName> elements for the document's own names array, written VERBATIM and in the array's own order -- alongside, never replacing, buildDefinedNameElements' own two reserved _xlnm.Print_Area/_xlnm.Print_Titles names (build.ts merges both lists into one <definedNames> container, names first). `carriedNames` is filled with the (name, localSheetId) identity of every entry emitted here, so the print-settings derivation pass can confine itself to the print names the array does not already carry -- a workbook never carries two definedNames of the same name and scope, and the array's own refersTo is the higher-fidelity spelling of exactly the two it restates.
+// xl/workbook.xml <definedName> elements for the document's own names array, written VERBATIM and in the array's own order — alongside, never replacing, buildDefinedNameElements' own two reserved _xlnm.Print_Area/_xlnm.Print_Titles names (build.ts merges both lists into one <definedNames> container, names first). `carriedNames` is filled with the (name, localSheetId) identity of every entry emitted here, so the print-settings derivation pass can confine itself to the print names the array does not already carry — a workbook never carries two definedNames of the same name and scope, and the array's own refersTo is the higher-fidelity spelling of exactly the two it restates.
 export function buildNameDefinedNameElements(
   names: readonly ContentDefinedName[],
   carriedNames: Set<string>,
@@ -103,7 +103,7 @@ export function buildNameDefinedNameElements(
   return elements;
 }
 
-// One xl/tables/tableN.xml part for one TableEntry: CT_Table's own required id/name/displayName/ref quartet, an <autoFilter> spanning the same ref (every real producer emits one, even for a table that filters nothing), and <tableColumns> in the entry's own column order -- the exact inverse of definitions.ts's readTableEntries, which reads name/ref/columns back through this identical wrapper shape. id is workbook-scoped (build.ts assigns it as the table's own 1-based position across every table entry, matching CT_Table/@id's own "unique within the workbook" rule); displayName mirrors name verbatim, since DefinitionEntry carries only the one producer-facing name.
+// One xl/tables/tableN.xml part for one TableEntry: CT_Table's own required id/name/displayName/ref quartet, an <autoFilter> spanning the same ref (every real producer emits one, even for a table that filters nothing), and <tableColumns> in the entry's own column order — the exact inverse of definitions.ts's readTableEntries, which reads name/ref/columns back through this identical wrapper shape. id is workbook-scoped (build.ts assigns it as the table's own 1-based position across every table entry, matching CT_Table/@id's own "unique within the workbook" rule); displayName mirrors name verbatim, since DefinitionEntry carries only the one producer-facing name.
 export function buildTablePart(entry: TableEntry, id: number): XmlElement {
   const columnElements = entry.columns.map((name, index) =>
     el("tableColumn", { id: String(index + 1), name: encodeXmlText(name) }),

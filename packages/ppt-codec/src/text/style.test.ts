@@ -160,7 +160,7 @@ describe("readStyleTextPropAtom paragraph runs", () => {
   });
 
   it("skips every unprojected optional field in the spec's own order, leaving the cursor correctly positioned for the fields that follow", () => {
-    // bulletFlags, bulletChar, bulletFont, bulletSize, bulletColor, [alignment], defaultTabSize, fontAlign, wrapFlags, textDirection -- none of these except alignment itself is projected into ParagraphProperties, so the only way to prove each skip() actually advanced the cursor is to check that alignment (and the following run) still decode correctly with every one of them present.
+    // bulletFlags, bulletChar, bulletFont, bulletSize, bulletColor, [alignment], defaultTabSize, fontAlign, wrapFlags, textDirection — none of these except alignment itself is projected into ParagraphProperties, so the only way to prove each skip() actually advanced the cursor is to check that alignment (and the following run) still decode correctly with every one of them present.
     const masks =
       PF_HAS_BULLET |
       PF_BULLET_CHAR |
@@ -183,7 +183,7 @@ describe("readStyleTextPropAtom paragraph runs", () => {
           u16le(0), // bulletFont
           u16le(0), // bulletSize
           u32le(0), // bulletColor (4 bytes)
-          u16le(ALIGN_RIGHT), // alignment -- the one value this test can observe
+          u16le(ALIGN_RIGHT), // alignment — the one value this test can observe
           u16le(0), // defaultTabSize
           u16le(0), // fontAlign
           u16le(0), // wrapFlags
@@ -236,7 +236,7 @@ describe("readStyleTextPropAtom paragraph runs", () => {
 
 describe("readStyleTextPropAtom character runs", () => {
   it("rejects character runs whose counts overshoot the text's character count", () => {
-    // The identical check as paragraph runs, on the same field name pattern, but with its own label -- proving this run's own overflow message names "character runs", not a copy-pasted "paragraph runs" from the sibling check.
+    // The identical check as paragraph runs, on the same field name pattern, but with its own label — proving this run's own overflow message names "character runs", not a copy-pasted "paragraph runs" from the sibling check.
     const bytes = styleTextPropAtom([pfRun(7, 0, 0)], [cfRun(99, 0)]);
     expect(() => read(bytes, 7)).toThrow(PptFormatError);
     expect(() => read(bytes, 7)).toThrow(
@@ -362,7 +362,7 @@ describe("readStyleTextPropAtom character runs", () => {
   });
 
   it("skips the position field even when it is the only mask bit set, keeping a later run's own count aligned", () => {
-    // CF_POSITION alone sets no font-style bit, so this run reads no other optional field at all -- the position skip is the only thing standing between a correctly-aligned second run and a corrupted one.
+    // CF_POSITION alone sets no font-style bit, so this run reads no other optional field at all — the position skip is the only thing standing between a correctly-aligned second run and a corrupted one.
     const bytes = styleTextPropAtom(
       [pfRun(7, 0, 0)],
       [cfRun(3, CF_POSITION, u16le(0)), cfRun(4, CF_BOLD, u16le(STYLE_BOLD))],
@@ -375,7 +375,7 @@ describe("readStyleTextPropAtom character runs", () => {
   });
 
   it("skips oldEAFontRef, symbolFontRef and position, none of which are projected, without disturbing the fields around them", () => {
-    // fontRef (typeface) then oldEAFontRef (skipped), symbolFontRef (skipped), fontSize, color, then position (skipped) -- the spec's own field order. Only fontRef and fontSize are observable here, so setting every skip-only bit at once and checking both still decode correctly is the only way to prove none of the three skips was dropped.
+    // fontRef (typeface) then oldEAFontRef (skipped), symbolFontRef (skipped), fontSize, color, then position (skipped) — the spec's own field order. Only fontRef and fontSize are observable here, so setting every skip-only bit at once and checking both still decode correctly is the only way to prove none of the three skips was dropped.
     const bytes = styleTextPropAtom(
       [pfRun(6, 0, 0)],
       [
@@ -421,7 +421,7 @@ describe("readStyleTextPropAtom character runs", () => {
   });
 });
 
-// A TextMasterStyleLevel's own pf/cf fields are the identical TextPFException/TextCFException byte layout a run's own PFRun/CFRun carry, minus the leading count field a run has and a level does not -- so these builders are pfRun/cfRun above with that one field dropped, not a second independently-derived layout.
+// A TextMasterStyleLevel's own pf/cf fields are the identical TextPFException/TextCFException byte layout a run's own PFRun/CFRun carry, minus the leading count field a run has and a level does not — so these builders are pfRun/cfRun above with that one field dropped, not a second independently-derived layout.
 function pfLevel(
   masks: number,
   ...optionalFields: readonly Uint8Array<ArrayBuffer>[]
@@ -486,7 +486,7 @@ describe("readTextMasterStyleAtom", () => {
   });
 
   it("consumes an explicit level field for a type at or above CENTER_BODY, without letting it affect the level's own position-derived indentLevel", () => {
-    // TEXT_TYPE_CENTER_BODY levels carry a real level field ([MS-PPT] 2.9.35's own explicit-level types) ahead of pf/cf. The level field itself is 0 here specifically because a nonzero value would leak into readTextPFException's own mask if this field went unconsumed -- and several of that mask's low bits (PF_HAS_BULLET/PF_BULLET_HAS_FONT/PF_LEFT_MARGIN among them) each happen to trigger a field exactly 2 bytes wide, silently re-synchronising the cursor and masking the very omission this test exists to catch. A zero level field leaves no such field to accidentally compensate: skipping its consumption misreads the next 4 bytes as the pf mask with nothing left over, permanently losing 2 bytes and corrupting every field read after it.
+    // TEXT_TYPE_CENTER_BODY levels carry a real level field ([MS-PPT] 2.9.35's own explicit-level types) ahead of pf/cf. The level field itself is 0 here specifically because a nonzero value would leak into readTextPFException's own mask if this field went unconsumed — and several of that mask's low bits (PF_HAS_BULLET/PF_BULLET_HAS_FONT/PF_LEFT_MARGIN among them) each happen to trigger a field exactly 2 bytes wide, silently re-synchronising the cursor and masking the very omission this test exists to catch. A zero level field leaves no such field to accidentally compensate: skipping its consumption misreads the next 4 bytes as the pf mask with nothing left over, permanently losing 2 bytes and corrupting every field read after it.
     const bytes = masterStyleAtom(TEXT_TYPE_CENTER_BODY, [
       concatBytes(u16le(0), pfLevel(0), cfLevel(CF_BOLD, u16le(STYLE_BOLD))),
     ]);
@@ -497,7 +497,7 @@ describe("readTextMasterStyleAtom", () => {
   });
 
   it("rejects a level truncated part way through its own pf/cf fields, naming this atom in the message", () => {
-    // cLevels 1, but no level data at all follows it -- readTextPFException's own cursor.u32() call throws, and the message must name "TextMasterStyleAtom", not some other cursor's own label.
+    // cLevels 1, but no level data at all follows it — readTextPFException's own cursor.u32() call throws, and the message must name "TextMasterStyleAtom", not some other cursor's own label.
     const bytes = atom(RT_TextMasterStyleAtom, u16le(1), {
       recInstance: TEXT_TYPE_BODY,
     });
@@ -542,7 +542,7 @@ describe("readTextMasterStyleAtom", () => {
   });
 
   it("treats textType one below CENTER_BODY as having no explicit level field", () => {
-    // TEXT_TYPE_OTHER (0x004) is one below MASTER_STYLE_TYPES_WITH_EXPLICIT_LEVEL (0x005) -- the boundary an off-by-one on the >= comparison would blur.
+    // TEXT_TYPE_OTHER (0x004) is one below MASTER_STYLE_TYPES_WITH_EXPLICIT_LEVEL (0x005) — the boundary an off-by-one on the >= comparison would blur.
     const bytes = masterStyleAtom(TEXT_TYPE_OTHER, [
       concatBytes(pfLevel(0), cfLevel(CF_BOLD, u16le(STYLE_BOLD))),
     ]);

@@ -8,7 +8,7 @@ import { mountWithProviders } from "../test/mountComponent";
 
 vi.mock("../rpc/client", () => ({ getRpcClient: vi.fn() }));
 
-// Stands in for the real FileUpload (already covered by its own dedicated test suite): InspectPage's own logic -- auto-detecting a picked file's format and starting inspection immediately, or falling through to the format Select when detection fails -- is what this file exercises.
+// Stands in for the real FileUpload (already covered by its own dedicated test suite): InspectPage's own logic — auto-detecting a picked file's format and starting inspection immediately, or falling through to the format Select when detection fails — is what this file exercises.
 let latestOnFile: ((file: OpenedFile) => void) | undefined;
 let latestFormatHint: string | undefined;
 vi.mock("../ui/FileUpload", () => ({
@@ -30,7 +30,7 @@ vi.mock("../ui/FileUpload", () => ({
   },
 }));
 
-// Real Mantine Select renders as a text input with no accessible way to drive its dropdown without @testing-library/user-event -- capturing its own props (as the mocked FileUpload above already does) lets this suite drive onChange directly, the same way it drives FileUpload's onFile.
+// Real Mantine Select renders as a text input with no accessible way to drive its dropdown without @testing-library/user-event — capturing its own props (as the mocked FileUpload above already does) lets this suite drive onChange directly, the same way it drives FileUpload's onFile.
 let latestSelect:
   | {
       data: string[];
@@ -127,7 +127,7 @@ describe("InspectPage", () => {
 
   it("auto-detects a recognised format and starts inspection immediately, surfacing the content-backed result", async () => {
     const client = createMockRpcClient();
-    // Deliberately not already alphabetical -- proves the Select's own `data` is actually sorted, not just passed through in whatever order formats.list resolved with.
+    // Deliberately not already alphabetical — proves the Select's own `data` is actually sorted, not just passed through in whatever order formats.list resolved with.
     vi.mocked(client.formats.list).mockResolvedValue(["pdf", "docx"]);
     vi.mocked(client.pdf.inspect).mockResolvedValue({
       pageCount: 3,

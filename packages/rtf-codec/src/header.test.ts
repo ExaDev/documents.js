@@ -83,7 +83,7 @@ describe("font table", () => {
   });
 
   it("does not flush an empty pending run into a diagnostic-worthy decode", () => {
-    // \cpg99999 is deliberately unsupported, so decoding through it emits one UNSUPPORTED_CODEPAGE warning per real, non-empty flush -- {\*\falt X} is skipped as a nested group before any name text has accumulated, so an unguarded flush right there would decode zero bytes through the same unsupported page and emit a second, spurious warning nothing in the actual name justifies.
+    // \cpg99999 is deliberately unsupported, so decoding through it emits one UNSUPPORTED_CODEPAGE warning per real, non-empty flush — {\*\falt X} is skipped as a nested group before any name text has accumulated, so an unguarded flush right there would decode zero bytes through the same unsupported page and emit a second, spurious warning nothing in the actual name justifies.
     const diagnostics: unknown[] = [];
     const tokens = tokenizeRtf(
       bytes("{\\rtf1{\\fonttbl{\\f0\\froman\\cpg99999{\\*\\falt X}Y;}}}"),
@@ -93,7 +93,7 @@ describe("font table", () => {
   });
 
   it("trims leading whitespace from a font name, not just the trailing semicolon", () => {
-    // The <fontinfo> delimiter space after each control word is already consumed by the tokenizer, so these extra leading/trailing spaces are genuinely part of the name's own text run, not delimiter artifacts -- only .trim() removes the leading pair; the trailing-semicolon regex only ever touches what comes after the last real character.
+    // The <fontinfo> delimiter space after each control word is already consumed by the tokenizer, so these extra leading/trailing spaces are genuinely part of the name's own text run, not delimiter artifacts — only .trim() removes the leading pair; the trailing-semicolon regex only ever touches what comes after the last real character.
     const { fonts } = headerOf("{\\rtf1{\\fonttbl{\\f0\\froman  Arial ;}}}");
     expect(fonts.get(0)?.name).toBe("Arial");
   });
@@ -109,7 +109,7 @@ describe("font table", () => {
   });
 
   it("does not add 0x1_00_00 to \\u0, the boundary case that is exactly zero rather than negative", () => {
-    // code < 0 is false for code === 0 -- a <= mutation would wrongly take the negative-encoding branch for this exact boundary value, producing U+10000 instead of NUL.
+    // code < 0 is false for code === 0 — a <= mutation would wrongly take the negative-encoding branch for this exact boundary value, producing U+10000 instead of NUL.
     const { fonts } = headerOf("{\\rtf1{\\fonttbl{\\f0\\froman A\\u0B;}}}");
     expect(fonts.get(0)?.name).toBe(`A${String.fromCodePoint(0)}B`);
   });
@@ -132,7 +132,7 @@ describe("font table", () => {
 });
 
 describe("color table", () => {
-  // The spec's own example opens with a bare semicolon: "{\colortbl;\red0\green0\blue0;..." -- the first entry defines no components at all, which is the 'auto' colour.
+  // The spec's own example opens with a bare semicolon: "{\colortbl;\red0\green0\blue0;..." — the first entry defines no components at all, which is the 'auto' colour.
   const sample =
     "{\\rtf1{\\colortbl;\\red0\\green0\\blue0;\\red255\\green0\\blue0;\\red0\\green0\\blue255;}}";
 
@@ -155,7 +155,7 @@ describe("color table", () => {
   });
 
   it("is a real colour, not the auto entry, when only one of red/green/blue is stated", () => {
-    // Only \red is present here -- green and blue are genuinely absent from the entry, not merely zero -- so this must still resolve to a real (defaulted-to-0) colour rather than being mistaken for the auto entry, which requires all three to be absent.
+    // Only \red is present here — green and blue are genuinely absent from the entry, not merely zero — so this must still resolve to a real (defaulted-to-0) colour rather than being mistaken for the auto entry, which requires all three to be absent.
     const { colors } = headerOf("{\\rtf1{\\colortbl;\\red200;}}");
     expect(colors[1]).toEqual({ r: 200 / 255, g: 0, b: 0 });
   });
@@ -171,7 +171,7 @@ describe("color table", () => {
   });
 
   it("does not treat an unrelated control word as \\blue just because it isn't \\red or \\green", () => {
-    // \wgrffmtfilter99 names no field this table reads at all -- it must be ignored, not mistaken for \blue99 merely for falling into the same else-if chain's final branch.
+    // \wgrffmtfilter99 names no field this table reads at all — it must be ignored, not mistaken for \blue99 merely for falling into the same else-if chain's final branch.
     const { colors } = headerOf(
       "{\\rtf1{\\colortbl;\\red10\\green20\\wgrffmtfilter99;}}",
     );
@@ -179,7 +179,7 @@ describe("color table", () => {
   });
 
   it("only finishes the current entry on a real semicolon byte, not on every byte of trailing text", () => {
-    // "xy;" after \blue30 is 3 plain text bytes -- only the last one is the entry terminator; treating every byte as one would finish (and reset) the entry twice more, in each case with nothing left to record.
+    // "xy;" after \blue30 is 3 plain text bytes — only the last one is the entry terminator; treating every byte as one would finish (and reset) the entry twice more, in each case with nothing left to record.
     const { colors } = headerOf(
       "{\\rtf1{\\colortbl;\\red10\\green20\\blue30xy;}}",
     );
@@ -263,7 +263,7 @@ describe("style sheet", () => {
   });
 
   it("skips a stray text byte between two style groups rather than misreading it as the next entry's own opening brace", () => {
-    // The tokenizer drops bare CR/LF as pure whitespace, but a literal space here is a real "text" token some producers still emit for readability between destination groups -- treating it as if it were a groupStart would fold the whole of the next entry into a bogus, mis-scoped one and lose it.
+    // The tokenizer drops bare CR/LF as pure whitespace, but a literal space here is a real "text" token some producers still emit for readability between destination groups — treating it as if it were a groupStart would fold the whole of the next entry into a bogus, mis-scoped one and lose it.
     const { styles } = headerOf(
       "{\\rtf1{\\stylesheet{\\s1\\snext0 heading 1;} {\\s2\\snext0 heading 2;}}}",
     );
@@ -272,7 +272,7 @@ describe("style sheet", () => {
 });
 
 describe("list and list override tables", () => {
-  // One \list whose single \listlevel is a bullet (\levelnfc23), and one whose level is arabic (\levelnfc0) starting at 3, each reached through its own \listoverride's \lsN -- the level of indirection the spec describes: "Each paragraph will contain a list override index (keyword \lsN), which is a 1-based index into this table."
+  // One \list whose single \listlevel is a bullet (\levelnfc23), and one whose level is arabic (\levelnfc0) starting at 3, each reached through its own \listoverride's \lsN — the level of indirection the spec describes: "Each paragraph will contain a list override index (keyword \lsN), which is a 1-based index into this table."
   const sample =
     "{\\rtf1{\\*\\listtable" +
     "{\\list\\listtemplateid1\\listsimple{\\listlevel\\levelnfc23\\leveljc0\\levelstartat1{\\leveltext \\'01\\u183 ?;}{\\levelnumbers;}}\\listid101}" +
@@ -328,13 +328,13 @@ describe("list and list override tables", () => {
         "{\\listlevel\\levelnfc0\\leveljc0\\levelstartat1{\\leveltext \\'02\\'00.;}{\\levelnumbers\\'01;}}" +
         "\\listid301}}{\\*\\listoverridetable{\\listoverride\\listid301\\listoverridecount0\\ls1}}}",
     ).lists;
-    // Only the real <listlevel> group contributes -- the unrelated group must not become a bogus, wrongly-numbered-23 level 0.
+    // Only the real <listlevel> group contributes — the unrelated group must not become a bogus, wrongly-numbered-23 level 0.
     expect(lists.get(1)?.levels).toHaveLength(1);
     expect(lists.get(1)?.levels[0]?.numberFormat).toBe(0);
   });
 
   it("does not let a control word named something other than \\listidN set the list's own id", () => {
-    // \listtemplateid999 carries a numeric param too, but only the exact name \listid may set listId -- placed AFTER the real \listidN so a wrongly-matched value would visibly stick rather than just get overwritten again by coincidence.
+    // \listtemplateid999 carries a numeric param too, but only the exact name \listid may set listId — placed AFTER the real \listidN so a wrongly-matched value would visibly stick rather than just get overwritten again by coincidence.
     const lists = headerOf(
       "{\\rtf1{\\*\\listtable{\\list\\listid401\\listtemplateid999\\listsimple" +
         "{\\listlevel\\levelnfc0\\leveljc0\\levelstartat1{\\leveltext \\'02\\'00.;}{\\levelnumbers\\'01;}}}}" +
@@ -362,7 +362,7 @@ describe("list and list override tables", () => {
   });
 
   it("does not let a control word named something other than \\levelnfc or \\levelstartat set a \\listlevel's own fields", () => {
-    // \leveljc carries a numeric param too, but only the exact name \levelstartat may set startAt -- placed AFTER the real \levelstartat9 so a wrongly-matched value would visibly stick rather than just get overwritten again by coincidence.
+    // \leveljc carries a numeric param too, but only the exact name \levelstartat may set startAt — placed AFTER the real \levelstartat9 so a wrongly-matched value would visibly stick rather than just get overwritten again by coincidence.
     const lists = headerOf(
       "{\\rtf1{\\*\\listtable{\\list\\listtemplateid1\\listsimple" +
         "{\\listlevel\\levelnfc0\\levelstartat9\\leveljc0{\\leveltext \\'02\\'00.;}{\\levelnumbers\\'01;}}" +
@@ -475,7 +475,7 @@ describe("list override levels", () => {
   });
 
   it("does not let a control word named something other than \\listid or \\ls set the override's own id fields", () => {
-    // \listoverridecount0 itself carries a numeric param -- placed AFTER the real \ls1 so a wrongly-matched value would visibly stick.
+    // \listoverridecount0 itself carries a numeric param — placed AFTER the real \ls1 so a wrongly-matched value would visibly stick.
     const lists = listsFor(
       "{\\listoverride\\listid101\\ls1\\listoverridecount0}",
     );
@@ -483,7 +483,7 @@ describe("list override levels", () => {
   });
 
   it("does not treat an unrelated group inside a \\lfolevel as if it were its own <listlevel>", () => {
-    // The real <listlevel> comes FIRST here, and the unrelated group after it -- so a wrongly-matched second read would visibly overwrite the correct value, rather than just get overwritten again by coincidence.
+    // The real <listlevel> comes FIRST here, and the unrelated group after it — so a wrongly-matched second read would visibly overwrite the correct value, rather than just get overwritten again by coincidence.
     const lists = listsFor(
       "{\\listoverride\\listid101\\listoverridecount1" +
         "{\\lfolevel\\listoverrideformat1" +
@@ -502,7 +502,7 @@ describe("list override levels", () => {
   });
 
   it("does not let a control word named something other than \\levelstartat set the \\lfolevel's own start-at", () => {
-    // \listoverridestartat itself carries no param at all here, and \listoverrideformat1 does -- neither is \levelstartat, so placing one right after the real \levelstartat6 must not overwrite it.
+    // \listoverridestartat itself carries no param at all here, and \listoverrideformat1 does — neither is \levelstartat, so placing one right after the real \levelstartat6 must not overwrite it.
     const lists = listsFor(
       "{\\listoverride\\listid101\\listoverridecount1" +
         "{\\lfolevel\\listoverridestartat\\levelstartat6\\listoverrideformat1}\\ls1}",
@@ -521,7 +521,7 @@ describe("list override levels", () => {
   });
 
   it("stops reading the nested <listlevel> at its own closing brace, not the \\lfolevel's", () => {
-    // A direct \levelstartatN placed AFTER the <listlevel> group's own close, but still inside the \lfolevel, must never be folded into that <listlevel>'s own reading -- readListLevel's own \levelstartat is last-wins, so a boundary that ran past the true close would let this trailing 77 silently clobber the 99 stated inside the level itself.
+    // A direct \levelstartatN placed AFTER the <listlevel> group's own close, but still inside the \lfolevel, must never be folded into that <listlevel>'s own reading — readListLevel's own \levelstartat is last-wins, so a boundary that ran past the true close would let this trailing 77 silently clobber the 99 stated inside the level itself.
     const lists = listsFor(
       "{\\listoverride\\listid101\\listoverridecount1" +
         "{\\lfolevel\\listoverrideformat1" +
@@ -599,7 +599,7 @@ describe("document properties", () => {
   });
 
   it("does not treat an unrecognized {\\info ...} field as \\operator just for reaching the end of the else-if chain", () => {
-    // The real \operator comes FIRST here, and the unrecognized field after it -- so a wrongly-matched second write would visibly overwrite the correct value, rather than just get overwritten again by coincidence.
+    // The real \operator comes FIRST here, and the unrecognized field after it — so a wrongly-matched second write would visibly overwrite the correct value, rather than just get overwritten again by coincidence.
     const header = headerOf(
       "{\\rtf1\\ansi{\\info{\\operator Jane Roe}{\\manager Someone Else}}}",
     );
@@ -614,7 +614,7 @@ describe("document properties", () => {
   });
 
   it("does not read a document property from inside a nested destination group, only at the file group's own top level", () => {
-    // \paperw999 sits inside a font entry here -- nonsensical RTF, but nothing stops a malformed producer from emitting it, and the document-properties sweep must skip the whole {\fonttbl ...} group rather than linearly scanning through it.
+    // \paperw999 sits inside a font entry here — nonsensical RTF, but nothing stops a malformed producer from emitting it, and the document-properties sweep must skip the whole {\fonttbl ...} group rather than linearly scanning through it.
     const header = headerOf(
       "{\\rtf1\\ansi{\\fonttbl{\\f0\\froman\\paperw999 Arial;}}}",
     );
@@ -640,7 +640,7 @@ describe("revision table", () => {
   });
 
   it("trims whitespace immediately before the conflict form's own NUL separator, which collectPlainText's own overall trim never reaches", () => {
-    // collectPlainText already trims the WHOLE group's own leading/trailing whitespace before parseRevisionTable ever sees it, so a plain leading/trailing-space fixture alone cannot tell the two .trim() calls apart -- this one puts the whitespace immediately before an internal \'00 (NUL) byte, a position the outer trim never touches at all.
+    // collectPlainText already trims the WHOLE group's own leading/trailing whitespace before parseRevisionTable ever sees it, so a plain leading/trailing-space fixture alone cannot tell the two .trim() calls apart — this one puts the whitespace immediately before an internal \'00 (NUL) byte, a position the outer trim never touches at all.
     const header = headerOf(
       "{\\rtf1{\\*\\revtbl{Current Author  \\'00\\'05Prev A;}}}",
     );
@@ -663,7 +663,7 @@ describe("bodyStartIndex", () => {
     const header = readRtfHeader(tokens, () => {
       /* not asserted here */
     });
-    // bodyStartIndex must land exactly on the {\unknowndest x} group's own opening brace -- immediately after \fonttbl's matching close -- rather than being pushed past that whole group too.
+    // bodyStartIndex must land exactly on the {\unknowndest x} group's own opening brace — immediately after \fonttbl's matching close — rather than being pushed past that whole group too.
     expect(tokens[header.bodyStartIndex]).toEqual({ kind: "groupStart" });
     expect(tokens[header.bodyStartIndex - 1]).toEqual({ kind: "groupEnd" });
   });

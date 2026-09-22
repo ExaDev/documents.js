@@ -82,7 +82,7 @@ beforeAll(async () => {
   await writeFile(join(workspace, "source.docx"), buildDocxWithMetadata());
   await writeFile(join(workspace, "extras.docx"), buildDocxWithExtras());
   await writeFile(join(workspace, "source.pdf"), buildPdfWithMetadata());
-  // setDocumentMetadata (documents.js) validates its own source/target format pair internally rather than the CLI pre-checking it, so the input file is now genuinely read before that rejection fires -- unlike a placeholder path, this needs to exist. Its content is never parsed: the rejection below fires purely on the '.odf' extension, before any real ODF decoding is attempted.
+  // setDocumentMetadata (documents.js) validates its own source/target format pair internally rather than the CLI pre-checking it, so the input file is now genuinely read before that rejection fires — unlike a placeholder path, this needs to exist. Its content is never parsed: the rejection below fires purely on the '.odf' extension, before any real ODF decoding is attempted.
   await writeFile(join(workspace, "formula.odf"), new Uint8Array([0]));
 
   const odsEditor = createOds();
@@ -113,7 +113,7 @@ afterEach(() => {
 });
 
 describe("set-metadata", () => {
-  it("patches a docx's own metadata in place, leaving everything else -- including the body paragraph -- untouched", async () => {
+  it("patches a docx's own metadata in place, leaving everything else — including the body paragraph — untouched", async () => {
     const outputPath = join(workspace, "patched.docx");
     const { exitCode, stderr } = await runCli([
       "set-metadata",
@@ -138,7 +138,7 @@ describe("set-metadata", () => {
     expect(patched.metadata.subject).toBe(METADATA_FIXTURE.subject);
     // --set-keywords splits on comma, trims, and drops empty entries.
     expect(patched.metadata.keywords).toStrictEqual(["gamma", "delta"]);
-    // The paragraph itself survives the patch -- only metadata changed.
+    // The paragraph itself survives the patch — only metadata changed.
     expect(patched.kind).toBe("wordprocessing");
     const survived =
       patched.kind === "wordprocessing" &&
@@ -204,12 +204,12 @@ describe("set-metadata", () => {
     const patchedLayout = readPdf(new Uint8Array(await readFile(outputPath)));
     expect(patchedLayout.metadata.subject).toBe("A new subject");
     expect(patchedLayout.metadata.title).toBe(METADATA_FIXTURE.title);
-    // No layout engine runs for the pdf path -- the page geometry and every item on it survive unchanged.
+    // No layout engine runs for the pdf path — the page geometry and every item on it survive unchanged.
     expect(patchedLayout.pages).toStrictEqual(sourceLayout.pages);
   });
 
   it("patches an xlsx file in place now that documents.js wires a real xlsx content codec, leaving its cells untouched", async () => {
-    // xlsx used to be rejected outright here -- documents.js's own DOCUMENT_FORMAT_CODECS registry gained a real xlsx content codec this session, and setDocumentMetadata now rebuilds xlsx through the identical readXContent -> buildXPackage shape every other REBUILD_FORMATS member already used.
+    // xlsx used to be rejected outright here — documents.js's own DOCUMENT_FORMAT_CODECS registry gained a real xlsx content codec this session, and setDocumentMetadata now rebuilds xlsx through the identical readXContent -> buildXPackage shape every other REBUILD_FORMATS member already used.
     const outputPath = join(workspace, "rebuilt.xlsx");
     const { exitCode, stderr } = await runCli([
       "set-metadata",
@@ -238,7 +238,7 @@ describe("set-metadata", () => {
     });
   });
 
-  it("still rejects a cross-format request into xlsx -- set-metadata patches metadata in place, it does not convert format", async () => {
+  it("still rejects a cross-format request into xlsx — set-metadata patches metadata in place, it does not convert format", async () => {
     const { exitCode, stderr } = await runCli([
       "set-metadata",
       join(workspace, "source.docx"),
@@ -266,7 +266,7 @@ describe("set-metadata", () => {
     );
   });
 
-  it("rejects a cross-format request -- set-metadata patches metadata in place, it does not convert format", async () => {
+  it("rejects a cross-format request — set-metadata patches metadata in place, it does not convert format", async () => {
     const { exitCode, stderr } = await runCli([
       "set-metadata",
       join(workspace, "source.docx"),
@@ -304,7 +304,7 @@ describe("set-metadata", () => {
     ]);
     expect(exitCode).not.toBe(EXIT_SUCCESS);
     expect(stderr).toBe(
-      "[set-metadata] cannot infer a target format -- pass an output path with a recognised extension, --out with one, or --to <format>\n",
+      "[set-metadata] cannot infer a target format — pass an output path with a recognised extension, --out with one, or --to <format>\n",
     );
   });
 
@@ -351,7 +351,7 @@ describe("set-metadata", () => {
           "--help",
         ]);
       } catch {
-        // exitOverride (program.ts) rethrows after writing help and setting process.exitCode -- the thrown CommanderError carries nothing this test needs.
+        // exitOverride (program.ts) rethrows after writing help and setting process.exitCode — the thrown CommanderError carries nothing this test needs.
       } finally {
         stdoutSpy.mockRestore();
       }
@@ -362,10 +362,10 @@ describe("set-metadata", () => {
       "Three write paths: a pdf source/target patches the metadata directly on the parsed PDF (writePdf), and a docx source/target",
     );
     expect(stdout).toContain(
-      "patches docProps/core.xml directly on the decoded package -- both with no layout engine or ContentDocument rebuild involved",
+      "patches docProps/core.xml directly on the decoded package — both with no layout engine or ContentDocument rebuild involved",
     );
     expect(stdout).toContain(
-      "at all, so everything else on the page (pdf) or in the package (docx -- comments, footnotes, headers/footers, numbering",
+      "at all, so everything else on the page (pdf) or in the package (docx — comments, footnotes, headers/footers, numbering",
     );
     expect(stdout).toContain(
       "definitions included) survives byte-faithful. Every other supported format (pptx, xlsx, odt, odp, ods, odg, markdown, rtf)",
@@ -374,7 +374,7 @@ describe("set-metadata", () => {
       "rebuilds a fresh package from that format's own ContentDocument instead.",
     );
     expect(stdout).toContain(
-      "set-metadata does not convert format -- source and target must match. Run convert/from-package first, then",
+      "set-metadata does not convert format — source and target must match. Run convert/from-package first, then",
     );
     expect(stdout).toContain(
       "set-metadata on the result, if you need a different target format.",

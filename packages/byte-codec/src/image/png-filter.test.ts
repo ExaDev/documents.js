@@ -70,7 +70,7 @@ describe("unfilterScanlines: filter type 3 (Average)", () => {
   });
 
   it("floors an odd left+above sum rather than rounding", () => {
-    // Row1 x=0: left=0 (no left neighbour), above=row0[0]=1 -> avg=floor((0+1)/2)=floor(0.5)=0, not 1 -- Math.round(0.5) would give 1, so this distinguishes floor() from round().
+    // Row1 x=0: left=0 (no left neighbour), above=row0[0]=1 -> avg=floor((0+1)/2)=floor(0.5)=0, not 1 — Math.round(0.5) would give 1, so this distinguishes floor() from round().
     const avgData = filtered([
       [0, 1, 0],
       [3, 0, 5],
@@ -104,7 +104,7 @@ describe("unfilterScanlines: filter type 4 (Paeth)", () => {
 
   it("picks 'a' from a genuine, non-tied distance comparison, not merely a degenerate tie", () => {
     // a=200 (left), b=0 (above), c=0 (above-left, first row): p=a+b-c=200, pa=|200-200|=0,
-    // pb=|200-0|=200, pc=|200-0|=200 -- pa is decisively smallest, and a (200) differs from
+    // pb=|200-0|=200, pc=|200-0|=200 — pa is decisively smallest, and a (200) differs from
     // b and c (0), so picking the wrong candidate here is observable in the actual output byte, unlike an all-equal tie where every branch happens to return the same numeric value.
     const data = filtered([[4, 200, 0]]); // row0, Paeth: col0 raw=200 -> a=0,b=0,c=0 -> unfiltered=200
     const out = unfilterScanlines(data, 1, 2, 1);
@@ -127,7 +127,7 @@ describe("unfilterScanlines: filter type 4 (Paeth)", () => {
 
   it("picks 'c' (above-left) only when it strictly beats both a and b", () => {
     // Choosing c as the exact midpoint of a and b forces p = a+b-c = c, so pc=0 while
-    // pa=pb=|(b-a)/2| > 0 -- the one construction where c can strictly beat both. Concretely
+    // pa=pb=|(b-a)/2| > 0 — the one construction where c can strictly beat both. Concretely
     // a=2, b=4, c=3: p=3, pa=1, pb=1, pc=0 -> pa<=pb but not pa<=pc, and not pb<=pc -> c wins.
     const data = filtered([
       [0, 3, 4], // row0 (None): col0=3 (this pixel's c), col1=4 (this pixel's b)
@@ -136,12 +136,12 @@ describe("unfilterScanlines: filter type 4 (Paeth)", () => {
     ]);
     const out = unfilterScanlines(data, 2, 2, 1);
     expect(out[2]).toBe(2); // row1 col0, confirms a=2 for the pixel under test
-    // Row1 col1: a=out[row1,col0]=2, b=row0[col1]=4, c=row0[col0]=3 -- exactly a=2,b=4,c=3. predictorValue returns c=3, so the unfiltered value is raw(0) + 3 = 3, not a(2) or b(4).
+    // Row1 col1: a=out[row1,col0]=2, b=row0[col1]=4, c=row0[col0]=3 — exactly a=2,b=4,c=3. predictorValue returns c=3, so the unfiltered value is raw(0) + 3 = 3, not a(2) or b(4).
     expect(out[3]).toBe(3);
   });
 
   it("picks 'a' at an exact pa === pc tie, not merely when pa is strictly smaller", () => {
-    // a=0, b=15, c=10: p=a+b-c=5, pa=|5-0|=5, pb=|5-15|=10, pc=|5-10|=5 -- pa and pc are tied
+    // a=0, b=15, c=10: p=a+b-c=5, pa=|5-0|=5, pb=|5-15|=10, pc=|5-10|=5 — pa and pc are tied
     // exactly, with pa<=pb holding too, so the first branch's outcome hinges purely on the pa<=pc boundary. a, b and c are all distinct, so picking the wrong candidate is observable.
     const data = filtered([
       [0, 10, 15], // row0 (None): col0=10 (this pixel's c), col1=15 (this pixel's b)
@@ -150,12 +150,12 @@ describe("unfilterScanlines: filter type 4 (Paeth)", () => {
     ]);
     const out = unfilterScanlines(data, 2, 2, 1);
     expect(out[2]).toBe(0); // row1 col0, confirms a=0 for the pixel under test
-    // Row1 col1: a=0, b=15, c=10 -- the exact pa===pc tie. Correct code picks a=0, so the unfiltered value is raw(5) + 0 = 5, not c(10) (which would give 5 + 10 = 15).
+    // Row1 col1: a=0, b=15, c=10 — the exact pa===pc tie. Correct code picks a=0, so the unfiltered value is raw(5) + 0 = 5, not c(10) (which would give 5 + 10 = 15).
     expect(out[3]).toBe(5);
   });
 
   it("picks 'b' at an exact pb === pc tie, not merely when pb is strictly smaller", () => {
-    // a=0, b=30, c=10: p=a+b-c=20, pa=|20-0|=20, pb=|20-30|=10, pc=|20-10|=10 -- pa is largest
+    // a=0, b=30, c=10: p=a+b-c=20, pa=|20-0|=20, pb=|20-30|=10, pc=|20-10|=10 — pa is largest
     // (first branch fails regardless), and pb/pc are tied exactly, with b and c distinct values.
     const data = filtered([
       [0, 10, 30], // row0 (None): col0=10 (this pixel's c), col1=30 (this pixel's b)
@@ -164,7 +164,7 @@ describe("unfilterScanlines: filter type 4 (Paeth)", () => {
     ]);
     const out = unfilterScanlines(data, 2, 2, 1);
     expect(out[2]).toBe(0); // row1 col0, confirms a=0 for the pixel under test
-    // Row1 col1: a=0, b=30, c=10 -- the exact pb===pc tie (pa=20 is decisively largest, so the first branch fails either way). Correct code picks b=30, so the unfiltered value is raw(1) + 30 = 31, not c(10) (which would give 1 + 10 = 11).
+    // Row1 col1: a=0, b=30, c=10 — the exact pb===pc tie (pa=20 is decisively largest, so the first branch fails either way). Correct code picks b=30, so the unfiltered value is raw(1) + 30 = 31, not c(10) (which would give 1 + 10 = 11).
     expect(out[3]).toBe(31);
   });
 });
@@ -261,12 +261,12 @@ describe("filterScanlines: strategy 'adaptive'", () => {
   });
 
   it("picks the lowest-scoring candidate using the true signed-magnitude interpretation, not a raw byte-value comparison", () => {
-    // row1 is row0 shifted down by exactly 1 (mod 256): Paeth's "above" prediction is off by just 1 everywhere, giving residual bytes of 255 (i.e. -1) -- a tiny SIGNED magnitude (1) that a raw-byte-value comparison would instead see as a huge (255) score, wrongly favouring a candidate with genuinely larger errors but smaller *raw* byte values (Average, here).
+    // row1 is row0 shifted down by exactly 1 (mod 256): Paeth's "above" prediction is off by just 1 everywhere, giving residual bytes of 255 (i.e. -1) — a tiny SIGNED magnitude (1) that a raw-byte-value comparison would instead see as a huge (255) score, wrongly favouring a candidate with genuinely larger errors but smaller *raw* byte values (Average, here).
     const row0 = [200, 200, 200, 200];
     const row1 = [199, 199, 199, 199];
     const data = new Uint8Array([...row0, ...row1]);
     const out = filterScanlines(data, 2, 4, 1, "adaptive");
-    // row0 has nothing above it: None and Sub both score 56 (a tie broken in candidate-scan order, since Sub is tried before Paeth) -- this assertion only pins down the shared setup.
+    // row0 has nothing above it: None and Sub both score 56 (a tie broken in candidate-scan order, since Sub is tried before Paeth) — this assertion only pins down the shared setup.
     expect(out[0]).toBe(1);
     expect(out[5]).toBe(4); // row1 must choose Paeth (type 4), the true lowest-signed-magnitude candidate
     const back = unfilterScanlines(out, 2, 4, 1);

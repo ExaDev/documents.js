@@ -4,11 +4,11 @@ import {
   WHITE_TERMINATING_AND_MAKEUP,
 } from "./ccitt";
 
-// A hand-written CCITT Group 4 (ITU-T T.6, Modified Modified READ) fax ENCODER -- the inverse of ccitt.ts's decoder, consuming exactly the packed 1-bit-per-pixel bitmap that decoder produces (MSB first, each row padded to a whole byte, 0 = black and 1 = white under PDF's /BlackIs1-false convention). Like its sibling, this module has zero PDF knowledge: the caller (write.ts's image path) supplies plain geometry and gets plain bytes, and writes the /CCITTFaxDecode dictionary and /DecodeParms itself.
+// A hand-written CCITT Group 4 (ITU-T T.6, Modified Modified READ) fax ENCODER — the inverse of ccitt.ts's decoder, consuming exactly the packed 1-bit-per-pixel bitmap that decoder produces (MSB first, each row padded to a whole byte, 0 = black and 1 = white under PDF's /BlackIs1-false convention). Like its sibling, this module has zero PDF knowledge: the caller (write.ts's image path) supplies plain geometry and gets plain bytes, and writes the /CCITTFaxDecode dictionary and /DecodeParms itself.
 //
 // The run-length code tables are NOT restated here: they are imported from ccitt.ts's own literal transcription (T.4 Tables 2/3/4), so encoder and decoder are built from one transcription and cannot drift apart. Only the two-dimensional mode codes are restated, because ccitt.ts types them for DECODING (a bit-string-keyed lookup of {kind, delta}) while encoding needs the reverse direction.
 //
-// The algorithm is T.6 clause 2.2's coding model exactly: for each line, against the previous line's changing elements, choose pass / vertical / horizontal mode per the standard's decision procedure. No EOLs are emitted (pure T.6), and the final byte is zero-padded -- both properties the decoder accepts by construction (it stops at the requested row count and ignores trailing pad bits).
+// The algorithm is T.6 clause 2.2's coding model exactly: for each line, against the previous line's changing elements, choose pass / vertical / horizontal mode per the standard's decision procedure. No EOLs are emitted (pure T.6), and the final byte is zero-padded — both properties the decoder accepts by construction (it stops at the requested row count and ignores trailing pad bits).
 
 // The per-colour terminating+makeup tables plus the shared extended makeups, inverted from [bits, run] to run -> bits. A run of length < 64 has exactly one terminating code; a longer run is one or more make-up codes (each a multiple of 64, up to 2560) followed by one terminating code for the remainder.
 function buildRunCodes(
@@ -29,7 +29,7 @@ function buildRunCodes(
 const WHITE_RUN_CODES = buildRunCodes(WHITE_TERMINATING_AND_MAKEUP);
 const BLACK_RUN_CODES = buildRunCodes(BLACK_TERMINATING_AND_MAKEUP);
 
-// T.4 4.2.1.3.1's two-dimensional mode codes (reused unchanged by T.6): pass, horizontal, and vertical at each signed offset -3..3. Vertical is by far the common case -- "1" alone codes a1 exactly under b1 -- which is why G4 compresses line-art-like bilevel content far past what Flate achieves on the same pixels.
+// T.4 4.2.1.3.1's two-dimensional mode codes (reused unchanged by T.6): pass, horizontal, and vertical at each signed offset -3..3. Vertical is by far the common case — "1" alone codes a1 exactly under b1 — which is why G4 compresses line-art-like bilevel content far past what Flate achieves on the same pixels.
 const PASS_MODE = "0001";
 const HORIZONTAL_MODE = "001";
 const VERTICAL_MODES: ReadonlyMap<number, string> = new Map([
@@ -90,7 +90,7 @@ function writeRun(writer: BitWriter, run: number, white: boolean): void {
   writer.writeBits(codes.get(remaining)!);
 }
 
-// One row's changing elements: the positions where the pixel colour differs from the one before it, with an imaginary WHITE pixel before position 0 (T.6 2.2.1's own convention). Index parity in this array therefore encodes colour: element i is a transition INTO black when i is even, into white when odd -- the property the b1 lookup relies on.
+// One row's changing elements: the positions where the pixel colour differs from the one before it, with an imaginary WHITE pixel before position 0 (T.6 2.2.1's own convention). Index parity in this array therefore encodes colour: element i is a transition INTO black when i is even, into white when odd — the property the b1 lookup relies on.
 function changingElements(
   bitmap: Uint8Array,
   rowByteOffset: number,
@@ -112,7 +112,7 @@ function changingElements(
 export interface EncodeCcittFaxOptions {
   readonly columns: number;
   readonly rows: number;
-  // The encode-abort budget: the moment the emitted stream grows past this many bytes the encoder stops and answers undefined, because the caller is comparing against a rival encoding of that size and G4 can no longer win. Without it, an adversarial bilevel image (a checkerboard -- G4's worst case, where every run is 1 pixel and codes horizontally) makes the encoder emit a losing multi-megabyte candidate in full before the caller discards it.
+  // The encode-abort budget: the moment the emitted stream grows past this many bytes the encoder stops and answers undefined, because the caller is comparing against a rival encoding of that size and G4 can no longer win. Without it, an adversarial bilevel image (a checkerboard — G4's worst case, where every run is 1 pixel and codes horizontally) makes the encoder emit a losing multi-megabyte candidate in full before the caller discards it.
   readonly maxBytes?: number;
 }
 
@@ -150,7 +150,7 @@ export function encodeCcittFax(
       while (ri < reference.length && ref(ri) <= a0) {
         ri++;
       }
-      // b1: the first reference element strictly right of a0 whose transition direction matches a1's -- INTO black while the a0-run is white, INTO white while it is black. Parity encodes direction; skip one element when the parity is wrong.
+      // b1: the first reference element strictly right of a0 whose transition direction matches a1's — INTO black while the a0-run is white, INTO white while it is black. Parity encodes direction; skip one element when the parity is wrong.
       let b1Index = ri;
       if (b1Index % 2 !== (white ? 0 : 1)) {
         b1Index++;

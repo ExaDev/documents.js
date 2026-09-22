@@ -525,7 +525,7 @@ describe("CommandPalette :close, :undo, :view-source, :help and :quit", () => {
     await waitForFrame(lastFrame, (candidate) => candidate.includes(":save"));
     await settle();
 
-    // UNDO against an empty undo stack is a documented no-op -- asserting it doesn't crash and the palette closes normally is enough to prove the dispatch reached the reducer.
+    // UNDO against an empty undo stack is a documented no-op — asserting it doesn't crash and the palette closes normally is enough to prove the dispatch reached the reducer.
     await submit(stdin, "undo");
     await waitForFrame(lastFrame, (candidate) =>
       candidate.includes("commandPaletteOpen:false"),
@@ -547,7 +547,7 @@ describe("CommandPalette :close, :undo, :view-source, :help and :quit", () => {
   });
 
   it(":view-source pushes the viewSource screen for an open markdown document", async () => {
-    // ":new" itself only accepts isEditableFormat -- markdown is a WritableFormat but deliberately not an EditableFormat (see types.ts's own EDITABLE_FORMATS/WRITABLE_FORMATS split), so a markdown document must be seeded directly through CREATE_DOCUMENT rather than through the palette's own ":new" command, exactly like the xls/ppt screen tests seed content the dispatched actions can't reach.
+    // ":new" itself only accepts isEditableFormat — markdown is a WritableFormat but deliberately not an EditableFormat (see types.ts's own EDITABLE_FORMATS/WRITABLE_FORMATS split), so a markdown document must be seeded directly through CREATE_DOCUMENT rather than through the palette's own ":new" command, exactly like the xls/ppt screen tests seed content the dispatched actions can't reach.
     function MarkdownHarness(): ReactElement {
       const state = useAppState();
       const dispatch = useAppDispatch();

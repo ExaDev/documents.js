@@ -1,15 +1,15 @@
 import type { ContentCellValue } from "document-schema.js";
 
-// HSQLDB's historical TEXT script format (hsqldb.script_format=0, the default LibreOffice's embedded engine writes) renders an entire database as literal SQL text: CREATE TABLE/CREATE USER/GRANT/INSERT INTO statements, one per logical statement, human-readable. This module is a bounded DDL/DML text parser over exactly that format -- a small SQL SUBSET, not a database engine -- extracting column names/types from CREATE TABLE and row values from INSERT INTO, and tolerating (skipping) every other statement kind this package has no use for (users, grants, sequences, indexes, views, schema/session SET commands). It deliberately imports nothing beyond document-schema.js's own ContentCellValue type: no odf.js Package/XmlElement knowledge belongs here at all -- the caller (src/odb/read.ts) is responsible for extracting database/script's own raw bytes from a real .odb package and handing them to parseHsqldbScript; this module never sees a Package.
+// HSQLDB's historical TEXT script format (hsqldb.script_format=0, the default LibreOffice's embedded engine writes) renders an entire database as literal SQL text: CREATE TABLE/CREATE USER/GRANT/INSERT INTO statements, one per logical statement, human-readable. This module is a bounded DDL/DML text parser over exactly that format — a small SQL SUBSET, not a database engine — extracting column names/types from CREATE TABLE and row values from INSERT INTO, and tolerating (skipping) every other statement kind this package has no use for (users, grants, sequences, indexes, views, schema/session SET commands). It deliberately imports nothing beyond document-schema.js's own ContentCellValue type: no odf.js Package/XmlElement knowledge belongs here at all — the caller (src/odb/read.ts) is responsible for extracting database/script's own raw bytes from a real .odb package and handing them to parseHsqldbScript; this module never sees a Package.
 //
-// Statement recognition is a closed allowlist on both sides: CREATE TABLE (any of MEMORY/CACHED/TEXT/TEMP/TEMPORARY/GLOBAL TEMPORARY) and INSERT INTO are the two statement kinds this module extracts data from; a second, explicit allowlist (IGNORABLE_STATEMENT_PREFIXES) names every statement kind real HSQLDB script output is known to emit that carries no table/row data this package models. A statement matching NEITHER list throws HsqldbScriptParseError rather than being silently skipped -- an unrecognised statement might carry data this bounded parser doesn't know how to interpret, and silently dropping it would risk exactly the "accuracy compromised" failure mode this module is required to avoid.
+// Statement recognition is a closed allowlist on both sides: CREATE TABLE (any of MEMORY/CACHED/TEXT/TEMP/TEMPORARY/GLOBAL TEMPORARY) and INSERT INTO are the two statement kinds this module extracts data from; a second, explicit allowlist (IGNORABLE_STATEMENT_PREFIXES) names every statement kind real HSQLDB script output is known to emit that carries no table/row data this package models. A statement matching NEITHER list throws HsqldbScriptParseError rather than being silently skipped — an unrecognised statement might carry data this bounded parser doesn't know how to interpret, and silently dropping it would risk exactly the "accuracy compromised" failure mode this module is required to avoid.
 
 export class HsqldbScriptParseError extends Error {
   readonly statement: string;
 
   constructor(message: string, statement: string) {
     super(
-      `HSQLDB script parse error: ${message} -- in statement: ${truncateForMessage(statement)}`,
+      `HSQLDB script parse error: ${message} — in statement: ${truncateForMessage(statement)}`,
     );
     this.name = "HsqldbScriptParseError";
     this.statement = statement;
@@ -26,7 +26,7 @@ function truncateForMessage(statement: string): string {
 
 export interface HsqldbColumn {
   readonly name: string;
-  // The column's own declared type clause, verbatim from CREATE TABLE (e.g. "INTEGER NOT NULL PRIMARY KEY", "VARCHAR(50)", "DECIMAL(10,2)") -- kept whole rather than parsed into a structured type, since this module's only use for it is disambiguating a bare quoted literal's DATE/TIME bucket (see typeBucket below); nothing here models SQL constraints.
+  // The column's own declared type clause, verbatim from CREATE TABLE (e.g. "INTEGER NOT NULL PRIMARY KEY", "VARCHAR(50)", "DECIMAL(10,2)") — kept whole rather than parsed into a structured type, since this module's only use for it is disambiguating a bare quoted literal's DATE/TIME bucket (see typeBucket below); nothing here models SQL constraints.
   readonly type: string;
 }
 
@@ -36,7 +36,7 @@ export interface HsqldbTable {
   readonly rows: readonly (readonly ContentCellValue[])[];
 }
 
-// Mirrors src/edit/ods/cell.ts's own OdsCell.value setter default-displayText convention exactly (number -> String(value); boolean -> 'TRUE'/'FALSE'; date/time/string/error -> the value's own string verbatim; empty -> '') -- this module has no ODF cell to write into, but the same "what would a human reading this cell see" rule applies to both the ContentSheet-mapping step (src/odb/spreadsheet.ts) and CSV serialisation (src/odb/csv.ts), so it lives here once rather than being redefined twice.
+// Mirrors src/edit/ods/cell.ts's own OdsCell.value setter default-displayText convention exactly (number -> String(value); boolean -> 'TRUE'/'FALSE'; date/time/string/error -> the value's own string verbatim; empty -> '') — this module has no ODF cell to write into, but the same "what would a human reading this cell see" rule applies to both the ContentSheet-mapping step (src/odb/spreadsheet.ts) and CSV serialisation (src/odb/csv.ts), so it lives here once rather than being redefined twice.
 export function displayTextFor(value: ContentCellValue): string {
   switch (value.kind) {
     case "number":
@@ -60,7 +60,7 @@ export function displayTextFor(value: ContentCellValue): string {
   }
 }
 
-// Statement kinds real HSQLDB TEXT-format script output is known to emit that carry no table/row data this package models -- session/database configuration (SET *), users and grants, schema and sequence management, and index/view/trigger/routine definitions. Checked as a case-insensitive, whitespace-collapsed PREFIX match against a statement's own start, not a full parse -- these statements are never inspected further once matched.
+// Statement kinds real HSQLDB TEXT-format script output is known to emit that carry no table/row data this package models — session/database configuration (SET *), users and grants, schema and sequence management, and index/view/trigger/routine definitions. Checked as a case-insensitive, whitespace-collapsed PREFIX match against a statement's own start, not a full parse — these statements are never inspected further once matched.
 const IGNORABLE_STATEMENT_PREFIXES: readonly string[] = [
   "SET DATABASE",
   "SET FILES",
@@ -125,7 +125,7 @@ const TABLE_CONSTRAINT_KEYWORDS = new Set([
   "CONSTRAINT",
 ]);
 
-// Splits the whole script into individual statements at newline characters that occur OUTSIDE a single-quoted string or double-quoted identifier -- a character-level scan rather than a naive per-line split, so a string literal that happens to contain a literal embedded newline is never mistaken for a statement boundary. Blank (whitespace-only) lines are dropped.
+// Splits the whole script into individual statements at newline characters that occur OUTSIDE a single-quoted string or double-quoted identifier — a character-level scan rather than a naive per-line split, so a string literal that happens to contain a literal embedded newline is never mistaken for a statement boundary. Blank (whitespace-only) lines are dropped.
 function splitStatements(text: string): string[] {
   const statements: string[] = [];
   let current = "";
@@ -193,7 +193,7 @@ function skipWs(s: string, start: number): number {
   return i;
 }
 
-// Reads a single identifier at `start`: a double-quoted identifier (with "" doubling for an embedded quote), or a plain run of letters/digits/underscore/$/# -- HSQLDB's own unquoted-identifier character set.
+// Reads a single identifier at `start`: a double-quoted identifier (with "" doubling for an embedded quote), or a plain run of letters/digits/underscore/$/# — HSQLDB's own unquoted-identifier character set.
 function readIdentifier(
   s: string,
   start: number,
@@ -225,7 +225,7 @@ function readIdentifier(
   return { name: s.slice(i0, i), next: i };
 }
 
-// A qualified name (e.g. PUBLIC.CUSTOMERS or PUBLIC."My Table") is a dot-separated identifier chain -- only the LAST segment (the table's own bare name) is kept; the schema-qualifying segments are discarded, since HsqldbTable has no schema field of its own.
+// A qualified name (e.g. PUBLIC.CUSTOMERS or PUBLIC."My Table") is a dot-separated identifier chain — only the LAST segment (the table's own bare name) is kept; the schema-qualifying segments are discarded, since HsqldbTable has no schema field of its own.
 function readQualifiedName(
   s: string,
   start: number,
@@ -294,7 +294,7 @@ function readBalancedParens(
   throw new HsqldbScriptParseError("unterminated parenthesis", s);
 }
 
-// Splits `s` on top-level occurrences of `sep` only -- never inside nested parens or a quoted string/identifier -- so "VARCHAR(50)" and "'a, b'" each survive as one field.
+// Splits `s` on top-level occurrences of `sep` only — never inside nested parens or a quoted string/identifier — so "VARCHAR(50)" and "'a, b'" each survive as one field.
 function splitTopLevel(s: string, sep: string): string[] {
   const parts: string[] = [];
   let current = "";
@@ -363,7 +363,7 @@ function unescapeSingleQuotes(s: string): string {
   return s.replace(/''/g, "'");
 }
 
-// The column-type-clause bucket this module cares about: only DATE and TIME change how a bare (un-prefixed) quoted literal is interpreted -- every other declared type (INTEGER, VARCHAR, DECIMAL, BOOLEAN, ...) falls to 'other', where a bare quoted literal is always a plain string.
+// The column-type-clause bucket this module cares about: only DATE and TIME change how a bare (un-prefixed) quoted literal is interpreted — every other declared type (INTEGER, VARCHAR, DECIMAL, BOOLEAN, ...) falls to 'other', where a bare quoted literal is always a plain string.
 function typeBucket(typeText: string): "date" | "time" | "other" {
   const leading = /^([A-Za-z_]+)/.exec(typeText.trim());
   const word = leading?.[1]?.toUpperCase();
@@ -378,7 +378,7 @@ function typeBucket(typeText: string): "date" | "time" | "other" {
 
 const NUMBER_LITERAL_RE = /^[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?$/;
 
-// A single VALUES-tuple field -> ContentCellValue. Recognises: NULL; DATE/TIME/TIMESTAMP 'literal' (HSQLDB's own typed-literal rendering for date/time-valued columns -- TIMESTAMP has no ContentCellValue kind of its own, so it maps onto 'date' the same way ooxml.js's own xlsx writer collapses date/time into one wire kind, see this package's README); a bare quoted string, disambiguated into 'date'/'time'/'string' by the owning column's own declared type; TRUE/FALSE; and a plain signed/decimal/exponent number. Anything else throws -- a literal form this bounded parser does not recognise is not silently coerced to a string, since that could misrepresent the source data.
+// A single VALUES-tuple field -> ContentCellValue. Recognises: NULL; DATE/TIME/TIMESTAMP 'literal' (HSQLDB's own typed-literal rendering for date/time-valued columns — TIMESTAMP has no ContentCellValue kind of its own, so it maps onto 'date' the same way ooxml.js's own xlsx writer collapses date/time into one wire kind, see this package's README); a bare quoted string, disambiguated into 'date'/'time'/'string' by the owning column's own declared type; TRUE/FALSE; and a plain signed/decimal/exponent number. Anything else throws — a literal form this bounded parser does not recognise is not silently coerced to a string, since that could misrepresent the source data.
 function parseLiteral(
   raw: string,
   bucket: "date" | "time" | "other",
@@ -528,7 +528,7 @@ function parseInsertInto(statement: string): {
   const trailing = statement.slice(afterTuple).trim();
   if (trailing.length > 0) {
     throw new HsqldbScriptParseError(
-      `INSERT INTO "${tableName}": unexpected trailing content after the VALUES tuple ("${trailing}") -- multiple tuples per INSERT are outside this bounded parser's scope`,
+      `INSERT INTO "${tableName}": unexpected trailing content after the VALUES tuple ("${trailing}") — multiple tuples per INSERT are outside this bounded parser's scope`,
       statement,
     );
   }
@@ -562,7 +562,7 @@ function resolveColumnOrder(
   });
 }
 
-// Parses HSQLDB TEXT-format script bytes (hsqldb.script_format=0) into one HsqldbTable per CREATE TABLE statement, populated by whatever INSERT INTO statements follow it in the script -- a bounded DDL/DML subset, not a database engine. Throws HsqldbScriptParseError for any statement that is neither CREATE TABLE, INSERT INTO, nor a recognised ignorable statement kind, or for a CREATE TABLE/INSERT INTO statement whose own shape this parser cannot follow (an unrecognised literal, a column-count mismatch, an INSERT referencing an undeclared table or column) -- never a silent partial or empty result.
+// Parses HSQLDB TEXT-format script bytes (hsqldb.script_format=0) into one HsqldbTable per CREATE TABLE statement, populated by whatever INSERT INTO statements follow it in the script — a bounded DDL/DML subset, not a database engine. Throws HsqldbScriptParseError for any statement that is neither CREATE TABLE, INSERT INTO, nor a recognised ignorable statement kind, or for a CREATE TABLE/INSERT INTO statement whose own shape this parser cannot follow (an unrecognised literal, a column-count mismatch, an INSERT referencing an undeclared table or column) — never a silent partial or empty result.
 export function parseHsqldbScript(bytes: Uint8Array): HsqldbTable[] {
   const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   const tablesByKey = new Map<string, MutableTable>();

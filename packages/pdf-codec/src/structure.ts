@@ -5,7 +5,7 @@ import type { PdfDict, PdfObject } from "./objects";
 import { asArray, asName, asNumber, dictGet } from "./objects";
 import { decodePdfString } from "./pdf-text";
 
-// Tagged-structure reading (#760, ISO 32000-1 14.7): the /StructTreeRoot element tree and the (page, MCID) association that tells an extracted item which element owns it. Two channels in the file serve two different jobs and neither can do the other's: the /K recursion states the element tree itself (nesting, types, attributes), while /ParentTree states ownership -- a number tree keyed by each page's own /StructParents value (a producer-chosen integer, not the page's position) whose entry is that page's array of owning elements indexed by MCID. The tree walk therefore ignores /K's integer and MCR content items entirely (they duplicate what the parent tree states, without the page context they need), and the association lookup never guesses a page from the tree.
+// Tagged-structure reading (#760, ISO 32000-1 14.7): the /StructTreeRoot element tree and the (page, MCID) association that tells an extracted item which element owns it. Two channels in the file serve two different jobs and neither can do the other's: the /K recursion states the element tree itself (nesting, types, attributes), while /ParentTree states ownership — a number tree keyed by each page's own /StructParents value (a producer-chosen integer, not the page's position) whose entry is that page's array of owning elements indexed by MCID. The tree walk therefore ignores /K's integer and MCR content items entirely (they duplicate what the parent tree states, without the page context they need), and the association lookup never guesses a page from the tree.
 
 export interface StructureContext {
   readonly tree: readonly LayoutStructureElement[];
@@ -34,7 +34,7 @@ export function readStructure(
     }
   }
 
-  // /ClassMap (14.7.5.2): class name -> attribute dict. An element referencing a class through /C inherits that class's attributes -- the ones with semantic meaning here are the same three the element itself can carry, and an element's OWN entry always wins over a class's. A /C entry may also be an inline attribute dict rather than a class name, which 14.7.5.2 permits.
+  // /ClassMap (14.7.5.2): class name -> attribute dict. An element referencing a class through /C inherits that class's attributes — the ones with semantic meaning here are the same three the element itself can carry, and an element's OWN entry always wins over a class's. A /C entry may also be an inline attribute dict rather than a class name, which 14.7.5.2 permits.
   const classAttributes = new Map<string, ElementAttributes>();
   const classMapDict = resolver.resolveDict(dictGet(root, "ClassMap"));
   for (const [className, value] of classMapDict?.entries ?? []) {
@@ -179,7 +179,7 @@ function mergedAttributes(
   return Object.fromEntries(values);
 }
 
-// A /K value's element children: each kid that resolves to a dictionary CARRYING /S is a nested structure element. Everything else a /K holds -- an integer MCID, an MCR or OBJR reference dict -- is a content item, the parent tree's channel, not a tree node. A single element in place of the array is legal (14.7.2), hence the asArray-or-single handling.
+// A /K value's element children: each kid that resolves to a dictionary CARRYING /S is a nested structure element. Everything else a /K holds — an integer MCID, an MCR or OBJR reference dict — is a content item, the parent tree's channel, not a tree node. A single element in place of the array is legal (14.7.2), hence the asArray-or-single handling.
 function elementKids(dict: PdfDict, resolver: PdfObjectResolver): PdfDict[] {
   const kids: PdfDict[] = [];
   const k = dictGet(dict, "K");
@@ -192,7 +192,7 @@ function elementKids(dict: PdfDict, resolver: PdfObjectResolver): PdfDict[] {
   return kids;
 }
 
-// One number-tree leaf entry pair, flattened in tree order (ISO 32000-1 7.9.7: a node's own /Nums come before its /Kids' contents). Non-integer keys and unresolvable /Kids entries are skipped silently, matching names.ts's own behaviour for the string-keyed twin -- the surrounding document still reads.
+// One number-tree leaf entry pair, flattened in tree order (ISO 32000-1 7.9.7: a node's own /Nums come before its /Kids' contents). Non-integer keys and unresolvable /Kids entries are skipped silently, matching names.ts's own behaviour for the string-keyed twin — the surrounding document still reads.
 function numberTreeEntries(
   node: PdfDict,
   resolver: PdfObjectResolver,
@@ -219,7 +219,7 @@ function numberTreeEntries(
   return entries;
 }
 
-// The (page, MCID) -> element-id map built from /ParentTree (14.7.4.4). A page's key in the document-level number tree is the value of that page's OWN /StructParents page-dictionary entry -- a producer-chosen integer with no required relation to the page's position in the page tree -- and the entry it names is an array of element references indexed by MCID (14.7.4.4: a sequence's marked-content identifier is a zero-based index into the array). Keys no page claims carry the OBJR channel instead -- a single element reference naming the owner of a whole referenced object, whose /StructParent lives on the object itself -- which this reader recognises by shape (a non-array value under a page's key can only be that) and skips, as it is outside the (page, MCID) channel's scope. Array entries that resolve to no element (the null a producer writes for an unused MCID, an unresolvable reference) stamp nothing.
+// The (page, MCID) -> element-id map built from /ParentTree (14.7.4.4). A page's key in the document-level number tree is the value of that page's OWN /StructParents page-dictionary entry — a producer-chosen integer with no required relation to the page's position in the page tree — and the entry it names is an array of element references indexed by MCID (14.7.4.4: a sequence's marked-content identifier is a zero-based index into the array). Keys no page claims carry the OBJR channel instead — a single element reference naming the owner of a whole referenced object, whose /StructParent lives on the object itself — which this reader recognises by shape (a non-array value under a page's key can only be that) and skips, as it is outside the (page, MCID) channel's scope. Array entries that resolve to no element (the null a producer writes for an unused MCID, an unresolvable reference) stamp nothing.
 function parentTreeOwners(
   root: PdfDict,
   pages: readonly PdfDict[],

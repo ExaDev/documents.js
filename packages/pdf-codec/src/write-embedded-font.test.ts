@@ -14,7 +14,7 @@ import { carlitoRegularBytes } from "./test-support/fonts";
 import { wrapRunsToWidth } from "./text-layout";
 import { writePdf } from "./write";
 
-// The end-to-end proof that a FontRegistry actually reaches the written PDF: a document whose text is authored in Calibri, converted with a registry whose vendored-substitute step resolves that family to the real Carlito face this package embeds, must come out carrying a genuine /Type0 + /CIDFontType2 + /FontFile2 font program rather than a standard-14 Helvetica dictionary -- and must be measured against Carlito's own advances rather than Helvetica's plus the Calibri width fudge.
+// The end-to-end proof that a FontRegistry actually reaches the written PDF: a document whose text is authored in Calibri, converted with a registry whose vendored-substitute step resolves that family to the real Carlito face this package embeds, must come out carrying a genuine /Type0 + /CIDFontType2 + /FontFile2 font program rather than a standard-14 Helvetica dictionary — and must be measured against Carlito's own advances rather than Helvetica's plus the Calibri width fudge.
 //
 // The other half of this file is the guarantee that costs nothing to state and everything to lose: a document converted with NO registry at all must still produce byte-identical output to the build before any of this existed. That is asserted against golden SHA-256 digests captured from commit 162b24c, the last commit before embedded-font resolution was wired into writePdf (regenerate by checking that commit out and hashing writePdf's output for backwardCompatibilityDocument() below).
 
@@ -108,7 +108,7 @@ function readFontFileProgram(bytes: Uint8Array): Uint8Array {
   const lengthMatch = /\/Length1 (\d+)/.exec(text);
   if (lengthMatch?.[1] === undefined) {
     throw new Error(
-      "no /Length1 entry found -- no embedded font program was written",
+      "no /Length1 entry found — no embedded font program was written",
     );
   }
   const streamStart = text.indexOf("stream\n", lengthMatch.index);
@@ -172,7 +172,7 @@ describe("writePdf: a FontRegistry resolving Calibri to the vendored Carlito sub
     );
     expect(text).toContain("/Font <</E1 ");
     expect(text).toContain("/E1 12 Tf");
-    // An embedded face is drawn at its own real advances, so the horizontal-scaling operator is always exactly 100% -- never Calibri's 0.92 standard-14 width correction.
+    // An embedded face is drawn at its own real advances, so the horizontal-scaling operator is always exactly 100% — never Calibri's 0.92 standard-14 width correction.
     expect(text).toContain("100 Tz");
     expect(text).not.toContain("92 Tz");
   });
@@ -254,7 +254,7 @@ describe("writePdf: a FontRegistry resolving Calibri to the vendored Carlito sub
               sizePt: 12,
               color: BLACK,
             },
-            // Calibri Light has no distinct vendored face -- font-substitutes.ts maps it to ordinary Carlito, so both items resolve to the same EmbeddedFace object and must share one font program.
+            // Calibri Light has no distinct vendored face — font-substitutes.ts maps it to ordinary Carlito, so both items resolve to the same EmbeddedFace object and must share one font program.
             {
               kind: "text",
               text: "calibri light",
@@ -356,7 +356,7 @@ describe("createFontMeasurer: measurement against a real embedded face", () => {
         12,
       ),
     ).toBeCloseTo(expectedPt, 10);
-    // The same string measured through the standard-14 path is Helvetica's H/l/l (722/222/222) times Calibri's 0.92 correction -- a genuinely different number, so the assertion above cannot pass by coincidence.
+    // The same string measured through the standard-14 path is Helvetica's H/l/l (722/222/222) times Calibri's 0.92 correction — a genuinely different number, so the assertion above cannot pass by coincidence.
     expect(
       createStandardFontMeasurer().widthOfTextAtSize("Hll", CALIBRI, 12),
     ).toBeCloseTo(((722 + 222 + 222) / 1000) * 12 * 0.92, 10);
@@ -386,7 +386,7 @@ describe("createFontMeasurer: measurement against a real embedded face", () => {
     const embeddedMeasurer = createFontMeasurer(createFontRegistry());
     const standardMeasurer = createStandardFontMeasurer();
 
-    // A column just wide enough to hold the whole string at the standard-14 substitute's (narrower) measurement. Carlito's own advances are genuinely wider, so the same column fits one word rather than two -- the wrap POINT moves, not merely a reported width. The boundary is placed exactly halfway between the two real measurements rather than at either one plus a chosen slack: Carlito's own pair kerning pulls its measurement several points closer to the substitute's than the bare advances alone would, and a fixed slack that once cleared that gap comfortably no longer does.
+    // A column just wide enough to hold the whole string at the standard-14 substitute's (narrower) measurement. Carlito's own advances are genuinely wider, so the same column fits one word rather than two — the wrap POINT moves, not merely a reported width. The boundary is placed exactly halfway between the two real measurements rather than at either one plus a chosen slack: Carlito's own pair kerning pulls its measurement several points closer to the substitute's than the bare advances alone would, and a fixed slack that once cleared that gap comfortably no longer does.
     const standardWidthPt = standardMeasurer.widthOfTextAtSize(
       text,
       CALIBRI,
@@ -431,7 +431,7 @@ describe("createFontMeasurer: measurement against a real embedded face", () => {
   });
 });
 
-// The whole path a pair-kerning adjustment travels, end to end: the font's own 'GPOS' table, through the shared encode-and-measure step, into a line's measured width and into the page's own content stream, and back out again through this package's own reader. Both vendored families appear for the reason they always do here -- Carlito's 2048-unit em makes every adjustment a real fractional conversion, Caladea's 1000-unit em makes a TJ number and the font's own declared design-unit adjustment the same digits.
+// The whole path a pair-kerning adjustment travels, end to end: the font's own 'GPOS' table, through the shared encode-and-measure step, into a line's measured width and into the page's own content stream, and back out again through this package's own reader. Both vendored families appear for the reason they always do here — Carlito's 2048-unit em makes every adjustment a real fractional conversion, Caladea's 1000-unit em makes a TJ number and the font's own declared design-unit adjustment the same digits.
 describe("writePdf: pair kerning, from the font table through to a written page", () => {
   // Four adjacent pairs both families genuinely kern (AV, VA, AT, TA), a glyph repeated three times, and one final pair (AR) each font covers but adjusts by nothing.
   const KERNED_TEXT = "AVATAR";
@@ -470,7 +470,7 @@ describe("writePdf: pair kerning, from the font table through to a written page"
     expect(text).toContain(
       "[<0005> 117 <001a> 119 <0005> 79 <0018> 79 <00050016>] TJ",
     );
-    // The array's own strings concatenate back to exactly the CIDs an unkerned Tj would have shown -- splitting the run repositions glyphs, it never changes which ones are drawn -- and no unsplit Tj for this run survives alongside it.
+    // The array's own strings concatenate back to exactly the CIDs an unkerned Tj would have shown — splitting the run repositions glyphs, it never changes which ones are drawn — and no unsplit Tj for this run survives alongside it.
     expect(text).not.toContain("<0005001a0005001800050016> Tj");
   });
 
@@ -496,7 +496,7 @@ describe("writePdf: pair kerning, from the font table through to a written page"
     if (item?.kind !== "text") {
       throw new Error("the written page did not read back as one text item");
     }
-    // Caladea's own advances for A/V/T/R (599/598/557/613, on a 1000-unit em) sum to 3565 units; its four adjustments total -394. A TJ number written with the opposite sign would recover 3565 + 394 here -- WIDER than the unkerned run rather than narrower -- so this is the assertion that decides the direction against this package's own reader rather than by argument from the specification alone.
+    // Caladea's own advances for A/V/T/R (599/598/557/613, on a 1000-unit em) sum to 3565 units; its four adjustments total -394. A TJ number written with the opposite sign would recover 3565 + 394 here — WIDER than the unkerned run rather than narrower — so this is the assertion that decides the direction against this package's own reader rather than by argument from the specification alone.
     expect(item.widthPt).toBeCloseTo(((3565 - 394) / 1000) * 12, 4);
     expect(item.widthPt).toBeLessThan((3565 / 1000) * 12);
     expect(item.widthPt).not.toBeCloseTo(((3565 + 394) / 1000) * 12, 1);
@@ -518,7 +518,7 @@ describe("writePdf: backward compatibility with no registry supplied", () => {
     };
   }
 
-  // Deliberately exercises every object kind writePdf allocates -- three distinct standard-14 faces (two of them, Calibri and Cambria, families that WOULD have resolved to an embedded vendored substitute had a registry been supplied), an underlined run, each vector item kind, an image with its own XObject, a link annotation, hidden speaker notes, and Info metadata -- so a change to any allocation order, resource-dict key, or content-stream operator shows up as a digest mismatch rather than passing unnoticed.
+  // Deliberately exercises every object kind writePdf allocates — three distinct standard-14 faces (two of them, Calibri and Cambria, families that WOULD have resolved to an embedded vendored substitute had a registry been supplied), an underlined run, each vector item kind, an image with its own XObject, a link annotation, hidden speaker notes, and Info metadata — so a change to any allocation order, resource-dict key, or content-stream operator shows up as a digest mismatch rather than passing unnoticed.
   function backwardCompatibilityDocument(): LayoutDocument {
     return {
       formatVersion: LAYOUT_FORMAT_VERSION,
@@ -633,7 +633,7 @@ describe("writePdf: backward compatibility with no registry supplied", () => {
     };
   }
 
-  // Captured at commit 162b24c (the last commit before embedded-font resolution was wired into measurement and PDF text writing) by hashing writePdf(backwardCompatibilityDocument()) for both compression settings. A mismatch here means output drifted for a caller that supplied no font configuration at all -- the one thing this whole change is not allowed to do.
+  // Captured at commit 162b24c (the last commit before embedded-font resolution was wired into measurement and PDF text writing) by hashing writePdf(backwardCompatibilityDocument()) for both compression settings. A mismatch here means output drifted for a caller that supplied no font configuration at all — the one thing this whole change is not allowed to do.
   const GOLDEN_UNCOMPRESSED_SHA256 =
     "69fcab0328798b0992e45515fb8bf63eeaa346daf67dec215653bd512fec0b2a";
   const GOLDEN_COMPRESSED_SHA256 =
@@ -679,7 +679,7 @@ describe("writePdf: GSUB ligature shaping through the vendored faces", () => {
       fonts: createFontRegistry(),
     });
     const text = decode(bytes);
-    // The ffi ligature glyph (76) maps to its whole three-character run -- the bfchar destination a copy/paste recovers -- proving the ToUnicode CMap carries multi-character sequences and the subset retained the ligature glyph no single code point's cmap entry reaches.
+    // The ffi ligature glyph (76) maps to its whole three-character run — the bfchar destination a copy/paste recovers — proving the ToUnicode CMap carries multi-character sequences and the subset retained the ligature glyph no single code point's cmap entry reaches.
     expect(text).toContain("<004c> <006600660069>");
     // And the read side puts those sequences back together as the original text.
     const reread = readPdf(bytes);
@@ -700,7 +700,7 @@ describe("the vendored-substitute step's Calibri Light report", () => {
       onSubstitution: (report) => reports.push(report),
     });
     const resolved = registry.resolve(CALIBRI_LIGHT);
-    // No genuine Light face exists to vendor (Carlito ships one weight per style axis), so the honest outcome is the documented approximation -- ordinary-weight Carlito -- REPORTED rather than silent. This pins that the report fires, so it cannot quietly regress into a silent substitution.
+    // No genuine Light face exists to vendor (Carlito ships one weight per style axis), so the honest outcome is the documented approximation — ordinary-weight Carlito — REPORTED rather than silent. This pins that the report fires, so it cannot quietly regress into a silent substitution.
     expect(resolved.kind).toBe("embedded");
     expect(reports).toContainEqual({
       requestedFamily: "Calibri Light",

@@ -2,7 +2,7 @@ import type { StandardFontName } from "./afm-widths";
 
 type StandardFamily = "helvetica" | "times" | "courier";
 
-// Every family name maps to one of the three standard-14 proportional/monospace families. Word's current default body font is Aptos (2024-), which replaced Calibri -- both map to Helvetica, along with every other mainstream UI/sans-serif family. This table is shared by both the docx and pptx write paths (src/layout/engine.ts and src/layout/slides.ts).
+// Every family name maps to one of the three standard-14 proportional/monospace families. Word's current default body font is Aptos (2024-), which replaced Calibri — both map to Helvetica, along with every other mainstream UI/sans-serif family. This table is shared by both the docx and pptx write paths (src/layout/engine.ts and src/layout/slides.ts).
 const FAMILY_BY_NORMALIZED_NAME: ReadonlyMap<string, StandardFamily> = new Map([
   // Sans-serif -> Helvetica
   ["helvetica", "helvetica"],
@@ -76,14 +76,14 @@ const FAMILY_BY_NORMALIZED_NAME: ReadonlyMap<string, StandardFamily> = new Map([
 
 const DEFAULT_FAMILY: StandardFamily = "helvetica";
 
-// Lowercase, strip everything but letters/digits -- so 'Calibri Light', 'CalibriLight', and 'calibri-light' all normalize to the identical 'calibrilight' key. Exported for font-substitutes.ts/font-registry.ts, which key their own exact-match tables and caches on this same normalization rather than maintaining a second copy of it.
+// Lowercase, strip everything but letters/digits — so 'Calibri Light', 'CalibriLight', and 'calibri-light' all normalize to the identical 'calibrilight' key. Exported for font-substitutes.ts/font-registry.ts, which key their own exact-match tables and caches on this same normalization rather than maintaining a second copy of it.
 export function normalizeFamilyName(raw: string): string {
   return raw.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 export interface FontFamilyResolution {
   readonly family: StandardFamily;
-  // False when the name matched nothing (including the includes('mono')/includes('serif') heuristics) and fell all the way back to the default -- callers can use this to raise a font-substitution diagnostic.
+  // False when the name matched nothing (including the includes('mono')/includes('serif') heuristics) and fell all the way back to the default — callers can use this to raise a font-substitution diagnostic.
   readonly matched: boolean;
 }
 
@@ -109,7 +109,7 @@ interface FamilyVariants {
   readonly boldItalic: StandardFontName;
 }
 
-// Times uses "Italic" where Helvetica and Courier use "Oblique" -- a real asymmetry in the standard 14's own naming, not an inconsistency in this table.
+// Times uses "Italic" where Helvetica and Courier use "Oblique" — a real asymmetry in the standard 14's own naming, not an inconsistency in this table.
 const VARIANTS: Readonly<Record<StandardFamily, FamilyVariants>> = {
   helvetica: {
     regular: "Helvetica",

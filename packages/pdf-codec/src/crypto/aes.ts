@@ -1,4 +1,4 @@
-// AES (FIPS 197) in CBC mode, hand-written for the same portability reason as md5.ts/sha2.ts/rc4.ts: the PDF standard security handler needs it for /CFM /AESV2 (128-bit) and /AESV3 (256-bit) content, for decrypting /UE to recover a revision-6 file key, and -- as a raw *encryption* primitive -- inside the revision-6 hardened hash of ISO 32000-2 Algorithm 2.B. `node:crypto` would break this package's `platform: 'neutral'` build and its fully client-side downstream consumer; WebCrypto offers AES-CBC but only asynchronously, and this codec's read path is synchronous end to end.
+// AES (FIPS 197) in CBC mode, hand-written for the same portability reason as md5.ts/sha2.ts/rc4.ts: the PDF standard security handler needs it for /CFM /AESV2 (128-bit) and /AESV3 (256-bit) content, for decrypting /UE to recover a revision-6 file key, and — as a raw *encryption* primitive — inside the revision-6 hardened hash of ISO 32000-2 Algorithm 2.B. `node:crypto` would break this package's `platform: 'neutral'` build and its fully client-side downstream consumer; WebCrypto offers AES-CBC but only asynchronously, and this codec's read path is synchronous end to end.
 //
 // The state is four 32-bit column words, each holding s[0][c] to s[3][c] most significant byte first, which is FIPS 197 3.4's layout (s[r][c] at byte index r + 4c) read a word at a time, so the input bytes map straight in with no transposition step. Rounds are table-driven (see the tables below); the S-boxes, the field arithmetic and the key schedule are FIPS 197's own definitions.
 
@@ -12,7 +12,7 @@ function xtime(a: number): number {
   return (doubled & 0x100) !== 0 ? (doubled ^ GF_MODULUS) & 0xff : doubled;
 }
 
-// Multiplication in GF(2^8), FIPS 197 4.2 -- Russian-peasant style, adding shifted copies of `a` for each set bit of `b`.
+// Multiplication in GF(2^8), FIPS 197 4.2 — Russian-peasant style, adding shifted copies of `a` for each set bit of `b`.
 function gmul(a: number, b: number): number {
   let product = 0;
   let left = a;
@@ -79,7 +79,7 @@ function rotWord(word: number): number {
   return ((word << 8) | (word >>> 24)) >>> 0;
 }
 
-// FIPS 197 5.2's KeyExpansion, valid for all three standard key sizes -- Nk = key words, Nr = Nk + 6 rounds, and the extra SubWord at i % Nk === 4 that only AES-256 (Nk = 8) ever reaches.
+// FIPS 197 5.2's KeyExpansion, valid for all three standard key sizes — Nk = key words, Nr = Nk + 6 rounds, and the extra SubWord at i % Nk === 4 that only AES-256 (Nk = 8) ever reaches.
 function expandKey(key: Uint8Array<ArrayBuffer>): ExpandedKey {
   if (key.length !== 16 && key.length !== 24 && key.length !== 32) {
     throw new Error(

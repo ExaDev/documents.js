@@ -3,7 +3,7 @@ import { readEpubContent } from "./read";
 import { EPUB_MIME_TYPE } from "./format";
 import { zipPackage } from "./zip";
 
-// Regression coverage for buildCrossDocumentAnchorRegistry's own two ordering/self-reference edges (src/read.ts) -- neither is reachable through this package's own hand-authored fixtures (fixtureEpubMultichapterBytes has exactly one referrer per target, and never a document referencing itself by full path instead of a bare fragment), so both need a bespoke, minimal fixture built directly here.
+// Regression coverage for buildCrossDocumentAnchorRegistry's own two ordering/self-reference edges (src/read.ts) — neither is reachable through this package's own hand-authored fixtures (fixtureEpubMultichapterBytes has exactly one referrer per target, and never a document referencing itself by full path instead of a bare fragment), so both need a bespoke, minimal fixture built directly here.
 
 const CONTAINER_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <container xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>`;
@@ -26,7 +26,7 @@ const CONTENT_OPF = `<?xml version="1.0" encoding="UTF-8"?>
   </spine>
 </package>`;
 
-// The footnote-shaped referrer (epub:type="noteref") comes FIRST in spine order, a plain bookmark-shaped referrer to the SAME target comes SECOND -- the one ordering that actually exercises buildCrossDocumentAnchorRegistry's own "a footnote-shaped referrer always wins" guard: the guard only ever has anything to protect once an entry is ALREADY footnote-classified and a later referrer, read second, would otherwise downgrade it.
+// The footnote-shaped referrer (epub:type="noteref") comes FIRST in spine order, a plain bookmark-shaped referrer to the SAME target comes SECOND — the one ordering that actually exercises buildCrossDocumentAnchorRegistry's own "a footnote-shaped referrer always wins" guard: the guard only ever has anything to protect once an entry is ALREADY footnote-classified and a later referrer, read second, would otherwise downgrade it.
 const CHAPTER1_XHTML = `<?xml version="1.0" encoding="UTF-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
   <head><title>Chapter One</title></head>
@@ -36,7 +36,7 @@ const CHAPTER1_XHTML = `<?xml version="1.0" encoding="UTF-8"?>
   </body>
 </html>`;
 
-// Also references chapter1's own "sec1b" heading by full path, genuinely cross-document from here -- this is what populates buildCrossDocumentAnchorRegistry's own targetsByHref["OEBPS/chapter1.xhtml"]["sec1b"] entry, the entry chapter1's own resolveHref self-reference guard (targetHref === sourceHref) must refuse to reuse for its OWN, different, same-document reference to the identical heading below.
+// Also references chapter1's own "sec1b" heading by full path, genuinely cross-document from here — this is what populates buildCrossDocumentAnchorRegistry's own targetsByHref["OEBPS/chapter1.xhtml"]["sec1b"] entry, the entry chapter1's own resolveHref self-reference guard (targetHref === sourceHref) must refuse to reuse for its OWN, different, same-document reference to the identical heading below.
 const CHAPTER2_XHTML = `<?xml version="1.0" encoding="UTF-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
   <head><title>Chapter Two</title></head>

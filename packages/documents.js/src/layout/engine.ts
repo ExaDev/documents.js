@@ -46,25 +46,25 @@ import type {
   LayoutText,
 } from "pdf-codec";
 
-// ContentDocument (the wordprocessing variant) -> LayoutDocument: docx's hard direction. A docx page isn't a fixed canvas the way a pptx slide is -- content flows and paginates, so this engine tracks a vertical cursor per page and starts a new page whenever the next line (or table row) would overflow the current one, honoring explicit page breaks, w:pageBreakBefore, and a per-section page-size/margin change. Headers/footers and live PAGE/NUMPAGES substitution are not laid out here -- src/ooxml/docx/read.ts doesn't read them either, a deliberate, tracked narrowing from the plan's original scope (see that file's own module doc).
+// ContentDocument (the wordprocessing variant) -> LayoutDocument: docx's hard direction. A docx page isn't a fixed canvas the way a pptx slide is — content flows and paginates, so this engine tracks a vertical cursor per page and starts a new page whenever the next line (or table row) would overflow the current one, honoring explicit page breaks, w:pageBreakBefore, and a per-section page-size/margin change. Headers/footers and live PAGE/NUMPAGES substitution are not laid out here — src/ooxml/docx/read.ts doesn't read them either, a deliberate, tracked narrowing from the plan's original scope (see that file's own module doc).
 
-// One indent step per list nesting level, applied both to the marker glyph's own gutter position and, cumulatively, to the hanging indent of the paragraph's own wrapped text -- level 0 gets one step of hanging indent (room for its own marker), level 1 gets two, and so on.
+// One indent step per list nesting level, applied both to the marker glyph's own gutter position and, cumulatively, to the hanging indent of the paragraph's own wrapped text — level 0 gets one step of hanging indent (room for its own marker), level 1 gets two, and so on.
 const LIST_INDENT_STEP_PT = 18;
 
-// ContentListMembership carries only { numId, level } -- no marker format -- so every list this package can't otherwise identify degrades to a plain bullet, cycling by nesting depth the way Word/LibreOffice conventionally vary marker glyph per level. This is the same documented limitation src/edit/docx/numbering.ts's write side already accepts (search that file for "BULLET template"): preserving real ordered-vs-bullet/per-source glyph fidelity needs a format field on ContentListMembership, a document-schema.js change out of scope for this interim, read-side fix.
+// ContentListMembership carries only { numId, level } — no marker format — so every list this package can't otherwise identify degrades to a plain bullet, cycling by nesting depth the way Word/LibreOffice conventionally vary marker glyph per level. This is the same documented limitation src/edit/docx/numbering.ts's write side already accepts (search that file for "BULLET template"): preserving real ordered-vs-bullet/per-source glyph fidelity needs a format field on ContentListMembership, a document-schema.js change out of scope for this interim, read-side fix.
 //
-// '•' (U+2022) is the only one of the conventional Word/LibreOffice bullet glyphs (•/◦/▪) that's actually in the standard-14 fonts' glyph coverage this package falls back to when a document embeds no font of its own -- confirmed by rendering: U+25E6/U+25AA came back as literal "?" missing-glyph boxes. '-' and '*' are plain ASCII, guaranteed present in any font, so the cycle uses those for deeper levels instead of risking an unrenderable Unicode bullet variant.
+// '•' (U+2022) is the only one of the conventional Word/LibreOffice bullet glyphs (•/◦/▪) that's actually in the standard-14 fonts' glyph coverage this package falls back to when a document embeds no font of its own — confirmed by rendering: U+25E6/U+25AA came back as literal "?" missing-glyph boxes. '-' and '*' are plain ASCII, guaranteed present in any font, so the cycle uses those for deeper levels instead of risking an unrenderable Unicode bullet variant.
 const BULLET_GLYPHS = ["•", "-", "*"];
 
-// One counter per distinct numId -- a new list instance always mints a fresh numId in both docx and markdown-codec's own conventions, so there is no cross-list bleed to guard against; a single Map threaded through one convertWordprocessingToLayout call is enough.
+// One counter per distinct numId — a new list instance always mints a fresh numId in both docx and markdown-codec's own conventions, so there is no cross-list bleed to guard against; a single Map threaded through one convertWordprocessingToLayout call is enough.
 type ListCounters = Map<string, number>;
 
-// markdown-codec mints its own numId as "md{n}:bullet|ordered@start" (see that package's list-id.ts) -- parseListNumId is already public from there specifically so a consumer can recover this. docx numIds are plain "1", "2", ...; odt's are "list1", "list2", ... -- neither follows markdown-codec's convention, so a docx/odt-sourced ordered list still degrades to a bullet here, same as the write-side limitation noted above. Only markdown gets real sequential numbering, which is still a strict improvement over no marker at all.
+// markdown-codec mints its own numId as "md{n}:bullet|ordered@start" (see that package's list-id.ts) — parseListNumId is already public from there specifically so a consumer can recover this. docx numIds are plain "1", "2", ...; odt's are "list1", "list2", ... — neither follows markdown-codec's convention, so a docx/odt-sourced ordered list still degrades to a bullet here, same as the write-side limitation noted above. Only markdown gets real sequential numbering, which is still a strict improvement over no marker at all.
 function listMarkerText(
   list: ContentListMembership,
   counters: ListCounters,
 ): string {
-  // numId is optional since schema 4.0.0 (an OOXML drawing paragraph carries only a level; markdown-codec mints its own md{n}: ids), and only a minted markdown id can name an ORDERED list -- no numId means no ordering information at all, so the glyph cycle below is the only honest marker.
+  // numId is optional since schema 4.0.0 (an OOXML drawing paragraph carries only a level; markdown-codec mints its own md{n}: ids), and only a minted markdown id can name an ORDERED list — no numId means no ordering information at all, so the glyph cycle below is the only honest marker.
   const { numId } = list;
   if (numId !== undefined) {
     const info = parseListNumId(numId);
@@ -84,9 +84,9 @@ export interface EngineLayoutOptions {
 
 export interface WordprocessingLayoutResult {
   readonly document: LayoutDocument;
-  // Every embedded formula actually rendered via src/mathml, already positioned in PDF page space (bottom-left origin, y-up) -- pdf-codec's write.ts's own WritePdfOptions.formulas consumes this directly. See that module's own comment for why a formula's CID-font glyph runs can't travel through LayoutDocument.pages[].items itself.
+  // Every embedded formula actually rendered via src/mathml, already positioned in PDF page space (bottom-left origin, y-up) — pdf-codec's write.ts's own WritePdfOptions.formulas consumes this directly. See that module's own comment for why a formula's CID-font glyph runs can't travel through LayoutDocument.pages[].items itself.
   readonly formulas: readonly PositionedFormula[];
-  // The DocumentTree's own pages array (each rendered page's size, indexed to match every content node's own frames[].pageIndex) -- the input `doc` argument itself comes back with frames stamped in place, which together with this array is the fused unified package a conversion reports through onDocument.
+  // The DocumentTree's own pages array (each rendered page's size, indexed to match every content node's own frames[].pageIndex) — the input `doc` argument itself comes back with frames stamped in place, which together with this array is the fused unified package a conversion reports through onDocument.
   readonly pages: readonly PageSize[];
 }
 
@@ -119,7 +119,7 @@ function flushPage(
   state.cursorYDown = section.margins.topPt;
 }
 
-// Starts a fresh page only when there is already content on the current one and the next item wouldn't fit -- an empty page is never flushed just because a single, page-exceeding item doesn't fit either (that item is placed on the fresh page regardless and simply overflows its bottom margin, the same "at least make progress" guarantee pdf-codec's text-layout.ts's own emergency word-split gives at the character level).
+// Starts a fresh page only when there is already content on the current one and the next item wouldn't fit — an empty page is never flushed just because a single, page-exceeding item doesn't fit either (that item is placed on the fresh page regardless and simply overflows its bottom margin, the same "at least make progress" guarantee pdf-codec's text-layout.ts's own emergency word-split gives at the character level).
 function ensureRoom(
   state: FlowState,
   section: ContentSection,
@@ -135,7 +135,7 @@ function ensureRoom(
   }
 }
 
-// Lays out one paragraph's wrapped lines directly into `state`, checking for a page break before each line (so a paragraph can split across a page boundary, unlike pptx's shape-bounded text). spacingBeforePt is skipped when the paragraph starts a fresh, otherwise-empty page -- the same "don't stack whitespace at the top of a page" behaviour real word processors apply.
+// Lays out one paragraph's wrapped lines directly into `state`, checking for a page break before each line (so a paragraph can split across a page boundary, unlike pptx's shape-bounded text). spacingBeforePt is skipped when the paragraph starts a fresh, otherwise-empty page — the same "don't stack whitespace at the top of a page" behaviour real word processors apply.
 function layoutParagraphFlow(
   paragraph: ContentParagraph,
   section: ContentSection,
@@ -157,7 +157,7 @@ function layoutParagraphFlow(
     headingStyleFor(paragraph.styleId),
   );
   const fallbackRun = effectiveRuns[0]!;
-  // A list item reserves one hanging-indent step per nesting level (0-indexed level 0 still gets one step, for its own marker's gutter) -- see LIST_INDENT_STEP_PT's own comment.
+  // A list item reserves one hanging-indent step per nesting level (0-indexed level 0 still gets one step, for its own marker's gutter) — see LIST_INDENT_STEP_PT's own comment.
   const listIndentPt =
     paragraph.list !== undefined
       ? (paragraph.list.level + 1) * LIST_INDENT_STEP_PT
@@ -179,7 +179,7 @@ function layoutParagraphFlow(
     const pageIndex = pages.length;
 
     const baselineYDown = state.cursorYDown + line.ascentPt;
-    // First-line indent shifts only where the first line starts, not its wrap point -- see src/layout/slides.ts's identical note on the same simplification.
+    // First-line indent shifts only where the first line starts, not its wrap point — see src/layout/slides.ts's identical note on the same simplification.
     const firstLineIndentPt =
       lineIndex === 0 ? (paragraph.indentFirstLinePt ?? 0) : 0;
     const alignOffsetPt = alignmentOffsetPt(
@@ -187,13 +187,13 @@ function layoutParagraphFlow(
       paragraphWidthPt,
       line.widthPt,
     );
-    // Only a WRAPPED, non-final line of a justified paragraph gets its inter-word gaps stretched -- the paragraph's own final line (or a paragraph that never wraps at all, i.e. lines.length === 1) renders left-aligned instead, the standard justification convention Word/LibreOffice both follow.
+    // Only a WRAPPED, non-final line of a justified paragraph gets its inter-word gaps stretched — the paragraph's own final line (or a paragraph that never wraps at all, i.e. lines.length === 1) renders left-aligned instead, the standard justification convention Word/LibreOffice both follow.
     const justifyGapsPt =
       paragraph.alignment === "justify" && lineIndex < lines.length - 1
         ? justifyLineGapsPt(line, paragraphWidthPt, measurer)
         : undefined;
 
-    // The marker sits one indent step to the left of the paragraph's own (already-indented) text, on the paragraph's first line only -- the same hanging-indent convention a word processor uses, so wrapped continuation lines line up under the text, not under the marker. The marker derives from the paragraph's own list membership rather than from any run, so its frame stamps the PARAGRAPH node itself.
+    // The marker sits one indent step to the left of the paragraph's own (already-indented) text, on the paragraph's first line only — the same hanging-indent convention a word processor uses, so wrapped continuation lines line up under the text, not under the marker. The marker derives from the paragraph's own list membership rather than from any run, so its frame stamps the PARAGRAPH node itself.
     if (lineIndex === 0 && paragraph.list !== undefined) {
       const markerText = listMarkerText(paragraph.list, listCounters);
       const markerItem: LayoutText = {
@@ -243,7 +243,7 @@ function layoutParagraphFlow(
         sourcePath: fragment.sourcePath,
       };
       state.items.push(textItem);
-      // One frame per rendered placement, on the run that placement renders -- a hyperlinked fragment's LayoutLink rides the same placement, so it stamps nothing additional.
+      // One frame per rendered placement, on the run that placement renders — a hyperlinked fragment's LayoutLink rides the same placement, so it stamps nothing additional.
       stampFragmentFrame(
         paragraph.runs,
         fragment,
@@ -277,7 +277,7 @@ function layoutParagraphFlow(
   state.cursorYDown += paragraph.spacingAfterPt ?? 0;
 }
 
-// A simpler variant for text inside a table cell: the row's own row-atomic placement (see layoutTableFlow) already guaranteed the whole row fits before any cell content is laid out, so no page-break checking happens per line here -- only wrapping and stacking, returning the new cursor position. `pageIndex` is that row's own settled page, threaded in once per row rather than re-derived per line. Nested tables inside a cell are not laid out (read.ts can represent one recursively, but rendering one is out of v1 scope -- rare in practice, and cheap to add later without touching this function's contract).
+// A simpler variant for text inside a table cell: the row's own row-atomic placement (see layoutTableFlow) already guaranteed the whole row fits before any cell content is laid out, so no page-break checking happens per line here — only wrapping and stacking, returning the new cursor position. `pageIndex` is that row's own settled page, threaded in once per row rather than re-derived per line. Nested tables inside a cell are not laid out (read.ts can represent one recursively, but rendering one is out of v1 scope — rare in practice, and cheap to add later without touching this function's contract).
 function layoutParagraphInCell(
   paragraph: ContentParagraph,
   cellLeftXDown: number,
@@ -386,7 +386,7 @@ function layoutParagraphInCell(
   return cursorYDown + (paragraph.spacingAfterPt ?? 0);
 }
 
-// Row-atomic: a row that doesn't fit in the remaining space on the current page moves to a fresh page as a whole, never splitting its own content across the boundary (cell-level splitting would roughly double the paginator's complexity for what is, in practice, a rare case -- see the implementation plan's own reasoning). Column widths scale proportionally to fit the available content width.
+// Row-atomic: a row that doesn't fit in the remaining space on the current page moves to a fresh page as a whole, never splitting its own content across the boundary (cell-level splitting would roughly double the paginator's complexity for what is, in practice, a rare case — see the implementation plan's own reasoning). Column widths scale proportionally to fit the available content width.
 function layoutTableFlow(
   table: ContentTable,
   section: ContentSection,
@@ -404,13 +404,13 @@ function layoutTableFlow(
   for (const { row, anchors } of tableAnchorBoxes(table, scale)) {
     const rowHeightPt = row.heightPt ?? estimateRowHeightPt(anchors, measurer);
     ensureRoom(state, section, pages, rowHeightPt, contentBottomYDown);
-    // The row's own settled page -- read after ensureRoom, and shared by every cell in it (row-atomic placement means the whole row, decorations and content, is one page's content).
+    // The row's own settled page — read after ensureRoom, and shared by every cell in it (row-atomic placement means the whole row, decorations and content, is one page's content).
     const pageIndex = pages.length;
 
     for (const { cell, xOffsetPt, widthPt: cellWidthPt } of anchors) {
       const cellXDown = contentLeftXDown + xOffsetPt;
 
-      // A cell's decoration paints under its own content, in the order a real word processor draws it: background fill first, then the border lines sitting on that same frame's edges, then (below) the cell's paragraphs on top of both. ContentTableCell carries a real sourcePath of its own now, so a cell's rect/lines are attributed to the exact cell that declared them, falling back to the containing table only for a cell that has none. The cell's own frame stamps the CELL node once, PDF-space -- background, borders, and any content runs inside all belong to this one placement of this one cell.
+      // A cell's decoration paints under its own content, in the order a real word processor draws it: background fill first, then the border lines sitting on that same frame's edges, then (below) the cell's paragraphs on top of both. ContentTableCell carries a real sourcePath of its own now, so a cell's rect/lines are attributed to the exact cell that declared them, falling back to the containing table only for a cell that has none. The cell's own frame stamps the CELL node once, PDF-space — background, borders, and any content runs inside all belong to this one placement of this one cell.
       const cellFrameYDown = {
         xPt: cellXDown,
         yPt: state.cursorYDown,
@@ -420,7 +420,7 @@ function layoutTableFlow(
       const cellSourcePath = cell.sourcePath ?? table.sourcePath;
       const cellFrame = flipY(cellFrameYDown, section.pageSize.heightPt);
       stampFrame(cell, pageIndex, cellFrame);
-      // A rect's own fill is one flat colour, so a 'pattern' fill (ExaDev/documents.js#951) renders as resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern PDF rendering has no primitive for -- and that resolution can itself come back undefined (an unresolvable theme/indexed colour, or the reserved gray125 pattern with no explicit colours), which is genuinely no fill rather than a reason to skip resolving at all, so the guard checks the RESOLVED colour, not merely whether the cell declared a background object.
+      // A rect's own fill is one flat colour, so a 'pattern' fill (ExaDev/documents.js#951) renders as resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern PDF rendering has no primitive for — and that resolution can itself come back undefined (an unresolvable theme/indexed colour, or the reserved gray125 pattern with no explicit colours), which is genuinely no fill rather than a reason to skip resolving at all, so the guard checks the RESOLVED colour, not merely whether the cell declared a background object.
       const cellFill =
         cell.background === undefined
           ? undefined
@@ -501,9 +501,9 @@ function layoutImageFlow(
   state.cursorYDown += block.heightPt;
 }
 
-// The one ContentEmbeddedObjectBlock kind this engine actually renders (objectKind: 'formula') -- reserves flow space the same way layoutImageFlow does for an ordinary image, but via src/mathml's own layoutFormula rather than a static width/height, and records the result into `formulas` (consumed by pdf-codec's write.ts, not LayoutDocument.pages[].items -- see WordprocessingLayoutResult's own comment on why). The MathML comes straight out of the block's own document (src/model/formula.ts's formulaOfBlock), so no side-channel map, and no sourcePath lookup, is involved at all.
+// The one ContentEmbeddedObjectBlock kind this engine actually renders (objectKind: 'formula') — reserves flow space the same way layoutImageFlow does for an ordinary image, but via src/mathml's own layoutFormula rather than a static width/height, and records the result into `formulas` (consumed by pdf-codec's write.ts, not LayoutDocument.pages[].items — see WordprocessingLayoutResult's own comment on why). The MathML comes straight out of the block's own document (src/model/formula.ts's formulaOfBlock), so no side-channel map, and no sourcePath lookup, is involved at all.
 //
-// Falls back to laying out the formula's own plain-text stand-in -- its StarMath annotation, or the literal "[formula]" -- when the block carries no MathML nodes to typeset: either its document is not a formula document at all (a block a caller constructed by hand), or it is one whose mathml array is empty. A real, honest fallback rather than a silent no-op, since the alternative is a block that occupies no space and renders nothing.
+// Falls back to laying out the formula's own plain-text stand-in — its StarMath annotation, or the literal "[formula]" — when the block carries no MathML nodes to typeset: either its document is not a formula document at all (a block a caller constructed by hand), or it is one whose mathml array is empty. A real, honest fallback rather than a silent no-op, since the alternative is a block that occupies no space and renders nothing.
 function layoutFormulaFallback(
   block: ContentEmbeddedObjectBlock,
   section: ContentSection,
@@ -594,7 +594,7 @@ function layoutFormulaFlow(
   state.cursorYDown += box.heightPt;
 }
 
-// Paginates one section's own blocks into one or more pages, all sharing that section's page size and margins -- a w:sectPr boundary (see read.ts) just means the next section starts this whole function over with a different pageSize/margins, which is what makes multi-section support fall out for free rather than needing special-casing here.
+// Paginates one section's own blocks into one or more pages, all sharing that section's page size and margins — a w:sectPr boundary (see read.ts) just means the next section starts this whole function over with a different pageSize/margins, which is what makes multi-section support fall out for free rather than needing special-casing here.
 function paginateSection(
   section: ContentSection,
   measurer: TextMeasurer,
@@ -670,7 +670,7 @@ function paginateSection(
         listCounters,
       );
     }
-    // Every other 'embeddedObject' objectKind (wordprocessing/presentation/spreadsheet/drawing) is not produced by any reader this package depends on yet (document-schema.js's forward-looking schema addition -- see edit/docx/content.ts's own note on the same gap), so there is nothing to lay out for those here today. 'constructStart'/'constructEnd' fall through the same way, but deliberately rather than by omission: a construct marker is a zero-width boundary sentinel with no content of its own to render, so skipping it here loses nothing -- the paragraphs/tables it wraps are separate blocks in this same flow and lay out exactly as if the marker were not there.
+    // Every other 'embeddedObject' objectKind (wordprocessing/presentation/spreadsheet/drawing) is not produced by any reader this package depends on yet (document-schema.js's forward-looking schema addition — see edit/docx/content.ts's own note on the same gap), so there is nothing to lay out for those here today. 'constructStart'/'constructEnd' fall through the same way, but deliberately rather than by omission: a construct marker is a zero-width boundary sentinel with no content of its own to render, so skipping it here loses nothing — the paragraphs/tables it wraps are separate blocks in this same flow and lay out exactly as if the marker were not there.
   }
 
   flushPage(state, section, pages);
@@ -683,7 +683,7 @@ export function convertWordprocessingToLayout(
   const images: Record<string, LayoutImageAsset> = {};
   const pages: LayoutPage[] = [];
   const formulas: PositionedFormula[] = [];
-  // One counter map for the whole document -- see ListCounters' own comment on why a fresh numId per list instance makes this safe across section boundaries too.
+  // One counter map for the whole document — see ListCounters' own comment on why a fresh numId per list instance makes this safe across section boundaries too.
   const listCounters: ListCounters = new Map();
   for (const section of doc.sections) {
     paginateSection(

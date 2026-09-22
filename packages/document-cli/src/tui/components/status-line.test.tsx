@@ -142,7 +142,7 @@ describe("StatusLine rendering", () => {
       </AppStateProvider>,
     );
     const frame = await waitForFrame(lastFrame, (candidate) =>
-      candidate.includes("diagnostics -- Ctrl+D"),
+      candidate.includes("diagnostics — Ctrl+D"),
     );
     expect(frame).toContain("1 diagnostics");
   });
@@ -174,7 +174,7 @@ describe("StatusLine rendering", () => {
       candidate.includes("no document"),
     );
     await settle();
-    expect(lastFrame()).not.toContain("diagnostics -- Ctrl+D");
+    expect(lastFrame()).not.toContain("diagnostics — Ctrl+D");
   });
 
   it("shows the current status message in its own colour-mapped role", async () => {

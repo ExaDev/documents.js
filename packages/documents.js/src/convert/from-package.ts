@@ -58,7 +58,7 @@ import type {
   LayoutPage,
 } from "pdf-codec";
 
-// Builds any DocumentFormat's own bytes from an already-assembled tree-form DocumentTree -- the reverse of what every ergonomic X-to-PDF/PDF-to-X conversion's own onDocument callback hands back. The tree is flattened once at this boundary (flattenTree, which also materialises any styles-table refs away): the builders' public signatures already take the flat ContentDocument, so nothing downstream of this point knows the tree exists -- the boundary design in one sentence. Every target except 'pdf' dispatches through DOCUMENT_FORMAT_CODECS (src/codecs/registry.ts), building a fresh package through the identical buildXPackage function the matching pdf-to-X/bridge conversion already uses, then encoding it with that format's own codec -- xlsx goes through this exact same dispatch (DOCUMENT_FORMAT_CODECS.xlsx.content.write wraps ooxml.js's buildXlsxPackageFromContent), no longer a named exception. 'odf' still has no builder at all -- a standalone formula document has no write path from ContentDocument to begin with -- so it alone is rejected outright ahead of the registry lookup.
+// Builds any DocumentFormat's own bytes from an already-assembled tree-form DocumentTree — the reverse of what every ergonomic X-to-PDF/PDF-to-X conversion's own onDocument callback hands back. The tree is flattened once at this boundary (flattenTree, which also materialises any styles-table refs away): the builders' public signatures already take the flat ContentDocument, so nothing downstream of this point knows the tree exists — the boundary design in one sentence. Every target except 'pdf' dispatches through DOCUMENT_FORMAT_CODECS (src/codecs/registry.ts), building a fresh package through the identical buildXPackage function the matching pdf-to-X/bridge conversion already uses, then encoding it with that format's own codec — xlsx goes through this exact same dispatch (DOCUMENT_FORMAT_CODECS.xlsx.content.write wraps ooxml.js's buildXlsxPackageFromContent), no longer a named exception. 'odf' still has no builder at all — a standalone formula document has no write path from ContentDocument to begin with — so it alone is rejected outright ahead of the registry lookup.
 export function buildDocumentBytes(
   pkg: DocumentTree,
   target: DocumentFormat,
@@ -66,7 +66,7 @@ export function buildDocumentBytes(
   if (target === "pdf") {
     if (pkg.pages === undefined) {
       throw new Error(
-        "this DocumentTree has no pages -- only a package dumped from a <format>-to-pdf or pdf-to-<format> conversion carries them; a bridge conversion's own dump (e.g. odt-to-docx) never does, so 'pdf' is not a reachable target from it",
+        "this DocumentTree has no pages — only a package dumped from a <format>-to-pdf or pdf-to-<format> conversion carries them; a bridge conversion's own dump (e.g. odt-to-docx) never does, so 'pdf' is not a reachable target from it",
       );
     }
     const { document: layout, formulas, fonts } = packageToLayout(pkg);
@@ -85,7 +85,7 @@ export function buildDocumentBytes(
   const content = DOCUMENT_FORMAT_CODECS[target].content;
   if (!content?.write) {
     throw new Error(
-      `DocumentFormat '${target}' has no content.write codec in DOCUMENT_FORMAT_CODECS, is not 'pdf', and is not read-only -- this is an internal invariant violation, not a caller error`,
+      `DocumentFormat '${target}' has no content.write codec in DOCUMENT_FORMAT_CODECS, is not 'pdf', and is not read-only — this is an internal invariant violation, not a caller error`,
     );
   }
   return requireArrayBufferBytes(content.write(flattenTree(pkg)));
@@ -93,27 +93,27 @@ export function buildDocumentBytes(
 
 // --- The frames-to-layout inverse ----------------------------------------------------------------
 //
-// Rebuilds the pdf-codec LayoutDocument a package's own frames + pages describe: a mechanical inverse that walks the content tree and emits LayoutItems from each node's own recorded placements. This is the fusion-faithful direction -- the package now CARRIES the positions (a layout pass stamped them onto content's own nodes), so from-package reconstructs the pdf-codec view from them rather than needing a parallel layout side-channel, which is exactly the second-tree coupling the fused DocumentTree design removed.
+// Rebuilds the pdf-codec LayoutDocument a package's own frames + pages describe: a mechanical inverse that walks the content tree and emits LayoutItems from each node's own recorded placements. This is the fusion-faithful direction — the package now CARRIES the positions (a layout pass stamped them onto content's own nodes), so from-package reconstructs the pdf-codec view from them rather than needing a parallel layout side-channel, which is exactly the second-tree coupling the fused DocumentTree design removed.
 //
 // One honest limit, a structural property of what a package records rather than a gap in this walk: a bare DocumentTree carries no source-EMBEDDED font bytes, so text re-renders through pdf-codec's vendored substitutes and the standard 14 rather than the source document's own embedded faces.
 //
 // The two limits this walk used to carry are closed:
 //
-// 1. Wrap distribution is RE-DERIVED, not guessed: a run's frames each record the tight width of the fragment the original wrap placed there (shared.ts's textBoxForFragment stamps the same measurement the wrapping pass made), and re-wrapping the run's remaining text against each frame's own recorded width through the same registry-backed metrics the re-render draws with (wrapRunsToWidth, the identical line-breaker the layout engines run) reproduces the original split wherever the original also resolved through the vendored/standard layers -- and where it did not (an embedded face the rebuild no longer has), the re-derived wrap and the re-render at least stay consistent with each other, wrapping and drawing through the same substitute metrics, where the old behaviour drew one long overflowing line.
-// 2. An embedded formula is RE-TYPESET from its own recorded MathML: the formula block carries the full ContentFormula (mathml tree and all) in the content, so its frame is enough to re-run the identical layoutFormula + loadMathFont pipeline the original pass ran, at the size the recorded frame's own two-pass fit recovers. Only a formula whose source carried no MathML at all (mathml: []) still renders as nothing -- there is genuinely nothing to typeset.
+// 1. Wrap distribution is RE-DERIVED, not guessed: a run's frames each record the tight width of the fragment the original wrap placed there (shared.ts's textBoxForFragment stamps the same measurement the wrapping pass made), and re-wrapping the run's remaining text against each frame's own recorded width through the same registry-backed metrics the re-render draws with (wrapRunsToWidth, the identical line-breaker the layout engines run) reproduces the original split wherever the original also resolved through the vendored/standard layers — and where it did not (an embedded face the rebuild no longer has), the re-derived wrap and the re-render at least stay consistent with each other, wrapping and drawing through the same substitute metrics, where the old behaviour drew one long overflowing line.
+// 2. An embedded formula is RE-TYPESET from its own recorded MathML: the formula block carries the full ContentFormula (mathml tree and all) in the content, so its frame is enough to re-run the identical layoutFormula + loadMathFont pipeline the original pass ran, at the size the recorded frame's own two-pass fit recovers. Only a formula whose source carried no MathML at all (mathml: []) still renders as nothing — there is genuinely nothing to typeset.
 
 interface FrameWalkState {
   readonly pages: LayoutPage[];
   readonly images: Record<string, LayoutImageAsset>;
-  // The measurer the wrap re-derivation below measures through, built over the same registry the re-render draws through (state.fonts) so a re-derived split and its re-render agree with each other by construction -- measuring one face's advances while drawing another's is exactly the drift measure.ts's own module comment forbids.
+  // The measurer the wrap re-derivation below measures through, built over the same registry the re-render draws through (state.fonts) so a re-derived split and its re-render agree with each other by construction — measuring one face's advances while drawing another's is exactly the drift measure.ts's own module comment forbids.
   readonly measurer: TextMeasurer;
   // The registry both halves of the rebuild share: pdf-codec's vendored substitutes ahead of the standard 14, with no source-embedded faces (the one layer a bare DocumentTree does not carry). Measuring through it is what makes the re-derived wrap reproduce the original split wherever the original also resolved through the vendored/standard layers, and drawing through it is what makes the re-render match that measurement.
   readonly fonts: FontRegistry;
-  // Every embedded formula re-typeset during the walk, for buildDocumentBytes to hand to writePdf's own formulas side channel -- the same hand-off convertWordprocessingToLayout's own result makes.
+  // Every embedded formula re-typeset during the walk, for buildDocumentBytes to hand to writePdf's own formulas side channel — the same hand-off convertWordprocessingToLayout's own result makes.
   readonly formulas: PositionedFormula[];
 }
 
-// The page a frame's own pageIndex names, or undefined when it points outside the package's own pages array -- an internally inconsistent or hand-edited package. There is nothing to render such a frame onto, so each emitter skips it; every other frame in the same tree still renders.
+// The page a frame's own pageIndex names, or undefined when it points outside the package's own pages array — an internally inconsistent or hand-edited package. There is nothing to render such a frame onto, so each emitter skips it; every other frame in the same tree still renders.
 function pageOfFrame(
   state: FrameWalkState,
   frame: LayoutFrame,
@@ -121,14 +121,14 @@ function pageOfFrame(
   return state.pages[frame.pageIndex];
 }
 
-// One run's emission. A single-frame run (the common case: an unwrapped line, a spreadsheet cell) renders its whole text at that frame exactly as before. A multi-frame run is a wrapped line set: each frame's own width is the tight measured width of the fragment the original wrap placed there, so re-wrapping the remaining text against each frame's width through wrapRunsToWidth -- the identical line-breaker the layout engines themselves run -- reproduces the fragment boundaries wherever the original drew through the same standard-14 metrics, and a hyperlink covers every fragment it spans (one link per frame, the same way the engines stamp a link over each wrapped fragment). Font resolution mirrors the layout engines' own defaults (shared.ts's runFont and NOMINAL_TEXT_SIZE_PT), so a run that carried no explicit formatting renders as it would have laid out.
+// One run's emission. A single-frame run (the common case: an unwrapped line, a spreadsheet cell) renders its whole text at that frame exactly as before. A multi-frame run is a wrapped line set: each frame's own width is the tight measured width of the fragment the original wrap placed there, so re-wrapping the remaining text against each frame's width through wrapRunsToWidth — the identical line-breaker the layout engines themselves run — reproduces the fragment boundaries wherever the original drew through the same standard-14 metrics, and a hyperlink covers every fragment it spans (one link per frame, the same way the engines stamp a link over each wrapped fragment). Font resolution mirrors the layout engines' own defaults (shared.ts's runFont and NOMINAL_TEXT_SIZE_PT), so a run that carried no explicit formatting renders as it would have laid out.
 function emitRun(state: FrameWalkState, run: ContentRun): void {
   const frames = run.frames ?? [];
   const font = runFont(run);
   const sizePt = run.sizePt ?? NOMINAL_TEXT_SIZE_PT;
   const color = run.color ?? COLOR_BLACK;
 
-  // The frames a page actually exists for -- an out-of-range pageIndex drops that placement, exactly as every other emitter here drops one.
+  // The frames a page actually exists for — an out-of-range pageIndex drops that placement, exactly as every other emitter here drops one.
   const placements = frames.filter(
     (frame) => pageOfFrame(state, frame) !== undefined,
   );
@@ -147,7 +147,7 @@ function emitRun(state: FrameWalkState, run: ContentRun): void {
           state.measurer,
         );
 
-  // Text that no frame's budget could hold (more fragments than frames) joins the last fragment rather than being dropped -- the same overflow failure mode a single-frame run has always had, confined to the tail.
+  // Text that no frame's budget could hold (more fragments than frames) joins the last fragment rather than being dropped — the same overflow failure mode a single-frame run has always had, confined to the tail.
   for (const [index, frame] of placements.entries()) {
     const page = pageOfFrame(state, frame);
     if (page === undefined) {
@@ -190,7 +190,7 @@ function rederiveWrapFragments(
   frames: readonly LayoutFrame[],
   measurer: TextMeasurer,
 ): string[] {
-  // Atomise once, then consume one line per frame from the already-measured atoms: each frame takes only line 1 of a wrap at its own recorded width, so re-running the whole-text wrapper per frame measured the entire remaining suffix N times for N frames -- quadratic work an untrusted many-frame run could drive into seconds of event-loop blockage through the from_package MCP tool. The incremental consumer spends each atom's measurement once. The consistency guard runs against the same running remaining-string the whole-text approach used (sliced and trimStart-ed per consumed line), not against a concatenation of per-line texts: a wrap boundary's glue is consumed by the wrap itself and belongs to no fragment, so a prefix-concatenation guard would spuriously trip on every space at a wrap point.
+  // Atomise once, then consume one line per frame from the already-measured atoms: each frame takes only line 1 of a wrap at its own recorded width, so re-running the whole-text wrapper per frame measured the entire remaining suffix N times for N frames — quadratic work an untrusted many-frame run could drive into seconds of event-loop blockage through the from_package MCP tool. The incremental consumer spends each atom's measurement once. The consistency guard runs against the same running remaining-string the whole-text approach used (sliced and trimStart-ed per consumed line), not against a concatenation of per-line texts: a wrap boundary's glue is consumed by the wrap itself and belongs to no fragment, so a prefix-concatenation guard would spuriously trip on every space at a wrap point.
   let atoms = atomizeForWrap(
     [{ text, font, sizePt, color: COLOR_BLACK }],
     measurer,
@@ -213,7 +213,7 @@ function rederiveWrapFragments(
   return fragments;
 }
 
-// A consumed line's trailing glue is trimmed by the consumer itself; the NEXT line must not begin with the glue that ended the previous one (the whole-text wrapper skips it when starting its next line), so the incremental caller trims leading glue between frames -- the join the wrapper performs implicitly by never queueing a line-leading glue onto a fresh line.
+// A consumed line's trailing glue is trimmed by the consumer itself; the NEXT line must not begin with the glue that ended the previous one (the whole-text wrapper skips it when starting its next line), so the incremental caller trims leading glue between frames — the join the wrapper performs implicitly by never queueing a line-leading glue onto a fresh line.
 function trimLeadingGlueAtoms(atoms: readonly WrapAtom[]): WrapAtom[] {
   let start = 0;
   while (start < atoms.length && atoms[start]?.kind === "glue") {
@@ -222,7 +222,7 @@ function trimLeadingGlueAtoms(atoms: readonly WrapAtom[]): WrapAtom[] {
   return atoms.slice(start);
 }
 
-// A paragraph's own frames record its list-marker placements (engine.ts stamps the paragraph node, not any run, for the marker it derives from list membership). The marker text itself came from the engine's own per-numId counters, which a package does not carry, so there is nothing honest to re-render at those positions -- the frames stay recorded on the node (traceability) and emit nothing here.
+// A paragraph's own frames record its list-marker placements (engine.ts stamps the paragraph node, not any run, for the marker it derives from list membership). The marker text itself came from the engine's own per-numId counters, which a package does not carry, so there is nothing honest to re-render at those positions — the frames stay recorded on the node (traceability) and emit nothing here.
 function emitParagraph(
   state: FrameWalkState,
   paragraph: ContentParagraph,
@@ -255,14 +255,14 @@ function emitImageBlock(
   }
 }
 
-// A table cell's own frame is the whole cell box: its declared background re-renders as the LayoutRect the engine emitted, and its declared borders as the same four edge lines pushCellBorderLines produces from a y-down frame -- flipY is its own exact inverse, so un-flipping through the package's own page height recovers the frame the original emission started from.
+// A table cell's own frame is the whole cell box: its declared background re-renders as the LayoutRect the engine emitted, and its declared borders as the same four edge lines pushCellBorderLines produces from a y-down frame — flipY is its own exact inverse, so un-flipping through the package's own page height recovers the frame the original emission started from.
 function emitTableCell(state: FrameWalkState, cell: ContentTableCell): void {
   for (const frame of cell.frames ?? []) {
     const page = pageOfFrame(state, frame);
     if (page === undefined) {
       continue;
     }
-    // A rect's own fill is one flat colour, so a 'pattern' fill (ExaDev/documents.js#951) renders as resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern PDF rendering has no primitive for -- and that resolution can itself come back undefined (an unresolvable theme/indexed colour, or the reserved gray125 pattern with no explicit colours), which is genuinely no fill rather than a reason to skip resolving at all, so the guard checks the RESOLVED colour, not merely whether the cell declared a background object.
+    // A rect's own fill is one flat colour, so a 'pattern' fill (ExaDev/documents.js#951) renders as resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern PDF rendering has no primitive for — and that resolution can itself come back undefined (an unresolvable theme/indexed colour, or the reserved gray125 pattern with no explicit colours), which is genuinely no fill rather than a reason to skip resolving at all, so the guard checks the RESOLVED colour, not merely whether the cell declared a background object.
     const cellFill =
       cell.background === undefined
         ? undefined
@@ -315,7 +315,7 @@ function emitTable(state: FrameWalkState, table: ContentTable): void {
   }
 }
 
-// One drawing vector: re-runs the layout engine's own single vector-to-item conversion against the frame's own page height, so the rebuilt geometry is identical to a fresh layout pass's emission by construction (one implementation, no drift) -- a vector's own frame plus the page height fully determine its placement, which is what makes the exact re-derivation possible where text wrapping is not.
+// One drawing vector: re-runs the layout engine's own single vector-to-item conversion against the frame's own page height, so the rebuilt geometry is identical to a fresh layout pass's emission by construction (one implementation, no drift) — a vector's own frame plus the page height fully determine its placement, which is what makes the exact re-derivation possible where text wrapping is not.
 function emitVector(state: FrameWalkState, vector: ContentVector): void {
   for (const frame of vector.frames ?? []) {
     const page = pageOfFrame(state, frame);
@@ -327,7 +327,7 @@ function emitVector(state: FrameWalkState, vector: ContentVector): void {
   }
 }
 
-// One spreadsheet cell. A cell whose runs carry stamped frames renders those (per-run styling survives); a cell with no runs -- or none that rendered, e.g. a numeric overflow the engine replaced with a synthesised '###' -- falls back to its displayText at the cell's own frames through the same nominal font/size the sheets engine itself renders an unstyled cell at. Exact either way, per the single-line note in the module doc above.
+// One spreadsheet cell. A cell whose runs carry stamped frames renders those (per-run styling survives); a cell with no runs — or none that rendered, e.g. a numeric overflow the engine replaced with a synthesised '###' — falls back to its displayText at the cell's own frames through the same nominal font/size the sheets engine itself renders an unstyled cell at. Exact either way, per the single-line note in the module doc above.
 function emitSheetCell(state: FrameWalkState, cell: ContentSheetCell): void {
   const hasStampedRuns = (cell.runs ?? []).some(
     (run) => (run.frames?.length ?? 0) > 0,
@@ -358,7 +358,7 @@ function emitSheetCell(state: FrameWalkState, cell: ContentSheetCell): void {
     if (page === undefined) {
       continue;
     }
-    // A rect's own fill is one flat colour, so a 'pattern' fill (ExaDev/documents.js#951) renders as resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern PDF rendering has no primitive for -- and that resolution can itself come back undefined (an unresolvable theme/indexed colour, or the reserved gray125 pattern with no explicit colours), which is genuinely no fill rather than a reason to skip resolving at all, so the guard checks the RESOLVED colour, not merely whether the cell declared a background object.
+    // A rect's own fill is one flat colour, so a 'pattern' fill (ExaDev/documents.js#951) renders as resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern PDF rendering has no primitive for — and that resolution can itself come back undefined (an unresolvable theme/indexed colour, or the reserved gray125 pattern with no explicit colours), which is genuinely no fill rather than a reason to skip resolving at all, so the guard checks the RESOLVED colour, not merely whether the cell declared a background object.
     const cellFill =
       cell.background === undefined
         ? undefined
@@ -438,7 +438,7 @@ function emitBlocks(
   }
 }
 
-// One embedded object block. A formula is re-typeset at its own recorded frames through the identical layoutFormula + loadMathFont pipeline the original layout pass ran (formulaSizePtForFrame's two-pass fit against the recorded frame recovers the size the original chose), landing in writePdf's own formulas side channel -- the same channel the original pass used, which is why nothing of this renders as a page item. A non-formula embedded object (a chart, a sub-document) still emits nothing: the original pass did not render its glyphs either, so the frame stays a position record. A formula whose source carried no MathML (mathml: []) has nothing to typeset and renders as nothing -- the honest floor, not a guess.
+// One embedded object block. A formula is re-typeset at its own recorded frames through the identical layoutFormula + loadMathFont pipeline the original layout pass ran (formulaSizePtForFrame's two-pass fit against the recorded frame recovers the size the original chose), landing in writePdf's own formulas side channel — the same channel the original pass used, which is why nothing of this renders as a page item. A non-formula embedded object (a chart, a sub-document) still emits nothing: the original pass did not render its glyphs either, so the frame stays a position record. A formula whose source carried no MathML (mathml: []) has nothing to typeset and renders as nothing — the honest floor, not a guess.
 function emitEmbeddedObjectBlock(
   state: FrameWalkState,
   block: ContentEmbeddedObjectBlock,
@@ -483,7 +483,7 @@ function packageToLayout(pkg: DocumentTree): {
     heightPt: page.heightPt,
     items: [],
   }));
-  // The tree's own embedded font faces (document-schema.js's tree-only `fonts` table, spliced by whichever construction site read a package that embedded them) feed the rebuild's registry as sourceFonts, so a rebuild renders through the document's real faces rather than vendored substitutes and the standard 14 -- the one layer of the original package a tree previously could not carry (ExaDev/documents.js#1192). An empty or absent table keeps the identical registry construction a tree without embedded fonts always had, byte-for-byte.
+  // The tree's own embedded font faces (document-schema.js's tree-only `fonts` table, spliced by whichever construction site read a package that embedded them) feed the rebuild's registry as sourceFonts, so a rebuild renders through the document's real faces rather than vendored substitutes and the standard 14 — the one layer of the original package a tree previously could not carry (ExaDev/documents.js#1192). An empty or absent table keeps the identical registry construction a tree without embedded fonts always had, byte-for-byte.
   const fonts =
     pkg.fonts !== undefined && pkg.fonts.length > 0
       ? createFontRegistry({
@@ -510,7 +510,7 @@ function packageToLayout(pkg: DocumentTree): {
   } else if (content.kind === "presentation") {
     for (const slide of content.slides) {
       for (const shape of slide.shapes) {
-        // A shape's own frames carry no renderable payload (a bare shape emits no item of its own -- its content blocks carry everything), so only its blocks walk.
+        // A shape's own frames carry no renderable payload (a bare shape emits no item of its own — its content blocks carry everything), so only its blocks walk.
         emitBlocks(state, shape.blocks);
       }
     }

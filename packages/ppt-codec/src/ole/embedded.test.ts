@@ -143,7 +143,7 @@ describe("readExternalOleEmbeds", () => {
     if (written === undefined) {
       throw new Error("expected a written ExObjListContainer");
     }
-    // Splice an unrelated sibling record between the seed atom and the real embed container. The sibling itself wraps a fully valid ExOleObjAtom (exObjId 99) -- a sibling with nothing parseable inside it would converge on the same result whether or not the skip actually ran, since there would be nothing there to spuriously pick up either way; wrapping something genuinely embed-shaped proves the record-type check, not merely the sibling's own shape, is what keeps it out.
+    // Splice an unrelated sibling record between the seed atom and the real embed container. The sibling itself wraps a fully valid ExOleObjAtom (exObjId 99) — a sibling with nothing parseable inside it would converge on the same result whether or not the skip actually ran, since there would be nothing there to spuriously pick up either way; wrapping something genuinely embed-shaped proves the record-type check, not merely the sibling's own shape, is what keeps it out.
     const record = readRecordAt(written, 0);
     const [seedAtom, embedContainer] = childRecords(record);
     if (seedAtom === undefined || embedContainer === undefined) {
@@ -176,7 +176,7 @@ describe("readExternalOleEmbeds", () => {
   });
 
   it("finds the ProgIDAtom by its own recInstance among an embed's CString siblings, not merely by record type", () => {
-    // menuNameAtom and clipboardNameAtom are also RT_CString, distinguished only by recInstance -- a lookup keyed on type alone could pick either up instead of the real ProgIDAtom (recInstance 0x002).
+    // menuNameAtom and clipboardNameAtom are also RT_CString, distinguished only by recInstance — a lookup keyed on type alone could pick either up instead of the real ProgIDAtom (recInstance 0x002).
     const objAtom = atom(
       RT_ExternalOleObjectAtom,
       concatBytes(u32le(1), u32le(0), u32le(1), u32le(0), u32le(10), u32le(0)),

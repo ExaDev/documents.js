@@ -53,7 +53,7 @@ function spreadsheetDocument(sheets: readonly SheetFixture[]): ContentDocument {
 
 describe("readCsvContent", () => {
   it("writes the first record as verbatim string header cells and never re-types them", () => {
-    // A header of "007" and "TRUE" -- text that inferCellValue would decline/re-type as data -- must stay a plain verbatim string at row 0, because headers are labels, not data.
+    // A header of "007" and "TRUE" — text that inferCellValue would decline/re-type as data — must stay a plain verbatim string at row 0, because headers are labels, not data.
     const document = readCsvContent("007,TRUE\n42.5,x\n");
     expect(document.kind).toBe("spreadsheet");
     if (document.kind !== "spreadsheet") {
@@ -122,7 +122,7 @@ describe("readCsvContent", () => {
     expect(valueAt(2, 0)).toEqual({ kind: "string", value: "solo" });
     expect(valueAt(2, 1)).toEqual({ kind: "empty" });
     expect(valueAt(2, 2)).toEqual({ kind: "empty" });
-    // The three empty fields (row 1 col 1, row 2 cols 1 and 2) never fire a type-inference event -- only the populated fields ("1" and "3", both plain numbers) do.
+    // The three empty fields (row 1 col 1, row 2 cols 1 and 2) never fire a type-inference event — only the populated fields ("1" and "3", both plain numbers) do.
     expect(
       events.map((event) => `${String(event.row)},${String(event.column)}`),
     ).toEqual(["1,0", "1,2"]);
@@ -158,7 +158,7 @@ describe("readCsvContent", () => {
     readCsvContent("h1,h2\n007,42.5\nYes,x\n", {
       onCellTypeInference: (event) => events.push(event),
     });
-    // Header cells are never re-typed, so the header's own "007" fires nothing. "x" matches no typing rule at all, which is not a decision and fires nothing either -- the sink reports decisions (retypes and named-ambiguity declines), not every cell.
+    // Header cells are never re-typed, so the header's own "007" fires nothing. "x" matches no typing rule at all, which is not a decision and fires nothing either — the sink reports decisions (retypes and named-ambiguity declines), not every cell.
     expect(events).toEqual([
       {
         sheetIndex: 0,

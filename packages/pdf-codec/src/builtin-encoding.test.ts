@@ -32,7 +32,7 @@ describe("readFontProgramEncoding: what it refuses to read", () => {
   });
 
   it("returns undefined for a CID-keyed CFF, whose charset holds CIDs rather than glyph names", () => {
-    // Reading such a font's charset as though its numbers were name SIDs would name every glyph, and name them all wrongly -- the same silent-wrong-answer failure this module exists to avoid.
+    // Reading such a font's charset as though its numbers were name SIDs would name every glyph, and name them all wrongly — the same silent-wrong-answer failure this module exists to avoid.
     const program = cffFont("CIDKeyed", [...ROS_OPERANDS_AND_OPERATOR]);
     expect(readFontProgramEncoding(program)).toBeUndefined();
   });
@@ -235,7 +235,7 @@ describe("readFontProgramEncoding: CFF programs", () => {
     );
     expect(encoding?.glyphIdToUnicode(5)).toBe(0x43);
     expect(encoding?.glyphIdToUnicode(35)).toBe(0x1ea8);
-    // An sfnt-wrapped CFF states its encoding through the container's own 'cmap', never the CFF Encoding operator (predefinedEncodingApplies is false here) -- so with no symbolic cmap subtable in this font, no code reaches any glyph at all, only glyph IDs do.
+    // An sfnt-wrapped CFF states its encoding through the container's own 'cmap', never the CFF Encoding operator (predefinedEncodingApplies is false here) — so with no symbolic cmap subtable in this font, no code reaches any glyph at all, only glyph IDs do.
     expect(encoding?.codeToUnicode(0x43)).toBeUndefined();
   });
 });

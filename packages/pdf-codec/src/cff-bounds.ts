@@ -12,15 +12,15 @@ import { hasBytes, u8, u16, u32 } from "./sfnt";
 
 // Per-glyph ink bounding boxes for a CFF-flavoured font, computed by interpreting each glyph's own Type 2 charstring (CFF 1.0 spec, and Adobe's "The Type 2 Charstring Format", TN 5177).
 //
-// Why this exists at all, when glyf.ts gets the same answer for free. A TrueType glyph stores its own bounding box in the ten bytes at the head of its 'glyf' entry, so measuring one is a read. A CFF glyph stores no bounding box anywhere: the charstring is a program, and the only way to know what area it covers is to run it. The embedded math font (STIX Two Math) is CFF-flavoured -- see math-font.ts -- so without this module every math token would be stuck with the font-wide nominal ascent/descent, which is precisely the uniform, glyph-blind vertical extent per-glyph ink bounds exist to replace.
+// Why this exists at all, when glyf.ts gets the same answer for free. A TrueType glyph stores its own bounding box in the ten bytes at the head of its 'glyf' entry, so measuring one is a read. A CFF glyph stores no bounding box anywhere: the charstring is a program, and the only way to know what area it covers is to run it. The embedded math font (STIX Two Math) is CFF-flavoured — see math-font.ts — so without this module every math token would be stuck with the font-wide nominal ascent/descent, which is precisely the uniform, glyph-blind vertical extent per-glyph ink bounds exist to replace.
 //
-// This is an outline WALKER, not a rasteriser: it tracks the current point through every path-construction operator and accumulates the extent of the path, and draws nothing. Curve extents are computed exactly -- the real extrema of each cubic Bezier, from the roots of its own derivative, not the convex hull of its control points -- so a bound reported here is genuinely tight rather than merely a safe over-estimate. Hint operators are decoded only far enough to know how many bytes a following hintmask consumes; the hints themselves are ignored, since they are rasterisation advice about a shape this module already has exactly.
+// This is an outline WALKER, not a rasteriser: it tracks the current point through every path-construction operator and accumulates the extent of the path, and draws nothing. Curve extents are computed exactly — the real extrema of each cubic Bezier, from the roots of its own derivative, not the convex hull of its control points — so a bound reported here is genuinely tight rather than merely a safe over-estimate. Hint operators are decoded only far enough to know how many bytes a following hintmask consumes; the hints themselves are ignored, since they are rasterisation advice about a shape this module already has exactly.
 //
 // Scope, and what returns `undefined` rather than a wrong answer:
 //   * A CID-keyed CFF (a Top DICT carrying ROS). Its local subroutines live per-FD behind an FDArray/FDSelect pair rather than in one Private DICT, and this package refuses CID-keyed CFF programs elsewhere for its own reasons (see cff-probe.ts). Reported as `undefined` for the whole font.
-//   * `endchar` used in its four-argument "seac-like" form, which composes a glyph out of two standard-encoding glyphs. Resolving those two needs the charset and the Standard Encoding table, neither of which this module reads. Reported as `undefined` for that one glyph -- the caller falls back to nominal metrics for it rather than getting a box missing its accent.
+//   * `endchar` used in its four-argument "seac-like" form, which composes a glyph out of two standard-encoding glyphs. Resolving those two needs the charset and the Standard Encoding table, neither of which this module reads. Reported as `undefined` for that one glyph — the caller falls back to nominal metrics for it rather than getting a box missing its accent.
 //   * The arithmetic, storage, and conditional escaped operators (12 3 `and` through 12 29 `ifelse`, and 12 23 `random`). These appear in no font this package has met; a charstring using one is reported as `undefined` for that glyph rather than silently mis-walked.
-// A glyph that legitimately draws nothing (a space, whose charstring is just a width and `endchar`) reports `undefined` too -- it has no ink, so it has no ink box.
+// A glyph that legitimately draws nothing (a space, whose charstring is just a width and `endchar`) reports `undefined` too — it has no ink, so it has no ink box.
 
 export interface CffGlyphBounds {
   readonly numGlyphs: number;
@@ -149,7 +149,7 @@ function cubicAt(
   );
 }
 
-// The exact extent of one axis of a cubic Bezier: its endpoints, plus the curve's value at each root of its own derivative that lies strictly inside the segment. B'(t) = 3[(-p0 + 3p1 - 3p2 + p3)t^2 + 2(p0 - 2p1 + p2)t + (p1 - p0)], so the roots come from an ordinary quadratic -- with the degenerate linear case (a == 0) handled separately, which is what a curve whose control points happen to be collinear in this axis produces.
+// The exact extent of one axis of a cubic Bezier: its endpoints, plus the curve's value at each root of its own derivative that lies strictly inside the segment. B'(t) = 3[(-p0 + 3p1 - 3p2 + p3)t^2 + 2(p0 - 2p1 + p2)t + (p1 - p0)], so the roots come from an ordinary quadratic — with the degenerate linear case (a == 0) handled separately, which is what a curve whose control points happen to be collinear in this axis produces.
 function includeCubicAxis(
   p0: number,
   p1: number,
@@ -227,7 +227,7 @@ function curveTo(
 }
 
 function lineTo(state: WalkState, dx: number, dy: number): void {
-  includePoint(state.box, state.x, state.y); // the segment's own start, which is only already in the box if something drew it there -- a lineto immediately after a moveto is the case that needs it
+  includePoint(state.box, state.x, state.y); // the segment's own start, which is only already in the box if something drew it there — a lineto immediately after a moveto is the case that needs it
   state.x += dx;
   state.y += dy;
   includePoint(state.box, state.x, state.y);
@@ -239,7 +239,7 @@ function moveTo(state: WalkState, dx: number, dy: number): void {
   // A moveto's own destination is deliberately NOT added to the box: an unclosed, undrawn subpath start contributes no ink, and a font whose charstring ends with a stray moveto (or begins with one far from its outline, as several do) would otherwise report a box stretched to reach it. Whatever the following path operator draws includes this point through its own start.
 }
 
-// Takes the leading width operand off the stack, where the operator that just ran declares one. A charstring's optional leading width is detected purely by arity: the FIRST stack-clearing operator carries one extra argument when the glyph's width differs from the Private DICT's own defaultWidthX (TN 5177 section 3.1). The width value itself is not read here -- hmtx already supplies every advance width this package uses.
+// Takes the leading width operand off the stack, where the operator that just ran declares one. A charstring's optional leading width is detected purely by arity: the FIRST stack-clearing operator carries one extra argument when the glyph's width differs from the Private DICT's own defaultWidthX (TN 5177 section 3.1). The width value itself is not read here — hmtx already supplies every advance width this package uses.
 function takeWidth(
   state: WalkState,
   evenArgs: boolean,
@@ -582,7 +582,7 @@ function execute(
             stack.shift();
           }
         }
-        // Four remaining arguments make this the seac-like accented-character form, which needs the charset and Standard Encoding to resolve into two other glyphs -- see this module's own scope note.
+        // Four remaining arguments make this the seac-like accented-character form, which needs the charset and Standard Encoding to resolve into two other glyphs — see this module's own scope note.
         return stack.length < ENDCHAR_SEAC_ARG_COUNT;
       }
       case OP_ESCAPE: {
@@ -604,7 +604,7 @@ function execute(
   return true;
 }
 
-// The flex family (TN 5177 section 4.2): two cubics drawn as one operator, in four encodings that each omit whichever deltas the construction fixes. Every other escaped operator -- the arithmetic, storage, and conditional set -- returns false rather than being approximated.
+// The flex family (TN 5177 section 4.2): two cubics drawn as one operator, in four encodings that each omit whichever deltas the construction fixes. Every other escaped operator — the arithmetic, storage, and conditional set — returns false rather than being approximated.
 function executeEscaped(operator: number, state: WalkState): boolean {
   const stack = state.stack;
   const startY = state.y;
@@ -629,7 +629,7 @@ function executeEscaped(operator: number, state: WalkState): boolean {
       stack[9]!,
       stack[10]!,
       stack[11]!,
-    ); // the 13th argument is fd, the flex depth -- a rasterisation hint with no effect on the curve
+    ); // the 13th argument is fd, the flex depth — a rasterisation hint with no effect on the curve
     stack.length = 0;
     return true;
   }

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { version } from "../package.json";
 import { createServer } from "./server";
 
-// createServer()'s own advertised identity (name/version) is otherwise never asserted -- every src/tools/*.test.ts file connects through it but only ever inspects tool results, never the server's own self-reported Implementation from the initialize handshake.
+// createServer()'s own advertised identity (name/version) is otherwise never asserted — every src/tools/*.test.ts file connects through it but only ever inspects tool results, never the server's own self-reported Implementation from the initialize handshake.
 describe("createServer", () => {
   it("advertises itself as document-mcp at this package's own version", async () => {
     const server = createServer();
@@ -23,7 +23,7 @@ describe("createServer", () => {
     await client.close();
   });
 
-  // Every src/tools/*.test.ts file connects through createServer() but only ever calls one tool it already knows the name of, so none of them would notice a register*Tools(server) call going missing from createServer()'s own body -- only the full, exact set of every tool every register function contributes proves each of the twelve calls actually ran.
+  // Every src/tools/*.test.ts file connects through createServer() but only ever calls one tool it already knows the name of, so none of them would notice a register*Tools(server) call going missing from createServer()'s own body — only the full, exact set of every tool every register function contributes proves each of the twelve calls actually ran.
   it("registers every tool contributed by each of its twelve register*Tools calls", async () => {
     const server = createServer();
     const client = new Client({ name: "server-test-client", version: "0.0.0" });

@@ -15,7 +15,7 @@ export interface MediaContext {
   readonly mediaDir: string;
 }
 
-// p:cNvPr/@id must be a document-unique (per-slide, in practice per-presentation) numeric id -- scanning the slide tree for the highest existing one mirrors opc/rels.ts's rId allocation.
+// p:cNvPr/@id must be a document-unique (per-slide, in practice per-presentation) numeric id — scanning the slide tree for the highest existing one mirrors opc/rels.ts's rId allocation.
 function nextShapeId(slideRoot: XmlElement): number {
   let max = 0;
   const stack: XmlElement[] = [slideRoot];

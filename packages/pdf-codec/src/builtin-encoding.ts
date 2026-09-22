@@ -15,14 +15,14 @@ import { parsePostGlyphNames } from "./font-tables";
 import type { SfntFont } from "./sfnt";
 import { hasBytes, parseSfnt, sfntTableBytes, u8, u16 } from "./sfnt";
 
-// A font's *built-in* encoding: the character-code-to-glyph mapping the embedded font program carries inside itself, as opposed to the one the PDF font dictionary states through /Encoding or /ToUnicode. For a symbol-encoded font -- a subset embedded to draw Ω, µ, ± or ≤ at whatever codes its producer happened to pick -- the program is the only place that mapping exists at all, and ISO 32000-1 9.6.6.2 makes it the base encoding whenever the font dictionary names none. Reading it is what separates "code 0x57 in this font draws an ohm sign" from the WinAnsi guess that silently yields "W" (ExaDev/documents.js#834).
+// A font's *built-in* encoding: the character-code-to-glyph mapping the embedded font program carries inside itself, as opposed to the one the PDF font dictionary states through /Encoding or /ToUnicode. For a symbol-encoded font — a subset embedded to draw Ω, µ, ± or ≤ at whatever codes its producer happened to pick — the program is the only place that mapping exists at all, and ISO 32000-1 9.6.6.2 makes it the base encoding whenever the font dictionary names none. Reading it is what separates "code 0x57 in this font draws an ohm sign" from the WinAnsi guess that silently yields "W" (ExaDev/documents.js#834).
 //
 // Three program shapes carry an encoding, and this module reads all three because a PDF may embed any of them for the same font:
 //   - TrueType (/FontFile2, or an sfnt-wrapped /FontFile3 /OpenType): the 'cmap' table's (3, 0) Microsoft Symbol or (1, 0) Macintosh subtable maps codes to glyph IDs (9.6.6.4), and the glyph is then identified by the 'post' table's own name for it, or by reversing the font's Unicode subtable.
 //   - CFF (/FontFile3 /Type1C, or an sfnt 'CFF ' table): the Top DICT's Encoding operator maps codes to glyphs and its charset names each glyph, both directly (CFF 1.0 spec, sections 12 and 13).
 //   - Type 1 (/FontFile): the /Encoding array in the program's own cleartext header names a glyph per code outright.
 //
-// Every route ends at a PostScript glyph name resolved through the Adobe Glyph List, or -- where a subsetting tool has stripped the names -- at a code point recovered by reading the program's Unicode mapping backwards. Where neither is available the answer is `undefined`, never a guess: the caller reports an honestly unmapped code rather than a plausible wrong character.
+// Every route ends at a PostScript glyph name resolved through the Adobe Glyph List, or — where a subsetting tool has stripped the names — at a code point recovered by reading the program's Unicode mapping backwards. Where neither is available the answer is `undefined`, never a guess: the caller reports an honestly unmapped code rather than a plausible wrong character.
 
 export interface BuiltinEncoding {
   // The program's own character code -> Unicode code point. Always undefined for a program that states no code-keyed encoding at all (a CID-keyed CFF, or a TrueType with no symbolic subtable), which is exactly the case a simple font must fall back from.
@@ -405,7 +405,7 @@ function type1Sources(
     : { codeToName: (code) => nameByCode.get(code) };
 }
 
-// Reads whatever encoding an embedded font program carries in itself. `undefined` means this program states nothing this codec can read -- a program in a format not read here, or one too damaged to parse -- and the caller must fall back rather than treat the absence as a mapping.
+// Reads whatever encoding an embedded font program carries in itself. `undefined` means this program states nothing this codec can read — a program in a format not read here, or one too damaged to parse — and the caller must fall back rather than treat the absence as a mapping.
 export function readFontProgramEncoding(
   program: Uint8Array<ArrayBuffer>,
 ): BuiltinEncoding | undefined {

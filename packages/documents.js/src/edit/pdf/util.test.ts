@@ -3,7 +3,7 @@ import type { LayoutImageAsset } from "pdf-codec";
 import { encodePng } from "byte-codec";
 import { registerImageBytes, spliceOut } from "./util";
 
-// A minimal, spec-shaped baseline JPEG: SOI, an SOF0 frame header (4x3px, 3 components), EOI -- mirrors byte-codec's own readJpegInfo test fixture shape (that package's own image/jpeg-info.test.ts buildJpeg helper), restated inline here since this is the only place in documents.js that needs a real (not merely format-labelled) JPEG byte stream.
+// A minimal, spec-shaped baseline JPEG: SOI, an SOF0 frame header (4x3px, 3 components), EOI — mirrors byte-codec's own readJpegInfo test fixture shape (that package's own image/jpeg-info.test.ts buildJpeg helper), restated inline here since this is the only place in documents.js that needs a real (not merely format-labelled) JPEG byte stream.
 const JPEG_WIDTH = 4;
 const JPEG_HEIGHT = 3;
 const JPEG_BYTES = new Uint8Array([
@@ -69,7 +69,7 @@ describe("registerImageBytes", () => {
   it("does not re-decode or overwrite an already-registered image id", () => {
     const images: Record<string, LayoutImageAsset> = {};
     const imageId = registerImageBytes(PNG_BYTES, "png", images);
-    // A sentinel value decodeImageDimensions could never itself produce -- if the "already registered" guard were skipped, the second call would overwrite it with the real decode.
+    // A sentinel value decodeImageDimensions could never itself produce — if the "already registered" guard were skipped, the second call would overwrite it with the real decode.
     const sentinel: LayoutImageAsset = {
       format: "png",
       base64: "sentinel",

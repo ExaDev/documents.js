@@ -48,7 +48,7 @@ describe("readSummaryInformation / writeSummaryInformationStream", () => {
   });
 
   it("drops empty entries a hand-written KEYWORDS value carries between commas", () => {
-    // writeSummaryInformationStream's own join never produces an empty segment, so this builds the KEYWORDS property directly to exercise splitKeywords' own filter -- a real producer's comma-separated field is not guaranteed free of doubled or trailing delimiters.
+    // writeSummaryInformationStream's own join never produces an empty segment, so this builds the KEYWORDS property directly to exercise splitKeywords' own filter — a real producer's comma-separated field is not guaranteed free of doubled or trailing delimiters.
     const bytes = writePropertySetStream({
       formatId: FMTID_SUMMARY_INFORMATION,
       properties: new Map([[5, { type: "VT_LPWSTR", value: "a,,b, ,c" }]]), // PIDSI_KEYWORDS
@@ -70,7 +70,7 @@ describe("readSummaryInformation / writeSummaryInformationStream", () => {
   });
 
   it("reads a genuine VT_LPSTR string property exactly as it reads the VT_LPWSTR this module itself writes", () => {
-    // writeSummaryInformationStream never writes VT_LPSTR (see write.ts's own scope note; writePropertySetStream itself refuses to encode one), so a round trip through this module's own writer never exercises stringValue's VT_LPSTR branch -- built instead through test-support's own encoder, which supports VT_LPSTR directly, against a real producer's more common ANSI string encoding.
+    // writeSummaryInformationStream never writes VT_LPSTR (see write.ts's own scope note; writePropertySetStream itself refuses to encode one), so a round trip through this module's own writer never exercises stringValue's VT_LPSTR branch — built instead through test-support's own encoder, which supports VT_LPSTR directly, against a real producer's more common ANSI string encoding.
     const bytes = propertySetStream(FMTID_SUMMARY_INFORMATION, [
       { pid: 4, value: { type: "VT_LPSTR", value: "Ansi Author" } }, // PIDSI_AUTHOR
     ]);
@@ -94,7 +94,7 @@ describe("readSummaryInformation / writeSummaryInformationStream", () => {
   });
 
   it("reads a zero FILETIME (the conventional 'never printed' spelling) back as absent", () => {
-    // [MS-OLEPS] 2.15: an all-zero FILETIME (low=0, high=0) decodes to the FILETIME epoch itself, 1601-01-01T00:00:00Z -- the value a real producer writes for "never printed" rather than omitting PIDSI_LASTPRINTED outright.
+    // [MS-OLEPS] 2.15: an all-zero FILETIME (low=0, high=0) decodes to the FILETIME epoch itself, 1601-01-01T00:00:00Z — the value a real producer writes for "never printed" rather than omitting PIDSI_LASTPRINTED outright.
     const bytes = writePropertySetStream({
       formatId: FMTID_SUMMARY_INFORMATION,
       properties: new Map([

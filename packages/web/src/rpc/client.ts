@@ -7,7 +7,7 @@ import type { AppRouter } from "./router";
 
 let cachedClient: RouterClient<AppRouter> | undefined;
 
-// Lazily creates the single Worker + oRPC client pair for the app's lifetime. src/workers/workerPool.ts (added alongside the conversion pool) will replace this with a real pool for concurrent/cancellable jobs -- this minimal version proves the RPCLink/RPCHandler MessagePort boundary end to end for the flagship convert tool first.
+// Lazily creates the single Worker + oRPC client pair for the app's lifetime. src/workers/workerPool.ts (added alongside the conversion pool) will replace this with a real pool for concurrent/cancellable jobs — this minimal version proves the RPCLink/RPCHandler MessagePort boundary end to end for the flagship convert tool first.
 export function getRpcClient(): RouterClient<AppRouter> {
   if (cachedClient !== undefined) return cachedClient;
 

@@ -64,11 +64,11 @@ import {
   synthesiseConditionValue,
 } from "./conditional-format";
 
-// ContentDocument (the 'spreadsheet' arm) -> a real .ods Package: the inverse of typed/ods/read.ts, and the second content WRITER in this package's typed layer (the first, typed/odt/write.ts, states the philosophy this module follows in full and is worth reading first). Every mapping below is stated as the exact inverse of the corresponding read in that module rather than as an independent idea of what an .ods should look like -- the correctness property this writer is held to is that its own package reads back as the document it was given (see normaliseOdsContent below for the one canonical form that equality is stated against, and write.test.ts / write-round-trip.test.ts for both halves).
+// ContentDocument (the 'spreadsheet' arm) -> a real .ods Package: the inverse of typed/ods/read.ts, and the second content WRITER in this package's typed layer (the first, typed/odt/write.ts, states the philosophy this module follows in full and is worth reading first). Every mapping below is stated as the exact inverse of the corresponding read in that module rather than as an independent idea of what an .ods should look like — the correctness property this writer is held to is that its own package reads back as the document it was given (see normaliseOdsContent below for the one canonical form that equality is stated against, and write.test.ts / write-round-trip.test.ts for both halves).
 //
-// WHAT THIS WRITER DOES NOT WRITE, and why: an embedded OBJECT of the 'chart' kind is refused BY NAME for every sheet (a chart sub-document is quarantined residue by the family's own ExaDev/documents.js#719 decision, and fabricating a serialiser for it would invent a writer the family deliberately decided not to have). Every other embedded kind IS now written: the shared writeEmbeddedObject machinery (typed/draw/embedded-write.ts, ExaDev/documents.js#972) serialises the sub-package under its own "Object N/" directory, and writeSheetEmbeddedObjectFrame anchors the referencing draw:frame inside the object's own anchor cell exactly as writeSheetImageFrame anchors an image. dataValidations and conditionalFormats ARE now written (the exact inverses of readOdsContent's own data-validation.ts/conditional-format.ts readings, co-located with the parsers they invert), with two narrower refusals inside the conditional-format side: the schema's containsBlanks/notContainsBlanks members have no spelling in calcext:condition's own mini-language at all, and a rule carrying priority, stopIfTrue, stdDev, or reverse carries a precedence/standard-deviation/reversal fact ODF's vendor extension simply has no attribute for -- each is refused by name rather than written as a rule that would read back as something else. The quarantined residue channel splits the same way it does for the odt writer: the package-level table readOdsContent collects (calculation-settings, vendor-extension elements, and every non-content package part such as settings.xml) IS restored, verbatim, by writeOds itself once writeOdsContent has built the rest of the package, since none of it is ever touched or interpreted by anything this writer does either way. A per-sheet `sheet.source` -- which readOdsContent does not populate today, so this is stated for whichever future reader change adds it, not a live gap -- would stay dropped on write, the same known, tracked, restorable-fidelity gap a paragraph's own residue is for the odt writer. A per-rule `source` residue on a data-validation or conditional-format rule stays dropped the same way: the promoted fields write, the raw element they were quarantined from does not. A cell's own `numberFormatCode` is likewise not written as a `number:*` data-style/`style:data-style-name` reference: readOdsContent does not populate that field for any cell today (it has no data-style reading wired into its own walk at all, unlike readOdtContent's field-master reading), so there is no genuine inverse to write against or verify -- every cell value kind still writes back with the correct `office:value-type` regardless, which is the fact that actually round-trips. A cell's `comment` DOES now round-trip (ExaDev/documents.js#949) -- see writeCellAnnotation below and readCellComment in ./read.ts.
+// WHAT THIS WRITER DOES NOT WRITE, and why: an embedded OBJECT of the 'chart' kind is refused BY NAME for every sheet (a chart sub-document is quarantined residue by the family's own ExaDev/documents.js#719 decision, and fabricating a serialiser for it would invent a writer the family deliberately decided not to have). Every other embedded kind IS now written: the shared writeEmbeddedObject machinery (typed/draw/embedded-write.ts, ExaDev/documents.js#972) serialises the sub-package under its own "Object N/" directory, and writeSheetEmbeddedObjectFrame anchors the referencing draw:frame inside the object's own anchor cell exactly as writeSheetImageFrame anchors an image. dataValidations and conditionalFormats ARE now written (the exact inverses of readOdsContent's own data-validation.ts/conditional-format.ts readings, co-located with the parsers they invert), with two narrower refusals inside the conditional-format side: the schema's containsBlanks/notContainsBlanks members have no spelling in calcext:condition's own mini-language at all, and a rule carrying priority, stopIfTrue, stdDev, or reverse carries a precedence/standard-deviation/reversal fact ODF's vendor extension simply has no attribute for — each is refused by name rather than written as a rule that would read back as something else. The quarantined residue channel splits the same way it does for the odt writer: the package-level table readOdsContent collects (calculation-settings, vendor-extension elements, and every non-content package part such as settings.xml) IS restored, verbatim, by writeOds itself once writeOdsContent has built the rest of the package, since none of it is ever touched or interpreted by anything this writer does either way. A per-sheet `sheet.source` — which readOdsContent does not populate today, so this is stated for whichever future reader change adds it, not a live gap — would stay dropped on write, the same known, tracked, restorable-fidelity gap a paragraph's own residue is for the odt writer. A per-rule `source` residue on a data-validation or conditional-format rule stays dropped the same way: the promoted fields write, the raw element they were quarantined from does not. A cell's own `numberFormatCode` is likewise not written as a `number:*` data-style/`style:data-style-name` reference: readOdsContent does not populate that field for any cell today (it has no data-style reading wired into its own walk at all, unlike readOdtContent's field-master reading), so there is no genuine inverse to write against or verify — every cell value kind still writes back with the correct `office:value-type` regardless, which is the fact that actually round-trips. A cell's `comment` DOES now round-trip (ExaDev/documents.js#949) — see writeCellAnnotation below and readCellComment in ./read.ts.
 //
-// THE ONE FORCED ASYMMETRY THIS WRITER CANNOT PAPER OVER: a 'time' cell's ISO 8601 HH:MM:SS wall-clock value (document-schema.js's own documented wire contract for ContentCellValueSchema's 'time' kind) has no direct ODF spelling -- office:time-value is an xsd:duration ("PT13H30M00S"), and a conformant producer must convert between the two. This writer performs that conversion on write (see formatOdfDuration), because writing the ISO clock string directly into office:time-value would be invalid ODF that no real spreadsheet application could open correctly. readOdsContent, however, does not perform the inverse conversion today (see that module's own readCellValue: `attrValue(cellElement, "office:time-value") ?? displayText`, carried through unconverted) -- a narrow, pre-existing, unrelated reader gap this writer's own correctness cannot depend on being fixed. normaliseOdsContent states the resulting canonical form precisely (the raw xsd:duration string, not the ISO clock string) rather than hand-waving it, and the gap is tracked as a follow-up rather than silently worked around by emitting non-conformant XML to make today's reader happy.
+// THE ONE FORCED ASYMMETRY THIS WRITER CANNOT PAPER OVER: a 'time' cell's ISO 8601 HH:MM:SS wall-clock value (document-schema.js's own documented wire contract for ContentCellValueSchema's 'time' kind) has no direct ODF spelling — office:time-value is an xsd:duration ("PT13H30M00S"), and a conformant producer must convert between the two. This writer performs that conversion on write (see formatOdfDuration), because writing the ISO clock string directly into office:time-value would be invalid ODF that no real spreadsheet application could open correctly. readOdsContent, however, does not perform the inverse conversion today (see that module's own readCellValue: `attrValue(cellElement, "office:time-value") ?? displayText`, carried through unconverted) — a narrow, pre-existing, unrelated reader gap this writer's own correctness cannot depend on being fixed. normaliseOdsContent states the resulting canonical form precisely (the raw xsd:duration string, not the ISO clock string) rather than hand-waving it, and the gap is tracked as a follow-up rather than silently worked around by emitting non-conformant XML to make today's reader happy.
 
 const CONTENT_PART = "content.xml";
 const STYLES_PART = "styles.xml";
@@ -77,24 +77,24 @@ const PICTURES_DIRECTORY = "Pictures";
 export interface OdsWriteOptions {
   // The ODF version stamped on each part's office:version and on the manifest. Defaults to the current standard.
   readonly version?: string;
-  // Stamps the package as a document template (ODF_MEDIA_TYPES.ots) rather than a regular document (ODF_MEDIA_TYPES.ods) -- the "mimetype" part and the manifest root entry syncManifest derives from it, both of which createOdfPackage/syncManifest already key off whatever media type is passed in. Nothing else about the writer's own output changes: ODF makes no other structural distinction between a document and its template. Defaults to false.
+  // Stamps the package as a document template (ODF_MEDIA_TYPES.ots) rather than a regular document (ODF_MEDIA_TYPES.ods) — the "mimetype" part and the manifest root entry syncManifest derives from it, both of which createOdfPackage/syncManifest already key off whatever media type is passed in. Nothing else about the writer's own output changes: ODF makes no other structural distinction between a document and its template. Defaults to false.
   readonly template?: boolean;
 }
 
 function unsupported(what: string, where: string): Error {
   return new Error(
-    `writeOds: ${where} carries ${what}, which this writer does not write yet -- refusing rather than producing an .ods that silently lost it.`,
+    `writeOds: ${where} carries ${what}, which this writer does not write yet — refusing rather than producing an .ods that silently lost it.`,
   );
 }
 
 // --- cell values: ContentCellValue -> office:value-type + its own value attribute ------------------------------------
 
-// A 'PT<h>H<m>M<s>S' xsd:duration literal from an ISO 8601 HH:MM:SS wall-clock string -- the inverse this format's own datatype forces (see this module's own top-of-file note on why readOdsContent cannot yet undo it). Malformed input (anything not matching the canonical wire spelling document-schema.js's own ContentCellValueSchema documents for 'time') is refused rather than guessed at: a producer emitting an unparseable duration would be worse than one that refuses outright.
+// A 'PT<h>H<m>M<s>S' xsd:duration literal from an ISO 8601 HH:MM:SS wall-clock string — the inverse this format's own datatype forces (see this module's own top-of-file note on why readOdsContent cannot yet undo it). Malformed input (anything not matching the canonical wire spelling document-schema.js's own ContentCellValueSchema documents for 'time') is refused rather than guessed at: a producer emitting an unparseable duration would be worse than one that refuses outright.
 function formatOdfDuration(isoTime: string): string {
   const match = /^(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?$/.exec(isoTime);
   if (match === null) {
     throw new Error(
-      `writeOdsContent: a "time" cell's value "${isoTime}" is not the canonical ISO 8601 HH:MM:SS wall-clock spelling document-schema.js's ContentCellValueSchema documents -- refusing to guess at an ODF xsd:duration equivalent`,
+      `writeOdsContent: a "time" cell's value "${isoTime}" is not the canonical ISO 8601 HH:MM:SS wall-clock spelling document-schema.js's ContentCellValueSchema documents — refusing to guess at an ODF xsd:duration equivalent`,
     );
   }
   const [, hours, minutes, seconds, fraction] = match;
@@ -115,7 +115,7 @@ function formatCellNumberLiteral(value: {
 
 function unsupportedCellValueKind(kind: string): Error {
   return new Error(
-    `writeOdsContent: a cell carries a "${kind}" value, which this writer does not write -- readOdsContent's own reader can never produce this kind for an .ods document (see its own doc comment), so there is no genuine inverse to verify a write against; refusing rather than writing a document that would read back reporting a different value kind than it was given.`,
+    `writeOdsContent: a cell carries a "${kind}" value, which this writer does not write — readOdsContent's own reader can never produce this kind for an .ods document (see its own doc comment), so there is no genuine inverse to verify a write against; refusing rather than writing a document that would read back reporting a different value kind than it was given.`,
   );
 }
 
@@ -173,7 +173,7 @@ function writeCellValueAttributes(
 
 // --- a cell's own rendered text: ContentSheetCell.runs/displayText -> one text:p per readCellText's own multi-paragraph join --------
 
-// Whether a run is EXACTLY the bare paragraph-separator readCellText's own multi-text:p join synthesises (`runs.push({ text: "\n" })`, carrying no formatting field at all) -- the only shape a text:p boundary can ever produce on the way back in, so it is the only shape this writer can recreate faithfully by splitting into a new text:p rather than embedding a text:line-break. A "\n" run carrying any formatting or a hyperlink came from a real text:line-break inside one paragraph (collectRuns' own text:line-break handling threads the surrounding span's baseProperties through it), and is left to flow through writeOdfParagraph's own established segmentOdfParagraphRuns/segmentOdfText splitting untouched, which reproduces it -- formatting and all -- as a text:line-break inside the correct text:span, exactly as it would have read.
+// Whether a run is EXACTLY the bare paragraph-separator readCellText's own multi-text:p join synthesises (`runs.push({ text: "\n" })`, carrying no formatting field at all) — the only shape a text:p boundary can ever produce on the way back in, so it is the only shape this writer can recreate faithfully by splitting into a new text:p rather than embedding a text:line-break. A "\n" run carrying any formatting or a hyperlink came from a real text:line-break inside one paragraph (collectRuns' own text:line-break handling threads the surrounding span's baseProperties through it), and is left to flow through writeOdfParagraph's own established segmentOdfParagraphRuns/segmentOdfText splitting untouched, which reproduces it — formatting and all — as a text:line-break inside the correct text:span, exactly as it would have read.
 function isBareNewlineRun(run: ContentRun): boolean {
   return (
     run.text === "\n" &&
@@ -188,7 +188,7 @@ function isBareNewlineRun(run: ContentRun): boolean {
   );
 }
 
-// The runs a cell actually carries, falling back to a single plain run of its own displayText when no `runs` field is present -- mirroring readCellText's own "the cell's rendered text IS its runs" convention for the common, unformatted case.
+// The runs a cell actually carries, falling back to a single plain run of its own displayText when no `runs` field is present — mirroring readCellText's own "the cell's rendered text IS its runs" convention for the common, unformatted case.
 function cellSourceRuns(cell: ContentSheetCell): ContentRun[] {
   if (cell.runs !== undefined) {
     return [...cell.runs];
@@ -196,7 +196,7 @@ function cellSourceRuns(cell: ContentSheetCell): ContentRun[] {
   return cell.displayText.length > 0 ? [{ text: cell.displayText }] : [];
 }
 
-// Splits a cell's own runs at every bare newline run into the groups this writer emits as separate text:p elements -- shared between the writer (writeCellParagraphs, below) and the round-trip canonicaliser (canonicalCellRuns) so the two can never disagree about the grouping, mirroring the odt writer's own shared-plan discipline.
+// Splits a cell's own runs at every bare newline run into the groups this writer emits as separate text:p elements — shared between the writer (writeCellParagraphs, below) and the round-trip canonicaliser (canonicalCellRuns) so the two can never disagree about the grouping, mirroring the odt writer's own shared-plan discipline.
 function planCellTextGroups(cell: ContentSheetCell): ContentRun[][] {
   const runs = cellSourceRuns(cell);
   const groups: ContentRun[][] = [[]];
@@ -221,9 +221,9 @@ function writeCellParagraphs(
 
 // --- a cell's own annotation: ContentSheetCellComment -> office:annotation, a direct child of table:table-cell preceding its own text:p content ---
 //
-// dc:creator before dc:date is the order ODF's own schema states, per this package's own ooo1/transform.ts MOVED_TO_CHILD_ELEMENT map (office:author -> dc:creator listed before office:create-date -> dc:date, "in the order ODF's own schema puts them"), confirmed there against real LibreOffice source and the OpenOffice.org DTD -- unlike whether the metadata pair precedes or follows the text:p content itself, which this package has no fixture carrying a comment to confirm and readCellComment's own tag-based lookup does not care about either way.
+// dc:creator before dc:date is the order ODF's own schema states, per this package's own ooo1/transform.ts MOVED_TO_CHILD_ELEMENT map (office:author -> dc:creator listed before office:create-date -> dc:date, "in the order ODF's own schema puts them"), confirmed there against real LibreOffice source and the OpenOffice.org DTD — unlike whether the metadata pair precedes or follows the text:p content itself, which this package has no fixture carrying a comment to confirm and readCellComment's own tag-based lookup does not care about either way.
 //
-// Plain text, not runs -- ContentSheetCellCommentSchema.text is a bare string, so this goes through segmentOdfText/buildOdfInlineNodes directly (the same pair readCellComment's own decodeOdfText already inverts for one text:p's content) rather than through the ContentRun-based writeCellParagraphs/planCellTextGroups pipeline built for a cell's own, possibly-rich, VALUE text. Each '\n'-separated line becomes its own text:p, mirroring how readCellComment (typed/ods/read.ts) joins one annotation's own multiple text:p children back into one string with '\n' between them -- the identical convention readCellText/writeCellParagraphs already establish for a cell's own multi-paragraph text, just without the run-formatting layer a comment has no schema field for.
+// Plain text, not runs — ContentSheetCellCommentSchema.text is a bare string, so this goes through segmentOdfText/buildOdfInlineNodes directly (the same pair readCellComment's own decodeOdfText already inverts for one text:p's content) rather than through the ContentRun-based writeCellParagraphs/planCellTextGroups pipeline built for a cell's own, possibly-rich, VALUE text. Each '\n'-separated line becomes its own text:p, mirroring how readCellComment (typed/ods/read.ts) joins one annotation's own multiple text:p children back into one string with '\n' between them — the identical convention readCellText/writeCellParagraphs already establish for a cell's own multi-paragraph text, just without the run-formatting layer a comment has no schema field for.
 function writeCellAnnotation(comment: ContentSheetCellComment): XmlElement {
   const children: XmlNode[] = [];
   if (comment.author !== undefined) {
@@ -242,14 +242,14 @@ function writeCellAnnotation(comment: ContentSheetCellComment): XmlElement {
 
 // --- cell decoration: background/borders/alignment/verticalAlignment -> one table-cell-family automatic style ---------
 //
-// Alignment lives on a SIBLING style:paragraph-properties child of the SAME style:style[family="table-cell"] element that carries the table-cell-properties background/border/vertical-align bag -- confirmed by readCellStyleDecoration (typed/shared/table.ts), which reads fo:text-align from exactly that position, not from the cell's own text:p style. Writing both children on one minted style, rather than a separate paragraph-family style, is therefore the genuine inverse of what the reader resolves.
+// Alignment lives on a SIBLING style:paragraph-properties child of the SAME style:style[family="table-cell"] element that carries the table-cell-properties background/border/vertical-align bag — confirmed by readCellStyleDecoration (typed/shared/table.ts), which reads fo:text-align from exactly that position, not from the cell's own text:p style. Writing both children on one minted style, rather than a separate paragraph-family style, is therefore the genuine inverse of what the reader resolves.
 
 function sheetCellStyle(
   cell: ContentSheetCell,
   registry: StyleRegistry,
 ): string | undefined {
   const cellProperties: Record<string, string> = {};
-  // ODF's fo:background-color states one flat colour with no pattern-fill vocabulary at all, so a 'pattern' fill approximates through resolveCellFillColor's own single representative colour (ExaDev/documents.js#951) -- the same degradation typed/shared/table.ts's own tableCellStyle applies for odt/odp cell fills.
+  // ODF's fo:background-color states one flat colour with no pattern-fill vocabulary at all, so a 'pattern' fill approximates through resolveCellFillColor's own single representative colour (ExaDev/documents.js#951) — the same degradation typed/shared/table.ts's own tableCellStyle applies for odt/odp cell fills.
   const backgroundColor =
     cell.background === undefined
       ? undefined
@@ -334,7 +334,7 @@ function sheetRowStyle(
 
 // --- data validation and conditional formatting: the write-side inverses of data-validation.ts/conditional-format.ts ----
 
-// The merge key for canonicalisation is the rule's WRITTEN content -- the emitted condition string plus everything else that reaches the definition element -- rather than its raw fields: two rules that write identical definitions (a list rule with operator "notEqual" and one with no operator at all both emit the same condition, the operator being unstated for a list) are one definition in the file and must canonicalise as one rule, exactly as a second normalise pass over the read-back would merge them. The same key interns definitions on the write side, so the two agree by construction.
+// The merge key for canonicalisation is the rule's WRITTEN content — the emitted condition string plus everything else that reaches the definition element — rather than its raw fields: two rules that write identical definitions (a list rule with operator "notEqual" and one with no operator at all both emit the same condition, the operator being unstated for a list) are one definition in the file and must canonicalise as one rule, exactly as a second normalise pass over the read-back would merge them. The same key interns definitions on the write side, so the two agree by construction.
 function canonicalValidationKey(rule: ContentSheetDataValidation): string {
   return JSON.stringify([
     synthesiseContentValidationCondition(rule) ?? null,
@@ -349,7 +349,7 @@ function canonicalValidationKey(rule: ContentSheetDataValidation): string {
   ]);
 }
 
-// One table:content-validation definition per distinct written rule content in the whole document, interned by that key and named deterministically ("val1", "val2", ... in first-encounter order). The name is this writer's own mint -- ODF ties no meaning to it beyond the references cells carry, and readOdsContent joins purely through it.
+// One table:content-validation definition per distinct written rule content in the whole document, interned by that key and named deterministically ("val1", "val2", ... in first-encounter order). The name is this writer's own mint — ODF ties no meaning to it beyond the references cells carry, and readOdsContent joins purely through it.
 function internContentValidation(
   rule: ContentSheetDataValidation,
   state: OdsWriteState,
@@ -420,7 +420,7 @@ function writeValidationMessage(
   return el(tag, attributes, children);
 }
 
-// Every grid position a sheet's rules stamp, as coverageKey -> minted definition name. Positions covered by another cell's vertical span are excluded: ODF carries a validation reference only on a real table:table-cell, and a table:covered-table-cell (the only element a span-covered position can be) is invisible to readOdsContent's own reference walk -- a position a span hides is a position no producer can reference, not a gap this writer chose.
+// Every grid position a sheet's rules stamp, as coverageKey -> minted definition name. Positions covered by another cell's vertical span are excluded: ODF carries a validation reference only on a real table:table-cell, and a table:covered-table-cell (the only element a span-covered position can be) is invisible to readOdsContent's own reference walk — a position a span hides is a position no producer can reference, not a gap this writer chose.
 function validationNameByPosition(
   sheet: ContentSheet,
   covered: ReadonlySet<string>,
@@ -447,7 +447,7 @@ function validationNameByPosition(
   return names;
 }
 
-// A conditional-format rule's resulting style as one interned table-cell-family named style -- the same channel a regular cell's own decoration takes (sheetCellStyle above), so readConditionalFormatStyle's resolveStyleElementChain finds it through the identical path. Only the two properties the schema itself carries are stated; a style carrying nothing but quarantined source mints nothing at all and reads back as no style.
+// A conditional-format rule's resulting style as one interned table-cell-family named style — the same channel a regular cell's own decoration takes (sheetCellStyle above), so readConditionalFormatStyle's resolveStyleElementChain finds it through the identical path. Only the two properties the schema itself carries are stated; a style carrying nothing but quarantined source mints nothing at all and reads back as no style.
 function conditionalFormatStyleName(
   style: ContentSheetConditionalFormatStyle | undefined,
   registry: StyleRegistry,
@@ -658,7 +658,7 @@ function writeConditionalFormats(
 
 // --- the used range: every position this writer must materialise a table:table-column/-row element for ---------------
 //
-// ODF's own table:table-column/table:table-row model is purely positional -- there is no "skip to column N" spelling -- so a sparse `columns`/`rows`/`cells` input has to be densified into one element per position from 0 up to the highest position anything in the sheet actually references, INDEPENDENTLY per axis (a column-only declaration must never force a row to exist, and vice versa).
+// ODF's own table:table-column/table:table-row model is purely positional — there is no "skip to column N" spelling — so a sparse `columns`/`rows`/`cells` input has to be densified into one element per position from 0 up to the highest position anything in the sheet actually references, INDEPENDENTLY per axis (a column-only declaration must never force a row to exist, and vice versa).
 interface UsedRange {
   readonly maxRow: number | undefined;
   readonly maxColumn: number | undefined;
@@ -694,7 +694,7 @@ function computeUsedRange(sheet: ContentSheet): UsedRange {
     bumpRow(object.anchorRow ?? 0);
     bumpColumn(object.anchorColumn ?? 0);
   }
-  // A data-validation rule's ranges extend the grid the writer must materialise: every referencing cell within them carries table:content-validation-name (the only carrier ODF offers -- there is no range-level spelling), so a rule reaching past the last content-bearing cell has to stamp cells that would otherwise never exist. This is bounded under the untrusted-round-trip threat model by the source itself: readOdsContent collects a rule's ranges only from cells that physically exist in the source XML, so an attacker pays for the cells up front rather than amplifying a compact attribute into them. A conditional-format rule's ranges deliberately do NOT extend the grid: calcext:conditional-format is emitted range-level through its own calcext:target-range-address attribute, no cell needs to exist, and letting a hostile compact range (A1:XFD1048576) drive the materialised grid would amplify 22 bytes of attribute into a million row nodes and billions of position checks.
+  // A data-validation rule's ranges extend the grid the writer must materialise: every referencing cell within them carries table:content-validation-name (the only carrier ODF offers — there is no range-level spelling), so a rule reaching past the last content-bearing cell has to stamp cells that would otherwise never exist. This is bounded under the untrusted-round-trip threat model by the source itself: readOdsContent collects a rule's ranges only from cells that physically exist in the source XML, so an attacker pays for the cells up front rather than amplifying a compact attribute into them. A conditional-format rule's ranges deliberately do NOT extend the grid: calcext:conditional-format is emitted range-level through its own calcext:target-range-address attribute, no cell needs to exist, and letting a hostile compact range (A1:XFD1048576) drive the materialised grid would amplify 22 bytes of attribute into a million row nodes and billions of position checks.
   for (const validation of sheet.dataValidations ?? []) {
     for (const range of validation.ranges) {
       bumpRow(range.endRow);
@@ -768,7 +768,7 @@ function groupImagesByPosition(
 
 // --- images: ContentSheetImage -> a draw:frame anchored directly inside its own table:table-cell ----------------------
 //
-// Every image this writer places is written cell-anchored (a direct child of the table:table-cell at anchorRow/anchorColumn, with svg:x/svg:y as the offsets readDrawFrame parses directly), never as a table:shapes page-anchored entry -- and that is a genuine, not merely convenient, choice: readOdsContent's own two anchoring conventions are numerically INDISTINGUISHABLE at row 0/column 0 (cell (0,0)'s own top-left IS the sheet origin, per that module's own top-of-file note), so a page-anchored image reads back with exactly the same anchorRow/anchorColumn/offsetXPt/offsetYPt a cell-anchored one at (0,0) would. Writing every image cell-anchored is therefore not a narrowing of what this writer can express -- it is the one representation that already covers both source conventions losslessly.
+// Every image this writer places is written cell-anchored (a direct child of the table:table-cell at anchorRow/anchorColumn, with svg:x/svg:y as the offsets readDrawFrame parses directly), never as a table:shapes page-anchored entry — and that is a genuine, not merely convenient, choice: readOdsContent's own two anchoring conventions are numerically INDISTINGUISHABLE at row 0/column 0 (cell (0,0)'s own top-left IS the sheet origin, per that module's own top-of-file note), so a page-anchored image reads back with exactly the same anchorRow/anchorColumn/offsetXPt/offsetYPt a cell-anchored one at (0,0) would. Writing every image cell-anchored is therefore not a narrowing of what this writer can express — it is the one representation that already covers both source conventions losslessly.
 function writeSheetImageFrame(
   image: ContentSheetImage,
   state: OdsWriteState,
@@ -818,7 +818,7 @@ function groupEmbeddedObjectsByPosition(
   return byPosition;
 }
 
-// An embedded object's own sub-package plus the page-anchored draw:frame that references it: the frame mirrors writeSheetImageFrame's own z-indexed/svg:x/y/width/height shape (the cell-anchored spelling -- anchorRow/anchorColumn with cell-relative offsets, which is what the reader's cell-anchored walk resolves back), and the draw:object child replaces the draw:image. The sub-package serialises through the shared writeEmbeddedObject (#972's machinery, typed/draw/embedded-write.ts) under its own "Object N/" directory.
+// An embedded object's own sub-package plus the page-anchored draw:frame that references it: the frame mirrors writeSheetImageFrame's own z-indexed/svg:x/y/width/height shape (the cell-anchored spelling — anchorRow/anchorColumn with cell-relative offsets, which is what the reader's cell-anchored walk resolves back), and the draw:object child replaces the draw:image. The sub-package serialises through the shared writeEmbeddedObject (#972's machinery, typed/draw/embedded-write.ts) under its own "Object N/" directory.
 function writeSheetEmbeddedObjectFrame(
   object: ContentEmbeddedObject,
   state: OdsWriteState,
@@ -877,7 +877,7 @@ function sheetPageLayoutElement(
   ]);
 }
 
-// table:print-ranges is a space-separated list of "SheetName.StartCell:SheetName.EndCell" ranges, both halves carrying the sheet-name prefix (see typed/ods/read.ts's own parsePrintRanges) -- ContentSheetPrintSettingsSchema carries only one, so only one is ever written.
+// table:print-ranges is a space-separated list of "SheetName.StartCell:SheetName.EndCell" ranges, both halves carrying the sheet-name prefix (see typed/ods/read.ts's own parsePrintRanges) — ContentSheetPrintSettingsSchema carries only one, so only one is ever written.
 function formatPrintRange(
   range: NonNullable<ContentSheetPrintSettings["printRange"]>,
   sheetName: string,
@@ -1027,7 +1027,7 @@ function writeRowCells(
       }
       const children: XmlNode[] = [];
       if (cell?.comment !== undefined) {
-        // Precedes the cell's own text:p content, matching ODF's general metadata-before-content convention (the same order office:change-info's own dc:creator/dc:date precede a tracked change's content) -- none of this package's own real fixtures happens to carry a cell comment to confirm the exact order against, and readCellComment's own findChildElement-based lookup is order-independent regardless, so this ordering affects compatibility with other ODF consumers, not round-trip correctness through this pair.
+        // Precedes the cell's own text:p content, matching ODF's general metadata-before-content convention (the same order office:change-info's own dc:creator/dc:date precede a tracked change's content) — none of this package's own real fixtures happens to carry a cell comment to confirm the exact order against, and readCellComment's own findChildElement-based lookup is order-independent regardless, so this ordering affects compatibility with other ODF consumers, not round-trip correctness through this pair.
         children.push(writeCellAnnotation(cell.comment));
       }
       if (cell !== undefined) {
@@ -1045,7 +1045,7 @@ function writeRowCells(
     }
 
     if (validationName !== undefined) {
-      // A referenced but content-less position still has to carry its table:content-validation-name on a real table:table-cell -- the one carrier ODF offers -- so it gets its own element rather than dissolving into the repeated empty run below.
+      // A referenced but content-less position still has to carry its table:content-validation-name on a real table:table-cell — the one carrier ODF offers — so it gets its own element rather than dissolving into the repeated empty run below.
       nodes.push(
         el("table:table-cell", {
           "table:content-validation-name": encodeXmlText(validationName),
@@ -1210,12 +1210,12 @@ function writeSheet(sheet: ContentSheet, state: OdsWriteState): XmlElement {
 
 // --- the canonical form: what reading this writer's own output back produces ----------------------------------------
 
-// Exported alongside normaliseOdsContent purely for direct unit coverage: normaliseOdsContent applies every canonical* helper below identically to BOTH sides of a round-trip equality check (the actual, real-reader-produced document and the expected, original-document-normalised-the-same-way), so a mutation to one of these helpers alone cannot be observed through that comparison -- it changes both sides in lockstep. Each is therefore also pinned directly, against a literal expected return value, in write.test.ts.
+// Exported alongside normaliseOdsContent purely for direct unit coverage: normaliseOdsContent applies every canonical* helper below identically to BOTH sides of a round-trip equality check (the actual, real-reader-produced document and the expected, original-document-normalised-the-same-way), so a mutation to one of these helpers alone cannot be observed through that comparison — it changes both sides in lockstep. Each is therefore also pinned directly, against a literal expected return value, in write.test.ts.
 export function canonicalColor(color: Color): Color {
   return rgbHexToColor(colorToRgbHex(color));
 }
 
-// A cell fill written and read back through this writer: always a 'solid' ContentCellFill, since fo:background-color has no two-colour pattern-fill vocabulary at all (ExaDev/documents.js#951) -- sheetCellStyle above resolves a 'pattern' fill to resolveCellFillColor's own single representative colour before it ever reaches ODF, and undefined when that resolves to nothing (a pattern stating neither of its own colours), matching an absent background exactly.
+// A cell fill written and read back through this writer: always a 'solid' ContentCellFill, since fo:background-color has no two-colour pattern-fill vocabulary at all (ExaDev/documents.js#951) — sheetCellStyle above resolves a 'pattern' fill to resolveCellFillColor's own single representative colour before it ever reaches ODF, and undefined when that resolves to nothing (a pattern stating neither of its own colours), matching an absent background exactly.
 export function canonicalCellFill(
   fill: ContentCellFill,
 ): ContentCellFill | undefined {
@@ -1225,7 +1225,7 @@ export function canonicalCellFill(
     : { kind: "solid", color: canonicalColor(color) };
 }
 
-// A ContentRun carrying only the fields it actually states -- the same spelled-only canonical form typed/odt/write.ts's own canonicalRun establishes for wordprocessing runs, restated here rather than imported: the two writers are independent codec modules, and this is a small, self-contained defaulting function rather than a shared abstraction worth coupling them over.
+// A ContentRun carrying only the fields it actually states — the same spelled-only canonical form typed/odt/write.ts's own canonicalRun establishes for wordprocessing runs, restated here rather than imported: the two writers are independent codec modules, and this is a small, self-contained defaulting function rather than a shared abstraction worth coupling them over.
 export function canonicalRun(run: ContentRun): ContentRun {
   const canonical: ContentRun = { text: run.text };
   if (run.bold !== undefined) canonical.bold = run.bold;
@@ -1239,7 +1239,7 @@ export function canonicalRun(run: ContentRun): ContentRun {
   return canonical;
 }
 
-// The exact runs reading this writer's own cell text back produces: each planCellTextGroups group canonicalised through segmentOdfParagraphRuns (the same fixed point typed/shared/paragraph.ts's own writeOdfParagraph/readOdfParagraph pair already establishes for any ODF text:p), rejoined with a bare {text:'\n'} at every group boundary -- exactly the shape readCellText's own synthetic separator produces, regardless of what a same-valued source run originally carried (see isBareNewlineRun's own note on why that asymmetry is unavoidable).
+// The exact runs reading this writer's own cell text back produces: each planCellTextGroups group canonicalised through segmentOdfParagraphRuns (the same fixed point typed/shared/paragraph.ts's own writeOdfParagraph/readOdfParagraph pair already establishes for any ODF text:p), rejoined with a bare {text:'\n'} at every group boundary — exactly the shape readCellText's own synthetic separator produces, regardless of what a same-valued source run originally carried (see isBareNewlineRun's own note on why that asymmetry is unavoidable).
 export function canonicalCellRuns(cell: ContentSheetCell): ContentRun[] {
   const groups = planCellTextGroups(cell).map((group) =>
     segmentOdfParagraphRuns(group).map(canonicalRun),
@@ -1254,7 +1254,7 @@ export function canonicalCellRuns(cell: ContentSheetCell): ContentRun[] {
   return combined;
 }
 
-// The exact ContentCellValue reading this writer's own written cell back produces. exactValue never survives -- readCellValue has no field for it, only ever reading office:value back into the nearest-double `value` -- and a 'time' cell reads back as the raw xsd:duration string this writer wrote, per this module's own top-of-file note on that forced, pre-existing asymmetry.
+// The exact ContentCellValue reading this writer's own written cell back produces. exactValue never survives — readCellValue has no field for it, only ever reading office:value back into the nearest-double `value` — and a 'time' cell reads back as the raw xsd:duration string this writer wrote, per this module's own top-of-file note on that forced, pre-existing asymmetry.
 export function canonicalCellValue(value: ContentCellValue): ContentCellValue {
   switch (value.kind) {
     case "number":
@@ -1290,7 +1290,7 @@ export function canonicalCellValue(value: ContentCellValue): ContentCellValue {
   }
 }
 
-// One cell's canonical form, or undefined when readOdsContent's own trailing-empty-cell skip drops it entirely: a cell carrying no formula, no office:value-type-bearing value (kind 'empty'), and no rendered text is never materialised by the reader at all, regardless of what colSpan/background/borders it stated -- readTable's own skip test (`!hasValueType && formula === undefined && displayText.length === 0`) runs before any of those attributes are even considered. This is a real, forced normalisation, not a writer choice: any of those facts on such a cell is lost on the round trip because ODF's own trailing-empty-cell compression convention has nowhere else to put them.
+// One cell's canonical form, or undefined when readOdsContent's own trailing-empty-cell skip drops it entirely: a cell carrying no formula, no office:value-type-bearing value (kind 'empty'), and no rendered text is never materialised by the reader at all, regardless of what colSpan/background/borders it stated — readTable's own skip test (`!hasValueType && formula === undefined && displayText.length === 0`) runs before any of those attributes are even considered. This is a real, forced normalisation, not a writer choice: any of those facts on such a cell is lost on the round trip because ODF's own trailing-empty-cell compression convention has nowhere else to put them.
 export function canonicalCell(
   cell: ContentSheetCell,
 ): ContentSheetCell | undefined {
@@ -1384,7 +1384,7 @@ export function canonicalCells(
   return result;
 }
 
-// Dense from 0 to maxColumn/maxRow, an undeclared position stamped with readColumnLayout/readRowLayout's own DEFAULT_COLUMN_WIDTH_PT/DEFAULT_ROW_HEIGHT_PT default -- ContentSheetColumn/RowSchema's own "absent widthPt/heightPt means no declared size" cannot be written as a genuinely absent style, since an unstyled table:table-column/-row still resolves to that same reader-side default. A sparse input `columns`/`rows` array is therefore densified on the round trip, one entry per position, exactly as this writer's own dense table:table-column/-row output reads back.
+// Dense from 0 to maxColumn/maxRow, an undeclared position stamped with readColumnLayout/readRowLayout's own DEFAULT_COLUMN_WIDTH_PT/DEFAULT_ROW_HEIGHT_PT default — ContentSheetColumn/RowSchema's own "absent widthPt/heightPt means no declared size" cannot be written as a genuinely absent style, since an unstyled table:table-column/-row still resolves to that same reader-side default. A sparse input `columns`/`rows` array is therefore densified on the round trip, one entry per position, exactly as this writer's own dense table:table-column/-row output reads back.
 export function canonicalColumns(
   sheet: ContentSheet,
   maxColumn: number | undefined,
@@ -1447,7 +1447,7 @@ export function canonicalSheetImage(
   return canonical;
 }
 
-// Images read back in row-major anchor-position document order (top-to-bottom, then left-to-right), the order readTable's own cell walk discovers them in -- never the input array's own order, which this writer's per-position placement does not preserve when several images share no ordering relationship across positions.
+// Images read back in row-major anchor-position document order (top-to-bottom, then left-to-right), the order readTable's own cell walk discovers them in — never the input array's own order, which this writer's per-position placement does not preserve when several images share no ordering relationship across positions.
 export function canonicalImages(sheet: ContentSheet): ContentSheetImage[] {
   return sheet.images
     .map((image, originalIndex) => ({ image, originalIndex }))
@@ -1492,7 +1492,7 @@ export function canonicalPrintSettings(
 }
 
 // What a sheet's dataValidations read back as, per the read side's own established behaviour rather than chosen here: rules sharing one interned definition merge into one rule carrying the union of their ranges; every range expands to one 1x1 range per stamped cell (readOdsContent's own collect step, one entry per referencing cell, never merged); a position covered by another cell's span carries no reference and so drops out; rules order and range order follow the row-major walk order of first reference; allowBlank is always explicit (the reader's own default); the display flags appear only when true (the reader sets them only on table:display="true"); a list rule always reads an operator of "equal" and a custom rule never reads one (data-validation.ts's own CONDITION_INFOS fixed mappings); a list or custom rule with no formula1 has no condition to write and reads back as a bare custom rule; and a rule whose every position sat under a span is referenced by nothing and vanishes.
-// The merge key for canonicalisation is the rule's WRITTEN content -- see canonicalValidationKey's own note above.
+// The merge key for canonicalisation is the rule's WRITTEN content — see canonicalValidationKey's own note above.
 export function canonicalDataValidations(
   sheet: ContentSheet,
 ): ContentSheetDataValidation[] | undefined {
@@ -1566,7 +1566,7 @@ export function canonicalDataValidations(
   return canonical;
 }
 
-// What one conditional-format style reads back as: the two colour properties that actually round-trip through a minted named style, or no style field at all when neither is present (the read side resolves no style from a style element carrying no colour properties -- a source-only style is indistinguishable from none).
+// What one conditional-format style reads back as: the two colour properties that actually round-trip through a minted named style, or no style field at all when neither is present (the read side resolves no style from a style element carrying no colour properties — a source-only style is indistinguishable from none).
 export function canonicalConditionalFormatStyle(
   style: ContentSheetConditionalFormatStyle | undefined,
 ):
@@ -1712,11 +1712,11 @@ export function canonicalSheet(sheet: ContentSheet): ContentSheet {
   return canonical;
 }
 
-// The one canonical ContentDocument a written-and-reread document equals -- the exact statement of what this writer preserves and what ODF (or this package's own reader) cannot carry back, mirroring typed/odt/write.ts's own normaliseOdtContent in both role and discipline. What it restates, each forced by the format or by readOdsContent's own established behaviour rather than chosen here:
+// The one canonical ContentDocument a written-and-reread document equals — the exact statement of what this writer preserves and what ODF (or this package's own reader) cannot carry back, mirroring typed/odt/write.ts's own normaliseOdtContent in both role and discipline. What it restates, each forced by the format or by readOdsContent's own established behaviour rather than chosen here:
 // - CELLS carrying no formula, no value-bearing office:value-type, and no rendered text vanish entirely (canonicalCell's own note); every surviving cell's runs are re-segmented through the identical ODF inline-content rules typed/shared/paragraph.ts already establishes, and a bare "\n" run boundary becomes a genuine text:p split rather than a text:line-break (canonicalCellRuns' own note).
 // - COLUMNS/ROWS densify to one entry per position across the sheet's used range, an undeclared width/height stamped with readOdsContent's own DEFAULT_COLUMN_WIDTH_PT/DEFAULT_ROW_HEIGHT_PT default rather than staying absent (canonicalColumns/canonicalRows' own note).
 // - IMAGES reorder into row-major anchor-position document order (canonicalImages' own note).
-// - A cell's numeric exactValue, comment, sourcePath, and source never survive -- readOdsContent has no field for the first three on write-back and residue is a deliberate, documented drop (this module's own top-of-file note); a 'time' cell's ISO clock value becomes the raw xsd:duration string readOdsContent carries through unconverted (this module's own top-of-file note on that one forced, pre-existing asymmetry).
+// - A cell's numeric exactValue, comment, sourcePath, and source never survive — readOdsContent has no field for the first three on write-back and residue is a deliberate, documented drop (this module's own top-of-file note); a 'time' cell's ISO clock value becomes the raw xsd:duration string readOdsContent carries through unconverted (this module's own top-of-file note on that one forced, pre-existing asymmetry).
 // - The sheet-level `source` residue is refused outright by the writer itself (writeSheet throws before producing a Package for one), so a document reaching this canonicaliser never carries it in the first place; embeddedObjects pass through with the reader-droppable `source` field stripped; `dataValidations` and `conditionalFormats` canonicalise per their own functions above (definition-merged, span-narrowed, row-major re-ordered; source residue dropped).
 export function normaliseOdsContent(
   document: ContentDocument,
@@ -1741,7 +1741,7 @@ export function writeOdsContent(
 ): Package {
   if (document.kind !== "spreadsheet") {
     throw new Error(
-      `writeOdsContent: expected a 'spreadsheet' document, got '${document.kind}' -- odf.js writes .ods from the spreadsheet arm only`,
+      `writeOdsContent: expected a 'spreadsheet' document, got '${document.kind}' — odf.js writes .ods from the spreadsheet arm only`,
     );
   }
   const version = options.version ?? DEFAULT_ODF_VERSION;
@@ -1777,7 +1777,7 @@ export function writeOdsContent(
     nextSheetStyle: 1,
   };
 
-  // The document-wide validation definitions container precedes every table:table -- the position LibreOffice itself writes it and readContentValidationDefinitions's own findChildElement finds it, order-independently of the sheets that reference into it.
+  // The document-wide validation definitions container precedes every table:table — the position LibreOffice itself writes it and readContentValidationDefinitions's own findChildElement finds it, order-independently of the sheets that reference into it.
   spreadsheetElement.children.push(state.contentValidations);
   for (const sheet of document.sheets) {
     spreadsheetElement.children.push(writeSheet(sheet, state));

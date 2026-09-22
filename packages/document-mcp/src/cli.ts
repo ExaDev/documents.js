@@ -41,9 +41,9 @@ export function parsePort(raw: string): number {
 }
 
 /**
- * The real CLI entry logic, shared by both distribution shapes this package ships: `src/bin.ts` (the published npm `bin`, run under a real Node.js install) and `src/sea-entry.ts` (bundled into a Node single-executable application, which embeds its own Node runtime). Node's SEA feature runs only a CommonJS entry with no top-level await (see that file's own comment), so this function itself contains no top-level await of its own -- only `bin.ts` awaits calling it, at its own top level, which SEA never sees.
+ * The real CLI entry logic, shared by both distribution shapes this package ships: `src/bin.ts` (the published npm `bin`, run under a real Node.js install) and `src/sea-entry.ts` (bundled into a Node single-executable application, which embeds its own Node runtime). Node's SEA feature runs only a CommonJS entry with no top-level await (see that file's own comment), so this function itself contains no top-level await of its own — only `bin.ts` awaits calling it, at its own top level, which SEA never sees.
  *
- * Returns the bound `http.Server` for the `--transport http` path so a caller with a reason to stop it again (a test binding an ephemeral port for the duration of one assertion) can; `undefined` for `--transport stdio`, which has no equivalent handle to return -- `serveStdio` wires the process's own stdin/stdout directly and keeps the process alive on its own.
+ * Returns the bound `http.Server` for the `--transport http` path so a caller with a reason to stop it again (a test binding an ephemeral port for the duration of one assertion) can; `undefined` for `--transport stdio`, which has no equivalent handle to return — `serveStdio` wires the process's own stdin/stdout directly and keeps the process alive on its own.
  */
 export async function main(): Promise<Server | undefined> {
   const args = process.argv.slice(2);

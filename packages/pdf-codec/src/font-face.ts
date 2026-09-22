@@ -1,4 +1,4 @@
-// What a caller inspecting a standalone TrueType/OpenType font FILE needs before using it as a ProvidedFont (src/font-registry.ts): the family/bold/italic triple a font declares about itself, read out of its own 'name'/'OS/2'/'head' tables. This is a thin public wrapper over sfnt.ts's parseSfnt and font-tables.ts's parseName/parseOs2/parseHead -- every one of those already parses the tables this needs; nothing here re-reads a table those modules do not already expose. embedded-font.ts's own EmbeddedFace.postScriptName is the wrong field for this job even though it is already public: a PostScript name is a naming convention rather than a structured family+style pair ("ArialMT", "TimesNewRomanPS-BoldMT"), and recovering a family from one is guesswork where the 'name' table states it outright.
+// What a caller inspecting a standalone TrueType/OpenType font FILE needs before using it as a ProvidedFont (src/font-registry.ts): the family/bold/italic triple a font declares about itself, read out of its own 'name'/'OS/2'/'head' tables. This is a thin public wrapper over sfnt.ts's parseSfnt and font-tables.ts's parseName/parseOs2/parseHead — every one of those already parses the tables this needs; nothing here re-reads a table those modules do not already expose. embedded-font.ts's own EmbeddedFace.postScriptName is the wrong field for this job even though it is already public: a PostScript name is a naming convention rather than a structured family+style pair ("ArialMT", "TimesNewRomanPS-BoldMT"), and recovering a family from one is guesswork where the 'name' table states it outright.
 import type { HeadTable, NameTable, Os2Table } from "./font-tables";
 import { parseHead, parseName, parseOs2 } from "./font-tables";
 import { hasBytes, parseSfnt, u32 } from "./sfnt";
@@ -9,7 +9,7 @@ export interface FontFace {
   readonly italic: boolean;
 }
 
-// The font file could not be read as the font-face triple above: not a recognised sfnt container, no usable family name, or no table this codec can read a weight/slope from. `message` always names what was wrong and, where the caller passed one, the `source` label -- the same shape font-tables.ts's own parsers report through (undefined, degrade-and-continue) is not available here, since a caller asking specifically "what face is this file" has nothing useful left to do with a result that has no family name at all.
+// The font file could not be read as the font-face triple above: not a recognised sfnt container, no usable family name, or no table this codec can read a weight/slope from. `message` always names what was wrong and, where the caller passed one, the `source` label — the same shape font-tables.ts's own parsers report through (undefined, degrade-and-continue) is not available here, since a caller asking specifically "what face is this file" has nothing useful left to do with a result that has no family name at all.
 export class FontFaceParseError extends Error {
   constructor(message: string) {
     super(message);
@@ -28,7 +28,7 @@ function isTrueTypeCollection(bytes: Uint8Array<ArrayBuffer>): boolean {
 const OS2_FS_SELECTION_ITALIC = 0x0001;
 const OS2_FS_SELECTION_BOLD = 0x0020;
 
-// 'head' macStyle (clause 5.2.2): bit 0 BOLD, bit 1 ITALIC -- a different bit layout from fsSelection above, not a typo repeating it.
+// 'head' macStyle (clause 5.2.2): bit 0 BOLD, bit 1 ITALIC — a different bit layout from fsSelection above, not a typo repeating it.
 const HEAD_MAC_STYLE_BOLD = 0x0001;
 const HEAD_MAC_STYLE_ITALIC = 0x0002;
 
@@ -64,7 +64,7 @@ function readFamily(name: NameTable | undefined, source: string): string {
   return name.familyName;
 }
 
-// Reads a standalone font file's own family/bold/italic declaration -- for a caller holding the raw bytes of a .ttf/.otf a user supplied (e.g. as a ProvidedFont candidate), not a font already extracted from a source document. `source` names the file in every error this throws, matching every other multi-input read path in this package's own callers, since the bytes alone carry no such label.
+// Reads a standalone font file's own family/bold/italic declaration — for a caller holding the raw bytes of a .ttf/.otf a user supplied (e.g. as a ProvidedFont candidate), not a font already extracted from a source document. `source` names the file in every error this throws, matching every other multi-input read path in this package's own callers, since the bytes alone carry no such label.
 export function readFontFace(
   bytes: Uint8Array<ArrayBuffer>,
   source: string,

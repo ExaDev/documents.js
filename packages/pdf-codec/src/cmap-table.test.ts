@@ -130,7 +130,7 @@ function buildFormat4Subtable(
   view.setUint16(2, subtable.length); // length
   view.setUint16(6, segCountX2);
   if (segCountX2Override === undefined) {
-    // The well-formed case only: a malformed declared segCountX2 (0, or an odd value) has no real one-segment layout to write field values into, and none is needed -- the test using it only checks that the malformed count itself is rejected, not what a garbage lookup would return.
+    // The well-formed case only: a malformed declared segCountX2 (0, or an odd value) has no real one-segment layout to write field values into, and none is needed — the test using it only checks that the malformed count itself is rejected, not what a garbage lookup would return.
 
     const startCodesOffset = HEADER_SIZE + segCountX2 + 2;
     const idDeltasOffset = startCodesOffset + segCountX2;
@@ -495,7 +495,7 @@ describe("degrading on an unusable cmap", () => {
 
 describe("readCmapSubtables", () => {
   it("exposes every subtable of a real vendored font with the platform and encoding it is keyed by", () => {
-    // Carlito ships three subtables: (0, 3) and (3, 1) in format 4, plus a (1, 0) in format 6 -- read out of the .ttf by a standalone script, independently of this module.
+    // Carlito ships three subtables: (0, 3) and (3, 1) in format 4, plus a (1, 0) in format 6 — read out of the .ttf by a standalone script, independently of this module.
     expect(
       readCmapSubtables(parse(carlitoRegularBytes())).map((subtable) => [
         subtable.platformId,

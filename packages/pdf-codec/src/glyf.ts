@@ -5,7 +5,7 @@ import { f2dot14, hasBytes, i16, sfntTableBytes, u16, u32, u8 } from "./sfnt";
 
 // The 'loca' and 'glyf' tables of a TrueType-outline font (ISO/IEC 14496-22 clauses 5.3.2 and 5.3.3): the glyph-offset index, each glyph's own header, and the component records of a composite glyph.
 //
-// The component walk is what makes subsetting a TrueType font safe. A composite glyph -- almost every accented Latin character in a real text font -- holds no outline of its own, only references to the glyph IDs of its base letter and its combining mark(s). Copying a composite's own 'glyf' entry into a subset without also copying every glyph it references produces a glyph that renders as nothing, or as whatever unrelated outline now sits at that ID. Components nest (a component may itself be composite), so a subsetter must take the transitive closure over this walk, not just one level of it.
+// The component walk is what makes subsetting a TrueType font safe. A composite glyph — almost every accented Latin character in a real text font — holds no outline of its own, only references to the glyph IDs of its base letter and its combining mark(s). Copying a composite's own 'glyf' entry into a subset without also copying every glyph it references produces a glyph that renders as nothing, or as whatever unrelated outline now sits at that ID. Components nest (a component may itself be composite), so a subsetter must take the transitive closure over this walk, not just one level of it.
 //
 // This module deliberately does not decode a simple glyph's own contours (the end-point/flag/coordinate arrays after the header): subsetting copies a glyph's bytes verbatim, and nothing in this package rasterises an outline, so parsing coordinates would be building a consumer that does not exist. Composite components are decoded because their glyph IDs must be followed, which is the one thing a byte-verbatim copy cannot do for you.
 
@@ -31,7 +31,7 @@ export interface CompositeComponent {
 
 export interface GlyfTable {
   readonly numGlyphs: number;
-  // A glyph's own 'glyf' bytes: an empty array for a glyph with no outline (a space, say -- its 'loca' entry legitimately has zero length), or `undefined` for a glyph ID outside the font or one whose 'loca' entry is malformed.
+  // A glyph's own 'glyf' bytes: an empty array for a glyph with no outline (a space, say — its 'loca' entry legitimately has zero length), or `undefined` for a glyph ID outside the font or one whose 'loca' entry is malformed.
   glyphBytes(glyphId: number): Uint8Array<ArrayBuffer> | undefined;
   // `undefined` for a glyph with no outline at all, since such a glyph has no header to read, as well as for an unreadable one.
   glyphHeader(glyphId: number): GlyphHeader | undefined;
@@ -39,7 +39,7 @@ export interface GlyfTable {
   compositeComponents(
     glyphId: number,
   ): readonly CompositeComponent[] | undefined;
-  // This glyph's own tight ink bounding box in design units, or `undefined` for a glyph that draws nothing (a space), one that is unreadable, or a composite this walk declines to measure (see resolveInkBounds below). For a simple glyph this is the box the font itself declares in the glyph's own header -- there is no cheaper or more authoritative source, and re-deriving it from the point arrays would be recomputing what the format already states. For a composite it is the union of each component's own box under that component's own placement, since a composite's declared header box is derived data that real font tools have been known to leave stale.
+  // This glyph's own tight ink bounding box in design units, or `undefined` for a glyph that draws nothing (a space), one that is unreadable, or a composite this walk declines to measure (see resolveInkBounds below). For a simple glyph this is the box the font itself declares in the glyph's own header — there is no cheaper or more authoritative source, and re-deriving it from the point arrays would be recomputing what the format already states. For a composite it is the union of each component's own box under that component's own placement, since a composite's declared header box is derived data that real font tools have been known to leave stale.
   glyphInkBounds(glyphId: number): GlyphInkBounds | undefined;
 }
 
@@ -50,7 +50,7 @@ export interface GlyfOptions {
 
 const LOCA_SHORT_ENTRY_SIZE = 2;
 const LOCA_LONG_ENTRY_SIZE = 4;
-// A short-format 'loca' stores each offset halved, so it can only address an even byte -- glyph data is padded to an even length for exactly this reason (clause 5.3.2).
+// A short-format 'loca' stores each offset halved, so it can only address an even byte — glyph data is padded to an even length for exactly this reason (clause 5.3.2).
 const LOCA_SHORT_OFFSET_SCALE = 2;
 
 // The 'loca' index: numGlyphs + 1 byte offsets into 'glyf', where glyph N occupies [offsets[N], offsets[N + 1]). Returned as the raw offset array rather than a lookup, since a subsetter rebuilding 'loca' needs the array itself.
@@ -90,7 +90,7 @@ const MORE_COMPONENTS = 0x0020;
 const WE_HAVE_AN_X_AND_Y_SCALE = 0x0040;
 const WE_HAVE_A_TWO_BY_TWO = 0x0080;
 
-// Flag bits that change how a component's own placement offset is applied (clause 5.3.3.2). Neither being set means the offset is in the composite's own coordinate space, unscaled -- the near-universal case, and what every Microsoft-lineage rasteriser assumes.
+// Flag bits that change how a component's own placement offset is applied (clause 5.3.3.2). Neither being set means the offset is in the composite's own coordinate space, unscaled — the near-universal case, and what every Microsoft-lineage rasteriser assumes.
 const SCALED_COMPONENT_OFFSET = 0x0800;
 const UNSCALED_COMPONENT_OFFSET = 0x1000;
 
@@ -268,7 +268,7 @@ export function parseGlyf(
     return glyph === undefined ? undefined : readComponents(glyph);
   };
 
-  // A composite is measured from its components rather than from its own declared header box, and returns `undefined` -- rather than a box missing a piece -- for any component it cannot place: an unreadable component glyph, one nested past MAX_COMPOSITE_DEPTH, or one positioned by POINT MATCHING (argsAreXyValues false), where the two arguments are point indices into the parent's and component's own outlines. Resolving a point match needs the coordinate arrays this module deliberately does not decode, and guessing an offset of zero for one would silently stack a mark on top of its base letter.
+  // A composite is measured from its components rather than from its own declared header box, and returns `undefined` — rather than a box missing a piece — for any component it cannot place: an unreadable component glyph, one nested past MAX_COMPOSITE_DEPTH, or one positioned by POINT MATCHING (argsAreXyValues false), where the two arguments are point indices into the parent's and component's own outlines. Resolving a point match needs the coordinate arrays this module deliberately does not decode, and guessing an offset of zero for one would silently stack a mark on top of its base letter.
   const resolveInkBounds = (
     glyphId: number,
     depth: number,

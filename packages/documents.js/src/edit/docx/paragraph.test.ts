@@ -83,7 +83,7 @@ describe("DocxParagraph styleId / alignment / list", () => {
     const { paragraph, paragraphElement } = paragraphFromXml();
     expect(paragraph.headingLevel).toBeUndefined();
     paragraph.headingLevel = 2;
-    // w:outlineLvl is 0-based where the schema's headingLevel is 1-based -- the same +1 mapping ooxml.js's own docx reader applies on the way back in.
+    // w:outlineLvl is 0-based where the schema's headingLevel is 1-based — the same +1 mapping ooxml.js's own docx reader applies on the way back in.
     const pPr = paragraphElement.children.find(
       (c): c is XmlElement => c.type === "element" && c.tag === "w:pPr",
     );
@@ -122,7 +122,7 @@ describe("DocxParagraph.appendTab", () => {
       c.type === "element" ? c.tag : undefined,
     );
     expect(tags).toEqual(["w:r", "w:r", "w:r"]);
-    expect(paragraph.text).toBe("beforeafter"); // w:tab contributes no text-content characters (ooxml.js's textContent has no WordprocessingML-specific knowledge of it) -- its presence is verified structurally above
+    expect(paragraph.text).toBe("beforeafter"); // w:tab contributes no text-content characters (ooxml.js's textContent has no WordprocessingML-specific knowledge of it) — its presence is verified structurally above
   });
 });
 

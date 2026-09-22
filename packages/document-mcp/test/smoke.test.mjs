@@ -1,4 +1,4 @@
-// Smoke test: the real built dist/bin.js runs correctly as a genuine subprocess speaking the actual MCP stdio protocol -- not an in-process InMemoryTransport pair (every src/tools/*.test.ts file already proves the in-process wiring) and not a handler function called directly. Run only via `pnpm test:smoke` (tsdown, then vitest scoped to the "smoke" project), never part of the default `pnpm test` file set, since it requires a fresh build to mean anything. Every test here connects a real @modelcontextprotocol/client Client over a real StdioClientTransport spawning `node dist/bin.js`, matching document-cli's own test/smoke.test.mjs convention (spawn the built artifact, assert on genuine output) adapted from argv/exit-code assertions to a real JSON-RPC tools/list + tools/call round trip.
+// Smoke test: the real built dist/bin.js runs correctly as a genuine subprocess speaking the actual MCP stdio protocol — not an in-process InMemoryTransport pair (every src/tools/*.test.ts file already proves the in-process wiring) and not a handler function called directly. Run only via `pnpm test:smoke` (tsdown, then vitest scoped to the "smoke" project), never part of the default `pnpm test` file set, since it requires a fresh build to mean anything. Every test here connects a real @modelcontextprotocol/client Client over a real StdioClientTransport spawning `node dist/bin.js`, matching document-cli's own test/smoke.test.mjs convention (spawn the built artifact, assert on genuine output) adapted from argv/exit-code assertions to a real JSON-RPC tools/list + tools/call round trip.
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -9,10 +9,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const BIN_PATH = fileURLToPath(new URL('../dist/bin.js', import.meta.url));
 
-// The one real .odb fixture this repo checks in (src/test-support/odb-fixture.ts's own source) -- referenced by path directly here rather than through that helper, since this file deliberately stays outside tsconfig's "src" program (it tests build output, matching document-cli's identical exclusion) and so cannot import a .ts module.
+// The one real .odb fixture this repo checks in (src/test-support/odb-fixture.ts's own source) — referenced by path directly here rather than through that helper, since this file deliberately stays outside tsconfig's "src" program (it tests build output, matching document-cli's identical exclusion) and so cannot import a .ts module.
 const FORM_AND_REPORT_ODB_PATH = fileURLToPath(new URL('../src/test-support/fixtures/form-and-report.odb', import.meta.url));
 
-// Every tool src/server.ts's createServer() actually registers, across all twelve tool modules -- kept as an explicit sorted list (rather than merely asserting a count) so a renamed or dropped tool fails this test by name, not just by a number changing.
+// Every tool src/server.ts's createServer() actually registers, across all twelve tool modules — kept as an explicit sorted list (rather than merely asserting a count) so a renamed or dropped tool fails this test by name, not just by a number changing.
 const EXPECTED_TOOL_NAMES = [
   'compute_formula',
   'convert_document',
@@ -37,7 +37,7 @@ const EXPECTED_TOOL_NAMES = [
   'pdf_inspect',
 ].sort();
 
-// A tiny, real docx fixture built through documents.js's own live-view editor (already a dependency of this package) -- exercised as genuine input bytes, matching document-cli's own smoke test convention, not a hand-crafted stub.
+// A tiny, real docx fixture built through documents.js's own live-view editor (already a dependency of this package) — exercised as genuine input bytes, matching document-cli's own smoke test convention, not a hand-crafted stub.
 function buildFixtureDocxBytes() {
   const editor = createDocx();
   editor.body.appendParagraph().appendRun({ text: 'Hello from the document-mcp smoke test.' });
@@ -48,7 +48,7 @@ function isPdfBytes(bytes) {
   return new TextDecoder('latin1').decode(bytes.subarray(0, 5)) === '%PDF-';
 }
 
-// odb_tables returns a bare array as structuredContent, matching what its own callback hands back to registerTool -- but the 2025-11-25 wire era's own SEP-2106 projection boxes a non-object structuredContent value as `{ result: [...] }` before it reaches a client (the 2026-07-28 era codec does not). Unwraps either shape, mirroring src/tools/odb.test.ts's own arrayStructuredContent helper.
+// odb_tables returns a bare array as structuredContent, matching what its own callback hands back to registerTool — but the 2025-11-25 wire era's own SEP-2106 projection boxes a non-object structuredContent value as `{ result: [...] }` before it reaches a client (the 2026-07-28 era codec does not). Unwraps either shape, mirroring src/tools/odb.test.ts's own arrayStructuredContent helper.
 function unwrapArrayStructuredContent(structuredContent) {
   return Array.isArray(structuredContent) ? structuredContent : structuredContent.result;
 }
@@ -58,7 +58,7 @@ describe('document-mcp stdio smoke test', () => {
   let transport;
 
   beforeAll(async () => {
-    // process.execPath rather than relying on dist/bin.js's own shebang/chmod bit, so this doesn't depend on the host OS honouring executable permissions -- matches document-cli's own spawnCli helper.
+    // process.execPath rather than relying on dist/bin.js's own shebang/chmod bit, so this doesn't depend on the host OS honouring executable permissions — matches document-cli's own spawnCli helper.
     transport = new StdioClientTransport({ command: process.execPath, args: [BIN_PATH] });
     client = new Client({ name: 'document-mcp-smoke-test', version: '0.0.0' });
     await client.connect(transport);
@@ -114,7 +114,7 @@ describe('document-mcp stdio smoke test', () => {
   });
 });
 
-// The line src/bin.ts writes to stderr once the HTTP listener is actually bound -- matched against the spawned child's real stderr output below rather than assumed, so this test fails honestly if the startup log ever stops matching what the server actually reports.
+// The line src/bin.ts writes to stderr once the HTTP listener is actually bound — matched against the spawned child's real stderr output below rather than assumed, so this test fails honestly if the startup log ever stops matching what the server actually reports.
 const HTTP_LISTENING_LINE = /^document-mcp listening on http:\/\/127\.0\.0\.1:(\d+)\/mcp$/m;
 
 // Waits for the spawned document-mcp child to report its bound port on stderr, rejecting if it exits first (a real startup failure, e.g. a port already in use) or if the line never appears within the timeout.
@@ -144,7 +144,7 @@ describe('document-mcp http smoke test', () => {
   let port;
 
   beforeAll(async () => {
-    // --port 0 asks the OS for a free port rather than hardcoding one, so this test cannot collide with anything else already listening on the host -- the real port is read back from the child's own startup log line via waitForHttpPort.
+    // --port 0 asks the OS for a free port rather than hardcoding one, so this test cannot collide with anything else already listening on the host — the real port is read back from the child's own startup log line via waitForHttpPort.
     child = spawn(process.execPath, [BIN_PATH, '--transport', 'http', '--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'] });
     port = await waitForHttpPort(child);
 

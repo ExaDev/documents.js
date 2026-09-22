@@ -8,7 +8,7 @@ import {
   writeXlsContent,
 } from "../../src/index";
 
-// The write path run inside workerd -- the real Cloudflare Workers runtime -- mirroring test/workers/read.test.ts's own rationale for the read path: if writeXlsContent, buildWorkbookGlobals, buildWorksheetSubstream, or archive-codec's writeCompoundFile beneath them reached for a Node-only API, this isolate would throw rather than the test passing. This is a genuine round trip (write, then read back through this package's own reader), not a byte-shape assertion, so it also proves the writer and reader agree with each other inside the real target runtime, not only under Node.
+// The write path run inside workerd — the real Cloudflare Workers runtime — mirroring test/workers/read.test.ts's own rationale for the read path: if writeXlsContent, buildWorkbookGlobals, buildWorksheetSubstream, or archive-codec's writeCompoundFile beneath them reached for a Node-only API, this isolate would throw rather than the test passing. This is a genuine round trip (write, then read back through this package's own reader), not a byte-shape assertion, so it also proves the writer and reader agree with each other inside the real target runtime, not only under Node.
 
 const PRINT_SETTINGS: ContentSheet["printSettings"] = {
   pageSize: { widthPt: 612, heightPt: 792 },

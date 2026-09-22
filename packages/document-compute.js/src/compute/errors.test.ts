@@ -9,7 +9,7 @@ import {
   UnsupportedExpressionError,
 } from "./errors";
 
-// Every error class is a real, named Error subclass a caller can catch and discriminate by `instanceof` or by `.name` -- exercised end to end by quantity.test.ts/interval.test.ts/evaluate.test.ts/solve.test.ts at the call sites that actually throw them; this file pins each constructor's own contract (name, structured fields, message content) directly.
+// Every error class is a real, named Error subclass a caller can catch and discriminate by `instanceof` or by `.name` — exercised end to end by quantity.test.ts/interval.test.ts/evaluate.test.ts/solve.test.ts at the call sites that actually throw them; this file pins each constructor's own contract (name, structured fields, message content) directly.
 describe("document-compute.js error classes", () => {
   it("IncompatibleDimensionsError carries the operation and both dimension vectors", () => {
     const error = new IncompatibleDimensionsError(

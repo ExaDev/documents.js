@@ -23,7 +23,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   };
 });
 
-// Stands in for the real FileUpload (already covered by its own dedicated test suite): ConvertLayout's own logic -- format detection/branch selection, the convert/download flows, and the URL-sync effect -- is what this file exercises.
+// Stands in for the real FileUpload (already covered by its own dedicated test suite): ConvertLayout's own logic — format detection/branch selection, the convert/download flows, and the URL-sync effect — is what this file exercises.
 let latestOnFile: ((file: OpenedFile) => void) | undefined;
 let latestFile: OpenedFile | undefined;
 vi.mock("../ui/FileUpload", () => ({
@@ -37,7 +37,7 @@ vi.mock("../ui/FileUpload", () => ({
   },
 }));
 
-// Real Mantine Select renders as a text input with no accessible way to drive its dropdown without @testing-library/user-event -- capturing its own props (as the mocked FileUpload above already does) lets this suite drive onChange directly, keyed by the Select's own label since ConvertLayout renders two ("From"/"To").
+// Real Mantine Select renders as a text input with no accessible way to drive its dropdown without @testing-library/user-event — capturing its own props (as the mocked FileUpload above already does) lets this suite drive onChange directly, keyed by the Select's own label since ConvertLayout renders two ("From"/"To").
 interface CapturedSelect {
   data: unknown;
   value: string | null;
@@ -393,7 +393,7 @@ describe("ConvertLayout", () => {
       expect(original?.getAttribute("data-has-error")).toBe("false");
       expect(converted?.getAttribute("data-has-error")).toBe("false");
 
-      // Every content.read/pdf.inspect call this pair should have triggered is a separate async operation from convert.mutate itself, settling on its own tick -- waited for explicitly rather than assumed already resolved the moment the Done panel first appears.
+      // Every content.read/pdf.inspect call this pair should have triggered is a separate async operation from convert.mutate itself, settling on its own tick — waited for explicitly rather than assumed already resolved the moment the Done panel first appears.
       await vi.waitFor(() => {
         const inspectPanels = mounted.container.querySelectorAll(
           '[data-testid="inspect-panel"]',

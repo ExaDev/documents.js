@@ -47,7 +47,7 @@ describe("pointsToColumnWidth", () => {
   });
 
   it("computes the smallest coldx via ceil(targetPixels * 256 / MAX_DIGIT_WIDTH_PX - digitWidthAllowance), not a widened one", () => {
-    // 100pt -> 133px at 96dpi (round(100/72*96) = 133); digitWidthAllowance = trunc(128/7) = 18. coldx = ceil(133 * 256 / 7 - 18) = ceil(4864 - 18) = 4846 -- subtracting the allowance, not adding it.
+    // 100pt -> 133px at 96dpi (round(100/72*96) = 133); digitWidthAllowance = trunc(128/7) = 18. coldx = ceil(133 * 256 / 7 - 18) = ceil(4864 - 18) = 4846 — subtracting the allowance, not adding it.
     expect(pointsToColumnWidth(100)).toBe(4846);
   });
 });

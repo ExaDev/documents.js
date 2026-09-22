@@ -102,7 +102,7 @@ describe('parseValue: "N G R" reference disambiguation', () => {
     ]);
   });
 
-  it('does not misread "5 0 obj" as a reference -- backtracks so all three tokens parse independently', () => {
+  it('does not misread "5 0 obj" as a reference — backtracks so all three tokens parse independently', () => {
     expect(parseAllValues("5 0 obj").values).toEqual([
       { kind: "number", value: 5 },
       { kind: "number", value: 0 },

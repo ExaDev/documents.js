@@ -51,7 +51,7 @@ function notesAtom(
   );
 }
 
-// [MS-PPT] 2.4.14.7 NotesPersistAtom: recLen 0x14, then persistIdRef, the reserved1/fNonOutlineData/reserved2 flags word, reserved3, notesId, reserved4 -- the same 20 bytes a SlidePersistAtom spends, but with reserved3 where that record states cTexts.
+// [MS-PPT] 2.4.14.7 NotesPersistAtom: recLen 0x14, then persistIdRef, the reserved1/fNonOutlineData/reserved2 flags word, reserved3, notesId, reserved4 — the same 20 bytes a SlidePersistAtom spends, but with reserved3 where that record states cTexts.
 function notesPersistAtom(
   persistIdRef: number,
   notesId: number,

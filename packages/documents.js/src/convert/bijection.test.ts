@@ -14,7 +14,7 @@ import {
   factorStyles,
   flattenTree,
 } from "document-schema.js";
-// The canonicaliser is deliberately absent from document-schema.js's index barrel (it exists to give the minting pass one tuple-identity recipe, not to publish a sort order as an API guarantee), so it comes in by subpath -- the same one recipe the transform itself uses, never a second one restated here.
+// The canonicaliser is deliberately absent from document-schema.js's index barrel (it exists to give the minting pass one tuple-identity recipe, not to publish a sort order as an API guarantee), so it comes in by subpath — the same one recipe the transform itself uses, never a second one restated here.
 import { canonicalise } from "document-schema.js/canonicalise";
 import { decodePackage as decodeOdfPackage } from "odf.js";
 import {
@@ -71,9 +71,9 @@ import { embeddedHsqldbOdbPackage } from "../test-support/odb";
 import { formAndReportOdbPackage } from "../test-support/odb-fixture";
 import { FRACTION_FORMULA, odfFormulaBytes } from "../test-support/odf";
 
-// THE PROMOTION'S MERGE GATE: the three bijection laws re-run over this repo's REAL corpus -- reader outputs for every format, editors per kind, xlsx via ooxml.js, csv/svg text, odf formulas (standalone, sheet-embedded, and odt-embedded), an .odb table extraction, a rendered .odb report, reconstruction outputs, and onDocument captures from every conversion family (each carrying the layout pass's real frames and pages). document-outline.js proved the laws property-wise over its local corpus in phase 1; this file is the phase-3 gate the plan makes the merge condition: the laws must hold over the documents this package actually produces, not only over hand-built fixtures.
+// THE PROMOTION'S MERGE GATE: the three bijection laws re-run over this repo's REAL corpus — reader outputs for every format, editors per kind, xlsx via ooxml.js, csv/svg text, odf formulas (standalone, sheet-embedded, and odt-embedded), an .odb table extraction, a rendered .odb report, reconstruction outputs, and onDocument captures from every conversion family (each carrying the layout pass's real frames and pages). document-outline.js proved the laws property-wise over its local corpus in phase 1; this file is the phase-3 gate the plan makes the merge condition: the laws must hold over the documents this package actually produces, not only over hand-built fixtures.
 //
-// The laws (stated on ExaDev/document-schema.js#20 and its errata): (i) flatten(assemble(c)) reproduces c exactly, up to one declared normalisation (a present-but-empty embeddedObjects array normalises to the field absent); (ii) effective-property equality universally -- the flat codec-exchange form flatten produces is fully materialised (zero style refs) and structurally identical to the unfactored original, so a factored and an unfactored serialisation of one document compare equal; (iii) minting idempotence -- assembling the flattened tree again (and factoring an already-factored package) mints the identical table and the identical tree. Never an identity assertion: decompose embeds the source's own node objects, so toBe would pass even for an implementation that mutated its input -- structural comparison over a pre-roundtrip structuredClone snapshot is what actually pins the values, and re-comparing the source against its snapshot additionally pins that neither direction mutates the input in place.
+// The laws (stated on ExaDev/document-schema.js#20 and its errata): (i) flatten(assemble(c)) reproduces c exactly, up to one declared normalisation (a present-but-empty embeddedObjects array normalises to the field absent); (ii) effective-property equality universally — the flat codec-exchange form flatten produces is fully materialised (zero style refs) and structurally identical to the unfactored original, so a factored and an unfactored serialisation of one document compare equal; (iii) minting idempotence — assembling the flattened tree again (and factoring an already-factored package) mints the identical table and the identical tree. Never an identity assertion: decompose embeds the source's own node objects, so toBe would pass even for an implementation that mutated its input — structural comparison over a pre-roundtrip structuredClone snapshot is what actually pins the values, and re-comparing the source against its snapshot additionally pins that neither direction mutates the input in place.
 
 function canon(value: unknown): unknown {
   return JSON.parse(
@@ -81,7 +81,7 @@ function canon(value: unknown): unknown {
   );
 }
 
-// The bijection's one declared normalisation: decompose concatenates a sheet's images and embedded objects into a single children array and flatten rebuilds embeddedObjects only when an embedded object exists, so a present-but-empty array -- schema-legal, emitted by no codec -- cannot survive the round trip and normalises to the field absent. Applied to BOTH sides of every comparison so law (i) stays an equivalence over canonical forms; the direction is pinned outright by the transform's own decompose tests, which live with the transform in document-schema.js. Recursive because a sheet can sit inside an embedded document, whose own sheets can carry the same field.
+// The bijection's one declared normalisation: decompose concatenates a sheet's images and embedded objects into a single children array and flatten rebuilds embeddedObjects only when an embedded object exists, so a present-but-empty array — schema-legal, emitted by no codec — cannot survive the round trip and normalises to the field absent. Applied to BOTH sides of every comparison so law (i) stays an equivalence over canonical forms; the direction is pinned outright by the transform's own decompose tests, which live with the transform in document-schema.js. Recursive because a sheet can sit inside an embedded document, whose own sheets can carry the same field.
 function normaliseEmbeddedObjects(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normaliseEmbeddedObjects);
   if (typeof value !== "object" || value === null) return value;
@@ -152,13 +152,13 @@ function corpus(): readonly CorpusEntry[] {
     readMarkdownContent(richMarkdownText()),
     readCsvContent('h1,h2,h3\n42.5,TRUE,2024-01-15\n"1,234",plain,x'),
     readSvgContent(SVG_TEXT),
-    // xlsx through ooxml.js's own spreadsheet pair -- the one ContentDocument source with no odf.js reader behind it.
+    // xlsx through ooxml.js's own spreadsheet pair — the one ContentDocument source with no odf.js reader behind it.
     readXlsxContent(
       buildXlsxPackageFromContent(
         readOdsContent(decodeOdfPackage(gridOdsBytes())),
       ),
     ),
-    // Editors per kind: a live-view build, encoded and read back through the same reader every other corpus entry uses -- the editor surface, not a rebuild of reader output.
+    // Editors per kind: a live-view build, encoded and read back through the same reader every other corpus entry uses — the editor surface, not a rebuild of reader output.
     readDocxContent(decodeOoxmlPackage(editorDocxBytes())),
     readOdsContent(decodeOdfPackage(editorOdsBytes())),
     readOdgContent(decodeOdfPackage(editorOdgBytes())),
@@ -169,7 +169,7 @@ function corpus(): readonly CorpusEntry[] {
     name: `reader output ${String(index)}`,
     content,
   }));
-  // A multi-section wordprocessing document -- the per-section geometry case section groups exist to carry (odmToPdf's own combined shape: two read chapters concatenated with a leading break).
+  // A multi-section wordprocessing document — the per-section geometry case section groups exist to carry (odmToPdf's own combined shape: two read chapters concatenated with a leading break).
   const chapterOne = readOdtContent(decodeOdfPackage(minimalOdtBytes()));
   const chapterTwo = readOdtContent(decodeOdfPackage(minimalOdtBytes()));
   if (
@@ -185,7 +185,7 @@ function corpus(): readonly CorpusEntry[] {
       },
     });
   }
-  // OLE-embedded OOXML hosts: the ContentEmbeddedObjectBlock both ooxml.js readers emit when an embeddings part is itself a ZIP package -- a nested ContentDocument riding a block, the one block shape whose content is itself a whole document, so the three laws must hold over it in both the section flow (docx) and the shape flow (pptx).
+  // OLE-embedded OOXML hosts: the ContentEmbeddedObjectBlock both ooxml.js readers emit when an embeddings part is itself a ZIP package — a nested ContentDocument riding a block, the one block shape whose content is itself a whole document, so the three laws must hold over it in both the section flow (docx) and the shape flow (pptx).
   entries.push({
     name: "reader output: docx with an OLE-embedded xlsx",
     content: readDocxContent(decodeOoxmlPackage(oleEmbeddedDocxBytes())),
@@ -286,7 +286,7 @@ function corpus(): readonly CorpusEntry[] {
 
 // --- The construct-boundary corpus ------------------------------------------------------------------------
 
-// document-schema.js 4.2.0 gave ContentBlock the constructStart/constructEnd marker pair, so a construct boundary is now a flat-form signal decompose promotes to a construct group and flatten reproduces, exactly like a heading level or a list level. No reader in this package emits a marker yet (the format codecs' own construct extraction is document-schema.js#22's separate track), so the vocabulary reaches this gate only through hand-built content -- but the gate itself is unchanged: these entries run the identical three laws every reader entry does, which is what makes them the proof the promotion is correct rather than merely typed. One entry per placement, so a failure names the case.
+// document-schema.js 4.2.0 gave ContentBlock the constructStart/constructEnd marker pair, so a construct boundary is now a flat-form signal decompose promotes to a construct group and flatten reproduces, exactly like a heading level or a list level. No reader in this package emits a marker yet (the format codecs' own construct extraction is document-schema.js#22's separate track), so the vocabulary reaches this gate only through hand-built content — but the gate itself is unchanged: these entries run the identical three laws every reader entry does, which is what makes them the proof the promotion is correct rather than merely typed. One entry per placement, so a failure names the case.
 
 const CONSTRUCT_SECTION = {
   pageSize: { widthPt: 595, heightPt: 842 },
@@ -450,7 +450,7 @@ function constructCorpus(): readonly CorpusEntry[] {
   ];
 }
 
-// A live-view docx build carrying repeated direct formatting (two identically-styled runs), encoded through the editor's own bytes and read back -- the editor surface's contribution to the corpus.
+// A live-view docx build carrying repeated direct formatting (two identically-styled runs), encoded through the editor's own bytes and read back — the editor surface's contribution to the corpus.
 function editorDocxBytes(): Uint8Array<ArrayBuffer> {
   const editor = createDocx();
   editor.body.appendParagraph().appendRun({ text: "Hello from the editor" });
@@ -522,7 +522,7 @@ describe("decompose/flatten bijection laws over the real corpus", () => {
     });
   });
 
-  // The gate must not pass vacuously: minting has to actually run over real corpus documents (repeated direct formatting is common reader output -- the docx extras and editor builds carry it), so at least one entry's tree carries a non-empty styles table and at least one wrapper ref. If this ever fails because no entry mints, the corpus has stopped exercising laws (ii) and (iii) and needs a real formatting-repetition fixture, not a weakened assertion.
+  // The gate must not pass vacuously: minting has to actually run over real corpus documents (repeated direct formatting is common reader output — the docx extras and editor builds carry it), so at least one entry's tree carries a non-empty styles table and at least one wrapper ref. If this ever fails because no entry mints, the corpus has stopped exercising laws (ii) and (iii) and needs a real formatting-repetition fixture, not a weakened assertion.
   it("the corpus exercises real minting (at least one entry carries a styles table)", () => {
     const minting = corpus().filter(
       (entry) =>
@@ -550,7 +550,7 @@ describe("decompose/flatten bijection laws over the real corpus", () => {
     );
   });
 
-  // And narrowed to the OLE-embedded entries: the laws would hold vacuously over an entry whose embedded block never materialised, so every OLE entry (reader outputs and conversion captures alike) must genuinely carry an embeddedObject block holding a recovered nested spreadsheet -- the shape the entries exist to pin.
+  // And narrowed to the OLE-embedded entries: the laws would hold vacuously over an entry whose embedded block never materialised, so every OLE entry (reader outputs and conversion captures alike) must genuinely carry an embeddedObject block holding a recovered nested spreadsheet — the shape the entries exist to pin.
   it("the OLE corpus entries carry genuinely recovered embeddedObject blocks", () => {
     const oleEntries = corpus().filter((entry) =>
       entry.name.includes("OLE-embedded"),

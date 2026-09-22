@@ -18,7 +18,7 @@ import {
   spreadsheetPackage,
 } from "../test-support/fixtures";
 
-// Builders local to this test file: sheetCell() from test-support/fixtures only takes value+displayText, so cells that need `formula` are built by spreading its result -- the same pattern the fixtures module documents for options it does not itself parameterise.
+// Builders local to this test file: sheetCell() from test-support/fixtures only takes value+displayText, so cells that need `formula` are built by spreading its result — the same pattern the fixtures module documents for options it does not itself parameterise.
 function textCell(row: number, column: number, text: string): ContentSheetCell {
   return sheetCell(row, column, { kind: "string", value: text }, text);
 }
@@ -35,7 +35,7 @@ function numberCell(
   };
 }
 
-// A text-valued cell that also carries a `formula` field (e.g. a text-producing formula like =CONCATENATE(...)): the one shape that lets a test separately control "is this cell string-kind" (relevant to topRowTextFraction) from "does this cell count as numeric-like" (NUMERIC_VALUE_KINDS.has(kind) || formula !== undefined -- true here purely because of the formula, independent of its string kind).
+// A text-valued cell that also carries a `formula` field (e.g. a text-producing formula like =CONCATENATE(...)): the one shape that lets a test separately control "is this cell string-kind" (relevant to topRowTextFraction) from "does this cell count as numeric-like" (NUMERIC_VALUE_KINDS.has(kind) || formula !== undefined — true here purely because of the formula, independent of its string kind).
 function formulaTextCell(
   row: number,
   column: number,
@@ -89,7 +89,7 @@ describe("segmentSheetRegions adjacency rule", () => {
   });
 
   it("does not connect a diagonal jump across both a blank row and a blank column", () => {
-    // (0,0) and (2,2): one blank row (row 1) AND one blank column (column 1) simultaneously -- the "not both at once" case the adjacency rule's own doc comment names explicitly.
+    // (0,0) and (2,2): one blank row (row 1) AND one blank column (column 1) simultaneously — the "not both at once" case the adjacency rule's own doc comment names explicitly.
     const cells = [textCell(0, 0, "a"), textCell(2, 2, "b")];
     const regions = segmentSheetRegions(cells);
     expect(regions).toHaveLength(2);
@@ -196,7 +196,7 @@ describe("segmentSheetRegions region discovery", () => {
         tableCells.push(numberCell(row, column, row * 10 + column));
       }
     }
-    // Column 7 sits 4 columns past the table's rightmost column (3) -- comfortably past the adjacency rule's own 2-column tolerance, so no per-row alignment between the two blocks can bridge them regardless of which rows the commentary happens to occupy.
+    // Column 7 sits 4 columns past the table's rightmost column (3) — comfortably past the adjacency rule's own 2-column tolerance, so no per-row alignment between the two blocks can bridge them regardless of which rows the commentary happens to occupy.
     const proseCells = [
       textCell(
         0,
@@ -287,7 +287,7 @@ describe("computeSignals", () => {
     expect(signals.averageTextLength).toBe(7); // (7 + 7) / 2
     // rowRegularity: row counts [2, 4], mean 3, variance ((2-3)^2+(4-3)^2)/2 = 1, so 1 - sqrt(1)/3.
     expect(signals.rowRegularity).toBeCloseTo(1 - Math.sqrt(1) / 3, 10);
-    // Top row (row 0) is 100% text, and the only other row (row 1) is 100% numeric -- a genuine header shape.
+    // Top row (row 0) is 100% text, and the only other row (row 1) is 100% numeric — a genuine header shape.
     expect(signals.hasHeaderLikeRow).toBe(true);
   });
 
@@ -418,7 +418,7 @@ describe("classifyRegion", () => {
     });
   });
 
-  it("computes tableScore as a weighted blend of row regularity, header signal, and density -- never a table from a single row or column", () => {
+  it("computes tableScore as a weighted blend of row regularity, header signal, and density — never a table from a single row or column", () => {
     const singleRow = computeSignals([
       numberCell(0, 0, 1),
       numberCell(0, 1, 2),
@@ -459,7 +459,7 @@ describe("classifyRegion", () => {
       rowRegularity: 1,
       hasHeaderLikeRow: true,
     };
-    // Extreme rowRegularity/density values would swamp every other score if the distinctColumns > 1 guard were ever bypassed -- so a correct guard must keep this a clean prose call, not table or mixed.
+    // Extreme rowRegularity/density values would swamp every other score if the distinctColumns > 1 guard were ever bypassed — so a correct guard must keep this a clean prose call, not table or mixed.
     expect(classifyRegion(signals)).toEqual({
       classification: "prose",
       confidence: 1,
@@ -586,7 +586,7 @@ describe("classifyRegion", () => {
   });
 
   it("does not call it mixed when the top score sits exactly at the second score plus the mixed margin", () => {
-    // Constructed so the comparison's two sides are BIT-IDENTICAL, not merely numerically close: proseScore is set directly via textFraction (multiplying by clamp01(40/40) = 1 introduces no rounding), and tableScore is built as (proseScore + 0.15) * 2 halved back by its own 0.5 weight -- doubling then halving a normal-range double is exact, so tableScore ends up EXACTLY equal to `proseScore + 0.15`, the identical expression classifyRegion's own comparison evaluates. A gap-based `top - second < MIXED_MARGIN` formulation can never be pinned this precisely: with both scores held to [SIGNAL_THRESHOLD, 1], their difference always lands on a coarser float grid than 0.15's own stored value needs, so no achievable pair of scores can make that subtraction hit 0.15 bit-for-bit -- see classifyRegion's own comment on why it compares `top < second + MIXED_MARGIN` instead. rowSpan/colSpan are set enormous purely so density's own 0.2 contribution underflows to nothing when added to the dominant term, keeping tableScore's construction exact.
+    // Constructed so the comparison's two sides are BIT-IDENTICAL, not merely numerically close: proseScore is set directly via textFraction (multiplying by clamp01(40/40) = 1 introduces no rounding), and tableScore is built as (proseScore + 0.15) * 2 halved back by its own 0.5 weight — doubling then halving a normal-range double is exact, so tableScore ends up EXACTLY equal to `proseScore + 0.15`, the identical expression classifyRegion's own comparison evaluates. A gap-based `top - second < MIXED_MARGIN` formulation can never be pinned this precisely: with both scores held to [SIGNAL_THRESHOLD, 1], their difference always lands on a coarser float grid than 0.15's own stored value needs, so no achievable pair of scores can make that subtraction hit 0.15 bit-for-bit — see classifyRegion's own comment on why it compares `top < second + MIXED_MARGIN` instead. rowSpan/colSpan are set enormous purely so density's own 0.2 contribution underflows to nothing when added to the dominant term, keeping tableScore's construction exact.
     const second = 0.4;
     const MIXED_MARGIN = 0.15;
     const rowRegularity = (second + MIXED_MARGIN) * 2;

@@ -42,7 +42,7 @@ import {
   requirePdfDocument,
 } from "./shared.js";
 
-// --- read-only field dump, for an xlsx-sourced item (no live PdfEditor to edit through -- see shared.ts's own isEditablePdfDocument doc comment) -------------------------------------------------------------------------------------------------
+// --- read-only field dump, for an xlsx-sourced item (no live PdfEditor to edit through — see shared.ts's own isEditablePdfDocument doc comment) -------------------------------------------------------------------------------------------------
 
 type Field = readonly [label: string, value: string];
 
@@ -50,7 +50,7 @@ function formatPoint(xPt: number, yPt: number): string {
   return `(${xPt.toFixed(1)}, ${yPt.toFixed(1)})pt`;
 }
 
-// A full field dump of one `LayoutItem`, kind by kind -- every field the item's own schema variant carries, formatted for reading rather than parsed or interpreted further. `sourcePath` is common to every variant, so it is appended once after the kind-specific fields rather than repeated in each branch.
+// A full field dump of one `LayoutItem`, kind by kind — every field the item's own schema variant carries, formatted for reading rather than parsed or interpreted further. `sourcePath` is common to every variant, so it is appended once after the kind-specific fields rather than repeated in each branch.
 function fieldsFor(item: LayoutItem): readonly Field[] {
   const fields: Field[] = [["Kind", item.kind]];
   switch (item.kind) {
@@ -127,7 +127,7 @@ function fieldsFor(item: LayoutItem): readonly Field[] {
       fields.push(["Size", formatSize(item.widthPt, item.heightPt)]);
       break;
     default: {
-      // Exhaustiveness check, not a runtime fallback: if `LayoutItem` ever grows a kind this switch does not handle, `item` stops narrowing to `never` here and `satisfies never` fails to compile. Written as `satisfies` rather than an annotated `const` because the check is about the type alone -- there is no binding anyone reads, and introducing one only to return it reads as an alias.
+      // Exhaustiveness check, not a runtime fallback: if `LayoutItem` ever grows a kind this switch does not handle, `item` stops narrowing to `never` here and `satisfies never` fails to compile. Written as `satisfies` rather than an annotated `const` because the check is about the type alone — there is no binding anyone reads, and introducing one only to return it reads as an alias.
       return item satisfies never;
     }
   }
@@ -171,7 +171,7 @@ function ReadOnlyItemDetail(props: {
 
 // --- real field editor, for a genuine 'pdf'-format document ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-// A field is either commit-based (Enter opens a TextField seeded with `currentValue`, submitting dispatches through `commit`) or activate-based (Enter fires `activate` immediately, no TextField at all -- used for a toggle whose entire state fits in its own label, and for "Replace image..."'s nested file-path wizard). Exactly one of the two is ever set on a given row.
+// A field is either commit-based (Enter opens a TextField seeded with `currentValue`, submitting dispatches through `commit`) or activate-based (Enter fires `activate` immediately, no TextField at all — used for a toggle whose entire state fits in its own label, and for "Replace image..."'s nested file-path wizard). Exactly one of the two is ever set on a given row.
 interface EditableRow {
   readonly label: string;
   readonly currentValue: string;
@@ -638,7 +638,7 @@ function buildLinkRows(
   ];
 }
 
-// An internal link's destination names a destinations-table entry, not a URI -- editable as the plain name it is, with the same frame rows every placed item gets.
+// An internal link's destination names a destinations-table entry, not a URI — editable as the plain name it is, with the same frame rows every placed item gets.
 function buildInternalLinkRows(
   item: PdfInternalLinkItem,
   pageIndex: number,
@@ -707,7 +707,7 @@ function pathSummary(item: PdfPathItem): string {
     (total, subpath) => total + subpath.segments.length,
     0,
   );
-  return `${item.subpaths.length} subpath${item.subpaths.length === 1 ? "" : "s"}, ${segmentCount} segment${segmentCount === 1 ? "" : "s"} (not editable here -- see documents.js's own PdfPathItem doc comment)`;
+  return `${item.subpaths.length} subpath${item.subpaths.length === 1 ? "" : "s"}, ${segmentCount} segment${segmentCount === 1 ? "" : "s"} (not editable here — see documents.js's own PdfPathItem doc comment)`;
 }
 
 async function applyImageReplace(
@@ -721,7 +721,7 @@ async function applyImageReplace(
     dispatch({
       type: "SET_STATUS",
       severity: "warning",
-      text: `${path} is not a .png or .jpg/.jpeg file -- image not replaced`,
+      text: `${path} is not a .png or .jpg/.jpeg file — image not replaced`,
     });
     return;
   }
@@ -828,7 +828,7 @@ function EditableItemDetail(props: {
     const row = rows[editingField];
     if (row === undefined) {
       throw new Error(
-        `EditableItemDetail is editing field index ${editingField}, but there are only ${rows.length} rows -- selecting a row always sets editingField to a valid index from that same rows array, so this indicates a bug in that selection.`,
+        `EditableItemDetail is editing field index ${editingField}, but there are only ${rows.length} rows — selecting a row always sets editingField to a valid index from that same rows array, so this indicates a bug in that selection.`,
       );
     }
     return (
@@ -853,7 +853,7 @@ function EditableItemDetail(props: {
   return (
     <Box flexDirection="column">
       <Text bold>
-        Page {pageIndex + 1}, item {itemIndex + 1} -- {item.kind}
+        Page {pageIndex + 1}, item {itemIndex + 1} — {item.kind}
       </Text>
       {item.kind === "path" && <Text dimColor>{pathSummary(item)}</Text>}
       {item.kind === "image" && <Text dimColor>Image ID: {item.imageId}</Text>}

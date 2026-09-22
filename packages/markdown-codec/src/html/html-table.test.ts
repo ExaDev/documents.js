@@ -1,4 +1,4 @@
-// Construct-by-construct tests for the bounded HTML-table recogniser itself (ExaDev/documents.js#1089) -- src/table-html-fallback.test.ts covers the full write -> read round trip through the public surface; this file exercises parseHtmlTable directly, including the shapes it deliberately refuses to guess about.
+// Construct-by-construct tests for the bounded HTML-table recogniser itself (ExaDev/documents.js#1089) — src/table-html-fallback.test.ts covers the full write -> read round trip through the public surface; this file exercises parseHtmlTable directly, including the shapes it deliberately refuses to guess about.
 
 import type { ContentTable, ContentTableCell } from "document-schema.js";
 import { describe, expect, it } from "vitest";
@@ -6,7 +6,7 @@ import { parseHtmlTable } from "./html-table";
 
 const CONTENT_WIDTH_PT = 451.28;
 
-// A real, minimal 1x1 PNG -- the identical fixture src/lower/lower.test.ts's own image tests already use.
+// A real, minimal 1x1 PNG — the identical fixture src/lower/lower.test.ts's own image tests already use.
 const ONE_PIXEL_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
@@ -165,7 +165,7 @@ describe("parseHtmlTable", () => {
     expect(block?.kind === "paragraph" && block.alignment).toBe("center");
   });
 
-  it("ignores a single-quoted or unquoted attribute value -- double-quoted only, matching exactly what the writer itself emits", () => {
+  it("ignores a single-quoted or unquoted attribute value — double-quoted only, matching exactly what the writer itself emits", () => {
     const table = parse(
       "<table>\n<tr><td colspan='2'>a</td><td colspan=3>b</td></tr>\n</table>",
     );

@@ -32,7 +32,7 @@ function xorArrayIndexFor(
   return (spanOffset + recordDataLength) % XOR_OBFUSCATION_ARRAY_LENGTH;
 }
 
-/** Wraps bytes and an offset as a BiffRecord -- the record's own type is the only field decryptWorkbookRecords dispatches on; data and offset carry the payload and its stream position. */
+/** Wraps bytes and an offset as a BiffRecord — the record's own type is the only field decryptWorkbookRecords dispatches on; data and offset carry the payload and its stream position. */
 function biffRecord(
   type: number,
   data: readonly number[],
@@ -109,7 +109,7 @@ describe("decryptWorkbookRecords", () => {
     });
 
     it("refuses RC4 EncryptionVersionInfo with a valid minor but wrong major", () => {
-      // A wrong major alone must still be refused -- the version check is a conjunction of both fields matching, not just the minor.
+      // A wrong major alone must still be refused — the version check is a conjunction of both fields matching, not just the minor.
       const filePass = biffRecord(RECORD_FILEPASS, [1, 0, 2, 0, 1, 0], 0);
 
       expect(() =>
@@ -249,7 +249,7 @@ describe("decryptWorkbookRecords", () => {
     });
 
     it("refuses an RC4 verifier hash that decrypts to the wrong bytes even where one byte happens to coincide", () => {
-      // The comparison must be a genuine every-byte match, not merely "at least one byte agrees" -- engineered here by taking the real, correctly-decrypting verifier hash and flipping every byte except the first, so a `.some()` in place of `.every()` would still wrongly accept it.
+      // The comparison must be a genuine every-byte match, not merely "at least one byte agrees" — engineered here by taking the real, correctly-decrypting verifier hash and flipping every byte except the first, so a `.some()` in place of `.every()` would still wrongly accept it.
       const baseHash = deriveOfficeRc4BaseHash(PASSWORD, SALT);
       const verifier = new Uint8Array(16).map((_, i) => i * 7 + 3);
       const realHash = md5(verifier);
@@ -310,7 +310,7 @@ describe("decryptWorkbookRecords", () => {
     it("leaves a never-encrypted record type's data untouched", () => {
       const filePassData = rc4FilePassData(PASSWORD, SALT);
       const filePass = biffRecord(RECORD_FILEPASS, filePassData, 0);
-      // Bytes that would decrypt to something else entirely if the guard were bypassed -- proving the bypass, rather than a coincidental match, is what leaves them alone.
+      // Bytes that would decrypt to something else entirely if the guard were bypassed — proving the bypass, rather than a coincidental match, is what leaves them alone.
       const untouchedBytes = [1, 2, 3, 4];
       const record = biffRecord(RECORD_USREXCL, untouchedBytes, 1000);
 

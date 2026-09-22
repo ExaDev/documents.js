@@ -44,7 +44,7 @@ export function buildWpdFile(
   bytes[9] = 0x0a; // file type: WordPerfect document
   bytes[10] = 2; // major version: the 6.x-X6 lineage
   bytes[11] = 1; // minor version
-  // Offset 12-13 (the encryption word) is left at its zero-initialised default rather than written explicitly -- `new Uint8Array` always starts zeroed, so a build produces an unencrypted document either way.
+  // Offset 12-13 (the encryption word) is left at its zero-initialised default rather than written explicitly — `new Uint8Array` always starts zeroed, so a build produces an unencrypted document either way.
   putUint16(bytes, 14, PREFIX_HEADER_SIZE); // pointer to the index area
   putUint32(bytes, 16, 5); // the documented reserved long at the head of the extended header
   putUint32(bytes, 20, fileSize);
@@ -120,7 +120,7 @@ export function word(value: number): number[] {
   return [value & 0xff, (value >>> 8) & 0xff];
 }
 
-// An End-of-Line group function (0xD0) carrying embedded subfunctions. The group's own non-deletable region is not the subfunction list directly: it opens with "[size of deletable subfunction data]", then the deletable subfunctions, then the non-deletable ones -- so this builder writes a zero-length deletable half and the given records after it.
+// An End-of-Line group function (0xD0) carrying embedded subfunctions. The group's own non-deletable region is not the subfunction list directly: it opens with "[size of deletable subfunction data]", then the deletable subfunctions, then the non-deletable ones — so this builder writes a zero-length deletable half and the given records after it.
 export function eolFunction(options: {
   readonly subgroup: number;
   readonly embedded?: readonly number[];

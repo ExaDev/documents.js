@@ -14,7 +14,7 @@ import {
 } from "./rule-residue";
 import { formatSqref, parseSqref } from "./sqref";
 
-// xlsx dataValidation <-> ContentSheetDataValidation, promoted from the anchor-cell residue landing typed/xlsx/content.ts's own applyCellResidueRules used to quarantine every rule under, for every ContentSheetDataValidationTypeSchema member -- effectively the FULL ECMA-376 ST_DataValidationType vocabulary bar its own 'none' member (a rule declaring no validation at all, vanishingly rare and structurally meaningless, so left for the whole-element residue fallback like any other unrecognised type).
+// xlsx dataValidation <-> ContentSheetDataValidation, promoted from the anchor-cell residue landing typed/xlsx/content.ts's own applyCellResidueRules used to quarantine every rule under, for every ContentSheetDataValidationTypeSchema member — effectively the FULL ECMA-376 ST_DataValidationType vocabulary bar its own 'none' member (a rule declaring no validation at all, vanishingly rare and structurally meaningless, so left for the whole-element residue fallback like any other unrecognised type).
 
 const DATA_VALIDATION_TYPES = new Set([
   "whole",
@@ -47,7 +47,7 @@ function isSheetRuleOperator(
   );
 }
 
-// 'list' and 'custom' have no comparison operator (document-schema.js's own doc comment on ContentSheetDataValidationSchema.operator) -- a stray operator attribute a producer left on one of these two (real-producer-validation-and-cellis.xlsx's own list validation carries operator="equal", meaningless for a list) is noise this reader does not carry into the structured field.
+// 'list' and 'custom' have no comparison operator (document-schema.js's own doc comment on ContentSheetDataValidationSchema.operator) — a stray operator attribute a producer left on one of these two (real-producer-validation-and-cellis.xlsx's own list validation carries operator="equal", meaningless for a list) is noise this reader does not carry into the structured field.
 const TYPES_WITHOUT_OPERATOR = new Set<ContentSheetDataValidationType>([
   "list",
   "custom",
@@ -69,7 +69,7 @@ const MANAGED_ATTRIBUTES = new Set([
 
 export interface DataValidationReadResult {
   validations: ContentSheetDataValidation[];
-  // Every <dataValidation> element this reader could not promote structurally (type 'none' or otherwise unrecognised, or a sqref that parses to no range at all) -- fed to content.ts's own applyCellResidueRules exactly as a whole quarantined rule always has been.
+  // Every <dataValidation> element this reader could not promote structurally (type 'none' or otherwise unrecognised, or a sqref that parses to no range at all) — fed to content.ts's own applyCellResidueRules exactly as a whole quarantined rule always has been.
   residueElements: XmlElement[];
 }
 
@@ -96,7 +96,7 @@ function readFormulaChild(
   tag: "formula1" | "formula2",
 ): string | undefined {
   const child = childrenWithTag(element, tag)[0];
-  // textContent already entity-decodes (typed/util.ts) -- formula text is carried verbatim otherwise, matching ContentSheetCell.formula's own "raw, unparsed" convention.
+  // textContent already entity-decodes (typed/util.ts) — formula text is carried verbatim otherwise, matching ContentSheetCell.formula's own "raw, unparsed" convention.
   return child === undefined ? undefined : textContent(child);
 }
 
@@ -126,7 +126,7 @@ function readDataValidation(
   const prompt = attr(element, "prompt");
   const errorTitle = attr(element, "errorTitle");
   const error = attr(element, "error");
-  // 'stop' is CT_DataValidation/@errorStyle's own documented default -- left absent, matching this reader's own "absent means default" convention throughout.
+  // 'stop' is CT_DataValidation/@errorStyle's own documented default — left absent, matching this reader's own "absent means default" convention throughout.
   const errorStyleRaw = attr(element, "errorStyle");
   const errorStyle =
     errorStyleRaw === "warning" || errorStyleRaw === "information"

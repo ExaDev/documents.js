@@ -10,13 +10,13 @@ import type {
 } from "document-schema.js";
 import { byteAt, int16At, uint16At, uint32At } from "../bytes/view";
 
-// -- WPG (WordPerfect Graphic) vector graphics, per the SDK's "WordPerfect Graphic File Format" pages --
+// — WPG (WordPerfect Graphic) vector graphics, per the SDK's "WordPerfect Graphic File Format" pages --
 //
-// A WPG file opens with the same 26-byte prefix family a WordPerfect document does (file ID FF 57 50 43, a long pointer to the data, product/file-type/version bytes), distinguished from a document by its file-type byte 22 (0x16). From the pointer onwards it is an ordered sequence of drawing records: a header of Class (1 byte), Type (1 byte), Extension (a count field, 1/3/5 bytes), and Length (the same count-field coding), then exactly Length bytes of data. The Extension count groups physical records into logical ones -- a record whose count is N is followed by N more records belonging to it, and a grouped logical record counts as one record to the next outermost group's count. A Group record's children are independent objects each with their own attributes; every other grouped record's children belong to their opener (a Text Block's Text Data, a Bitmap's palette and data, a Compound Polygon's paths), so when this reader skips a grouped record it skips the whole group and walks on only after that group's members have passed. The one opener whose member still walks after a successful decode is the Text Block: its Text Data extension is the payload itself, folded through the injected WP fold rather than skipped with it.
+// A WPG file opens with the same 26-byte prefix family a WordPerfect document does (file ID FF 57 50 43, a long pointer to the data, product/file-type/version bytes), distinguished from a document by its file-type byte 22 (0x16). From the pointer onwards it is an ordered sequence of drawing records: a header of Class (1 byte), Type (1 byte), Extension (a count field, 1/3/5 bytes), and Length (the same count-field coding), then exactly Length bytes of data. The Extension count groups physical records into logical ones — a record whose count is N is followed by N more records belonging to it, and a grouped logical record counts as one record to the next outermost group's count. A Group record's children are independent objects each with their own attributes; every other grouped record's children belong to their opener (a Text Block's Text Data, a Bitmap's palette and data, a Compound Polygon's paths), so when this reader skips a grouped record it skips the whole group and walks on only after that group's members have passed. The one opener whose member still walks after a successful decode is the Text Block: its Text Data extension is the payload itself, folded through the injected WP fold rather than skipped with it.
 //
-// THE SCOPE OF THIS DECODER, stated because a WPG record stream has a long tail and this is deliberately a layered subset, not "WPG support": decoded are the record framing itself; Start WPG (the units, precision, and image extent every coordinate conversion needs); the flat colour and weight attributes (Pen Fore Color, Pen Size, Brush Fore Color, and their double-precision variants); and the common primitives -- Polyline (two unclosed points as the shared model's own line variant when a stroke resolved, more points as a path, a closed one as a closed subpath), Rectangle (square corners as a rect, rounded corners as a path of kappa-approximated quarter-ellipses), Arc with identical endpoint offsets (the full ellipse the specification itself defines that spelling to mean), and Text Block with its Text Data extension (a WP document stream, folded through this package's own tokeniser and fold via the callback the caller injects). Every other record type is recognised by the walk, skipped whole, and named in the diagnostic the caller reports -- among them Polyspline, Polycurve, Compound Polygon, Bitmap, Bitmap Data, Text Line, Text Path, Chart and its style/data companions, Object Image, Object Capsule, the pen style/pattern and brush pattern/gradient/texture families (a non-flat pen or brush pattern has no flat colour this reader could honestly approximate it with), and the page-settings records. A record carrying a transformation in its characterisation flags (taper, translate, skew, scale, or rotate) is skipped rather than decoded with the transformation dropped -- its geometry would be wrong, not partial. WPG 1.0-major files are refused outright: that is a separate record vocabulary (type byte and length only, no class or extension fields, palette-indexed colours, 1200ths-of-an-inch units) which the vendor pages this package builds from do not document, and misparsing one as WPG 2.x would decode rubbish rather than refuse.
+// THE SCOPE OF THIS DECODER, stated because a WPG record stream has a long tail and this is deliberately a layered subset, not "WPG support": decoded are the record framing itself; Start WPG (the units, precision, and image extent every coordinate conversion needs); the flat colour and weight attributes (Pen Fore Color, Pen Size, Brush Fore Color, and their double-precision variants); and the common primitives — Polyline (two unclosed points as the shared model's own line variant when a stroke resolved, more points as a path, a closed one as a closed subpath), Rectangle (square corners as a rect, rounded corners as a path of kappa-approximated quarter-ellipses), Arc with identical endpoint offsets (the full ellipse the specification itself defines that spelling to mean), and Text Block with its Text Data extension (a WP document stream, folded through this package's own tokeniser and fold via the callback the caller injects). Every other record type is recognised by the walk, skipped whole, and named in the diagnostic the caller reports — among them Polyspline, Polycurve, Compound Polygon, Bitmap, Bitmap Data, Text Line, Text Path, Chart and its style/data companions, Object Image, Object Capsule, the pen style/pattern and brush pattern/gradient/texture families (a non-flat pen or brush pattern has no flat colour this reader could honestly approximate it with), and the page-settings records. A record carrying a transformation in its characterisation flags (taper, translate, skew, scale, or rotate) is skipped rather than decoded with the transformation dropped — its geometry would be wrong, not partial. WPG 1.0-major files are refused outright: that is a separate record vocabulary (type byte and length only, no class or extension fields, palette-indexed colours, 1200ths-of-an-inch units) which the vendor pages this package builds from do not document, and misparsing one as WPG 2.x would decode rubbish rather than refuse.
 //
-// Coordinates are single precision (signed 16-bit) or double precision (32-bit 16.16 fixed point) per Start WPG's own precision byte, in units of the Start WPG record's pixels-per-inch, with Y increasing upward from a bottom-left origin. The shared vector model is top-left origin, Y down, in points -- so every coordinate divides by the pixels-per-inch and multiplies by 72, and every Y flips against the image extent's height.
+// Coordinates are single precision (signed 16-bit) or double precision (32-bit 16.16 fixed point) per Start WPG's own precision byte, in units of the Start WPG record's pixels-per-inch, with Y increasing upward from a bottom-left origin. The shared vector model is top-left origin, Y down, in points — so every coordinate divides by the pixels-per-inch and multiplies by 72, and every Y flips against the image extent's height.
 //
 // https://github.com/OneWingedShark/WordPerfect/blob/master/doc/SDK_Help/FileFormats/b_1graph.htm https://github.com/OneWingedShark/WordPerfect/blob/master/doc/SDK_Help/FileFormats/b_2g-rec.htm https://github.com/OneWingedShark/WordPerfect/blob/master/doc/SDK_Help/FileFormats/b_4g-txt.htm
 
@@ -91,7 +91,7 @@ const RECORD_NAMES: ReadonlyMap<number, string> = new Map([
   [0x3f, "Pen Texture"],
 ]);
 
-// Characterisation flag bits, per the SDK's own table: bits 0-4 state that optional transformation data follows (taper, translate, skew, scale, rotate -- every one a transformation this decoder refuses a record for), bit 5 an Object ID, bit 7 an edit-lock descriptor, and the high byte's two-state options -- bit 12 the winding path rule, bit 13 fill, bit 14 close, bit 15 frame.
+// Characterisation flag bits, per the SDK's own table: bits 0-4 state that optional transformation data follows (taper, translate, skew, scale, rotate — every one a transformation this decoder refuses a record for), bit 5 an Object ID, bit 7 an edit-lock descriptor, and the high byte's two-state options — bit 12 the winding path rule, bit 13 fill, bit 14 close, bit 15 frame.
 const FLAG_TAPER = 1 << 0;
 const FLAG_TRANSLATE = 1 << 1;
 const FLAG_SKEW = 1 << 2;
@@ -104,7 +104,7 @@ const FLAG_FILL = 1 << 13;
 const FLAG_CLOSE = 1 << 14;
 const FLAG_FRAME = 1 << 15;
 
-// The one approximation this decoder makes: a rounded Rectangle's corners are quarter ellipses, and the shared path model carries only straight and cubic segments, so each quarter becomes the standard cubic approximation of a quarter ellipse -- control points offset by 4/3*(sqrt(2)-1) of the radii, the identical bounded approximation this family's SVG path module applies to elliptical arcs at no more than 90 degrees per cubic. Derived from the circle constant here rather than hard-coded, so the geometry and its derivation stay checkable together.
+// The one approximation this decoder makes: a rounded Rectangle's corners are quarter ellipses, and the shared path model carries only straight and cubic segments, so each quarter becomes the standard cubic approximation of a quarter ellipse — control points offset by 4/3*(sqrt(2)-1) of the radii, the identical bounded approximation this family's SVG path module applies to elliptical arcs at no more than 90 degrees per cubic. Derived from the circle constant here rather than hard-coded, so the geometry and its derivation stay checkable together.
 const QUARTER_ELLIPSE_KAPPA = (4 / 3) * (Math.SQRT2 - 1);
 
 // The WPG prefix's own product/file-type/version gates: product type 1 ("always 1 for WPG files"), file type 22 (0x16, "always 22 for WPG files"), and the major version byte that separates the two record vocabularies (2 for the framed record stream this decoder reads, 1 for WPG 1.0's earlier type-and-length-only stream it refuses).
@@ -118,7 +118,7 @@ const WPG_PREFIX_HEAD_SIZE = 26;
 
 const POINTS_PER_INCH = 72;
 
-// The one injected dependency: a Text Data record's bytes are a WP document stream, and folding one into blocks is the read layer's own machinery (the identical tokeniser and fold a box's WP-text content takes) -- injected as a callback so this module stays a pure byte decoder with no dependency back on src/read.ts.
+// The one injected dependency: a Text Data record's bytes are a WP document stream, and folding one into blocks is the read layer's own machinery (the identical tokeniser and fold a box's WP-text content takes) — injected as a callback so this module stays a pure byte decoder with no dependency back on src/read.ts.
 export type WpgTextFold = (documentArea: Uint8Array) => readonly ContentBlock[];
 
 // What a decode produced: either the drawing's page size and decoded vectors and shapes (plus the names of the record types the walk skipped), or the reason a graphic this reader recognises still did not decode.
@@ -143,7 +143,7 @@ interface WpgColor {
   readonly a: number;
 }
 
-// The running rendition state a drawing's records decode against, seeded from the specification's own "WPG Defaults" table: pen and brush foreground black, pen width 0 ("0 = hairline", the thinnest width the output device can render), opacities fully opaque. The hairline default has no positive point value the shared stroke shape can state (its widthPt is positive-only), so a framed record with no Pen Size record states no stroke at all -- the identical reading the family's PDF reconstruction gives a zero-width paint, whose stroke is likewise absent rather than a guessed width.
+// The running rendition state a drawing's records decode against, seeded from the specification's own "WPG Defaults" table: pen and brush foreground black, pen width 0 ("0 = hairline", the thinnest width the output device can render), opacities fully opaque. The hairline default has no positive point value the shared stroke shape can state (its widthPt is positive-only), so a framed record with no Pen Size record states no stroke at all — the identical reading the family's PDF reconstruction gives a zero-width paint, whose stroke is likewise absent rather than a guessed width.
 interface WpgRenditionState {
   penColor: WpgColor;
   penWidthUnits: number;
@@ -206,12 +206,12 @@ function coordinateAt(
   return uint32At(bytes, offset) / 0x10000;
 }
 
-// The characterisation flags word plus the walk past the optional data its low bits state -- exactly as far as this decoder needs: past the edit-lock descriptor and the Object ID. A record carrying any transformation flag (taper/translate/skew/scale/rotate) is refused whole, so the transformation elements themselves are never walked past -- like every other refusal this function makes, that is undefined, not a sentinel value inside an otherwise-valid result for callers to separately test.
+// The characterisation flags word plus the walk past the optional data its low bits state — exactly as far as this decoder needs: past the edit-lock descriptor and the Object ID. A record carrying any transformation flag (taper/translate/skew/scale/rotate) is refused whole, so the transformation elements themselves are never walked past — like every other refusal this function makes, that is undefined, not a sentinel value inside an otherwise-valid result for callers to separately test.
 function readCharacterization(
   bytes: Uint8Array,
   cursor: number,
 ): { readonly flags: number; readonly geometryAt: number } | undefined {
-  // No recordEnd parameter: both of this function's own callers always passed exactly bytes.length for it (their own record's whole data), which uint16At already enforces on its own -- it throws (via byteAt) rather than returning undefined for a read past bytes' own end, caught once below, so neither the flags word nor the Object ID's own short/long check needs a separate room guard ahead of it. This also drops the final geometryAt > bytes.length check that used to close this function: every one of readCharacterization's own callers (readTextBlockFrame's explicit check, readWpgRectangle's and readWpgFullEllipse's own, readPolyline's throwing reads) already refuses identically the moment it tries to read geometry starting past its own record's end, so a geometryAt this function itself deemed "too far" and one that merely turned out that way downstream are never distinguishable to any of them.
+  // No recordEnd parameter: both of this function's own callers always passed exactly bytes.length for it (their own record's whole data), which uint16At already enforces on its own — it throws (via byteAt) rather than returning undefined for a read past bytes' own end, caught once below, so neither the flags word nor the Object ID's own short/long check needs a separate room guard ahead of it. This also drops the final geometryAt > bytes.length check that used to close this function: every one of readCharacterization's own callers (readTextBlockFrame's explicit check, readWpgRectangle's and readWpgFullEllipse's own, readPolyline's throwing reads) already refuses identically the moment it tries to read geometry starting past its own record's end, so a geometryAt this function itself deemed "too far" and one that merely turned out that way downstream are never distinguishable to any of them.
   try {
     const flags = uint16At(bytes, cursor);
     const transformationFlags =
@@ -339,7 +339,7 @@ export function decodeWpgGraphic(
   if (uint16At(bytes, start + 12) !== 0) {
     return { status: "refused", reason: "encrypted" };
   }
-  // Neither half of the original "recordStart < start + WPG_PREFIX_HEAD_SIZE || recordStart >= bytes.length" guard is needed as a check of its own. A recordStart at or past bytes.length makes cursor (start + recordStart, below) at least bytes.length too, and the record walk's own leading read breaks on its very first iteration for any such cursor. A recordStart landing inside the fixed 26-byte header instead points the walk at bytes this format never lays out as a record: the header's own critical fields (product type, file type, major version) are already validated at their own fixed offsets regardless of recordStart, and the remaining header bytes are too few (well short of the 25 a minimal Start WPG record needs) to ever assemble into one -- verified directly, not just argued, by removing this guard outright and confirming every test in this file (including the leading-garbage and corrupted-recordStart fixtures written specifically to probe it) still passes. Either way, geometry never gets set, and this function's own later `if (geometry === undefined)` check refuses with the identical {malformed} result no matter how recordStart itself went wrong.
+  // Neither half of the original "recordStart < start + WPG_PREFIX_HEAD_SIZE || recordStart >= bytes.length" guard is needed as a check of its own. A recordStart at or past bytes.length makes cursor (start + recordStart, below) at least bytes.length too, and the record walk's own leading read breaks on its very first iteration for any such cursor. A recordStart landing inside the fixed 26-byte header instead points the walk at bytes this format never lays out as a record: the header's own critical fields (product type, file type, major version) are already validated at their own fixed offsets regardless of recordStart, and the remaining header bytes are too few (well short of the 25 a minimal Start WPG record needs) to ever assemble into one — verified directly, not just argued, by removing this guard outright and confirming every test in this file (including the leading-garbage and corrupted-recordStart fixtures written specifically to probe it) still passes. Either way, geometry never gets set, and this function's own later `if (geometry === undefined)` check refuses with the identical {malformed} result no matter how recordStart itself went wrong.
   const recordStart = uint32At(bytes, start + 4);
 
   const state: WpgRenditionState = {
@@ -360,7 +360,7 @@ export function decodeWpgGraphic(
   const recordName = (type: number): string =>
     RECORD_NAMES.get(type) ?? `record type 0x${type.toString(16)}`;
 
-  // The loop's own termination: byteAt throws (via its own bounds check) the moment there is no room left even for the Class/Type pair, caught here to end the walk with whatever was already decoded, rather than a separate "cursor + 2 > bytes.length" pre-check whose own threshold exactly matches byteAt's own -- the two could never disagree on any input.
+  // The loop's own termination: byteAt throws (via its own bounds check) the moment there is no room left even for the Class/Type pair, caught here to end the walk with whatever was already decoded, rather than a separate "cursor + 2 > bytes.length" pre-check whose own threshold exactly matches byteAt's own — the two could never disagree on any input.
   for (;;) {
     let type: number;
     try {
@@ -386,7 +386,7 @@ export function decodeWpgGraphic(
     }
     const data = bytes.subarray(after, recordEnd);
 
-    // The group bookkeeping: this record consumes one member slot of the innermost open group, a group whose last member just arrived closes before this record can open one of its own, and a record with members opens a new context -- a Group's members independent objects walked as their own records, a decoded Text Block's Text Data member walked as its payload, every other grouped record's members swallowed with their opener.
+    // The group bookkeeping: this record consumes one member slot of the innermost open group, a group whose last member just arrived closes before this record can open one of its own, and a record with members opens a new context — a Group's members independent objects walked as their own records, a decoded Text Block's Text Data member walked as its payload, every other grouped record's members swallowed with their opener.
     const innermostBefore = groups[groups.length - 1];
     if (innermostBefore !== undefined) {
       innermostBefore.remaining -= 1;
@@ -492,7 +492,7 @@ export function decodeWpgGraphic(
           const frame = pendingTextBlockFrame;
           pendingTextBlockFrame = undefined;
           if (frame === undefined) {
-            // A Text Data with no Text Block before it is a Text Line's or Text Path's payload -- both records this reader skips -- so it is named with them rather than decoded against a frame nothing stated.
+            // A Text Data with no Text Block before it is a Text Line's or Text Path's payload — both records this reader skips — so it is named with them rather than decoded against a frame nothing stated.
             skipped.add(recordName(type));
             break;
           }
@@ -532,12 +532,12 @@ export function decodeWpgGraphic(
       }
     }
 
-    // groups[groups.length - 1] on an empty array is groups[-1], which is undefined -- the optional chain already answers false without a separate "groups.length > 0" guard.
+    // groups[groups.length - 1] on an empty array is groups[-1], which is undefined — the optional chain already answers false without a separate "groups.length > 0" guard.
     while (groups[groups.length - 1]?.remaining === 0) {
       groups.pop();
     }
     if (extension.value > 0) {
-      // A Group's members are independent objects, and a decoded Text Block's Text Data member is the payload the switch folds -- both walk. Every other grouped record's members belong to their opener, so if the opener was skipped (or was itself swallowed) they are swallowed with it. No separate `type === RECORD_TEXT_BLOCK` guard is needed on the second half: pendingTextBlockFrame is already cleared to undefined, just above, for every type other than RECORD_TEXT_BLOCK, so `pendingTextBlockFrame !== undefined` is already false for all of them regardless of type -- the guard would only ever restate what clearing it already guarantees.
+      // A Group's members are independent objects, and a decoded Text Block's Text Data member is the payload the switch folds — both walk. Every other grouped record's members belong to their opener, so if the opener was skipped (or was itself swallowed) they are swallowed with it. No separate `type === RECORD_TEXT_BLOCK` guard is needed on the second half: pendingTextBlockFrame is already cleared to undefined, just above, for every type other than RECORD_TEXT_BLOCK, so `pendingTextBlockFrame !== undefined` is already false for all of them regardless of type — the guard would only ever restate what clearing it already guarantees.
       groups.push({
         remaining: extension.value,
         membersWalk:
@@ -560,7 +560,7 @@ export function decodeWpgGraphic(
   };
 }
 
-// Whether the record about to be handled sits inside a group whose members are swallowed rather than walked: its DIRECT parent decides -- the innermost context open at the moment the record arrives, exactly as the nesting rule states (a grouped logical record counts as one member of the group outside it). The one shape this rule cannot express is a Group nested inside a swallowed group, whose members would walk as top-level records; the specification's own extension lists name no such shape (a Compound Polygon's or Chart's members are path, rendition, and data records, never Groups).
+// Whether the record about to be handled sits inside a group whose members are swallowed rather than walked: its DIRECT parent decides — the innermost context open at the moment the record arrives, exactly as the nesting rule states (a grouped logical record counts as one member of the group outside it). The one shape this rule cannot express is a Group nested inside a swallowed group, whose members would walk as top-level records; the specification's own extension lists name no such shape (a Compound Polygon's or Chart's members are path, rendition, and data records, never Groups).
 function swallowedByOpenGroup(groups: readonly WpgGroupContext[]): boolean {
   const innermost = groups[groups.length - 1];
   return innermost !== undefined && !innermost.membersWalk;
@@ -599,7 +599,7 @@ function readTextBlockFrame(
   );
 }
 
-// The shared frame for two WPG corners (lower-left and upper-right, Y up): normalised and converted to the model's top-left-origin, Y-down page space, in points. yToPt has already performed the one flip against the extent height, so the smaller converted Y is the frame's top edge -- subtracting it from heightPt again would flip it back into Y-up space.
+// The shared frame for two WPG corners (lower-left and upper-right, Y up): normalised and converted to the model's top-left-origin, Y-down page space, in points. yToPt has already performed the one flip against the extent height, so the smaller converted Y is the frame's top edge — subtracting it from heightPt again would flip it back into Y-up space.
 function frameFromCorners(
   geometry: WpgGeometry,
   x1: number,
@@ -660,7 +660,7 @@ function readPolyline(
   stroke: ContentStroke | undefined,
   state: WpgRenditionState,
 ): ContentVector | undefined {
-  // uint16At and coordinateAt are both built on byteAt, whose own bounds check throws rather than returning undefined -- a count field or a point that runs past data's own end surfaces as one caught exception, not a separate manual "room for N more bytes" comparison at each read.
+  // uint16At and coordinateAt are both built on byteAt, whose own bounds check throws rather than returning undefined — a count field or a point that runs past data's own end surfaces as one caught exception, not a separate manual "room for N more bytes" comparison at each read.
   const points: { xPt: number; yPt: number }[] = [];
   try {
     const count = uint16At(data, geometryAt);
@@ -690,7 +690,7 @@ function readPolyline(
   const closed = (flags & FLAG_CLOSE) !== 0;
   const filled = (flags & FLAG_FILL) !== 0;
 
-  // Two points, not closed, is the shared model's own line variant -- the shape a plain stroke draws -- when a stroke resolved for it (the variant carries a required stroke, and a hairline-framed line keeps its geometry as a path instead).
+  // Two points, not closed, is the shared model's own line variant — the shape a plain stroke draws — when a stroke resolved for it (the variant carries a required stroke, and a hairline-framed line keeps its geometry as a path instead).
   if (
     points.length === 2 &&
     secondPoint !== undefined &&
@@ -802,7 +802,7 @@ function readWpgRectangle(
         }
       : {};
 
-  // "If either the horizontal radius or the vertical radius is less than or equal to zero, then the corner is assumed to be square" -- the plain rect the shared model carries directly.
+  // "If either the horizontal radius or the vertical radius is less than or equal to zero, then the corner is assumed to be square" — the plain rect the shared model carries directly.
   if (rx <= 0 || ry <= 0) {
     return {
       kind: "rect",
@@ -812,7 +812,7 @@ function readWpgRectangle(
     };
   }
 
-  // A genuinely rounded rectangle: the shared rect variant carries no corner radii, so the shape becomes a path whose corners are the quarter-ellipse cubics named at this module's head. The path starts at the nine o'clock position the specification itself defines for a rectangle's path, and the subpath points are local to the frame as the path variant's own contract states. A corner radius is a magnitude, not a position, so only the unit conversion applies -- running one through yToPt would flip it against an extent height it never measured from -- and each radius clamps to half its side so a radius larger than the rectangle itself still yields a path inside the frame, with the cubic control offsets derived from the clamped values to match.
+  // A genuinely rounded rectangle: the shared rect variant carries no corner radii, so the shape becomes a path whose corners are the quarter-ellipse cubics named at this module's head. The path starts at the nine o'clock position the specification itself defines for a rectangle's path, and the subpath points are local to the frame as the path variant's own contract states. A corner radius is a magnitude, not a position, so only the unit conversion applies — running one through yToPt would flip it against an extent height it never measured from — and each radius clamps to half its side so a radius larger than the rectangle itself still yields a path inside the frame, with the cubic control offsets derived from the clamped values to match.
   const cornerRxPt = Math.min(
     (rx / geometry.xPpi) * POINTS_PER_INCH,
     frame.widthPt / 2,
@@ -871,7 +871,7 @@ function readWpgRectangle(
   };
 }
 
-// An Arc record whose initial and terminal endpoint offsets are identical: "Identical endpoint coordinates define a full ellipse or circle" -- the only arc spelling this decoder lifts, since a partial elliptical arc has no exact segment shape in the shared path model (whose cubics would approximate, not carry, it). Any other arc is refused and named.
+// An Arc record whose initial and terminal endpoint offsets are identical: "Identical endpoint coordinates define a full ellipse or circle" — the only arc spelling this decoder lifts, since a partial elliptical arc has no exact segment shape in the shared path model (whose cubics would approximate, not carry, it). Any other arc is refused and named.
 function readWpgFullEllipse(
   data: Uint8Array,
   geometry: WpgGeometry,

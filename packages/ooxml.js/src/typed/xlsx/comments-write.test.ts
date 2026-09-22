@@ -44,7 +44,7 @@ function numberCell(
 describe("threadedCommentId", () => {
   it("formats the counter as zero-padded, UPPERCASE hex inside the braced GUID shape", () => {
     expect(threadedCommentId(0)).toBe("{00000000-0000-0000-0000-000000000000}");
-    // 10 in hex is "a" -- exercises the uppercase-vs-lowercase distinction the digits 0-9 alone cannot.
+    // 10 in hex is "a" — exercises the uppercase-vs-lowercase distinction the digits 0-9 alone cannot.
     expect(threadedCommentId(10)).toBe(
       "{00000000-0000-0000-0000-00000000000A}",
     );
@@ -99,7 +99,7 @@ describe("buildThreadedCommentElements", () => {
   });
 
   it("keeps the counter strictly increasing past a reply, so a later cell's root id never collides with an earlier one", () => {
-    // A reply consumes a counter value of its own (root=0, reply=1) before the next cell's root is minted -- if the reply loop's own increment ever ran backwards, this second cell's root would collide with the first cell's root id instead of continuing at 2.
+    // A reply consumes a counter value of its own (root=0, reply=1) before the next cell's root is minted — if the reply loop's own increment ever ran backwards, this second cell's root would collide with the first cell's root id instead of continuing at 2.
     const s = sheet([
       numberCell(0, 0, 1, {
         comment: { text: "root", replies: [{ text: "reply" }] },

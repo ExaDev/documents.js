@@ -43,7 +43,7 @@ import { FormulaPreview } from "../ui/FormulaPreview";
 import { takePendingReopen } from "../ui/reopenMailbox";
 import { WordProcessingPreview } from "../ui/WordProcessingPreview";
 
-// Layout route: convert.index.tsx and convert.$source.$target.tsx become its children (per TanStack Router's file-based nesting convention) and exist only to register typed path params in the route tree -- this component owns all the real state and UI directly, so it never remounts when the selected pair changes. That's the actual fix for "picking a new pair feels like leaving the page": the old sibling-routes structure fully remounted (destroying `file`/`convert` state) on every pair change, since convert.index.tsx and convert.$source.$target.tsx both parented directly to root.
+// Layout route: convert.index.tsx and convert.$source.$target.tsx become its children (per TanStack Router's file-based nesting convention) and exist only to register typed path params in the route tree — this component owns all the real state and UI directly, so it never remounts when the selected pair changes. That's the actual fix for "picking a new pair feels like leaving the page": the old sibling-routes structure fully remounted (destroying `file`/`convert` state) on every pair change, since convert.index.tsx and convert.$source.$target.tsx both parented directly to root.
 export const Route = createFileRoute("/convert")({
   component: ConvertLayout,
 });
@@ -88,7 +88,7 @@ export function isSlidesFormat(format: string | null): format is SlidesFormat {
   );
 }
 
-// True for every format whose preview renders the ContentDocument natively via content.read rather than a PDF rendition. PDF itself is the only exception -- its "native" representation IS the PDF bytes rendered in an iframe.
+// True for every format whose preview renders the ContentDocument natively via content.read rather than a PDF rendition. PDF itself is the only exception — its "native" representation IS the PDF bytes rendered in an iframe.
 export function isContentBackedPreview(format: string | null): boolean {
   return format !== "pdf" && format !== null;
 }
@@ -99,10 +99,10 @@ function ConvertLayout() {
   const conversions = useConversions();
   const formats = useDocumentFormats();
 
-  // Captured once via its own lazy initializer -- takePendingReopen clears the mailbox on read, so the source/file initializers below must read this already-resolved value rather than calling takePendingReopen() a second time (which would find it empty).
+  // Captured once via its own lazy initializer — takePendingReopen clears the mailbox on read, so the source/file initializers below must read this already-resolved value rather than calling takePendingReopen() a second time (which would find it empty).
   const [pendingReopen] = useState(() => takePendingReopen());
 
-  // Lazy initializers, not an effect: this only needs to seed state once, from whatever the route's params (or a Recent Files reopen) are at the moment ConvertLayout first mounts -- `params` merges the currently matched leaf route's params up into this parent route via `strict: false`. Syncing via an effect instead would set state synchronously during render's commit phase for no benefit here (the initial value never needs to react to a *later* params change; the navigate() effect below is what keeps params in sync with state, not the other way around after mount).
+  // Lazy initializers, not an effect: this only needs to seed state once, from whatever the route's params (or a Recent Files reopen) are at the moment ConvertLayout first mounts — `params` merges the currently matched leaf route's params up into this parent route via `strict: false`. Syncing via an effect instead would set state synchronously during render's commit phase for no benefit here (the initial value never needs to react to a *later* params change; the navigate() effect below is what keeps params in sync with state, not the other way around after mount).
   const [source, setSource] = useState<string | null>(
     () => params.source ?? pendingReopen?.format ?? null,
   );
@@ -113,12 +113,12 @@ function ConvertLayout() {
     () => pendingReopen?.file,
   );
   const convert = useConvert();
-  // Content-backed previews read their ContentDocument directly via the content.read RPC -- no conversion, no target build/encode, no PDF layout pass. PDF (the only non-content-backed format) uses the uploaded file's own bytes in PdfPreview directly.
+  // Content-backed previews read their ContentDocument directly via the content.read RPC — no conversion, no target build/encode, no PDF layout pass. PDF (the only non-content-backed format) uses the uploaded file's own bytes in PdfPreview directly.
   const originalContent = useReadContent();
   const resultContent = useReadContent();
   const fileAccess = createFileAccess();
 
-  // Only reflect a *complete* pair in the URL -- a half-picked pair isn't a meaningful thing to bookmark. `replace`, not `push`: changing formats mid-exploration is editing current tool state, not creating a new navigable history entry.
+  // Only reflect a *complete* pair in the URL — a half-picked pair isn't a meaningful thing to bookmark. `replace`, not `push`: changing formats mid-exploration is editing current tool state, not creating a new navigable history entry.
   useEffect(() => {
     if (source !== null && target !== null) {
       void navigate({
@@ -129,11 +129,11 @@ function ConvertLayout() {
     }
   }, [source, target, navigate]);
 
-  // Prefetches the original's content as soon as a file and its (auto-detected or manual) source are both known, rather than waiting for the user to click Convert -- so the "Original" preview panel is already populated the moment the "Done" panel appears. `mutate`'s identity is stable across renders (TanStack Query), so depending on it here doesn't retrigger this effect on every render. Skipped for PDF -- its bytes are already what PdfPreview needs.
+  // Prefetches the original's content as soon as a file and its (auto-detected or manual) source are both known, rather than waiting for the user to click Convert — so the "Original" preview panel is already populated the moment the "Done" panel appears. `mutate`'s identity is stable across renders (TanStack Query), so depending on it here doesn't retrigger this effect on every render. Skipped for PDF — its bytes are already what PdfPreview needs.
   const { mutate: mutateOriginalContent } = originalContent;
   useEffect(() => {
     if (file === undefined || source === "pdf") return;
-    // A null (nothing picked yet) or otherwise-invalid source fails this parse exactly the same way an explicit `source === null` check would have short-circuited above -- a separate null check would only re-reject a case safeParse already rejects, never a distinct one.
+    // A null (nothing picked yet) or otherwise-invalid source fails this parse exactly the same way an explicit `source === null` check would have short-circuited above — a separate null check would only re-reject a case safeParse already rejects, never a distinct one.
     const parsedSource = DocumentFormatSchema.safeParse(source);
     if (!parsedSource.success) return;
     mutateOriginalContent({ format: parsedSource.data, bytes: file.bytes });
@@ -143,7 +143,7 @@ function ConvertLayout() {
     ...new Set((conversions.data ?? []).map((pair) => pair.source)),
   ].sort();
 
-  // Every known format is always listed -- ones the current source can't reach are disabled in place rather than filtered out, so picking "To" first still shows the full picture of what's possible, not a silently shrinking list.
+  // Every known format is always listed — ones the current source can't reach are disabled in place rather than filtered out, so picking "To" first still shows the full picture of what's possible, not a silently shrinking list.
   const validTargets = new Set(
     (conversions.data ?? [])
       .filter((pair) => pair.source === source)
@@ -169,18 +169,18 @@ function ConvertLayout() {
   const handleFile = (opened: OpenedFile) => {
     setFile(opened);
     convert.reset();
-    // Auto-detected format overrides "From" outright -- a fresh drop is the strongest signal of intent, stronger than whatever was previously selected. When the extension isn't recognised, "From" is left untouched (manual or previously-detected) and the Alert below explains why nothing changed.
+    // Auto-detected format overrides "From" outright — a fresh drop is the strongest signal of intent, stronger than whatever was previously selected. When the extension isn't recognised, "From" is left untouched (manual or previously-detected) and the Alert below explains why nothing changed.
     const detected = inferFormatFromFilename(opened.name);
     if (detected !== undefined) handleSourceChange(detected);
   };
 
-  // Called only from the Convert button below, which itself only exists (in its enabled, wired-up form) once file/source/target are all known defined -- the caller has already done that narrowing, so this takes the resolved values directly rather than re-deriving and re-checking them from component state.
+  // Called only from the Convert button below, which itself only exists (in its enabled, wired-up form) once file/source/target are all known defined — the caller has already done that narrowing, so this takes the resolved values directly rather than re-deriving and re-checking them from component state.
   const handleConvert = (
     opened: OpenedFile,
     sourceValue: string,
     targetValue: string,
   ) => {
-    // Mantine's Select works in plain strings, so `sourceValue`/`targetValue` need re-narrowing to DocumentFormat here rather than a cast -- they can only ever hold a value drawn from sourceOptions/targetOptions, which are themselves real DocumentFormat values, so this parse cannot practically fail; it is still a genuine boundary validation, not dead code, since nothing about the Select's own string-based API enforces it at the type level.
+    // Mantine's Select works in plain strings, so `sourceValue`/`targetValue` need re-narrowing to DocumentFormat here rather than a cast — they can only ever hold a value drawn from sourceOptions/targetOptions, which are themselves real DocumentFormat values, so this parse cannot practically fail; it is still a genuine boundary validation, not dead code, since nothing about the Select's own string-based API enforces it at the type level.
     const parsedSource = DocumentFormatSchema.safeParse(sourceValue);
     const parsedTarget = DocumentFormatSchema.safeParse(targetValue);
     if (!parsedSource.success || !parsedTarget.success) return;
@@ -207,7 +207,7 @@ function ConvertLayout() {
     );
   };
 
-  // Structure inspection for content-backed formats derives directly from the ContentDocument already on hand (from content.read) -- pure client-side, no second RPC. For PDF, a separate pdf.inspect call parses the bytes directly.
+  // Structure inspection for content-backed formats derives directly from the ContentDocument already on hand (from content.read) — pure client-side, no second RPC. For PDF, a separate pdf.inspect call parses the bytes directly.
   const originalInspectData = useMemo(
     () =>
       isContentBackedPreview(source) && originalContent.data !== undefined
@@ -236,7 +236,7 @@ function ConvertLayout() {
     mutateConvertedInspect(convert.data.document.bytes);
   }, [target, convert.data, mutateConvertedInspect]);
 
-  // Only ever called once a conversion has succeeded, which requires a file/target that were already valid at that point and neither of which this component ever clears back to undefined/null afterwards -- opened/targetFormat are taken as resolved values rather than re-reading the possibly-stale file/target state.
+  // Only ever called once a conversion has succeeded, which requires a file/target that were already valid at that point and neither of which this component ever clears back to undefined/null afterwards — opened/targetFormat are taken as resolved values rather than re-reading the possibly-stale file/target state.
   const handleDownload = (
     bytes: Uint8Array<ArrayBuffer>,
     opened: OpenedFile,
@@ -248,11 +248,11 @@ function ConvertLayout() {
     });
   };
 
-  // Narrowed once here, as a plain const, so every reference below -- including inside the JSX event handler closures further down -- narrows to defined without each one re-deriving it from the live, always-optional convert.data.
+  // Narrowed once here, as a plain const, so every reference below — including inside the JSX event handler closures further down — narrows to defined without each one re-deriving it from the live, always-optional convert.data.
   const doneData = convert.data;
 
   return (
-    // Fluid, not a fixed max-width -- Mantine's Container size prop is a static breakpoint (same cap at 1920px and 2560px alike), which is what previously left a growing dead margin on wide screens. The Done panel below applies its own clamp()-based max-width instead, so it scales continuously with viewport rather than jumping to one arbitrary number.
+    // Fluid, not a fixed max-width — Mantine's Container size prop is a static breakpoint (same cap at 1920px and 2560px alike), which is what previously left a growing dead margin on wide screens. The Done panel below applies its own clamp()-based max-width instead, so it scales continuously with viewport rather than jumping to one arbitrary number.
     <Container fluid px="xl" py="xl">
       <Stack gap="lg">
         <Box maw={600}>
@@ -266,7 +266,7 @@ function ConvertLayout() {
                   inferFormatFromFilename(file.name) === undefined && (
                     <Alert color="yellow">
                       Could not detect "{file.name}"'s format from its extension
-                      -- pick "From" manually below.
+                      — pick "From" manually below.
                     </Alert>
                   )}
 
@@ -339,7 +339,7 @@ function ConvertLayout() {
                       format={source}
                       content={originalContent.data?.content}
                       loading={originalContent.isPending}
-                      // React Query represents "no error" as null, not undefined -- normalised here since MarkdownPreview/SheetPreview/PdfPreview's own contract only knows "no error" as undefined.
+                      // React Query represents "no error" as null, not undefined — normalised here since MarkdownPreview/SheetPreview/PdfPreview's own contract only knows "no error" as undefined.
                       error={originalContent.error ?? undefined}
                     />
                   ) : isSheetFormat(source) ? (
@@ -375,7 +375,7 @@ function ConvertLayout() {
                       error={originalContent.error ?? undefined}
                     />
                   ) : (
-                    // Every other branch above is a specific format check on `source`, so reaching here with `source` genuinely null (rather than "pdf") would mean this whole doneData-gated panel rendered without a completed conversion, which handleConvert/convert.reset() never allow -- same invariant as file above.
+                    // Every other branch above is a specific format check on `source`, so reaching here with `source` genuinely null (rather than "pdf") would mean this whole doneData-gated panel rendered without a completed conversion, which handleConvert/convert.reset() never allow — same invariant as file above.
                     <PdfPreview
                       label="Original"
                       format={source!}

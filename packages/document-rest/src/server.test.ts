@@ -5,7 +5,7 @@ import { ODF_MEDIA_TYPES, zipPackage } from "odf.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createRestServer } from "./server";
 
-// The identical fixture document-operations' own odb-render-report.test.ts uses (copied verbatim -- see that package's test-support/fixtures/form-and-report.odb for its provenance), needed here only to exercise odb_render_report's OdbReportNotSpecifiedError -> 400 mapping with a real .odb.
+// The identical fixture document-operations' own odb-render-report.test.ts uses (copied verbatim — see that package's test-support/fixtures/form-and-report.odb for its provenance), needed here only to exercise odb_render_report's OdbReportNotSpecifiedError -> 400 mapping with a real .odb.
 const FORM_AND_REPORT_ODB_PATH = fileURLToPath(
   new URL("../test-support/fixtures/form-and-report.odb", import.meta.url),
 );
@@ -88,7 +88,7 @@ describe("createRestServer", () => {
 
     expect(response.status).toBe(400);
     const body = (await response.json()) as { error: string };
-    // An empty body parses to {}, which then fails convert_document's own inputSchema (missing source/targetFormat) -- a distinct failure mode from "not valid JSON", and the one that actually applies here.
+    // An empty body parses to {}, which then fails convert_document's own inputSchema (missing source/targetFormat) — a distinct failure mode from "not valid JSON", and the one that actually applies here.
     expect(body.error).toMatch(/failed validation/);
   });
 
@@ -194,7 +194,7 @@ describe("createRestServer", () => {
     );
   });
 
-  // odb_render_report's own OdbReportNotSpecifiedError mapping (the "no report given, and the .odb declares zero or more than one" case) has no equivalent direct HTTP-round-trip test here: the one real .odb fixture this repo checks in (form-and-report.odb, copied from document-operations' own test-support) declares exactly one report, so omitting `report` auto-selects it without ever throwing -- the identical limitation document-mcp's own odb-render-report.test.ts documents for its own suite, which resorts to constructing an OdbReportNotSpecifiedError instance directly rather than a real fixture round trip. This route's mapping is structurally identical to odm_to_pdf's (an instanceof check plus a fixed-shape body), which the test above does exercise end to end.
+  // odb_render_report's own OdbReportNotSpecifiedError mapping (the "no report given, and the .odb declares zero or more than one" case) has no equivalent direct HTTP-round-trip test here: the one real .odb fixture this repo checks in (form-and-report.odb, copied from document-operations' own test-support) declares exactly one report, so omitting `report` auto-selects it without ever throwing — the identical limitation document-mcp's own odb-render-report.test.ts documents for its own suite, which resorts to constructing an OdbReportNotSpecifiedError instance directly rather than a real fixture round trip. This route's mapping is structurally identical to odm_to_pdf's (an instanceof check plus a fixed-shape body), which the test above does exercise end to end.
   it("renders the fixture's single declared report to odt with no report name given", async () => {
     const bytesBase64 = bytesToBase64(
       new Uint8Array(readFileSync(FORM_AND_REPORT_ODB_PATH)),

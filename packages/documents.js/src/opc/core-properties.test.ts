@@ -70,7 +70,7 @@ describe("addCoreProperties", () => {
       "Quarterly Report",
     );
 
-    // dc:creator carries metadata.AUTHOR (the human byline) -- not metadata.creator, which names the originating application and has no core-properties counterpart this function writes.
+    // dc:creator carries metadata.AUTHOR (the human byline) — not metadata.creator, which names the originating application and has no core-properties counterpart this function writes.
     const creator =
       root === undefined ? undefined : childrenWithTag(root, "dc:creator")[0];
     expect(creator === undefined ? undefined : textContent(creator)).toBe(
@@ -163,7 +163,7 @@ describe("addCoreProperties", () => {
       override === undefined ? undefined : attr(override, "ContentType"),
     ).toBe("application/vnd.openxmlformats-package.core-properties+xml");
 
-    // The root relationship lands in the real "_rels/.rels" part -- not the "/_rels/.rels" resolveRelationships(pkg, '') would (mis)derive, per addRootRelationship's own note (src/opc/rels.ts) -- so it is read directly, matching that function's own test file.
+    // The root relationship lands in the real "_rels/.rels" part — not the "/_rels/.rels" resolveRelationships(pkg, '') would (mis)derive, per addRootRelationship's own note (src/opc/rels.ts) — so it is read directly, matching that function's own test file.
     const rootRels = rootElement(pkg.parts["_rels/.rels"]);
     expect(rootRels).toBeDefined();
     const relationship =
@@ -226,11 +226,11 @@ describe("addCoreProperties", () => {
   });
 
   it("resolves via resolveRelationships when queried from a real part path, not just the root", () => {
-    // Sanity check that the relationship this function writes is genuinely discoverable through ooxml.js's own public API from a real part -- addImageMedia's own test file establishes this same pattern for media relationships.
+    // Sanity check that the relationship this function writes is genuinely discoverable through ooxml.js's own public API from a real part — addImageMedia's own test file establishes this same pattern for media relationships.
     const pkg = emptyPackage();
     pkg.parts["word/document.xml"] = { kind: "xml", nodes: [] };
     addCoreProperties(pkg, { title: "Doc" });
-    // resolveRelationships resolves a real part's OWN .rels, which is unrelated to _rels/.rels -- confirming core.xml's relationship lives at the root and is absent from an unrelated part's relationships.
+    // resolveRelationships resolves a real part's OWN .rels, which is unrelated to _rels/.rels — confirming core.xml's relationship lives at the root and is absent from an unrelated part's relationships.
     const unrelated = resolveRelationships(pkg, "word/document.xml");
     expect(unrelated.size).toBe(0);
   });

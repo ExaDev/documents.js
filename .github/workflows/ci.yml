@@ -12,11 +12,11 @@ on:
   workflow_dispatch:
     inputs:
       backfill_tags:
-        description: "Release tags (name@version) to backfill the SBOM/attestation, GitHub Packages mirror, and npm alias republish steps for, without re-running the release itself -- for a run whose post-release jobs never ran (see ExaDev/documents.js#835). Comma- or newline-separated. Leave empty for a normal manual CI run."
+        description: "Release tags (name@version) to backfill the SBOM/attestation, GitHub Packages mirror, and npm alias republish steps for, without re-running the release itself — for a run whose post-release jobs never ran (see ExaDev/documents.js#835). Comma- or newline-separated. Leave empty for a normal manual CI run."
         required: false
         type: string
 
-# A new push to a pull request supersedes that PR's in-flight run. A push to main never cancels: the release job publishes to npm and pushes tags mid-run, and the audit job polls a dispatched run to decide whether to merge its own fix -- cancelling either partway leaves real work half-done. The release and Pages jobs keep their own narrower groups below; this one only stops a PR racing itself.
+# A new push to a pull request supersedes that PR's in-flight run. A push to main never cancels: the release job publishes to npm and pushes tags mid-run, and the audit job polls a dispatched run to decide whether to merge its own fix — cancelling either partway leaves real work half-done. The release and Pages jobs keep their own narrower groups below; this one only stops a PR racing itself.
 #
 # A merge-queue run is isolated from all of that by the key alone, with no extra clause needed: github.ref on a merge_group event is the merge group's own ref (refs/heads/gh-readonly-queue/<base>/pr-...), which no pull_request run (refs/pull/<n>/merge) or push run (refs/heads/main) can ever produce. So a queue entry can neither be cancelled by a later push to a pull request it contains nor cancel that pull request's own run, and each queue entry gets its own group. cancel-in-progress stays false here too, since the expression is only ever true for pull_request.
 concurrency:
@@ -54,7 +54,7 @@ jobs:
       - name: Find the commit-lint range
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         id: lint-range
-        # Every package's history was imported into packages/<name> verbatim rather than rewritten (see the root README on the migration), so it was authored -- and validated by commitlint -- under that package's own, now-superseded standalone config, not this workspace's. fc476c76 is the last of the ten import merges, the commit after which every commit on main is new workspace-native history this repo's own commitlint.config.ts actually governed when it was written. An ordinary PR's base is always a descendant of that commit once the migration itself has landed on main, so this only ever widens the range for the one-time landing PR whose base predates the migration; every later PR computes the identical `from` its base.sha would have given directly.
+        # Every package's history was imported into packages/<name> verbatim rather than rewritten (see the root README on the migration), so it was authored — and validated by commitlint — under that package's own, now-superseded standalone config, not this workspace's. fc476c76 is the last of the ten import merges, the commit after which every commit on main is new workspace-native history this repo's own commitlint.config.ts actually governed when it was written. An ordinary PR's base is always a descendant of that commit once the migration itself has landed on main, so this only ever widens the range for the one-time landing PR whose base predates the migration; every later PR computes the identical `from` its base.sha would have given directly.
         #
         # A merge-queue entry supplies the same two endpoints from its own event instead: the merge group's parent commit and the merge group's tip, so the range is exactly the commits the queue is proposing to put on the target branch. Those are the pull request's own commits as the queue arranged them, which is not the same text the pull request itself was linted against whenever the queue's merge method rewrites them, so linting here is a real check rather than a repeat. Both endpoints come through the environment rather than being interpolated into the script, and an endpoint that resolves empty is a hard failure: a job whose only commitlint steps are gated on an event it did not receive reports success without validating a single commit, which is worse than no check at all once this is a required one.
         env:
@@ -100,7 +100,7 @@ jobs:
       - uses: ./.github/actions/setup-workspace
         with:
           task: typecheck
-          # _typecheck:attw (attw --pack per published package, checking each package's declared types resolve under every module resolution mode) is one of the tasks `pnpm typecheck` already runs through turbo, depending on that package's own _build the same way _test:smoke does -- no separate `pnpm build` step or raw shell loop needed to give it a dist/ to inspect. The web UI has no _typecheck:attw script at all, so turbo skips it there: it publishes nothing and exposes no types.
+          # _typecheck:attw (attw --pack per published package, checking each package's declared types resolve under every module resolution mode) is one of the tasks `pnpm typecheck` already runs through turbo, depending on that package's own _build the same way _test:smoke does — no separate `pnpm build` step or raw shell loop needed to give it a dist/ to inspect. The web UI has no _typecheck:attw script at all, so turbo skips it there: it publishes nothing and exposes no types.
           command: pnpm typecheck $TURBO_FLAGS
 
   test:
@@ -151,7 +151,7 @@ jobs:
 
   test-e2e:
     name: E2E test (web)
-    # Promoted to a required check (ExaDev/documents.js#1194): the suite has run unattended on every pull request and main push since it landed (ExaDev/documents.js#932), and its only observed red run tracked a regression on that pull request's own branch and cleared when the branch was fixed -- a genuine catch, not flakiness, which is exactly the run history gating merges on it requires. Requiredness itself lives in the repository ruleset ("main required checks"), not in this file; this job always runs on both triggers, so requiring it can never strand a pull request waiting for a check that does not report.
+    # Promoted to a required check (ExaDev/documents.js#1194): the suite has run unattended on every pull request and main push since it landed (ExaDev/documents.js#932), and its only observed red run tracked a regression on that pull request's own branch and cleared when the branch was fixed — a genuine catch, not flakiness, which is exactly the run history gating merges on it requires. Requiredness itself lives in the repository ruleset ("main required checks"), not in this file; this job always runs on both triggers, so requiring it can never strand a pull request waiting for a check that does not report.
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -161,9 +161,9 @@ jobs:
       - uses: ./.github/actions/setup-workspace
         with:
           task: test-e2e
-          # --filter=web, not a bare `pnpm exec`: the composite action's own command step runs from the repo root, and playwright's CLI binary is only linked into packages/web's own node_modules/.bin, not the root's -- a root-scoped `pnpm exec playwright` can't find it at all ([ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] "playwright" not found).
+          # --filter=web, not a bare `pnpm exec`: the composite action's own command step runs from the repo root, and playwright's CLI binary is only linked into packages/web's own node_modules/.bin, not the root's — a root-scoped `pnpm exec playwright` can't find it at all ([ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL] "playwright" not found).
           #
-          # The google-chrome apt source GitHub's ubuntu images preinstall is removed first: playwright's --with-deps runs apt-get update, which fails the whole install whenever dl.google.com serves a Packages index whose hash mismatches the runner's cached InRelease (confirmed twice in a row on main, 2026-09-09: "Err:10 https://dl.google.com/linux/chrome-stable/deb stable/main amd64 Packages / Hash Sum mismatch", apt exit 100). That repo is irrelevant to playwright's own chromium build (it downloads its own; the deps it installs are Ubuntu system libraries), so dropping the source fixes the update without losing anything the browser needs. Both source spellings are removed: the runner image defines the repo in the deb822 .sources format as well as the legacy .list one, and removing only the legacy spelling left apt still fetching (and still failing on) the deb822 copy -- confirmed by a run of this very job with only the .list glob in place.
+          # The google-chrome apt source GitHub's ubuntu images preinstall is removed first: playwright's --with-deps runs apt-get update, which fails the whole install whenever dl.google.com serves a Packages index whose hash mismatches the runner's cached InRelease (confirmed twice in a row on main, 2026-09-09: "Err:10 https://dl.google.com/linux/chrome-stable/deb stable/main amd64 Packages / Hash Sum mismatch", apt exit 100). That repo is irrelevant to playwright's own chromium build (it downloads its own; the deps it installs are Ubuntu system libraries), so dropping the source fixes the update without losing anything the browser needs. Both source spellings are removed: the runner image defines the repo in the deb822 .sources format as well as the legacy .list one, and removing only the legacy spelling left apt still fetching (and still failing on) the deb822 copy — confirmed by a run of this very job with only the .list glob in place.
           command: sudo rm -f /etc/apt/sources.list.d/google-chrome*.list /etc/apt/sources.list.d/google-chrome*.sources && pnpm --filter web exec playwright install --with-deps chromium && pnpm test:e2e $TURBO_FLAGS
       - uses: actions/upload-artifact@v7
         if: always()
@@ -261,7 +261,7 @@ jobs:
           $(cat /tmp/audit-fix-commit-body.txt)"
           git push origin "$BRANCH"
           gh pr create --title "fix(deps): apply aged security overrides" --body-file /tmp/audit-fix-commit-body.txt --base main --head "$BRANCH"
-          # A push or PR authenticated with GITHUB_TOKEN never triggers another workflow run, so the fix branch's own checks have to be dispatched explicitly -- which is why workflow_dispatch is in this workflow's `on:` block.
+          # A push or PR authenticated with GITHUB_TOKEN never triggers another workflow run, so the fix branch's own checks have to be dispatched explicitly — which is why workflow_dispatch is in this workflow's `on:` block.
           gh workflow run ci.yml --ref "$BRANCH"
           RUN_ID=""
           for _ in 1 2 3 4 5; do
@@ -325,13 +325,13 @@ jobs:
         npm-registration,
       ]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    # Two pushes to main close together must never run this job at the same time. The orchestrator's own dependency-bump-and-release cascade pushes to main mid-run, and semantic-release's own stale-checkout guard (comparing this job's local HEAD against a fresh `git ls-remote` of the real repository on every per-package release) will correctly refuse to publish the instant it sees ANY commit land on main that this checkout doesn't have yet -- including a concurrent Release run's own pushes. One run racing another this way is how ooxml.js, pdf-codec, documents.js, document-cli, and document-mcp all silently skipped a release they needed (ExaDev/documents.js#735): every package after the point the two runs' pushes interleaved reported "no release", correctly by that check's own logic, but wrongly for what the cascade needed. `cancel-in-progress: false` queues the second run behind the first rather than cancelling either -- cancelling mid-release would leave whichever packages it had already published without their downstream dependents' bumps.
+    # Two pushes to main close together must never run this job at the same time. The orchestrator's own dependency-bump-and-release cascade pushes to main mid-run, and semantic-release's own stale-checkout guard (comparing this job's local HEAD against a fresh `git ls-remote` of the real repository on every per-package release) will correctly refuse to publish the instant it sees ANY commit land on main that this checkout doesn't have yet — including a concurrent Release run's own pushes. One run racing another this way is how ooxml.js, pdf-codec, documents.js, document-cli, and document-mcp all silently skipped a release they needed (ExaDev/documents.js#735): every package after the point the two runs' pushes interleaved reported "no release", correctly by that check's own logic, but wrongly for what the cascade needed. `cancel-in-progress: false` queues the second run behind the first rather than cancelling either — cancelling mid-release would leave whichever packages it had already published without their downstream dependents' bumps.
     concurrency:
       group: release-workspace
       cancel-in-progress: false
     runs-on: ubuntu-latest
     # @semantic-release/github's success step queries GitHub's GraphQL search API to find every PR/issue
-    # linked to a released commit, then comments and labels each one -- one round of calls per package released in this run. A release cascade touching several packages at once (e.g. a backlog of merged PRs releasing together) can burn through GitHub's GraphQL rate limit, at which point Octokit's own retry logic waits out the reset window rather than failing -- correct behaviour, but confirmed to take over 20 minutes twice in a row (run 33664031010, both attempts cancelled at almost exactly 30:00, 19:25:34Z "Request quota exhausted for request POST /graphql" through 19:47:50Z's next successful call). 30 minutes has no headroom for that wait; 60 does.
+    # linked to a released commit, then comments and labels each one — one round of calls per package released in this run. A release cascade touching several packages at once (e.g. a backlog of merged PRs releasing together) can burn through GitHub's GraphQL rate limit, at which point Octokit's own retry logic waits out the reset window rather than failing — correct behaviour, but confirmed to take over 20 minutes twice in a row (run 33664031010, both attempts cancelled at almost exactly 30:00, 19:25:34Z "Request quota exhausted for request POST /graphql" through 19:47:50Z's next successful call). 30 minutes has no headroom for that wait; 60 does.
     timeout-minutes: 60
     permissions:
       contents: write # to push release and dependency-bump commits and tags, and create GitHub Releases
@@ -339,7 +339,7 @@ jobs:
       pull-requests: write # to comment on released pull requests
       id-token: write # OIDC identity for npm trusted publishing (no NPM_TOKEN)
     outputs:
-      # JSON matrices for the post-release jobs below, listing exactly what this run released. Each is [] when nothing released, which each consuming job tests for in its own `if` -- an empty include list does not skip a matrix job, it makes the matrix invalid and fails the run.
+      # JSON matrices for the post-release jobs below, listing exactly what this run released. Each is [] when nothing released, which each consuming job tests for in its own `if` — an empty include list does not skip a matrix job, it makes the matrix invalid and fails the run.
       github-packages-matrix: ${{ steps.released.outputs.github-packages-matrix }}
       npm-alias-matrix: ${{ steps.released.outputs.npm-alias-matrix }}
       attest-matrix: ${{ steps.released.outputs.attest-matrix }}
@@ -347,7 +347,7 @@ jobs:
       container-matrix: ${{ steps.released.outputs.container-matrix }}
       container-image-matrix: ${{ steps.released.outputs.container-image-matrix }}
     steps:
-      # main requires status checks to merge, and the default GITHUB_TOKEN has no bypass for that -- the orchestrator's release commits, dependency-bump commits, and tags are direct pushes to main, so they need a token from an actor the branch ruleset explicitly allows to bypass (see ExaDev/.github and this repo's own ruleset). Everything else in this job (release notes, GitHub Release creation, issue/PR comments, OIDC npm publish) keeps using secrets.GITHUB_TOKEN below, unaffected -- only checkout's own git credentials need the elevated token, since that's what the later pushes inherit.
+      # main requires status checks to merge, and the default GITHUB_TOKEN has no bypass for that — the orchestrator's release commits, dependency-bump commits, and tags are direct pushes to main, so they need a token from an actor the branch ruleset explicitly allows to bypass (see ExaDev/.github and this repo's own ruleset). Everything else in this job (release notes, GitHub Release creation, issue/PR comments, OIDC npm publish) keeps using secrets.GITHUB_TOKEN below, unaffected — only checkout's own git credentials need the elevated token, since that's what the later pushes inherit.
       - name: Generate a token for the release pushes
         id: app-token
         uses: actions/create-github-app-token@v3
@@ -369,7 +369,7 @@ jobs:
       - name: Upgrade npm for OIDC trusted publishing (needs npm CLI >=11.5.1)
         run: npm install -g npm@latest
       - name: Record the tags present before the orchestrator runs
-        # The orchestrator creates each package's `name@version` tag in this same checkout as it releases, so diffing `git tag` across the release step is the exact record of what this run released -- the same source of truth the post-release jobs below consume. Written to RUNNER_TEMP, not the working tree: commitStrategy "single" discovers what it touched via `git status` and requires a clean tree to start from, so a scratch file living inside the checkout would fail that check every run.
+        # The orchestrator creates each package's `name@version` tag in this same checkout as it releases, so diffing `git tag` across the release step is the exact record of what this run released — the same source of truth the post-release jobs below consume. Written to RUNNER_TEMP, not the working tree: commitStrategy "single" discovers what it touched via `git status` and requires a clean tree to start from, so a scratch file living inside the checkout would fail that check every run.
         run: git ls-remote --tags origin | sed 's|.*refs/tags/||' | grep -v '\^{}' | sort > "$RUNNER_TEMP/release-tags-before.txt"
       - name: Release every package that changed, in dependency order
         # One orchestrator run replaces the per-package release jobs: it discovers the workspace from pnpm-workspace.yaml, orders packages topologically, and runs semantic-release per package with commits path-filtered to that package's own directory and tags in `name@version` form. A package whose only change is a sibling's release still gets a patch release, because its published dependency range changed. HUSKY=0 so local git hooks never fire against the automated commits.
@@ -378,12 +378,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # npm publish provenance for every package the run publishes, matching each package.json's own publishConfig.provenance.
           NPM_CONFIG_PROVENANCE: "true"
-          # Blanked, not omitted -- an inherited NPM_TOKEN/NODE_AUTH_TOKEN from a workflow-level env block, reusable workflow, or composite action would otherwise be used in preference to the OIDC exchange.
+          # Blanked, not omitted — an inherited NPM_TOKEN/NODE_AUTH_TOKEN from a workflow-level env block, reusable workflow, or composite action would otherwise be used in preference to the OIDC exchange.
           NPM_TOKEN: ""
           NODE_AUTH_TOKEN: ""
       - name: Collect the packages this run released
         id: released
-        # Builds the matrices the post-release jobs fan out over: one attestation leg per released published package, one GitHub Packages leg per released package the map mirrors there, one npm-alias leg per (released package, alias) pair, one SEA-binary leg per (SEA-eligible released package, platform) pair, one container-image leg per (container-eligible released package, Linux architecture) pair, and one container-manifest leg per container-eligible released package. The version comes from each package's own package.json in this working tree -- the orchestrator has already committed the released version by the time this step runs, so it is the same version the tag names. The web UI is private and publishes nothing, so it is filtered out.
+        # Builds the matrices the post-release jobs fan out over: one attestation leg per released published package, one GitHub Packages leg per released package the map mirrors there, one npm-alias leg per (released package, alias) pair, one SEA-binary leg per (SEA-eligible released package, platform) pair, one container-image leg per (container-eligible released package, Linux architecture) pair, and one container-manifest leg per container-eligible released package. The version comes from each package's own package.json in this working tree — the orchestrator has already committed the released version by the time this step runs, so it is the same version the tag names. The web UI is private and publishes nothing, so it is filtered out.
         run: |
           git ls-remote --tags origin | sed 's|.*refs/tags/||' | grep -v '\^{}' | sort > "$RUNNER_TEMP/release-tags-after.txt"
           comm -13 "$RUNNER_TEMP/release-tags-before.txt" "$RUNNER_TEMP/release-tags-after.txt" > "$RUNNER_TEMP/release-tags-new.txt"
@@ -416,7 +416,7 @@ jobs:
               NPM_ALIASES=$(echo "$NPM_ALIASES" | jq -c --arg name "$NAME" --arg version "$VERSION" --arg tag "$TAG" --arg alias "$ALIAS" \
                 '. + [{name: $name, version: $version, tag: $tag, alias: $alias}]')
             done < <(jq -r --arg name "$NAME" '.[$name].aliases // [] | .[]' .github/release-republish.json)
-            # The only three packages this workspace builds a Node SEA (single-executable application) binary for -- see packages/document-cli, document-mcp, document-rest's own tsdown.config.ts. A hardcoded literal set, not a config-file entry like the alias/GitHub-Packages maps above: those vary per package and grow independently, where this is a small, closed set unlikely to grow the same way. Three architecture pairs share an OS (macos-latest/macos-26-intel are both darwin; ubuntu-latest/ubuntu-24.04-arm are both linux; windows-latest/windows-11-arm are both win32) -- all of them standard, non-large-runner images, no extra cost -- so build-sea-binary.ts's own binaryFileName disambiguates every leg by process.arch, not just by OS, for exactly this reason.
+            # The only three packages this workspace builds a Node SEA (single-executable application) binary for — see packages/document-cli, document-mcp, document-rest's own tsdown.config.ts. A hardcoded literal set, not a config-file entry like the alias/GitHub-Packages maps above: those vary per package and grow independently, where this is a small, closed set unlikely to grow the same way. Three architecture pairs share an OS (macos-latest/macos-26-intel are both darwin; ubuntu-latest/ubuntu-24.04-arm are both linux; windows-latest/windows-11-arm are both win32) — all of them standard, non-large-runner images, no extra cost — so build-sea-binary.ts's own binaryFileName disambiguates every leg by process.arch, not just by OS, for exactly this reason.
             case "$NAME" in
               document-cli | document-mcp | document-rest)
                 for OS in ubuntu-latest ubuntu-24.04-arm macos-latest macos-26-intel windows-latest windows-11-arm; do
@@ -425,7 +425,7 @@ jobs:
                 done
                 ;;
             esac
-            # The two packages this workspace runs as long-lived servers rather than a one-shot CLI/TUI -- document-cli is deliberately excluded, per the root README's Releases section. This needs two shapes: one leg per (package, architecture) for build-container-images (its own per-arch build+push), and one leg per package for publish-container-manifests (which merges both architectures' images into one manifest) -- there's no way to dedupe the former into the latter inside a job's own `fromJSON(...)` matrix expression, so both are built here directly. isLatest is "true" here (a genuine release); collect-backfill-matrix's own copy of this block sets it "false", since a historical catch-up run must never regress the floating `latest` tag to an older version.
+            # The two packages this workspace runs as long-lived servers rather than a one-shot CLI/TUI — document-cli is deliberately excluded, per the root README's Releases section. This needs two shapes: one leg per (package, architecture) for build-container-images (its own per-arch build+push), and one leg per package for publish-container-manifests (which merges both architectures' images into one manifest) — there's no way to dedupe the former into the latter inside a job's own `fromJSON(...)` matrix expression, so both are built here directly. isLatest is "true" here (a genuine release); collect-backfill-matrix's own copy of this block sets it "false", since a historical catch-up run must never regress the floating `latest` tag to an older version.
             case "$NAME" in
               document-mcp | document-rest)
                 IMAGE=""
@@ -453,7 +453,7 @@ jobs:
             echo "container-image-matrix=$CONTAINER_IMAGES"
           } >> "$GITHUB_OUTPUT"
 
-  # Everything the release job gates on (commitlint/lint/typecheck/test/test-workers/test-smoke/knip) validates the commit BEFORE release bumps any versions -- never the workspace state AFTER. The orchestrator's own release/dependency-bump commits are pushed with `[skip ci]` (deliberately: a push authenticated this way would otherwise re-trigger this same workflow and risk a concurrent release racing itself, per the release job's own comment above), so nothing else ever runs CI against post-release main either. A package released with a breaking (major) change is therefore never checked against its own workspace-local dependents until whichever of THEIR test suites next happens to run for an unrelated reason -- exactly what caught document-schema.js's 7.0.0 major landing with documents.js's own committed example dumps still pinned to 6.0.0 (ExaDev/documents.js, 2026-09-07): main was red from the moment that release commit landed, silently, until a later PR's own turbo --affected run (which doesn't even touch documents.js on an unrelated branch) happened not to catch it either. This job closes that gap: re-run every check that already exists above, against the real post-release commit on main, so a release that breaks a sibling package inside this same workspace fails LOUDLY on this same workflow run's own summary rather than staying invisible until someone else's unrelated work trips over it. It cannot un-publish a release that already went out -- nothing running after the fact can -- but a red run here is exactly the loud, immediate signal that should prompt a same-day follow-up fix, the way this file's own commit history already shows one landing for the 7.0.0 case.
+  # Everything the release job gates on (commitlint/lint/typecheck/test/test-workers/test-smoke/knip) validates the commit BEFORE release bumps any versions — never the workspace state AFTER. The orchestrator's own release/dependency-bump commits are pushed with `[skip ci]` (deliberately: a push authenticated this way would otherwise re-trigger this same workflow and risk a concurrent release racing itself, per the release job's own comment above), so nothing else ever runs CI against post-release main either. A package released with a breaking (major) change is therefore never checked against its own workspace-local dependents until whichever of THEIR test suites next happens to run for an unrelated reason — exactly what caught document-schema.js's 7.0.0 major landing with documents.js's own committed example dumps still pinned to 6.0.0 (ExaDev/documents.js, 2026-09-07): main was red from the moment that release commit landed, silently, until a later PR's own turbo --affected run (which doesn't even touch documents.js on an unrelated branch) happened not to catch it either. This job closes that gap: re-run every check that already exists above, against the real post-release commit on main, so a release that breaks a sibling package inside this same workspace fails LOUDLY on this same workflow run's own summary rather than staying invisible until someone else's unrelated work trips over it. It cannot un-publish a release that already went out — nothing running after the fact can — but a red run here is exactly the loud, immediate signal that should prompt a same-day follow-up fix, the way this file's own commit history already shows one landing for the 7.0.0 case.
   verify-release:
     name: Verify release (${{ matrix.task }})
     needs: [release]
@@ -478,16 +478,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # ref: main, not the bare event SHA -- the release job's own version-bump and dependency-bump commits landed on main AFTER the commit that triggered this workflow run, and validating that new state is the entire point of this job.
+          # ref: main, not the bare event SHA — the release job's own version-bump and dependency-bump commits landed on main AFTER the commit that triggered this workflow run, and validating that new state is the entire point of this job.
           ref: main
           fetch-depth: 0
       - uses: ./.github/actions/setup-workspace
         with:
           task: verify-release-${{ matrix.task }}
-          # No $TURBO_FLAGS: this job only ever runs from a push-to-main trigger (inherited via `needs: [release]`, itself gated the same way), where that variable is already empty -- the whole point here is checking the WHOLE workspace's post-release state, the identical scope its non-verify counterpart above already runs with on main.
+          # No $TURBO_FLAGS: this job only ever runs from a push-to-main trigger (inherited via `needs: [release]`, itself gated the same way), where that variable is already empty — the whole point here is checking the WHOLE workspace's post-release state, the identical scope its non-verify counterpart above already runs with on main.
           command: ${{ matrix.command }}
 
-  # Backfills the three post-release jobs below for releases whose own run never reached the "Collect the packages this run released" step -- e.g. a release job cancelled by its own timeout after the per-package publish work had already completed (ExaDev/documents.js#835). A plain re-run can't recover this: that step diffs tags against a before/after snapshot taken within the same job run, so a later run sees every already-existing tag as pre-existing, not new. This job instead builds the identical matrices directly from an explicit tag list, without re-running the release itself.
+  # Backfills the three post-release jobs below for releases whose own run never reached the "Collect the packages this run released" step — e.g. a release job cancelled by its own timeout after the per-package publish work had already completed (ExaDev/documents.js#835). A plain re-run can't recover this: that step diffs tags against a before/after snapshot taken within the same job run, so a later run sees every already-existing tag as pre-existing, not new. This job instead builds the identical matrices directly from an explicit tag list, without re-running the release itself.
   collect-backfill-matrix:
     name: Collect backfill matrix
     if: github.event_name == 'workflow_dispatch' && inputs.backfill_tags != ''
@@ -506,7 +506,7 @@ jobs:
           fetch-depth: 0
       - name: Build the post-release matrices from the given tags
         id: collect
-        # Mirrors the release job's own "Collect the packages this run released" step, but sources name/version from each tag directly (tags are always `name@version`) instead of the current checkout's package.json -- the checkout here is just main at whatever commit is current, not necessarily the release commit each historical tag was cut from.
+        # Mirrors the release job's own "Collect the packages this run released" step, but sources name/version from each tag directly (tags are always `name@version`) instead of the current checkout's package.json — the checkout here is just main at whatever commit is current, not necessarily the release commit each historical tag was cut from.
         env:
           # Passed through the environment rather than interpolated directly into the script below, so a tag list containing shell metacharacters is just data, never executed.
           BACKFILL_TAGS: ${{ inputs.backfill_tags }}
@@ -546,7 +546,7 @@ jobs:
               NPM_ALIASES=$(echo "$NPM_ALIASES" | jq -c --arg name "$NAME" --arg version "$VERSION" --arg tag "$TAG" --arg alias "$ALIAS" \
                 '. + [{name: $name, version: $version, tag: $tag, alias: $alias}]')
             done < <(jq -r --arg name "$NAME" '.[$name].aliases // [] | .[]' .github/release-republish.json)
-            # Mirrors the release job's own identical case statement -- see that step's own comment on why this is a hardcoded literal set rather than a release-republish.json entry, and on why three of the six legs share an OS with another leg.
+            # Mirrors the release job's own identical case statement — see that step's own comment on why this is a hardcoded literal set rather than a release-republish.json entry, and on why three of the six legs share an OS with another leg.
             case "$NAME" in
               document-cli | document-mcp | document-rest)
                 for OS in ubuntu-latest ubuntu-24.04-arm macos-latest macos-26-intel windows-latest windows-11-arm; do
@@ -555,7 +555,7 @@ jobs:
                 done
                 ;;
             esac
-            # Mirrors the release job's own identical container-matrix case statement, with one deliberate difference: isLatest is "false" here, never "true" -- a backfill exists specifically to catch up a possibly-old, already-superseded tag after the fact, so floating the registry's `latest` tag onto it would regress `latest` to an older version if newer releases have shipped since.
+            # Mirrors the release job's own identical container-matrix case statement, with one deliberate difference: isLatest is "false" here, never "true" — a backfill exists specifically to catch up a possibly-old, already-superseded tag after the fact, so floating the registry's `latest` tag onto it would regress `latest` to an older version if newer releases have shipped since.
             case "$NAME" in
               document-mcp | document-rest)
                 IMAGE=""
@@ -573,7 +573,7 @@ jobs:
                 done
                 ;;
             esac
-          # printf '%s\n', not '%s': `tr` never adds a trailing newline of its own, and `read` silently drops the last line of a while-read loop when it hits EOF without one -- confirmed the hard way, the final tag in a comma-separated backfill_tags list was dropped from every matrix with no warning or error. The trailing \n here survives the comma-to-newline translation as the terminator the last tag needs.
+          # printf '%s\n', not '%s': `tr` never adds a trailing newline of its own, and `read` silently drops the last line of a while-read loop when it hits EOF without one — confirmed the hard way, the final tag in a comma-separated backfill_tags list was dropped from every matrix with no warning or error. The trailing \n here survives the comma-to-newline translation as the terminator the last tag needs.
           done < <(printf '%s\n' "$BACKFILL_TAGS" | tr ',' '\n')
           {
             echo "github-packages-matrix=$GITHUB_PACKAGES"
@@ -584,14 +584,14 @@ jobs:
             echo "container-image-matrix=$CONTAINER_IMAGES"
           } >> "$GITHUB_OUTPUT"
 
-  # The three jobs below restore what the monorepo migration lost (ExaDev/documents.js#732): each standalone repository's own pipeline republished its package under alternate npm names and a @exadev/<name> scope on GitHub Packages, and signed an SPDX SBOM plus build-provenance attestation against the packed release tarball. They run after the release job (or, for a backfill, the collect-backfill-matrix job above) keyed off whichever of the two produced the matrices, and nothing depends on them -- a failure here can never block or fail the release itself or the Pages deploy.
+  # The three jobs below restore what the monorepo migration lost (ExaDev/documents.js#732): each standalone repository's own pipeline republished its package under alternate npm names and a @exadev/<name> scope on GitHub Packages, and signed an SPDX SBOM plus build-provenance attestation against the packed release tarball. They run after the release job (or, for a backfill, the collect-backfill-matrix job above) keyed off whichever of the two produced the matrices, and nothing depends on them — a failure here can never block or fail the release itself or the Pages deploy.
   #
-  # Each of the three reads directly from `needs.release`/`needs.collect-backfill-matrix` (never through an intermediate job) and gates with its own `always() && (...)` -- deliberately, after finding a real GitHub Actions platform quirk the hard way: an earlier design funnelled both through one intermediate `resolve-post-release-matrices` job so this `always()`-plus-mixed-`needs` gating logic (and the JSON matrix fallback) lived in one place instead of three. That job's own step correctly resolved and wrote the right matrices (confirmed directly via a `cat -A "$GITHUB_OUTPUT"` dump inside the step), but a *separate* downstream job reading `needs.resolve-post-release-matrices.outputs.*` always saw `'[]'`, regardless. The one thing unique to that intermediate job was combining `always()` with a `needs` array where one member is always skipped -- and that combination is exactly what breaks a job's own advertised `outputs` for whatever depends on *it* (its own step outputs and its own reads of *its* needs' outputs are unaffected, which is why the in-job debug dump looked correct). Reading `release`/`collect-backfill-matrix` directly here sidesteps it, since those two jobs never use `always()` themselves and nothing downstream needs outputs *from* a job that does.
+  # Each of the three reads directly from `needs.release`/`needs.collect-backfill-matrix` (never through an intermediate job) and gates with its own `always() && (...)` — deliberately, after finding a real GitHub Actions platform quirk the hard way: an earlier design funnelled both through one intermediate `resolve-post-release-matrices` job so this `always()`-plus-mixed-`needs` gating logic (and the JSON matrix fallback) lived in one place instead of three. That job's own step correctly resolved and wrote the right matrices (confirmed directly via a `cat -A "$GITHUB_OUTPUT"` dump inside the step), but a *separate* downstream job reading `needs.resolve-post-release-matrices.outputs.*` always saw `'[]'`, regardless. The one thing unique to that intermediate job was combining `always()` with a `needs` array where one member is always skipped — and that combination is exactly what breaks a job's own advertised `outputs` for whatever depends on *it* (its own step outputs and its own reads of *its* needs' outputs are unaffected, which is why the in-job debug dump looked correct). Reading `release`/`collect-backfill-matrix` directly here sidesteps it, since those two jobs never use `always()` themselves and nothing downstream needs outputs *from* a job that does.
 
   notify-hive:
     name: Notify novus-power/hive
     needs: [release, collect-backfill-matrix]
-    # Same dual-path gating as the three jobs above, and for the identical reason -- see their shared comment. This job isn't restoring anything the monorepo migration lost, though: it's telling novus-power/hive, an external consumer with its own dependency on documents.js, that a release just published, the moment it does, rather than leaving it to Dependabot's weekly scan. hive's own instant-update receiver filters the dispatched matrix down to packages it actually depends on, so this fires the full matrix unfiltered rather than hardcoding which package(s) hive currently uses -- hive picking up a dependency on another family package later needs no change here.
+    # Same dual-path gating as the three jobs above, and for the identical reason — see their shared comment. This job isn't restoring anything the monorepo migration lost, though: it's telling novus-power/hive, an external consumer with its own dependency on documents.js, that a release just published, the moment it does, rather than leaving it to Dependabot's weekly scan. hive's own instant-update receiver filters the dispatched matrix down to packages it actually depends on, so this fires the full matrix unfiltered rather than hardcoding which package(s) hive currently uses — hive picking up a dependency on another family package later needs no change here.
     if: always() && (needs.release.result == 'success' || needs.collect-backfill-matrix.result == 'success') && (needs.release.outputs.attest-matrix || needs.collect-backfill-matrix.outputs.attest-matrix) != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -626,14 +626,14 @@ jobs:
   publish-github-packages:
     name: Mirror to GitHub Packages (${{ matrix.scoped }})
     needs: [release, collect-backfill-matrix]
-    # Exactly one of the two ever runs for a given trigger (release only on a push to main, collect-backfill-matrix only on a workflow_dispatch carrying backfill_tags) -- always() waits on both regardless, and the matrix-emptiness check takes whichever produced output (the other's is the empty string when its job is skipped) and is load-bearing: `matrix: include: []` is not an empty matrix that skips the job, it is an invalid matrix, and the run concludes failed with no failed job to point at.
+    # Exactly one of the two ever runs for a given trigger (release only on a push to main, collect-backfill-matrix only on a workflow_dispatch carrying backfill_tags) — always() waits on both regardless, and the matrix-emptiness check takes whichever produced output (the other's is the empty string when its job is skipped) and is load-bearing: `matrix: include: []` is not an empty matrix that skips the job, it is an invalid matrix, and the run concludes failed with no failed job to point at.
     if: always() && (needs.release.result == 'success' || needs.collect-backfill-matrix.result == 'success') && (needs.release.outputs.github-packages-matrix || needs.collect-backfill-matrix.outputs.github-packages-matrix) != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
       packages: write
-      # Deliberately no id-token: write here -- see publish-npm-aliases' own comment for why this job is kept separate rather than folded into that matrix: GitHub Packages has no OIDC trusted-publishing exchange, and holding id-token: write makes pnpm attempt (and fail) that exchange anyway, which then breaks its fallback to the GITHUB_TOKEN this job actually authenticates with.
+      # Deliberately no id-token: write here — see publish-npm-aliases' own comment for why this job is kept separate rather than folded into that matrix: GitHub Packages has no OIDC trusted-publishing exchange, and holding id-token: write makes pnpm attempt (and fail) that exchange anyway, which then breaks its fallback to the GITHUB_TOKEN this job actually authenticates with.
     strategy:
       fail-fast: false
       matrix:
@@ -651,7 +651,7 @@ jobs:
         with:
           node-version-file: .tool-versions
           cache: pnpm
-          # Deliberately NOT setup-node's own registry-url/scope inputs (see ExaDev/documents.js#309): those write an @exadev:registry=https://npm.pkg.github.com/ *install-time* scope-to-registry mapping into .npmrc, and per setup-node's own docs an empty/omitted `scope` still falls back to the repository owner (ExaDev) when the target is GitHub Packages -- there is no way to get just the auth-token line out of that mechanism without also redirecting every @exadev-scoped *install* through it, which breaks `pnpm install` below: @exadev/eslint-config is a real devDependency published only to the default registry, never mirrored to GitHub Packages.
+          # Deliberately NOT setup-node's own registry-url/scope inputs (see ExaDev/documents.js#309): those write an @exadev:registry=https://npm.pkg.github.com/ *install-time* scope-to-registry mapping into .npmrc, and per setup-node's own docs an empty/omitted `scope` still falls back to the repository owner (ExaDev) when the target is GitHub Packages — there is no way to get just the auth-token line out of that mechanism without also redirecting every @exadev-scoped *install* through it, which breaks `pnpm install` below: @exadev/eslint-config is a real devDependency published only to the default registry, never mirrored to GitHub Packages.
       - run: pnpm install --frozen-lockfile
       - name: Configure the GitHub Packages auth token for view and publish only
         # Added after install so install never sees any @exadev scope mapping at all; the host-scoped credential alone determines auth, and publishConfig.registry (set explicitly below) determines the publish target.
@@ -668,7 +668,7 @@ jobs:
         if: steps.mirrored.outputs.already != 'true'
         run: pnpm --dir "packages/${{ matrix.name }}" build
       - name: Rewrite package name and registry for the GitHub Packages scope
-        # GitHub Packages requires the npm package name to be scoped to the repo owner. Rewriting the fields rather than keeping a second package.json means this mirror cannot drift away from the real package's metadata. publishConfig.registry has to be overridden too: it takes precedence over any registry the .npmrc sets, so without this the publish silently targets registry.npmjs.org instead -- confirmed failure mode in the standalone repositories this restores, not a hypothetical (404 on the npmjs.org registry, since GITHUB_TOKEN isn't a credential it recognises).
+        # GitHub Packages requires the npm package name to be scoped to the repo owner. Rewriting the fields rather than keeping a second package.json means this mirror cannot drift away from the real package's metadata. publishConfig.registry has to be overridden too: it takes precedence over any registry the .npmrc sets, so without this the publish silently targets registry.npmjs.org instead — confirmed failure mode in the standalone repositories this restores, not a hypothetical (404 on the npmjs.org registry, since GITHUB_TOKEN isn't a credential it recognises).
         if: steps.mirrored.outputs.already != 'true'
         working-directory: packages/${{ matrix.name }}
         run: |
@@ -700,7 +700,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      id-token: write # OIDC identity for npm trusted publishing -- every leg in this job targets npmjs.org. The GitHub Packages mirror is a separate job above specifically so it never holds this permission: pnpm attempts an OIDC exchange whenever id-token: write is available regardless of target registry, and GitHub Packages has no such exchange to attempt -- confirmed the hard way in a sibling repo when this leg used to share that job and failed with "401 Unauthorized - authentication token not provided" even with GITHUB_TOKEN correctly set, because the failed OIDC attempt never fell through to it.
+      id-token: write # OIDC identity for npm trusted publishing — every leg in this job targets npmjs.org. The GitHub Packages mirror is a separate job above specifically so it never holds this permission: pnpm attempts an OIDC exchange whenever id-token: write is available regardless of target registry, and GitHub Packages has no such exchange to attempt — confirmed the hard way in a sibling repo when this leg used to share that job and failed with "401 Unauthorized - authentication token not provided" even with GITHUB_TOKEN correctly set, because the failed OIDC attempt never fell through to it.
     strategy:
       fail-fast: false
       matrix:
@@ -715,7 +715,7 @@ jobs:
         with:
           node-version-file: .tool-versions
           cache: pnpm
-          # registry-url is deliberately absent. Setting it makes setup-node write an .npmrc containing an _authToken line, and that line wins over the OIDC exchange -- so the setting that looks like it configures the registry is exactly the one that would break trusted publishing.
+          # registry-url is deliberately absent. Setting it makes setup-node write an .npmrc containing an _authToken line, and that line wins over the OIDC exchange — so the setting that looks like it configures the registry is exactly the one that would break trusted publishing.
       - run: pnpm install --frozen-lockfile
       - name: Check whether this alias version is already published
         id: published
@@ -729,12 +729,12 @@ jobs:
         if: steps.published.outputs.already != 'true'
         run: pnpm --dir "packages/${{ matrix.name }}" build
       - name: Rewrite package name for this alias
-        # Rewriting the checked-out package.json rather than keeping a package.json per alias means no alias can drift away from the real package's metadata -- each matrix leg gets its own fresh runner and checkout, so there is no cross-contamination between legs.
+        # Rewriting the checked-out package.json rather than keeping a package.json per alias means no alias can drift away from the real package's metadata — each matrix leg gets its own fresh runner and checkout, so there is no cross-contamination between legs.
         if: steps.published.outputs.already != 'true'
         working-directory: packages/${{ matrix.name }}
         run: npm pkg set name="${{ matrix.alias }}"
       - name: Publish the alias
-        # Trusted publishing is registered per package name, so each alias needs its own one-time registration on npmjs.com against this repository and workflow file. Until that registration exists the publish fails two ways depending on where pnpm gives up: the OIDC exchange itself 404s (`oidc/token` or pnpm's `ERR_PNPM_AUTH_TOKEN_EXCHANGE` in the output), or the exchange is skipped and the bare PUT 404s on the unregistered name (`404 Not Found - PUT ... registry.npmjs.org/<alias>`). Both exact signatures are the fail-with-instructions case below (a deliberate signal, not a skip: the registration is a one-time user action, and a silent skip let every alias stay stranded from the monorepo migration until a manual audit found them -- a red leg names the missing registration the day a release runs); every other failure is real and fails the leg too.
+        # Trusted publishing is registered per package name, so each alias needs its own one-time registration on npmjs.com against this repository and workflow file. Until that registration exists the publish fails two ways depending on where pnpm gives up: the OIDC exchange itself 404s (`oidc/token` or pnpm's `ERR_PNPM_AUTH_TOKEN_EXCHANGE` in the output), or the exchange is skipped and the bare PUT 404s on the unregistered name (`404 Not Found - PUT ... registry.npmjs.org/<alias>`). Both exact signatures are the fail-with-instructions case below (a deliberate signal, not a skip: the registration is a one-time user action, and a silent skip let every alias stay stranded from the monorepo migration until a manual audit found them — a red leg names the missing registration the day a release runs); every other failure is real and fails the leg too.
         if: steps.published.outputs.already != 'true'
         working-directory: packages/${{ matrix.name }}
         run: |
@@ -750,7 +750,7 @@ jobs:
           fi
           exit "$STATUS"
         env:
-          # Blanked, not omitted -- an inherited NODE_AUTH_TOKEN would otherwise be used in preference to the OIDC exchange, matching the release job's own convention above.
+          # Blanked, not omitted — an inherited NODE_AUTH_TOKEN would otherwise be used in preference to the OIDC exchange, matching the release job's own convention above.
           NODE_AUTH_TOKEN: ""
 
   attest-release-artifacts:
@@ -781,14 +781,14 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Build the released package
         run: pnpm --dir "packages/${{ matrix.name }}" build
-      # Pack into a directory of its own, separate from dist/ (tsdown's raw build output). The attestation subject has to be the artefact that actually ships -- attesting dist/ itself would mix in files that never leave the repo, producing digests that match nothing a consumer can download.
+      # Pack into a directory of its own, separate from dist/ (tsdown's raw build output). The attestation subject has to be the artefact that actually ships — attesting dist/ itself would mix in files that never leave the repo, producing digests that match nothing a consumer can download.
       - name: Pack the release tarball
         working-directory: packages/${{ matrix.name }}
         run: pnpm pack --pack-destination release-artifact
       - name: Generate the SPDX SBOM
         working-directory: packages/${{ matrix.name }}
         run: pnpm sbom --sbom-format spdx --prod > release-artifact/sbom.spdx.json
-      # Two steps (sbom-path present vs. absent) rather than one, since actions/attest's docs don't clearly state whether passing both together attests SBOM and provenance in a single call or SBOM only -- two steps is the unambiguous form.
+      # Two steps (sbom-path present vs. absent) rather than one, since actions/attest's docs don't clearly state whether passing both together attests SBOM and provenance in a single call or SBOM only — two steps is the unambiguous form.
       - name: Attest SBOM
         uses: actions/attest@v4
         with:
@@ -810,10 +810,10 @@ jobs:
         with:
           client-id: Iv23liuX19EFyXndAmkL
           private-key: ${{ secrets.AUTOMERGE_APP_PRIVATE_KEY }}
-          # Scoped down to only what this step needs, rather than inheriting every permission the documents-js app carries (contents/workflows/pull-requests/etc, needed by the release job's own use of the same app) -- least-privilege for a token that only ever calls one org-level endpoint.
+          # Scoped down to only what this step needs, rather than inheriting every permission the documents-js app carries (contents/workflows/pull-requests/etc, needed by the release job's own use of the same app) — least-privilege for a token that only ever calls one org-level endpoint.
           permission-artifact-metadata: write
       - name: Record the npm publish as a linked artifact
-        # The digest is the same tarball actions/attest signed above, hashed the same way (sha256 of the exact bytes at subject-path) -- this endpoint's own description says it attaches the record "on behalf of any artifact matching the provided digest and associated with a repository owned by the organization", which is the just-created build-provenance attestation for this tarball. github_repository is deliberately omitted: the API prefers the repository the provenance attestation itself names over this parameter.
+        # The digest is the same tarball actions/attest signed above, hashed the same way (sha256 of the exact bytes at subject-path) — this endpoint's own description says it attaches the record "on behalf of any artifact matching the provided digest and associated with a repository owned by the organization", which is the just-created build-provenance attestation for this tarball. github_repository is deliberately omitted: the API prefers the repository the provenance attestation itself names over this parameter.
         env:
           GH_TOKEN: ${{ steps.artifact-metadata-token.outputs.token }}
         working-directory: packages/${{ matrix.name }}
@@ -846,7 +846,7 @@ jobs:
         with:
           ref: ${{ matrix.tag }} # the release commit the orchestrator tagged, not whatever main has moved on to by now
           fetch-depth: 0
-      # build-sea-binary.ts and its shared tsdown config are workspace-level CI tooling, not part of any package's own versioned release -- unlike a package's own src/, they have no reason to stay frozen at whatever they looked like the moment a tag was cut. Checking out the tag alone would mean a script bug fixed on main today stays permanently unfixable for every already-tagged release, including a later backfill run against that same tag, since a backfill checks out the identical ref. Overlaying main's own current copies here is exactly what caught and needed fixing the first time this job ran for real (ExaDev/documents.js#1230, 2026-09-11): node --build-sea's own stdout corrupted this job's GITHUB_OUTPUT write, fixed on main, but every already-tagged release would still replay the old, broken script without this.
+      # build-sea-binary.ts and its shared tsdown config are workspace-level CI tooling, not part of any package's own versioned release — unlike a package's own src/, they have no reason to stay frozen at whatever they looked like the moment a tag was cut. Checking out the tag alone would mean a script bug fixed on main today stays permanently unfixable for every already-tagged release, including a later backfill run against that same tag, since a backfill checks out the identical ref. Overlaying main's own current copies here is exactly what caught and needed fixing the first time this job ran for real (ExaDev/documents.js#1230, 2026-09-11): node --build-sea's own stdout corrupted this job's GITHUB_OUTPUT write, fixed on main, but every already-tagged release would still replay the old, broken script without this.
       - name: Use the latest SEA build tooling rather than this tag's own frozen copy
         run: git checkout origin/main -- .github/scripts/build-sea-binary.ts tsdown.sea.shared.ts
       - uses: pnpm/action-setup@v6
@@ -894,7 +894,7 @@ jobs:
   build-container-images:
     name: Build container image (${{ matrix.image }}, ${{ matrix.dockerArch }})
     needs: [release, collect-backfill-matrix, build-sea-binaries]
-    # build-sea-binaries' own result is checked for "attempted", not "success": its own matrix spans every SEA-eligible package and OS at once (including document-cli and every non-Linux leg), so an unrelated leg failing there must never block this job -- the gh release download step below fails loudly and specifically instead if the one Linux asset this leg actually needs wasn't uploaded.
+    # build-sea-binaries' own result is checked for "attempted", not "success": its own matrix spans every SEA-eligible package and OS at once (including document-cli and every non-Linux leg), so an unrelated leg failing there must never block this job — the gh release download step below fails loudly and specifically instead if the one Linux asset this leg actually needs wasn't uploaded.
     if: always() && (needs.release.result == 'success' || needs.collect-backfill-matrix.result == 'success') && (needs.release.outputs.container-matrix || needs.collect-backfill-matrix.outputs.container-matrix) != '[]' && (needs.build-sea-binaries.result == 'success' || needs.build-sea-binaries.result == 'failure')
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
@@ -922,7 +922,7 @@ jobs:
             --clobber
           mv "packages/${{ matrix.name }}/dist-sea/${{ matrix.name }}-linux-${{ matrix.nodeArch }}" \
              "packages/${{ matrix.name }}/dist-sea/${{ matrix.name }}"
-          # The distroless base image this package's own Dockerfile builds FROM has no shell to chmod this with, so the execute bit has to already be set on disk before `docker build` runs -- COPY preserves it.
+          # The distroless base image this package's own Dockerfile builds FROM has no shell to chmod this with, so the execute bit has to already be set on disk before `docker build` runs — COPY preserves it.
           chmod +x "packages/${{ matrix.name }}/dist-sea/${{ matrix.name }}"
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v4
@@ -941,7 +941,7 @@ jobs:
   publish-container-manifests:
     name: Publish container manifest (${{ matrix.image }} ${{ matrix.version }})
     needs: [release, collect-backfill-matrix, build-container-images]
-    # build-container-images' own result is likewise checked for "attempted": its own matrix can span both document-rest and document-mcp at once, so one package's arch leg failing must never block merging the other package's manifest -- imagetools create below fails specifically if either of *this* image's two per-arch tags doesn't actually exist.
+    # build-container-images' own result is likewise checked for "attempted": its own matrix can span both document-rest and document-mcp at once, so one package's arch leg failing must never block merging the other package's manifest — imagetools create below fails specifically if either of *this* image's two per-arch tags doesn't actually exist.
     if: always() && (needs.release.result == 'success' || needs.collect-backfill-matrix.result == 'success') && (needs.release.outputs.container-image-matrix || needs.collect-backfill-matrix.outputs.container-image-matrix) != '[]' && (needs.build-container-images.result == 'success' || needs.build-container-images.result == 'failure')
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -966,7 +966,7 @@ jobs:
             "ghcr.io/exadev/${{ matrix.image }}:${{ matrix.version }}-amd64" \
             "ghcr.io/exadev/${{ matrix.image }}:${{ matrix.version }}-arm64"
       - name: Float latest onto this manifest (never for a backfill run)
-        # A backfill run sets isLatest "false" specifically because it exists to catch up an old, already-superseded tag -- floating `latest` onto it would regress the tag if newer releases have shipped since.
+        # A backfill run sets isLatest "false" specifically because it exists to catch up an old, already-superseded tag — floating `latest` onto it would regress the tag if newer releases have shipped since.
         if: matrix.isLatest == 'true'
         run: |
           docker buildx imagetools create \
@@ -1055,7 +1055,7 @@ jobs:
           html="$(curl -sf "$PAGE_URL")"
           origin="$(printf '%s' "$PAGE_URL" | sed -E 's#^(https?://[^/]+).*#\1#')"
 
-          # Every script src and link href (stylesheet/preload/icon/manifest) ending in one of these extensions -- the asset kinds a Vite PWA build actually emits and references from the page. Extracted paths are absolute (the build's own base config guarantees this), so they resolve against the origin alone, never by concatenating onto PAGE_URL itself -- PAGE_URL already carries the base path, so that would double it. grep exits non-zero when nothing matches; `|| true` stops that from tripping `set -e`/pipefail before the explicit empty-result check below gets a chance to report it properly.
+          # Every script src and link href (stylesheet/preload/icon/manifest) ending in one of these extensions — the asset kinds a Vite PWA build actually emits and references from the page. Extracted paths are absolute (the build's own base config guarantees this), so they resolve against the origin alone, never by concatenating onto PAGE_URL itself — PAGE_URL already carries the base path, so that would double it. grep exits non-zero when nothing matches; `|| true` stops that from tripping `set -e`/pipefail before the explicit empty-result check below gets a chance to report it properly.
           assets="$(printf '%s' "$html" | grep -oE '(src|href)="[^"]+\.(js|css|svg|png|webmanifest)"' | sed -E 's/^(src|href)="//; s/"$//' | sort -u || true)"
 
           if [ -z "$assets" ]; then

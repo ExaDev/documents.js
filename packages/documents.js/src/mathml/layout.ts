@@ -37,7 +37,7 @@ interface LayoutContext {
   readonly metrics: MathFontMetrics;
   readonly sizePt: number;
   readonly color: MathColor;
-  // undefined = "no ancestor mstyle/mathvariant attribute set one explicitly" -- a token element then applies its own intrinsic default (mi: italic iff single-character content, else normal; mn/mo/mtext: always normal). A defined value overrides every descendant's own intrinsic default, matching MathML's own mathvariant inheritance rule.
+  // undefined = "no ancestor mstyle/mathvariant attribute set one explicitly" — a token element then applies its own intrinsic default (mi: italic iff single-character content, else normal; mn/mo/mtext: always normal). A defined value overrides every descendant's own intrinsic default, matching MathML's own mathvariant inheritance rule.
   readonly inheritedVariant: MathVariant | undefined;
   readonly displayStyle: boolean;
   readonly cramped: boolean;
@@ -83,7 +83,7 @@ function unsupported(ctx: LayoutContext, element: MathMlElement): MathBox {
   return layoutToken(textContent(element), "normal", ctx);
 }
 
-// Renders `text` (already resolved to its final display string -- the caller has already applied mathvariant) as one MathGlyphRun, measuring its width one code point at a time via ctx.metrics.glyph and skipping (with a diagnostic) any code point the embedded font has no glyph for at all. Ascent/descent are the UNION of every rendered character's own real ink bounds (MathGlyphMetrics.inkAscentPt/inkDescentPt) when a glyph carries them -- not just the first character's -- falling back per-character to the font's own nominal design metrics (ascentPerEm/descentPerEm) for a glyph that carries no ink bounds at all (e.g. an implementation with no glyf/CFF outline parsing). A single-character token is the degenerate case of this same union.
+// Renders `text` (already resolved to its final display string — the caller has already applied mathvariant) as one MathGlyphRun, measuring its width one code point at a time via ctx.metrics.glyph and skipping (with a diagnostic) any code point the embedded font has no glyph for at all. Ascent/descent are the UNION of every rendered character's own real ink bounds (MathGlyphMetrics.inkAscentPt/inkDescentPt) when a glyph carries them — not just the first character's — falling back per-character to the font's own nominal design metrics (ascentPerEm/descentPerEm) for a glyph that carries no ink bounds at all (e.g. an implementation with no glyf/CFF outline parsing). A single-character token is the degenerate case of this same union.
 function layoutToken(
   rawText: string,
   variant: MathVariant,
@@ -153,7 +153,7 @@ function miIntrinsicDefault(content: string): MathVariant {
   return [...content].length === 1 ? "italic" : "normal";
 }
 
-// Whether `element` is an operator that stretches to whatever it wraps or spans -- a row's own content (a vertical fence, via stretchRowOperators) or a munder/mover/munderover base's own width (a horizontal over/under-brace, via layoutUnderOverChild). The operator dictionary's own `stretchy` property is the default; MathML lets a document override it per element, and only an explicit stretchy="false" is honoured here, since stretchy="true" cannot make a glyph the font declares no MathVariants construction for stretchable anyway (metrics.stretch simply returns undefined for it and the operator draws at its base size).
+// Whether `element` is an operator that stretches to whatever it wraps or spans — a row's own content (a vertical fence, via stretchRowOperators) or a munder/mover/munderover base's own width (a horizontal over/under-brace, via layoutUnderOverChild). The operator dictionary's own `stretchy` property is the default; MathML lets a document override it per element, and only an explicit stretchy="false" is honoured here, since stretchy="true" cannot make a glyph the font declares no MathVariants construction for stretchable anyway (metrics.stretch simply returns undefined for it and the operator draws at its base size).
 function isStretchyOperator(element: MathMlElement): boolean {
   if (elementLocalName(element) !== "mo") {
     return false;
@@ -164,7 +164,7 @@ function isStretchyOperator(element: MathMlElement): boolean {
   return operatorProperties(textContent(element).trim()).stretchy;
 }
 
-// Turns one resolved stretchy construction into a box holding a single 'assembled-glyphs' item. The construction's own real ink is centred on the maths axis -- the default `symmetric` behaviour MathML gives a fence, and the reason a pair of tall brackets lines up with the fraction rule between them rather than with the text baseline -- so the drawing origin sits `originAboveBaselinePt` above the shared baseline and the box's own edges land exactly on the ink's own top and bottom.
+// Turns one resolved stretchy construction into a box holding a single 'assembled-glyphs' item. The construction's own real ink is centred on the maths axis — the default `symmetric` behaviour MathML gives a fence, and the reason a pair of tall brackets lines up with the fraction rule between them rather than with the text baseline — so the drawing origin sits `originAboveBaselinePt` above the shared baseline and the box's own edges land exactly on the ink's own top and bottom.
 function stretchedBox(
   result: MathStretchResult,
   text: string,
@@ -202,7 +202,7 @@ function stretchedBox(
   };
 }
 
-// The stretched replacement box for one operator, or undefined to keep the ordinary text run already laid out for it. Kept deliberately: a 'base' result means the font's own smallest form already reaches the target, and the existing MathGlyphRun carries the operator's real Unicode text where an assembled-glyphs item can only carry glyph IDs -- so an ordinary inline (x+1) renders exactly as it did before this stretching path existed, text extraction included.
+// The stretched replacement box for one operator, or undefined to keep the ordinary text run already laid out for it. Kept deliberately: a 'base' result means the font's own smallest form already reaches the target, and the existing MathGlyphRun carries the operator's real Unicode text where an assembled-glyphs item can only carry glyph IDs — so an ordinary inline (x+1) renders exactly as it did before this stretching path existed, text extraction included.
 function stretchOperator(
   element: MathMlElement,
   targetSizePt: number,
@@ -230,11 +230,11 @@ function stretchOperator(
   return stretchedBox(result, text, ctx);
 }
 
-// Turns one resolved HORIZONTAL stretchy construction (an over/under-brace spanning its own munder/mover base) into a box holding a single 'assembled-glyphs' item. Deliberately a sibling of stretchedBox, not a shared axis-branching function -- the geometry genuinely differs on both axes measured:
+// Turns one resolved HORIZONTAL stretchy construction (an over/under-brace spanning its own munder/mover base) into a box holding a single 'assembled-glyphs' item. Deliberately a sibling of stretchedBox, not a shared axis-branching function — the geometry genuinely differs on both axes measured:
 //
-// Width is `result.sizePt`, the extent the construction actually reached along the stretch axis -- NEVER `result.advanceWidthPt`, which for a horizontal construction is only the widest individual glyph's own natural hmtx advance (a handful of points), not the assembled construction's own total span (confirmed empirically against the real embedded font: a 100pt-target assembly reports sizePt≈100 and advanceWidthPt≈11.5).
+// Width is `result.sizePt`, the extent the construction actually reached along the stretch axis — NEVER `result.advanceWidthPt`, which for a horizontal construction is only the widest individual glyph's own natural hmtx advance (a handful of points), not the assembled construction's own total span (confirmed empirically against the real embedded font: a 100pt-target assembly reports sizePt≈100 and advanceWidthPt≈11.5).
 //
-// Ascent/descent come directly and UNCLAMPED from result.inkAscentPt/result.inkDescentPt -- no maths-axis centring the way stretchedBox applies for a symmetric fence, since an over/under-brace is script content that layoutUnderOver already stacks against the base's own ascent/descent edges using whatever ascent/descent this box reports. One of the two is legitimately NEGATIVE for both U+23DE and U+23DF (confirmed against the real font: the over-brace's own inkDescentPt, and the under-brace's own inkAscentPt, both come back negative) -- each glyph's own ink sits almost entirely on one side of its own natural drawing origin, and that is honest ink data, not a bug, so it is never clamped to zero here.
+// Ascent/descent come directly and UNCLAMPED from result.inkAscentPt/result.inkDescentPt — no maths-axis centring the way stretchedBox applies for a symmetric fence, since an over/under-brace is script content that layoutUnderOver already stacks against the base's own ascent/descent edges using whatever ascent/descent this box reports. One of the two is legitimately NEGATIVE for both U+23DE and U+23DF (confirmed against the real font: the over-brace's own inkDescentPt, and the under-brace's own inkAscentPt, both come back negative) — each glyph's own ink sits almost entirely on one side of its own natural drawing origin, and that is honest ink data, not a bug, so it is never clamped to zero here.
 function horizontallyStretchedBox(
   result: MathStretchResult,
   text: string,
@@ -242,7 +242,7 @@ function horizontallyStretchedBox(
 ): MathBox {
   const ascentPt = result.inkAscentPt;
   const descentPt = result.inkDescentPt;
-  // Box-local, y-down: every placement shares the construction's own single baseline (`ascentPt` down from the box's own top), since offsetPt for a horizontal construction runs along x, not y -- unlike stretchedBox's vertical construction, where offsetPt varies each placement's own y and x stays fixed.
+  // Box-local, y-down: every placement shares the construction's own single baseline (`ascentPt` down from the box's own top), since offsetPt for a horizontal construction runs along x, not y — unlike stretchedBox's vertical construction, where offsetPt varies each placement's own y and x stays fixed.
   const placements: MathGlyphPlacement[] = result.placements.map(
     (placement) => ({
       glyphId: placement.glyphId,
@@ -268,7 +268,7 @@ function horizontallyStretchedBox(
   };
 }
 
-// The stretched replacement box for one munder/mover/munderover over/under-script operator, or undefined to keep whatever ordinary layout the caller already has for it -- mirrors stretchOperator exactly, but targets a box's own WIDTH (the base's) rather than a row's height/depth.
+// The stretched replacement box for one munder/mover/munderover over/under-script operator, or undefined to keep whatever ordinary layout the caller already has for it — mirrors stretchOperator exactly, but targets a box's own WIDTH (the base's) rather than a row's height/depth.
 function stretchHorizontalOperator(
   element: MathMlElement,
   targetWidthPt: number,
@@ -296,7 +296,7 @@ function stretchHorizontalOperator(
   return horizontallyStretchedBox(result, text, ctx);
 }
 
-// Lays out one munder/mover/munderover over- or under-script element, stretching it horizontally to `targetWidthPt` (the base's own width, computed independently for the over and under script -- real \overbrace{...}^{label}/\underbrace{...}_{label} semantics need no synchronisation between the two) when it is a stretchy operator the font can genuinely construct at that width, and falling through to the ordinary layout otherwise -- an operator isStretchyOperator declines (not an <mo>, an explicit stretchy="false", or a glyph the dictionary doesn't mark stretchy), or one metrics.stretch has nothing to offer (no horizontal MathVariants construction for that glyph in this font, or the construction already reaches the target at its base size, MathStretchResult.kind === 'base').
+// Lays out one munder/mover/munderover over- or under-script element, stretching it horizontally to `targetWidthPt` (the base's own width, computed independently for the over and under script — real \overbrace{...}^{label}/\underbrace{...}_{label} semantics need no synchronisation between the two) when it is a stretchy operator the font can genuinely construct at that width, and falling through to the ordinary layout otherwise — an operator isStretchyOperator declines (not an <mo>, an explicit stretchy="false", or a glyph the dictionary doesn't mark stretchy), or one metrics.stretch has nothing to offer (no horizontal MathVariants construction for that glyph in this font, or the construction already reaches the target at its base size, MathStretchResult.kind === 'base').
 function layoutUnderOverChild(
   childElement: MathMlElement,
   targetWidthPt: number,
@@ -315,9 +315,9 @@ function layoutUnderOverChild(
   return layoutNode(childElement, scriptCtx);
 }
 
-// Replaces each stretchy operator's own box with one stretched to cover the rest of the row. Per MathML3 3.2.5.8 the target is the maximum height and depth of the row's OTHER children -- a stretchy operator's own natural size never counts towards it, so several fences in one row all size to the same content rather than escalating off each other -- and a fence stretches symmetrically about the maths axis, which is what makes the target twice the larger of the two half-extents rather than the plain content height.
+// Replaces each stretchy operator's own box with one stretched to cover the rest of the row. Per MathML3 3.2.5.8 the target is the maximum height and depth of the row's OTHER children — a stretchy operator's own natural size never counts towards it, so several fences in one row all size to the same content rather than escalating off each other — and a fence stretches symmetrically about the maths axis, which is what makes the target twice the larger of the two half-extents rather than the plain content height.
 //
-// Only the VERTICAL axis is wired up here -- this function specifically stretches a row's fences to that row's own height/depth, which is inherently a vertical-extent target. Horizontal stretching (an over/under-brace spanning its own munder/mover/munderover base, U+23DE/U+23DF) needs a target derived from a single box's WIDTH instead, which is a different call site entirely: see stretchHorizontalOperator/layoutUnderOverChild below, called from layoutUnderOverElement rather than from here.
+// Only the VERTICAL axis is wired up here — this function specifically stretches a row's fences to that row's own height/depth, which is inherently a vertical-extent target. Horizontal stretching (an over/under-brace spanning its own munder/mover/munderover base, U+23DE/U+23DF) needs a target derived from a single box's WIDTH instead, which is a different call site entirely: see stretchHorizontalOperator/layoutUnderOverChild below, called from layoutUnderOverElement rather than from here.
 function stretchRowOperators(
   children: readonly MathMlElement[],
   boxes: readonly MathBox[],
@@ -381,7 +381,7 @@ function layoutRowChildren(
   return concatBoxesHorizontally(boxes, gapsPt);
 }
 
-// semantics wraps its actual content plus one or more parallel-markup annotations (annotation / annotation-xml) -- real MathML producers (confirmed against LibreOffice's own content.xml) always wrap a formula this way, pairing the presentation-MathML tree this module renders with a StarMath (or similar) annotation odf.js's own readOdfFormulaMathMl already extracts separately (OdfFormulaDocument.starMath). Only the first non-annotation child is rendered; every annotation/annotation-xml child is skipped.
+// semantics wraps its actual content plus one or more parallel-markup annotations (annotation / annotation-xml) — real MathML producers (confirmed against LibreOffice's own content.xml) always wrap a formula this way, pairing the presentation-MathML tree this module renders with a StarMath (or similar) annotation odf.js's own readOdfFormulaMathMl already extracts separately (OdfFormulaDocument.starMath). Only the first non-annotation child is rendered; every annotation/annotation-xml child is skipped.
 function layoutSemantics(element: MathMlElement, ctx: LayoutContext): MathBox {
   const content = elementChildren(element).find((child) => {
     const name = elementLocalName(child);
@@ -478,13 +478,13 @@ function layoutScripts(
   };
 }
 
-// The absolute (combined-box-local) x-position an over/under script should centre itself at when accent-attachment-point centring applies -- undefined falls back to plain geometric centring against the combined box's own width.
+// The absolute (combined-box-local) x-position an over/under script should centre itself at when accent-attachment-point centring applies — undefined falls back to plain geometric centring against the combined box's own width.
 interface AccentAttachment {
   readonly overXPt?: number;
   readonly underXPt?: number;
 }
 
-// True under/over stacking (munder/mover/munderover, or a movablelimits operator's own limits in displaystyle): centres `over`/`under` horizontally over the widest of the three boxes by default, and stacks them directly against `base`'s own ascent/descent edges with a fixed minimum gap. When `accentAttachment` supplies a resolved position for `over`/`under` (a genuine accent="true"/accentunder="true" script over a single-glyph base the font has a MathTopAccentAttachment entry for), that script is instead centred at the base glyph's own font-declared attachment point rather than the combined box's geometric centre -- see layoutUnderOverElement's own resolveTopAccentXPt for how that position is resolved, and this module's own README/gotchas note for the fallback boundary.
+// True under/over stacking (munder/mover/munderover, or a movablelimits operator's own limits in displaystyle): centres `over`/`under` horizontally over the widest of the three boxes by default, and stacks them directly against `base`'s own ascent/descent edges with a fixed minimum gap. When `accentAttachment` supplies a resolved position for `over`/`under` (a genuine accent="true"/accentunder="true" script over a single-glyph base the font has a MathTopAccentAttachment entry for), that script is instead centred at the base glyph's own font-declared attachment point rather than the combined box's geometric centre — see layoutUnderOverElement's own resolveTopAccentXPt for how that position is resolved, and this module's own README/gotchas note for the fallback boundary.
 function layoutUnderOver(
   base: MathBox,
   under: MathBox | undefined,
@@ -510,7 +510,7 @@ function layoutUnderOver(
       accentAttachment.overXPt === undefined
         ? (widthPt - over.widthPt) / 2
         : baseXPt + accentAttachment.overXPt - over.widthPt / 2;
-    // The over box's own bottom edge (descent) must land `gapPt` above base's own top edge (ascent above the shared baseline) -- i.e. its baseline sits `base.ascentPt + gapPt + over.descentPt` above the shared baseline.
+    // The over box's own bottom edge (descent) must land `gapPt` above base's own top edge (ascent above the shared baseline) — i.e. its baseline sits `base.ascentPt + gapPt + over.descentPt` above the shared baseline.
     items.push(
       ...placeChild(
         over,
@@ -550,7 +550,7 @@ function isMovableLimitsOperator(element: MathMlElement): boolean {
   );
 }
 
-// Resolves the font's own MathTopAccentAttachment x-position (metrics.ts's own MathGlyphMetrics.topAccentXPt) for `baseElement`, when it is simple enough for the metric to apply at all: a single token element (mi/mn/mo/mtext) whose own mathvariant-styled content is exactly one code point. Returns undefined for anything else -- a multi-character base, a non-token base (e.g. an mrow or another munder/mover), or a single glyph the embedded font's MATH table has no attachment entry for -- so the caller falls back to plain geometric centring exactly as before.
+// Resolves the font's own MathTopAccentAttachment x-position (metrics.ts's own MathGlyphMetrics.topAccentXPt) for `baseElement`, when it is simple enough for the metric to apply at all: a single token element (mi/mn/mo/mtext) whose own mathvariant-styled content is exactly one code point. Returns undefined for anything else — a multi-character base, a non-token base (e.g. an mrow or another munder/mover), or a single glyph the embedded font's MATH table has no attachment entry for — so the caller falls back to plain geometric centring exactly as before.
 function resolveTopAccentXPt(
   baseElement: MathMlElement,
   ctx: LayoutContext,
@@ -597,7 +597,7 @@ function layoutUnderOverElement(
     return EMPTY_BOX;
   }
 
-  // A movablelimits operator (sum, product, union, ...) renders its limits as an ordinary sub/sup pair outside display style -- the same \nolimits-vs-\limits distinction TeX makes -- and as a true stacked over/under only in display style.
+  // A movablelimits operator (sum, product, union, ...) renders its limits as an ordinary sub/sup pair outside display style — the same \nolimits-vs-\limits distinction TeX makes — and as a true stacked over/under only in display style.
   if (!ctx.displayStyle && isMovableLimitsOperator(baseElement)) {
     const base = layoutNode(baseElement, ctx);
     const scriptCtx = scriptContext(ctx, ctx.cramped);
@@ -628,7 +628,7 @@ function layoutUnderOverElement(
 
   const base = layoutNode(baseElement, ctx);
   const scriptCtx = scriptContext(ctx, false);
-  // accent/accentunder each opt only their own respective script (over for accent, under for accentunder) into attachment-point centring -- munderover's two scripts are independent, so each is resolved against its own flag.
+  // accent/accentunder each opt only their own respective script (over for accent, under for accentunder) into attachment-point centring — munderover's two scripts are independent, so each is resolved against its own flag.
   const isAccent = attrValue(element, "accent") === "true";
   const isAccentUnder = attrValue(element, "accentunder") === "true";
   const topAccentXPt =
@@ -751,7 +751,7 @@ function layoutRadical(
   const children = elementChildren(element);
 
   if (kind === "msqrt") {
-    // msqrt's own content model is an IMPLICIT mrow of every child (unlike mroot, which takes exactly two children: the radicand, then the index) -- see MathML3 3.3.6.
+    // msqrt's own content model is an IMPLICIT mrow of every child (unlike mroot, which takes exactly two children: the radicand, then the index) — see MathML3 3.3.6.
     const radicand = layoutRowChildren(children, { ...ctx, cramped: true });
     return wrapRadical(radicand, undefined, ctx);
   }
@@ -802,9 +802,9 @@ function wrapRadical(
   const descentPt = radicand.descentPt;
 
   const items: MathLayoutItem[] = [];
-  // Prefer the font's own vertical radical construction (its real √ MathVariants data, sized to the radicand) over the hand-drawn hook -- the font designer's glyph is the authentic radical silhouette this module's fixed-fraction approximation only echoes. 'base' (the font's smallest √ already reaches the target), 'variant' (a pre-built larger √), and 'assembly' (a multi-part construction) are all real radical glyphs and all used here; only a font that declares no √ construction at all (stretch returns undefined) falls back to the hand-drawn sign, so a different font backend with no radical MathVariants keeps rendering a radical rather than vanishing.
+  // Prefer the font's own vertical radical construction (its real √ MathVariants data, sized to the radicand) over the hand-drawn hook — the font designer's glyph is the authentic radical silhouette this module's fixed-fraction approximation only echoes. 'base' (the font's smallest √ already reaches the target), 'variant' (a pre-built larger √), and 'assembly' (a multi-part construction) are all real radical glyphs and all used here; only a font that declares no √ construction at all (stretch returns undefined) falls back to the hand-drawn sign, so a different font backend with no radical MathVariants keeps rendering a radical rather than vanishing.
   //
-  // The construction is stretched to (signHeightPt - radicalExtraAscenderPt) and its ink-top placed at y = radicalExtraAscenderPt -- the SAME y as the separately drawn vinculum rule below -- so the glyph's own top shelf and the vinculum read as one continuous bar rather than a step. Stretching to the reduced target (not the full signHeightPt) keeps the hook's bottom at the radicand's bottom (signHeightPt) once the ink-top is lowered by radicalExtraAscenderPt: the glyph spans [extraAscender, signHeightPt].
+  // The construction is stretched to (signHeightPt - radicalExtraAscenderPt) and its ink-top placed at y = radicalExtraAscenderPt — the SAME y as the separately drawn vinculum rule below — so the glyph's own top shelf and the vinculum read as one continuous bar rather than a step. Stretching to the reduced target (not the full signHeightPt) keeps the hook's bottom at the radicand's bottom (signHeightPt) once the ink-top is lowered by radicalExtraAscenderPt: the glyph spans [extraAscender, signHeightPt].
   const stretched = ctx.metrics.stretch(
     0x221a,
     "vertical",
@@ -853,7 +853,7 @@ function wrapRadical(
   items.push(...placeChild(radicand, signOriginXPt + signWidthPt, 0, ascentPt));
 
   if (index !== undefined) {
-    // The degree sits raised from the sign's own bottom by radicalDegreeBottomRaisePercent% of the sign's own visible height (ascentPt + descentPt of the WHOLE radical, per the OpenType MATH spec's own definition) -- a real, font-driven placement, not a fixed fraction picked by this module.
+    // The degree sits raised from the sign's own bottom by radicalDegreeBottomRaisePercent% of the sign's own visible height (ascentPt + descentPt of the WHOLE radical, per the OpenType MATH spec's own definition) — a real, font-driven placement, not a fixed fraction picked by this module.
     const raisePt =
       ((ascentPt + descentPt) * metrics.radicalDegreeBottomRaisePercent) / 100;
     const degreeBaselineFromTopPt =
@@ -989,7 +989,7 @@ function layoutSpace(element: MathMlElement, ctx: LayoutContext): MathBox {
   };
 }
 
-// The single recursive dispatch every MathML element in this module's own supported set (and every unsupported one, via the textContent fallback) goes through. A non-element node (a whitespace-only text node between siblings -- normal, valid MathML formatting) contributes nothing and is not itself a diagnostic-worthy event.
+// The single recursive dispatch every MathML element in this module's own supported set (and every unsupported one, via the textContent fallback) goes through. A non-element node (a whitespace-only text node between siblings — normal, valid MathML formatting) contributes nothing and is not itself a diagnostic-worthy event.
 export function layoutNode(node: MathMlNode, ctx: LayoutContext): MathBox {
   if (!isMathMlElement(node)) {
     return EMPTY_BOX;
@@ -1082,14 +1082,14 @@ export function layoutNode(node: MathMlNode, ctx: LayoutContext): MathBox {
       return layoutTable(node, ctx);
     case "mtr":
     case "mtd":
-      // Reached only if a caller lays one out directly rather than through 'mtable' (e.g. a malformed tree) -- treated as an implicit mrow of its own children, the same fallback MathML itself defines for an mtd encountered outside any row/table context.
+      // Reached only if a caller lays one out directly rather than through 'mtable' (e.g. a malformed tree) — treated as an implicit mrow of its own children, the same fallback MathML itself defines for an mtd encountered outside any row/table context.
       return layoutRowChildren(elementChildren(node), ctx);
     default:
       return unsupported(ctx, node);
   }
 }
 
-// The public entry point: lays out a full formula (odf.js's own readOdfFormulaMathMl's `mathml: XmlNode[]` -- the children of the <math> root element) at a given font size/colour, using `options.metrics` for every measurement. Multiple root-level nodes (rare, but the MathML content model permits more than one child directly under <math>) are laid out as an implicit row, matching how a <mrow> would combine them.
+// The public entry point: lays out a full formula (odf.js's own readOdfFormulaMathMl's `mathml: XmlNode[]` — the children of the <math> root element) at a given font size/colour, using `options.metrics` for every measurement. Multiple root-level nodes (rare, but the MathML content model permits more than one child directly under <math>) are laid out as an implicit row, matching how a <mrow> would combine them.
 export function layoutFormula(
   mathml: readonly MathMlNode[],
   options: LayoutFormulaOptions,

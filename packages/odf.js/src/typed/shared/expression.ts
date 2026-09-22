@@ -1,4 +1,4 @@
-// Balanced-paren/brace/quote-aware expression extraction, shared by every ODF mini-language reader in this package that needs to split a formula-shaped attribute string at an unnested delimiter: table:condition (typed/ods/data-validation.ts, transcribed from XMLConverter.cxx's own lclSkipExpression/lclSkipExpressionString and getExpression) and calcext:condition's own value mini-language (typed/ods/conditional-format.ts, transcribed from ScXMLConditionHelper::getExpression) both need the identical algorithm -- a comma or closing paren inside a nested `(...)`/`{...}` or a quoted string must not end the expression -- for two structurally similar but textually distinct LibreOffice source functions. Extracted here once both readers needed it, rather than duplicated.
+// Balanced-paren/brace/quote-aware expression extraction, shared by every ODF mini-language reader in this package that needs to split a formula-shaped attribute string at an unnested delimiter: table:condition (typed/ods/data-validation.ts, transcribed from XMLConverter.cxx's own lclSkipExpression/lclSkipExpressionString and getExpression) and calcext:condition's own value mini-language (typed/ods/conditional-format.ts, transcribed from ScXMLConditionHelper::getExpression) both need the identical algorithm — a comma or closing paren inside a nested `(...)`/`{...}` or a quoted string must not end the expression — for two structurally similar but textually distinct LibreOffice source functions. Extracted here once both readers needed it, rather than duplicated.
 
 // Skips one formula expression starting at `start`, honouring nested parentheses/braces and quoted strings. Returns the index of the first unnested occurrence of `endChar`, or `text.length` if the expression runs to the end unterminated.
 export function skipExpression(
@@ -30,7 +30,7 @@ export function skipExpression(
     }
     index += 1;
   }
-  // Every advance above is clamped to text.length, so a natural loop exit always leaves index exactly at text.length -- returning index rather than a hardcoded text.length keeps the loop's own boundary condition load-bearing (an off-by-one there would surface here as a wrong return value) instead of masked by a fallback that would produce the same answer either way.
+  // Every advance above is clamped to text.length, so a natural loop exit always leaves index exactly at text.length — returning index rather than a hardcoded text.length keeps the loop's own boundary condition load-bearing (an off-by-one there would surface here as a wrong return value) instead of masked by a fallback that would produce the same answer either way.
   return index;
 }
 

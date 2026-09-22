@@ -22,18 +22,18 @@ import type {
   SqlSortDirection,
 } from "./parser";
 
-// Executes a parsed SELECT (src/odb/sql/parser.ts) -- one table (or one derived table), plus zero or more JOINs of any kind, plus IN/EXISTS subqueries in WHERE or a JOIN's own ON -- against real HsqldbTables, the exact table shape readOdbTables produces for every .odb tier, so a saved .odb query can be run over the data this package already extracts, with no database engine anywhere in the path. Everything happens in memory over the rows it is handed; nothing here reads a package, a file, or a network connection.
+// Executes a parsed SELECT (src/odb/sql/parser.ts) — one table (or one derived table), plus zero or more JOINs of any kind, plus IN/EXISTS subqueries in WHERE or a JOIN's own ON — against real HsqldbTables, the exact table shape readOdbTables produces for every .odb tier, so a saved .odb query can be run over the data this package already extracts, with no database engine anywhere in the path. Everything happens in memory over the rows it is handed; nothing here reads a package, a file, or a network connection.
 //
-// It follows the same never-guess policy the parser does (see src/odb/sql/errors.ts's top-of-file comment for the src/hsqldb/script.ts precedent being followed): a statement that parsed cleanly but cannot be executed faithfully against the data -- an unresolvable table or column, an ambiguous unqualified reference two joined tables both declare, a comparison between genuinely incomparable value kinds, an aggregate over non-numeric values, a select list GROUP BY cannot justify, an IN (SELECT ...) whose subquery produces more or less than one column -- throws HsqldbSqlEvaluationError rather than substituting a default, skipping the row, or returning a partial result.
+// It follows the same never-guess policy the parser does (see src/odb/sql/errors.ts's top-of-file comment for the src/hsqldb/script.ts precedent being followed): a statement that parsed cleanly but cannot be executed faithfully against the data — an unresolvable table or column, an ambiguous unqualified reference two joined tables both declare, a comparison between genuinely incomparable value kinds, an aggregate over non-numeric values, a select list GROUP BY cannot justify, an IN (SELECT ...) whose subquery produces more or less than one column — throws HsqldbSqlEvaluationError rather than substituting a default, skipping the row, or returning a partial result.
 //
 // Six semantic decisions are worth stating outright, because each is a real choice a SQL implementation has to make and each is covered by its own test:
 //
 // 1. NULL is ContentCellValue's own { kind: 'empty' }, and both WHERE and a JOIN's own ON use genuine SQL three-valued logic: a comparison with a NULL operand is UNKNOWN, not false, and a row (or row pair) survives only when the predicate evaluates to TRUE. NOT UNKNOWN is UNKNOWN; UNKNOWN AND FALSE is FALSE; UNKNOWN OR TRUE is TRUE. IS [NOT] NULL and EXISTS/NOT EXISTS are the only predicates here that can never be UNKNOWN.
 // 2. Value comparison and the five aggregates' own NULL handling are src/odb/values.ts's, shared verbatim with src/odb/formula/'s Report Builder engine rather than restated here: values compare within three classes and never across them, and SUM/AVG/MIN/MAX skip NULLs and return NULL for a group with no non-NULL value at all. See that module's own top-of-file comment for the full statement of both rules.
-// 3. GROUP BY partitions by the grouped columns' own values, with all NULLs forming one group (SQL's own rule), and groups come back in first-appearance order -- SQL does not define an order without ORDER BY, and first-appearance is the one deterministic choice available. COUNT(*) counts rows; COUNT(column) counts non-NULL values; SUM/AVG/MIN/MAX ignore NULLs and return NULL for a group with no non-NULL value at all. An aggregate with no GROUP BY treats the whole (post-WHERE) row set as one group, and still returns exactly one row when that set is empty.
+// 3. GROUP BY partitions by the grouped columns' own values, with all NULLs forming one group (SQL's own rule), and groups come back in first-appearance order — SQL does not define an order without ORDER BY, and first-appearance is the one deterministic choice available. COUNT(*) counts rows; COUNT(column) counts non-NULL values; SUM/AVG/MIN/MAX ignore NULLs and return NULL for a group with no non-NULL value at all. An aggregate with no GROUP BY treats the whole (post-WHERE) row set as one group, and still returns exactly one row when that set is empty.
 // 4. ORDER BY sorts NULLs last under ASC (and therefore first under DESC, since a descending term is the ascending comparison negated). The sort is stable, so rows tied on every ORDER BY term keep their original relative order, and a multi-column ORDER BY resolves ties left to right.
-// 5. Each JOIN clause is a plain nested-loop join, folded into the row set left to right in the order written (joinTables/applyJoinClause below): the first JOIN's own condition tests every (base row, joined row) pair, the second JOIN's own condition then tests every (surviving pair, its joined row) triple, and so on. For INNER and CROSS, a row with no match on the other side is simply absent from the result; for LEFT/RIGHT/FULL, an unmatched row on the side that join kind preserves is kept, padded with NULL for every column the other side would have contributed. A USING or NATURAL join's shared columns are merged into one output column each, COALESCE(left, right) -- see applyJoinClause and mergeSharedColumns' own comments for the full column-ordering and qualifier rules, and src/odb/sql/parser.ts's own top-of-file comment for the PostgreSQL semantics this follows.
-// 6. A subquery (a derived table in FROM, or the operand of IN/EXISTS) is evaluated by this identical pipeline, recursively -- evaluateSelectInScope below is what both the exported evaluateSelect and every subquery position actually call. A derived table never correlates with its enclosing query (real SQL's own rule for a plain, non-LATERAL derived table): it is evaluated once, standalone, with no outer scope at all. An IN/EXISTS subquery MAY correlate -- it can reference a column its own FROM/JOIN cannot resolve, meaning the enclosing row -- so it is evaluated once per outer row, with that row's own resolver and values available as a fallback (ColumnResolver.valueOf's own `outer` parameter): a column reference resolves locally first, and only falls back to the outer row when nothing in the subquery's own FROM/JOIN declares it at all, exactly as SQL's own scoping rule requires. This engine does not distinguish "provably uncorrelated" from "provably correlated" up front and cache the former's single result -- every IN/EXISTS subquery is simply re-evaluated once per outer row, which is correct in both cases (an uncorrelated subquery is a pure function of `tables` alone, so re-running it produces the identical result every time) at the cost of doing so needlessly for the uncorrelated case; see this directory's own evaluate.test.ts (a correlated and an uncorrelated case, hand-built) for both shapes proven correct.
+// 5. Each JOIN clause is a plain nested-loop join, folded into the row set left to right in the order written (joinTables/applyJoinClause below): the first JOIN's own condition tests every (base row, joined row) pair, the second JOIN's own condition then tests every (surviving pair, its joined row) triple, and so on. For INNER and CROSS, a row with no match on the other side is simply absent from the result; for LEFT/RIGHT/FULL, an unmatched row on the side that join kind preserves is kept, padded with NULL for every column the other side would have contributed. A USING or NATURAL join's shared columns are merged into one output column each, COALESCE(left, right) — see applyJoinClause and mergeSharedColumns' own comments for the full column-ordering and qualifier rules, and src/odb/sql/parser.ts's own top-of-file comment for the PostgreSQL semantics this follows.
+// 6. A subquery (a derived table in FROM, or the operand of IN/EXISTS) is evaluated by this identical pipeline, recursively — evaluateSelectInScope below is what both the exported evaluateSelect and every subquery position actually call. A derived table never correlates with its enclosing query (real SQL's own rule for a plain, non-LATERAL derived table): it is evaluated once, standalone, with no outer scope at all. An IN/EXISTS subquery MAY correlate — it can reference a column its own FROM/JOIN cannot resolve, meaning the enclosing row — so it is evaluated once per outer row, with that row's own resolver and values available as a fallback (ColumnResolver.valueOf's own `outer` parameter): a column reference resolves locally first, and only falls back to the outer row when nothing in the subquery's own FROM/JOIN declares it at all, exactly as SQL's own scoping rule requires. This engine does not distinguish "provably uncorrelated" from "provably correlated" up front and cache the former's single result — every IN/EXISTS subquery is simply re-evaluated once per outer row, which is correct in both cases (an uncorrelated subquery is a pure function of `tables` alone, so re-running it produces the identical result every time) at the cost of doing so needlessly for the uncorrelated case; see this directory's own evaluate.test.ts (a correlated and an uncorrelated case, hand-built) for both shapes proven correct.
 
 export interface SqlResultSet {
   // The result-set column labels, in order: a real table column's own name for a plain column item, or the aggregate's own rendering (COUNT(*), SUM(AMOUNT)) for an aggregate item.
@@ -43,7 +43,7 @@ export interface SqlResultSet {
 
 type Truth = "true" | "false" | "unknown";
 
-// Turns a src/odb/values.ts failure into this engine's own error, carrying the statement that produced it. Shared value semantics, engine-specific error class -- see that module's own top-of-file comment for why the split exists.
+// Turns a src/odb/values.ts failure into this engine's own error, carrying the statement that produced it. Shared value semantics, engine-specific error class — see that module's own top-of-file comment for why the split exists.
 function sqlFailure(sql: string): (message: string) => Error {
   return (message: string) => new HsqldbSqlEvaluationError(message, sql);
 }
@@ -125,7 +125,7 @@ function likePatternToRegExp(pattern: string): RegExp {
   return new RegExp(`${source}$`);
 }
 
-// SQL's own identifier rule, as both HSQLDB and Firebird implement it and as real LibreOffice-generated .odb queries rely on: a double-quoted name matches only exactly, while an unquoted one (already folded to upper case by the lexer) may also match a real name case-insensitively. Reports "no match at all" as undefined rather than throwing -- the fallback signal ColumnResolver.tryLocalIndexOf uses to defer to an enclosing scope for a correlated subquery (see this module's own top-of-file comment, point 6) before finally giving up -- but a genuine ambiguity (an unquoted name matching more than one real name case-insensitively) is still a hard, immediate error, since it is decisive within whatever candidate set was actually searched regardless of what an outer scope might also contain.
+// SQL's own identifier rule, as both HSQLDB and Firebird implement it and as real LibreOffice-generated .odb queries rely on: a double-quoted name matches only exactly, while an unquoted one (already folded to upper case by the lexer) may also match a real name case-insensitively. Reports "no match at all" as undefined rather than throwing — the fallback signal ColumnResolver.tryLocalIndexOf uses to defer to an enclosing scope for a correlated subquery (see this module's own top-of-file comment, point 6) before finally giving up — but a genuine ambiguity (an unquoted name matching more than one real name case-insensitively) is still a hard, immediate error, since it is decisive within whatever candidate set was actually searched regardless of what an outer scope might also contain.
 function tryResolveName(
   candidates: readonly string[],
   ref: SqlNameRef,
@@ -142,7 +142,7 @@ function tryResolveName(
     );
     if (folded.length > 1) {
       throw new HsqldbSqlEvaluationError(
-        `${what} "${ref.name}" is ambiguous -- it matches ${folded.join(", ")} case-insensitively`,
+        `${what} "${ref.name}" is ambiguous—it matches ${folded.join(", ")} case-insensitively`,
         sql,
       );
     }
@@ -165,7 +165,7 @@ function resolveName(
     return found;
   }
   throw new HsqldbSqlEvaluationError(
-    `${what} "${ref.name}" not found -- available: ${candidates.length === 0 ? "(none)" : candidates.join(", ")}`,
+    `${what} "${ref.name}" not found—available: ${candidates.length === 0 ? "(none)" : candidates.join(", ")}`,
     sql,
   );
 }
@@ -193,13 +193,13 @@ function resolveTable(
   return table;
 }
 
-// A joined-row column: the name(s) it may legally be qualified by (normally the one table or alias that declared it, but two for a column USING/NATURAL merged from both sides of a join -- see mergeSharedColumns), and its own real column name.
+// A joined-row column: the name(s) it may legally be qualified by (normally the one table or alias that declared it, but two for a column USING/NATURAL merged from both sides of a join — see mergeSharedColumns), and its own real column name.
 interface ResolvedColumn {
   readonly qualifiers: readonly string[];
   readonly columnName: string;
 }
 
-// A shared column pairing a USING or NATURAL join matched on: `leftIndex` is an index into the LEFT side's own column list (which, after prior joins, may itself already hold merged columns), `rightIndex` is an index into the newly-joined table's own column list alone (0-based, never merged), and `columnName` is the real name the merged output column keeps -- see mergeSharedColumns' own comment for why it is always the left side's name.
+// A shared column pairing a USING or NATURAL join matched on: `leftIndex` is an index into the LEFT side's own column list (which, after prior joins, may itself already hold merged columns), `rightIndex` is an index into the newly-joined table's own column list alone (0-based, never merged), and `columnName` is the real name the merged output column keeps — see mergeSharedColumns' own comment for why it is always the left side's name.
 interface SharedColumnPair {
   readonly leftIndex: number;
   readonly rightIndex: number;
@@ -236,7 +236,7 @@ function valueAtIndex(
   return value;
 }
 
-// Resolves a column name against a narrowed set of candidate indices into `columns`, the same identifier rule tryResolveName applies (exact, case-sensitive match first; an unquoted reference also matching case-insensitively as a fallback) but keyed by INDEX rather than by name, and checking ambiguity by count of matching indices rather than distinct names. tryResolveName's own return-a-name contract is safe only when candidates cannot repeat (a single table's own column list, or the table-name list) -- a joined column list can legitimately hold the identical name at more than one index (two different tables both declaring an ID column, or a self-join naming the same table twice), so two tables sharing a column name must still be flagged ambiguous even though "the name" itself resolves to only one string. Reports "no match at all" as undefined for the identical reason tryResolveName does (see its own comment); a genuine ambiguity is still immediate.
+// Resolves a column name against a narrowed set of candidate indices into `columns`, the same identifier rule tryResolveName applies (exact, case-sensitive match first; an unquoted reference also matching case-insensitively as a fallback) but keyed by INDEX rather than by name, and checking ambiguity by count of matching indices rather than distinct names. tryResolveName's own return-a-name contract is safe only when candidates cannot repeat (a single table's own column list, or the table-name list) — a joined column list can legitimately hold the identical name at more than one index (two different tables both declaring an ID column, or a self-join naming the same table twice), so two tables sharing a column name must still be flagged ambiguous even though "the name" itself resolves to only one string. Reports "no match at all" as undefined for the identical reason tryResolveName does (see its own comment); a genuine ambiguity is still immediate.
 function tryResolveColumnIndex(
   columns: readonly ResolvedColumn[],
   candidateIndices: readonly number[],
@@ -253,7 +253,7 @@ function tryResolveColumnIndex(
   }
   if (exactCount > 1) {
     throw new HsqldbSqlEvaluationError(
-      `column "${ref.name}" is ambiguous -- it matches more than one joined column named "${ref.name}"`,
+      `column "${ref.name}" is ambiguous—it matches more than one joined column named "${ref.name}"`,
       sql,
     );
   }
@@ -273,7 +273,7 @@ function tryResolveColumnIndex(
     }
     if (foldedNames.length > 1) {
       throw new HsqldbSqlEvaluationError(
-        `column "${ref.name}" is ambiguous -- it matches ${foldedNames.join(", ")} case-insensitively`,
+        `column "${ref.name}" is ambiguous—it matches ${foldedNames.join(", ")} case-insensitively`,
         sql,
       );
     }
@@ -295,25 +295,25 @@ function resolveColumnIndex(
     return index;
   }
   throw new HsqldbSqlEvaluationError(
-    `column "${ref.name}" not found -- available: ${candidateIndices.length === 0 ? "(none)" : candidateIndices.map((index) => columns[index]?.columnName ?? "?").join(", ")}`,
+    `column "${ref.name}" not found—available: ${candidateIndices.length === 0 ? "(none)" : candidateIndices.map((index) => columns[index]?.columnName ?? "?").join(", ")}`,
     sql,
   );
 }
 
-// The enclosing query's own resolver and current row, carried by a subquery's ColumnResolver so a correlated IN/EXISTS subquery can resolve a column its own FROM/JOIN does not declare against the row it is currently being evaluated for -- see ColumnResolver.valueOf below, and this module's own top-of-file comment, point 6.
+// The enclosing query's own resolver and current row, carried by a subquery's ColumnResolver so a correlated IN/EXISTS subquery can resolve a column its own FROM/JOIN does not declare against the row it is currently being evaluated for — see ColumnResolver.valueOf below, and this module's own top-of-file comment, point 6.
 interface OuterScope {
   readonly resolver: ColumnResolver;
   readonly row: readonly ContentCellValue[];
 }
 
-// Every column reference in a statement resolves to the same index on every row, so resolution happens once per reference and is memoised by the AST node's own identity -- a large table would otherwise re-scan the joined column list once per row per reference.
+// Every column reference in a statement resolves to the same index on every row, so resolution happens once per reference and is memoised by the AST node's own identity — a large table would otherwise re-scan the joined column list once per row per reference.
 //
 // A resolver is built over the fully-joined column list at once, never one table alone: joinTables/applyJoinClause below produce that list (and its matching row shape) by folding every JOIN left to right, so the flat index space this class resolves into is exactly the position space a joined row's own values live in, whether the statement joins zero tables or several, and regardless of whether any join along the way merged a USING/NATURAL column pair into one.
 class ColumnResolver {
   private readonly cache = new Map<SqlColumnRef, number>();
   // The joined column list this resolver was built over, in exactly the order joinTables/applyJoinClause laid the corresponding row values out in.
   private readonly columns: readonly ResolvedColumn[];
-  // Every qualifying name any column in this list may be referenced by, deduplicated -- a plain table's own name, an alias, or (for a USING/NATURAL merged column) both sides' names at once.
+  // Every qualifying name any column in this list may be referenced by, deduplicated — a plain table's own name, an alias, or (for a USING/NATURAL merged column) both sides' names at once.
   private readonly qualifierNames: readonly string[];
 
   constructor(
@@ -367,7 +367,7 @@ class ColumnResolver {
     return index;
   }
 
-  // Like indexOf, but purely local: reports "not found here" as undefined instead of throwing, so valueOf below can fall back to an enclosing (correlated-subquery) scope before finally giving up. A genuine local ambiguity still throws immediately -- see tryResolveName/tryResolveColumnIndex's own comments.
+  // Like indexOf, but purely local: reports "not found here" as undefined instead of throwing, so valueOf below can fall back to an enclosing (correlated-subquery) scope before finally giving up. A genuine local ambiguity still throws immediately — see tryResolveName/tryResolveColumnIndex's own comments.
   private tryLocalIndexOf(ref: SqlColumnRef): number | undefined {
     const cached = this.cache.get(ref);
     if (cached !== undefined) {
@@ -409,7 +409,7 @@ class ColumnResolver {
     return valueAtIndex(row, index, this.sql);
   }
 
-  // Resolves and reads a column reference's value on `row`, falling back to the enclosing scope's own resolver and row -- recursively, so a subquery nested several levels deep walks outward one scope at a time until something resolves it -- when this resolver's own FROM/JOIN declares no matching column at all. This is the one point correlation actually happens: every WHERE/ON predicate reads its operands through operandValue, which reads them through this method, so a correlated subquery's WHERE or ON clause gets outer-row resolution with no further plumbing. When nothing resolves anywhere, this falls through to indexOf purely to raise its own identically-worded "not found"/ambiguity error.
+  // Resolves and reads a column reference's value on `row`, falling back to the enclosing scope's own resolver and row — recursively, so a subquery nested several levels deep walks outward one scope at a time until something resolves it — when this resolver's own FROM/JOIN declares no matching column at all. This is the one point correlation actually happens: every WHERE/ON predicate reads its operands through operandValue, which reads them through this method, so a correlated subquery's WHERE or ON clause gets outer-row resolution with no further plumbing. When nothing resolves anywhere, this falls through to indexOf purely to raise its own identically-worded "not found"/ambiguity error.
   valueOf(
     ref: SqlColumnRef,
     row: readonly ContentCellValue[],
@@ -472,7 +472,7 @@ function evaluateIn(
       return "true";
     }
   }
-  // SQL's own rule, and the one most easily got wrong: a non-match against a list containing NULL is UNKNOWN, not FALSE -- which is why "x NOT IN (1, NULL)" excludes every row rather than keeping the ones where x is not 1.
+  // SQL's own rule, and the one most easily got wrong: a non-match against a list containing NULL is UNKNOWN, not FALSE — which is why "x NOT IN (1, NULL)" excludes every row rather than keeping the ones where x is not 1.
   return sawNull ? "unknown" : "false";
 }
 
@@ -563,7 +563,7 @@ function evaluatePredicate(
   }
 }
 
-// IN (SELECT ...): the inner query must produce exactly one column (SQL's own rule -- a row-valued or multi-column IN needs a row constructor on the left, which this grammar has no expression syntax for at all), and this follows evaluateIn's own three-valued rule identically: a NULL left operand is UNKNOWN regardless of what the subquery produces, and a non-match against a result set containing a NULL is UNKNOWN rather than FALSE. `outerResolver`/`outerRow` give the subquery a correlation fallback (this module's own top-of-file comment, point 6) -- used whether or not the subquery actually turns out to reference an outer column, since re-evaluating an uncorrelated subquery with a harmless, unused fallback in place produces the identical result.
+// IN (SELECT ...): the inner query must produce exactly one column (SQL's own rule — a row-valued or multi-column IN needs a row constructor on the left, which this grammar has no expression syntax for at all), and this follows evaluateIn's own three-valued rule identically: a NULL left operand is UNKNOWN regardless of what the subquery produces, and a non-match against a result set containing a NULL is UNKNOWN rather than FALSE. `outerResolver`/`outerRow` give the subquery a correlation fallback (this module's own top-of-file comment, point 6) — used whether or not the subquery actually turns out to reference an outer column, since re-evaluating an uncorrelated subquery with a harmless, unused fallback in place produces the identical result.
 function evaluateInSubquery(
   value: ContentCellValue,
   query: SqlSelectStatement,
@@ -605,7 +605,7 @@ function evaluateInSubquery(
   return sawNull ? "unknown" : "false";
 }
 
-// EXISTS (SELECT ...): true precisely when the inner query produces at least one row, regardless of that row's own column values -- unlike IN, EXISTS never inspects what the subquery selects, so an arbitrary select list (SELECT 1, SELECT *, SELECT COUNT(*)) is equally valid here. Never UNKNOWN: existence is a plain fact about the row set, not a comparison a NULL operand can leave undecided -- NOT EXISTS negates it through the ordinary "not" predicate kind (parser.ts's own grammar note on EXISTS), which is exactly right since notTruth never turns a "true"/"false" input into "unknown".
+// EXISTS (SELECT ...): true precisely when the inner query produces at least one row, regardless of that row's own column values — unlike IN, EXISTS never inspects what the subquery selects, so an arbitrary select list (SELECT 1, SELECT *, SELECT COUNT(*)) is equally valid here. Never UNKNOWN: existence is a plain fact about the row set, not a comparison a NULL operand can leave undecided — NOT EXISTS negates it through the ordinary "not" predicate kind (parser.ts's own grammar note on EXISTS), which is exactly right since notTruth never turns a "true"/"false" input into "unknown".
 function evaluateExists(
   query: SqlSelectStatement,
   tables: readonly HsqldbTable[],
@@ -655,7 +655,7 @@ function sortRows(
   directions: readonly SqlSortDirection[],
   sql: string,
 ): readonly (readonly ContentCellValue[])[] {
-  // Array.prototype.sort is stable (ES2019 onward), which is exactly what carries tied rows through in their original order -- nothing else here preserves it.
+  // Array.prototype.sort is stable (ES2019 onward), which is exactly what carries tied rows through in their original order — nothing else here preserves it.
   return [...rows]
     .sort((left, right) => {
       for (const [index, direction] of directions.entries()) {
@@ -822,7 +822,7 @@ function evaluateGrouped(
   for (const item of plan) {
     if (item.kind === "column" && !groupIndices.includes(item.index)) {
       throw new HsqldbSqlEvaluationError(
-        `column "${item.text}" is neither grouped nor aggregated -- add it to GROUP BY or wrap it in an aggregate`,
+        `column "${item.text}" is neither grouped nor aggregated—add it to GROUP BY or wrap it in an aggregate`,
         statement.sql,
       );
     }
@@ -838,7 +838,7 @@ function evaluateGrouped(
     const position = groupIndices.indexOf(resolver.indexOf(term.column));
     if (position < 0) {
       throw new HsqldbSqlEvaluationError(
-        `ORDER BY column "${term.column.text}" is not a GROUP BY column -- a grouped result has no single value for it`,
+        `ORDER BY column "${term.column.text}" is not a GROUP BY column—a grouped result has no single value for it`,
         statement.sql,
       );
     }
@@ -850,7 +850,7 @@ function evaluateGrouped(
       if (item.kind === "aggregate") {
         const argumentIndex = item.argumentIndex;
         if (argumentIndex === undefined) {
-          // COUNT(*) counts rows, not values -- the only aggregate that never looks at a column at all.
+          // COUNT(*) counts rows, not values — the only aggregate that never looks at a column at all.
           return { kind: "number", value: group.rows.length };
         }
         return aggregateOverValues(
@@ -905,12 +905,12 @@ function tableColumns(
   }));
 }
 
-// A row of NULLs the width of one side of a join, used to pad the side an unmatched LEFT/RIGHT/FULL row has no partner on. Every entry is the identical CELL_NULL constant -- safe to share by reference, since a ContentCellValue is never mutated in place anywhere in this module.
+// A row of NULLs the width of one side of a join, used to pad the side an unmatched LEFT/RIGHT/FULL row has no partner on. Every entry is the identical CELL_NULL constant — safe to share by reference, since a ContentCellValue is never mutated in place anywhere in this module.
 function nullRow(count: number): readonly ContentCellValue[] {
   return new Array<ContentCellValue>(count).fill(CELL_NULL);
 }
 
-// Every column NATURAL JOIN's left and right sides share, matched by real column name alone (never case-folded or quoted, unlike a user-typed identifier -- these are structural properties of the tables themselves, not something the query spelled out). Iterates the left side in column order, which is what fixes the shared columns' own left-to-right order in the merged result (see mergeSharedColumns). A name appearing more than once on either side -- two already-joined tables both declaring it, or (defensively) a table declaring it twice -- cannot be matched to a single unambiguous partner, so it is refused rather than guessed at, the same "never guess" policy this module's own top-of-file comment states for every other ambiguous reference.
+// Every column NATURAL JOIN's left and right sides share, matched by real column name alone (never case-folded or quoted, unlike a user-typed identifier — these are structural properties of the tables themselves, not something the query spelled out). Iterates the left side in column order, which is what fixes the shared columns' own left-to-right order in the merged result (see mergeSharedColumns). A name appearing more than once on either side — two already-joined tables both declaring it, or (defensively) a table declaring it twice — cannot be matched to a single unambiguous partner, so it is refused rather than guessed at, the same "never guess" policy this module's own top-of-file comment states for every other ambiguous reference.
 function computeNaturalSharedPairs(
   leftColumns: readonly ResolvedColumn[],
   rightColumns: readonly ResolvedColumn[],
@@ -938,7 +938,7 @@ function computeNaturalSharedPairs(
       seenNames.has(leftColumn.columnName)
     ) {
       throw new HsqldbSqlEvaluationError(
-        `NATURAL JOIN cannot determine a unique match for column "${leftColumn.columnName}" -- more than one column shares that name on one side of the join`,
+        `NATURAL JOIN cannot determine a unique match for column "${leftColumn.columnName}"—more than one column shares that name on one side of the join`,
         sql,
       );
     }
@@ -948,7 +948,7 @@ function computeNaturalSharedPairs(
   return pairs;
 }
 
-// Whether a row pair matches a USING/NATURAL join's implicit condition: every shared column pair equal, under the identical three-valued NULL logic WHERE and ON already use (a NULL on either side makes that pair's comparison UNKNOWN, which -- like an ON clause -- excludes the row pair rather than matching it).
+// Whether a row pair matches a USING/NATURAL join's implicit condition: every shared column pair equal, under the identical three-valued NULL logic WHERE and ON already use (a NULL on either side makes that pair's comparison UNKNOWN, which — like an ON clause — excludes the row pair rather than matching it).
 function evaluateSharedColumnMatch(
   combined: readonly ContentCellValue[],
   pairs: readonly SharedColumnPair[],
@@ -970,7 +970,7 @@ function evaluateSharedColumnMatch(
   });
 }
 
-// Collapses a USING/NATURAL join's shared column pairs into one output column each, exactly as PostgreSQL documents JOIN USING doing (see src/odb/sql/parser.ts's own top-of-file comment for the citation): the merged columns come first, in the order `sharedPairs` gives them, followed by the left side's own remaining columns, then the right side's remaining columns. Each merged column's value is COALESCE(left, right) -- the left side's value when it is not NULL, otherwise the right's, which only differs from either side alone when an outer join has padded one side with NULL -- and it may be qualified by either side's own qualifying name, since the merge is exactly what makes the two references the same column. The merged column keeps the LEFT side's own real column name; the two sides are only reachable this way because USING/NATURAL requires them to share a name in the first place, so this is a naming choice, not a semantic one.
+// Collapses a USING/NATURAL join's shared column pairs into one output column each, exactly as PostgreSQL documents JOIN USING doing (see src/odb/sql/parser.ts's own top-of-file comment for the citation): the merged columns come first, in the order `sharedPairs` gives them, followed by the left side's own remaining columns, then the right side's remaining columns. Each merged column's value is COALESCE(left, right) — the left side's value when it is not NULL, otherwise the right's, which only differs from either side alone when an outer join has padded one side with NULL — and it may be qualified by either side's own qualifying name, since the merge is exactly what makes the two references the same column. The merged column keeps the LEFT side's own real column name; the two sides are only reachable this way because USING/NATURAL requires them to share a name in the first place, so this is a naming choice, not a semantic one.
 function mergeSharedColumns(
   rawColumns: readonly ResolvedColumn[],
   rows: readonly (readonly ContentCellValue[])[],
@@ -1027,7 +1027,7 @@ function mergeSharedColumns(
   return { columns, rows: mergedRows };
 }
 
-// Folds one JOIN clause into the running joined row set, left to right (joinTables calls this once per clause): a plain nested loop over (left row, right row) pairs, tested against the clause's own condition -- an ON predicate (reusing evaluatePredicate's own three-valued logic directly), a USING/NATURAL equi-join over shared columns (evaluateSharedColumnMatch), or, for CROSS, no condition at all. LEFT/FULL then re-adds every left row that matched nothing, padded with NULL for the right side's columns; RIGHT/FULL mirrors that for unmatched right rows. A USING/NATURAL join's raw (unmerged) result is finally collapsed by mergeSharedColumns; an ON or CROSS join's is not, since only USING/NATURAL ever declare two columns "the same".
+// Folds one JOIN clause into the running joined row set, left to right (joinTables calls this once per clause): a plain nested loop over (left row, right row) pairs, tested against the clause's own condition — an ON predicate (reusing evaluatePredicate's own three-valued logic directly), a USING/NATURAL equi-join over shared columns (evaluateSharedColumnMatch), or, for CROSS, no condition at all. LEFT/FULL then re-adds every left row that matched nothing, padded with NULL for the right side's columns; RIGHT/FULL mirrors that for unmatched right rows. A USING/NATURAL join's raw (unmerged) result is finally collapsed by mergeSharedColumns; an ON or CROSS join's is not, since only USING/NATURAL ever declare two columns "the same".
 function applyJoinClause(
   left: JoinResult,
   join: SqlJoinClause,
@@ -1139,7 +1139,7 @@ function applyJoinClause(
   return { columns: rawColumns, rows: paired };
 }
 
-// Resolves the statement's own base FROM source to a JoinResult: a real table resolves the ordinary way (resolveTable + tableColumns, exactly as joinTables always did), and a derived table is materialised by recursively evaluating its own inner query -- always standalone, with no outer scope of its own, since a plain (non-LATERAL) derived table can never reference the enclosing query's own columns (this module's own top-of-file comment, point 6). The materialised result's own columns carry the derived table's alias as their one qualifying name, exactly as tableColumns gives a real table's own columns their table (or alias) name.
+// Resolves the statement's own base FROM source to a JoinResult: a real table resolves the ordinary way (resolveTable + tableColumns, exactly as joinTables always did), and a derived table is materialised by recursively evaluating its own inner query — always standalone, with no outer scope of its own, since a plain (non-LATERAL) derived table can never reference the enclosing query's own columns (this module's own top-of-file comment, point 6). The materialised result's own columns carry the derived table's alias as their one qualifying name, exactly as tableColumns gives a real table's own columns their table (or alias) name.
 function resolveFromSource(
   source: SqlFromSource,
   tables: readonly HsqldbTable[],
@@ -1161,7 +1161,7 @@ function resolveFromSource(
   };
 }
 
-// Folds every JOIN clause into the base table's own row set, left to right in the order written, via applyJoinClause -- each clause sees every table joined so far, not only the two tables its own clause names, which is exactly what src/odb/sql/parser.ts's own grammar note on self-joins relies on when a table repeats under two different aliases. `outer` (see this module's own top-of-file comment, point 6) is threaded through to every ON clause's own resolver, so a JOIN inside a correlated subquery can reference the enclosing row exactly as its WHERE clause can.
+// Folds every JOIN clause into the base table's own row set, left to right in the order written, via applyJoinClause — each clause sees every table joined so far, not only the two tables its own clause names, which is exactly what src/odb/sql/parser.ts's own grammar note on self-joins relies on when a table repeats under two different aliases. `outer` (see this module's own top-of-file comment, point 6) is threaded through to every ON clause's own resolver, so a JOIN inside a correlated subquery can reference the enclosing row exactly as its WHERE clause can.
 function joinTables(
   from: SqlFromClause,
   tables: readonly HsqldbTable[],
@@ -1182,7 +1182,7 @@ export function evaluateSelect(
   return evaluateSelectInScope(statement, tables, undefined);
 }
 
-// The shared implementation behind both the public evaluateSelect (a top-level statement, no enclosing scope) and every subquery position this engine supports: a derived table in FROM (always evaluated with outer undefined -- see resolveFromSource above) and the operand of IN/EXISTS (evaluated once per outer row, with outer giving that row's own resolver and values as a correlation fallback -- see evaluateInSubquery/evaluateExists above and ColumnResolver.valueOf's own comment). A subquery is exactly as capable as a top-level statement -- JOINs of any kind, WHERE, GROUP BY, aggregates, ORDER BY, and further nested subqueries all work identically, since this is the identical pipeline either way.
+// The shared implementation behind both the public evaluateSelect (a top-level statement, no enclosing scope) and every subquery position this engine supports: a derived table in FROM (always evaluated with outer undefined — see resolveFromSource above) and the operand of IN/EXISTS (evaluated once per outer row, with outer giving that row's own resolver and values as a correlation fallback — see evaluateInSubquery/evaluateExists above and ColumnResolver.valueOf's own comment). A subquery is exactly as capable as a top-level statement — JOINs of any kind, WHERE, GROUP BY, aggregates, ORDER BY, and further nested subqueries all work identically, since this is the identical pipeline either way.
 function evaluateSelectInScope(
   statement: SqlSelectStatement,
   tables: readonly HsqldbTable[],
@@ -1214,7 +1214,7 @@ function evaluateSelectInScope(
       statement.items.some((item) => item.kind === "star")
     ) {
       throw new HsqldbSqlEvaluationError(
-        "SELECT * is not valid with GROUP BY -- name the grouped columns and the aggregates explicitly",
+        "SELECT * is not valid with GROUP BY—name the grouped columns and the aggregates explicitly",
         statement.sql,
       );
     }

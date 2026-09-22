@@ -29,7 +29,7 @@ export interface SheetPreviewProps {
   error?: unknown;
 }
 
-// Renders a spreadsheet-sourced ContentDocument as a real data grid instead of round-tripping it through the PDF pipeline (xlsxToPdf/odsToPdf) the way PdfPreview does -- that applies the *print* layout (page breaks, margins, repeat rows), useful for "what prints" but not for browsing the data itself (see ExaDev/documents#2). Unlike markdown, ContentSheet has no private-convention problem to normalize -- every field consumed here is already part of document-schema.js's own public schema.
+// Renders a spreadsheet-sourced ContentDocument as a real data grid instead of round-tripping it through the PDF pipeline (xlsxToPdf/odsToPdf) the way PdfPreview does — that applies the *print* layout (page breaks, margins, repeat rows), useful for "what prints" but not for browsing the data itself (see ExaDev/documents#2). Unlike markdown, ContentSheet has no private-convention problem to normalize — every field consumed here is already part of document-schema.js's own public schema.
 export function SheetPreview({
   label,
   format,
@@ -39,7 +39,7 @@ export function SheetPreview({
 }: SheetPreviewProps) {
   const sheets = content?.kind === "spreadsheet" ? content.sheets : undefined;
   const [activeSheetIndex, setActiveSheetIndex] = useState(0);
-  // Clamped rather than reset via an effect -- if `content` changes to a sheet count smaller than the previously-selected index, this falls back to the last real sheet instead of an effect racing the render. No separate empty-sheets branch: Math.min against a length of 0 already yields -1, an out-of-range index that reads back as undefined the same as the 0 this would otherwise special-case to, so a dedicated check for "no sheets at all" would only ever produce a value with the identical downstream effect.
+  // Clamped rather than reset via an effect — if `content` changes to a sheet count smaller than the previously-selected index, this falls back to the last real sheet instead of an effect racing the render. No separate empty-sheets branch: Math.min against a length of 0 already yields -1, an out-of-range index that reads back as undefined the same as the 0 this would otherwise special-case to, so a dedicated check for "no sheets at all" would only ever produce a value with the identical downstream effect.
   const clampedIndex =
     sheets === undefined ? 0 : Math.min(activeSheetIndex, sheets.length - 1);
   const activeSheet = sheets?.[clampedIndex];
@@ -168,7 +168,7 @@ function cellClassName(cell: ContentSheetCell | undefined): string {
   });
 }
 
-// A cell's own background is a discriminated 'solid'/'pattern' ContentCellFill (documents.js re-exporting document-schema.js's own shape). This preview renders one flat swatch either way, so a 'pattern' fill picks its own most-representative single colour -- the foreground, falling back to the background, mirroring document-schema.js's own resolveCellFillColor rather than importing it. document-schema.js is an allowed direct dependency here (it isn't one of the packages this UI layer is restricted from importing -- see this package's own README), but importing resolveCellFillColor from it measurably grows the bundle regardless of which module the import names: rebuilding with the import in place (via the package root, and again via its own `document-schema.js/content` subpath) grew the convert-route chunk from 22.69 kB to 39.11 kB (gzip 6.78 kB to 11.34 kB) and the shared vendor-data chunk from 137.21 kB to 175.40 kB (gzip 43.54 kB to 52.88 kB) either way -- document-schema.js's Zod schema graph doesn't tree-shake, so even one function pulls the rest of the graph in behind it. Three lines of duplicated logic is cheaper than that.
+// A cell's own background is a discriminated 'solid'/'pattern' ContentCellFill (documents.js re-exporting document-schema.js's own shape). This preview renders one flat swatch either way, so a 'pattern' fill picks its own most-representative single colour — the foreground, falling back to the background, mirroring document-schema.js's own resolveCellFillColor rather than importing it. document-schema.js is an allowed direct dependency here (it isn't one of the packages this UI layer is restricted from importing — see this package's own README), but importing resolveCellFillColor from it measurably grows the bundle regardless of which module the import names: rebuilding with the import in place (via the package root, and again via its own `document-schema.js/content` subpath) grew the convert-route chunk from 22.69 kB to 39.11 kB (gzip 6.78 kB to 11.34 kB) and the shared vendor-data chunk from 137.21 kB to 175.40 kB (gzip 43.54 kB to 52.88 kB) either way — document-schema.js's Zod schema graph doesn't tree-shake, so even one function pulls the rest of the graph in behind it. Three lines of duplicated logic is cheaper than that.
 function previewColor(
   fill: ContentCellFill | undefined,
 ): { r: number; g: number; b: number } | undefined {

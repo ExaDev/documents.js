@@ -8,7 +8,7 @@ describe("decodePdfString", () => {
   });
 
   it("decodes a plain-ASCII PDFDocEncoding string byte-per-character", () => {
-    const bytes = Uint8Array.from([0x48, 0x69]); // 'H', 'i' -- no BOM
+    const bytes = Uint8Array.from([0x48, 0x69]); // 'H', 'i' — no BOM
     expect(decodePdfString(bytes)).toBe("Hi");
   });
 
@@ -36,8 +36,8 @@ describe("parsePdfDate", () => {
     expect(parsePdfDate("D:20240115093045Z")).toBe("2024-01-15T09:30:45Z");
   });
 
-  it("defaults every field after the year -- month, day, hour, minute, second, and the offset -- when the source date carries only the year", () => {
-    // ISO 32000-1 7.9.4 makes every field after the year optional; a producer that writes only "D:2024" still names a valid date, and the spec's own reading is "the first moment of that year, UTC" -- exactly what every default below encodes.
+  it("defaults every field after the year — month, day, hour, minute, second, and the offset — when the source date carries only the year", () => {
+    // ISO 32000-1 7.9.4 makes every field after the year optional; a producer that writes only "D:2024" still names a valid date, and the spec's own reading is "the first moment of that year, UTC" — exactly what every default below encodes.
     expect(parsePdfDate("D:2024")).toBe("2024-01-01T00:00:00Z");
   });
 

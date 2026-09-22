@@ -33,7 +33,7 @@ describe("extractOoxmlEmbeddedFonts (docx)", () => {
     ]);
   });
 
-  // The load-bearing claim: the extracted bytes are the ORIGINAL font, not the obfuscated part. The fixture obfuscated with literal key bytes quoted from ECMA-376 Part 4 2.8.1 (regular face) and never called deriveFontKey, so a wrong key derivation cannot produce these bytes -- it would fail the sfnt check inside deobfuscateEmbeddedFont before reaching here.
+  // The load-bearing claim: the extracted bytes are the ORIGINAL font, not the obfuscated part. The fixture obfuscated with literal key bytes quoted from ECMA-376 Part 4 2.8.1 (regular face) and never called deriveFontKey, so a wrong key derivation cannot produce these bytes — it would fail the sfnt check inside deobfuscateEmbeddedFont before reaching here.
   it("deobfuscates each face back to its exact original font bytes", () => {
     const fonts = extractOoxmlEmbeddedFonts(embeddedFontDocxPackage(), "docx");
     expect(fonts[0]?.bytes).toEqual(caladeaRegularBytes());

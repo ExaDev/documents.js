@@ -7,9 +7,9 @@ import type { XmlElement } from "../../model/node";
 import { buildXml } from "../../xml/build";
 import { attr, childrenWithTag, textContent } from "../util";
 
-// Reads a SmartArt diagram's data model part (a dgm:dataModel root) into paragraphs of node text in diagram order. The data model is the semantic half of a SmartArt graphic (the dgm:relIds' r:dm target): a graph of points whose text lives in dgm:t text bodies, plus the parOf connections that make it a tree rooted at the type="doc" point. The layout/quickStyle/colour parts (r:lo/r:qs/r:cs) decide only how that graph is drawn -- readDiagramText does not read them, but readDiagramResidue below quarantines them whole as the graphic frame's own residue rather than discarding them.
+// Reads a SmartArt diagram's data model part (a dgm:dataModel root) into paragraphs of node text in diagram order. The data model is the semantic half of a SmartArt graphic (the dgm:relIds' r:dm target): a graph of points whose text lives in dgm:t text bodies, plus the parOf connections that make it a tree rooted at the type="doc" point. The layout/quickStyle/colour parts (r:lo/r:qs/r:cs) decide only how that graph is drawn — readDiagramText does not read them, but readDiagramResidue below quarantines them whole as the graphic frame's own residue rather than discarding them.
 
-// A node's a:p paragraphs become ContentParagraphs with one plain-text run per a:r/a:fld (an a:br becomes a literal-newline run) -- the same structure readParagraph produces for slide text, minus the placeholder inheritance cascade a diagram's private text body never participates in.
+// A node's a:p paragraphs become ContentParagraphs with one plain-text run per a:r/a:fld (an a:br becomes a literal-newline run) — the same structure readParagraph produces for slide text, minus the placeholder inheritance cascade a diagram's private text body never participates in.
 function diagramTextParagraphs(
   txBody: XmlElement | undefined,
 ): ContentParagraph[] {
@@ -122,9 +122,9 @@ export function readDiagramText(dataModelRoot: XmlElement): ContentParagraph[] {
   return blocks;
 }
 
-// Quarantines the three parts readDiagramText itself does not read -- layout (r:lo), quickStyle (r:qs), colours (r:cs) -- as opaque residue on the diagram's own graphic-frame shape, mirroring readChartResidue's identical "whole part, own reader's contract" treatment for a chart (ExaDev/documents.js#719's residue-channel convention). Only the parts that actually resolved are concatenated, in relIds' own r:lo/r:qs/r:cs order; a diagram missing one or more (a producer that emitted only a data model) quarantines whatever it does have rather than fabricating an element for what's absent. Undefined when none resolved at all, so a diagram with no drawing-specific parts leaves the shape's own source field absent rather than an empty residue value.
+// Quarantines the three parts readDiagramText itself does not read — layout (r:lo), quickStyle (r:qs), colours (r:cs) — as opaque residue on the diagram's own graphic-frame shape, mirroring readChartResidue's identical "whole part, own reader's contract" treatment for a chart (ExaDev/documents.js#719's residue-channel convention). Only the parts that actually resolved are concatenated, in relIds' own r:lo/r:qs/r:cs order; a diagram missing one or more (a producer that emitted only a data model) quarantines whatever it does have rather than fabricating an element for what's absent. Undefined when none resolved at all, so a diagram with no drawing-specific parts leaves the shape's own source field absent rather than an empty residue value.
 //
-// Cached by the exact (layoutRoot, quickStyleRoot, colorsRoot) triple's own object identity, nested through three WeakMaps (a shared sentinel stands in for "absent" at each level, since WeakMap keys must be objects) -- mirroring readChartResidue's cache for the identical reason: multiple graphic frames can share one diagram's layout/quickStyle/colour relationship targets, and re-serialising the same parts once per frame is an O(N*M) cost a hostile document can exploit.
+// Cached by the exact (layoutRoot, quickStyleRoot, colorsRoot) triple's own object identity, nested through three WeakMaps (a shared sentinel stands in for "absent" at each level, since WeakMap keys must be objects) — mirroring readChartResidue's cache for the identical reason: multiple graphic frames can share one diagram's layout/quickStyle/colour relationship targets, and re-serialising the same parts once per frame is an O(N*M) cost a hostile document can exploit.
 const ABSENT_ROOT: XmlElement = {
   type: "element",
   tag: "",

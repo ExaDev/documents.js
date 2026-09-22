@@ -14,11 +14,11 @@ import {
   type PropertyValue,
 } from "./wire";
 
-// The write half of the generic [MS-OLEPS] Property Set Stream reader in ./read.ts: given the same {formatId, properties} vocabulary that reads, it emits a conformant single-property-set stream -- header, PropertySet packet (Size, NumProperties, the PropertyIdentifierAndOffset dictionary, and the typed values themselves). Deliberately the mirror of readPropertySetStream: writePropertySetStream(readPropertySetStream(bytes)) is a well-typed round trip rather than a translation between two vocabularies, exactly as cfb/write.ts is to cfb/read.ts.
+// The write half of the generic [MS-OLEPS] Property Set Stream reader in ./read.ts: given the same {formatId, properties} vocabulary that reads, it emits a conformant single-property-set stream — header, PropertySet packet (Size, NumProperties, the PropertyIdentifierAndOffset dictionary, and the typed values themselves). Deliberately the mirror of readPropertySetStream: writePropertySetStream(readPropertySetStream(bytes)) is a well-typed round trip rather than a translation between two vocabularies, exactly as cfb/write.ts is to cfb/read.ts.
 //
-// Purely mechanical: this writer emits exactly the properties it is given, in PID order, and injects nothing of its own (no default CodePage, no synthesized property) -- the same "output depends only on what was asked for, never a guess about what a well-formed stream should also contain" discipline cfb/write.ts holds for stream paths. Constructing a properties map that is actually a well-formed "\x05SummaryInformation" stream (title/author/dates mapped onto the right PIDs, a CodePage property included) is ./summary-information.ts's job, one level up.
+// Purely mechanical: this writer emits exactly the properties it is given, in PID order, and injects nothing of its own (no default CodePage, no synthesized property) — the same "output depends only on what was asked for, never a guess about what a well-formed stream should also contain" discipline cfb/write.ts holds for stream paths. Constructing a properties map that is actually a well-formed "\x05SummaryInformation" stream (title/author/dates mapped onto the right PIDs, a CodePage property included) is ./summary-information.ts's job, one level up.
 //
-// Narrower than the reader in one respect, deliberately: VT_LPSTR (CodePageString) is not written, only VT_LPWSTR (UnicodeString). A CodePageString's ANSI encoding depends on the property set's own CodePage property, and writing an arbitrary codepage's byte encoding would need a full codepage table this package does not have (the reader only ever decodes windows-1252 or CP_WINUNICODE for the same reason -- see ./read.ts). Writing Unicode strings unconditionally sidesteps the whole question: VT_LPWSTR is always UTF-16LE regardless of CodePage, so every string this package's callers actually need to write (arbitrary document titles/authors, not constrained to Latin-1) round-trips losslessly without a codepage table.
+// Narrower than the reader in one respect, deliberately: VT_LPSTR (CodePageString) is not written, only VT_LPWSTR (UnicodeString). A CodePageString's ANSI encoding depends on the property set's own CodePage property, and writing an arbitrary codepage's byte encoding would need a full codepage table this package does not have (the reader only ever decodes windows-1252 or CP_WINUNICODE for the same reason — see ./read.ts). Writing Unicode strings unconditionally sidesteps the whole question: VT_LPWSTR is always UTF-16LE regardless of CodePage, so every string this package's callers actually need to write (arbitrary document titles/authors, not constrained to Latin-1) round-trips losslessly without a codepage table.
 
 export class PropertySetWriteError extends Error {
   constructor(message: string) {
@@ -27,7 +27,7 @@ export class PropertySetWriteError extends Error {
   }
 }
 
-// [MS-OLEPS] 2.20 UnicodeString's own Characters field: a null-terminated array of 16-bit code units. `split("")` walks a JS string by UTF-16 code unit (unlike spreading a string, which walks by Unicode code point and would split a surrogate pair across two array entries) -- a surrogate pair round-trips as its own two code units with no special-casing needed, since nothing here interprets code-point boundaries. No explicit terminator write: characterBytes is allocated one 16-bit unit longer than `value` itself and starts zero-filled, so the reserved terminator slot already holds the 0 [MS-OLEPS] 2.20 requires without writing it a second time.
+// [MS-OLEPS] 2.20 UnicodeString's own Characters field: a null-terminated array of 16-bit code units. `split("")` walks a JS string by UTF-16 code unit (unlike spreading a string, which walks by Unicode code point and would split a surrogate pair across two array entries) — a surrogate pair round-trips as its own two code units with no special-casing needed, since nothing here interprets code-point boundaries. No explicit terminator write: characterBytes is allocated one 16-bit unit longer than `value` itself and starts zero-filled, so the reserved terminator slot already holds the 0 [MS-OLEPS] 2.20 requires without writing it a second time.
 function encodeUnicodeStringValue(value: string): Uint8Array<ArrayBuffer> {
   const characterBytes = new Uint8Array((value.length + 1) * 2);
   const charView = new DataView(characterBytes.buffer);
@@ -85,7 +85,7 @@ function encodeTypedPropertyValue(
     }
     case "VT_LPSTR":
       throw new PropertySetWriteError(
-        "writePropertySetStream cannot write a VT_LPSTR property: this writer emits Unicode (VT_LPWSTR) strings only, since encoding to an arbitrary ANSI codepage is out of scope -- see the package README's OLEPS scope note",
+        "writePropertySetStream cannot write a VT_LPSTR property: this writer emits Unicode (VT_LPWSTR) strings only, since encoding to an arbitrary ANSI codepage is out of scope — see the package README's OLEPS scope note",
       );
   }
 }

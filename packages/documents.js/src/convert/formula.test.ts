@@ -62,7 +62,7 @@ import {
   odtToPdf,
 } from "./convert";
 
-// End-to-end coverage for the MathML/formula pipeline: odfToPdf (a standalone .odf formula document) for each of the task's own named curated formulas (a simple fraction, a square root, a superscript/subscript combination, a small matrix via mtable), plus the embedded-formula-inside-odt/odp path. Checks the output PDF is well-formed (readable back through this package's own readPdf; also cross-checked with qpdf --check when that binary is available locally -- see qpdfCheck below) and that real layout invariants hold, not just "it doesn't crash".
+// End-to-end coverage for the MathML/formula pipeline: odfToPdf (a standalone .odf formula document) for each of the task's own named curated formulas (a simple fraction, a square root, a superscript/subscript combination, a small matrix via mtable), plus the embedded-formula-inside-odt/odp path. Checks the output PDF is well-formed (readable back through this package's own readPdf; also cross-checked with qpdf --check when that binary is available locally — see qpdfCheck below) and that real layout invariants hold, not just "it doesn't crash".
 
 function findQpdf(): boolean {
   try {
@@ -74,7 +74,7 @@ function findQpdf(): boolean {
 }
 const QPDF_AVAILABLE = findQpdf();
 
-// Cross-checks a PDF's own well-formedness with a real, independent, mature PDF tool -- qpdf --check parses the object graph, xref table, and every stream's own /Length, catching a structural mistake this package's own reader might tolerate. Skipped (not failed) when qpdf isn't installed locally -- matching this repo's own test:corpus precedent for an optional, environment-dependent check that never gates pnpm test/CI.
+// Cross-checks a PDF's own well-formedness with a real, independent, mature PDF tool — qpdf --check parses the object graph, xref table, and every stream's own /Length, catching a structural mistake this package's own reader might tolerate. Skipped (not failed) when qpdf isn't installed locally — matching this repo's own test:corpus precedent for an optional, environment-dependent check that never gates pnpm test/CI.
 function qpdfCheck(bytes: Uint8Array<ArrayBuffer>): void {
   if (!QPDF_AVAILABLE) {
     return;
@@ -129,7 +129,7 @@ describe("odfToPdf: a small matrix (mtable)", () => {
   });
 
   it("carries the StarMath annotation through, honoured by readOdfFormulaContent, even though it never affects the rendered output", () => {
-    // starMath itself is not asserted on the PDF (there is no StarMath-rendering path -- the real MathML is what's rendered), but this confirms the option is accepted and odfToPdf still succeeds with it present.
+    // starMath itself is not asserted on the PDF (there is no StarMath-rendering path — the real MathML is what's rendered), but this confirms the option is accepted and odfToPdf still succeeds with it present.
     const bytes = odfToPdf(
       odfFormulaBytes(FRACTION_FORMULA, { starMath: "{a} over {b}" }),
     );
@@ -137,7 +137,7 @@ describe("odfToPdf: a small matrix (mtable)", () => {
   });
 });
 
-// Every Flate-compressed stream in `bytes`, inflated back to text -- the only way to assert on the content-stream OPERATORS a conversion produced, since writePdf compresses them. Brute force by design (try each stream, keep the ones that inflate) rather than walking the object graph: this is a test wanting to read what was drawn, not a second PDF parser.
+// Every Flate-compressed stream in `bytes`, inflated back to text — the only way to assert on the content-stream OPERATORS a conversion produced, since writePdf compresses them. Brute force by design (try each stream, keep the ones that inflate) rather than walking the object graph: this is a test wanting to read what was drawn, not a second PDF parser.
 function inflatedStreams(bytes: Uint8Array<ArrayBuffer>): string[] {
   const raw = new TextDecoder("latin1").decode(bytes);
   const streams: string[] = [];
@@ -154,7 +154,7 @@ function inflatedStreams(bytes: Uint8Array<ArrayBuffer>): string[] {
           ),
         );
       } catch {
-        // Not a Flate stream (or not one whose bounds this crude scan got right) -- the streams that matter here are, so skipping is correct rather than a swallowed failure.
+        // Not a Flate stream (or not one whose bounds this crude scan got right) — the streams that matter here are, so skipping is correct rather than a swallowed failure.
       }
     }
     match = marker.exec(raw);
@@ -185,7 +185,7 @@ describe("odfToPdf: a stretchy fence around a tall construct", () => {
     expect(content).toContain(cid(0x239d)); // LEFT PARENTHESIS LOWER HOOK
     expect(content).toContain(cid(0x239b)); // LEFT PARENTHESIS UPPER HOOK
     expect(content.split(cid(0x239c)).length - 1).toBeGreaterThan(0); // LEFT PARENTHESIS EXTENSION, repeated
-    expect(content).toContain(cid(0x23a0)); // RIGHT PARENTHESIS LOWER HOOK -- the closing fence is assembled too
+    expect(content).toContain(cid(0x23a0)); // RIGHT PARENTHESIS LOWER HOOK — the closing fence is assembled too
     // One /ActualText span per fence, so a reader still extracts "(" and ")" from glyphs that carry no ToUnicode mapping of their own.
     expect(content.split("/ActualText <feff0028> >> BDC").length - 1).toBe(1);
     expect(content.split("/ActualText <feff0029> >> BDC").length - 1).toBe(1);
@@ -217,7 +217,7 @@ describe("odfToPdf: cancellation", () => {
   });
 });
 
-// An odt (or odp) with a real embedded formula sub-object -- a draw:frame > draw:object referencing "./Object 1", the standard ODF convention this package's own src/odf/formula/detect.ts targets (see that module's own comment) -- built by hand exactly like every other src/test-support/*.ts fixture, not from a real LibreOffice-produced .odt/.odp.
+// An odt (or odp) with a real embedded formula sub-object — a draw:frame > draw:object referencing "./Object 1", the standard ODF convention this package's own src/odf/formula/detect.ts targets (see that module's own comment) — built by hand exactly like every other src/test-support/*.ts fixture, not from a real LibreOffice-produced .odt/.odp.
 const OFFICE_NS =
   'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"';
 const TEXT_NS = 'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"';
@@ -233,7 +233,7 @@ function enc(s: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(s);
 }
 
-// The embedded sub-object's own content.xml, addressed as "<name>/content.xml" inside the OUTER package -- the same office:body > office:math > math:math structure odfFormulaBytes builds for a standalone .odf, just package-relative rather than a whole separate zip (see src/odf/formula/detect.ts's own subPackagePathFromHref for the "./Object 1" -> "Object 1" convention this exercises).
+// The embedded sub-object's own content.xml, addressed as "<name>/content.xml" inside the OUTER package — the same office:body > office:math > math:math structure odfFormulaBytes builds for a standalone .odf, just package-relative rather than a whole separate zip (see src/odf/formula/detect.ts's own subPackagePathFromHref for the "./Object 1" -> "Object 1" convention this exercises).
 function embeddedFormulaObjectBytes(
   mathMlInner: string,
 ): Uint8Array<ArrayBuffer> {
@@ -268,7 +268,7 @@ function odtZip(
   ]);
 }
 
-// A formula frame sitting as a DIRECT child of office:text -- the absolutely-positioned (non-inline) shape, and the only one this package detected before.
+// A formula frame sitting as a DIRECT child of office:text — the absolutely-positioned (non-inline) shape, and the only one this package detected before.
 function odtWithEmbeddedFormulaBytes(): Uint8Array<ArrayBuffer> {
   return odtZip(
     '<text:p>Before the formula</text:p><draw:frame svg:x="2cm" svg:y="2cm" svg:width="4cm" svg:height="1.5cm"><draw:object xlink:href="./Object 1"/></draw:frame>',
@@ -281,7 +281,7 @@ function odtWithEmbeddedFormulaBytes(): Uint8Array<ArrayBuffer> {
   );
 }
 
-// A formula anchored INLINE inside a paragraph's own run content -- the shape LibreOffice writes for a formula typed into a sentence: text:anchor-type="as-char", carrying svg:width/svg:height but deliberately NO svg:x, since its horizontal position comes from the text flow rather than from the frame (see src/odf/formula/detect.ts's own flowAnchoredFrameBox).
+// A formula anchored INLINE inside a paragraph's own run content — the shape LibreOffice writes for a formula typed into a sentence: text:anchor-type="as-char", carrying svg:width/svg:height but deliberately NO svg:x, since its horizontal position comes from the text flow rather than from the frame (see src/odf/formula/detect.ts's own flowAnchoredFrameBox).
 function odtWithInlineFormulaBytes(): Uint8Array<ArrayBuffer> {
   return odtZip(
     '<text:p>First paragraph</text:p><text:p>Second paragraph with <draw:frame text:anchor-type="as-char" svg:width="1cm" svg:height="0.5cm"><draw:object xlink:href="./Object 1"/></draw:frame> inline.</text:p><text:p>Third paragraph</text:p>',
@@ -289,7 +289,7 @@ function odtWithInlineFormulaBytes(): Uint8Array<ArrayBuffer> {
   );
 }
 
-// A formula frame nested inside a draw:g group at the top level of office:text -- neither a direct child of office:text nor inside a paragraph.
+// A formula frame nested inside a draw:g group at the top level of office:text — neither a direct child of office:text nor inside a paragraph.
 function odtWithGroupedFormulaBytes(): Uint8Array<ArrayBuffer> {
   return odtZip(
     '<text:p>Before the group</text:p><draw:g><draw:frame svg:x="2cm" svg:y="2cm" svg:width="4cm" svg:height="1.5cm"><draw:object xlink:href="./Object 1"/></draw:frame></draw:g><text:p>After the group</text:p>',
@@ -347,7 +347,7 @@ function odpWithEmbeddedFormulaBytes(): Uint8Array<ArrayBuffer> {
   ]);
 }
 
-// A slide carrying BOTH a draw:g group and a formula frame -- the exact shape that previously disabled formula detection for the whole slide, because a group's own frames are spliced into readOdpContent's flat shapes array at the group's own position, breaking any "Nth top-level frame = shapes[N]" correspondence.
+// A slide carrying BOTH a draw:g group and a formula frame — the exact shape that previously disabled formula detection for the whole slide, because a group's own frames are spliced into readOdpContent's flat shapes array at the group's own position, breaking any "Nth top-level frame = shapes[N]" correspondence.
 function odpWithGroupAndFormulaBytes(): Uint8Array<ArrayBuffer> {
   return odpZip(`<draw:g>${TEXT_BOX_FRAME}</draw:g>${FORMULA_FRAME}`, [
     ["Object 1", "<math:msqrt><math:mi>x</math:mi></math:msqrt>"],
@@ -485,7 +485,7 @@ describe("a formula as a real ContentDocument, not a side-channel map", () => {
   });
 });
 
-// --- Where a formula frame actually IS: inline in a paragraph's run content, inside a group, inside a list item -- and where its block lands as a result ---
+// --- Where a formula frame actually IS: inline in a paragraph's run content, inside a group, inside a list item — and where its block lands as a result ---
 
 function wordprocessingBlocks(
   bytes: Uint8Array<ArrayBuffer>,
@@ -665,7 +665,7 @@ describe("odtToDocx: an embedded formula becomes real OOXML math", () => {
     const paras = elementsWithTag([root], "m:oMathPara");
     expect(paras).toHaveLength(1);
     expect(childrenWithTag(paras[0]!, "m:oMath")).toHaveLength(1);
-    // The formula's own structure, translated -- an m:f carrying num/den, exactly what a docx-math-aware consumer renders as a fraction.
+    // The formula's own structure, translated — an m:f carrying num/den, exactly what a docx-math-aware consumer renders as a fraction.
     const fractions = elementsWithTag([root], "m:f");
     expect(fractions).toHaveLength(1);
     expect(childrenWithTag(fractions[0]!, "m:num")).toHaveLength(1);
@@ -792,7 +792,7 @@ describe("odtToDocx: an embedded formula becomes real OOXML math", () => {
   });
 
   it("keeps an INLINE equation's own paragraph, placing the formula block immediately after it", () => {
-    // The mirror of the consumption rule above: a paragraph carrying real text alongside its equation is not the equation, so it keeps its own block and the formula lands after it -- exactly where src/odf/odt/read.ts places an inline ODF formula frame.
+    // The mirror of the consumption rule above: a paragraph carrying real text alongside its equation is not the equation, so it keeps its own block and the formula lands after it — exactly where src/odf/odt/read.ts places an inline ODF formula frame.
     const content = readDocxContent(
       decodeOoxmlPackage(odtToDocx(odtWithInlineFormulaBytes())),
     );
@@ -821,7 +821,7 @@ describe("odtToDocx: an embedded formula becomes real OOXML math", () => {
 
 // --- The regression this whole pair of features exists to close: a formula surviving odt -> docx -> odt as a formula ---
 
-// Every element tag, nested, with a token element's own text inlined -- the same "same construct types, same content" comparison src/omml/read.test.ts's own round-trip suite uses, applied here to the MathML at each end of a two-format chain.
+// Every element tag, nested, with a token element's own text inlined — the same "same construct types, same content" comparison src/omml/read.test.ts's own round-trip suite uses, applied here to the MathML at each end of a two-format chain.
 function mathSignature(nodes: readonly MathMlNode[]): string {
   return nodes
     .flatMap((node) => {
@@ -935,7 +935,7 @@ describe("odt -> docx -> odt: a formula survives the whole chain as a formula", 
 
 // The sheets-side counterpart to the odt/odp embedded-formula suites above, and the one exercised against a genuinely LibreOffice-produced file rather than a fixture this package assembled: src/test-support/ods-formula.ts embeds odf.js's own real sheet-formula.ods, a Calc document whose single Math object is anchored TO CELL C4 (column index 2, row index 3) at a 0.4cm/0.2cm cell-relative offset. What that file establishes, and a hand-built fixture could not, is that the anchor quartet src/layout/sheets.ts resolves against (ContentEmbeddedObject.anchorRow/anchorColumn/offsetXPt/offsetYPt) matches what a real spreadsheet application actually writes.
 
-// The `1 0 0 1 x y Tm` translations of every text run set in the math font, in content-stream order -- pdf-codec's math-content-write.ts emits one BT/Tf/Tm/Tj/ET group per positioned glyph run, always with the /MF resource name. Reuses this file's own inflatedStreams above, since a formula's real glyph placement is observable nowhere else: readPdf reconstructs LayoutItems, and a formula's CID-font runs deliberately never travel as LayoutItems (see src/layout/engine.ts's WordprocessingLayoutResult.formulas).
+// The `1 0 0 1 x y Tm` translations of every text run set in the math font, in content-stream order — pdf-codec's math-content-write.ts emits one BT/Tf/Tm/Tj/ET group per positioned glyph run, always with the /MF resource name. Reuses this file's own inflatedStreams above, since a formula's real glyph placement is observable nowhere else: readPdf reconstructs LayoutItems, and a formula's CID-font runs deliberately never travel as LayoutItems (see src/layout/engine.ts's WordprocessingLayoutResult.formulas).
 function mathFontTextMatrices(
   pdfBytes: Uint8Array<ArrayBuffer>,
 ): { readonly xPt: number; readonly yPt: number }[] {
@@ -1003,12 +1003,12 @@ describe("odsToPdf: a formula anchored to a spreadsheet cell", () => {
     const sheet = spreadsheetContent().sheets[0]!;
     const object = sheet.embeddedObjects![0]!;
     const { margins, pageSize } = sheet.printSettings;
-    // The fixture declares no header gutter and no repeat bands, and its print range starts at row 0/column 0, so the grid origin is the page's own top-left content corner -- and the anchor's grid offset is simply the widths/heights of everything before it. Every number below is read out of the file, never restated as a literal.
+    // The fixture declares no header gutter and no repeat bands, and its print range starts at row 0/column 0, so the grid origin is the page's own top-left content corner — and the anchor's grid offset is simply the widths/heights of everything before it. Every number below is read out of the file, never restated as a literal.
     const columnWidthPt = (index: number): number =>
       sheet.columns.find((column) => column.index === index)?.widthPt ?? 0;
     const rowHeightPt = (index: number): number =>
       sheet.rows.find((row) => row.index === index)?.heightPt ?? 0;
-    // Column and row entries are run-length compressed (one entry per STARTING index of a repeated run), so an index with no entry of its own carries the last entry at or before it -- exactly what resolveAxis does.
+    // Column and row entries are run-length compressed (one entry per STARTING index of a repeated run), so an index with no entry of its own carries the last entry at or before it — exactly what resolveAxis does.
     const carriedWidthPt = (index: number): number =>
       columnWidthPt(
         [...sheet.columns].reverse().find((column) => column.index <= index)!
@@ -1054,7 +1054,7 @@ describe("odsToPdf: a formula anchored to a spreadsheet cell", () => {
     expect(formulas).toHaveLength(1);
     expect(formulas[0]!.pageIndex).toBe(0);
     expect(formulas[0]!.box.items.length).toBeGreaterThan(0);
-    // The layout-level x matches the leftmost glyph the writer actually emitted -- the two halves of the pipeline agree.
+    // The layout-level x matches the leftmost glyph the writer actually emitted — the two halves of the pipeline agree.
     expect(
       Math.min(
         ...mathFontTextMatrices(odsToPdf(bytes)).map((matrix) => matrix.xPt),

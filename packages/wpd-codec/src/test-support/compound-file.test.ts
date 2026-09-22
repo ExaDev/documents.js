@@ -2,7 +2,7 @@ import { isCompoundFile, readCompoundFile } from "archive-codec";
 import { describe, expect, it } from "vitest";
 import { compoundFileWithStream } from "./compound-file";
 
-// Direct round-trip coverage of the [MS-CFB] file this test-support builder writes, read back through archive-codec's own real reader rather than through this package's own container tests, which only ever exercise the small (mini-stream) case a genuine WordPerfect file needs. The builder also has a whole second code path -- a stream at or above the 4096-byte mini-stream cutoff, written through the FAT-chained "big stream" area instead -- that nothing else in this package's test suite ever reaches.
+// Direct round-trip coverage of the [MS-CFB] file this test-support builder writes, read back through archive-codec's own real reader rather than through this package's own container tests, which only ever exercise the small (mini-stream) case a genuine WordPerfect file needs. The builder also has a whole second code path — a stream at or above the 4096-byte mini-stream cutoff, written through the FAT-chained "big stream" area instead — that nothing else in this package's test suite ever reaches.
 describe("compoundFileWithStream", () => {
   function readBack(name: string, stream: Uint8Array): Uint8Array {
     const file = compoundFileWithStream(name, stream);
@@ -67,7 +67,7 @@ describe("compoundFileWithStream", () => {
     expect(streams.map((entry) => entry.path)).toEqual(["MyStream"]);
   });
 
-  // The header's own 109-entry DIFAT array names exactly one real FAT sector (this fixture only ever needs one), so every other entry must state FREESECT (0xFFFFFFFF), the [MS-CFB] sentinel for "unused" -- archive-codec's own reader (src/cfb/read.ts) walks all 109 header entries unconditionally and treats anything other than FREESECT as a real FAT sector number to read, so a zero-initialised (rather than FREESECT-padded) entry here would be misread as 108 more (bogus, duplicate) FAT sectors.
+  // The header's own 109-entry DIFAT array names exactly one real FAT sector (this fixture only ever needs one), so every other entry must state FREESECT (0xFFFFFFFF), the [MS-CFB] sentinel for "unused" — archive-codec's own reader (src/cfb/read.ts) walks all 109 header entries unconditionally and treats anything other than FREESECT as a real FAT sector number to read, so a zero-initialised (rather than FREESECT-padded) entry here would be misread as 108 more (bogus, duplicate) FAT sectors.
   it("pads every unused header DIFAT entry with FREESECT, not the buffer's own zero fill", () => {
     const file = compoundFileWithStream("Stream", new Uint8Array([1, 2, 3]));
     const view = new DataView(file.buffer, file.byteOffset, file.byteLength);

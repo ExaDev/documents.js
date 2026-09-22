@@ -74,7 +74,7 @@ import { createCpuRasteriser } from "pdf-raster-cpu";
 
 const rasteriser = createCpuRasteriser({
   onDiagnostic: (d) => console.warn(d.code, d.message),
-  // "raster-cpu/jpeg-image-undecoded" -- the one refusal this backend
+  // "raster-cpu/jpeg-image-undecoded" — the one refusal this backend
   // reports: a JPEG image op, which it declines rather than misrenders
 });
 ```

@@ -1,4 +1,4 @@
-// -- WordPerfect's character model, per WPFF "Single-Byte Characters and Functions" and WPFF Document Structure's glossary --
+// — WordPerfect's character model, per WPFF "Single-Byte Characters and Functions" and WPFF Document Structure's glossary --
 //
 // A character in a WordPerfect document is a (character set, character number) pair. The document area encodes that pair three ways, and this module owns all three:
 //
@@ -70,7 +70,7 @@ export const LAST_CHARACTER = 0x7f;
 // What a character this package cannot name decodes to. U+FFFD is the right glyph precisely because it is visible: a reader looking at the output can see that something was there and was not understood, which silently dropping the character or substituting a plausible-looking one would both hide. Every occurrence is also reported through the diagnostic sink, so a caller can count them rather than having to eyeball the text.
 export const UNMAPPED_CHARACTER = "�";
 
-// Character set 0 is ASCII. The SDK's table runs 33 (0x21) to 127 (0x7F) and each entry maps to the identically-numbered ASCII character; the range below starts at 32 because a set-0 character *number* of 32 (reached through the extended-character function, or inside a word string) genuinely is a space -- it is only the single-byte document stream where byte 0x20 means something else.
+// Character set 0 is ASCII. The SDK's table runs 33 (0x21) to 127 (0x7F) and each entry maps to the identically-numbered ASCII character; the range below starts at 32 because a set-0 character *number* of 32 (reached through the extended-character function, or inside a word string) genuinely is a space — it is only the single-byte document stream where byte 0x20 means something else.
 function decodeAsciiSet(characterNumber: number): string | undefined {
   if (characterNumber < 0x20 || characterNumber > 0x7f) {
     return undefined;
@@ -101,12 +101,12 @@ export function decodeSingleByteCharacter(byte: number): string | undefined {
   return undefined;
 }
 
-// A caller with no separate length prefix of its own to bound the read -- it just wants "the rest of this buffer, read as a word string" -- passes this rather than computing its own arithmetic bound from the buffer's own remaining length: decodeWordString already stops at the first null word or the moment `bytes[]` itself answers undefined past the buffer's real end (see its own comment below), so any caller-computed cap merely restates that same stopping point and can never be observed to change the text decoded. `Number.POSITIVE_INFINITY` is a genuine sentinel for "no separate bound", not a magic number: the while loop's own `wordsRead < maxWords` holds for every finite wordsRead, exactly the "keep going until the buffer itself ends" behaviour these callers want.
+// A caller with no separate length prefix of its own to bound the read — it just wants "the rest of this buffer, read as a word string" — passes this rather than computing its own arithmetic bound from the buffer's own remaining length: decodeWordString already stops at the first null word or the moment `bytes[]` itself answers undefined past the buffer's real end (see its own comment below), so any caller-computed cap merely restates that same stopping point and can never be observed to change the text decoded. `Number.POSITIVE_INFINITY` is a genuine sentinel for "no separate bound", not a magic number: the while loop's own `wordsRead < maxWords` holds for every finite wordsRead, exactly the "keep going until the buffer itself ends" behaviour these callers want.
 export const UNBOUNDED_WORDS = Number.POSITIVE_INFINITY;
 
 // Decodes a WP word string: a run of 16-bit values, each "the high byte is the number of the WordPerfect character set, the low byte contains an offset value into the character set", terminated by a null word. Used by packet data (a typeface name, a comment, a bookmark name), never by the document area's own byte stream.
 //
-// Reads at most `maxWords` words and stops at the first null word or at the end of the available bytes, whichever comes first -- an unterminated string is the packet running out, not a failure to raise, since a WordPerfect packet's own last string legitimately abuts the packet's end.
+// Reads at most `maxWords` words and stops at the first null word or at the end of the available bytes, whichever comes first — an unterminated string is the packet running out, not a failure to raise, since a WordPerfect packet's own last string legitimately abuts the packet's end.
 export function decodeWordString(
   bytes: Uint8Array,
   offset: number,

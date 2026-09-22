@@ -30,7 +30,7 @@ import {
   isAnchorOnly,
 } from "./special";
 
-// The paragraph-level read shared by every document-stream range this package reads (the main document, and -- notes.ts/headers-footers.ts -- the footnote, endnote, comment, and header/footer subdocuments): splitting a logical text stream into paragraphs at the marks [MS-DOC] 2.4.2 names as paragraph ends, and each paragraph into runs at the boundaries of the character-formatting exceptions covering it. Every one of those ranges lives in the same WordDocument stream and is addressed through the same ChpxFkp/PapxFkp bin tables and style sheet, so this module carries no notion of which range it is reading -- that is entirely the caller's concern (which text/fcs it hands in), which is what lets read.ts's own DocContent.sections read and notes.ts's plain-text footnote/endnote/comment bodies share one implementation rather than two that could drift apart.
+// The paragraph-level read shared by every document-stream range this package reads (the main document, and — notes.ts/headers-footers.ts — the footnote, endnote, comment, and header/footer subdocuments): splitting a logical text stream into paragraphs at the marks [MS-DOC] 2.4.2 names as paragraph ends, and each paragraph into runs at the boundaries of the character-formatting exceptions covering it. Every one of those ranges lives in the same WordDocument stream and is addressed through the same ChpxFkp/PapxFkp bin tables and style sheet, so this module carries no notion of which range it is reading — that is entirely the caller's concern (which text/fcs it hands in), which is what lets read.ts's own DocContent.sections read and notes.ts's plain-text footnote/endnote/comment bodies share one implementation rather than two that could drift apart.
 
 export interface ReadContext {
   readonly chpxTable: PropertyBinTable;
@@ -38,20 +38,20 @@ export interface ReadContext {
   readonly styles: StyleSheet | undefined;
   /** The font names sprmCRgFtc0's operand indexes into, or undefined when the document carries no SttbfFfn at all. */
   readonly fonts: readonly string[] | undefined;
-  // Character properties already folded out of one Chpx, keyed by that Chpx's own position and length in the WordDocument stream. It belongs to the whole read rather than to one paragraph because a Chpx routinely spans many paragraphs -- a document in one font is one exception covering all of it -- so a per-paragraph cache would re-parse the same grpprl once per paragraph and never hit. Shared across every document-stream range a caller reads through this context, since the same byte offset in the WordDocument stream means the same Chpx regardless of which subdocument's own CP space is being walked.
+  // Character properties already folded out of one Chpx, keyed by that Chpx's own position and length in the WordDocument stream. It belongs to the whole read rather than to one paragraph because a Chpx routinely spans many paragraphs — a document in one font is one exception covering all of it — so a per-paragraph cache would re-parse the same grpprl once per paragraph and never hit. Shared across every document-stream range a caller reads through this context, since the same byte offset in the WordDocument stream means the same Chpx regardless of which subdocument's own CP space is being walked.
   readonly characterProperties: Map<string, CharacterProperties>;
-  /** The "Data" stream's own bytes, or undefined when the container carries none -- a valid Word Binary File with no pictures need not have one at all. sprmCPicLocation's operand is an offset into this stream (pictures.ts's readInlinePicture). */
+  /** The "Data" stream's own bytes, or undefined when the container carries none — a valid Word Binary File with no pictures need not have one at all. sprmCPicLocation's operand is an offset into this stream (pictures.ts's readInlinePicture). */
   readonly dataStream: Uint8Array | undefined;
 }
 
-/** One paragraph/cell/row-ending mark, still flat -- table/read.ts's assembleBlocks is what folds a run of these into a real ContentTable. `properties` and `grpprl` are carried alongside the already-built `blocks` because table grouping needs sprmPFInTable/sprmPFTtp/sprmPItap (properties) and, on a row's own mark, its table-defining sgc-5 sprms (grpprl) -- neither of which survives onto a plain ContentParagraph. `blocks` is more than one paragraph exactly when an inline picture anchor split this paragraph's own text around it (buildParagraphBlocks) -- ordinarily a single-element array holding the one ContentParagraph this mark closes. */
+/** One paragraph/cell/row-ending mark, still flat — table/read.ts's assembleBlocks is what folds a run of these into a real ContentTable. `properties` and `grpprl` are carried alongside the already-built `blocks` because table grouping needs sprmPFInTable/sprmPFTtp/sprmPItap (properties) and, on a row's own mark, its table-defining sgc-5 sprms (grpprl) — neither of which survives onto a plain ContentParagraph. `blocks` is more than one paragraph exactly when an inline picture anchor split this paragraph's own text around it (buildParagraphBlocks) — ordinarily a single-element array holding the one ContentParagraph this mark closes. */
 export interface ParagraphEntry {
   readonly blocks: readonly ContentBlock[];
   readonly properties: ParagraphProperties;
   readonly grpprl: readonly Prl[];
   /** The character that terminated this paragraph in the text stream: PARAGRAPH_MARK, CELL_MARK, or SECTION_MARK. */
   readonly terminator: number;
-  /** The character position immediately after this paragraph's own terminator (or, for the trailing no-mark case, the text's own length) -- comparable directly to a boundary plex's own CPs (PlcfSed.aCp, PlcffndTxt.aCp, Plcfhdd's aCp, ...) as long as `text` was itself read starting from that plex's own CP 0. read.ts's splitIntoSections and notes.ts/headers-footers.ts's own splitting use it to locate a story's real boundary. */
+  /** The character position immediately after this paragraph's own terminator (or, for the trailing no-mark case, the text's own length) — comparable directly to a boundary plex's own CPs (PlcfSed.aCp, PlcffndTxt.aCp, Plcfhdd's aCp, ...) as long as `text` was itself read starting from that plex's own CP 0. read.ts's splitIntoSections and notes.ts/headers-footers.ts's own splitting use it to locate a story's real boundary. */
   readonly endCp: number;
 }
 
@@ -109,13 +109,13 @@ export function readParagraphs(
   return entries;
 }
 
-/** sprmPHugePapx (0x6646), [MS-DOC] 2.6.2's Paragraph Properties table: "a 4-byte unsigned integer that specifies a location in the Data Stream" where "a PrcData structure begins ... and specifies additional properties for the paragraph". A paragraph whose direct grpprl opens with this sprm keeps its real properties in that Data-stream PrcData -- the whole point of the sprm is a Papx too large for its own 512-byte FKP page, so Word leaves the FKP holding only the pointer. */
+/** sprmPHugePapx (0x6646), [MS-DOC] 2.6.2's Paragraph Properties table: "a 4-byte unsigned integer that specifies a location in the Data Stream" where "a PrcData structure begins ... and specifies additional properties for the paragraph". A paragraph whose direct grpprl opens with this sprm keeps its real properties in that Data-stream PrcData — the whole point of the sprm is a Papx too large for its own 512-byte FKP page, so Word leaves the FKP holding only the pointer. */
 const SPRM_P_HUGE_PAPX = 0x6646;
 
 // The same table's own chain bound, made finite: "sprmPHugePapx and sprmPTableProps values can refer to PrcDatas containing each other, but the chain MUST eventually terminate in a PrcData structure [that] does not contain a sprmPHugePapx value or a sprmPTableProps value". A chain longer than any real producer writes is a malformed file, and throwing beats looping on it; the bound is generous rather than derived because the specification states no number, only termination.
 const MAX_PAPX_INDIRECTION_HOPS = 16;
 
-// Resolves a paragraph's own direct grpprl through its indirect spelling: a grpprl whose FIRST Prl is sprmPHugePapx is replaced by the PrcData its operand names, because [MS-DOC] 2.6.2's own text is "if an application processes this PrcData, then it MUST NOT process any more Prl elements in the array that contained the sprmPHugePapx" -- the PrcData's GrpPrl substitutes for the rest of the array rather than stacking beneath it. A sprmPHugePapx that is not first "MUST be ignored" (the same table's own rule), and in a GrpPrlAndIstd it "MUST be the only Prl in that array and the ... istd member ... MUST be zero", so following only a first Prl covers every legal spelling. Each hop reads the PrcData at the operand's Data-stream offset -- cbGrpprl (a signed 2-byte length) followed by that many bytes of GrpPrl, the PrcData structure's own layout -- and a GrpPrl that itself opens with sprmPHugePapx is one more legal hop of the same chain.
+// Resolves a paragraph's own direct grpprl through its indirect spelling: a grpprl whose FIRST Prl is sprmPHugePapx is replaced by the PrcData its operand names, because [MS-DOC] 2.6.2's own text is "if an application processes this PrcData, then it MUST NOT process any more Prl elements in the array that contained the sprmPHugePapx" — the PrcData's GrpPrl substitutes for the rest of the array rather than stacking beneath it. A sprmPHugePapx that is not first "MUST be ignored" (the same table's own rule), and in a GrpPrlAndIstd it "MUST be the only Prl in that array and the ... istd member ... MUST be zero", so following only a first Prl covers every legal spelling. Each hop reads the PrcData at the operand's Data-stream offset — cbGrpprl (a signed 2-byte length) followed by that many bytes of GrpPrl, the PrcData structure's own layout — and a GrpPrl that itself opens with sprmPHugePapx is one more legal hop of the same chain.
 function resolveIndirectPapx(
   prls: readonly Prl[],
   context: ReadContext,
@@ -164,9 +164,9 @@ function buildParagraph(
       ? resolveIndirectPapx(readGrpprl(papx.grpprl), context)
       : [];
   if (papx !== undefined) {
-    // The istd comes from the GrpPrlAndIstd's own field, and a sprmPIstd inside the grpprl can then replace it -- so it is seeded first and the fold is allowed to overwrite it.
+    // The istd comes from the GrpPrlAndIstd's own field, and a sprmPIstd inside the grpprl can then replace it — so it is seeded first and the fold is allowed to overwrite it.
     properties.istd = papx.istd;
-    // The paragraph style's own formatting is resolved and folded in BEFORE the direct PAPX exception, [MS-DOC] 2.4.6.6 Part 2's own order -- style first, then the paragraph's own grpprl on top, so the direct exception can override whatever the style (and its own base-style chain) supplied. Resolved from papx.istd specifically, not properties.istd, since a rare embedded sprmPIstd inside grpprl replaces what gets reported going forward without retroactively changing which style's formatting was already applied beneath it (see #1005's own README scope note).
+    // The paragraph style's own formatting is resolved and folded in BEFORE the direct PAPX exception, [MS-DOC] 2.4.6.6 Part 2's own order — style first, then the paragraph's own grpprl on top, so the direct exception can override whatever the style (and its own base-style chain) supplied. Resolved from papx.istd specifically, not properties.istd, since a rare embedded sprmPIstd inside grpprl replaces what gets reported going forward without retroactively changing which style's formatting was already applied beneath it (see #1005's own README scope note).
     if (context.styles !== undefined) {
       applyParagraphSprms(
         resolveStyleFormatting(context.styles, papx.istd).paragraphPrls,
@@ -192,7 +192,7 @@ function buildParagraph(
   };
 }
 
-// Splits a paragraph's own text into ContentBlock[] around every inline picture anchor (U+0001) it carries, resolving each one through its own Chpx's sprmCPicLocation (resolveInlinePicture) into a real ContentImageBlock -- an inline image is block-level in document-schema.js's own model, not a run property, so a paragraph containing one genuinely becomes more than one block, mirroring how ooxml.js's own docx reader splits a paragraph around a mid-run page break (readParagraphBlocks's own top comment: "Both halves inherit the original paragraph's own paragraph-level formatting... unchanged"). The ordinary case -- no picture anchor at all -- still produces exactly one ContentParagraph, identical to what this function replaced.
+// Splits a paragraph's own text into ContentBlock[] around every inline picture anchor (U+0001) it carries, resolving each one through its own Chpx's sprmCPicLocation (resolveInlinePicture) into a real ContentImageBlock — an inline image is block-level in document-schema.js's own model, not a run property, so a paragraph containing one genuinely becomes more than one block, mirroring how ooxml.js's own docx reader splits a paragraph around a mid-run page break (readParagraphBlocks's own top comment: "Both halves inherit the original paragraph's own paragraph-level formatting... unchanged"). The ordinary case — no picture anchor at all — still produces exactly one ContentParagraph, identical to what this function replaced.
 function buildParagraphBlocks(
   text: string,
   fcs: readonly number[],
@@ -226,14 +226,14 @@ function buildParagraphBlocks(
   );
   flushSegment(text.length);
 
-  // A paragraph that ends up with no real block at all -- an ordinary blank paragraph, or one whose only picture anchor pointed at a format this reader does not decode (pictures.ts's own scope note) -- still needs its own genuine, empty ContentParagraph: every existing caller of this pipeline already expects one for a blank line or an empty table cell. A paragraph that DID produce at least one real block (non-empty text, a resolved image) never reaches this: the whole point of splitting around an image is that the image itself carries the paragraph's real content, and a synthetic empty wrapper alongside it would be a block this paragraph never actually had.
+  // A paragraph that ends up with no real block at all — an ordinary blank paragraph, or one whose only picture anchor pointed at a format this reader does not decode (pictures.ts's own scope note) — still needs its own genuine, empty ContentParagraph: every existing caller of this pipeline already expects one for a blank line or an empty table cell. A paragraph that DID produce at least one real block (non-empty text, a resolved image) never reaches this: the whole point of splitting around an image is that the image itself carries the paragraph's real content, and a synthetic empty wrapper alongside it would be a block this paragraph never actually had.
   if (blocks.length === 0) {
     blocks.push({ kind: "paragraph", runs: [], ...attributes });
   }
   return blocks;
 }
 
-// Resolves one inline picture anchor's own Chpx for its sprmCPicLocation operand -- the Data-stream offset pictures.ts's readInlinePicture needs -- returning undefined when the character carries no such sprm at all (malformed input) or when context.dataStream is absent (a container with no "Data" stream can carry no pictures).
+// Resolves one inline picture anchor's own Chpx for its sprmCPicLocation operand — the Data-stream offset pictures.ts's readInlinePicture needs — returning undefined when the character carries no such sprm at all (malformed input) or when context.dataStream is absent (a container with no "Data" stream can carry no pictures).
 const SPRM_C_PIC_LOCATION = 0x6a03;
 
 function resolveInlinePicture(
@@ -265,7 +265,7 @@ function paragraphAttributes(
     const headingLevel = headingLevelFromIstd(istd);
     if (headingLevel !== undefined) attributes.headingLevel = headingLevel;
   }
-  // sprmPOutLvl states an outline level directly and is the more specific statement where both are present, so it wins over the istd-derived one. [MS-DOC] makes the reverse precedence explicit -- sprmPOutLvl "MUST be ignored if the paragraph has an istd that is greater than or equal to 0x1 and less than or equal to 0x9" -- so it only applies where the istd did not already supply a level.
+  // sprmPOutLvl states an outline level directly and is the more specific statement where both are present, so it wins over the istd-derived one. [MS-DOC] makes the reverse precedence explicit — sprmPOutLvl "MUST be ignored if the paragraph has an istd that is greater than or equal to 0x1 and less than or equal to 0x9" — so it only applies where the istd did not already supply a level.
   if (
     attributes.headingLevel === undefined &&
     properties.outlineLevel !== undefined
@@ -302,7 +302,7 @@ function paragraphAttributes(
   return attributes;
 }
 
-// Every message below names an invariant this module already maintains elsewhere in the same function, never one a caller's input could violate -- see each call site's own comment. Exported for this package's own tests only, so a change to the actual wording stays directly testable even though nothing in the public read path can trigger it.
+// Every message below names an invariant this module already maintains elsewhere in the same function, never one a caller's input could violate — see each call site's own comment. Exported for this package's own tests only, so a change to the actual wording stays directly testable even though nothing in the public read path can trigger it.
 export function noByteOffsetForCharacterMessage(index: number): string {
   return `character ${index} of a paragraph has no byte offset, so its formatting cannot be located`;
 }
@@ -321,7 +321,7 @@ export function computeCharacterProperties(
   applyCharacterSprms(paragraphStyleCharacterPrls, properties, context.fonts);
   if (grpprl !== undefined) {
     const runPrls = readGrpprl(grpprl);
-    // A run's own sprmCIstd names a character style, which is resolved and folded in AFTER the paragraph style's own defaults but BEFORE the run's direct exceptions -- the same "more specific wins" precedence the paragraph/direct-exception layering above already follows, applied one level deeper.
+    // A run's own sprmCIstd names a character style, which is resolved and folded in AFTER the paragraph style's own defaults but BEFORE the run's direct exceptions — the same "more specific wins" precedence the paragraph/direct-exception layering above already follows, applied one level deeper.
     const characterIstd = characterIstdFromGrpprl(runPrls);
     if (characterIstd !== undefined && context.styles !== undefined) {
       applyCharacterSprms(
@@ -336,7 +336,7 @@ export function computeCharacterProperties(
   return properties;
 }
 
-// Groups the paragraph's characters into runs of identical direct character formatting. The grouping key is the identity of the Chpx covering each character -- its position and length within the WordDocument stream -- rather than the resolved properties, so two runs that happen to resolve to the same values but come from different exceptions stay distinct, exactly as the file states them. The paragraph's own istd joins the key too: the SAME raw Chpx bytes routinely cover runs in different paragraphs (a Chpx exception spans until the next one, paragraph boundaries notwithstanding), and since a paragraph's style now contributes character defaults, two paragraphs in different styles sharing one Chpx no longer resolve to the same properties.
+// Groups the paragraph's characters into runs of identical direct character formatting. The grouping key is the identity of the Chpx covering each character — its position and length within the WordDocument stream — rather than the resolved properties, so two runs that happen to resolve to the same values but come from different exceptions stay distinct, exactly as the file states them. The paragraph's own istd joins the key too: the SAME raw Chpx bytes routinely cover runs in different paragraphs (a Chpx exception spans until the next one, paragraph boundaries notwithstanding), and since a paragraph's style now contributes character defaults, two paragraphs in different styles sharing one Chpx no longer resolve to the same properties.
 function buildRuns(
   text: string,
   fcs: readonly number[],
@@ -347,18 +347,18 @@ function buildRuns(
   let currentKey: string | undefined;
   let currentText = "";
   let currentProperties: CharacterProperties = {};
-  // The paragraph style's own character defaults (StkParaGRLPUPX.lpUpxChpx), resolved once per paragraph rather than per run -- every run in this paragraph starts from the identical base, [MS-DOC] 2.4.6.6 Part 2 step 4's own "obtain any character property modifications specified by GrpprlAndIstd.istd... apply [them] to the character properties" applied before step 5's direct formatting.
+  // The paragraph style's own character defaults (StkParaGRLPUPX.lpUpxChpx), resolved once per paragraph rather than per run — every run in this paragraph starts from the identical base, [MS-DOC] 2.4.6.6 Part 2 step 4's own "obtain any character property modifications specified by GrpprlAndIstd.istd... apply [them] to the character properties" applied before step 5's direct formatting.
   const paragraphStyleCharacterPrls: readonly Prl[] =
     context.styles !== undefined && paragraphIstd !== undefined
       ? resolveStyleFormatting(context.styles, paragraphIstd).characterPrls
       : [];
   // Field state, per [MS-DOC] 2.8.25's field characters: everything between a begin (0x13) and a separator (0x14) is the field's instruction rather than its displayed result, and a field with no separator displays nothing at all.
   //
-  // A stack of one record per OPEN field rather than three parallel arrays (the enclosing inInstruction flag to restore, the accumulated instruction text, and the runs[] index the result starts at): all three are pushed at the identical point (a field's own begin) and popped at the identical point (its own end), so keeping them in three separately-indexed arrays could only ever let them silently drift apart, never usefully vary independently. A stack rather than a depth counter, because fields nest and the enclosing field's own state has to survive the inner one -- a nested field appears inside the OUTER field's instruction as often as inside its result, so on reaching the inner field's end, whether text resumes depends on which side of its own separator the outer field had reached, which a counter cannot express.
+  // A stack of one record per OPEN field rather than three parallel arrays (the enclosing inInstruction flag to restore, the accumulated instruction text, and the runs[] index the result starts at): all three are pushed at the identical point (a field's own begin) and popped at the identical point (its own end), so keeping them in three separately-indexed arrays could only ever let them silently drift apart, never usefully vary independently. A stack rather than a depth counter, because fields nest and the enclosing field's own state has to survive the inner one — a nested field appears inside the OUTER field's instruction as often as inside its result, so on reaching the inner field's end, whether text resumes depends on which side of its own separator the outer field had reached, which a counter cannot express.
   interface OpenField {
     wasInInstruction: boolean;
     instructionText: string;
-    /** The runs[] index this field's own result starts at, so a completed HYPERLINK field can tag exactly its own result runs with the instruction's URI -- the inverse of the writer's own field spelling (table/write.ts's plainRuns). Set once this field reaches its own separator; a field that never does (its own end arrives first) stays undefined, so its result -- which never existed -- is never tagged. */
+    /** The runs[] index this field's own result starts at, so a completed HYPERLINK field can tag exactly its own result runs with the instruction's URI — the inverse of the writer's own field spelling (table/write.ts's plainRuns). Set once this field reaches its own separator; a field that never does (its own end arrives first) stays undefined, so its result — which never existed — is never tagged. */
     resultStart: number | undefined;
   }
   const openFields: OpenField[] = [];
@@ -391,17 +391,17 @@ function buildRuns(
       continue;
     }
     if (code === FIELD_END) {
-      // Flush the pending result text FIRST: the field's own characters carry distinct formatting (their fSpec grpprl), but the result text and whatever follows can share one formatting stretch -- without this flush they would land in one run, and the hyperlink tagging below would have no boundary to stop at (the field's result would bleed into the following plain text, or vice versa the pending result would never become a run at all before the tagging pass).
+      // Flush the pending result text FIRST: the field's own characters carry distinct formatting (their fSpec grpprl), but the result text and whatever follows can share one formatting stretch — without this flush they would land in one run, and the hyperlink tagging below would have no boundary to stop at (the field's result would bleed into the following plain text, or vice versa the pending result would never become a run at all before the tagging pass).
       flush();
-      // An unmatched end -- one the text carries with no begin before it -- pops nothing and leaves the state alone rather than flipping it, so malformed field nesting cannot swallow the rest of the paragraph.
+      // An unmatched end — one the text carries with no begin before it — pops nothing and leaves the state alone rather than flipping it, so malformed field nesting cannot swallow the rest of the paragraph.
       const top = openFields.pop();
       inInstruction = top?.wasInInstruction ?? inInstruction;
       if (top?.resultStart !== undefined) {
         const resultStart = top.resultStart;
-        // [MS-DOC] 2.8.25 + real-producer bytes (LibreOffice 26.2's Word 97 export): a hyperlink field's instruction is ` HYPERLINK "<uri>" ` -- spaces around, double-quoted URI. Tolerant of surrounding whitespace variation; anything else is a field this reader does not model, and its result runs pass through untagged exactly as before.
+        // [MS-DOC] 2.8.25 + real-producer bytes (LibreOffice 26.2's Word 97 export): a hyperlink field's instruction is ` HYPERLINK "<uri>" ` — spaces around, double-quoted URI. Tolerant of surrounding whitespace variation; anything else is a field this reader does not model, and its result runs pass through untagged exactly as before.
         const match = /^\s*HYPERLINK\s+"[^"]*"\s*$/.exec(top.instructionText);
         if (match !== null) {
-          // The URI by its own quote positions in the whole match (match[0], always a real string) rather than a capturing group (match[1], typed string | undefined regardless of the group never actually being optional here) -- the pattern's own two literal quotes are the only quote characters [^"]* can ever let through, so they are unambiguously the URI's own delimiters.
+          // The URI by its own quote positions in the whole match (match[0], always a real string) rather than a capturing group (match[1], typed string | undefined regardless of the group never actually being optional here) — the pattern's own two literal quotes are the only quote characters [^"]* can ever let through, so they are unambiguously the URI's own delimiters.
           const whole = match[0];
           const uri = whole.slice(
             whole.indexOf('"') + 1,
@@ -415,7 +415,7 @@ function buildRuns(
       continue;
     }
     if (inInstruction) {
-      // Instruction text is not displayed, but it IS the field's payload -- accumulate it for the HYPERLINK lift above rather than discarding it on the floor. Rebuilt from the code unit already in hand (as the line-break handling below already does) rather than indexed back out of the string, matching this same loop's own established reasoning for why that read is safe.
+      // Instruction text is not displayed, but it IS the field's payload — accumulate it for the HYPERLINK lift above rather than discarding it on the floor. Rebuilt from the code unit already in hand (as the line-break handling below already does) rather than indexed back out of the string, matching this same loop's own established reasoning for why that read is safe.
       const top = openFields[openFields.length - 1];
       assertDefined(top, noOpenFieldWhileInInstructionMessage());
       top.instructionText += String.fromCharCode(code);
@@ -451,9 +451,9 @@ function buildRuns(
   return runs;
 }
 
-// Splits a flat span of paragraph entries into `boundaries.length - 1` groups by a boundary plex's own CPs -- read.ts's own splitIntoSections generalised for reuse by notes.ts (PlcffndTxt/PlcfandTxt/PlcfendTxt) and headers-footers.ts (Plcfhdd), all of which divide a document-stream range into consecutive stories the identical way [MS-DOC] states PlcfSed does. Unlike splitIntoSections -- whose last section absorbs every remaining entry, since a section genuinely has no upper CP bound of its own -- this stops emitting once `boundaries` is exhausted: an entry past the final real boundary belongs to no story at all (the trailing "ignored" PLC slot [MS-DOC] states for PlcffndTxt/PlcfandTxt/PlcfendTxt, or a guard paragraph mark that is "not considered part of the story contents" per the Headers page), so it is dropped rather than folded into whichever story happens to be open.
+// Splits a flat span of paragraph entries into `boundaries.length - 1` groups by a boundary plex's own CPs — read.ts's own splitIntoSections generalised for reuse by notes.ts (PlcffndTxt/PlcfandTxt/PlcfendTxt) and headers-footers.ts (Plcfhdd), all of which divide a document-stream range into consecutive stories the identical way [MS-DOC] states PlcfSed does. Unlike splitIntoSections — whose last section absorbs every remaining entry, since a section genuinely has no upper CP bound of its own — this stops emitting once `boundaries` is exhausted: an entry past the final real boundary belongs to no story at all (the trailing "ignored" PLC slot [MS-DOC] states for PlcffndTxt/PlcfandTxt/PlcfendTxt, or a guard paragraph mark that is "not considered part of the story contents" per the Headers page), so it is dropped rather than folded into whichever story happens to be open.
 //
-// A zero-width group -- boundaries[i] === boundaries[i+1], [MS-DOC]'s own "the story is considered empty" -- is skipped past unconditionally rather than left for the next entry to close: no character position can ever fall inside a range with no width, so nothing would ever advance `index` past it on its own, and every real entry from that point on would be misassigned to the empty group instead of its own. advancePastEmptyGroups runs before the very first entry (an empty leading story) and again after every group closes (a run of several empty stories in a row), so any number of consecutive empty groups are skipped correctly.
+// A zero-width group — boundaries[i] === boundaries[i+1], [MS-DOC]'s own "the story is considered empty" — is skipped past unconditionally rather than left for the next entry to close: no character position can ever fall inside a range with no width, so nothing would ever advance `index` past it on its own, and every real entry from that point on would be misassigned to the empty group instead of its own. advancePastEmptyGroups runs before the very first entry (an empty leading story) and again after every group closes (a run of several empty stories in a row), so any number of consecutive empty groups are skipped correctly.
 export function splitEntriesByBoundaries(
   entries: readonly ParagraphEntry[],
   boundaries: readonly number[],
@@ -464,7 +464,7 @@ export function splitEntriesByBoundaries(
     () => [],
   );
   let index = 0;
-  // Bounded by boundaries[index + 1] itself being a real entry rather than by comparing index against groupCount separately: the two conditions agree everywhere boundaries is non-empty (index + 1 names a real slot exactly when index < groupCount), and for an empty boundaries array both index and groupCount are already 0, where this loop cannot run either way -- so there is no separate arithmetic bound left to drift out of step with the array it is actually walking.
+  // Bounded by boundaries[index + 1] itself being a real entry rather than by comparing index against groupCount separately: the two conditions agree everywhere boundaries is non-empty (index + 1 names a real slot exactly when index < groupCount), and for an empty boundaries array both index and groupCount are already 0, where this loop cannot run either way — so there is no separate arithmetic bound left to drift out of step with the array it is actually walking.
   const advancePastEmptyGroups = (): void => {
     while (
       boundaries[index + 1] !== undefined &&

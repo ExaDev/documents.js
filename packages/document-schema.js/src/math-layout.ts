@@ -40,7 +40,7 @@ export interface MathGlyphPlacement {
   readonly yPt: number;
 }
 
-// A stretchy operator drawn from the font's own OpenType MATH MathVariants data: either one pre-built larger variant glyph, or a genuine multi-part assembly. Addressed by glyph id (most construction glyphs are unencoded); `text` carries the operator's original Unicode text so a consuming writer can emit it for copy/paste and search, since the glyphs themselves have no ToUnicode mapping. `sizePt` is the font size the glyphs are shown at, not the size the construction was stretched to -- that extent is baked into the placements' positions.
+// A stretchy operator drawn from the font's own OpenType MATH MathVariants data: either one pre-built larger variant glyph, or a genuine multi-part assembly. Addressed by glyph id (most construction glyphs are unencoded); `text` carries the operator's original Unicode text so a consuming writer can emit it for copy/paste and search, since the glyphs themselves have no ToUnicode mapping. `sizePt` is the font size the glyphs are shown at, not the size the construction was stretched to — that extent is baked into the placements' positions.
 export interface MathAssembledGlyphs {
   readonly kind: "assembled-glyphs";
   readonly placements: readonly MathGlyphPlacement[];
@@ -52,7 +52,7 @@ export interface MathAssembledGlyphs {
 export type MathLayoutItem =
   MathGlyphRun | MathRule | MathStroke | MathAssembledGlyphs;
 
-// The result of laying out one MathML (sub)tree: a bounding box (widthPt = full width; heightPt = ascentPt + descentPt) plus every positioned item inside it, already flattened to box-local absolute coordinates -- a parent box embeds a child by adding its own child-placement offset to every one of the child's items and splicing them into its own flat `items` array, rather than nesting MathBox values. Deliberately the flattest shape that still lets a consuming writer walk a whole formula non-recursively: add the box's own page-placement offset once, emit every item.
+// The result of laying out one MathML (sub)tree: a bounding box (widthPt = full width; heightPt = ascentPt + descentPt) plus every positioned item inside it, already flattened to box-local absolute coordinates — a parent box embeds a child by adding its own child-placement offset to every one of the child's items and splicing them into its own flat `items` array, rather than nesting MathBox values. Deliberately the flattest shape that still lets a consuming writer walk a whole formula non-recursively: add the box's own page-placement offset once, emit every item.
 export interface MathBox {
   readonly widthPt: number;
   readonly heightPt: number;
@@ -73,13 +73,13 @@ export interface MathGlyphMetrics {
 // Which extent a stretchy glyph is being stretched along: its height (a tall parenthesis, brace, bracket, or radical sign) or its width (an over/under-brace, a long arrow). A font declares a separate construction per axis.
 export type MathStretchAxis = "vertical" | "horizontal";
 
-// One glyph of a resolved stretchy construction. `offsetPt` is measured along the stretch axis, from the construction's own drawing origin to this glyph's own drawing origin -- upward for a vertical construction (parts ordered bottom to top), rightward for a horizontal one.
+// One glyph of a resolved stretchy construction. `offsetPt` is measured along the stretch axis, from the construction's own drawing origin to this glyph's own drawing origin — upward for a vertical construction (parts ordered bottom to top), rightward for a horizontal one.
 export interface MathStretchGlyph {
   readonly glyphId: number;
   readonly offsetPt: number;
 }
 
-// A stretchy glyph resolved to concrete, drawable placements at one target size. `kind` records the OpenType MATH outcome: 'base' (the unstretched form already reaches the target, or is all the font offers), 'variant' (a pre-built larger glyph), 'assembly' (built from repeated parts). `sizePt` is the extent actually achieved along the stretch axis, >= the requested target whenever the font can reach it. `inkAscentPt`/`inkDescentPt` are the whole construction's real ink extent (from outlines, not advances) -- the only thing that lets a caller centre the construction on the maths axis and give it a box that fits it. `advanceWidthPt` is the construction's horizontal advance.
+// A stretchy glyph resolved to concrete, drawable placements at one target size. `kind` records the OpenType MATH outcome: 'base' (the unstretched form already reaches the target, or is all the font offers), 'variant' (a pre-built larger glyph), 'assembly' (built from repeated parts). `sizePt` is the extent actually achieved along the stretch axis, >= the requested target whenever the font can reach it. `inkAscentPt`/`inkDescentPt` are the whole construction's real ink extent (from outlines, not advances) — the only thing that lets a caller centre the construction on the maths axis and give it a box that fits it. `advanceWidthPt` is the construction's horizontal advance.
 export interface MathStretchResult {
   readonly kind: "base" | "variant" | "assembly";
   readonly sizePt: number;
@@ -89,7 +89,7 @@ export interface MathStretchResult {
   readonly placements: readonly MathStretchGlyph[];
 }
 
-// The font-metrics port a MathML layout engine consumes. Every *Pt field is already in points at the caller's requested font size (not design units, not em-relative) -- a layout engine never needs the font's unitsPerEm or its own unit conversion; that is entirely the implementation's job. `glyph()` returns undefined for a code point the font has no glyph for; `stretch()` returns undefined when the font declares no construction for that glyph/axis or no placement's outline could be measured -- in both cases the caller draws the unstretched base glyph as ordinary text.
+// The font-metrics port a MathML layout engine consumes. Every *Pt field is already in points at the caller's requested font size (not design units, not em-relative) — a layout engine never needs the font's unitsPerEm or its own unit conversion; that is entirely the implementation's job. `glyph()` returns undefined for a code point the font has no glyph for; `stretch()` returns undefined when the font declares no construction for that glyph/axis or no placement's outline could be measured — in both cases the caller draws the unstretched base glyph as ordinary text.
 export interface MathFontMetrics {
   readonly ascentPerEm: number;
   readonly descentPerEm: number;
@@ -121,9 +121,9 @@ export interface MathFontMetrics {
   readonly stackTopShiftUpPt: number;
   readonly stackBottomShiftDownPt: number;
   readonly stackGapMinPt: number;
-  readonly scriptPercentScaleDown: number; // e.g. 0.71, not 71 -- already divided by 100
+  readonly scriptPercentScaleDown: number; // e.g. 0.71, not 71 — already divided by 100
   readonly scriptScriptPercentScaleDown: number;
-  // Line thickness for a plain (non-fraction) rule -- derived by the implementation from FractionRuleThickness, the nearest genuine spec field, since most math fonts use the same nominal rule weight for both.
+  // Line thickness for a plain (non-fraction) rule — derived by the implementation from FractionRuleThickness, the nearest genuine spec field, since most math fonts use the same nominal rule weight for both.
   readonly defaultRuleThicknessPt: number;
 
   glyph(codePoint: number, sizePt: number): MathGlyphMetrics | undefined;

@@ -3,7 +3,7 @@ import { vi } from "vitest";
 
 import type { AppRouter } from "../rpc/router";
 
-// A full structural stand-in for getRpcClient()'s return value, one vi.fn() per procedure the real router (src/rpc/router.ts) exposes -- every hook test replaces getRpcClient with a function returning one of these, then overrides only the procedure(s) it actually calls via mockResolvedValue/mockImplementation. vi.fn()'s own type can't be verified against oRPC's generic per-procedure call signature (input, plus an options object carrying signal), so the return is cast at the one point where the object's shape is assembled, not scattered per test.
+// A full structural stand-in for getRpcClient()'s return value, one vi.fn() per procedure the real router (src/rpc/router.ts) exposes — every hook test replaces getRpcClient with a function returning one of these, then overrides only the procedure(s) it actually calls via mockResolvedValue/mockImplementation. vi.fn()'s own type can't be verified against oRPC's generic per-procedure call signature (input, plus an options object carrying signal), so the return is cast at the one point where the object's shape is assembled, not scattered per test.
 export function createMockRpcClient(): RouterClient<AppRouter> {
   return {
     formats: {

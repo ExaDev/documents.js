@@ -19,7 +19,7 @@ import type { DocxDocument } from "./read";
 import { readDocxContent } from "./read";
 import { buildDocxPackageFromContent } from "./write";
 
-// The round trip these tests actually assert: a docx read into sections, written back out through buildDocxPackageFromContent, and read again must produce the identical sections. Every fixture below is a real word/document.xml body, so the assertion is over the whole pair rather than over the writer's XML in isolation -- what the writer emits only matters inasmuch as readDocxContent reads the same model back out of it.
+// The round trip these tests actually assert: a docx read into sections, written back out through buildDocxPackageFromContent, and read again must produce the identical sections. Every fixture below is a real word/document.xml body, so the assertion is over the whole pair rather than over the writer's XML in isolation — what the writer emits only matters inasmuch as readDocxContent reads the same model back out of it.
 
 const TINY_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
@@ -82,7 +82,7 @@ function expectStableRoundTrip(source: Package): ContentSection[] {
   return after;
 }
 
-// The extras round trip: unlike `roundTrip` above, this carries the WHOLE DocxDocument -- comments, footnotes, endnotes, header/footer parts, and numbering, not only sections -- through buildDocxPackageFromContent, since DocxContent's own optional fields are a superset of what `roundTrip` exercises.
+// The extras round trip: unlike `roundTrip` above, this carries the WHOLE DocxDocument — comments, footnotes, endnotes, header/footer parts, and numbering, not only sections — through buildDocxPackageFromContent, since DocxContent's own optional fields are a superset of what `roundTrip` exercises.
 function fullRoundTrip(source: Package): {
   before: DocxDocument;
   after: DocxDocument;
@@ -718,7 +718,7 @@ describe("buildDocxPackageFromContent: content round trip", () => {
     ]);
   });
 
-  // A heading with a page break before it and Word's own _Toc bookmark around it -- one of the commonest shapes in a real document with a table of contents. collectParagraph pushes the pageBreak block before the paragraph it belongs to, so a construct whose extent starts at that same paragraph opens one block later: the page break and the construct are siblings in the flat list, not nested. The page break must still land immediately before the paragraph that carries it, not at the end of the section with a spurious empty paragraph appended.
+  // A heading with a page break before it and Word's own _Toc bookmark around it — one of the commonest shapes in a real document with a table of contents. collectParagraph pushes the pageBreak block before the paragraph it belongs to, so a construct whose extent starts at that same paragraph opens one block later: the page break and the construct are siblings in the flat list, not nested. The page break must still land immediately before the paragraph that carries it, not at the end of the section with a spurious empty paragraph appended.
   it("keeps a page break immediately before the paragraph that opens a construct there, instead of moving it to the end of the flow", () => {
     const source = docxPackage([
       para("before"),
@@ -789,7 +789,7 @@ describe("buildDocxPackageFromContent: content round trip", () => {
     expect(kinds.indexOf("pageBreak")).toBeLessThan(kinds.indexOf("table"));
   });
 
-  // The source relationship spells its query separator as the XML entity '&amp;'; the projection decodes it, and the writer re-encodes it once -- the whole point of the pair being that a target survives the trip spelled the same way, not doubly encoded.
+  // The source relationship spells its query separator as the XML entity '&amp;'; the projection decodes it, and the writer re-encodes it once — the whole point of the pair being that a target survives the trip spelled the same way, not doubly encoded.
   it("round-trips an external hyperlink through a freshly minted relationship, sharing one relationship per target", () => {
     const link = (text: string): XmlNode =>
       el("w:p", {}, [
@@ -819,7 +819,7 @@ describe("buildDocxPackageFromContent: content round trip", () => {
         ? paragraph.runs[0]?.hyperlink
         : undefined,
     ).toBe("https://example.com/a?x=1&y=2");
-    // Filtered to the hyperlink relationship specifically -- document.xml.rels also always carries a styles.xml relationship now (buildStylesPart is unconditional), which this test's own "one relationship per target" claim was never about.
+    // Filtered to the hyperlink relationship specifically — document.xml.rels also always carries a styles.xml relationship now (buildStylesPart is unconditional), which this test's own "one relationship per target" claim was never about.
     const rels = rootElement(written.parts["word/_rels/document.xml.rels"]);
     const hyperlinkRels = elementsWithTag(
       rels === undefined ? [] : [rels],
@@ -1276,7 +1276,7 @@ describe("buildDocxPackageFromContent: construct round trip", () => {
   });
 
   it("round-trips a non-TOC gallery through the residue channel: the docPartObj degrades to richText on read and is restored on write", () => {
-    // The restorable tier's first consumer (document-schema.js's residue channel): a Cover Pages SDT reads back as a richText control carrying its w:docPartObj verbatim in descriptor.source, and the writer re-emits the element from that residue in place of the default w:richText type element -- so the same-format pair loses the gallery name no longer.
+    // The restorable tier's first consumer (document-schema.js's residue channel): a Cover Pages SDT reads back as a richText control carrying its w:docPartObj verbatim in descriptor.source, and the writer re-emits the element from that residue in place of the default w:richText type element — so the same-format pair loses the gallery name no longer.
     const coverPage = el("w:sdt", {}, [
       el("w:sdtPr", {}, [
         el("w:alias", { "w:val": "Title" }),
@@ -1535,7 +1535,7 @@ describe("buildDocxPackageFromContent: construct round trip", () => {
         endRun: 2,
       },
     ]);
-    // The writer puts the halves back between the runs the range names -- inside the paragraph, never around it.
+    // The writer puts the halves back between the runs the range names — inside the paragraph, never around it.
     const document = rootElement(written.parts["word/document.xml"]);
     const body = document === undefined ? undefined : document.children[0];
     const paragraphElement =
@@ -1621,7 +1621,7 @@ describe("buildDocxPackageFromContent: construct round trip", () => {
   });
 
   it("writes a point run extent's own halves as a start-then-end pair, not an inverted one", () => {
-    // WordprocessingML pairs w:bookmarkStart/End by w:id with start-before-end ordering, so the ORDER of a point extent's own two halves is load-bearing for every consumer that pairs by id and order (Word included): the boundary convention of emitting closes before opens exists for two DIFFERENT extents meeting at one boundary, and applied to a point's own halves it would put the bookmarkEnd first. The written order of the neighbouring range extent is pinned too -- its close lands after the last run it covers, the point pair between the runs its position names.
+    // WordprocessingML pairs w:bookmarkStart/End by w:id with start-before-end ordering, so the ORDER of a point extent's own two halves is load-bearing for every consumer that pairs by id and order (Word included): the boundary convention of emitting closes before opens exists for two DIFFERENT extents meeting at one boundary, and applied to a point's own halves it would put the bookmarkEnd first. The written order of the neighbouring range extent is pinned too — its close lands after the last run it covers, the point pair between the runs its position names.
     const source = docxPackage([
       el("w:p", {}, [
         el("w:r", {}, [el("w:t", {}, [txt("unmarked ")])]),
@@ -1684,7 +1684,7 @@ describe("buildDocxPackageFromContent: construct round trip", () => {
   });
 
   it("writes a non-writable run-level construct extent as its paragraph's own content, with no markers", () => {
-    // The kinds readDocxContent produces at run level that this writer has no spelling for: a run-scoped content control (a legacy w:ffData form field) would need its control payload rebuilt from the descriptor, and a comment or note reference points into parts this writer does not emit. Its runs write as ordinary content and only the descriptor is lost -- the same content-preserving policy the block-level foreign constructs above follow.
+    // The kinds readDocxContent produces at run level that this writer has no spelling for: a run-scoped content control (a legacy w:ffData form field) would need its control payload rebuilt from the descriptor, and a comment or note reference points into parts this writer does not emit. Its runs write as ordinary content and only the descriptor is lost — the same content-preserving policy the block-level foreign constructs above follow.
     const written = buildDocxPackageFromContent({
       sections: [
         {
@@ -1828,7 +1828,7 @@ describe("buildDocxPackageFromContent: construct round trip", () => {
   });
 
   it("writes a crossing internal link extent's runs as plain content rather than a mis-nested wrap", () => {
-    // Two internal links whose ranges cross cannot both wrap (nesting w:hyperlink inside w:hyperlink is not WordprocessingML), and Word itself cannot produce the shape -- only a hand-built ContentDocument can. The earlier link wraps; the crossing one's runs stay plain and only its descriptor is lost, the same content-preserving policy an unwritable construct kind follows.
+    // Two internal links whose ranges cross cannot both wrap (nesting w:hyperlink inside w:hyperlink is not WordprocessingML), and Word itself cannot produce the shape — only a hand-built ContentDocument can. The earlier link wraps; the crossing one's runs stay plain and only its descriptor is lost, the same content-preserving policy an unwritable construct kind follows.
     const written = buildDocxPackageFromContent({
       sections: [
         {
@@ -1876,7 +1876,7 @@ describe("buildDocxPackageFromContent: construct round trip", () => {
   });
 
   it("resolves two overlapping internal links by the earliest-starting extent, regardless of the constructs array's own order", () => {
-    // The winner is decided by sorting the extents by startRun (ties broken by the LONGER extent first), never by the order they happen to appear in `constructs` -- this paragraph lists the later-starting, shorter link FIRST specifically to prove the sort, not the array order, decides the winner.
+    // The winner is decided by sorting the extents by startRun (ties broken by the LONGER extent first), never by the order they happen to appear in `constructs` — this paragraph lists the later-starting, shorter link FIRST specifically to prove the sort, not the array order, decides the winner.
     const written = buildDocxPackageFromContent({
       sections: [
         {
@@ -2060,7 +2060,7 @@ describe("buildDocxPackageFromContent: construct round trip", () => {
     ).toEqual({ kind: "field", instruction: " PAGE " });
   });
 
-  // The kinds readDocxContent never produces, which a ContentDocument from another codec still can. Each writes its content and drops only the descriptor, since WordprocessingML has no block-level element for any of them -- what must never happen is an element written where it does not parse.
+  // The kinds readDocxContent never produces, which a ContentDocument from another codec still can. Each writes its content and drops only the descriptor, since WordprocessingML has no block-level element for any of them — what must never happen is an element written where it does not parse.
   it.each([
     [
       "a block-scoped link",
@@ -2105,7 +2105,7 @@ describe("buildDocxPackageFromContent: construct round trip", () => {
   );
 
   it("round-trips constructs nested inside each other, and inside a table cell", () => {
-    // A content control wrapping a wholly tracked-inserted paragraph -- Word's own nesting order, since CT_RunTrackChange has no w:p in its content model and so can never be the structural outer element around a block-level w:sdt.
+    // A content control wrapping a wholly tracked-inserted paragraph — Word's own nesting order, since CT_RunTrackChange has no w:p in its content model and so can never be the structural outer element around a block-level w:sdt.
     const trackedParagraph = el("w:p", {}, [
       el("w:pPr", {}, [
         el("w:rPr", {}, [el("w:ins", { "w:id": "1", "w:author": "Ada" })]),
@@ -2142,7 +2142,7 @@ describe("buildDocxPackageFromContent: styles, numbering, comments, footnotes, e
       el("w:pPr", {}, [el("w:pStyle", { "w:val": "IntenseQuote" })]),
       el("w:r", {}, [el("w:t", {}, [txt("quoted")])]),
     ]);
-    // No word/styles.xml at all in the source -- the exact defect the issue reports.
+    // No word/styles.xml at all in the source — the exact defect the issue reports.
     const { after, written } = fullRoundTrip(docxPackage([paragraph]));
     const stylesRoot = rootElement(written.parts["word/styles.xml"]);
     expect(stylesRoot).toBeDefined();
@@ -2294,7 +2294,7 @@ describe("buildDocxPackageFromContent: styles, numbering, comments, footnotes, e
       ]),
     );
     const notes = childrenWithTag(root, "w:footnote").slice(2);
-    // Explicit ids are 2 and 9, so the minted id for the id-less middle note is 10, not one past 2 -- every explicit id counts toward the floor, regardless of array position.
+    // Explicit ids are 2 and 9, so the minted id for the id-less middle note is 10, not one past 2 — every explicit id counts toward the floor, regardless of array position.
     expect(notes.map((n) => attr(n, "w:id"))).toEqual(["2", "10", "9"]);
     // w:type is written only when the source recorded one other than the ordinary "normal" implied by its absence.
     expect(notes[0]?.attributes.some((a) => a.name === "w:type")).toBe(false);
@@ -2473,7 +2473,7 @@ describe("buildDocxPackageFromContent: styles, numbering, comments, footnotes, e
   });
 
   it("writes ONE media file for one payload referenced from many header parts, not one per part", () => {
-    // The resource-exhaustion shape the security review of this PR named: a hostile package of N header/footer parts all referencing the same S-byte image must not become N x S of decoded media on round trip. Two headers carrying one payload here; the assertion is the byte-level consequence -- exactly one word/media part, and both header relationships pointing at it.
+    // The resource-exhaustion shape the security review of this PR named: a hostile package of N header/footer parts all referencing the same S-byte image must not become N x S of decoded media on round trip. Two headers carrying one payload here; the assertion is the byte-level consequence — exactly one word/media part, and both header relationships pointing at it.
     const headerImage = (embedId: string): XmlElement =>
       el("w:drawing", {}, [
         el("wp:inline", {}, [
@@ -3253,7 +3253,7 @@ describe("buildDocxPackageFromContent: run content, styles part, note parts, and
       "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
     );
     const styles = elementsWithTag([stylesRoot], "w:style");
-    // The fixed Normal/DefaultParagraphFont scaffolding plus exactly one referenced entry -- referencing Normal itself adds nothing.
+    // The fixed Normal/DefaultParagraphFont scaffolding plus exactly one referenced entry — referencing Normal itself adds nothing.
     expect(styles.map((style) => attr(style, "w:styleId"))).toEqual([
       "Normal",
       "DefaultParagraphFont",

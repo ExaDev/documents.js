@@ -203,7 +203,7 @@ describe("setImage: swapped pixel bytes survive a real write/reopen, and the orp
     expect(image.imageId).not.toBe(originalImageId);
 
     const reopened = readPdf(editor.toBytes());
-    // writePdf only ever embeds an images[] entry a page item actually references -- the orphaned original was never referenced after setImage, so it was never embedded and does not reappear on a fresh parse.
+    // writePdf only ever embeds an images[] entry a page item actually references — the orphaned original was never referenced after setImage, so it was never embedded and does not reappear on a fresh parse.
     expect(reopened.images[originalImageId]).toBeUndefined();
     expect(reopened.images[image.imageId]).toBeDefined();
     const reopenedImage = reopened.pages[0]?.items[0];

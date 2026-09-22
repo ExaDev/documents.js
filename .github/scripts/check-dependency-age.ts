@@ -15,9 +15,9 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// pnpm's minimumReleaseAge is a number of MINUTES, not days: pnpm types the setting "number (minutes)" in its own settings reference (https://pnpm.io/settings#minimumreleaseage). This workspace configures 60 -- one hour -- where the repository this script was ported from configures 10080, seven days and the source of its hardcoded 7. Reading the live value is what keeps this gate and pnpm's own resolution gate describing the same window: a hardcoded number here would silently pass PRs pnpm refuses to install, or hold PRs it would have installed. Nothing converts to days, so the unit cannot drift from the setting.
+// pnpm's minimumReleaseAge is a number of MINUTES, not days: pnpm types the setting "number (minutes)" in its own settings reference (https://pnpm.io/settings#minimumreleaseage). This workspace configures 60 — one hour — where the repository this script was ported from configures 10080, seven days and the source of its hardcoded 7. Reading the live value is what keeps this gate and pnpm's own resolution gate describing the same window: a hardcoded number here would silently pass PRs pnpm refuses to install, or hold PRs it would have installed. Nothing converts to days, so the unit cannot drift from the setting.
 //
-// An absent key is a real error rather than a case to default. This check is the whole reason a dependency bump is allowed to merge unattended, and a default would mean choosing a window nobody configured -- either stricter than the workspace's own policy (blocking merges the policy permits) or looser (merging what it forbids).
+// An absent key is a real error rather than a case to default. This check is the whole reason a dependency bump is allowed to merge unattended, and a default would mean choosing a window nobody configured — either stricter than the workspace's own policy (blocking merges the policy permits) or looser (merging what it forbids).
 export function minimumReleaseAgeMinutes(workspaceYamlText: string): number {
   const parsed: unknown = parse(workspaceYamlText);
   if (!isRecord(parsed) || typeof parsed.minimumReleaseAge !== "number") {
@@ -37,7 +37,7 @@ export function isTooNew(
   return now - publishedAt.getTime() < minimumAgeMinutes * MS_PER_MINUTE;
 }
 
-// This workspace's pnpm-lock.yaml is a single YAML document. The reference this was ported from reads a multi-document stream, which is what pnpm writes when a project pins its own pnpm binary through packageManagerDependencies: one document for that self-management lockfile, one for the project's own dependencies, both carrying their own `packages:` map -- hence its search for the document with a project `importers['.']` entry. This workspace pins pnpm through package.json's packageManager field alone, so there is one document and nothing to disambiguate. `parse` rather than parseAllDocuments keeps that assumption honest: it throws on a multi-document source, so the day a lockfile here does grow a second document this fails loudly rather than silently reading whichever document came first.
+// This workspace's pnpm-lock.yaml is a single YAML document. The reference this was ported from reads a multi-document stream, which is what pnpm writes when a project pins its own pnpm binary through packageManagerDependencies: one document for that self-management lockfile, one for the project's own dependencies, both carrying their own `packages:` map — hence its search for the document with a project `importers['.']` entry. This workspace pins pnpm through package.json's packageManager field alone, so there is one document and nothing to disambiguate. `parse` rather than parseAllDocuments keeps that assumption honest: it throws on a multi-document source, so the day a lockfile here does grow a second document this fails loudly rather than silently reading whichever document came first.
 export function projectDocument(yamlText: string): Record<string, unknown> {
   const parsed: unknown = parse(yamlText);
   if (
@@ -108,7 +108,7 @@ function main(): void {
   }
 
   try {
-    // Read inside the try, not at module scope: a missing or malformed minimumReleaseAge is a script failure, and an uncaught throw at module scope exits 1 -- the code that tells the caller "this PR is merely too new, come back later", which would leave a real misconfiguration looking like a grace period that never ends.
+    // Read inside the try, not at module scope: a missing or malformed minimumReleaseAge is a script failure, and an uncaught throw at module scope exits 1 — the code that tells the caller "this PR is merely too new, come back later", which would leave a real misconfiguration looking like a grace period that never ends.
     const minimumAgeMinutes = minimumReleaseAgeMinutes(
       readFileSync(WORKSPACE_FILE, "utf8"),
     );

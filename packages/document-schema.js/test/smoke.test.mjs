@@ -1,4 +1,4 @@
-// Verifies the built dist/ output actually loads and exposes the public surface, in both ESM and CJS. Run only via `pnpm test:smoke` (which rebuilds dist/ and schemas/ first, via `pnpm run build`) -- deliberately outside the "unit" vitest project and outside tsconfig's "src" program, since it tests build output rather than source.
+// Verifies the built dist/ output actually loads and exposes the public surface, in both ESM and CJS. Run only via `pnpm test:smoke` (which rebuilds dist/ and schemas/ first, via `pnpm run build`) — deliberately outside the "unit" vitest project and outside tsconfig's "src" program, since it tests build output rather than source.
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
@@ -52,7 +52,7 @@ describe('smoke: generated JSON Schema files', () => {
     expect(() => readSchema('layout-document.schema.json')).toThrow();
   });
 
-  it("document-tree.schema.json's $id is a jsdelivr URL pinned to the package's own published version -- the URI IS the version", () => {
+  it("document-tree.schema.json's $id is a jsdelivr URL pinned to the package's own published version — the URI IS the version", () => {
     const documentTree = readSchema('document-tree.schema.json');
     expect(documentTree.$id).toBe(
       `https://cdn.jsdelivr.net/npm/document-schema.js@${packageVersion}/schemas/document-tree.schema.json`,
@@ -86,7 +86,7 @@ describe('smoke: generated JSON Schema files', () => {
     // The tree fragments resolve file-locally: both published files carry the same $defs block (the same object emitted twice in one generator run).
     expect(Object.keys(documentTree.$defs)).toContain('SectionGroup');
     expect(Object.keys(documentTree.$defs)).toContain('StyleEntry');
-    // The recursion itself: a section group's children point back at the shared HeadingGroup/ListGroup/SectionConstructGroup definitions, and those at TreeBlockLeaf -- the block union minus the two construct boundary markers, since a construct is a group at this position and never the flat form's marker pair.
+    // The recursion itself: a section group's children point back at the shared HeadingGroup/ListGroup/SectionConstructGroup definitions, and those at TreeBlockLeaf — the block union minus the two construct boundary markers, since a construct is a group at this position and never the flat form's marker pair.
     expect(documentTree.$defs.SectionGroup.properties.children.items.oneOf).toEqual([
       { $ref: '#/$defs/HeadingGroup' },
       { $ref: '#/$defs/ListGroup' },
@@ -117,7 +117,7 @@ describe('smoke: generated JSON Schema files', () => {
       { $ref: '#/$defs/ProvenanceDescriptor' },
       { $ref: '#/$defs/DivisionDescriptor' },
     ]);
-    // Both group wrappers take a construct descriptor as their node, and each recurses into its own flow's child union -- the section-scoped one admitting heading groups, the shape-scoped one not.
+    // Both group wrappers take a construct descriptor as their node, and each recurses into its own flow's child union — the section-scoped one admitting heading groups, the shape-scoped one not.
     for (const wrapper of ['SectionConstructGroup', 'ShapeConstructGroup']) {
       expect(documentTree.$defs[wrapper].properties.node.$ref).toBe('#/$defs/ConstructDescriptor');
       expect(documentTree.$defs[wrapper].required).toEqual(['node', 'children']);
@@ -129,7 +129,7 @@ describe('smoke: generated JSON Schema files', () => {
     expect(documentTree.$defs.ShapeConstructGroup.properties.children.items.oneOf).not.toContainEqual({
       $ref: '#/$defs/HeadingGroup',
     });
-    // Every descriptor is a closed object, so a producer cannot smuggle format-specific residue onto one -- channel 2 is its own facility, not a descriptor escape hatch.
+    // Every descriptor is a closed object, so a producer cannot smuggle format-specific residue onto one — channel 2 is its own facility, not a descriptor escape hatch.
     for (const descriptor of [
       'ContentControlDescriptor',
       'FieldDescriptor',
@@ -174,7 +174,7 @@ describe('smoke: generated JSON Schema files', () => {
     ]);
     expect(contentDocument.$defs.ContentConstructStart.properties.descriptor.$ref).toBe('#/$defs/ConstructDescriptor');
     expect(contentDocument.$defs.ContentConstructStart.required).toEqual(['kind', 'descriptor']);
-    // The close marker's kind is its whole payload -- no id, no frames, no style ref.
+    // The close marker's kind is its whole payload — no id, no frames, no style ref.
     expect(Object.keys(contentDocument.$defs.ContentConstructEnd.properties)).toEqual(['kind']);
     // The embedded-object cycle is the one deliberate cross-file pointer.
     expect(contentDocument.$defs.ContentEmbeddedObjectBlock.properties.document.$ref).toBe(

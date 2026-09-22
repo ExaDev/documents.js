@@ -56,13 +56,13 @@ export function f64(value: number): number[] {
   return [...new Uint8Array(buffer)];
 }
 
-/** An XLUnicodeString ([MS-XLS] 2.5.294), written compressed when every character fits in a low byte and uncompressed otherwise -- the same choice a real producer makes. */
+/** An XLUnicodeString ([MS-XLS] 2.5.294), written compressed when every character fits in a low byte and uncompressed otherwise — the same choice a real producer makes. */
 export function xlUnicodeString(text: string): number[] {
   const { flags, rgb } = encodeCharacters(text);
   return [...u16(text.length), flags, ...rgb];
 }
 
-/** An XLUnicodeStringNoCch ([MS-XLS] 2.5.296): as XLUnicodeString, but with no character-count field of its own -- the containing structure states the count separately (SupBook's own `cch`, for its `virtPath` field). */
+/** An XLUnicodeStringNoCch ([MS-XLS] 2.5.296): as XLUnicodeString, but with no character-count field of its own — the containing structure states the count separately (SupBook's own `cch`, for its `virtPath` field). */
 export function xlUnicodeStringNoCch(text: string): number[] {
   const { flags, rgb } = encodeCharacters(text);
   return [flags, ...rgb];
@@ -74,7 +74,7 @@ export function shortXlUnicodeString(text: string): number[] {
   return [text.length & 0xff, flags, ...rgb];
 }
 
-/** An XLUnicodeRichExtendedString ([MS-XLS] 2.5.293) carrying neither formatting runs nor phonetic data -- the shape a plain SST entry has. */
+/** An XLUnicodeRichExtendedString ([MS-XLS] 2.5.293) carrying neither formatting runs nor phonetic data — the shape a plain SST entry has. */
 export function richExtendedString(text: string): number[] {
   const { flags, rgb } = encodeCharacters(text);
   return [...u16(text.length), flags, ...rgb];
@@ -126,39 +126,39 @@ export function cell(row: number, column: number, xfIndex = 15): number[] {
   return [...u16(row), ...u16(column), ...u16(xfIndex)];
 }
 
-/** One border edge's own raw fields, for cellXfTrailer below -- a BorderStyle line-style token (0 = no border) and a 7-bit icv colour index. */
+/** One border edge's own raw fields, for cellXfTrailer below — a BorderStyle line-style token (0 = no border) and a 7-bit icv colour index. */
 export interface XfTestBorderEdge {
   readonly style: number;
   readonly icv: number;
 }
 
-/** The decoration and alignment fields cellXfTrailer packs, in the same shape src/biff/xf-colors.ts's own XfDecorationFields/XfAlignmentFields carry -- kept as a separate, independently-written literal here rather than imported, so a test asserting against this fixture's own bytes is checking the reader's understanding of the spec, not agreement with the writer's packing code (see this module's own top comment). */
+/** The decoration and alignment fields cellXfTrailer packs, in the same shape src/biff/xf-colors.ts's own XfDecorationFields/XfAlignmentFields carry — kept as a separate, independently-written literal here rather than imported, so a test asserting against this fixture's own bytes is checking the reader's understanding of the spec, not agreement with the writer's packing code (see this module's own top comment). */
 export interface XfTestDecoration {
   readonly fillPattern?: number;
   readonly fillForegroundIcv?: number;
-  /** icvBack -- meaningless for a solid fill ("only icvFore is rendered"), but a real colour for every other named FillPattern; ICV_AUTOMATIC_BACKGROUND (0x41) when omitted, matching a real Excel-written XF with no explicit background stated. */
+  /** icvBack — meaningless for a solid fill ("only icvFore is rendered"), but a real colour for every other named FillPattern; ICV_AUTOMATIC_BACKGROUND (0x41) when omitted, matching a real Excel-written XF with no explicit background stated. */
   readonly fillBackgroundIcv?: number;
   readonly left?: XfTestBorderEdge;
   readonly right?: XfTestBorderEdge;
   readonly top?: XfTestBorderEdge;
   readonly bottom?: XfTestBorderEdge;
-  /** HorizAlign's own alc token (0-7, [MS-XLS] "HorizAlign") -- ALC_GENERAL (0) when omitted, matching a real Excel-written XF with no explicit alignment. */
+  /** HorizAlign's own alc token (0-7, [MS-XLS] "HorizAlign") — ALC_GENERAL (0) when omitted, matching a real Excel-written XF with no explicit alignment. */
   readonly alc?: number;
-  /** VertAlign's own alcV token (0-4, [MS-XLS] "VertAlign") -- ALCV_BOTTOM (2) when omitted, matching a real Excel-written XF with no explicit vertical alignment (this package's own writer default, xf-writer.ts's packAlignmentPrefix). */
+  /** VertAlign's own alcV token (0-4, [MS-XLS] "VertAlign") — ALCV_BOTTOM (2) when omitted, matching a real Excel-written XF with no explicit vertical alignment (this package's own writer default, xf-writer.ts's packAlignmentPrefix). */
   readonly alcV?: number;
 }
 
 const NO_EDGE: XfTestBorderEdge = { style: 0, icv: 0 };
 
-/** IcvXF's own "default foreground/background colour" special values (icv 0x40/0x41) -- literals taken directly from [MS-XLS]'s Icv table, the values a genuinely undecorated real Excel-written XF carries in icvFore/icvBack. Kept as their own literals here rather than imported from src/biff/xf-colors.ts, for the same reason the rest of this fixture builder is independently written (see this module's own top comment). */
+/** IcvXF's own "default foreground/background colour" special values (icv 0x40/0x41) — literals taken directly from [MS-XLS]'s Icv table, the values a genuinely undecorated real Excel-written XF carries in icvFore/icvBack. Kept as their own literals here rather than imported from src/biff/xf-colors.ts, for the same reason the rest of this fixture builder is independently written (see this module's own top comment). */
 const ICV_DEFAULT_FOREGROUND = 0x40;
 const ICV_DEFAULT_BACKGROUND = 0x41;
 
-/** HorizAlign's ALCGEN (general) and VertAlign's ALCVBOT (bottom) -- word1's own default alc/alcV tokens for an XF with no explicit alignment stated, matching what a real Excel-written cell also carries (xf-writer.ts's own packAlignmentPrefix default). Independently-written literals, for the same reason ICV_DEFAULT_FOREGROUND is. */
+/** HorizAlign's ALCGEN (general) and VertAlign's ALCVBOT (bottom) — word1's own default alc/alcV tokens for an XF with no explicit alignment stated, matching what a real Excel-written cell also carries (xf-writer.ts's own packAlignmentPrefix default). Independently-written literals, for the same reason ICV_DEFAULT_FOREGROUND is. */
 const ALC_GENERAL_DEFAULT = 0x0;
 const ALCV_BOTTOM_DEFAULT = 0x2;
 
-/** An XF record's own trailing CellXF/StyleXF "Data" payload ([MS-XLS] 2.4.353), 14 bytes: a leading alignment word (word1's own alc/alcV tokens, General/Bottom when the caller states neither -- the identical default a real Excel-written XF with no explicit alignment carries), then the border word, fill-pattern word, and fill-colour word `decoration` packs -- no borders and no fill pattern when omitted, with icvFore at its own real-file default (0x40, "Automatic") unless the caller states one -- a legal payload every XF record needs regardless of whether a test cares about decoration or alignment. */
+/** An XF record's own trailing CellXF/StyleXF "Data" payload ([MS-XLS] 2.4.353), 14 bytes: a leading alignment word (word1's own alc/alcV tokens, General/Bottom when the caller states neither — the identical default a real Excel-written XF with no explicit alignment carries), then the border word, fill-pattern word, and fill-colour word `decoration` packs — no borders and no fill pattern when omitted, with icvFore at its own real-file default (0x40, "Automatic") unless the caller states one — a legal payload every XF record needs regardless of whether a test cares about decoration or alignment. */
 export function cellXfTrailer(decoration: XfTestDecoration = {}): number[] {
   const left = decoration.left ?? NO_EDGE;
   const right = decoration.right ?? NO_EDGE;
@@ -186,9 +186,9 @@ export function cellXfTrailer(decoration: XfTestDecoration = {}): number[] {
   return [...u32(word1), ...u32(word2), ...u32(word3), ...u16(word4)];
 }
 
-// --- Cell comments: Note/Obj/TxO ([MS-XLS] 2.4.179/2.4.181/2.4.329) -- see workbook/comments.ts's own top comment for how the three join. ---
+// --- Cell comments: Note/Obj/TxO ([MS-XLS] 2.4.179/2.4.181/2.4.329) — see workbook/comments.ts's own top comment for how the three join. ---
 
-/** [MS-XLS] 2.5.92 FtCmo (22 bytes): ft (reserved 0x15), cb (reserved 0x12), ot (object type -- 0x19 is Note), id, a 16-bit flags word workbook/comments.ts never reads, then three reserved 4-byte fields. */
+/** [MS-XLS] 2.5.92 FtCmo (22 bytes): ft (reserved 0x15), cb (reserved 0x12), ot (object type — 0x19 is Note), id, a 16-bit flags word workbook/comments.ts never reads, then three reserved 4-byte fields. */
 export function ftCmo(ot: number, id: number): number[] {
   return [
     ...u16(0x0015),
@@ -213,7 +213,7 @@ export function ftNts(): number[] {
   ];
 }
 
-/** An Obj record ([MS-XLS] 2.4.181) for a Note-type shape: cmo then nts, nothing else -- the fields gated on any other cmo.ot value never apply to a comment's own Obj record. */
+/** An Obj record ([MS-XLS] 2.4.181) for a Note-type shape: cmo then nts, nothing else — the fields gated on any other cmo.ot value never apply to a comment's own Obj record. */
 export function noteObjRecord(id: number): Uint8Array<ArrayBuffer> {
   return record(RECORD_OBJ, [...ftCmo(0x0019, id), ...ftNts()]);
 }
@@ -229,7 +229,7 @@ export function otherObjRecord(
 /**
  * A TxO record ([MS-XLS] 2.4.329) plus the Continue record carrying its text.
  *
- * cbRuns is left at 0 (no TxORuns bytes at all) rather than the >=16-and-a-multiple-of-8 a real producer always writes -- workbook/comments.ts only ever skips cbRuns bytes verbatim, never validates the constraint, so a shorter run table exercises the same code path with a simpler fixture.
+ * cbRuns is left at 0 (no TxORuns bytes at all) rather than the >=16-and-a-multiple-of-8 a real producer always writes — workbook/comments.ts only ever skips cbRuns bytes verbatim, never validates the constraint, so a shorter run table exercises the same code path with a simpler fixture.
  */
 export function noteTxoRecords(
   text: string,
@@ -241,7 +241,7 @@ export function noteTxoRecords(
     ...u16(text.length), // cchText
     ...u16(0), // cbRuns
     ...u16(0), // ifntEmpty
-    ...u16(0), // cbFmla -- no formula
+    ...u16(0), // cbFmla — no formula
   ];
   return [
     record(RECORD_TXO, fixed),
@@ -249,7 +249,7 @@ export function noteTxoRecords(
   ];
 }
 
-/** A Note record ([MS-XLS] 2.4.179, wrapping a NoteSh): row, col, a flags word workbook/comments.ts never reads, idObj, and stAuthor -- omit author entirely by leaving it undefined. */
+/** A Note record ([MS-XLS] 2.4.179, wrapping a NoteSh): row, col, a flags word workbook/comments.ts never reads, idObj, and stAuthor — omit author entirely by leaving it undefined. */
 export function noteRecord(
   row: number,
   column: number,

@@ -95,7 +95,7 @@ describe("colorToRgbHex", () => {
   });
 
   it("zero-pads a byte that hex-encodes to a single digit", () => {
-    // 1/255 * 255 = 1, which toString(16) renders as the single character "1" -- this only reads "01" back out if padStart actually pads with a leading zero.
+    // 1/255 * 255 = 1, which toString(16) renders as the single character "1" — this only reads "01" back out if padStart actually pads with a leading zero.
     expect(colorToRgbHex({ r: 1 / 255, g: 0, b: 0 })).toBe("010000");
   });
 

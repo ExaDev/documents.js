@@ -8,7 +8,7 @@ import {
   SI_UNIT_REGISTRY,
 } from "./units";
 
-// This fixture registry is consumed indirectly, by unit id, throughout the rest of this package's test suite (evaluate.test.ts, worked-example.test.ts, corpus.test.ts all resolve a qty node's "si:..." unit id against SI_UNIT_REGISTRY.units without ever inspecting a unit's own symbol or display name) -- so a unit's cosmetic fields (symbol, name) and its own object-literal shape have no other test anywhere that would notice one going missing or blank. These tests assert each exported constant's exact literal shape directly, the same way a canonical data table gets tested: not because any of these fields are exercised by a computation, but because the registry's whole point is to BE this exact, stable set of values.
+// This fixture registry is consumed indirectly, by unit id, throughout the rest of this package's test suite (evaluate.test.ts, worked-example.test.ts, corpus.test.ts all resolve a qty node's "si:..." unit id against SI_UNIT_REGISTRY.units without ever inspecting a unit's own symbol or display name) — so a unit's cosmetic fields (symbol, name) and its own object-literal shape have no other test anywhere that would notice one going missing or blank. These tests assert each exported constant's exact literal shape directly, the same way a canonical data table gets tested: not because any of these fields are exercised by a computation, but because the registry's whole point is to BE this exact, stable set of values.
 describe("SI unit fixtures", () => {
   it("defines SI_KILOGRAM exactly", () => {
     expect(SI_KILOGRAM).toEqual({
@@ -60,7 +60,7 @@ describe("SI unit fixtures", () => {
     });
   });
 
-  it("registers no pre-bound symbols, only units -- this registry exists solely to resolve unit ids", () => {
+  it("registers no pre-bound symbols, only units — this registry exists solely to resolve unit ids", () => {
     expect(SI_UNIT_REGISTRY.symbols).toEqual([]);
   });
 

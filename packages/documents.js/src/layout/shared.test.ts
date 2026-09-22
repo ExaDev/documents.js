@@ -165,7 +165,7 @@ describe("lineNaturalHeightPt", () => {
 });
 
 describe("alignmentOffsetPt", () => {
-  it("centers, right-aligns, and defaults to left -- justify's own whole-line offset is 0 too, since its real stretching is a per-fragment concern handled by justifyLineGapsPt, not this function", () => {
+  it("centers, right-aligns, and defaults to left — justify's own whole-line offset is 0 too, since its real stretching is a per-fragment concern handled by justifyLineGapsPt, not this function", () => {
     expect(alignmentOffsetPt("center", 100, 20)).toBe(40);
     expect(alignmentOffsetPt("right", 100, 20)).toBe(80);
     expect(alignmentOffsetPt("left", 100, 20)).toBe(0);
@@ -194,11 +194,11 @@ describe("justifyLineGapsPt", () => {
       measurer,
       Number.POSITIVE_INFINITY,
     );
-    // Natural layout: aa@0 (w2), bb@3 (w2), cc@6 (w2) -- natural width 8. Target 14 -> 6pt of slack across 2 gaps -> 3pt each.
+    // Natural layout: aa@0 (w2), bb@3 (w2), cc@6 (w2) — natural width 8. Target 14 -> 6pt of slack across 2 gaps -> 3pt each.
     expect(justifyLineGapsPt(line!, 14, measurer)).toEqual([0, 3, 6]);
   });
 
-  it("never shifts anything on a single-word line -- there is no gap to distribute slack across", () => {
+  it("never shifts anything on a single-word line — there is no gap to distribute slack across", () => {
     const measurer = fakeMeasurer();
     const [line] = wrapRunsToWidth(
       [{ text: "aaaa", font, sizePt: 10, color }],
@@ -208,7 +208,7 @@ describe("justifyLineGapsPt", () => {
     expect(justifyLineGapsPt(line!, 20, measurer)).toEqual([0]);
   });
 
-  it("never shifts anything when the line's own natural width already meets or exceeds the target -- this function only ever adds space, never compresses", () => {
+  it("never shifts anything when the line's own natural width already meets or exceeds the target — this function only ever adds space, never compresses", () => {
     const measurer = fakeMeasurer();
     const [line] = wrapRunsToWidth(
       [{ text: "aa bb", font, sizePt: 10, color }],
@@ -220,7 +220,7 @@ describe("justifyLineGapsPt", () => {
 
   it("treats two fragments of one run-split word (no space between them) as ungapped, not stretching between them", () => {
     const measurer = fakeMeasurer();
-    // A word split across a run boundary (bold change mid-word) stays one unbreakable box atom with two touching fragments and zero gap -- see text-layout.ts's own atomizeRuns.
+    // A word split across a run boundary (bold change mid-word) stays one unbreakable box atom with two touching fragments and zero gap — see text-layout.ts's own atomizeRuns.
     const [line] = wrapRunsToWidth(
       [
         { text: "ab", font, sizePt: 10, color },
@@ -418,7 +418,7 @@ describe("pushCellBorderLines", () => {
     expect(line?.style).toBeUndefined();
   });
 
-  it("carries each edge's own distinct style independently -- a mix of dotted/double/solid on one cell does not collapse to one shared style", () => {
+  it("carries each edge's own distinct style independently — a mix of dotted/double/solid on one cell does not collapse to one shared style", () => {
     const borders: ContentCellBorders = {
       top: { color: RED, widthPt: 1, style: "dotted" },
       right: { color: RED, widthPt: 1, style: "double" },

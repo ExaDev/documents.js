@@ -59,7 +59,7 @@ import { throwIfAborted } from "./util/abort";
 import { writeObject } from "./serialize";
 import type { WinAnsiSubstitution } from "./winansi";
 
-// A formula's own glyph runs are shown through an embedded CID composite font via Identity-H 2-byte CIDs (see math-content-write.ts's own module comment) -- a fundamentally different content-stream shape from an ordinary LayoutText item's single-byte WinAnsi string, and one this package's own LayoutItem union (src/layout.ts) has no member for (LayoutFont only ever names one of the 14 standard PDF faces -- see document-schema.js's style.ts comment -- with no room for "this run uses an embedded, non-standard font resource" at all). A formula therefore cannot travel through LayoutDocument.pages[].items the way every other kind of content this writer draws does; WritePdfOptions.formulas is this module's own, local side channel for it instead, positioned entirely outside the LayoutDocument schema itself.
+// A formula's own glyph runs are shown through an embedded CID composite font via Identity-H 2-byte CIDs (see math-content-write.ts's own module comment) — a fundamentally different content-stream shape from an ordinary LayoutText item's single-byte WinAnsi string, and one this package's own LayoutItem union (src/layout.ts) has no member for (LayoutFont only ever names one of the 14 standard PDF faces — see document-schema.js's style.ts comment — with no room for "this run uses an embedded, non-standard font resource" at all). A formula therefore cannot travel through LayoutDocument.pages[].items the way every other kind of content this writer draws does; WritePdfOptions.formulas is this module's own, local side channel for it instead, positioned entirely outside the LayoutDocument schema itself.
 const MATH_FONT_RESOURCE_NAME = "MF";
 
 // The /Resources/Font key prefix for an embedded text face, deliberately distinct from both the standard-14 faces' own 'F' prefix and the math font's 'MF': all three share one /Font dict, so a collision would silently make one font's resource name resolve to another's object.
@@ -69,7 +69,7 @@ const EMBEDDED_FONT_RESOURCE_PREFIX = "E";
 const FIRST_CHAR = 32;
 const LAST_CHAR = 255;
 
-// The PDF spec requires /StemV on every FontDescriptor, but for a non-embedded standard-14 font every conforming reader already has this exact face's real metrics built in and never consults this value to render it -- these are nominal regular/bold values (heavier stroke weight for bold), included only to satisfy the spec's required-field rule.
+// The PDF spec requires /StemV on every FontDescriptor, but for a non-embedded standard-14 font every conforming reader already has this exact face's real metrics built in and never consults this value to render it — these are nominal regular/bold values (heavier stroke weight for bold), included only to satisfy the spec's required-field rule.
 const NOMINAL_STEM_V_REGULAR = 80;
 const NOMINAL_STEM_V_BOLD = 120;
 
@@ -81,31 +81,31 @@ const FLAG_ITALIC = 64;
 const FLAG_FORCE_BOLD = 262144;
 
 export interface WritePdfOptions {
-  // Compresses content streams and PNG-sourced image data with FlateDecode. Defaults to true; false is an escape hatch for producing a human-auditable, uncompressed PDF (e.g. for a byte-golden test). JPEG-sourced images are embedded via DCTDecode regardless -- this option never touches them.
+  // Compresses content streams and PNG-sourced image data with FlateDecode. Defaults to true; false is an escape hatch for producing a human-auditable, uncompressed PDF (e.g. for a byte-golden test). JPEG-sourced images are embedded via DCTDecode regardless — this option never touches them.
   readonly compress?: boolean;
   readonly signal?: AbortSignal;
-  // Called once per WinAnsi character substitution made while emitting text (see src/pdf/winansi.ts). writePdf itself has no Diagnostic schema to translate these into -- a caller that wants diagnostics (e.g. the local DocumentConverter) supplies this and does the translation itself. Only ever raised for text drawn in a standard-14 face; an embedded face reports through onMissingGlyph below instead.
+  // Called once per WinAnsi character substitution made while emitting text (see src/pdf/winansi.ts). writePdf itself has no Diagnostic schema to translate these into — a caller that wants diagnostics (e.g. the local DocumentConverter) supplies this and does the translation itself. Only ever raised for text drawn in a standard-14 face; an embedded face reports through onMissingGlyph below instead.
   readonly onSubstitution?: (
     substitution: WinAnsiSubstitution,
     context: { readonly pageIndex: number },
   ) => void;
-  // Called once per character drawn as .notdef because the EMBEDDED face resolved for it (see `fonts`) has no glyph for that character. The embedded-face counterpart to onSubstitution, kept separate because nothing visible was substituted -- see ContentStreamResult.missingGlyphs for why inventing a WinAnsiSubstitution's own `to` here would be a worse report than an honest one with no replacement to name.
+  // Called once per character drawn as .notdef because the EMBEDDED face resolved for it (see `fonts`) has no glyph for that character. The embedded-face counterpart to onSubstitution, kept separate because nothing visible was substituted — see ContentStreamResult.missingGlyphs for why inventing a WinAnsiSubstitution's own `to` here would be a worse report than an honest one with no replacement to name.
   readonly onMissingGlyph?: (
     missing: EmbeddedFaceSubstitution,
     context: { readonly pageIndex: number },
   ) => void;
-  // Resolves each text item's own LayoutFont to a real embeddable face where one is available, falling through to the standard-14 mapping otherwise (see src/font-registry.ts for the full five-step order). Omitted -- the default -- every font resolves through resolveStandardFont exactly as it always has, no font program is embedded, and output is byte-identical to a build with no embedded-font support at all: a registry only ever changes anything for a caller that explicitly constructs one.
+  // Resolves each text item's own LayoutFont to a real embeddable face where one is available, falling through to the standard-14 mapping otherwise (see src/font-registry.ts for the full five-step order). Omitted — the default — every font resolves through resolveStandardFont exactly as it always has, no font program is embedded, and output is byte-identical to a build with no embedded-font support at all: a registry only ever changes anything for a caller that explicitly constructs one.
   readonly fonts?: FontRegistry;
-  // Every embedded formula to draw (src/mathml's own MathBox, already positioned per page) -- see this module's own top-of-file comment for why a formula can't travel through doc.pages[].items itself. The embedded STIX Two Math composite font (one Type0/CIDFontType0/FontDescriptor/FontFile3/ToUnicode object group) is allocated once for the whole document, only when this array is non-empty, and shared across every page that references it -- the same "allocate once, reuse via /Resources" pattern this writer already uses for every standard-14 font and image asset.
+  // Every embedded formula to draw (src/mathml's own MathBox, already positioned per page) — see this module's own top-of-file comment for why a formula can't travel through doc.pages[].items itself. The embedded STIX Two Math composite font (one Type0/CIDFontType0/FontDescriptor/FontFile3/ToUnicode object group) is allocated once for the whole document, only when this array is non-empty, and shared across every page that references it — the same "allocate once, reuse via /Resources" pattern this writer already uses for every standard-14 font and image asset.
   readonly formulas?: readonly PositionedFormula[];
-  // Encrypts the written PDF with the standard security handler under one of encrypt-write.ts's four schemes (default: aes-256). Omitted -- the default -- no /Encrypt dictionary is written at all and output is byte-identical to a build with no encryption support; see encrypt-write.ts's own module comment for the write-side algorithms and README.md's Gotchas section for this feature's scope.
+  // Encrypts the written PDF with the standard security handler under one of encrypt-write.ts's four schemes (default: aes-256). Omitted — the default — no /Encrypt dictionary is written at all and output is byte-identical to a build with no encryption support; see encrypt-write.ts's own module comment for the write-side algorithms and README.md's Gotchas section for this feature's scope.
   readonly encryption?: PdfEncryptionOptions;
 }
 
-// A PDF file identifier (trailer /ID) is only ever written when encryption is requested -- an unencrypted document has never needed one from this writer, and adding it unconditionally would change every existing golden-byte test's output. 16 bytes matches the ID this writer's own qpdf-produced test fixtures carry (src/test-support/encrypted-pdfs.ts).
+// A PDF file identifier (trailer /ID) is only ever written when encryption is requested — an unencrypted document has never needed one from this writer, and adding it unconditionally would change every existing golden-byte test's output. 16 bytes matches the ID this writer's own qpdf-produced test fixtures carry (src/test-support/encrypted-pdfs.ts).
 const FILE_ID_BYTES = 16;
 
-// PDF's UTF-16BE-with-BOM convention for text strings outside PDFDocEncoding's range (ISO 32000-1 7.9.2.2) -- JS strings are already UTF-16 internally, so this is a direct byte-pair re-encoding of each existing code unit (surrogate pairs included), not a decode/re-encode round trip.
+// PDF's UTF-16BE-with-BOM convention for text strings outside PDFDocEncoding's range (ISO 32000-1 7.9.2.2) — JS strings are already UTF-16 internally, so this is a direct byte-pair re-encoding of each existing code unit (surrogate pairs included), not a decode/re-encode round trip.
 function textToPdfString(text: string): PdfObject {
   const bytes = new Uint8Array(2 + text.length * 2);
   bytes[0] = 0xfe;
@@ -130,7 +130,7 @@ function formatPdfDate(iso: string): string {
 
 function buildInfoDict(doc: LayoutDocument): PdfDict {
   const entries = new Map<string, PdfObject>();
-  // Always this package's own identity, regardless of doc.metadata.producer (which describes whatever produced the *source* document this LayoutDocument came from, not this PDF) -- deliberately no version string, so byte-golden tests never need updating on a version bump.
+  // Always this package's own identity, regardless of doc.metadata.producer (which describes whatever produced the *source* document this LayoutDocument came from, not this PDF) — deliberately no version string, so byte-golden tests never need updating on a version bump.
   entries.set("Producer", textToPdfString("documents.js"));
   if (doc.metadata.title !== undefined) {
     entries.set("Title", textToPdfString(doc.metadata.title));
@@ -188,7 +188,7 @@ function buildFontObjects(
 ): { readonly font: PdfDict; readonly descriptor: PdfDict } {
   const metrics = STANDARD_METRICS[standardName];
   const widths: PdfObject[] = [];
-  // The Widths array must cover FIRST_CHAR..LAST_CHAR without gaps. WINANSI_GLYPH_NAMES defines a glyph name for every one of those codes (the CP1252 positions with no real assignment are filled with a placeholder name like "bullet" rather than left empty -- see encoding.ts's own comment), and every standard-14 AFM table carries a width for every name that table can produce, so widthOfCode never throws across this whole range for any of the 12 faces.
+  // The Widths array must cover FIRST_CHAR..LAST_CHAR without gaps. WINANSI_GLYPH_NAMES defines a glyph name for every one of those codes (the CP1252 positions with no real assignment are filled with a placeholder name like "bullet" rather than left empty — see encoding.ts's own comment), and every standard-14 AFM table carries a width for every name that table can produce, so widthOfCode never throws across this whole range for any of the 12 faces.
   for (let code = FIRST_CHAR; code <= LAST_CHAR; code++) {
     widths.push(pdfNum(widthOfCode(standardName, code)));
   }
@@ -247,7 +247,7 @@ function prepareJpegImage(bytes: Uint8Array<ArrayBuffer>): PreparedImage {
     ["BitsPerComponent", pdfNum(info.precision)],
     ["Filter", pdfName("DCTDecode")],
   ]);
-  // A 4-component JPEG is CMYK data; Adobe's APP14 transform 2 (YCCK) or an untagged 4-component stream almost always needs this inversion to render with correct colours (see src/image/jpeg-info.ts's own note on adobeTransform) -- transform 0 explicitly means "CMYK as-is", no inversion.
+  // A 4-component JPEG is CMYK data; Adobe's APP14 transform 2 (YCCK) or an untagged 4-component stream almost always needs this inversion to render with correct colours (see src/image/jpeg-info.ts's own note on adobeTransform) — transform 0 explicitly means "CMYK as-is", no inversion.
   if (
     info.components === 4 &&
     (info.adobeTransform === 2 || info.adobeTransform === undefined)
@@ -280,7 +280,7 @@ function pngImageDict(
   return pdfDict(entries);
 }
 
-// A bilevel (every sample 0 or 255) 8-bit grayscale decode re-packed to the 1-bit-per-pixel layout the CCITT encoder consumes: 255 -> 1 (white), 0 -> 0 (black), MSB first, rows padded to whole bytes. Undefined when any sample is intermediate -- a genuinely greyscale image has no G4 spelling and stays on the Flate path.
+// A bilevel (every sample 0 or 255) 8-bit grayscale decode re-packed to the 1-bit-per-pixel layout the CCITT encoder consumes: 255 -> 1 (white), 0 -> 0 (black), MSB first, rows padded to whole bytes. Undefined when any sample is intermediate — a genuinely greyscale image has no G4 spelling and stays on the Flate path.
 function packBilevel(raw: {
   readonly width: number;
   readonly height: number;
@@ -309,11 +309,11 @@ function preparePngImage(
 ): PreparedImage {
   const raw = decodePng(bytes);
   const colorSpace = raw.channels === 1 ? "DeviceGray" : "DeviceRGB";
-  // A bilevel grayscale image with no soft mask is the exact shape CCITT Group 4 was built for (a fax or a 1-bit scan): when the G4 encoding comes out smaller than Flate over the same pixels -- which for real bilevel content it does by an order of magnitude -- the image is written as /CCITTFaxDecode with K -1, recovering the compression a scanned-document source originally carried instead of regressing it to Flate (#975). Whichever encoding is smaller wins, deterministically, so noise-heavy bilevel images where Flate happens to win keep it.
+  // A bilevel grayscale image with no soft mask is the exact shape CCITT Group 4 was built for (a fax or a 1-bit scan): when the G4 encoding comes out smaller than Flate over the same pixels — which for real bilevel content it does by an order of magnitude — the image is written as /CCITTFaxDecode with K -1, recovering the compression a scanned-document source originally carried instead of regressing it to Flate (#975). Whichever encoding is smaller wins, deterministically, so noise-heavy bilevel images where Flate happens to win keep it.
   if (compress && raw.channels === 1 && raw.alpha === undefined) {
     const bilevel = packBilevel(raw);
     if (bilevel !== undefined) {
-      // Flate first, and G4 under Flate's own byte count as an abort budget: the moment the G4 stream grows past the size it is being compared against, it can no longer win and the encoder stops -- an adversarial bilevel image (a checkerboard, G4's worst case) otherwise makes the encoder emit a losing multi-megabyte candidate in full before the caller discards it.
+      // Flate first, and G4 under Flate's own byte count as an abort budget: the moment the G4 stream grows past the size it is being compared against, it can no longer win and the encoder stops — an adversarial bilevel image (a checkerboard, G4's worst case) otherwise makes the encoder emit a losing multi-megabyte candidate in full before the caller discards it.
       const flate = deflate(raw.data);
       const g4 = encodeCcittFax(bilevel, {
         columns: raw.width,
@@ -367,7 +367,7 @@ function preparePngImage(
   return { dict, raw: data, alpha };
 }
 
-// Verbatim re-embedding of a no-encoder filter's original stream (JBIG2, JPEG 2000): the asset's own decoded canonical never reaches the file at all -- these bytes are the compressed stream as the source carried it, re-emitted under the same filter, so a pdf-to-pdf round trip pays zero generation loss for exactly the two filters this package cannot re-encode. Width/Height still come from the asset (a viewer needs them whatever the stream says). A JBIG2 image is 1-bit /DeviceGray by construction (T.88's bitmap inverted into PDF's 0-is-black convention at decode), stated explicitly; a JPEG 2000 stream's component count and sample depth are the codestream's own to state (ISO 32000-1 7.4.9: /BitsPerComponent "shall not be present", /ColorSpace optional), so neither is written. /DecodeParms with the /JBIG2Globals reference is added in place at emission, once the globals stream's own object number is known -- the identical late-binding the SMask reference already uses. A source soft mask still re-emits: the decoded canonical's alpha is extracted through the ordinary PNG prepare path and rides along as a generated /SMask, since the original compressed stream does not encode it.
+// Verbatim re-embedding of a no-encoder filter's original stream (JBIG2, JPEG 2000): the asset's own decoded canonical never reaches the file at all — these bytes are the compressed stream as the source carried it, re-emitted under the same filter, so a pdf-to-pdf round trip pays zero generation loss for exactly the two filters this package cannot re-encode. Width/Height still come from the asset (a viewer needs them whatever the stream says). A JBIG2 image is 1-bit /DeviceGray by construction (T.88's bitmap inverted into PDF's 0-is-black convention at decode), stated explicitly; a JPEG 2000 stream's component count and sample depth are the codestream's own to state (ISO 32000-1 7.4.9: /BitsPerComponent "shall not be present", /ColorSpace optional), so neither is written. /DecodeParms with the /JBIG2Globals reference is added in place at emission, once the globals stream's own object number is known — the identical late-binding the SMask reference already uses. A source soft mask still re-emits: the decoded canonical's alpha is extracted through the ordinary PNG prepare path and rides along as a generated /SMask, since the original compressed stream does not encode it.
 function preparePassthroughImage(
   asset: LayoutImageAsset,
   compress: boolean,
@@ -433,7 +433,7 @@ function buildLinkAnnotDict(link: LayoutLink): PdfObject {
   });
 }
 
-// A display destination array's view half (ISO 32000-1 Table 151) -- the inverse of navigation.ts's parseDestination, spelling the target back as the direct array form so the written link needs no /Dests or /Names tree to resolve. Absent coordinates are null, exactly as a producer that omitted them would write.
+// A display destination array's view half (ISO 32000-1 Table 151) — the inverse of navigation.ts's parseDestination, spelling the target back as the direct array form so the written link needs no /Dests or /Names tree to resolve. Absent coordinates are null, exactly as a producer that omitted them would write.
 function destinationViewArray(target: LayoutDestinationTarget): PdfObject[] {
   const n = (value: number | undefined): PdfObject =>
     value === undefined ? pdfNull() : pdfNum(value);
@@ -464,7 +464,7 @@ function destinationViewArray(target: LayoutDestinationTarget): PdfObject[] {
   return [pdfName(target.kind === "fitB" ? "FitB" : "Fit")];
 }
 
-// The direct destination array a destinations-table NAME resolves to -- [pageRef, view] -- shared by internal links and outline items so the two can never spell the same target differently. The error message names the referer (what) so a caller violating the destinations-table invariant knows which construct tripped it.
+// The direct destination array a destinations-table NAME resolves to — [pageRef, view] — shared by internal links and outline items so the two can never spell the same target differently. The error message names the referer (what) so a caller violating the destinations-table invariant knows which construct tripped it.
 function resolveDestinationArray(
   doc: LayoutDocument,
   pageAllocs: readonly { pageNum: number }[],
@@ -474,13 +474,13 @@ function resolveDestinationArray(
   const destination = doc.destinations?.find((d) => d.name === name);
   if (destination === undefined) {
     throw new Error(
-      `${what} names destination "${name}", which the document's destinations table does not carry -- this is a caller-invariant violation`,
+      `${what} names destination "${name}", which the document's destinations table does not carry — this is a caller-invariant violation`,
     );
   }
   const targetPage = pageAllocs[destination.pageIndex];
   if (targetPage === undefined) {
     throw new Error(
-      `destination "${destination.name}" names page index ${destination.pageIndex}, which is beyond the document's own pages -- this is a caller-invariant violation`,
+      `destination "${destination.name}" names page index ${destination.pageIndex}, which is beyond the document's own pages — this is a caller-invariant violation`,
     );
   }
   return [
@@ -527,7 +527,7 @@ function isInternalLinkItem(item: {
   return item.kind === "internalLink";
 }
 
-// PDF has no native concept of hidden presenter notes, but it does have a standard construct for "a note attached to a page that isn't part of the page's visible content": a /Subtype /Text annotation (the same one Acrobat's own sticky-note tool creates), with the Hidden annotation flag (ISO 32000-1 Table 165, bit position 2, value 2 -- "do not display the annotation... regardless of its annotation flags... in any way") set so it never renders or prints. This is how pptx speaker notes survive pptxToPdf -> pdfToPptx: reusing a real, standard PDF construct that generic PDF tooling already knows to preserve in an Annots array, rather than a bespoke private dictionary key nothing else would recognise. /T marks authorship so read.ts's readPageNotes only ever treats an annotation genuinely written by this function as recovered notes, not a real sticky note a human or another tool happened to leave on the page.
+// PDF has no native concept of hidden presenter notes, but it does have a standard construct for "a note attached to a page that isn't part of the page's visible content": a /Subtype /Text annotation (the same one Acrobat's own sticky-note tool creates), with the Hidden annotation flag (ISO 32000-1 Table 165, bit position 2, value 2 — "do not display the annotation... regardless of its annotation flags... in any way") set so it never renders or prints. This is how pptx speaker notes survive pptxToPdf -> pdfToPptx: reusing a real, standard PDF construct that generic PDF tooling already knows to preserve in an Annots array, rather than a bespoke private dictionary key nothing else would recognise. /T marks authorship so read.ts's readPageNotes only ever treats an annotation genuinely written by this function as recovered notes, not a real sticky note a human or another tool happened to leave on the page.
 const NOTES_ANNOTATION_HIDDEN_FLAG = 2;
 
 function buildNotesAnnotDict(notes: string): PdfObject {
@@ -546,22 +546,22 @@ interface AllocatedObject {
   readonly value: PdfObject;
 }
 
-// Writes a fixed 20-byte classic xref entry: 10-digit offset, space, 5-digit generation, space, 'n'/'f', space, LF -- exactly 10+1+5+1+1+1+1 = 20 bytes, one of the three EOL forms the spec permits (ISO 32000-1 7.5.4).
+// Writes a fixed 20-byte classic xref entry: 10-digit offset, space, 5-digit generation, space, 'n'/'f', space, LF — exactly 10+1+5+1+1+1+1 = 20 bytes, one of the three EOL forms the spec permits (ISO 32000-1 7.5.4).
 function xrefEntry(offset: number, generation: number, inUse: boolean): string {
   return `${offset.toString().padStart(10, "0")} ${generation.toString().padStart(5, "0")} ${inUse ? "n" : "f"} \n`;
 }
 
-// #967 residue parse-back: the inverse of serializeObjectToText the read side's readDocumentResidue used to quarantine each row. One object from the row's text through the ordinary lexer/parser; a row that does not parse at all restores as nothing (skip, never throw -- residue is opacity, not data this writer depends on).
+// #967 residue parse-back: the inverse of serializeObjectToText the read side's readDocumentResidue used to quarantine each row. One object from the row's text through the ordinary lexer/parser; a row that does not parse at all restores as nothing (skip, never throw — residue is opacity, not data this writer depends on).
 function parseResidueRow(residue: SourceResidue): PdfObject | undefined {
   const reader = new ByteReader(new TextEncoder().encode(residue.xml));
   const ignored: unknown[] = [];
   return parseValue(reader, () => {
-    // Parse diagnostics here describe the SOURCE producer's serialisation, not this writer's output -- nothing downstream can act on them, so they are collected and dropped rather than surfaced.
+    // Parse diagnostics here describe the SOURCE producer's serialisation, not this writer's output — nothing downstream can act on them, so they are collected and dropped rather than surfaced.
     void ignored;
   });
 }
 
-// True when the parsed object names an indirect object anywhere inside -- the marker that the row is tied to the source file's own object graph and cannot be restorable in this one.
+// True when the parsed object names an indirect object anywhere inside — the marker that the row is tied to the source file's own object graph and cannot be restorable in this one.
 function objectContainsReference(obj: PdfObject): boolean {
   if (obj.kind === "ref") {
     return true;
@@ -594,7 +594,7 @@ function restoreResidueRow(
   return parsed;
 }
 
-// Assembles a LayoutDocument into a complete PDF file: the object graph (Catalog, Pages, Info, one Font+FontDescriptor pair per standard-14 face actually used, one Image XObject (+SMask) per image asset actually referenced, one embedded math composite font group when options.formulas is non-empty (Type0/CIDFontType0/FontDescriptor/FontFile3/ToUnicode -- see math-font-write.ts), one embedded text font group per subsetted face when options.fonts resolved any (Type0/CIDFontType2/FontDescriptor/FontFile2/ToUnicode -- see embedded-font-write.ts), then each page's own Page dict, Contents stream (ordinary LayoutItem bytes followed by that page's own formula bytes, if any -- see math-content-write.ts), and optional Annots), a classic cross-reference table, and a trailer. Objects are allocated in this fixed order -- never derived from Map/object iteration order -- so identical input always produces byte-identical output (see the determinism tests).
+// Assembles a LayoutDocument into a complete PDF file: the object graph (Catalog, Pages, Info, one Font+FontDescriptor pair per standard-14 face actually used, one Image XObject (+SMask) per image asset actually referenced, one embedded math composite font group when options.formulas is non-empty (Type0/CIDFontType0/FontDescriptor/FontFile3/ToUnicode — see math-font-write.ts), one embedded text font group per subsetted face when options.fonts resolved any (Type0/CIDFontType2/FontDescriptor/FontFile2/ToUnicode — see embedded-font-write.ts), then each page's own Page dict, Contents stream (ordinary LayoutItem bytes followed by that page's own formula bytes, if any — see math-content-write.ts), and optional Annots), a classic cross-reference table, and a trailer. Objects are allocated in this fixed order — never derived from Map/object iteration order — so identical input always produces byte-identical output (see the determinism tests).
 //
 // Without options.fonts, no embedded text face can exist, so that group consumes no object numbers and every other object is numbered exactly as it was before embedded-font support: output is byte-identical to a build with none of it (proved by the golden digests in write-embedded-font.test.ts).
 export function writePdf(
@@ -746,7 +746,7 @@ export function writePdf(
   const encryptDictNum =
     options.encryption === undefined ? undefined : nextObjNum++;
 
-  // #967: the read side's embedded-file attachments (#721) write back as a /Names /EmbeddedFiles tree -- one /EmbeddedFile stream plus one /Filespec per attachment, the name-tree node listing them all, and a /Names entry on the Catalog. Allocation happens here, in document order, so the fixed-order determinism this writer is built around holds for attachments exactly as it does for fonts and images.
+  // #967: the read side's embedded-file attachments (#721) write back as a /Names /EmbeddedFiles tree — one /EmbeddedFile stream plus one /Filespec per attachment, the name-tree node listing them all, and a /Names entry on the Catalog. Allocation happens here, in document order, so the fixed-order determinism this writer is built around holds for attachments exactly as it does for fonts and images.
   const attachmentAllocs = (doc.attachments ?? []).map(() => ({
     fileNum: nextObjNum++,
     specNum: nextObjNum++,
@@ -814,7 +814,7 @@ export function writePdf(
     const num = formNumByField.get(field);
     if (num === undefined) {
       throw new Error(
-        "AcroForm field object number was not claimed -- this is a writePdf internal invariant violation",
+        "AcroForm field object number was not claimed — this is a writePdf internal invariant violation",
       );
     }
     return num;
@@ -886,7 +886,7 @@ export function writePdf(
   if (residueXmpNum !== undefined) {
     catalogEntries.push(["Metadata", pdfRef(residueXmpNum, 0)]);
   }
-  // The restorable residue rows: each is re-parsed from its own serialised text back into a PdfObject and emitted inline under its original Catalog key (the trailer /ID is held for the trailer block below). A row whose parse names an indirect object of the SOURCE file cannot be restorable -- its "N 0 R" targets an object number that need not exist in this file -- so it is skipped rather than emitted as a dangling reference. The XMP packet (a standalone XML stream, never a reference-carrier) is restored as a /Metadata stream object; the page-boxes row is deliberately not restored at all -- it records the SOURCE file's page geometry, which this writer states itself from each page's own dimensions. The open-action row is deliberately not restored either: /OpenAction is ACTIVE content (an inline JavaScript, Launch, or URI action a viewer executes on open), and restoring it verbatim from an attacker-supplied source would re-arm that behaviour in the rewritten file -- an inert-destination allowlist is not worth the risk surface when the writer's own destinations and outline already carry navigation.
+  // The restorable residue rows: each is re-parsed from its own serialised text back into a PdfObject and emitted inline under its original Catalog key (the trailer /ID is held for the trailer block below). A row whose parse names an indirect object of the SOURCE file cannot be restorable — its "N 0 R" targets an object number that need not exist in this file — so it is skipped rather than emitted as a dangling reference. The XMP packet (a standalone XML stream, never a reference-carrier) is restored as a /Metadata stream object; the page-boxes row is deliberately not restored at all — it records the SOURCE file's page geometry, which this writer states itself from each page's own dimensions. The open-action row is deliberately not restored either: /OpenAction is ACTIVE content (an inline JavaScript, Launch, or URI action a viewer executes on open), and restoring it verbatim from an attacker-supplied source would re-arm that behaviour in the rewritten file — an inert-destination allowlist is not worth the risk surface when the writer's own destinations and outline already carry navigation.
   const trailerIdRestore = restoreResidueRow(doc.source, "trailer-id");
   for (const [rowKey, catalogKey] of [
     ["viewer-preferences", "ViewerPreferences"],
@@ -950,7 +950,7 @@ export function writePdf(
     });
   }
   if (attachmentsNamesNum !== undefined) {
-    // The name-tree node: a flat /Names array of (name, filespec ref) pairs, the tree's own single-node shape -- small attachment sets need no intermediate kids, and a writer that always produces one node keeps output deterministic.
+    // The name-tree node: a flat /Names array of (name, filespec ref) pairs, the tree's own single-node shape — small attachment sets need no intermediate kids, and a writer that always produces one node keeps output deterministic.
     const names: PdfObject[] = [];
     for (const [index, attachment] of (doc.attachments ?? []).entries()) {
       names.push(pdfLiteralString(new TextEncoder().encode(attachment.name)));
@@ -959,14 +959,14 @@ export function writePdf(
     objects.push({
       num: attachmentsNamesNum,
       value: pdfDict({
-        // The /Names dict the Catalog references holds ONE child, /EmbeddedFiles, whose own /Names array is the flat name tree -- the identical shape readAttachments walks (resolve catalog /Names, take its /EmbeddedFiles, walk that node's /Names) and the shape every real producer writes.
+        // The /Names dict the Catalog references holds ONE child, /EmbeddedFiles, whose own /Names array is the flat name tree — the identical shape readAttachments walks (resolve catalog /Names, take its /EmbeddedFiles, walk that node's /Names) and the shape every real producer writes.
         EmbeddedFiles: pdfDict({ Names: pdfArray(names) }),
       }),
     });
   }
 
   if (outlineRootNum !== undefined && (doc.outline ?? []).length > 0) {
-    // One shared pre-order cursor across the whole walk: allocation reserved every item's number by pre-order count, so emission must consume them in exactly that order -- a per-level cursor would hand children numbers already used by earlier siblings.
+    // One shared pre-order cursor across the whole walk: allocation reserved every item's number by pre-order count, so emission must consume them in exactly that order — a per-level cursor would hand children numbers already used by earlier siblings.
     let itemCursor = 0;
     const emitItems = (
       items: readonly LayoutOutlineItem[],
@@ -978,7 +978,7 @@ export function writePdf(
         const ownNum = outlineItemNums[itemCursor]!;
         itemCursor += 1;
         siblingNums.push(ownNum);
-        // Children are allocated contiguously AFTER this whole sibling run was pre-counted, so the recursive call consumes the remaining tail of the same pre-allocated run -- the counts were reserved by the identical pre-order walk at allocation time, keeping object numbering deterministic.
+        // Children are allocated contiguously AFTER this whole sibling run was pre-counted, so the recursive call consumes the remaining tail of the same pre-allocated run — the counts were reserved by the identical pre-order walk at allocation time, keeping object numbering deterministic.
         const childNums = emitItems(item.children, ownNum);
         const entries: [string, PdfObject][] = [
           ["Title", pdfLiteralString(new TextEncoder().encode(item.title))],
@@ -1199,7 +1199,7 @@ export function writePdf(
   };
   emitFormFieldObjects(doc.form ?? [], "");
 
-  // #967: the tagged structure tree. One /StructElem per model element (/S the type, /P the parent -- the root for top-level elements, /K the child refs), and the /StructTreeRoot pointing at both the element roots and the /ParentTree number tree built after the page walk below (it depends on the per-page MCID assignments).
+  // #967: the tagged structure tree. One /StructElem per model element (/S the type, /P the parent — the root for top-level elements, /K the child refs), and the /StructTreeRoot pointing at both the element roots and the /ParentTree number tree built after the page walk below (it depends on the per-page MCID assignments).
   if (structRootNum !== undefined && structParentTreeNum !== undefined) {
     const emitStructureElement = (
       element: LayoutStructureElement,
@@ -1242,7 +1242,7 @@ export function writePdf(
               const num = structElementNumById.get(child.id);
               if (num === undefined) {
                 throw new Error(
-                  `structure element "${child.id}" was not allocated -- this is a writePdf internal invariant violation`,
+                  `structure element "${child.id}" was not allocated — this is a writePdf internal invariant violation`,
                 );
               }
               return pdfRef(num, 0);
@@ -1253,7 +1253,7 @@ export function writePdf(
       const ownNum = structElementNumById.get(element.id);
       if (ownNum === undefined) {
         throw new Error(
-          `structure element "${element.id}" was not allocated -- this is a writePdf internal invariant violation`,
+          `structure element "${element.id}" was not allocated — this is a writePdf internal invariant violation`,
         );
       }
       objects.push({
@@ -1269,7 +1269,7 @@ export function writePdf(
     }
   }
 
-  // #967: the XMP packet restored as an uncompressed /Metadata stream -- the read side decodes it back verbatim.
+  // #967: the XMP packet restored as an uncompressed /Metadata stream — the read side decodes it back verbatim.
   if (residueXmpNum !== undefined && doc.source?.xmp !== undefined) {
     objects.push({
       num: residueXmpNum,
@@ -1361,9 +1361,9 @@ export function writePdf(
       [...usedGlyphs.keys()].sort((a, b) => a - b),
     );
     if (subset === undefined) {
-      // Loud rather than a silent fall-back to a standard-14 substitute: the caller's own registry chose this face, and quietly drawing the document in a different font than it asked for -- with metrics already laid out against this one -- would be a worse outcome than a failure naming exactly which face could not be embedded. subsetSfnt returns undefined only for a font it cannot rebuild correctly (a CFF-outline face with no 'glyf' at all, or a missing/truncated table it must reconstruct); see its own module comment.
+      // Loud rather than a silent fall-back to a standard-14 substitute: the caller's own registry chose this face, and quietly drawing the document in a different font than it asked for — with metrics already laid out against this one — would be a worse outcome than a failure naming exactly which face could not be embedded. subsetSfnt returns undefined only for a font it cannot rebuild correctly (a CFF-outline face with no 'glyf' at all, or a missing/truncated table it must reconstruct); see its own module comment.
       throw new Error(
-        `font "${face.postScriptName}" resolved to an embeddable face, but its glyph outlines could not be subsetted -- only TrueType-outline ('glyf') fonts can be embedded, so supply a TrueType face for this family or drop it from the registry`,
+        `font "${face.postScriptName}" resolved to an embeddable face, but its glyph outlines could not be subsetted — only TrueType-outline ('glyf') fonts can be embedded, so supply a TrueType face for this family or drop it from the registry`,
       );
     }
     const built = buildEmbeddedFontObjects(
@@ -1447,7 +1447,7 @@ export function writePdf(
         const alloc = embeddedAllocs.get(resolved.face);
         if (alloc === undefined) {
           throw new Error(
-            `embedded font "${resolved.face.postScriptName}" was not pre-allocated -- this is a writePdf internal invariant violation`,
+            `embedded font "${resolved.face.postScriptName}" was not pre-allocated — this is a writePdf internal invariant violation`,
           );
         }
         return {
@@ -1459,7 +1459,7 @@ export function writePdf(
       const alloc = fontAllocs.get(resolved.standardName);
       if (alloc === undefined) {
         throw new Error(
-          `font "${resolved.standardName}" was not pre-allocated -- this is a writePdf internal invariant violation`,
+          `font "${resolved.standardName}" was not pre-allocated — this is a writePdf internal invariant violation`,
         );
       }
       return {
@@ -1472,7 +1472,7 @@ export function writePdf(
       const alloc = imageAllocs.get(imageId);
       if (alloc === undefined) {
         throw new Error(
-          `image "${imageId}" was not pre-allocated -- this is a writePdf internal invariant violation`,
+          `image "${imageId}" was not pre-allocated — this is a writePdf internal invariant violation`,
         );
       }
       return { resourceName: alloc.resourceName };
@@ -1564,7 +1564,7 @@ export function writePdf(
     objects.push({ num: pageNum, value: pdfDict(pageEntries) });
   });
 
-  // #967: the /ParentTree number tree. One entry per marked page, keyed by that page's /StructParents value, holding the array of owning element references indexed by MCID -- exactly the association structure.ts's own reader walks back. An MCID with no owning element (an item marked for a layer only, or naming an element id this document's tree does not carry) files a null, the spelling a producer writes for an unused slot.
+  // #967: the /ParentTree number tree. One entry per marked page, keyed by that page's /StructParents value, holding the array of owning element references indexed by MCID — exactly the association structure.ts's own reader walks back. An MCID with no owning element (an item marked for a layer only, or naming an element id this document's tree does not carry) files a null, the spelling a producer writes for an unused slot.
   if (structRootNum !== undefined && structParentTreeNum !== undefined) {
     const nums: PdfObject[] = [];
     for (const [pageIndex, marks] of markedStructureByPage) {
@@ -1593,7 +1593,7 @@ export function writePdf(
             const num = structElementNumById.get(element.id);
             if (num === undefined) {
               throw new Error(
-                `structure element "${element.id}" was not allocated -- this is a writePdf internal invariant violation`,
+                `structure element "${element.id}" was not allocated — this is a writePdf internal invariant violation`,
               );
             }
             return pdfRef(num, 0);
@@ -1608,7 +1608,7 @@ export function writePdf(
     });
   }
 
-  // Encryption runs as a final pass over the fully-assembled object graph, rather than being threaded through every object-construction call above: every string and stream this writer produces needs the identical treatment (Algorithm 1/1.A, keyed by that object's own number), so one recursive walk here is the same DRY move document.ts's own decryptDict/decryptObject already makes on the read side. The /Encrypt dictionary object itself is allocated and appended only afterwards, so this walk never touches it -- ISO 32000-2 7.6.1 requires its own O/U/OE/UE/Perms strings to stay in the clear.
+  // Encryption runs as a final pass over the fully-assembled object graph, rather than being threaded through every object-construction call above: every string and stream this writer produces needs the identical treatment (Algorithm 1/1.A, keyed by that object's own number), so one recursive walk here is the same DRY move document.ts's own decryptDict/decryptObject already makes on the read side. The /Encrypt dictionary object itself is allocated and appended only afterwards, so this walk never touches it — ISO 32000-2 7.6.1 requires its own O/U/OE/UE/Perms strings to stay in the clear.
   let fileId: Uint8Array<ArrayBuffer> | undefined;
   let encryptedObjects = objects;
   if (options.encryption !== undefined && encryptDictNum !== undefined) {
@@ -1643,7 +1643,7 @@ export function writePdf(
     const offset = offsets.get(num);
     if (offset === undefined) {
       throw new Error(
-        `object ${num} was allocated but never written -- this is a writePdf internal invariant violation`,
+        `object ${num} was allocated but never written — this is a writePdf internal invariant violation`,
       );
     }
     writer.writeAscii(xrefEntry(offset, 0, true));
@@ -1661,7 +1661,7 @@ export function writePdf(
     );
     trailerEntries.set("Encrypt", pdfRef(encryptDictNum, 0));
   } else if (trailerIdRestore !== undefined) {
-    // #967: the quarantined trailer /ID restored verbatim (the one residue row that belongs to the trailer, not the Catalog). An encrypted document keeps its own freshly minted ID -- the encryption keys are derived from it.
+    // #967: the quarantined trailer /ID restored verbatim (the one residue row that belongs to the trailer, not the Catalog). An encrypted document keeps its own freshly minted ID — the encryption keys are derived from it.
     trailerEntries.set("ID", trailerIdRestore);
   }
   writer.writeAscii("trailer\n");

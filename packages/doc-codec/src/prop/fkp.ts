@@ -2,15 +2,15 @@ import { readUint16LE, readUint32LE, readUint8, slice } from "../bytes";
 import { DocFormatError } from "../errors";
 import { findLargestAtMost, parsePlc, type Plc } from "../plc";
 
-// The formatted disk page (FKP), [MS-DOC] 2.9.23 and 2.9.175 -- how a .doc stores character and paragraph formatting as sparse exceptions rather than per-character state. Text is divided into runs of identical formatting; each run's properties live in one 512-byte page, and a bin table maps a byte offset in the WordDocument stream to the page holding the properties for the text there.
+// The formatted disk page (FKP), [MS-DOC] 2.9.23 and 2.9.175 — how a .doc stores character and paragraph formatting as sparse exceptions rather than per-character state. Text is divided into runs of identical formatting; each run's properties live in one 512-byte page, and a bin table maps a byte offset in the WordDocument stream to the page holding the properties for the text there.
 //
 // Three details in the page layout are easy to get wrong and produce plausible-looking wrong formatting rather than an error:
 //
 // 1. The element count is the page's LAST byte, at offset 511, not its first. Everything else is sized from it, so reading it from the wrong end mis-sizes both arrays at once.
-// 2. The offsets to the property records are stored HALVED -- "rgb[i] x 2 MUST either specify an offset, in bytes, between the beginning of the ChpxFkp and crun, or be equal to zero" -- so a record always begins on an even byte and a raw rgb value is never an offset.
+// 2. The offsets to the property records are stored HALVED — "rgb[i] x 2 MUST either specify an offset, in bytes, between the beginning of the ChpxFkp and crun, or be equal to zero" — so a record always begins on an even byte and a raw rgb value is never an offset.
 // 3. A zero in that array is not offset zero: it means the run or paragraph carries no exception at all and takes the document defaults.
 //
-// The paragraph side adds a fourth: PapxInFkp's length byte is doubled and decremented ("If this value is not 0, the grpprlInPapx is 2xcb-1 bytes long"), with a second spelling when it is zero. And what that length measures is the GrpPrlAndIstd -- the 2-byte style index AND the grpprl together -- not the grpprl alone, so a reader that treats it as the grpprl's own length reads two bytes of style index as the first sprm of every paragraph.
+// The paragraph side adds a fourth: PapxInFkp's length byte is doubled and decremented ("If this value is not 0, the grpprlInPapx is 2xcb-1 bytes long"), with a second spelling when it is zero. And what that length measures is the GrpPrlAndIstd — the 2-byte style index AND the grpprl together — not the grpprl alone, so a reader that treats it as the grpprl's own length reads two bytes of style index as the first sprm of every paragraph.
 
 /** Every FKP is exactly one 512-byte page, whatever the compound file's own sector size. */
 export const FKP_PAGE_SIZE = 512;
@@ -38,7 +38,7 @@ export interface PapxFkp {
   readonly rgfc: readonly number[];
   /** The PapxInFkp for paragraph `index`, or undefined when its BxPap.bOffset is zero and the paragraph takes the defaults. */
   papx(index: number): PapxRecord | undefined;
-  /** `rgfc[index + 1]`, the exclusive end offset for paragraph `index` -- always defined for any `index` `papx` itself accepts (rgfc always carries `cpara + 1` entries), so `papx`'s own bounds check is what actually guards this; exposed as its own method so that guarantee is directly testable rather than an unreachable check inside a caller. */
+  /** `rgfc[index + 1]`, the exclusive end offset for paragraph `index` — always defined for any `index` `papx` itself accepts (rgfc always carries `cpara + 1` entries), so `papx`'s own bounds check is what actually guards this; exposed as its own method so that guarantee is directly testable rather than an unreachable check inside a caller. */
   fcLimAt(index: number): number;
 }
 
@@ -154,7 +154,7 @@ export function parsePapxFkp(page: Uint8Array): PapxFkp {
 }
 
 export interface PapxLookup extends PapxRecord {
-  /** The byte offset one past the end of the paragraph this record covers -- PapxFkp.rgfc[k + 1], the paragraph boundary [MS-DOC] 2.4.2 derives its own from. */
+  /** The byte offset one past the end of the paragraph this record covers — PapxFkp.rgfc[k + 1], the paragraph boundary [MS-DOC] 2.4.2 derives its own from. */
   readonly fcLim: number;
 }
 
@@ -172,7 +172,7 @@ export class PropertyBinTable {
     this.#plc = parsePlc(plc, 4, what);
   }
 
-  /** Resolves `fc` to the bin table entry covering it, or undefined when `fc` falls outside every entry. Reads the page number through `Plc.element`, whose own bounds check is what actually guards this index -- `findLargestAtMost` never returns the PLC's own final (terminating) key, so `index` is always one `element` already accepts, and a second "is this page number missing" check here would have no input that could ever trigger it. */
+  /** Resolves `fc` to the bin table entry covering it, or undefined when `fc` falls outside every entry. Reads the page number through `Plc.element`, whose own bounds check is what actually guards this index — `findLargestAtMost` never returns the PLC's own final (terminating) key, so `index` is always one `element` already accepts, and a second "is this page number missing" check here would have no input that could ever trigger it. */
   #resolvePage(
     fc: number,
   ): { readonly pageNumber: number; readonly bytes: Uint8Array } | undefined {

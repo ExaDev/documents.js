@@ -14,7 +14,7 @@ import {
   readOdbTables,
 } from "./read";
 
-// Mirrors odf.js's own src/typed/odb/read.test.ts fixture-building style (databaseContentPart/manifestPart) -- readOdbTables sits directly on top of readOdbInventory, so its own tests build the identical minimal Package shape rather than a real .odb file. src/convert/odb.test.ts covers the genuine byte-level odbToXlsx/odbToCsv round trip separately.
+// Mirrors odf.js's own src/typed/odb/read.test.ts fixture-building style (databaseContentPart/manifestPart) — readOdbTables sits directly on top of readOdbInventory, so its own tests build the identical minimal Package shape rather than a real .odb file. src/convert/odb.test.ts covers the genuine byte-level odbToXlsx/odbToCsv round trip separately.
 
 function databaseContentPart(
   databaseChildren: XmlNode[],
@@ -74,7 +74,7 @@ function binaryPart(text: string): Package["parts"][string] {
   };
 }
 
-// Narrows a thrown OdbUnsupportedFormatError's own `format` field without a type assertion -- `instanceof` inside a catch block is a genuine type guard, unlike casting whatever expect().toBeInstanceOf() was given.
+// Narrows a thrown OdbUnsupportedFormatError's own `format` field without a type assertion — `instanceof` inside a catch block is a genuine type guard, unlike casting whatever expect().toBeInstanceOf() was given.
 function formatOfThrownError(
   fn: () => unknown,
 ): OdbUnsupportedFormatError["format"] {
@@ -176,7 +176,7 @@ describe("readOdbTables: embedded Firebird gbak backup (Tier 3, happy path)", ()
   });
 });
 
-describe("readOdbTables: unsupported embedded formats -- named, never silent", () => {
+describe("readOdbTables: unsupported embedded formats — named, never silent", () => {
   it("throws OdbUnsupportedFormatError naming an unrecognised embedded storage shape for an embedded Firebird connection with no database/firebird.fbk part at all", () => {
     const pkg: Package = {
       parts: {
@@ -220,7 +220,7 @@ describe("readOdbTables: unsupported embedded formats -- named, never silent", (
 });
 
 describe("readOdbTables: whole-script BINARY/COMPRESSED routing (Tier 4)", () => {
-  // The same tables and rows in both, since the two fixtures are the same database written at hsqldb.script_format=1 and =3 -- see src/test-support/odb.ts.
+  // The same tables and rows in both, since the two fixtures are the same database written at hsqldb.script_format=1 and =3 — see src/test-support/odb.ts.
   const EXPECTED_ROW_COUNTS = new Map([
     ["EMPLOYEES", 4],
     ["TYPE_TEST", 3],
@@ -299,9 +299,9 @@ describe("readOdbTables: propagates HsqldbScriptParseError for a genuinely malfo
   });
 });
 
-// Tier 2 routing: readOdbTables' own database/data-triggered CACHED-table decoding, exercised here against a small, hand-built synthetic row -- src/hsqldb/cache.test.ts and src/convert/odb.test.ts cover the genuine byte-level round trip against a real HSQLDB 1.8.0.10-produced fixture; this describe block is purely about readOdbTables' own routing/error-handling around that decoder, matching this file's existing minimal-synthetic-package style.
+// Tier 2 routing: readOdbTables' own database/data-triggered CACHED-table decoding, exercised here against a small, hand-built synthetic row — src/hsqldb/cache.test.ts and src/convert/odb.test.ts cover the genuine byte-level round trip against a real HSQLDB 1.8.0.10-produced fixture; this describe block is purely about readOdbTables' own routing/error-handling around that decoder, matching this file's existing minimal-synthetic-package style.
 describe("readOdbTables: CACHED-table routing (database/data present)", () => {
-  // One CACHED table T(A INTEGER, B VARCHAR(5)), one row (A=42, B='hi'), root at file position 32 (right after a zero-filled 32-byte header this decoder never itself inspects) -- byte layout verified against real HSQLDB 1.8.0.10 output (see src/hsqldb/cache.ts's own module comment): [4-byte storageSize=32][16-byte AVL node, all zero][1-byte present-flag][4-byte int32 A=42][1-byte present-flag][4-byte int32 B-length=2]['h','i'].
+  // One CACHED table T(A INTEGER, B VARCHAR(5)), one row (A=42, B='hi'), root at file position 32 (right after a zero-filled 32-byte header this decoder never itself inspects) — byte layout verified against real HSQLDB 1.8.0.10 output (see src/hsqldb/cache.ts's own module comment): [4-byte storageSize=32][16-byte AVL node, all zero][1-byte present-flag][4-byte int32 A=42][1-byte present-flag][4-byte int32 B-length=2]['h','i'].
   function syntheticCachedTableDataBytes(): Uint8Array<ArrayBuffer> {
     const bytes = new Uint8Array(64);
     const view = new DataView(bytes.buffer);

@@ -16,7 +16,7 @@ function defaultExportDestinationFor(
     : defaultPdfPathFor(document.path);
 }
 
-// Comma-separated rather than space-separated: a font path on macOS routinely contains spaces ("/System/Library/Fonts/Supplemental/Arial Bold.ttf") and almost never a comma, so splitting on spaces would break the common case to support one that does not occur. Each entry is trimmed, and an empty field yields no fonts at all -- the export then behaves exactly as it did before this field existed.
+// Comma-separated rather than space-separated: a font path on macOS routinely contains spaces ("/System/Library/Fonts/Supplemental/Arial Bold.ttf") and almost never a comma, so splitting on spaces would break the common case to support one that does not occur. Each entry is trimmed, and an empty field yields no fonts at all — the export then behaves exactly as it did before this field existed.
 function parseFontFileField(value: string): readonly string[] {
   return value
     .split(",")
@@ -42,7 +42,7 @@ export function ExportOptionsScreen(): ReactElement {
   const [fontFiles, setFontFiles] = useState("");
   const [field, setField] = useState<Field>("destination");
 
-  // 'e' is only ever wired to editor screens that have an open document, so this branch is unreached in practice -- it exists because `state.openDocument` is typed `OpenDocument | undefined`.
+  // 'e' is only ever wired to editor screens that have an open document, so this branch is unreached in practice — it exists because `state.openDocument` is typed `OpenDocument | undefined`.
   if (document === undefined) {
     return (
       <Box flexDirection="column">

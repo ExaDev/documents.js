@@ -209,7 +209,7 @@ describe("document_create / document_append_paragraphs", () => {
     );
   });
 
-  it("rejects a format mismatch between the source document and targetFormat -- it never converts format", async () => {
+  it("rejects a format mismatch between the source document and targetFormat — it never converts format", async () => {
     const sourceBytes = createDocx().toBytes();
 
     const result = await pair.client.callTool({

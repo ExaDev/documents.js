@@ -28,7 +28,7 @@ import {
 
 // A hand-written JPEG 2000 decoder (ISO/IEC 15444-1, ITU-T T.800), reading both the JP2 file format and the bare codestream a PDF /JPXDecode filter may carry either of.
 //
-// The scope is deliberately narrow and is enforced by refusal, never by approximation. readJpeg2000Metadata parses the JP2 boxes and the whole codestream header for ANY conforming codestream, and reports what it found together with an honest verdict on whether the pixels themselves are decodable here. decodeJpeg2000 decodes both wavelet paths -- the reversible 5-3 integer lifting and the irreversible 9-7 floating-point lifting -- across any number of tiles, quality layers, components, decomposition levels and precincts, LRCP or RLCP progression (and the position-driven orders when every resolution holds a single precinct), with either component transform. Sub-sampled components, regions of interest, progression-order changes, packed packet headers, arithmetic-coder bypass and per-pass termination all raise Jpeg2000UnsupportedError naming itself, because a decoder that guessed at any of them would return a plausible-looking image made of wrong pixels.
+// The scope is deliberately narrow and is enforced by refusal, never by approximation. readJpeg2000Metadata parses the JP2 boxes and the whole codestream header for ANY conforming codestream, and reports what it found together with an honest verdict on whether the pixels themselves are decodable here. decodeJpeg2000 decodes both wavelet paths — the reversible 5-3 integer lifting and the irreversible 9-7 floating-point lifting — across any number of tiles, quality layers, components, decomposition levels and precincts, LRCP or RLCP progression (and the position-driven orders when every resolution holds a single precinct), with either component transform. Sub-sampled components, regions of interest, progression-order changes, packed packet headers, arithmetic-coder bypass and per-pass termination all raise Jpeg2000UnsupportedError naming itself, because a decoder that guessed at any of them would return a plausible-looking image made of wrong pixels.
 //
 // The entropy layer is src/image/jpeg2000-t1.ts, the packet layer src/image/jpeg2000-t2.ts, the wavelet src/image/jpeg2000-dwt.ts, and the codestream syntax src/image/jpeg2000-codestream.ts. Like its src/image/ siblings this module has zero PDF knowledge.
 
@@ -74,7 +74,7 @@ export interface Jpeg2000Metadata {
 
 export interface Jpeg2000DecodeOptions {
   readonly onWarning?: (message: string) => void;
-  // Caller-supplied resource bounds, checked against the codestream's own declared canvas size (SIZ's Xsiz/Ysiz less Xosiz/Yosiz) before this function allocates its own per-component sample planes below -- rejecting a producer-declared size the caller considers unusably large before paying for that allocation, rather than after decoding has already done the work. Each is undefined (no bound) by default.
+  // Caller-supplied resource bounds, checked against the codestream's own declared canvas size (SIZ's Xsiz/Ysiz less Xosiz/Yosiz) before this function allocates its own per-component sample planes below — rejecting a producer-declared size the caller considers unusably large before paying for that allocation, rather than after decoding has already done the work. Each is undefined (no bound) by default.
   readonly maxWidth?: number;
   readonly maxHeight?: number;
   readonly maxPixels?: number;
@@ -626,7 +626,7 @@ export function decodeJpeg2000(
       onWarning,
     });
 
-    // The two transforms decode into different arithmetic domains -- exact integers and dequantized floats -- so each is reconstructed in its own and only rejoins the common path at the level shift below.
+    // The two transforms decode into different arithmetic domains — exact integers and dequantized floats — so each is reconstructed in its own and only rejoins the common path at the level shift below.
     const tilePlanes: (Int32Array | Float32Array)[] = [];
     if (defaults.transform === "reversible-5-3") {
       const reversible = Array.from({ length: componentCount }, (_, c) =>

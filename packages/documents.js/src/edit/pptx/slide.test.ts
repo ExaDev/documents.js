@@ -25,7 +25,7 @@ function findSpTreeChildren(
 }
 
 describe("PptxSlide.shapes / tables", () => {
-  it("shapes() excludes a table graphic frame -- only the text box and picture come back", () => {
+  it("shapes() excludes a table graphic frame — only the text box and picture come back", () => {
     const editor = createPptx();
     const slide = editor.addSlide();
     slide.addTextBox({
@@ -72,7 +72,7 @@ describe("PptxSlide.shapes / tables", () => {
     expect(b2).toBeDefined();
   });
 
-  it("tables() reflects true document position, not addTable call order -- swapping the two graphic frames in the raw XML tree reorders tables()", () => {
+  it("tables() reflects true document position, not addTable call order — swapping the two graphic frames in the raw XML tree reorders tables()", () => {
     const editor = createPptx();
     const slide = editor.addSlide();
     // Distinguishable by column count, so which table is which can be told apart after reordering.

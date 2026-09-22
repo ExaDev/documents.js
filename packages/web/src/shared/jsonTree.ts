@@ -8,7 +8,7 @@ function isLeaf(value: unknown): boolean {
   return value === null || typeof value !== "object";
 }
 
-// Cap rendered leaf length so a large value (an embedded image's base64, a long paragraph) doesn't produce a tree leaf wider than the panel. The start of the string is kept so the reader can still identify what it is. Strings are checked for length BEFORE JSON.stringify so a multi-MB base64 blob is never materialized in full -- only its first N chars are stringified.
+// Cap rendered leaf length so a large value (an embedded image's base64, a long paragraph) doesn't produce a tree leaf wider than the panel. The start of the string is kept so the reader can still identify what it is. Strings are checked for length BEFORE JSON.stringify so a multi-MB base64 blob is never materialized in full — only its first N chars are stringified.
 const MAX_LEAF_LENGTH = 100;
 const RAW_STRING_CAP = MAX_LEAF_LENGTH + 2; // +2 for the JSON quotes JSON.stringify wraps the string in
 
@@ -70,7 +70,7 @@ function arrayItemNode(
   return { value: path, label, children: childrenFor(value, path) };
 }
 
-// Generic value -> Mantine TreeNodeData[] adapter, so any plain JSON-like structure (a LayoutDocument, in this app's case) can be browsed as an expandable tree instead of a wall of stats. Leaf values (primitives, null) render inline as part of their parent's label; only non-empty objects and arrays become their own expandable node. `value` (Mantine Tree's own node identifier) is a synthetic path string, built fresh from the root on every call -- stable across two calls over structurally-identical data, but not meant to persist across different documents.
+// Generic value -> Mantine TreeNodeData[] adapter, so any plain JSON-like structure (a LayoutDocument, in this app's case) can be browsed as an expandable tree instead of a wall of stats. Leaf values (primitives, null) render inline as part of their parent's label; only non-empty objects and arrays become their own expandable node. `value` (Mantine Tree's own node identifier) is a synthetic path string, built fresh from the root on every call — stable across two calls over structurally-identical data, but not meant to persist across different documents.
 export function toTreeData(value: unknown): TreeNodeData[] {
   return childrenFor(value, "root") ?? [];
 }

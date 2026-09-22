@@ -19,7 +19,7 @@ export interface OdbHarnessProps {
   readonly tables?: readonly HsqldbTable[];
   readonly forms?: readonly OdbForm[];
   readonly reports?: readonly OdbReport[];
-  // A synthetic 'sample.odb' by default -- fine for every screen that only reads the tables/forms/reports this harness seeded directly. The report-render screen is the one exception: it re-reads and re-decodes `doc.path` from disk (see render-odb-report.ts's own doc comment on why an OdbOpenDocument carries no live Package of its own), so a test exercising it must pass a real, readable `.odb` path here.
+  // A synthetic 'sample.odb' by default — fine for every screen that only reads the tables/forms/reports this harness seeded directly. The report-render screen is the one exception: it re-reads and re-decodes `doc.path` from disk (see render-odb-report.ts's own doc comment on why an OdbOpenDocument carries no live Package of its own), so a test exercising it must pass a real, readable `.odb` path here.
   readonly path?: string;
 }
 
@@ -66,7 +66,7 @@ function OdbHarnessBody({
   }
 }
 
-// The three collections default to empty so a test that only cares about one of them names only that one -- a `.odb` genuinely can declare tables with no forms or reports (odf.js's own embedded-firebird fixture is exactly that), so an empty default is a real state, not a stub.
+// The three collections default to empty so a test that only cares about one of them names only that one — a `.odb` genuinely can declare tables with no forms or reports (odf.js's own embedded-firebird fixture is exactly that), so an empty default is a real state, not a stub.
 const NO_TABLES: readonly HsqldbTable[] = [];
 const NO_FORMS: readonly OdbForm[] = [];
 const NO_REPORTS: readonly OdbReport[] = [];

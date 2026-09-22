@@ -27,12 +27,12 @@ import {
 } from "./units";
 import { readXlsxContent, resolveSheetEntries } from "./content";
 
-// True precisely when `key` is an own property of `obj`, regardless of whether its value is `undefined` -- unlike `toBeUndefined()`, which is satisfied identically by a key holding `undefined` and by the key's own absence, and so cannot distinguish "never assigned" from "assigned undefined". Several of readCell's own optional-field copies (font/background/borders/alignment/verticalAlignment/numberFormatCode) are guarded by a presence check specifically to avoid ever assigning the key at all when the source has nothing to offer, and only a key-existence assertion can prove that guard is doing real work rather than being a no-op the object shape would be identical without.
+// True precisely when `key` is an own property of `obj`, regardless of whether its value is `undefined` — unlike `toBeUndefined()`, which is satisfied identically by a key holding `undefined` and by the key's own absence, and so cannot distinguish "never assigned" from "assigned undefined". Several of readCell's own optional-field copies (font/background/borders/alignment/verticalAlignment/numberFormatCode) are guarded by a presence check specifically to avoid ever assigning the key at all when the source has nothing to offer, and only a key-existence assertion can prove that guard is doing real work rather than being a no-op the object shape would be identical without.
 function hasOwn(obj: object, key: string): boolean {
   return Object.hasOwn(obj, key);
 }
 
-// This suite reads real, unmodified LibreOffice-generated .xlsx fixtures (src/typed/xlsx/fixtures/*.xlsx). Both fixtures are genuine LibreOffice xlsx-exports (`soffice --headless --convert-to xlsx`) of odf.js's own src/typed/ods/fixtures/{kitchen-sink,minimal}.ods -- the same feature set that package's own readOds test suite already validates against ODF's equivalent mechanisms, run back through LibreOffice's real SpreadsheetML export filter so this suite exercises genuine, LibreOffice-authored xlsx markup (column-width character units, row heights, hidden rows/columns, every value-type LibreOffice's own xlsx exporter distinguishes, a real merged range, a real cross-sheet formula, and real print settings including Print_Area/Print_Titles defined names) rather than a hand-built approximation of what that markup might look like. A handful of narrow scope-boundary/error-path tests at the end use small, synthetic, hand-built packages instead (via el/txt), mirroring readOds's own established convention for the identical reason.
+// This suite reads real, unmodified LibreOffice-generated .xlsx fixtures (src/typed/xlsx/fixtures/*.xlsx). Both fixtures are genuine LibreOffice xlsx-exports (`soffice --headless --convert-to xlsx`) of odf.js's own src/typed/ods/fixtures/{kitchen-sink,minimal}.ods — the same feature set that package's own readOds test suite already validates against ODF's equivalent mechanisms, run back through LibreOffice's real SpreadsheetML export filter so this suite exercises genuine, LibreOffice-authored xlsx markup (column-width character units, row heights, hidden rows/columns, every value-type LibreOffice's own xlsx exporter distinguishes, a real merged range, a real cross-sheet formula, and real print settings including Print_Area/Print_Titles defined names) rather than a hand-built approximation of what that markup might look like. A handful of narrow scope-boundary/error-path tests at the end use small, synthetic, hand-built packages instead (via el/txt), mirroring readOds's own established convention for the identical reason.
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 
@@ -60,10 +60,10 @@ describe("readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)", () => {
   it("produces a ContentDocument envelope directly (kind, metadata, sheets) matching the live ContentDocumentSchema", () => {
     expect(document.kind).toBe("spreadsheet");
     expect(ContentDocumentSchema.safeParse(document).success).toBe(true);
-    expect("formatVersion" in document).toBe(false); // retired in document-schema.js 4.0.0 -- versioning now lives only at the serialised-artefact boundary ($schema URI), never on the in-process codec-exchange envelope
+    expect("formatVersion" in document).toBe(false); // retired in document-schema.js 4.0.0 — versioning now lives only at the serialised-artefact boundary ($schema URI), never on the in-process codec-exchange envelope
   });
 
-  it("reads document metadata via docProps/core.xml -- this fixture never had a title set", () => {
+  it("reads document metadata via docProps/core.xml — this fixture never had a title set", () => {
     expect(document.metadata.title).toBeUndefined();
   });
 
@@ -95,7 +95,7 @@ describe("readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)", () => {
       ]);
     });
 
-    // Regression coverage for ExaDev/documents.js#953: this fixture's own real, LibreOffice-authored stored widths (15.32, 12.76, 10.21, ...) are exactly the kind of value that used to keep re-approximating narrower on every further write -- see units.test.ts's own convergence suite for the underlying arithmetic proof and units.ts's ptToColumnWidthChars for why rounding up (never to nearest) fixes it.
+    // Regression coverage for ExaDev/documents.js#953: this fixture's own real, LibreOffice-authored stored widths (15.32, 12.76, 10.21, ...) are exactly the kind of value that used to keep re-approximating narrower on every further write — see units.test.ts's own convergence suite for the underlying arithmetic proof and units.ts's ptToColumnWidthChars for why rounding up (never to nearest) fixes it.
     function dataSheetColWidthAttrs(pkg: Package): (string | undefined)[] {
       const entry = resolveSheetEntries(pkg).find(
         (sheet) => sheet.name === "Data",
@@ -160,7 +160,7 @@ describe("readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)", () => {
       expect(hiddenCell?.displayText).toBe("Hidden Row Content");
     });
 
-    it("reads one ContentSheetRow per real <row> element -- no repeat-compression mechanism to guard against, unlike ODF", () => {
+    it("reads one ContentSheetRow per real <row> element — no repeat-compression mechanism to guard against, unlike ODF", () => {
       expect(data.rows.map((row) => row.index)).toEqual([0, 1, 2, 5, 6, 9]);
     });
   });
@@ -186,15 +186,15 @@ describe("readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)", () => {
       expect(cellAt(1).displayText).toBe("1234.56");
     });
 
-    // Cross-checked against an INDEPENDENT oracle, not just against this reader's own view of the format codes: the source these fixtures were exported from, odf.js's own src/typed/ods/fixtures/kitchen-sink.ods, declares these same four cells explicitly typed -- office:value-type="date" office:date-value="2026-07-31", office:value-type="time" office:time-value="PT14H30M00S", office:value-type="percentage" office:value="0.4256", and office:value-type="currency" office:currency="GBP" office:value="99.99". Every kind, value, and the ISO 4217 code recovered below matches what the author originally entered, recovered from nothing but a style index and a numFmt string.
+    // Cross-checked against an INDEPENDENT oracle, not just against this reader's own view of the format codes: the source these fixtures were exported from, odf.js's own src/typed/ods/fixtures/kitchen-sink.ods, declares these same four cells explicitly typed — office:value-type="date" office:date-value="2026-07-31", office:value-type="time" office:time-value="PT14H30M00S", office:value-type="percentage" office:value="0.4256", and office:value-type="currency" office:currency="GBP" office:value="99.99". Every kind, value, and the ISO 4217 code recovered below matches what the author originally entered, recovered from nothing but a style index and a numFmt string.
     it("recovers the date/time/percentage/currency kinds xlsx itself has no cell type for, from the numFmt code each cell's own style points at", () => {
-      // Due Date: numFmtId 166, "[$-809]yyyy\\-mm\\-dd" -- a locale-only bracket (NOT currency) plus real y/m/d codes; serial 46234 in this workbook's 1900 date system (workbookPr@date1904="false").
+      // Due Date: numFmtId 166, "[$-809]yyyy\\-mm\\-dd" — a locale-only bracket (NOT currency) plus real y/m/d codes; serial 46234 in this workbook's 1900 date system (workbookPr@date1904="false").
       expect(cellAt(3).value).toEqual({ kind: "date", value: "2026-07-31" });
-      // Due Time: numFmtId 167, "[$-809]hh:mm:ss" -- the 'mm' resolves to MINUTES here (nearest preceding code is 'hh'), unlike the identical 'mm' in the date format above, where it resolves to a month.
+      // Due Time: numFmtId 167, "[$-809]hh:mm:ss" — the 'mm' resolves to MINUTES here (nearest preceding code is 'hh'), unlike the identical 'mm' in the date format above, where it resolves to a month.
       expect(cellAt(4).value).toEqual({ kind: "time", value: "14:30:00" });
-      // Rate: numFmtId 168, "[$-809]0.00%" -- the value stays the raw stored fraction, not the 42.56 Excel displays.
+      // Rate: numFmtId 168, "[$-809]0.00%" — the value stays the raw stored fraction, not the 42.56 Excel displays.
       expect(cellAt(5).value).toEqual({ kind: "percentage", value: 0.4256 });
-      // Fee: numFmtId 169, "[$GBP-809]#,##0.00" -- an ISO 4217 code between the '$' and the '-', so `currency` is populated rather than left honestly absent.
+      // Fee: numFmtId 169, "[$GBP-809]#,##0.00" — an ISO 4217 code between the '$' and the '-', so `currency` is populated rather than left honestly absent.
       expect(cellAt(6).value).toEqual({
         kind: "currency",
         value: 99.99,
@@ -207,18 +207,18 @@ describe("readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)", () => {
       expect(cellAt(4).numberFormatCode).toBe("[$-809]hh:mm:ss");
       expect(cellAt(5).numberFormatCode).toBe("[$-809]0.00%");
       expect(cellAt(6).numberFormatCode).toBe("[$GBP-809]#,##0.00");
-      // This fixture's own Amount cell resolves through a redefined numFmtId 164 whose own code IS the literal string "General" (some producers write it out explicitly rather than relying on the built-in default) -- carried verbatim like any other resolved code, not specially suppressed.
+      // This fixture's own Amount cell resolves through a redefined numFmtId 164 whose own code IS the literal string "General" (some producers write it out explicitly rather than relying on the built-in default) — carried verbatim like any other resolved code, not specially suppressed.
       expect(cellAt(1).numberFormatCode).toBe("General");
     });
 
-    it("leaves displayText as the plain typed-value spelling -- this reader classifies a number format, it does not render through one", () => {
+    it("leaves displayText as the plain typed-value spelling — this reader classifies a number format, it does not render through one", () => {
       expect(cellAt(3).displayText).toBe("2026-07-31");
       expect(cellAt(4).displayText).toBe("14:30:00");
       expect(cellAt(5).displayText).toBe("0.4256"); // not "42.56%"
       expect(cellAt(6).displayText).toBe("99.99"); // not "£99.99"
     });
 
-    it('reads a boolean cell (t="b") and derives an Excel-style TRUE/FALSE displayText -- its own numFmtId 165 ("TRUE";"TRUE";"FALSE") style never gets a say, since only numeric cells are classified', () => {
+    it('reads a boolean cell (t="b") and derives an Excel-style TRUE/FALSE displayText — its own numFmtId 165 ("TRUE";"TRUE";"FALSE") style never gets a say, since only numeric cells are classified', () => {
       expect(cellAt(2).value).toEqual({ kind: "boolean", value: true });
       expect(cellAt(2).displayText).toBe("TRUE");
     });
@@ -249,7 +249,7 @@ describe("readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)", () => {
       });
     });
 
-    it('emits nothing at all for the covered positions (B6, A7, B7) -- xlsx writes a bare, valueless <c> for each, and readCell\'s own "no v/is/f -> skip" rule already drops them', () => {
+    it('emits nothing at all for the covered positions (B6, A7, B7) — xlsx writes a bare, valueless <c> for each, and readCell\'s own "no v/is/f -> skip" rule already drops them', () => {
       expect(
         data.cells.find((cell) => cell.row === 5 && cell.column === 1),
       ).toBeUndefined();
@@ -369,7 +369,7 @@ describe("readXlsxContent: minimal.xlsx (real LibreOffice output, default/unmodi
     expect(sheet.name).toBe("Sheet1");
   });
 
-  it("emits nothing for the sheet's own single, genuinely empty cell -- and no <cols>/<row> elements at all", () => {
+  it("emits nothing for the sheet's own single, genuinely empty cell — and no <cols>/<row> elements at all", () => {
     expect(sheet.cells).toEqual([]);
     expect(sheet.columns).toEqual([]);
     expect(sheet.rows).toEqual([]);
@@ -388,13 +388,13 @@ describe("readXlsxContent: minimal.xlsx (real LibreOffice output, default/unmodi
     expect(sheet.printSettings.manualBreaks).toBeUndefined();
   });
 
-  it("has no xl/sharedStrings.xml part at all (no string cells) -- readXlsxContent tolerates its absence", () => {
+  it("has no xl/sharedStrings.xml part at all (no string cells) — readXlsxContent tolerates its absence", () => {
     const pkg = loadFixture("minimal.xlsx");
     expect(pkg.parts["xl/sharedStrings.xml"]).toBeUndefined();
   });
 });
 
-// A minimal single-sheet package wrapping a hand-built <worksheet> element -- shared by every synthetic test below, since each one only cares about a single cell's own markup.
+// A minimal single-sheet package wrapping a hand-built <worksheet> element — shared by every synthetic test below, since each one only cares about a single cell's own markup.
 function buildMinimalPackage(worksheet: ReturnType<typeof el>): Package {
   return {
     parts: {
@@ -584,13 +584,13 @@ function readStyledCell(
   return result.sheets[0]?.cells[0];
 }
 
-// A styled numeric cell -- s="1" points at the numFmts-declared format; s="0" at General.
+// A styled numeric cell — s="1" points at the numFmts-declared format; s="0" at General.
 function numericCell(value: string): ReturnType<typeof el> {
   return el("c", { r: "A1", s: "1" }, [el("v", {}, [txt(value)])]);
 }
 
 describe("readXlsxContent: the number format governs numeric cells only (synthetic packages)", () => {
-  it("never reclassifies a cell that already carries its own type -- a currency-formatted string, boolean, or error stays what the file says it is", () => {
+  it("never reclassifies a cell that already carries its own type — a currency-formatted string, boolean, or error stays what the file says it is", () => {
     expect(
       readStyledCell(
         "[$GBP-809]#,##0.00",
@@ -638,7 +638,7 @@ describe("readXlsxContent: the number format governs numeric cells only (synthet
     });
   });
 
-  it("keeps an elapsed-time cell as a raw number -- ContentCellValue has no duration kind, and [h]:mm:ss may exceed 24 hours", () => {
+  it("keeps an elapsed-time cell as a raw number — ContentCellValue has no duration kind, and [h]:mm:ss may exceed 24 hours", () => {
     expect(readStyledCell("[h]:mm:ss", numericCell("2.5"))?.value).toEqual({
       kind: "number",
       value: 2.5,
@@ -664,7 +664,7 @@ describe("readXlsxContent: the number format governs numeric cells only (synthet
   });
 });
 
-// Cell decoration (background/borders/alignment/verticalAlignment) resolves through the same cellXfs index the number format does. These build a package with a real xl/styles.xml carrying fills, borders, and inline <alignment> so a cell's own s attribute resolves to a genuinely decorated xf -- the boundaries the kitchen-sink fixture (all default styling) has no cell for.
+// Cell decoration (background/borders/alignment/verticalAlignment) resolves through the same cellXfs index the number format does. These build a package with a real xl/styles.xml carrying fills, borders, and inline <alignment> so a cell's own s attribute resolves to a genuinely decorated xf — the boundaries the kitchen-sink fixture (all default styling) has no cell for.
 function buildDecoratedPackage(
   styleSheet: ReturnType<typeof el>,
   cell: ReturnType<typeof el>,
@@ -803,7 +803,7 @@ describe("readXlsxContent: cell decoration (background/borders/alignment/vertica
     expect(cell?.verticalAlignment).toBeUndefined();
   });
 
-  it('leaves horizontal="general" unread -- general means "use the value-kind default", the same semantics as an absent alignment', () => {
+  it('leaves horizontal="general" unread — general means "use the value-kind default", the same semantics as an absent alignment', () => {
     const generalSheet = el("styleSheet", {}, [
       el("cellXfs", {}, [
         el("xf", { numFmtId: "0" }, [
@@ -856,7 +856,7 @@ describe("readXlsxContent: cell decoration (background/borders/alignment/vertica
     ).toBeUndefined();
   });
 
-  it("omits the font/background/borders/alignment/verticalAlignment keys entirely on a cell whose s index carries none of them -- not merely assigned undefined", () => {
+  it("omits the font/background/borders/alignment/verticalAlignment keys entirely on a cell whose s index carries none of them — not merely assigned undefined", () => {
     const cell = readDecoratedCell(
       styledSheet,
       el("c", { r: "A1", s: "0" }, [el("v", {}, [txt("42")])]),
@@ -903,7 +903,7 @@ describe("readXlsxContent: cell decoration (background/borders/alignment/vertica
   });
 });
 
-// Every one of readColumns/readRows/sheetFormatDefaultRowHeightPt's own conditional branches and index arithmetic, exercised directly against small synthetic worksheets -- the kitchen-sink fixture's own real rows/columns don't happen to visit every boundary (a 0-based min, a non-numeric width, a row number exactly at its own lower bound) these functions guard against.
+// Every one of readColumns/readRows/sheetFormatDefaultRowHeightPt's own conditional branches and index arithmetic, exercised directly against small synthetic worksheets — the kitchen-sink fixture's own real rows/columns don't happen to visit every boundary (a 0-based min, a non-numeric width, a row number exactly at its own lower bound) these functions guard against.
 function readSheetFromWorksheet(
   worksheet: ReturnType<typeof el>,
 ): ContentSheet {
@@ -957,7 +957,7 @@ describe("readXlsxContent: row/column geometry edge cases (synthetic packages)",
     ]);
   });
 
-  it('recovers row index 4 -- not 6 -- from r="5", proving the 1-based-to-0-based conversion subtracts rather than adds', () => {
+  it('recovers row index 4 — not 6 — from r="5", proving the 1-based-to-0-based conversion subtracts rather than adds', () => {
     const worksheet = el("worksheet", {}, [
       el("sheetData", {}, [el("row", { r: "5" })]),
     ]);
@@ -1175,7 +1175,7 @@ describe("readXlsxContent: merged-range span arithmetic (synthetic packages)", (
     expect(hasOwn(anchor ?? {}, "colSpan")).toBe(false);
   });
 
-  it("sets neither colSpan nor rowSpan for a single-cell 'merge' (B2:B2) -- a span of exactly 1 on both axes", () => {
+  it("sets neither colSpan nor rowSpan for a single-cell 'merge' (B2:B2) — a span of exactly 1 on both axes", () => {
     const { cells } = readFirstCell(mergedWorksheet("B2:B2", "B2"));
     const anchor = cells[0];
     expect(hasOwn(anchor ?? {}, "colSpan")).toBe(false);
@@ -1329,7 +1329,7 @@ describe("readXlsxContent: chart graphic frames", () => {
     expect(chart?.origin).toBe("chart");
     expect(chart?.anchorColumn).toBe(0);
     expect(chart?.anchorRow).toBe(1);
-    // The frame: anchored at column 0 offset 19050 EMU, row 1, spanning to the start of column 2 and row 4 -- absolute position from the sheet's left edge through the declared column widths and default row height, size the difference of the two anchors.
+    // The frame: anchored at column 0 offset 19050 EMU, row 1, spanning to the start of column 2 and row 4 — absolute position from the sheet's left edge through the declared column widths and default row height, size the difference of the two anchors.
     const col0 = columnWidthCharsToPt(10);
     const col1 = columnWidthCharsToPt(20);
     const offsetX = (19050 / 914400) * 72;
@@ -1344,7 +1344,7 @@ describe("readXlsxContent: chart graphic frames", () => {
       chart?.document.kind === "spreadsheet"
         ? chart.document.sheets[0]
         : undefined;
-    // The graphic frame's own xdr:cNvPr/@name ("Chart 1"), not the "Chart" fallback -- the payload sheet is named after the shape that actually held it.
+    // The graphic frame's own xdr:cNvPr/@name ("Chart 1"), not the "Chart" fallback — the payload sheet is named after the shape that actually held it.
     expect(sheet?.name).toBe("Chart 1");
     expect(sheet?.cells).toEqual([
       {
@@ -1387,7 +1387,7 @@ describe("readXlsxContent: chart graphic frames", () => {
     ).toBe(true);
   });
 
-  it("quarantines the whole chart part -- type, axes, colours, everything the cached-model read does not carry -- as xlsx residue on the embedded object", () => {
+  it("quarantines the whole chart part — type, axes, colours, everything the cached-model read does not carry — as xlsx residue on the embedded object", () => {
     const document = readXlsxContent(chartDrawingPackage());
     if (document.kind !== "spreadsheet") {
       throw new Error("expected a spreadsheet ContentDocument");
@@ -1755,7 +1755,7 @@ describe("readXlsxContent: drawing pictures", () => {
     expect(document.sheets[0]?.images).toHaveLength(1);
     const image = document.sheets[0]?.images[0];
     expect(image?.kind).toBe("image");
-    // The media part's own bytes decide the format, never the part's .png name -- the same contract as the pptx picture reader.
+    // The media part's own bytes decide the format, never the part's .png name — the same contract as the pptx picture reader.
     expect(image?.format).toBe("png");
     expect(image?.base64).toBe(TINY_PNG_BASE64);
     expect(image?.anchorColumn).toBe(0);
@@ -1768,7 +1768,7 @@ describe("readXlsxContent: drawing pictures", () => {
     expect(image?.offsetYPt).toBe(0);
     expect(image?.widthPt).toBeCloseTo(col0 + col1 - offsetX, 5);
     expect(image?.heightPt).toBeCloseTo(45, 5);
-    // A drawing carrying only a picture, no chart graphic frame at all, leaves embeddedObjects absent rather than an empty array -- the same "undefined means none, [] means none for images specifically" split the module doc comment states.
+    // A drawing carrying only a picture, no chart graphic frame at all, leaves embeddedObjects absent rather than an empty array — the same "undefined means none, [] means none for images specifically" split the module doc comment states.
     expect(document.sheets[0]?.embeddedObjects).toBeUndefined();
   });
 
@@ -1805,7 +1805,7 @@ describe("readXlsxContent: drawing pictures", () => {
   });
 });
 
-// The oneCellAnchor spelling -- Excel's own "Move, but don't size with cells" anchoring for an inserted picture (the common real-producer spelling, per #776): a from-marker positions the frame through the grid geometry exactly as a two-cell anchor's from-marker does, and the anchor's own xdr:ext sizes it, which is the to-marker's job in the two-cell spelling.
+// The oneCellAnchor spelling — Excel's own "Move, but don't size with cells" anchoring for an inserted picture (the common real-producer spelling, per #776): a from-marker positions the frame through the grid geometry exactly as a two-cell anchor's from-marker does, and the anchor's own xdr:ext sizes it, which is the to-marker's job in the two-cell spelling.
 function oneCellPicturePackage(extCx = "1828800", extCy = "914400"): Package {
   const picture = el("xdr:pic", {}, [
     el("xdr:nvPicPr", {}, [el("xdr:cNvPr", { id: "2", name: "Picture 1" })]),
@@ -1953,7 +1953,7 @@ describe("readXlsxContent: drawing pictures (oneCellAnchor)", () => {
   });
 });
 
-// The absoluteAnchor spelling: xdr:pos (x/y EMU, page-absolute) plus xdr:ext sizing, no markers at all. ContentSheetImage's anchor vocabulary is cell-relative, so the landing #776 decides on is the nearest-cell re-basing -- the grid geometry's own inverse maps the absolute position onto a containing column/row plus the offset within it, exactly the fields a from-marker spells directly. The fixture grid: column 0 is 10 chars (52.5 pt), column 1 is 20 chars (105 pt), rows default 15 pt; pos 762000 x 190500 EMU is 60 x 15 pt, so column 1 offset 7.5 pt (52.5 + 7.5 = 60) and row 1 offset 0 (15 sits exactly on the row-1 boundary).
+// The absoluteAnchor spelling: xdr:pos (x/y EMU, page-absolute) plus xdr:ext sizing, no markers at all. ContentSheetImage's anchor vocabulary is cell-relative, so the landing #776 decides on is the nearest-cell re-basing — the grid geometry's own inverse maps the absolute position onto a containing column/row plus the offset within it, exactly the fields a from-marker spells directly. The fixture grid: column 0 is 10 chars (52.5 pt), column 1 is 20 chars (105 pt), rows default 15 pt; pos 762000 x 190500 EMU is 60 x 15 pt, so column 1 offset 7.5 pt (52.5 + 7.5 = 60) and row 1 offset 0 (15 sits exactly on the row-1 boundary).
 function absolutePicturePackage(
   extCx = "1828800",
   extCy = "914400",
@@ -2075,7 +2075,7 @@ describe("readXlsxContent: drawing pictures (absoluteAnchor)", () => {
   });
 
   it("locates a position sitting exactly on a column boundary as the start of the next column, not an offset into the previous one", () => {
-    // Column 0 is 10 chars = columnWidthCharsToPt(10) pt exactly, i.e. that many EMU at 12700 EMU/pt -- pos x lands exactly on the column 0/1 boundary, pos y at 0 keeps the row/height math out of it entirely.
+    // Column 0 is 10 chars = columnWidthCharsToPt(10) pt exactly, i.e. that many EMU at 12700 EMU/pt — pos x lands exactly on the column 0/1 boundary, pos y at 0 keeps the row/height math out of it entirely.
     const boundaryEmu = Math.round(columnWidthCharsToPt(10) * 12700);
     const document = readXlsxContent(
       absolutePicturePackage("1828800", "914400", String(boundaryEmu), "0"),
@@ -2268,7 +2268,7 @@ describe("readXlsxContent: chart graphic frames (absoluteAnchor)", () => {
   });
 });
 
-// One drawing part mixing all three anchor spellings over pictures (each resolving the same media part): the rows land in the part's own document order, not grouped by spelling -- the walk iterates the drawing's children once.
+// One drawing part mixing all three anchor spellings over pictures (each resolving the same media part): the rows land in the part's own document order, not grouped by spelling — the walk iterates the drawing's children once.
 function mixedAnchorsPicturePackage(): Package {
   const picture = el("xdr:pic", {}, [
     el("xdr:nvPicPr", {}, [el("xdr:cNvPr", { id: "2", name: "Picture 1" })]),
@@ -2478,7 +2478,7 @@ function customDrawingPackage(
   };
 }
 
-// A twoCellAnchor carrying a single xdr:pic, from col0/row0 (offset 0) to col1/row1 (offset 0) unless overridden -- the minimal shape for exercising SheetGridGeometry's own column/row reading via the resulting frame size, independent of the anchor-placement arithmetic the fixtures above already cover.
+// A twoCellAnchor carrying a single xdr:pic, from col0/row0 (offset 0) to col1/row1 (offset 0) unless overridden — the minimal shape for exercising SheetGridGeometry's own column/row reading via the resulting frame size, independent of the anchor-placement arithmetic the fixtures above already cover.
 function onePicTwoCellAnchor(
   opts: {
     toCol?: number;
@@ -2553,7 +2553,7 @@ describe("readXlsxContent: SheetGridGeometry (synthetic packages)", () => {
   });
 
   it("prefers a covering column range's own declared width over a narrower range with no width at all", () => {
-    // Two declared ranges both cover column 0 -- an outer 1..5 range with no width (a real producer's habit for "these columns use the sheet default"), and an inner 1..1 range that actually states one. The inner range's real width must win, not the wider range's undefined one merely because .find() met it first.
+    // Two declared ranges both cover column 0 — an outer 1..5 range with no width (a real producer's habit for "these columns use the sheet default"), and an inner 1..1 range that actually states one. The inner range's real width must win, not the wider range's undefined one merely because .find() met it first.
     const images = imagesOf(
       customDrawingPackage(
         [
@@ -2592,7 +2592,7 @@ describe("readXlsxContent: SheetGridGeometry (synthetic packages)", () => {
         onePicTwoCellAnchor({ toRow: 1 }),
       ),
     );
-    // r="1" names the FIRST row (0-based index 0) -- the very row this anchor spans, not the one after it.
+    // r="1" names the FIRST row (0-based index 0) — the very row this anchor spans, not the one after it.
     expect(images[0]?.heightPt).toBeCloseTo(50, 5);
   });
 
@@ -2645,7 +2645,7 @@ describe("readXlsxContent: SheetGridGeometry (synthetic packages)", () => {
         onePicTwoCellAnchor({ toCol: 1 }),
       ),
     );
-    // Column 0 sits below the declared range's own min (2, 0-based) -- it must fall back to the default width, not the range's huge declared one merely because 0 <= the range's own max.
+    // Column 0 sits below the declared range's own min (2, 0-based) — it must fall back to the default width, not the range's huge declared one merely because 0 <= the range's own max.
     expect(images[0]?.widthPt).toBeCloseTo(
       columnWidthCharsToPt(DEFAULT_COLUMN_WIDTH_CHARS),
       5,
@@ -2694,7 +2694,7 @@ describe("readXlsxContent: chart graphic frame structural gaps (synthetic packag
       withCNvPr = true,
       graphicUri = "http://schemas.openxmlformats.org/drawingml/2006/chart",
     } = opts;
-    // "name" in opts (not a destructured default) distinguishes "caller omitted the option, use the real default" from "caller explicitly asked for no name attribute at all" -- a destructured default would treat {name: undefined} identically to {}, which defeats the one test below that needs a cNvPr with genuinely no name attribute.
+    // "name" in opts (not a destructured default) distinguishes "caller omitted the option, use the real default" from "caller explicitly asked for no name attribute at all" — a destructured default would treat {name: undefined} identically to {}, which defeats the one test below that needs a cNvPr with genuinely no name attribute.
     const name = "name" in opts ? opts.name : "Chart 1";
     const nvGraphicFramePrChildren = withCNvPr
       ? [
@@ -2783,7 +2783,7 @@ describe("readXlsxContent: chart graphic frame structural gaps (synthetic packag
   });
 
   it("never resolves an unrelated relationship type as the worksheet's own drawing part, even when it sorts before the real one", () => {
-    // A hyperlink relationship inserted before the genuine drawing relationship in the worksheet's own rels part -- resolveRelationships preserves declaration order, so a coverage-bearing loop that stops at the FIRST relationship regardless of type would resolve the hyperlink's own (nonsensical, non-drawing) target as if it were the drawing part.
+    // A hyperlink relationship inserted before the genuine drawing relationship in the worksheet's own rels part — resolveRelationships preserves declaration order, so a coverage-bearing loop that stops at the FIRST relationship regardless of type would resolve the hyperlink's own (nonsensical, non-drawing) target as if it were the drawing part.
     const relationship = (id: string, type: string, target: string) =>
       el("Relationship", { Id: id, Type: type, Target: target });
     const pkg = customDrawingPackage(
@@ -2816,7 +2816,7 @@ describe("readXlsxContent: chart graphic frame structural gaps (synthetic packag
   });
 });
 
-// dataValidation and conditionalFormatting rules, promoted to real vocabulary (ExaDev/documents.js#758) for every rule this package's schema names -- the two real-producer fixtures below exercise the structural read/write path; the synthetic packages further down exercise what is deliberately left un-promoted (an 'expression' cfRule, a dataValidation type this schema does not name) through the pre-existing anchor-cell residue mechanism.
+// dataValidation and conditionalFormatting rules, promoted to real vocabulary (ExaDev/documents.js#758) for every rule this package's schema names — the two real-producer fixtures below exercise the structural read/write path; the synthetic packages further down exercise what is deliberately left un-promoted (an 'expression' cfRule, a dataValidation type this schema does not name) through the pre-existing anchor-cell residue mechanism.
 function worksheetOnlyPackage(worksheet: ReturnType<typeof el>): Package {
   const workbook = el("workbook", {}, [
     el("sheets", {}, [
@@ -2851,7 +2851,7 @@ describe("readXlsxContent: real-producer-validation-and-cellis.xlsx (real LibreO
     throw new Error("expected one sheet");
   }
 
-  // The real fixture's own <alignment horizontal="general" vertical="bottom" textRotation="0" wrapText="false" indent="0" shrinkToFit="false"/> -- the "rest of the dxf" once font/fill are structurally absorbed into textColor/background, carried as the style's own residue (empty children serialise as an explicit open/close pair, not self-closing, matching buildXml's own convention elsewhere in this suite).
+  // The real fixture's own <alignment horizontal="general" vertical="bottom" textRotation="0" wrapText="false" indent="0" shrinkToFit="false"/> — the "rest of the dxf" once font/fill are structurally absorbed into textColor/background, carried as the style's own residue (empty children serialise as an explicit open/close pair, not self-closing, matching buildXml's own convention elsewhere in this suite).
   const DXF_ALIGNMENT_RESIDUE = {
     format: "xlsx",
     xml: '<alignment horizontal="general" vertical="bottom" textRotation="0" wrapText="false" indent="0" shrinkToFit="false"></alignment>',
@@ -2923,7 +2923,7 @@ describe("readXlsxContent: real-producer-colorscale.xlsx (real LibreOffice outpu
     throw new Error("expected one sheet");
   }
 
-  it("promotes the colorScale rule over C1:C2 with its own inline cfvo/color stops (this fixture's cellIs pair is a known ODF round-trip artifact -- missing operator -- and is not asserted on here)", () => {
+  it("promotes the colorScale rule over C1:C2 with its own inline cfvo/color stops (this fixture's cellIs pair is a known ODF round-trip artifact — missing operator — and is not asserted on here)", () => {
     const colorScale = sheet.conditionalFormats?.find(
       (format) => format.type === "colorScale",
     );
@@ -2938,7 +2938,7 @@ describe("readXlsxContent: real-producer-colorscale.xlsx (real LibreOffice outpu
     });
   });
 
-  it('parses a real multi-range sqref ("A1 C1") into BOTH ranges, not just the first -- the sqref bug fix', () => {
+  it('parses a real multi-range sqref ("A1 C1") into BOTH ranges, not just the first — the sqref bug fix', () => {
     expect(sheet.dataValidations).toEqual([
       {
         ranges: [
@@ -2959,7 +2959,7 @@ describe("readXlsxContent: real-producer-colorscale.xlsx (real LibreOffice outpu
   });
 });
 
-describe("readXlsxContent: dataValidation and conditionalFormatting -- what is NOT promoted still lands as anchor-cell residue (synthetic packages)", () => {
+describe("readXlsxContent: dataValidation and conditionalFormatting — what is NOT promoted still lands as anchor-cell residue (synthetic packages)", () => {
   function readFirstCellOf(worksheet: ReturnType<typeof el>) {
     const read = readXlsxContent(worksheetOnlyPackage(worksheet));
     if (read.kind !== "spreadsheet") {
@@ -2968,7 +2968,7 @@ describe("readXlsxContent: dataValidation and conditionalFormatting -- what is N
     return read.sheets[0]?.cells ?? [];
   }
 
-  it("still quarantines an 'expression' cfRule verbatim on its anchor cell -- the one deliberate ECMA-376 member this union does not promote", () => {
+  it("still quarantines an 'expression' cfRule verbatim on its anchor cell — the one deliberate ECMA-376 member this union does not promote", () => {
     const cells = readFirstCellOf(
       el("worksheet", {}, [
         el("sheetData", {}, [
@@ -3035,7 +3035,7 @@ describe("readXlsxContent: dataValidation and conditionalFormatting -- what is N
     expect(anchor).toMatchObject({ value: { kind: "empty" }, displayText: "" });
   });
 
-  it("keeps the first residue-eligible rule when two anchor at the same cell -- one residue slot per cell -- and leaves a rule whose sqref does not parse unattached", () => {
+  it("keeps the first residue-eligible rule when two anchor at the same cell — one residue slot per cell — and leaves a rule whose sqref does not parse unattached", () => {
     const cells = readFirstCellOf(
       el("worksheet", {}, [
         el("sheetData", {}, []),

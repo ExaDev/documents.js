@@ -277,8 +277,8 @@ pnpm typecheck     # turbo run _typecheck -> tsc --noEmit
 pnpm lint          # turbo run _lint -> eslint . --fix --cache --max-warnings 0
 pnpm test          # turbo run _test -> vitest run --project unit
 pnpm test:watch    # vitest --project unit
-pnpm test:smoke    # turbo run _test:smoke -> tsdown, then vitest run --project smoke -- spawns the built dist/cli.js as a real child process
-pnpm test:workers  # turbo run _test:workers -> vitest run --config vitest.workers.config.ts -- runs the thin isomorphic slice (src/sql-result-format.ts, src/runtime/exit-codes.ts) under the real Cloudflare Workers runtime (workerd), proving the wrapped documents.js paths execute inside a workerd isolate with no Node-only API usage
+pnpm test:smoke    # turbo run _test:smoke -> tsdown, then vitest run --project smoke — spawns the built dist/cli.js as a real child process
+pnpm test:workers  # turbo run _test:workers -> vitest run --config vitest.workers.config.ts — runs the thin isomorphic slice (src/sql-result-format.ts, src/runtime/exit-codes.ts) under the real Cloudflare Workers runtime (workerd), proving the wrapped documents.js paths execute inside a workerd isolate with no Node-only API usage
 ```
 
 ## Gotchas

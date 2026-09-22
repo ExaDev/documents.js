@@ -7,7 +7,7 @@ export const RT_SlideAtom = 0x03ef;
 export const RT_Notes = 0x03f0;
 export const RT_NotesAtom = 0x03f1;
 export const RT_Environment = 0x03f2;
-// One value shared by SlidePersistAtom, MasterPersistAtom and NotesPersistAtom -- which of the three a record is, is decided by the list container holding it, not by its own type.
+// One value shared by SlidePersistAtom, MasterPersistAtom and NotesPersistAtom — which of the three a record is, is decided by the list container holding it, not by its own type.
 export const RT_SlidePersistAtom = 0x03f3;
 export const RT_MainMaster = 0x03f8;
 export const RT_ExternalObjectList = 0x0409;
@@ -19,7 +19,7 @@ export const RT_List = 0x07d0;
 export const RT_FontCollection = 0x07d5;
 // One value shared by SlideSchemeColorSchemeAtom and SchemeListElementColorSchemeAtom, told apart by recInstance.
 export const RT_ColorSchemeAtom = 0x07f0;
-// One value shared by ExHyperlinkRefAtom and ExObjRefAtom -- which of the two a record is, is decided by its containing container, not by its own type. ExObjRefAtom 2.7.7: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/d6e17fee-7d53-453f-962b-b671a4f8869f
+// One value shared by ExHyperlinkRefAtom and ExObjRefAtom — which of the two a record is, is decided by its containing container, not by its own type. ExObjRefAtom 2.7.7: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/d6e17fee-7d53-453f-962b-b671a4f8869f
 export const RT_ExternalObjectRefAtom = 0x0bc1;
 export const RT_PlaceholderAtom = 0x0bc3;
 export const RT_OutlineTextRefAtom = 0x0f9e;
@@ -39,7 +39,7 @@ export const RT_ExternalOleObjectAtom = 0x0fc3;
 // ExOleEmbedContainer 2.10.27, one entry of the document's ExObjListContainer per embedded OLE object: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/c687090c-a359-4ffc-918e-415117e10229
 export const RT_ExternalOleEmbed = 0x0fcc;
 export const RT_ExternalOleEmbedAtom = 0x0fcd;
-// One value shared by MasterListWithTextContainer, SlideListWithTextContainer and NotesListWithTextContainer; only rh.recInstance distinguishes them, and it does not run in the order the names suggest -- see the instance constants below.
+// One value shared by MasterListWithTextContainer, SlideListWithTextContainer and NotesListWithTextContainer; only rh.recInstance distinguishes them, and it does not run in the order the names suggest — see the instance constants below.
 export const RT_SlideListWithText = 0x0ff0;
 export const RT_UserEditAtom = 0x0ff5;
 export const RT_CurrentUserAtom = 0x0ff6;
@@ -48,7 +48,7 @@ export const RT_ExternalOleObjectStg = 0x1011;
 export const RT_PersistDirectoryAtom = 0x1772;
 export const RT_CryptSession10Container = 0x2f14;
 
-// The three list-with-text containers share RT_SlideListWithText and are told apart by rh.recInstance alone. The values are not in the order the container names suggest -- the slide list is 0x000 and the master list 0x001 -- so each is taken from its own specification page rather than inferred from the trio.
+// The three list-with-text containers share RT_SlideListWithText and are told apart by rh.recInstance alone. The values are not in the order the container names suggest — the slide list is 0x000 and the master list 0x001 — so each is taken from its own specification page rather than inferred from the trio.
 // SlideListWithTextContainer 2.4.14.3, "rh.recInstance MUST be 0x000": https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/307e6d12-7304-47a8-acbd-3e7b8041ad3c
 export const SLIDE_LIST_INSTANCE_SLIDES = 0x000;
 // MasterListWithTextContainer 2.4.14.1, "rh.recInstance MUST be 0x001": https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/18a9bc04-3307-440e-bbc2-efcb75ee923d
@@ -76,17 +76,17 @@ export const OfficeArtFSPGR = 0xf009;
 export const OfficeArtFSP = 0xf00a;
 // OfficeArtFOPT 2.2.9, a shape's primary property table: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/10dc2fe1-9e69-48dc-a1d1-2921dfb9c28e
 export const OfficeArtFOPT = 0xf00b;
-// OfficeArtClientTextbox, whose contents are host-defined -- [MS-PPT] 2.9.76 defines PowerPoint's: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/f50070dd-a4dc-4edd-a446-c4fcc5c80ace
+// OfficeArtClientTextbox, whose contents are host-defined — [MS-PPT] 2.9.76 defines PowerPoint's: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/f50070dd-a4dc-4edd-a446-c4fcc5c80ace
 export const OfficeArtClientTextbox = 0xf00d;
 // OfficeArtChildAnchor, a grouped shape's anchor in its group's coordinate system: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/33a44593-02df-4684-ab35-5a7c4a9bcaac
 export const OfficeArtChildAnchor = 0xf00f;
-// OfficeArtClientAnchor, host-defined -- [MS-PPT] 2.7.1 defines PowerPoint's: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/37ee18c7-3c7c-4adc-91fb-cb3b01789d72
+// OfficeArtClientAnchor, host-defined — [MS-PPT] 2.7.1 defines PowerPoint's: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/37ee18c7-3c7c-4adc-91fb-cb3b01789d72
 export const OfficeArtClientAnchor = 0xf010;
-// OfficeArtClientData, host-defined -- [MS-PPT] 2.9.72 defines PowerPoint's, whose one field this package writes is the PlaceholderAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/ac3b454d-b5ea-4da8-a57c-32fc08ed332a
+// OfficeArtClientData, host-defined — [MS-PPT] 2.9.72 defines PowerPoint's, whose one field this package writes is the PlaceholderAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/ac3b454d-b5ea-4da8-a57c-32fc08ed332a
 export const OfficeArtClientData = 0xf011;
 // OfficeArtSecondaryFOPT 2.2.10, a shape's second property table: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/a7b26490-a8c7-4087-904e-417b10839f77
 export const OfficeArtSecondaryFOPT = 0xf121;
-// OfficeArtTertiaryFOPT 2.2.11, a shape's third property table -- where a real producer states a table group's own tableProperties/tableRowProperties: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/a687e90c-1748-4f57-8758-be31cfb36185
+// OfficeArtTertiaryFOPT 2.2.11, a shape's third property table — where a real producer states a table group's own tableProperties/tableRowProperties: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/a687e90c-1748-4f57-8758-be31cfb36185
 export const OfficeArtTertiaryFOPT = 0xf122;
 // OfficeArtBlipJPEG 2.2.27: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/704b3ec5-3e3f-425f-b2f7-a090cc68e624
 export const OfficeArtBlipJPEG = 0xf01d;

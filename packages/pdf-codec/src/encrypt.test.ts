@@ -188,7 +188,7 @@ describe("createStandardDecryptor: password verification", () => {
     ).toThrow(PdfPasswordRequiredError);
   });
 
-  // The pre-revision-5 key derivation mixes in the first /ID string, so the wrong /ID produces the wrong key and the /U check must catch it -- rather than the file appearing to open and every string coming back as noise.
+  // The pre-revision-5 key derivation mixes in the first /ID string, so the wrong /ID produces the wrong key and the /U check must catch it — rather than the file appearing to open and every string coming back as noise.
   it("refuses a file when the /ID it was keyed with is wrong", () => {
     const { encryptDict } = realHandlerFrom(rc4Bits128EmptyUserPasswordPdf());
     expect(() =>
@@ -237,7 +237,7 @@ describe("createStandardDecryptor: crypt-filter routing", () => {
     ).not.toBe(value);
   });
 
-  // ISO 32000-1 7.6.3.2: with /EncryptMetadata false, a /Type /Metadata stream is the one stream in the file left in the clear. The fixture is a genuinely qpdf-encrypted --cleartext-metadata file rather than this package's own dictionary with the flag flipped: at revision 4 that flag also feeds four 0xFF bytes into Algorithm 2, so a flipped copy would derive a different file key and fail /U verification outright -- which the neighbouring test now pins deliberately.
+  // ISO 32000-1 7.6.3.2: with /EncryptMetadata false, a /Type /Metadata stream is the one stream in the file left in the clear. The fixture is a genuinely qpdf-encrypted --cleartext-metadata file rather than this package's own dictionary with the flag flipped: at revision 4 that flag also feeds four 0xFF bytes into Algorithm 2, so a flipped copy would derive a different file key and fail /U verification outright — which the neighbouring test now pins deliberately.
   it("leaves a /Type /Metadata stream in the clear when /EncryptMetadata is false", () => {
     const { encryptDict, fileId } = realHandlerFrom(
       aes128CleartextMetadataPdf(),
@@ -326,7 +326,7 @@ describe("createStandardDecryptor: corrupt encrypted values degrade rather than 
     expect(diagnostics).toHaveLength(0);
   });
 
-  // A garbage AES value decrypts to garbage, which is the honest outcome -- what must not happen is a throw, or a result longer than the ciphertext that produced it.
+  // A garbage AES value decrypts to garbage, which is the honest outcome — what must not happen is a throw, or a result longer than the ciphertext that produced it.
   it("never throws or over-produces on a garbage AES value", () => {
     const { encryptDict, fileId } = realHandlerFrom(
       aes128EmptyUserPasswordPdf(),

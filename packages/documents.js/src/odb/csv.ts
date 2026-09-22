@@ -2,14 +2,14 @@ import type { HsqldbTable } from "../hsqldb/script";
 import { displayTextFor } from "../hsqldb/script";
 import { quoteCsvField } from "../csv/records";
 
-// Writes exactly one named HsqldbTable as CSV bytes -- no ContentSheet/xlsx machinery involved at all, since CSV needs nothing beyond the table's own column names and each cell's own display text. RFC 4180 quoting is the shared src/csv/records.ts quoteCsvField (the identical function src/csv/write.ts writes ContentSheet cells through), so every csv this package emits speaks one dialect by construction.
+// Writes exactly one named HsqldbTable as CSV bytes — no ContentSheet/xlsx machinery involved at all, since CSV needs nothing beyond the table's own column names and each cell's own display text. RFC 4180 quoting is the shared src/csv/records.ts quoteCsvField (the identical function src/csv/write.ts writes ContentSheet cells through), so every csv this package emits speaks one dialect by construction.
 
 export class OdbTableNotSpecifiedError extends Error {
   readonly availableTables: readonly string[];
 
   constructor(availableTables: readonly string[]) {
     super(
-      `odbToCsv: this .odb has more than one table (${availableTables.join(", ")}) -- pass { table: '<name>' } to select one`,
+      `odbToCsv: this .odb has more than one table (${availableTables.join(", ")}) — pass { table: '<name>' } to select one`,
     );
     this.name = "OdbTableNotSpecifiedError";
     this.availableTables = availableTables;
@@ -22,7 +22,7 @@ export class OdbTableNotFoundError extends Error {
 
   constructor(table: string, availableTables: readonly string[]) {
     super(
-      `odbToCsv: table "${table}" not found -- available table(s): ${availableTables.length === 0 ? "(none)" : availableTables.join(", ")}`,
+      `odbToCsv: table "${table}" not found — available table(s): ${availableTables.length === 0 ? "(none)" : availableTables.join(", ")}`,
     );
     this.name = "OdbTableNotFoundError";
     this.table = table;

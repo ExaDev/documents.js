@@ -64,7 +64,7 @@ describe("readShapeProperties", () => {
   });
 
   it("skips a sibling record of some other type, however property-table-shaped its own data happens to be", () => {
-    // recInstance 5 would demand 30 bytes (5 entries * 6) if this sibling were mistaken for a property table's own entry count, but it carries only 2 -- proving it is skipped by record type rather than merely tolerated by size.
+    // recInstance 5 would demand 30 bytes (5 entries * 6) if this sibling were mistaken for a property table's own entry count, but it carries only 2 — proving it is skipped by record type rather than merely tolerated by size.
     const shape = container(OfficeArtSpContainer, [
       atom(RT_TextHeaderAtom, new Uint8Array(2), { recInstance: 5 }),
       atom(

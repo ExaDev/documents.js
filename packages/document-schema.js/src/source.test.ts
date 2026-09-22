@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SourceFormatSchema, SourceResidueSchema } from "./source";
 
-// The quarantined residue channel's own shape (ExaDev/documents.js#718, channel 2 of the original ExaDev/document-schema.js#22): one `source: { format, xml }` value, validated as opaque text and never semantically interpreted by this package. These tests pin the three facts that make it a quarantine rather than a loose bag: the format vocabulary is closed (every member names a real reader that exists in this workspace today), the object is closed (strict -- a smuggled third key fails rather than strips), and nothing about the xml string is checked beyond it being text.
+// The quarantined residue channel's own shape (ExaDev/documents.js#718, channel 2 of the original ExaDev/document-schema.js#22): one `source: { format, xml }` value, validated as opaque text and never semantically interpreted by this package. These tests pin the three facts that make it a quarantine rather than a loose bag: the format vocabulary is closed (every member names a real reader that exists in this workspace today), the object is closed (strict — a smuggled third key fails rather than strips), and nothing about the xml string is checked beyond it being text.
 
 describe("SourceFormatSchema", () => {
   it("accepts every format a workspace reader produces today", () => {
@@ -26,7 +26,7 @@ describe("SourceFormatSchema", () => {
     }
   });
 
-  it("rejects an unknown format -- the vocabulary is closed, not a free string", () => {
+  it("rejects an unknown format — the vocabulary is closed, not a free string", () => {
     expect(SourceFormatSchema.safeParse("ooxml").success).toBe(false);
     expect(SourceFormatSchema.safeParse("").success).toBe(false);
     expect(SourceFormatSchema.safeParse(7).success).toBe(false);
@@ -41,7 +41,7 @@ describe("SourceResidueSchema", () => {
     ).toBe(true);
   });
 
-  it("is strict -- a third key fails parse rather than being stripped", () => {
+  it("is strict — a third key fails parse rather than being stripped", () => {
     expect(
       SourceResidueSchema.safeParse({
         format: "docx",
@@ -60,7 +60,7 @@ describe("SourceResidueSchema", () => {
     );
   });
 
-  it("treats the xml as opaque text -- any string validates, and only a string does", () => {
+  it("treats the xml as opaque text — any string validates, and only a string does", () => {
     expect(
       SourceResidueSchema.safeParse({
         format: "markdown",

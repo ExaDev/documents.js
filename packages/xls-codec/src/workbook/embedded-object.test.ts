@@ -51,7 +51,7 @@ describe("writeEmbeddedObjectPackage / readEmbeddedObjectPackage", () => {
     expect(result?.frame).toStrictEqual(otherFrame);
   });
 
-  it("does not round-trip the placement fields -- they come only from the caller's frame argument", () => {
+  it("does not round-trip the placement fields — they come only from the caller's frame argument", () => {
     const embedded = embeddedObject({
       anchorRow: 3,
       anchorColumn: 2,
@@ -86,7 +86,7 @@ describe("writeEmbeddedObjectPackage / readEmbeddedObjectPackage", () => {
   });
 
   it("returns undefined for a foreign label even when its payload is otherwise a fully valid embedding", () => {
-    // "{}" (the case above) also fails the objectKind/document presence check on its own, so it cannot prove the label check itself did anything -- a reader that skipped the label entirely would reach the same undefined result via that other guard. A payload valid enough to parse and pass schema validation isolates the label check.
+    // "{}" (the case above) also fails the objectKind/document presence check on its own, so it cannot prove the label check itself did anything — a reader that skipped the label entirely would reach the same undefined result via that other guard. A payload valid enough to parse and pass schema validation isolates the label check.
     const foreign = writeForeignPackage(
       "not-this-package.json",
       JSON.stringify({ objectKind: "drawing", document: DRAWING_DOCUMENT }),
@@ -149,7 +149,7 @@ describe("writeEmbeddedObjectPackage / readEmbeddedObjectPackage", () => {
   });
 });
 
-/** Builds a Package stream carrying an arbitrary label and JSON text, using the identical [MS-OLEDS] layout writeEmbeddedObjectPackage itself produces (a uint16 header, three null-terminated strings, then a little-endian byte count and the file bytes) -- so a test can construct a Package stream this module did not itself write. */
+/** Builds a Package stream carrying an arbitrary label and JSON text, using the identical [MS-OLEDS] layout writeEmbeddedObjectPackage itself produces (a uint16 header, three null-terminated strings, then a little-endian byte count and the file bytes) — so a test can construct a Package stream this module did not itself write. */
 function writeForeignPackage(
   label: string,
   json: string,

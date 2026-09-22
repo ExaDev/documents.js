@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { registerOperation } from "./register-operation";
 
-// Exercises registerOperation directly against a real McpServer + in-memory client/server round trip, the same connection pattern every src/tools/*.test.ts file already uses -- proving the wrapper's own wiring (outputSchema forwarding, the abort signal handed to run(), and the mapError/toErrorResult fallback), independent of any one real DocumentOperation's own business logic.
+// Exercises registerOperation directly against a real McpServer + in-memory client/server round trip, the same connection pattern every src/tools/*.test.ts file already uses — proving the wrapper's own wiring (outputSchema forwarding, the abort signal handed to run(), and the mapError/toErrorResult fallback), independent of any one real DocumentOperation's own business logic.
 describe("registerOperation", () => {
   let client: Client;
   let server: McpServer;

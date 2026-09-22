@@ -1,10 +1,10 @@
-// A point in the port's device space: pixels, origin at the rendered region's own top-left corner, x right, y down -- the one coordinate system every RasterDrawOp already carries, so nothing here flips anything.
+// A point in the port's device space: pixels, origin at the rendered region's own top-left corner, x right, y down — the one coordinate system every RasterDrawOp already carries, so nothing here flips anything.
 export interface Pt {
   readonly x: number;
   readonly y: number;
 }
 
-// The flattening tolerance every cubic in a fill or stroke outline is subdivided to meet, in device pixels, and the depth cap that keeps a pathological curve finite even for a tolerance it never quite meets. These mirror the constants pdf-codec's own raster walk flattens dotted strokes with (src/raster.ts there), so a dotted line this backend draws and the geometry the port computes agree about where a curve's polyline runs -- the two constants are deliberately the same number on both sides of the port rather than independently chosen ones that could drift.
+// The flattening tolerance every cubic in a fill or stroke outline is subdivided to meet, in device pixels, and the depth cap that keeps a pathological curve finite even for a tolerance it never quite meets. These mirror the constants pdf-codec's own raster walk flattens dotted strokes with (src/raster.ts there), so a dotted line this backend draws and the geometry the port computes agree about where a curve's polyline runs — the two constants are deliberately the same number on both sides of the port rather than independently chosen ones that could drift.
 export const FLATTEN_TOLERANCE_PX = 0.05;
 export const MAX_FLATTEN_DEPTH = 16;
 

@@ -102,7 +102,7 @@ const NOTES_SLIDE_CONTENT_TYPE =
   "application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml";
 
 function buildMinimalNotesSlide(text: string): XmlElement {
-  // A single body placeholder holding the text, with an explicit a:xfrm rather than leaving the placeholder to inherit geometry from the notesMaster's own matching placeholder (position/size matched against a real Keynote-exported reference file's own notes body placeholder). type="body" without idx matches the same reference: idx="1" alone (this scaffold's earlier attempt) turned out not to be the actual defect blocking Keynote from opening the file at all -- see the p:clrMapOvr note below for what was.
+  // A single body placeholder holding the text, with an explicit a:xfrm rather than leaving the placeholder to inherit geometry from the notesMaster's own matching placeholder (position/size matched against a real Keynote-exported reference file's own notes body placeholder). type="body" without idx matches the same reference: idx="1" alone (this scaffold's earlier attempt) turned out not to be the actual defect blocking Keynote from opening the file at all — see the p:clrMapOvr note below for what was.
   const body = el("p:sp", {}, [
     el("p:nvSpPr", {}, [
       el("p:cNvPr", { id: "2", name: "Notes Placeholder" }),
@@ -126,7 +126,7 @@ function buildMinimalNotesSlide(text: string): XmlElement {
   // xmlns:p/xmlns:a and the mandatory p:nvGrpSpPr/p:grpSpPr pair are required on p:notes' own p:spTree for the same reason they are on a slide's (see editor.ts's buildEmptySlideRoot).
   const spTree = buildEmptyGroupSpTree();
   spTree.children.push(body);
-  // CT_NotesSlide requires p:clrMapOvr as a direct sibling of p:cSld (mirroring CT_SlideLayout's own p:clrMapOvr, which this scaffold already got right) -- confirmed missing, and confirmed as the actual blocker, by diffing against a real Keynote-exported reference pptx with speaker notes: every other structural piece here (namespaces, the nvGrpSpPr/grpSpPr pair, the notesMaster chain) was already correct and still failed to open without this element.
+  // CT_NotesSlide requires p:clrMapOvr as a direct sibling of p:cSld (mirroring CT_SlideLayout's own p:clrMapOvr, which this scaffold already got right) — confirmed missing, and confirmed as the actual blocker, by diffing against a real Keynote-exported reference pptx with speaker notes: every other structural piece here (namespaces, the nvGrpSpPr/grpSpPr pair, the notesMaster chain) was already correct and still failed to open without this element.
   return el("p:notes", { "xmlns:p": PML_NS, "xmlns:a": DML_NS }, [
     el("p:cSld", {}, [spTree]),
     el("p:clrMapOvr", {}, [el("a:masterClrMapping")]),
@@ -177,7 +177,7 @@ export class PptxSlide {
     return out;
   }
 
-  // Live handles on every DrawingML table already on this slide, in document order -- the read-side inverse of addTable, and the table-shaped counterpart to shapes() above. A table lives in its own p:graphicFrame, a shape kind shapes() never walks at all (see addTable's own note on why it needs a PptxTable rather than a PptxShape), so this is a genuinely separate enumeration rather than a filter over shapes()'s own result. findGraphicFrameTable (table.ts) is the exact uri === TABLE_GRAPHIC_URI check that excludes a chart/SmartArt graphic frame from being mistaken for a table.
+  // Live handles on every DrawingML table already on this slide, in document order — the read-side inverse of addTable, and the table-shaped counterpart to shapes() above. A table lives in its own p:graphicFrame, a shape kind shapes() never walks at all (see addTable's own note on why it needs a PptxTable rather than a PptxShape), so this is a genuinely separate enumeration rather than a filter over shapes()'s own result. findGraphicFrameTable (table.ts) is the exact uri === TABLE_GRAPHIC_URI check that excludes a chart/SmartArt graphic frame from being mistaken for a table.
   tables(): PptxTable[] {
     const spTree = findSpTree(this.live());
     const out: PptxTable[] = [];
@@ -201,7 +201,7 @@ export class PptxSlide {
     return new PptxShape(spTree.children, shapeElement);
   }
 
-  // A vector primitive (rect/ellipse/line/path) as its own p:sp on this slide's shape tree, appended in call order -- p:spTree's document order IS paint order in PresentationML, exactly as draw:page's is in ODF, so a later addVector/addTextBox call paints in front of an earlier one with nothing else to declare. Returns a PptxShape because a vector shape IS a p:sp: frame/rotationDeg read and write through the same p:spPr/a:xfrm every other shape uses.
+  // A vector primitive (rect/ellipse/line/path) as its own p:sp on this slide's shape tree, appended in call order — p:spTree's document order IS paint order in PresentationML, exactly as draw:page's is in ODF, so a later addVector/addTextBox call paints in front of an earlier one with nothing else to declare. Returns a PptxShape because a vector shape IS a p:sp: frame/rotationDeg read and write through the same p:spPr/a:xfrm every other shape uses.
   addVector(vector: ContentVector): PptxShape {
     const spTree = findSpTree(this.live());
     const shapeElement = buildVectorShape(vector, nextIdIn(spTree));
@@ -227,7 +227,7 @@ export class PptxSlide {
     return new PptxShape(spTree.children, shapeElement);
   }
 
-  // A DrawingML table lives in its own p:graphicFrame, a shape kind distinct from p:sp/p:pic (see table.ts's own buildTableGraphicFrame) -- so it gets its own PptxTable view rather than a PptxShape.
+  // A DrawingML table lives in its own p:graphicFrame, a shape kind distinct from p:sp/p:pic (see table.ts's own buildTableGraphicFrame) — so it gets its own PptxTable view rather than a PptxShape.
   addTable(init: SlideTableInit): PptxTable {
     const spTree = findSpTree(this.live());
     const id = nextIdIn(spTree);
@@ -275,7 +275,7 @@ export class PptxSlide {
         type: NOTES_SLIDE_RELATIONSHIP_TYPE,
         target: buildRelativeTarget(slidePartPath, notesPartPath),
       });
-      // CT_NotesSlide requires its own relationship to a notesMaster, the same way an ordinary slide requires one to a slideLayout -- confirmed by testing against real Keynote, which rejected the whole file when this notesSlide part existed without it.
+      // CT_NotesSlide requires its own relationship to a notesMaster, the same way an ordinary slide requires one to a slideLayout — confirmed by testing against real Keynote, which rejected the whole file when this notesSlide part existed without it.
       const notesMasterPartPath = ensureNotesMaster(pkg);
       addRelationship(pkg, notesPartPath, {
         type: NOTES_MASTER_REL_TYPE,
@@ -299,7 +299,7 @@ export class PptxSlide {
     });
   }
 
-  // Removes this slide from the presentation: the p:sldId entry in sldIdLst -- this.container -- references this slide's own part by r:id, not by the p:sld root element remove() previously (and wrongly) tried to splice out of that same array, so finding it means resolving each p:sldId's relationship and matching its target against this slide's own slidePartPath, exactly as PptxEditor.removeSlideAt does by index.
+  // Removes this slide from the presentation: the p:sldId entry in sldIdLst — this.container — references this slide's own part by r:id, not by the p:sld root element remove() previously (and wrongly) tried to splice out of that same array, so finding it means resolving each p:sldId's relationship and matching its target against this slide's own slidePartPath, exactly as PptxEditor.removeSlideAt does by index.
   remove(): void {
     const { pkg, slidePartPath, presentationPartPath } = this.context;
     const presentationRels = resolveRelationships(pkg, presentationPartPath);

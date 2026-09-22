@@ -14,7 +14,7 @@ function headerView(file: Uint8Array<ArrayBuffer>): DataView {
   return new DataView(file.buffer, file.byteOffset, file.byteLength);
 }
 
-// A directory entry's own 128-byte slot within the FIRST directory sector -- every test using this builds a fixture small enough that the record it wants sits in that one sector, exactly like directoryStart itself (read from the header rather than assumed) already does for the whole family of tests below.
+// A directory entry's own 128-byte slot within the FIRST directory sector — every test using this builds a fixture small enough that the record it wants sits in that one sector, exactly like directoryStart itself (read from the header rather than assumed) already does for the whole family of tests below.
 function directoryEntryView(
   file: Uint8Array<ArrayBuffer>,
   id: number,
@@ -26,7 +26,7 @@ function directoryEntryView(
   return new DataView(file.buffer, file.byteOffset + base, 128);
 }
 
-// The directory entry's own name field: nameLength counts the terminating null, so the name itself is the first (nameLength - 2) / 2 UTF-16 code units -- mirroring archive-codec's own reader (src/cfb/read.ts) rather than re-deriving a different convention for the same bytes.
+// The directory entry's own name field: nameLength counts the terminating null, so the name itself is the first (nameLength - 2) / 2 UTF-16 code units — mirroring archive-codec's own reader (src/cfb/read.ts) rather than re-deriving a different convention for the same bytes.
 function directoryEntryName(entry: DataView): string {
   const nameLength = entry.getUint16(0x40, true);
   const codeUnits = Array.from(
@@ -348,7 +348,7 @@ describe("compoundFile", () => {
   });
 
   it("round-trips a multi-mini-sector stream whose own chain crosses into a second mini-FAT sector", () => {
-    // 128 one-mini-sector streams exactly fill the first (128-entry) mini-FAT sector with real chain data, then one 200-byte stream needs 4 more mini sectors (ceil(200/64)) of its own -- entries that only the second mini-FAT sector holds, and that (unlike a single-mini-sector stream's own always-ENDOFCHAIN entry) are genuinely position-dependent "next mini sector" pointers a corrupted second sector cannot reproduce by coincidence.
+    // 128 one-mini-sector streams exactly fill the first (128-entry) mini-FAT sector with real chain data, then one 200-byte stream needs 4 more mini sectors (ceil(200/64)) of its own — entries that only the second mini-FAT sector holds, and that (unlike a single-mini-sector stream's own always-ENDOFCHAIN entry) are genuinely position-dependent "next mini sector" pointers a corrupted second sector cannot reproduce by coincidence.
     const small = Array.from({ length: 128 }, (_ignored, index) => ({
       path: `S${String(index)}`,
       bytes: fill(1, index + 1),

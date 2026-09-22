@@ -28,16 +28,16 @@ export interface TableInit {
   readonly columnWidthsTwips?: readonly number[];
 }
 
-// 12240 (US Letter page width, twips) - 2 x 1440 (1in margins), matching createEmptyDocxPackage's default section -- the content width a new table defaults to when no explicit widths are given.
+// 12240 (US Letter page width, twips) - 2 x 1440 (1in margins), matching createEmptyDocxPackage's default section — the content width a new table defaults to when no explicit widths are given.
 const DEFAULT_TABLE_WIDTH_TWIPS = 9360;
 
-// ECMA-376 CT_TcPrBase's own child element sequence, narrowed to the elements this codebase writes -- w:gridSpan before w:vMerge before w:tcBorders before w:shd when several are present on one cell.
+// ECMA-376 CT_TcPrBase's own child element sequence, narrowed to the elements this codebase writes — w:gridSpan before w:vMerge before w:tcBorders before w:shd when several are present on one cell.
 const TC_PR_CHILD_ORDER = ["w:gridSpan", "w:vMerge", "w:tcBorders", "w:shd"];
 
-// ECMA-376 CT_TcBorders' own child sequence is top, start/left, bottom, end/right -- narrowed to the four edges this editor reads and writes (the reader at ooxml.js read.js falls back from w:start/w:end to w:left/w:right, so writing left/right is the form both Word and that reader accept).
+// ECMA-376 CT_TcBorders' own child sequence is top, start/left, bottom, end/right — narrowed to the four edges this editor reads and writes (the reader at ooxml.js read.js falls back from w:start/w:end to w:left/w:right, so writing left/right is the form both Word and that reader accept).
 const TC_BORDERS_CHILD_ORDER = ["w:top", "w:left", "w:bottom", "w:right"];
 
-// w:tcBorders/@w:sz is in eighth-points-of-a-point (1pt = 8 eighth-points), the unit ECMA-376 CT_Border uses for cell and paragraph borders -- distinct from both w:sz the run-size half-point and the twips w:ind/w:spacing use.
+// w:tcBorders/@w:sz is in eighth-points-of-a-point (1pt = 8 eighth-points), the unit ECMA-376 CT_Border uses for cell and paragraph borders — distinct from both w:sz the run-size half-point and the twips w:ind/w:spacing use.
 const EIGHTH_POINTS_PER_POINT = 8;
 
 const DOCX_BORDER_STYLE_TO_VAL: Readonly<Record<ContentStrokeStyle, string>> = {
@@ -66,7 +66,7 @@ export type DocxVerticalMerge = "restart" | "continue";
 export class DocxTableCell {
   constructor(private readonly node: XmlElement) {}
 
-  // w:tcPr must be the FIRST child of w:tc, before any w:p/w:tbl block content (ECMA-376 CT_Tc) -- unlike TC_PR_CHILD_ORDER's own internal ordering, this is a plain unshift since w:tcPr has no ordered sibling of its own kind to insert relative to.
+  // w:tcPr must be the FIRST child of w:tc, before any w:p/w:tbl block content (ECMA-376 CT_Tc) — unlike TC_PR_CHILD_ORDER's own internal ordering, this is a plain unshift since w:tcPr has no ordered sibling of its own kind to insert relative to.
   private tcPrElement(create: true): XmlElement;
   private tcPrElement(create: false): XmlElement | undefined;
   private tcPrElement(create: boolean): XmlElement | undefined {
@@ -87,7 +87,7 @@ export class DocxTableCell {
     return val === undefined ? undefined : Number(val);
   }
 
-  // Merges N grid columns into this one cell (ECMA-376 w:tcPr/w:gridSpan) -- the write-side inverse of ooxml.js's own readTable, whose ContentTableCell.colSpan this mirrors. A caller building a merged table writes this on the SPAN'S OWN starting cell only; there is no separate DOM element for the columns it covers, since docx (unlike ODF) simply omits a w:tc for each consumed column rather than writing an explicit placeholder for it.
+  // Merges N grid columns into this one cell (ECMA-376 w:tcPr/w:gridSpan) — the write-side inverse of ooxml.js's own readTable, whose ContentTableCell.colSpan this mirrors. A caller building a merged table writes this on the SPAN'S OWN starting cell only; there is no separate DOM element for the columns it covers, since docx (unlike ODF) simply omits a w:tc for each consumed column rather than writing an explicit placeholder for it.
   set colSpan(value: number | undefined) {
     if (value === undefined) {
       const tcPr = this.tcPrElement(false);
@@ -132,7 +132,7 @@ export class DocxTableCell {
     return attr(vMerge, "w:val") === "restart" ? "restart" : "continue";
   }
 
-  // Marks this cell as the start ('restart') or a covered continuation ('continue') of a vertical merge (ECMA-376 w:tcPr/w:vMerge) -- unlike colSpan, a vertically-merged region DOES need one real w:tc per covered row (Word's own reader has nowhere else to hang that row's own row-height/content), so a caller building a merged table writes 'restart' on the top cell and 'continue' on the corresponding cell in every row it covers. A continuation cell holds no content of its own, because the merged region's content belongs to the cell that restarts it and readDocxContent drops whatever a continuation cell carries: text left in one would stay in the part while being invisible to every view built from it. Setting 'continue' therefore discards the cell's block content, leaving the single empty w:p that ECMA-376 CT_Tc requires of every w:tc.
+  // Marks this cell as the start ('restart') or a covered continuation ('continue') of a vertical merge (ECMA-376 w:tcPr/w:vMerge) — unlike colSpan, a vertically-merged region DOES need one real w:tc per covered row (Word's own reader has nowhere else to hang that row's own row-height/content), so a caller building a merged table writes 'restart' on the top cell and 'continue' on the corresponding cell in every row it covers. A continuation cell holds no content of its own, because the merged region's content belongs to the cell that restarts it and readDocxContent drops whatever a continuation cell carries: text left in one would stay in the part while being invisible to every view built from it. Setting 'continue' therefore discards the cell's block content, leaving the single empty w:p that ECMA-376 CT_Tc requires of every w:tc.
   set verticalMerge(value: DocxVerticalMerge | undefined) {
     if (value === "continue") {
       this.clearBlockContent();
@@ -159,7 +159,7 @@ export class DocxTableCell {
     );
   }
 
-  // Cell background fill (ECMA-376 w:tcPr/w:shd), read through ooxml.js's own readCellShading -- the same w:val-based resolution readDocxContent applies to every table cell (w:val="clear" from w:fill, w:val="solid" from w:color instead, every other named pattern token from whichever of w:color/w:fill states a concrete colour) -- reduced to a single representative Color via resolveCellFillColor, since this editor's own live model carries one flat colour rather than the full ContentCellFill shape (see the write side's identical reduction in edit/docx/content.ts). Reading w:fill directly, as this getter once did, silently returned the wrong colour for a w:val="solid" cell (whose real colour lives in w:color) and no colour at all for a genuine pattern fill; delegating to readCellShading keeps this getter from re-deriving its own, easily-diverging copy of that resolution.
+  // Cell background fill (ECMA-376 w:tcPr/w:shd), read through ooxml.js's own readCellShading — the same w:val-based resolution readDocxContent applies to every table cell (w:val="clear" from w:fill, w:val="solid" from w:color instead, every other named pattern token from whichever of w:color/w:fill states a concrete colour) — reduced to a single representative Color via resolveCellFillColor, since this editor's own live model carries one flat colour rather than the full ContentCellFill shape (see the write side's identical reduction in edit/docx/content.ts). Reading w:fill directly, as this getter once did, silently returned the wrong colour for a w:val="solid" cell (whose real colour lives in w:color) and no colour at all for a genuine pattern fill; delegating to readCellShading keeps this getter from re-deriving its own, easily-diverging copy of that resolution.
   get background(): Color | undefined {
     const tcPr = this.tcPrElement(false);
     const fill = readCellShading(tcPr);
@@ -191,7 +191,7 @@ export class DocxTableCell {
     );
   }
 
-  // Per-edge cell borders (ECMA-376 w:tcPr/w:tcBorders) -- each present edge is a w:top/w:left/w:bottom/w:right child carrying w:val (single/dashed/dotted/double), w:sz (eighth-points), w:color (RRGGBB). The write-side inverse of readCellBorders, whose ContentTableCell.borders this mirrors; the bridge bypasses PDF, so the border STYLE (solid/dashed/dotted/double) is carried too -- valid here even though PDF-pivot conversions render every border solid.
+  // Per-edge cell borders (ECMA-376 w:tcPr/w:tcBorders) — each present edge is a w:top/w:left/w:bottom/w:right child carrying w:val (single/dashed/dotted/double), w:sz (eighth-points), w:color (RRGGBB). The write-side inverse of readCellBorders, whose ContentTableCell.borders this mirrors; the bridge bypasses PDF, so the border STYLE (solid/dashed/dotted/double) is carried too — valid here even though PDF-pivot conversions render every border solid.
   get borders(): ContentCellBorders | undefined {
     const tcPr = this.tcPrElement(false);
     const tcBorders =
@@ -294,7 +294,7 @@ export class DocxTableCell {
 export class DocxTableRow {
   constructor(private readonly node: XmlElement) {}
 
-  // w:trPr must be the FIRST child of w:tr (ECMA-376 CT_Row: trPr?, tblPrEx?, tc+), ahead of every w:tc -- a fixed-prefix invariant this row-property helper enforces by unshift, the same approach DocxTableCell.tcPrElement uses for w:tcPr inside w:tc.
+  // w:trPr must be the FIRST child of w:tr (ECMA-376 CT_Row: trPr?, tblPrEx?, tc+), ahead of every w:tc — a fixed-prefix invariant this row-property helper enforces by unshift, the same approach DocxTableCell.tcPrElement uses for w:tcPr inside w:tc.
   private trPrElement(create: boolean): XmlElement | undefined {
     const existing = directChildElement(this.node, "w:trPr");
     if (existing !== undefined || !create) {
@@ -316,7 +316,7 @@ export class DocxTableRow {
     return out;
   }
 
-  // Row height (ECMA-376 w:trPr/w:trHeight, value in twentieths-of-a-point). w:hRule="atLeast" preserves the source's intent -- a minimum row height that grows to fit taller content -- without clipping it the way "exact" would; odf.js's own reader resolves an ODF row height the same way (style:row-height is the value, content can still grow the row). This is the only row property this editor models because it is the only one ContentTableRow carries. Genuinely bidirectional today: ooxml.js's own readTable populates ContentTableRow.heightPt from w:trHeight and its writer emits w:trHeight back, so both the odt -> docx and docx -> odt bridges carry a row height through -- the latter via OdtTableRow's own heightPt getter/setter (src/edit/odt/table.ts), the ODF-side mirror of this one.
+  // Row height (ECMA-376 w:trPr/w:trHeight, value in twentieths-of-a-point). w:hRule="atLeast" preserves the source's intent — a minimum row height that grows to fit taller content — without clipping it the way "exact" would; odf.js's own reader resolves an ODF row height the same way (style:row-height is the value, content can still grow the row). This is the only row property this editor models because it is the only one ContentTableRow carries. Genuinely bidirectional today: ooxml.js's own readTable populates ContentTableRow.heightPt from w:trHeight and its writer emits w:trHeight back, so both the odt -> docx and docx -> odt bridges carry a row height through — the latter via OdtTableRow's own heightPt getter/setter (src/edit/odt/table.ts), the ODF-side mirror of this one.
   get heightPt(): number | undefined {
     const trPr = this.trPrElement(false);
     const trHeight =

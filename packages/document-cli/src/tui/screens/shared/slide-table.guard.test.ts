@@ -2,7 +2,7 @@ import { createPptx, type readPptxContent } from "documents.js";
 import { describe, expect, it, vi } from "vitest";
 import type { PptxOpenDocument } from "../../state/types.js";
 
-// A type guard against the already-imported binding's own real type, not an inline `import('documents.js')` type query -- avoids needing any project-wide consistent-type-imports exception for this one test file, and is a genuine runtime check besides, unlike an unverified generic type parameter on importOriginal().
+// A type guard against the already-imported binding's own real type, not an inline `import('documents.js')` type query — avoids needing any project-wide consistent-type-imports exception for this one test file, and is a genuine runtime check besides, unlike an unverified generic type parameter on importOriginal().
 function isDocumentsJsModule(
   value: unknown,
 ): value is { readPptxContent: typeof readPptxContent } {
@@ -24,7 +24,7 @@ vi.mock("documents.js", async (importOriginal) => {
   }
   return {
     ...actual,
-    // readPptxContent/readOdpContent always resolve a presentation package to the presentation ContentDocument variant in real use -- this stands in for the "genuinely impossible per its own contract, but still guarded against a hypothetical library bug" case resolveSlideTable's own throw exists for.
+    // readPptxContent/readOdpContent always resolve a presentation package to the presentation ContentDocument variant in real use — this stands in for the "genuinely impossible per its own contract, but still guarded against a hypothetical library bug" case resolveSlideTable's own throw exists for.
     readPptxContent: () => ({ kind: "spreadsheet" }),
   };
 });

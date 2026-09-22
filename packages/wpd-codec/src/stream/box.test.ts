@@ -113,7 +113,7 @@ describe("readBoxContent", () => {
     expect(result?.frame).toBeUndefined();
   });
 
-  // A stated bit (5) below the three this module names (counter, position, content). Nothing here ever reads its own block, but the walk must still correctly reject a function whose bit-5 block itself declares a corrupt, overrunning size -- not silently skip straight past it to whatever content override happens to sit earlier in the same function.
+  // A stated bit (5) below the three this module names (counter, position, content). Nothing here ever reads its own block, but the walk must still correctly reject a function whose bit-5 block itself declares a corrupt, overrunning size — not silently skip straight past it to whatever content override happens to sit earlier in the same function.
   it("rejects the whole function when a walked-but-unread bit (5) declares an overrunning size, even though a valid content override precedes it", () => {
     const nonDeletable = boxNonDeletable({
       overrideFlags: 0x2020, // bit 13 (content) and bit 5
@@ -164,7 +164,7 @@ describe("readBoxContent", () => {
     expect(readBoxContent(nonDeletable, [41, 42])).toBeUndefined();
   });
 
-  // The content block's own PID-flags skip (bit 15) must consume exactly two bytes before the type byte, not zero -- otherwise the type ends up misread as the first byte of what was actually the PID data.
+  // The content block's own PID-flags skip (bit 15) must consume exactly two bytes before the type byte, not zero — otherwise the type ends up misread as the first byte of what was actually the PID data.
   it("reads the type byte after the content block's own PID-flags skip, not before it", () => {
     const nonDeletable = boxNonDeletable({
       overrideFlags: 0x2000,
@@ -208,7 +208,7 @@ describe("readBoxContent", () => {
     const nonDeletable = boxNonDeletable({
       overrideFlags: 0x6000,
       blocks: new Map([
-        // bit 13 (horizontal) claimed: flags word, then one more byte -- not even the three (flags, offset) this code actually reads, let alone the declared five.
+        // bit 13 (horizontal) claimed: flags word, then one more byte — not even the three (flags, offset) this code actually reads, let alone the declared five.
         [14, [0x00, 0x20, 0]],
         [13, contentBlock(BOX_CONTENT_TYPE_TEXT)],
       ]),
@@ -253,9 +253,9 @@ describe("readBoxContent", () => {
   it("resolves every position sub-block together, each reading its own bytes rather than a neighbour's", () => {
     const positionData = [
       0x00,
-      0xaa, // PID flags (bit 15), skipped -- 2 bytes
+      0xaa, // PID flags (bit 15), skipped — 2 bytes
       0x00,
-      0xbb, // general flags (bit 14), skipped -- 2 bytes
+      0xbb, // general flags (bit 14), skipped — 2 bytes
       0x00,
       ...word16(1000),
       0,
@@ -284,7 +284,7 @@ describe("readBoxContent", () => {
     });
   });
 
-  // Width and height are also set here (unlike a bare "no other bits set" case), because frame is only ever computed at all once both are defined -- otherwise a version that wrongly resolved x regardless of the offset's own type would still report frame: undefined, for the unrelated reason that width and height were never supplied, and the bug would go unnoticed.
+  // Width and height are also set here (unlike a bare "no other bits set" case), because frame is only ever computed at all once both are defined — otherwise a version that wrongly resolved x regardless of the offset's own type would still report frame: undefined, for the unrelated reason that width and height were never supplied, and the bug would go unnoticed.
   it("does not resolve x from a horizontal offset whose own type is not absolute-from-page", () => {
     const nonDeletable = boxNonDeletable({
       overrideFlags: 0x6000,
@@ -347,7 +347,7 @@ describe("readBoxContent", () => {
     });
   });
 
-  // Exactly one of x/y resolved -- the existing "full house" test resolves both, which cannot tell positionResolved's && from ||, and neither non-absolute case above ever reaches this field at all (frame's xWpu/yWpu stay undefined there for an unrelated reason upstream).
+  // Exactly one of x/y resolved — the existing "full house" test resolves both, which cannot tell positionResolved's && from ||, and neither non-absolute case above ever reaches this field at all (frame's xWpu/yWpu stay undefined there for an unrelated reason upstream).
   it("reports positionResolved false when only x resolved, not just when neither did", () => {
     const nonDeletable = boxNonDeletable({
       overrideFlags: 0x6000,
@@ -409,7 +409,7 @@ describe("readBoxContent", () => {
           14,
           [
             0x00,
-            0x04, // bit 10 (height) only -- bit 11 (width) is NOT set
+            0x04, // bit 10 (height) only — bit 11 (width) is NOT set
             0x00,
             ...word16(999), // would-be phantom width source
             0x00,
@@ -431,7 +431,7 @@ describe("readBoxContent", () => {
           14,
           [
             0x00,
-            0x08, // bit 11 (width) only -- bit 10 (height) is NOT set
+            0x08, // bit 11 (width) only — bit 10 (height) is NOT set
             0x00,
             ...word16(999), // would-be phantom height source
             0x00,

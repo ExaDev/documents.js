@@ -1,7 +1,7 @@
 import type { StandardFontName } from "./afm-widths";
 import { widthOfCode } from "./afm-widths";
 
-// Unicode code point -> WinAnsi (CP1252) byte, for every code point WinAnsi can represent. Derived programmatically from the platform's own `TextDecoder('windows-1252')` (i.e. verified against a real, independent CP1252 implementation, not transcribed by hand), excluding the handful of genuinely-unassigned CP1252 byte positions (0x81, 0x8D, 0x8F, 0x90, 0x9D) that decoders conventionally fall back to mapping onto their own byte value as a C1 control code -- never a legitimate target for encoding real text.
+// Unicode code point -> WinAnsi (CP1252) byte, for every code point WinAnsi can represent. Derived programmatically from the platform's own `TextDecoder('windows-1252')` (i.e. verified against a real, independent CP1252 implementation, not transcribed by hand), excluding the handful of genuinely-unassigned CP1252 byte positions (0x81, 0x8D, 0x8F, 0x90, 0x9D) that decoders conventionally fall back to mapping onto their own byte value as a C1 control code — never a legitimate target for encoding real text.
 const UNICODE_TO_WINANSI: ReadonlyMap<number, number> = new Map([
   [0x20, 0x20],
   [0x21, 0x21],
@@ -226,7 +226,7 @@ const UNICODE_TO_WINANSI: ReadonlyMap<number, number> = new Map([
 
 let winAnsiCodeToUnicodeTable: ReadonlyMap<number, number> | undefined;
 
-// The inverse of UNICODE_TO_WINANSI, built once on first use: WinAnsi code (0-255) -> Unicode code point. Used by the read path (encoding.ts's glyphNameToUnicode, font-read.ts's simple-font fallback decoding) to recover text when no /ToUnicode CMap is present -- the write path never needs this direction.
+// The inverse of UNICODE_TO_WINANSI, built once on first use: WinAnsi code (0-255) -> Unicode code point. Used by the read path (encoding.ts's glyphNameToUnicode, font-read.ts's simple-font fallback decoding) to recover text when no /ToUnicode CMap is present — the write path never needs this direction.
 export function winAnsiCodeToUnicode(code: number): number | undefined {
   if (winAnsiCodeToUnicodeTable === undefined) {
     const inverted = new Map<number, number>();
@@ -238,7 +238,7 @@ export function winAnsiCodeToUnicode(code: number): number | undefined {
   return winAnsiCodeToUnicodeTable.get(code);
 }
 
-// The byte substituted for any character with no WinAnsi representation -- '?' (0x3F), always representable, and visually signals "something was lost" rather than silently vanishing.
+// The byte substituted for any character with no WinAnsi representation — '?' (0x3F), always representable, and visually signals "something was lost" rather than silently vanishing.
 const FALLBACK_BYTE = 0x3f;
 const FALLBACK_CHAR = "?";
 
@@ -252,7 +252,7 @@ export interface SanitizeResult {
   readonly substitutions: readonly WinAnsiSubstitution[];
 }
 
-// Converts `text` to WinAnsi bytes, substituting FALLBACK_CHAR for any character outside what the standard-14 fonts' WinAnsiEncoding can represent (any script outside Latin-1 plus the CP1252 extensions: CJK, Cyrillic, Greek, emoji, etc.). This is mandatory before every drawn text string -- the alternative (throwing on the first unencodable character, as a naive implementation would) would abort an entire multi-page conversion over a single foreign name or symbol.
+// Converts `text` to WinAnsi bytes, substituting FALLBACK_CHAR for any character outside what the standard-14 fonts' WinAnsiEncoding can represent (any script outside Latin-1 plus the CP1252 extensions: CJK, Cyrillic, Greek, emoji, etc.). This is mandatory before every drawn text string — the alternative (throwing on the first unencodable character, as a naive implementation would) would abort an entire multi-page conversion over a single foreign name or symbol.
 export function sanitizeToWinAnsi(text: string): SanitizeResult {
   const codes: number[] = [];
   const substitutions: WinAnsiSubstitution[] = [];

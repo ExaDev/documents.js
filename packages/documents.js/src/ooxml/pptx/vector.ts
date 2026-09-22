@@ -9,9 +9,9 @@ import { childrenWithTag } from "ooxml.js";
 import { readDrawingMlVector } from "../../edit/drawingml/vector";
 import { buildDrawingBlock } from "../../model/embedded-drawing";
 
-// Detects and collapses a slide's own vector-only p:sp shapes back into a real drawing block -- the pptx-side counterpart to src/ooxml/docx/vector.ts. Unlike docx (where a vector-only w:drawing leaves no trace in the flat docx reader's output at all, needing a new block INSERTED) and odp (where a bare vector primitive produces no shape at all either), ooxml.js's own readPptxContent ALWAYS produces an ordinary, EMPTY ContentShape for a p:sp regardless of its content -- so recovering a vector here is attach-and-replace, collapsing a run of already-existing (empty) shape slots into one synthetic shape carrying the recovered geometry, never an insertion that would shift any other shape's index.
+// Detects and collapses a slide's own vector-only p:sp shapes back into a real drawing block — the pptx-side counterpart to src/ooxml/docx/vector.ts. Unlike docx (where a vector-only w:drawing leaves no trace in the flat docx reader's output at all, needing a new block INSERTED) and odp (where a bare vector primitive produces no shape at all either), ooxml.js's own readPptxContent ALWAYS produces an ordinary, EMPTY ContentShape for a p:sp regardless of its content — so recovering a vector here is attach-and-replace, collapsing a run of already-existing (empty) shape slots into one synthetic shape carrying the recovered geometry, never an insertion that would shift any other shape's index.
 
-// A shape-tree walk mirroring ooxml.js's own walkShapeTreeChildren exactly: p:sp/p:pic/p:graphicFrame each occupy one shape slot (in that document order), p:grpSp recurses (flattening a group's own shapes into the same flat array, exactly as readPptxContent does), and p:cxnSp -- a connector -- never occupies a slot and is never recursed into, since readPptxContent does not visit one at all.
+// A shape-tree walk mirroring ooxml.js's own walkShapeTreeChildren exactly: p:sp/p:pic/p:graphicFrame each occupy one shape slot (in that document order), p:grpSp recurses (flattening a group's own shapes into the same flat array, exactly as readPptxContent does), and p:cxnSp — a connector — never occupies a slot and is never recursed into, since readPptxContent does not visit one at all.
 interface WalkState {
   shapeIndex: number;
 }
@@ -59,7 +59,7 @@ function collectVectorOnlyShapes(
     } else if (node.tag === "p:grpSp") {
       collectVectorOnlyShapes(node.children, shapes, state, out);
     }
-    // p:cxnSp (a connector) occupies no shape slot and is never recursed into -- ooxml.js's own walkShapeTreeChildren does not visit one either.
+    // p:cxnSp (a connector) occupies no shape slot and is never recursed into — ooxml.js's own walkShapeTreeChildren does not visit one either.
   }
 }
 
@@ -75,7 +75,7 @@ interface MutableGroup {
   vectors: ContentVector[];
 }
 
-// Every vector-only p:sp found on the slide, grouped into MAXIMAL RUNS of consecutive shape indices -- a single vector-carrying drawing collapses to one synthetic shape per run, matching how this package's own writer groups every vector of one recovered drawing block as unwrapped bare shapes with no container (src/edit/pptx/content.ts's own appendShape).
+// Every vector-only p:sp found on the slide, grouped into MAXIMAL RUNS of consecutive shape indices — a single vector-carrying drawing collapses to one synthetic shape per run, matching how this package's own writer groups every vector of one recovered drawing block as unwrapped bare shapes with no container (src/edit/pptx/content.ts's own appendShape).
 function collectSlideVectorGroups(
   spTreeChildren: readonly XmlNode[],
   shapes: readonly ContentShape[],
@@ -109,7 +109,7 @@ function collectSlideVectorGroups(
   }));
 }
 
-// Rebuilds a slide's own shapes array, replacing each maximal run of vector-only p:sp shapes with one synthetic shape carrying the recovered drawing block -- frame = the full slide at zero origin (not the bounding box of the vectors), since embeddedDrawingVectors(block, containerOriginPt) only translates by block.frame + containerOriginPt and buildDrawingBlock's own block.frame is always (0,0,size) by construction, so a zero-origin container reproduces each vector's already-absolute coordinates unchanged -- the exact invariant src/edit/pptx/content.test.ts's own writer tests already rely on. Returns `slide` unchanged when the slide carries no recoverable vector geometry at all.
+// Rebuilds a slide's own shapes array, replacing each maximal run of vector-only p:sp shapes with one synthetic shape carrying the recovered drawing block — frame = the full slide at zero origin (not the bounding box of the vectors), since embeddedDrawingVectors(block, containerOriginPt) only translates by block.frame + containerOriginPt and buildDrawingBlock's own block.frame is always (0,0,size) by construction, so a zero-origin container reproduces each vector's already-absolute coordinates unchanged — the exact invariant src/edit/pptx/content.test.ts's own writer tests already rely on. Returns `slide` unchanged when the slide carries no recoverable vector geometry at all.
 export function collapseVectorShapeRuns(
   slide: ContentSlide,
   slideIndex: number,

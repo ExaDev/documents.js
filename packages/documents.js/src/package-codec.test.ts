@@ -38,7 +38,7 @@ describe("decodeDocumentPackage: OOXML formats (docx/pptx/xlsx)", () => {
     );
   });
 
-  it("xlsx: decodes a real xlsx package through ooxml.js decodePackage -- xlsx is an ordinary OPC container with no xlsx-specific handling needed", () => {
+  it("xlsx: decodes a real xlsx package through ooxml.js decodePackage — xlsx is an ordinary OPC container with no xlsx-specific handling needed", () => {
     const bytes = odsToXlsx(minimalOdsBytes());
     const pkg = decodeDocumentPackage("xlsx", bytes);
     expect(pkg).toEqual(decodeOoxmlPackage(bytes));
@@ -102,7 +102,7 @@ describe("decodeOdbPackage", () => {
 });
 
 describe("decodeDocumentPackage / encodeDocumentPackage: unsupported formats", () => {
-  it("markdown: throws UnsupportedPackageFormatError -- markdown is plain text, not a zip container", () => {
+  it("markdown: throws UnsupportedPackageFormatError — markdown is plain text, not a zip container", () => {
     const bytes = encodeMarkdownText(richMarkdownText());
     expect(() => decodeDocumentPackage("markdown", bytes)).toThrow(
       UnsupportedPackageFormatError,
@@ -122,7 +122,7 @@ describe("decodeDocumentPackage / encodeDocumentPackage: unsupported formats", (
     }
   });
 
-  it("pdf: throws UnsupportedPackageFormatError -- pdf is not an OPC/ODF zip package", () => {
+  it("pdf: throws UnsupportedPackageFormatError — pdf is not an OPC/ODF zip package", () => {
     const bytes = docxToPdf(minimalDocxBytes());
     expect(() => decodeDocumentPackage("pdf", bytes)).toThrow(
       UnsupportedPackageFormatError,

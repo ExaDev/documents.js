@@ -10,7 +10,7 @@ import {
 import { settle, waitForFrame } from "../test-support.js";
 import { DiagnosticsPanel } from "./diagnostics-panel.js";
 
-// Seeds two real diagnostics (one with a page index, one without) through APPEND_DIAGNOSTIC -- there is no other way to populate `state.diagnostics` -- exactly once, guarded by a ref so re-renders don't keep appending.
+// Seeds two real diagnostics (one with a page index, one without) through APPEND_DIAGNOSTIC — there is no other way to populate `state.diagnostics` — exactly once, guarded by a ref so re-renders don't keep appending.
 function Harness(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();

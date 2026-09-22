@@ -7,9 +7,9 @@ import { buildDrawingBlock } from "../model/embedded-drawing";
 
 // The one vector fixture all four build-then-read round-trip tests share (src/edit/{docx,pptx,odt,odp}/content.test.ts), so "the vector content survives" means the same thing in every format rather than four subtly different things.
 //
-// It covers each ContentVector variant once and, between them, every field a variant can carry: a fill-only rect, a stroke-only ellipse, a rotated rect (the one attribute ODF and DrawingML express in genuinely different ways -- draw:transform against a:xfrm/@rot), a line running up and to the LEFT (so a writer that ignores direction produces visibly wrong endpoints rather than accidentally-right ones), and a path holding a real cubic Bezier plus a straight segment and an explicit close.
+// It covers each ContentVector variant once and, between them, every field a variant can carry: a fill-only rect, a stroke-only ellipse, a rotated rect (the one attribute ODF and DrawingML express in genuinely different ways — draw:transform against a:xfrm/@rot), a line running up and to the LEFT (so a writer that ignores direction produces visibly wrong endpoints rather than accidentally-right ones), and a path holding a real cubic Bezier plus a straight segment and an explicit close.
 //
-// Every coordinate is page-absolute, matching what src/layout/reconstruct.ts's own vector recovery produces -- these are the coordinates a recovered drawing block actually carries.
+// Every coordinate is page-absolute, matching what src/layout/reconstruct.ts's own vector recovery produces — these are the coordinates a recovered drawing block actually carries.
 
 const RED = { r: 1, g: 0, b: 0 };
 const BLUE = { r: 0, g: 0, b: 1 };
@@ -80,7 +80,7 @@ export function withoutRotation(
   );
 }
 
-// The rotations withoutRotation drops, positionally. A property-presence check ("rotationDeg" in vector), not a vector.kind === "line" comparison: 'line' is the only variant lacking rotationDeg, so the two guards narrow identically -- but a kind comparison here is a genuine equivalent-mutant trap TypeScript itself cannot rescue: forcing that comparison's own condition to always-true still type-narrows on the ORIGINAL condition text, so `vector.rotationDeg` stays valid in the branch reached, and a 'line' object with no such key simply reports undefined either way, indistinguishable from the correct branch's own explicit undefined. The `in` check has no such loophole -- Stryker's own typescript-checker rejects an always-true mutation of it outright (accessing rotationDeg on the still-fully-widened union fails to compile), leaving only an always-false mutation, which a real rotationDeg value on a non-line vector does kill.
+// The rotations withoutRotation drops, positionally. A property-presence check ("rotationDeg" in vector), not a vector.kind === "line" comparison: 'line' is the only variant lacking rotationDeg, so the two guards narrow identically — but a kind comparison here is a genuine equivalent-mutant trap TypeScript itself cannot rescue: forcing that comparison's own condition to always-true still type-narrows on the ORIGINAL condition text, so `vector.rotationDeg` stays valid in the branch reached, and a 'line' object with no such key simply reports undefined either way, indistinguishable from the correct branch's own explicit undefined. The `in` check has no such loophole — Stryker's own typescript-checker rejects an always-true mutation of it outright (accessing rotationDeg on the still-fully-widened union fails to compile), leaving only an always-false mutation, which a real rotationDeg value on a non-line vector does kill.
 export function rotationsOf(
   vectors: readonly ContentVector[],
 ): (number | undefined)[] {

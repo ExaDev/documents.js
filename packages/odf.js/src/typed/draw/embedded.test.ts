@@ -24,7 +24,7 @@ function packageWithObject(prefix: string, bodyChild: XmlElement): Package {
   return { parts: { [`${prefix}/content.xml`]: subDocumentPart(bodyChild) } };
 }
 
-// Copied element-for-element from the REAL "Object 1/content.xml" inside src/typed/ods/fixtures/sheet-formula.ods (a genuine LibreOffice 26.2 Calc sheet with a Math object anchored to a cell, never hand-edited) -- the same bare "math" root with a DEFAULT MathML xmlns, the same <semantics>/<annotation encoding="StarMath 5.0"> shape, deliberately not simplified, matching typed/formula/read.test.ts's own convention for the standalone .odf case.
+// Copied element-for-element from the REAL "Object 1/content.xml" inside src/typed/ods/fixtures/sheet-formula.ods (a genuine LibreOffice 26.2 Calc sheet with a Math object anchored to a cell, never hand-edited) — the same bare "math" root with a DEFAULT MathML xmlns, the same <semantics>/<annotation encoding="StarMath 5.0"> shape, deliberately not simplified, matching typed/formula/read.test.ts's own convention for the standalone .odf case.
 function realEmbeddedFormulaRoot(): XmlElement {
   return el(
     "math",
@@ -85,7 +85,7 @@ describe("readDrawObjectReference", () => {
     }
   });
 
-  it("returns undefined for an office:database sub-document -- a .odb front-end is not a ContentDocument at all", () => {
+  it("returns undefined for an office:database sub-document — a .odb front-end is not a ContentDocument at all", () => {
     expect(
       readDrawObjectReference(
         objectFrame("Object 1"),
@@ -94,7 +94,7 @@ describe("readDrawObjectReference", () => {
     ).toBeUndefined();
   });
 
-  it('resolves an office:chart sub-document to objectKind "chart" -- the member whose document is the frame-sized data projection readOdfChartContent builds, not a same-named ContentDocument', () => {
+  it('resolves an office:chart sub-document to objectKind "chart" — the member whose document is the frame-sized data projection readOdfChartContent builds, not a same-named ContentDocument', () => {
     const reference = readDrawObjectReference(
       objectFrame("Object 1"),
       packageWithObject("Object 1", el("office:chart")),
@@ -163,7 +163,7 @@ describe("readDrawObjectReference", () => {
     expect(readDrawObjectReference(frame, { parts: {} })).toBeUndefined();
   });
 
-  it("returns undefined for a LINKED object -- an absolute URL, or a path escaping the package root, is content this package genuinely does not hold", () => {
+  it("returns undefined for a LINKED object — an absolute URL, or a path escaping the package root, is content this package genuinely does not hold", () => {
     const pkg = packageWithObject("Object 1", el("office:drawing"));
     expect(
       readDrawObjectReference(
@@ -228,7 +228,7 @@ describe("normaliseObjectHref", () => {
   it("checks the START of the string for '..' and '/', not the end, so a name merely ending with either is accepted unchanged", () => {
     expect(normaliseObjectHref("Object 1/..")).toBe("Object 1/.."); // ends with ".." but does not START with it
     expect(normaliseObjectHref("folder..")).toBe("folder.."); // ditto
-    // "a//" has only ONE trailing slash stripped by the earlier, separate trailing-slash removal above, leaving "a/" -- which still itself ends with "/" without starting with it, isolating startsWith("/") from a wrongly-substituted endsWith("/") the way the first two cases isolate startsWith("..") from endsWith("..").
+    // "a//" has only ONE trailing slash stripped by the earlier, separate trailing-slash removal above, leaving "a/" — which still itself ends with "/" without starting with it, isolating startsWith("/") from a wrongly-substituted endsWith("/") the way the first two cases isolate startsWith("..") from endsWith("..").
     expect(normaliseObjectHref("a//")).toBe("a/");
   });
 });

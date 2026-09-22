@@ -12,7 +12,7 @@ import {
 import type { Jpeg2000SubbandType } from "./jpeg2000-t1";
 import { PacketBitReader, TagTree } from "./jpeg2000-tagtree";
 
-// The tile structure of ISO/IEC 15444-1 Annex B and the tier-2 packet decoding of B.9/B.10: working out which code-blocks exist and where their coded bytes are, without decoding a single coefficient. Splitting this from tier-1 keeps the two halves of EBCOT independently checkable -- this module's whole output is "code-block X's data is these byte ranges, carrying this many coding passes".
+// The tile structure of ISO/IEC 15444-1 Annex B and the tier-2 packet decoding of B.9/B.10: working out which code-blocks exist and where their coded bytes are, without decoding a single coefficient. Splitting this from tier-1 keeps the two halves of EBCOT independently checkable — this module's whole output is "code-block X's data is these byte ranges, carrying this many coding passes".
 
 // B.3: the three subbands a resolution level above zero contributes, in the order the codestream lists them (and the order their quantization step sizes appear in QCD).
 const HIGHER_RESOLUTION_BANDS: readonly Jpeg2000SubbandType[] = [
@@ -162,7 +162,7 @@ function precinctGrid(
   };
 }
 
-// Whether any resolution level of any component of this one tile is split into more than one precinct -- the exact condition buildPacketSequence refuses a position-driven progression order under. Computed from the geometry alone, with none of buildTileGeometry's own per-code-block allocation, so readJpeg2000Metadata can answer "is this decodable" for a large image without paying to set up a decode it is not going to run.
+// Whether any resolution level of any component of this one tile is split into more than one precinct — the exact condition buildPacketSequence refuses a position-driven progression order under. Computed from the geometry alone, with none of buildTileGeometry's own per-code-block allocation, so readJpeg2000Metadata can answer "is this decodable" for a large image without paying to set up a decode it is not going to run.
 export function tileHasSubdividedPrecincts(
   siz: Jpeg2000ImageSize,
   tileX: number,
@@ -437,7 +437,7 @@ interface PacketPosition {
   readonly precinct: number;
 }
 
-// B.12: the five progression orders, as the nesting of the four loops each one names. RPCL, PCRL and CPRL iterate position on the reference grid rather than by precinct index, which only collapses to a plain loop when every tile-component-resolution holds exactly one precinct -- the check below refuses anything else rather than emitting packets in the wrong order.
+// B.12: the five progression orders, as the nesting of the four loops each one names. RPCL, PCRL and CPRL iterate position on the reference grid rather than by precinct index, which only collapses to a plain loop when every tile-component-resolution holds exactly one precinct — the check below refuses anything else rather than emitting packets in the wrong order.
 export function buildPacketSequence(
   tile: Jpeg2000TileGeometry,
   order: Jpeg2000ProgressionOrder,

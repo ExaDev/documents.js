@@ -66,12 +66,12 @@ describe("setDocumentMetadata: rebuild path (pptx/odt/odp/ods/odg/markdown)", ()
         { images: resolver },
       ),
     );
-    // The resolved image is inlined back as a data: URI (buildMarkdownText re-serialises a ContentImageBlock), not lost to alt text -- the resolver reached the markdown content codec's read through SetDocumentMetadataOptions.images.
+    // The resolved image is inlined back as a data: URI (buildMarkdownText re-serialises a ContentImageBlock), not lost to alt text — the resolver reached the markdown content codec's read through SetDocumentMetadataOptions.images.
     expect(rebuilt).toContain("data:image/png");
   });
 });
 
-// ExaDev/documents.js#966: patchDocxMetadata patches docProps/core.xml directly on the decoded Package, so everything docx-extras covers (comments, footnotes, header/footer parts, numbering) survives byte-faithful -- unlike the rebuild-from-ContentDocument path every REBUILD_FORMATS member above takes, which genuinely drops all of it (see extras.ts's own gotcha). setDocumentMetadata's own docx/docx branch calls this function directly (see the "setDocumentMetadata: docx-patch path" describe block below), so every caller gets this for free.
+// ExaDev/documents.js#966: patchDocxMetadata patches docProps/core.xml directly on the decoded Package, so everything docx-extras covers (comments, footnotes, header/footer parts, numbering) survives byte-faithful — unlike the rebuild-from-ContentDocument path every REBUILD_FORMATS member above takes, which genuinely drops all of it (see extras.ts's own gotcha). setDocumentMetadata's own docx/docx branch calls this function directly (see the "setDocumentMetadata: docx-patch path" describe block below), so every caller gets this for free.
 describe("patchDocxMetadata", () => {
   it("patches title/author in place, leaving docx-extras data (comments, footnotes, headers/footers, numbering) completely untouched", () => {
     const sourceBytes = encodePackage(docxWithExtrasPackage());
@@ -111,7 +111,7 @@ describe("patchDocxMetadata", () => {
     expect(part?.kind).toBe("xml");
   });
 
-  // ExaDev/documents.js#1007 round 2: overrides.keywords !== undefined is true for `keywords: []`, but addCoreProperties itself never emits a cp:keywords element for an empty array -- so a naive "any field present" check created a real (but empty) docProps/core.xml, plus its Content_Types override and package-root relationship, out of a document that had neither, contradicting the "no requested change stays byte-for-byte free of a part it never had" contract this same describe block's own previous test pins.
+  // ExaDev/documents.js#1007 round 2: overrides.keywords !== undefined is true for `keywords: []`, but addCoreProperties itself never emits a cp:keywords element for an empty array — so a naive "any field present" check created a real (but empty) docProps/core.xml, plus its Content_Types override and package-root relationship, out of a document that had neither, contradicting the "no requested change stays byte-for-byte free of a part it never had" contract this same describe block's own previous test pins.
   it("stays byte-for-byte free of docProps/core.xml when the only override is an empty keywords array", () => {
     const sourceBytes = encodePackage(docxWithExtrasPackage());
     expect(
@@ -144,7 +144,7 @@ describe("patchDocxMetadata", () => {
   });
 });
 
-// ExaDev/documents.js#966 round 2: classifyWritePath routes a docx/docx pair to patchDocxMetadata internally (the "docx-patch" WritePath kind), rather than the generic ContentDocument rebuild every other REBUILD_FORMATS member takes -- so calling setDocumentMetadata directly, with no caller-side special-casing, is exactly as lossless for docx as calling patchDocxMetadata by hand (proven above).
+// ExaDev/documents.js#966 round 2: classifyWritePath routes a docx/docx pair to patchDocxMetadata internally (the "docx-patch" WritePath kind), rather than the generic ContentDocument rebuild every other REBUILD_FORMATS member takes — so calling setDocumentMetadata directly, with no caller-side special-casing, is exactly as lossless for docx as calling patchDocxMetadata by hand (proven above).
 describe("setDocumentMetadata: docx-patch path", () => {
   it("preserves docx-extras data (comments, footnotes, headers/footers, numbering) when source and target are both docx", () => {
     const sourceBytes = encodePackage(docxWithExtrasPackage());
@@ -174,7 +174,7 @@ describe("setDocumentMetadata: docx-patch path", () => {
   });
 
   it("rejects a different source format paired with a docx target, naming that the formats must match", () => {
-    // classifyWritePath rejects on the format pair alone, before ever reading the bytes -- so an empty Uint8Array is fine here, matching the sibling "rejects two different rebuild formats" test's own pattern.
+    // classifyWritePath rejects on the format pair alone, before ever reading the bytes — so an empty Uint8Array is fine here, matching the sibling "rejects two different rebuild formats" test's own pattern.
     expect(() =>
       setDocumentMetadata("pptx", "docx", new Uint8Array(), {}),
     ).toThrow(/must be the same format\./);
@@ -198,7 +198,7 @@ describe("setDocumentMetadata: pdf direct-patch path", () => {
   });
 });
 
-// xlsx rebuilds through DOCUMENT_FORMAT_CODECS.xlsx.content (ooxml.js's readXlsxContent/buildXlsxPackageFromContent, src/codecs/registry.ts) exactly like every other rebuild format above -- real xlsx bytes (via the odsToXlsx bridge over richOdsBytes, the same real-fixture pattern src/convert/bridges.test.ts already uses) prove the round trip genuinely works, not merely that the type system accepts 'xlsx' as a RebuildFormat.
+// xlsx rebuilds through DOCUMENT_FORMAT_CODECS.xlsx.content (ooxml.js's readXlsxContent/buildXlsxPackageFromContent, src/codecs/registry.ts) exactly like every other rebuild format above — real xlsx bytes (via the odsToXlsx bridge over richOdsBytes, the same real-fixture pattern src/convert/bridges.test.ts already uses) prove the round trip genuinely works, not merely that the type system accepts 'xlsx' as a RebuildFormat.
 describe("setDocumentMetadata: rebuild path (xlsx)", () => {
   it("patches only the overridden field, leaving the source spreadsheet content untouched", () => {
     const xlsxBytes = odsToXlsx(richOdsBytes());
@@ -252,7 +252,7 @@ describe("setDocumentMetadata: rejected formats", () => {
     ).toThrow(/must be the same format \(or both 'pdf'\)/);
   });
 
-  it("rejects two different rebuild formats -- setDocumentMetadata does not convert format", () => {
+  it("rejects two different rebuild formats — setDocumentMetadata does not convert format", () => {
     expect(() =>
       setDocumentMetadata("docx", "pptx", minimalDocxBytes(), {}),
     ).toThrow(/must be the same format\./);

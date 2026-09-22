@@ -4,7 +4,7 @@ import { encodeEntities } from "../xml/entities";
 import type { Attribute, XmlElement, XmlNode } from "../xml/node";
 import type { OpfManifestItem } from "./types";
 
-// Builds the OPF package document EPUB 3.3 section 5.4 requires, the structural inverse of src/opf/parse.ts. A minimal valid EPUB 3 needs no more than this package's own writer ever emits: dc:title/dc:creator/dc:language/dc:date plus a generated dc:identifier (ExaDev/documents.js#801's own "OPF with a generated identifier" -- this package never attempts to preserve a source EPUB's original identifier across a read-then-write round trip, matching the issue's explicit write scope), the manifest (one item per part this package wrote -- the nav document, every section's XHTML, every embedded image), and the spine (one itemref per section, in the writer's own section order).
+// Builds the OPF package document EPUB 3.3 section 5.4 requires, the structural inverse of src/opf/parse.ts. A minimal valid EPUB 3 needs no more than this package's own writer ever emits: dc:title/dc:creator/dc:language/dc:date plus a generated dc:identifier (ExaDev/documents.js#801's own "OPF with a generated identifier" — this package never attempts to preserve a source EPUB's original identifier across a read-then-write round trip, matching the issue's explicit write scope), the manifest (one item per part this package wrote — the nav document, every section's XHTML, every embedded image), and the spine (one itemref per section, in the writer's own section order).
 
 export interface WriteOpfInput {
   readonly metadata: LayoutMetadata;

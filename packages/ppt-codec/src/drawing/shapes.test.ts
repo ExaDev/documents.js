@@ -55,7 +55,7 @@ function fspgr(
   );
 }
 
-// [MS-PPT] 2.7.1 OfficeArtClientAnchor with recLen 0x8: a SmallRectStruct, whose fields are top, left, right, bottom -- not left, top, right, bottom. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/e47cb973-8480-4995-90b2-008bcb2ffc65
+// [MS-PPT] 2.7.1 OfficeArtClientAnchor with recLen 0x8: a SmallRectStruct, whose fields are top, left, right, bottom — not left, top, right, bottom. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/e47cb973-8480-4995-90b2-008bcb2ffc65
 function smallClientAnchor(
   top: number,
   left: number,
@@ -115,7 +115,7 @@ function drawing(
   ]);
 }
 
-// Every test in this file is about plain shapes, so the walk's result is narrowed to its shape arm -- a table group (which carries `cells` instead) never reaches these assertions.
+// Every test in this file is about plain shapes, so the walk's result is narrowed to its shape arm — a table group (which carries `cells` instead) never reaches these assertions.
 function shapesOf(bytes: Uint8Array<ArrayBuffer>): PptShape[] {
   return readDrawingShapes(readRecordAt(bytes, 0)).filter(
     (entry): entry is PptShape => "clientTextbox" in entry,
@@ -344,7 +344,7 @@ describe("readDrawingShapes", () => {
 });
 
 describe("readDrawingShapes: table groups", () => {
-  // A table group's tertiary property table stating tableProperties with fIsTable -- the one mark separating a table from an ordinary grouping.
+  // A table group's tertiary property table stating tableProperties with fIsTable — the one mark separating a table from an ordinary grouping.
   function tablePropertyTable(): Uint8Array<ArrayBuffer> {
     return writeShapePropertyTable(OfficeArtTertiaryFOPT, [
       { opid: PROPERTY_TABLE_PROPERTIES, op: TABLE_FLAG_IS_TABLE },
@@ -395,7 +395,7 @@ describe("readDrawingShapes: table groups", () => {
           tablePropertyTable(),
           largeClientAnchor(1000, 2000, 3000, 2000),
         ]),
-        atom(RT_Drawing, new Uint8Array(0)), // never a cell -- not an OfficeArtSpContainer
+        atom(RT_Drawing, new Uint8Array(0)), // never a cell — not an OfficeArtSpContainer
         container(OfficeArtSpContainer, [
           fsp(3, 0),
           childAnchor(0, 0, 1000, 1000),
@@ -603,7 +603,7 @@ describe("readDrawingShapes: rejections", () => {
 });
 
 describe("rotationDegOf", () => {
-  it("reports zero rotation as undefined -- an unrotated shape states no rotation at all", () => {
+  it("reports zero rotation as undefined — an unrotated shape states no rotation at all", () => {
     const bytes = drawing(
       container(OfficeArtSpContainer, [
         fsp(2, 0),

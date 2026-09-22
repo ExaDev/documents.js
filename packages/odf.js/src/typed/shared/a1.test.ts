@@ -20,7 +20,7 @@ describe("columnLettersToIndex", () => {
   });
 
   it("returns undefined for mixed-case input even though every character is a letter", () => {
-    // document-schema.js's own columnLettersToIndex uppercases its input before validating, so it alone can't distinguish "aA" or "Aa" from "AA" -- these two cases exist specifically to pin the ^ and $ anchors in this module's own uppercase-only guard, each anchor's removal otherwise lets exactly one of these two strings reach (and be silently accepted by) the schema helper.
+    // document-schema.js's own columnLettersToIndex uppercases its input before validating, so it alone can't distinguish "aA" or "Aa" from "AA" — these two cases exist specifically to pin the ^ and $ anchors in this module's own uppercase-only guard, each anchor's removal otherwise lets exactly one of these two strings reach (and be silently accepted by) the schema helper.
     expect(columnLettersToIndex("aA")).toBeUndefined();
     expect(columnLettersToIndex("Aa")).toBeUndefined();
   });
@@ -93,7 +93,7 @@ describe("TableCursor", () => {
     const cursor = new TableCursor();
     const first = cursor.nextCell(1024); // a real trailing-repeated-cell block, e.g. table:number-columns-repeated="1024"
     expect(first).toBe("A1");
-    expect(cursor.columnIndex).toBe(1024); // asserted on the cursor's own position, never on an array length -- nothing was allocated per repeated cell.
+    expect(cursor.columnIndex).toBe(1024); // asserted on the cursor's own position, never on an array length — nothing was allocated per repeated cell.
     expect(cursor.nextCell()).toBe(columnIndexToLetters(1024) + "1"); // the very next cell after the repeat block.
   });
 

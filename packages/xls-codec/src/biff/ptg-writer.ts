@@ -5,9 +5,9 @@ import { FTAB_FIXED_ARITY, FTAB_IFTAB_BY_NAME } from "./ptg-functions";
 import { writeShortXLUnicodeString } from "./string-writer";
 import { BiffWriteError } from "./write-errors";
 
-// The write-side counterpart of biff/ptg.ts: same-sheet formula TEXT compiled back into a Formula record's own rgce token stream ([MS-XLS] 2.5.198). Scoped to exactly the subset of Excel's formula grammar that round-trips through this package's own reader: literal operands, same-sheet cell/range references, every arithmetic/comparison/unary/percent operator, explicit parentheses, and a function call resolved by name against ptg-functions.ts's own Ftab table -- see this package's README for the writer's own scope table.
+// The write-side counterpart of biff/ptg.ts: same-sheet formula TEXT compiled back into a Formula record's own rgce token stream ([MS-XLS] 2.5.198). Scoped to exactly the subset of Excel's formula grammar that round-trips through this package's own reader: literal operands, same-sheet cell/range references, every arithmetic/comparison/unary/percent operator, explicit parentheses, and a function call resolved by name against ptg-functions.ts's own Ftab table — see this package's README for the writer's own scope table.
 //
-// Deliberately unsupported, each because writing bytes for it would either produce a formula this package's own reader cannot read back, or would need infrastructure this writer does not yet have: a 3D (cross-sheet or external-workbook) reference -- resolving one to an ixti needs a SupBook/ExternSheet pair, which globals-writer.ts only ever writes today for the two built-in print-settings names, not for an arbitrary formula; an array-constant literal (`{1,2;3,4}`) or a CSE array formula -- both need a PtgExtraArray/Array-record trailer this writer does not build; a defined name -- document-schema.js's spreadsheet model has nowhere a user-defined name lives, so there is nothing to resolve one against; and a function name outside ptg-functions.ts's own Ftab vocabulary (Excel 2007+ added many worksheet functions BIFF8's own Ftab enumeration never named, resolved instead through a PtgNameX/add-in mechanism this writer does not implement). Every one of these throws BiffWriteError naming the construct rather than emitting a plausible-looking but unreadable token stream.
+// Deliberately unsupported, each because writing bytes for it would either produce a formula this package's own reader cannot read back, or would need infrastructure this writer does not yet have: a 3D (cross-sheet or external-workbook) reference — resolving one to an ixti needs a SupBook/ExternSheet pair, which globals-writer.ts only ever writes today for the two built-in print-settings names, not for an arbitrary formula; an array-constant literal (`{1,2;3,4}`) or a CSE array formula — both need a PtgExtraArray/Array-record trailer this writer does not build; a defined name — document-schema.js's spreadsheet model has nowhere a user-defined name lives, so there is nothing to resolve one against; and a function name outside ptg-functions.ts's own Ftab vocabulary (Excel 2007+ added many worksheet functions BIFF8's own Ftab enumeration never named, resolved instead through a PtgNameX/add-in mechanism this writer does not implement). Every one of these throws BiffWriteError naming the construct rather than emitting a plausible-looking but unreadable token stream.
 
 const PTG_ADD = 0x03;
 const PTG_SUB = 0x04;
@@ -31,7 +31,7 @@ const PTG_ERR = 0x1c;
 const PTG_BOOL = 0x1d;
 const PTG_INT = 0x1e;
 const PTG_NUM = 0x1f;
-/** The "value" class of the reference/function token family -- see biff/ptg.ts's own top comment for why REF/VALUE/ARRAY share one on-disk field layout and this writer, like every other real minimal BIFF8 writer, does not need to distinguish them for an ordinary (non-array) formula. */
+/** The "value" class of the reference/function token family — see biff/ptg.ts's own top comment for why REF/VALUE/ARRAY share one on-disk field layout and this writer, like every other real minimal BIFF8 writer, does not need to distinguish them for an ordinary (non-array) formula. */
 const PTG_REF_VALUE = 0x44;
 const PTG_AREA_VALUE = 0x45;
 const PTG_FUNC_VALUE = 0x41;
@@ -40,7 +40,7 @@ const PTG_FUNCVAR_VALUE = 0x42;
 const COLUMN_RELATIVE_BIT = 0x4000;
 const ROW_RELATIVE_BIT = 0x8000;
 
-/** BIFF8's own 16-bit row index and 8-bit column index ceilings ([MS-XLS] 2.4.221's Rw structure and 2.4.53's Col256U structure) -- the identical grid workbook/sheet-writer.ts's own checkedCellPosition enforces for a cell record's own row/column. */
+/** BIFF8's own 16-bit row index and 8-bit column index ceilings ([MS-XLS] 2.4.221's Rw structure and 2.4.53's Col256U structure) — the identical grid workbook/sheet-writer.ts's own checkedCellPosition enforces for a cell record's own row/column. */
 const MAX_ROW_INDEX = 0xffff;
 const MAX_COLUMN_INDEX = 0xff;
 
@@ -117,7 +117,7 @@ const OPERATORS: readonly string[] = [
   "%",
 ];
 
-// The sentinel FormulaParser.peek() falls back to once `position` steps past the last real token tokenize() produced -- see its own comment for why every eof-handling assertion this module's tests make genuinely goes through this exact fallback, not a token tokenize() itself appended.
+// The sentinel FormulaParser.peek() falls back to once `position` steps past the last real token tokenize() produced — see its own comment for why every eof-handling assertion this module's tests make genuinely goes through this exact fallback, not a token tokenize() itself appended.
 const EOF_TOKEN: Token = { type: "eof", text: "" };
 
 function tokenize(text: string): Token[] {
@@ -158,7 +158,7 @@ function tokenize(text: string): Token[] {
       let value = "";
       let cursor = index + 1;
       for (;;) {
-        // Bracket indexing rather than charAt(): a real string genuinely cannot ever contain the value `undefined`, so this check needs no separate length comparison of its own -- reaching past the text's own end is the ONE way `current` can come back as anything other than a real character, unlike charAt(), whose out-of-range "" return reads as just another (empty) character rather than a distinguishable "nothing left" signal.
+        // Bracket indexing rather than charAt(): a real string genuinely cannot ever contain the value `undefined`, so this check needs no separate length comparison of its own — reaching past the text's own end is the ONE way `current` can come back as anything other than a real character, unlike charAt(), whose out-of-range "" return reads as just another (empty) character rather than a distinguishable "nothing left" signal.
         const current = text[cursor];
         if (current === undefined) {
           throw new BiffWriteError(
@@ -218,7 +218,7 @@ function tokenize(text: string): Token[] {
   return tokens;
 }
 
-// --- Parser: recursive descent over Excel's own documented operator precedence (https://support.microsoft.com/en-us/office/calculation-operators-and-precedence-in-excel), narrowed to the operators biff/ptg.ts's own reader reconstructs -- reference operators (: (space) ,) are handled structurally (a range's ':', a function call's ','), never as a generic binary operator. ---
+// --- Parser: recursive descent over Excel's own documented operator precedence (https://support.microsoft.com/en-us/office/calculation-operators-and-precedence-in-excel), narrowed to the operators biff/ptg.ts's own reader reconstructs — reference operators (: (space) ,) are handled structurally (a range's ':', a function call's ','), never as a generic binary operator. ---
 
 interface CellPoint {
   readonly row: number;
@@ -270,7 +270,7 @@ class FormulaParser {
     this.sourceText = sourceText;
   }
 
-  // tokenize() never appends an eof token of its own -- this `?? EOF_TOKEN` fallback is the ONLY place one is ever produced, firing the moment `position + offset` steps past whatever real tokens tokenize() found. Every advance() call site is gated behind a check that the CURRENT token (from this same peek()) is a specific non-eof type, so the one call site passing offset 1 (parsePrimary's word-lookahead) only does so once the current token is already confirmed not to be eof -- meaning this fallback is reached exactly once per formula, the call that notices there is nothing left to read.
+  // tokenize() never appends an eof token of its own — this `?? EOF_TOKEN` fallback is the ONLY place one is ever produced, firing the moment `position + offset` steps past whatever real tokens tokenize() found. Every advance() call site is gated behind a check that the CURRENT token (from this same peek()) is a specific non-eof type, so the one call site passing offset 1 (parsePrimary's word-lookahead) only does so once the current token is already confirmed not to be eof — meaning this fallback is reached exactly once per formula, the call that notices there is nothing left to read.
   private peek(offset = 0): Token {
     return this.tokens[this.position + offset] ?? EOF_TOKEN;
   }
@@ -456,7 +456,7 @@ class FormulaParser {
 
   private numberNode(text: string): FormulaNode {
     const value = Number.parseFloat(text);
-    // NUMBER_RE never captures a sign or a leading digit outside 0-9, so `text` matching this plain-digit form always parseFloats to a non-negative whole number regardless of magnitude -- Number.isInteger(value) and value >= 0 would therefore always be true whenever this regex already is, and checking them again would only ever restate that fact, never narrow it further.
+    // NUMBER_RE never captures a sign or a leading digit outside 0-9, so `text` matching this plain-digit form always parseFloats to a non-negative whole number regardless of magnitude — Number.isInteger(value) and value >= 0 would therefore always be true whenever this regex already is, and checking them again would only ever restate that fact, never narrow it further.
     if (/^[0-9]+$/.test(text) && value <= PTG_INT_MAX) {
       return { kind: "int", value };
     }
@@ -513,7 +513,7 @@ class FormulaParser {
     return { kind: "ref", point: start };
   }
 
-  /** One cell reference's own point, per its own leading `$` (column-absolute) and, for a column-only word, a trailing `$` (row-absolute) -- see this module's own top comment for why a plain (non-`$`-prefixed) reference always lexes as one combined letters-then-digits word token, while a `$`-separated one splits across a dollar/word/dollar/number sequence instead. */
+  /** One cell reference's own point, per its own leading `$` (column-absolute) and, for a column-only word, a trailing `$` (row-absolute) — see this module's own top comment for why a plain (non-`$`-prefixed) reference always lexes as one combined letters-then-digits word token, while a `$`-separated one splits across a dollar/word/dollar/number sequence instead. */
   private parseCellPoint(): CellPoint {
     let columnAbsolute = false;
     if (this.peek().type === "dollar") {
@@ -577,7 +577,7 @@ type ParentNode = FormulaNode & {
   readonly kind: "binary" | "unary" | "percent" | "paren" | "call";
 };
 
-/** A worklist entry: "visit" pushes a node's own children (deepest first, so they pop and compile before it), or -- for a leaf with no children -- compiles it immediately; "emit" compiles a parent node's own opcode(s) once every child a prior "visit" of it pushed has already been popped and compiled. */
+/** A worklist entry: "visit" pushes a node's own children (deepest first, so they pop and compile before it), or — for a leaf with no children — compiles it immediately; "emit" compiles a parent node's own opcode(s) once every child a prior "visit" of it pushed has already been popped and compiled. */
 type CompileStep =
   | { readonly phase: "visit"; readonly node: FormulaNode }
   | { readonly phase: "emit"; readonly node: ParentNode };
@@ -624,7 +624,7 @@ function compileLeaf(
 
 function compileParent(builder: RgceBuilder, node: ParentNode): void {
   switch (node.kind) {
-    // "binary" and "unary" share one body -- both node shapes carry an opcode field, already picked by the parser to be exactly the byte the reader expects, so there is nothing left for one kind to do that the other wouldn't do identically. Two separate case bodies with the same two statements would just be one AST node Stryker could empty without the other noticing.
+    // "binary" and "unary" share one body — both node shapes carry an opcode field, already picked by the parser to be exactly the byte the reader expects, so there is nothing left for one kind to do that the other wouldn't do identically. Two separate case bodies with the same two statements would just be one AST node Stryker could empty without the other noticing.
     case "binary":
     case "unary":
       builder.push(node.opcode);
@@ -661,7 +661,7 @@ function isParentNode(node: FormulaNode): node is ParentNode {
 }
 
 /**
- * Compiles a FormulaNode tree to rgce bytes, postfix (reverse Polish) exactly as biff/ptg.ts's own reader expects to walk it -- an explicit worklist rather than a native recursive descent, so a formula built from many thousands of chained operators (a long but legitimate generated SUM(...)+SUM(...)+... chain, say) compiles by iterating this loop rather than by nesting one JavaScript call frame per operator, which would risk a stack overflow at a tree depth far shallower than MAX_RGCE_LENGTH's own byte ceiling below ever requires throwing for.
+ * Compiles a FormulaNode tree to rgce bytes, postfix (reverse Polish) exactly as biff/ptg.ts's own reader expects to walk it — an explicit worklist rather than a native recursive descent, so a formula built from many thousands of chained operators (a long but legitimate generated SUM(...)+SUM(...)+... chain, say) compiles by iterating this loop rather than by nesting one JavaScript call frame per operator, which would risk a stack overflow at a tree depth far shallower than MAX_RGCE_LENGTH's own byte ceiling below ever requires throwing for.
  */
 function compileNode(builder: RgceBuilder, root: FormulaNode): void {
   const steps: CompileStep[] = [{ phase: "visit", node: root }];
@@ -706,7 +706,7 @@ function compileNode(builder: RgceBuilder, root: FormulaNode): void {
 const MAX_RGCE_LENGTH = 0xffff;
 
 /**
- * Compiles same-sheet formula text into a Formula record's own rgce token stream -- the write-side counterpart of biff/ptg.ts's parseFormulaText, scoped to the subset this module's own top comment describes. Throws BiffWriteError, naming the construct, for anything outside that scope rather than emitting a token stream this package's own reader could not read back.
+ * Compiles same-sheet formula text into a Formula record's own rgce token stream — the write-side counterpart of biff/ptg.ts's parseFormulaText, scoped to the subset this module's own top comment describes. Throws BiffWriteError, naming the construct, for anything outside that scope rather than emitting a token stream this package's own reader could not read back.
  */
 export function compileFormulaText(text: string): Uint8Array<ArrayBuffer> {
   const tokens = tokenize(text);

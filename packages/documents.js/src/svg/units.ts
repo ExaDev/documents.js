@@ -1,4 +1,4 @@
-// SVG length parsing: the one unit surface the read side needs. SVG lengths (width/height/viewBox companions and per-shape geometry) are expressed in CSS user units against the user coordinate system in force, so every absolute unit has an exact conversion factor into CSS px and then into the points this package's whole geometry pipeline runs on (CSS defines 1in = 96px and 1in = 72pt, so 1px = 72/96 = 0.75pt exactly -- a ratio, not a measured value).
+// SVG length parsing: the one unit surface the read side needs. SVG lengths (width/height/viewBox companions and per-shape geometry) are expressed in CSS user units against the user coordinate system in force, so every absolute unit has an exact conversion factor into CSS px and then into the points this package's whole geometry pipeline runs on (CSS defines 1in = 96px and 1in = 72pt, so 1px = 72/96 = 0.75pt exactly — a ratio, not a measured value).
 const PT_PER_PX = 0.75;
 const PT_PER_MM = 72 / 25.4;
 const PT_PER_CM = 720 / 25.4;
@@ -7,7 +7,7 @@ const PT_PER_IN = 72;
 // A single SVG number, the shared grammar of every length and coordinate this file touches: optional sign, digits with optional fraction in either "1.5" or ".5" form, optional exponent. Kept as one pattern (rather than Number() alone) so a trailing unit is split off cleanly and a malformed value yields undefined instead of NaN poisoning downstream geometry.
 const SVG_NUMBER_PATTERN = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/;
 
-// Resolves one SVG length against the user-unit convention in force and returns it in points. A bare number is a user unit; under the root coordinate systems this reader builds (viewBox mapped 1:1 onto the viewport, or the 0.75pt fallback when the svg declares neither -- see readSvgContent's own root notes), one user unit is one CSS px, hence the PT_PER_PX factor. The absolute units convert by their exact factors, pc and q included (1pc = 12pt, 1q = 1/40cm exactly). Returns undefined for em/ex/% -- each needs a font context or a referent this reader keeps no model of -- and for malformed values; an unresolvable length is the caller's diagnostic to report, never a silent zero.
+// Resolves one SVG length against the user-unit convention in force and returns it in points. A bare number is a user unit; under the root coordinate systems this reader builds (viewBox mapped 1:1 onto the viewport, or the 0.75pt fallback when the svg declares neither — see readSvgContent's own root notes), one user unit is one CSS px, hence the PT_PER_PX factor. The absolute units convert by their exact factors, pc and q included (1pc = 12pt, 1q = 1/40cm exactly). Returns undefined for em/ex/% — each needs a font context or a referent this reader keeps no model of — and for malformed values; an unresolvable length is the caller's diagnostic to report, never a silent zero.
 const SVG_LENGTH_PATTERN =
   /^([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)(px|pt|mm|cm|in|pc|q|em|ex|%)?$/;
 
@@ -44,7 +44,7 @@ export function parseSvgLengthPt(raw: string | undefined): number | undefined {
   }
 }
 
-// Resolves one SVG length into USER UNITS (CSS px) rather than points -- the form geometry attributes (x/y/width/rx/cx and stroke-width) need, because those coordinates live in the user coordinate system the root viewBox map afterwards scales, whereas a points value here would have pre-scaled them once and let the viewBox scale them again. Only absolute units are accepted: each converts through its exact pt factor and back through PT_PER_PX, so a bare number is itself (the identity), and em/ex/% return undefined for the same reason parseSvgLengthPt does.
+// Resolves one SVG length into USER UNITS (CSS px) rather than points — the form geometry attributes (x/y/width/rx/cx and stroke-width) need, because those coordinates live in the user coordinate system the root viewBox map afterwards scales, whereas a points value here would have pre-scaled them once and let the viewBox scale them again. Only absolute units are accepted: each converts through its exact pt factor and back through PT_PER_PX, so a bare number is itself (the identity), and em/ex/% return undefined for the same reason parseSvgLengthPt does.
 export function parseSvgUserUnits(raw: string | undefined): number | undefined {
   const pt = parseSvgLengthPt(raw);
   return pt === undefined ? undefined : pt / PT_PER_PX;
@@ -71,7 +71,7 @@ export function parseSvgViewBox(
   const numbers = parts.map((part) =>
     SVG_NUMBER_PATTERN.test(part) ? Number(part) : Number.NaN,
   );
-  // The parts.length === 4 check above guarantees every index exists, so the non-null assertions restate that check rather than assume past it -- the identical indexed access pattern read.ts's own polyline points use.
+  // The parts.length === 4 check above guarantees every index exists, so the non-null assertions restate that check rather than assume past it — the identical indexed access pattern read.ts's own polyline points use.
   if (
     !numbers.every((value) => Number.isFinite(value)) ||
     numbers[2]! < 0 ||

@@ -881,7 +881,7 @@
 * **pdf:** read embedded files from the name tree, file attachments, and /AF ([531b27c](https://github.com/ExaDev/documents.js/commit/531b27c1a1a58e62672b8b47c8fab67ca8c3ad56))
 * **pdf:** read named destinations, the outline tree, and internal link annotations ([6c837bd](https://github.com/ExaDev/documents.js/commit/6c837bd1949fba55ceca2e71c3e004376b69d0ae)), closes [#721](https://github.com/ExaDev/documents.js/issues/721)
 * **pdf:** read optional-content groups and stamp /OC membership on extracted items ([b4f3e71](https://github.com/ExaDev/documents.js/commit/b4f3e713e575d1f9bf5e13bb9e0626ab9ae5b475))
-* **pdf:** read page annotations -- sticky notes, FreeText, markup, and residue for the opaque kinds ([ce91db2](https://github.com/ExaDev/documents.js/commit/ce91db22aa1371dab9decdc1b7c55731868a9bf8))
+* **pdf:** read page annotations — sticky notes, FreeText, markup, and residue for the opaque kinds ([ce91db2](https://github.com/ExaDev/documents.js/commit/ce91db22aa1371dab9decdc1b7c55731868a9bf8))
 * **pdf:** read the AcroForm field tree with types, values, flags, and widget placements ([1d2c0ec](https://github.com/ExaDev/documents.js/commit/1d2c0eca00afc58881ce8d810aad75c39d119547))
 
 

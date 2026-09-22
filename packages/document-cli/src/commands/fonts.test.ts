@@ -24,7 +24,7 @@ import {
   fixtureCalibriFontBytes,
 } from "../test-support/font-fixture";
 
-// Drives the real assembled commander program against real docx/pptx/odt fixtures that genuinely embed a source font face (test-support/embedded-font-fixture.ts), not extractSourceFonts in isolation -- proving `fonts` is registered under that name, dispatches docx/pptx through ooxml.js's decodePackage and odt/odp/ods/odg through odf.js's, and reaches stdout as both a human-readable report and parseable --json.
+// Drives the real assembled commander program against real docx/pptx/odt fixtures that genuinely embed a source font face (test-support/embedded-font-fixture.ts), not extractSourceFonts in isolation — proving `fonts` is registered under that name, dispatches docx/pptx through ooxml.js's decodePackage and odt/odp/ods/odg through odf.js's, and reaches stdout as both a human-readable report and parseable --json.
 
 let savedExitCode: typeof process.exitCode;
 let workspace: string;
@@ -87,7 +87,7 @@ beforeAll(async () => {
   const plain = createDocx();
   plain.body.appendParagraph().appendRun({ text: "No fonts embedded here." });
   await writeFile(join(workspace, "plain.docx"), plain.toBytes());
-  // extractSourceFontsForFormat (documents.js) validates the format itself rather than the CLI pre-checking it, so the input file is now genuinely read before that rejection fires -- unlike a bare nonexistent path, this needs to exist. Its content is never parsed: the rejection below fires purely on the '.xlsx' extension.
+  // extractSourceFontsForFormat (documents.js) validates the format itself rather than the CLI pre-checking it, so the input file is now genuinely read before that rejection fires — unlike a bare nonexistent path, this needs to exist. Its content is never parsed: the rejection below fires purely on the '.xlsx' extension.
   await writeFile(join(workspace, "unused.xlsx"), new Uint8Array([0]));
 });
 

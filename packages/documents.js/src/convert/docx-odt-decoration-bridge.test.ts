@@ -15,7 +15,7 @@ type WordprocessingDocument = Extract<
   { kind: "wordprocessing" }
 >;
 
-// Round-trip tests for the docx/odt paragraph-decoration (spacingBefore/spacingAfter/lineSpacing/indentLeft/indentFirstLine) and table-cell decoration (background, borders) fields both readers already populate but the writers used to drop -- the sibling suite to bridges.test.ts, kept in its own file to avoid contention there. The proven shape is the run.strike fix (commit 7fb6e32): a pivot field exists on ContentDocument, both readers populate it, but the editor had no setter and populateParagraph/appendTable never threaded it. Each field now survives docx -> odt -> docx and odt -> docx -> odt.
+// Round-trip tests for the docx/odt paragraph-decoration (spacingBefore/spacingAfter/lineSpacing/indentLeft/indentFirstLine) and table-cell decoration (background, borders) fields both readers already populate but the writers used to drop — the sibling suite to bridges.test.ts, kept in its own file to avoid contention there. The proven shape is the run.strike fix (commit 7fb6e32): a pivot field exists on ContentDocument, both readers populate it, but the editor had no setter and populateParagraph/appendTable never threaded it. Each field now survives docx -> odt -> docx and odt -> docx -> odt.
 
 const RED = { r: 1, g: 0, b: 0 };
 const BLUE = { r: 0, g: 0, b: 1 };
@@ -201,7 +201,7 @@ describe("docx/odt decoration bridge", () => {
     expect(row?.heightPt).toBeCloseTo(28, 5);
   });
 
-  // The reverse direction this file's own row.heightPt test above only proved half of: docx -> odt now genuinely carries a row height through, via OdtTableRow's own heightPt setter (src/edit/odt/table.ts) -- previously dropped silently, since the ODT editor modelled no row-level property at all regardless of what the (then still gapped) docx reader produced.
+  // The reverse direction this file's own row.heightPt test above only proved half of: docx -> odt now genuinely carries a row height through, via OdtTableRow's own heightPt setter (src/edit/odt/table.ts) — previously dropped silently, since the ODT editor modelled no row-level property at all regardless of what the (then still gapped) docx reader produced.
   it("carries row height through docx -> odt -> docx", () => {
     const editor = createDocx();
     const table = editor.body.appendTable({ rows: 1, columns: 1 });
