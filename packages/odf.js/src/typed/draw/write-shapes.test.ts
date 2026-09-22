@@ -75,7 +75,7 @@ function paragraphBlock(text: string): ContentBlock {
 
 describe("planShapeContent", () => {
   it("resolves a single table block to kind: table", () => {
-    const table: ContentBlock = { kind: "table", rows: [], columnWidthsPt: [] };
+    const table: ContentBlock = { kind: "table", rows: [], columns: [] };
     const plan = planShapeContent([table], freshListState());
     expect(plan.kind).toBe("table");
   });
@@ -112,7 +112,7 @@ describe("planShapeContent", () => {
   });
 
   it("refuses a table alongside another block", () => {
-    const table: ContentBlock = { kind: "table", rows: [], columnWidthsPt: [] };
+    const table: ContentBlock = { kind: "table", rows: [], columns: [] };
     expect(() =>
       planShapeContent([table, paragraphBlock("x")], freshListState()),
     ).toThrow(/a table alongside other content/);
@@ -333,7 +333,7 @@ describe("writeDrawFrame", () => {
     const { state } = writeState();
     const written = writeDrawFrame(
       shape({
-        blocks: [{ kind: "table", rows: [], columnWidthsPt: [] }],
+        blocks: [{ kind: "table", rows: [], columns: [] }],
       }),
       freshListState(),
       state,

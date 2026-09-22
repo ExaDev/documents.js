@@ -163,7 +163,7 @@ const KITCHEN_SINK: WordprocessingDocument = {
         },
         {
           kind: "table",
-          columnWidthsPt: [120, 120, 120],
+          columns: [{ widthPt: 120 }, { widthPt: 120 }, { widthPt: 120 }],
           rows: [
             {
               heightPt: 20,
@@ -1089,7 +1089,7 @@ describe("the sxi round-trip law", () => {
               [
                 {
                   kind: "table",
-                  columnWidthsPt: [80, 80],
+                  columns: [{ widthPt: 80 }, { widthPt: 80 }],
                   rows: [
                     {
                       cells: [

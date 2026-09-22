@@ -383,7 +383,7 @@ describe("writeOdpContent: shape content", () => {
           shape({}, [
             {
               kind: "table",
-              columnWidthsPt: [100, 100],
+              columns: [{ widthPt: 100 }, { widthPt: 100 }],
               rows: [
                 {
                   cells: [
@@ -440,7 +440,7 @@ describe("writeOdpContent: shape content", () => {
               { kind: "paragraph", runs: [{ text: "x" }] },
               {
                 kind: "table",
-                columnWidthsPt: [10],
+                columns: [{ widthPt: 10 }],
                 rows: [{ cells: [{ blocks: [] }] }],
               },
             ]),

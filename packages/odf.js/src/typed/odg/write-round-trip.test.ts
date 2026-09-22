@@ -473,7 +473,7 @@ describe("writeOdgContent: refusals", () => {
                 { kind: "paragraph", runs: [{ text: "x" }] },
                 {
                   kind: "table",
-                  columnWidthsPt: [10],
+                  columns: [{ widthPt: 10 }],
                   rows: [{ cells: [{ blocks: [] }] }],
                 },
               ]),
