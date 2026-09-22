@@ -10,9 +10,9 @@ Created for [documents.js#564](https://github.com/ExaDev/documents.js/issues/564
 
 [documents.js#815](https://github.com/ExaDev/documents.js/issues/815), [#816](https://github.com/ExaDev/documents.js/issues/816), and [#817](https://github.com/ExaDev/documents.js/issues/817) then needed the other direction. `xls-codec`, `doc-codec`, `ppt-codec`, and `wpd-codec` each read a legacy Office binary format out of an [MS-CFB] container, and none of them can write one back, because there was no container to put their streams into: a `.xls` writer producing a `Workbook` stream, or a `.doc` writer producing `WordDocument` and `1Table`, needs a conformant compound file to hold them. That container is structural knowledge exactly as the reader's is, so `writeCompoundFile` is the mirror of `readCompoundFile` here rather than four hand-rolled emitters in four codecs.
 
-[documents.js#974](https://github.com/ExaDev/documents.js/issues/974) added the other half of the OLE Package stream: `writeOlePackage`, the mirror of `readOlePackage`, for `rtf-codec`'s own OLE embedding -- an RTF `\object`'s `\objdata` is the hex bytes of a real [MS-CFB] compound file wrapping a `Package` stream, so writing one needed both halves this package already had separately (`writeCompoundFile` for the container, `readOlePackage` for the stream inside it) plus the write side of the stream itself.
+[documents.js#974](https://github.com/ExaDev/documents.js/issues/974) added the other half of the OLE Package stream: `writeOlePackage`, the mirror of `readOlePackage`, for `rtf-codec`'s own OLE embedding — an RTF `\object`'s `\objdata` is the hex bytes of a real [MS-CFB] compound file wrapping a `Package` stream, so writing one needed both halves this package already had separately (`writeCompoundFile` for the container, `readOlePackage` for the stream inside it) plus the write side of the stream itself.
 
-[documents.js#815](https://github.com/ExaDev/documents.js/issues/815), [#816](https://github.com/ExaDev/documents.js/issues/816), and [#817](https://github.com/ExaDev/documents.js/issues/817) also each named the same remaining gap: `doc-codec`, `xls-codec`, and `ppt-codec` all hard-coded document metadata (title, author, dates) to an empty object, because that metadata lives in a genuinely different structure from the one each format's own reader already parses -- a [MS-OLEPS] Property Set Stream, conventionally stored as a "\x05SummaryInformation" stream beside `WordDocument`/`Workbook`/`PowerPoint Document` in the identical [MS-CFB] container all three already read through this package. `oleps/read` and `oleps/write` are the generic property-set codec (the stream header, the PropertySet packet's dictionary, and VT_I2/VT_I4/VT_LPSTR/VT_LPWSTR/VT_FILETIME typed values), and `oleps/summary-information` is the SummaryInformation-specific mapping on top of it -- the same two-layer split `cfb/read.ts` and `cfb/ole-package.ts` already establish for the OLE Package stream, container structure below, one named stream's own field layout above.
+[documents.js#815](https://github.com/ExaDev/documents.js/issues/815), [#816](https://github.com/ExaDev/documents.js/issues/816), and [#817](https://github.com/ExaDev/documents.js/issues/817) also each named the same remaining gap: `doc-codec`, `xls-codec`, and `ppt-codec` all hard-coded document metadata (title, author, dates) to an empty object, because that metadata lives in a genuinely different structure from the one each format's own reader already parses — a [MS-OLEPS] Property Set Stream, conventionally stored as a "\x05SummaryInformation" stream beside `WordDocument`/`Workbook`/`PowerPoint Document` in the identical [MS-CFB] container all three already read through this package. `oleps/read` and `oleps/write` are the generic property-set codec (the stream header, the PropertySet packet's dictionary, and VT_I2/VT_I4/VT_LPSTR/VT_LPWSTR/VT_FILETIME typed values), and `oleps/summary-information` is the SummaryInformation-specific mapping on top of it — the same two-layer split `cfb/read.ts` and `cfb/ole-package.ts` already establish for the OLE Package stream, container structure below, one named stream's own field layout above.
 
 [documents.js#1108](https://github.com/ExaDev/documents.js/issues/1108) added the RC4/MD5 primitives `xls-codec` needs to decrypt a legacy-encrypted `.xls` workbook: the [MS-OFFCRYPTO] 2.3.6.1 "RC4 encryption header" scheme every BIFF8 `FilePass` record protected this way shares with the same header shape in `.doc`. RC4 and MD5 are trivial and completely unavailable from any platform crypto API this package can portably reach (WebCrypto has never offered either; `node:crypto` dropped RC4 from its default provider with OpenSSL 3), so hand-writing them here — once, shared — is the only option that keeps `xls-codec` and `doc-codec` from each carrying their own copy. `.ppt` turned out NOT to share this scheme at all (see [documents.js#1116](https://github.com/ExaDev/documents.js/issues/1116) below) — the older XOR obfuscation scheme remains out of scope, tracked in [documents.js#922](https://github.com/ExaDev/documents.js/issues/922).
 
@@ -81,7 +81,7 @@ import { walkArchive } from "archive-codec";
 // the walk exceeds the depth cap or the cumulative decompressed-bytes budget.
 for (const entry of walkArchive(docxBytes)) {
   entry.path; // e.g. 'xl/workbook.xml', the path within its own archive
-  entry.ancestors; // e.g. ['word/embeddings/oleObject1.xlsx'] -- the nested
+  entry.ancestors; // e.g. ['word/embeddings/oleObject1.xlsx'] — the nested
   // ZIP entries descended through to reach this one
   entry.bytes; // decompressed content
 }
@@ -102,7 +102,7 @@ import {
 // Every stream of a classic OLE compound file, with its storage path.
 // Throws CompoundFileFormatError on any structural nonconformance.
 for (const stream of readCompoundFile(oleBinBytes)) {
-  stream.path; // e.g. 'Package' -- root-level, or 'ObjectStorage/Package'
+  stream.path; // e.g. 'Package' — root-level, or 'ObjectStorage/Package'
   stream.bytes; // the stream's content
 }
 
@@ -116,7 +116,7 @@ if (packageStream !== undefined) {
 }
 
 // The mirror image: builds a 'Package' stream's bytes from the same shape
-// readOlePackage returns, to wrap alongside writeCompoundFile -- this is how
+// readOlePackage returns, to wrap alongside writeCompoundFile — this is how
 // rtf-codec builds the real [MS-CFB] container an RTF \object's \objdata carries.
 const packageBytes = writeOlePackage({
   label: "embedded.docx",
@@ -195,7 +195,7 @@ const plaintext = decryptOfficeRc4(baseHash, streamOffset, ciphertext);
 
 `deriveOfficeRc4BaseHash`/`deriveOfficeRc4BlockKey`/`decryptOfficeRc4` implement [MS-OFFCRYPTO] 2.3.6.1/2.3.6.2's RC4 encryption header scheme: a per-workbook base hash derived once from the password and the header's own salt, then a full 128-bit RC4 key re-derived from that base hash at every 1024-byte boundary of the underlying decrypted stream — despite [MS-OFFCRYPTO] 2.3.6.1's own field descriptions twice stating "encrypted using a 40-bit RC4 cipher", which is wrong; the real key is Hfinal in full, confirmed against Apache POI's `BinaryRC4Decryptor` and nolze/msoffcrypto-tool's own doctested test vectors, both cross-checked directly rather than trusted from the spec's own prose — see each constant's own doc comment for the full account, including the truncated-to-5-bytes implementation this package shipped briefly before the cross-check caught it. `decryptOfficeRc4` takes the byte offset a chunk starts at within the whole encrypted stream (not within the chunk itself), so a stream can be decrypted in arbitrary pieces, not only from its own start, and still land on the correct per-block key throughout. The 1024-byte re-keying interval is `decryptOfficeRc4`'s own default `blockSize`, since [MS-XLS]'s own FilePass scheme is this module's original consumer, but it is a real [MS-XLS]-specific value, not a property of the algorithm itself: [MS-DOC] 2.2.6.2's own RC4 encryption header (the identical [MS-OFFCRYPTO] 2.3.6.1 structure, confirmed against Apache POI's `EncryptionMode.binaryRC4` resolving both) re-keys every 512 bytes instead (`OFFICE_RC4_DOC_BLOCK_SIZE`), passed explicitly as `decryptOfficeRc4`'s fourth argument.
 
-This is exactly the piece `xls-codec`'s `FilePass`-record reader and `doc-codec`'s own `EncryptionHeader` reader (ExaDev/documents.js#1113) both need and nothing more: locating the header, reading its own fields, and verifying the password against `EncryptedVerifier`/`EncryptedVerifierHash` are each codec's own concern, not this package's — `archive-codec` carries only the format-agnostic cryptography, never a `.xls`- or `.doc`-specific byte layout. `decryptOfficeRc4`'s own `blockSize` parameter exists because the two codecs' re-keying intervals genuinely differ (`OFFICE_RC4_BLOCK_SIZE`, 1024, for `xls-codec`; `OFFICE_RC4_DOC_BLOCK_SIZE`, 512, for `doc-codec`) -- confirmed as real, independent values against Apache POI's own `Biff8DecryptingStream` and `BinaryRC4Decryptor` respectively, not one shared constant this package could have assumed. `md5`/`rc4` are exported individually too, for reuse by the RC4 CryptoAPI scheme below, which is symmetric enough to need `rc4` but not this module's own MD5-based key derivation.
+This is exactly the piece `xls-codec`'s `FilePass`-record reader and `doc-codec`'s own `EncryptionHeader` reader (ExaDev/documents.js#1113) both need and nothing more: locating the header, reading its own fields, and verifying the password against `EncryptedVerifier`/`EncryptedVerifierHash` are each codec's own concern, not this package's — `archive-codec` carries only the format-agnostic cryptography, never a `.xls`- or `.doc`-specific byte layout. `decryptOfficeRc4`'s own `blockSize` parameter exists because the two codecs' re-keying intervals genuinely differ (`OFFICE_RC4_BLOCK_SIZE`, 1024, for `xls-codec`; `OFFICE_RC4_DOC_BLOCK_SIZE`, 512, for `doc-codec`) — confirmed as real, independent values against Apache POI's own `Biff8DecryptingStream` and `BinaryRC4Decryptor` respectively, not one shared constant this package could have assumed. `md5`/`rc4` are exported individually too, for reuse by the RC4 CryptoAPI scheme below, which is symmetric enough to need `rc4` but not this module's own MD5-based key derivation.
 
 ### RC4 CryptoAPI encryption (.ppt)
 
@@ -220,12 +220,12 @@ if (
 ) {
   throw new Error("wrong password");
 }
-// block is the persist object's own persist ID, not a byte offset -- see below.
+// block is the persist object's own persist ID, not a byte offset — see below.
 const key = deriveRc4CryptoApiBlockKey(password, salt, block, keySizeBits);
 const plaintext = rc4(key, ciphertext);
 ```
 
-`deriveRc4CryptoApiBlockKey`/`verifyRc4CryptoApiPassword` implement [MS-OFFCRYPTO] 2.3.5.1/2.3.5.2's "RC4 CryptoAPI Encryption" scheme, `.ppt`'s own encryption ([documents.js#1116](https://github.com/ExaDev/documents.js/issues/1116)) -- genuinely different from the [Legacy Office encryption](#legacy-office-encryption) scheme above despite both ending in an RC4 keystream: SHA-1 rather than MD5, one hash of the salt and password folded with the block number rather than an intermediate 336-byte buffer, and (per the spec's own prose) explicitly not iterated. There is no `decryptOfficeRc4`-style entry point with its own block-boundary loop here, because RC4 CryptoAPI does not re-key at fixed byte intervals within one continuous stream the way the legacy scheme does: it re-keys per persist object, using that object's own persist ID as the "block number" -- a caller derives the one key its own object needs and applies this package's own `rc4` directly, exactly as `ppt-codec`'s `decryptPptDocumentStream` does. Cross-checked against Apache POI's `EncryptionInfo`/`StandardEncryptionHeader`/`CryptoAPIEncryptionHeader` and nolze/msoffcrypto-tool's `method/rc4_cryptoapi.py`, whose own `_makekey`/`verifypw` this module's derivation and verification mirror.
+`deriveRc4CryptoApiBlockKey`/`verifyRc4CryptoApiPassword` implement [MS-OFFCRYPTO] 2.3.5.1/2.3.5.2's "RC4 CryptoAPI Encryption" scheme, `.ppt`'s own encryption ([documents.js#1116](https://github.com/ExaDev/documents.js/issues/1116)) — genuinely different from the [Legacy Office encryption](#legacy-office-encryption) scheme above despite both ending in an RC4 keystream: SHA-1 rather than MD5, one hash of the salt and password folded with the block number rather than an intermediate 336-byte buffer, and (per the spec's own prose) explicitly not iterated. There is no `decryptOfficeRc4`-style entry point with its own block-boundary loop here, because RC4 CryptoAPI does not re-key at fixed byte intervals within one continuous stream the way the legacy scheme does: it re-keys per persist object, using that object's own persist ID as the "block number" — a caller derives the one key its own object needs and applies this package's own `rc4` directly, exactly as `ppt-codec`'s `decryptPptDocumentStream` does. Cross-checked against Apache POI's `EncryptionInfo`/`StandardEncryptionHeader`/`CryptoAPIEncryptionHeader` and nolze/msoffcrypto-tool's `method/rc4_cryptoapi.py`, whose own `_makekey`/`verifypw` this module's derivation and verification mirror.
 
 ### XOR obfuscation (.xls/.doc)
 
@@ -250,7 +250,7 @@ const array = createXorObfuscationArray(
   password,
   XOR_OBFUSCATION_ROTATE_DISTANCE_METHOD1,
 );
-// initialIndex is (streamOffset + recordDataLength) % 16 -- a BIFF-record
+// initialIndex is (streamOffset + recordDataLength) % 16 — a BIFF-record
 // concept xls-codec's own [MS-XLS] 2.2.10 handling computes, not this package's.
 const plaintext = decryptXorObfuscationMethod1(array, ciphertext, initialIndex);
 ```

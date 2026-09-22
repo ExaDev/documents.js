@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 // Regenerates src/test-support/jbig2.ts: real JBIG2 embedded streams for src/image/jbig2.test.ts, src/filters.test.ts and src/images-read.test.ts to decode back.
 //
-// Run with `node scripts/generate-jbig2-fixtures.mjs`, which requires jbig2enc, jbig2dec, and libtiff on PATH (`brew install jbig2enc jbig2dec libtiff netpbm`). Not part of `pnpm build`/`pnpm test` -- the generated .ts file is committed like any other checked-in generated artifact, so the test suite needs neither those tools nor a filesystem read to run.
+// Run with `node scripts/generate-jbig2-fixtures.mjs`, which requires jbig2enc, jbig2dec, and libtiff on PATH (`brew install jbig2enc jbig2dec libtiff netpbm`). Not part of `pnpm build`/`pnpm test` — the generated .ts file is committed like any other checked-in generated artifact, so the test suite needs neither those tools nor a filesystem read to run.
 //
 // Two independent producers back the fixtures, for the reason scripts/generate-encrypted-pdf-fixtures.mjs states about its own: a stream this package encoded itself would let a mistake in the arithmetic coder or the template context ordering cancel out between an encoder and a decoder that shared it, and pass anyway.
 //
 //   1. jbig2enc (Adam Langley's encoder, the one that produces essentially every JBIG2-in-PDF in the wild) writes the generic-region and symbol/text-region fixtures. Nothing in this repository influences those bytes.
-//   2. libtiff's own Group 4 coder, via tiffcp, writes the MMR-coded generic region's payload -- the same producer src/test-support/ccitt-fax.ts already uses.
+//   2. libtiff's own Group 4 coder, via tiffcp, writes the MMR-coded generic region's payload — the same producer src/test-support/ccitt-fax.ts already uses.
 //
 // jbig2enc only ever emits GBTEMPLATE 0, so templates 1-3 (and a non-nominal AT placement) are encoded here by a hand-written MQ *encoder*, restated from T.88 Annex E's own CODEMPS/CODELPS/BYTEOUT/FLUSH procedures. That is deliberately NOT trusted on its own: every stream this script produces, hand-encoded ones included, is decoded by jbig2dec (Ghostscript's independent JBIG2 implementation) and must reproduce the source bitmap exactly before it is written out, and the bitmap recorded as each fixture's expected output is jbig2dec's, not this script's.
 //
-// What that cross-check does and does not establish, stated precisely because it is easy to overclaim. It pins the SET of template positions and their offsets: a decoder reading a different set of neighbours cannot track the encoder's adaptive state at all. It does NOT pin the ORDER those positions are concatenated in, and no differential test can -- a context index is just a label for a neighbourhood pattern, and any consistent permutation of the labels cancels out between any encoder and decoder that each use their own consistently. The same caveat applies to the fixed typical-prediction pseudo-contexts, which share one adaptive state array with the real pattern contexts: a wrong constant still round-trips whenever it happens not to collide with a pattern the test image produces. Only the fixtures produced by jbig2enc itself (which uses the specification's own constants) genuinely pin those, and only for the template jbig2enc emits, GBTEMPLATE 0.
+// What that cross-check does and does not establish, stated precisely because it is easy to overclaim. It pins the SET of template positions and their offsets: a decoder reading a different set of neighbours cannot track the encoder's adaptive state at all. It does NOT pin the ORDER those positions are concatenated in, and no differential test can — a context index is just a label for a neighbourhood pattern, and any consistent permutation of the labels cancels out between any encoder and decoder that each use their own consistently. The same caveat applies to the fixed typical-prediction pseudo-contexts, which share one adaptive state array with the real pattern contexts: a wrong constant still round-trips whenever it happens not to collide with a pattern the test image produces. Only the fixtures produced by jbig2enc itself (which uses the specification's own constants) genuinely pin those, and only for the template jbig2enc emits, GBTEMPLATE 0.
 //
 // This script is deliberately outside tsconfig.json's "include" and eslint.config.ts's linted set (see the "scripts" entry in both), matching scripts/generate-encrypted-pdf-fixtures.mjs.
 
@@ -36,7 +36,7 @@ const SOURCE_BITMAPS = [
   { name: 'text', width: 96, height: 26, isBlack: letterShapes },
 ];
 
-// Three block letters at three different x positions, two of them the same shape -- so jbig2enc's symbol mode has a genuine repeated symbol to put in a dictionary and place twice.
+// Three block letters at three different x positions, two of them the same shape — so jbig2enc's symbol mode has a genuine repeated symbol to put in a dictionary and place twice.
 function letterShapes(x, y) {
   const glyph = (ox) => {
     const lx = x - ox;
@@ -624,7 +624,7 @@ function run(dir) {
     const page = readFileSync(`${base}.0000`);
     fixtures.push(buildFixture(dir, `${source.name}-symbols`, 'jbig2enc symbol mode: an arithmetic symbol dictionary in a globals stream plus a text region in the page stream', source, [globals, page], undefined, false));
 
-    // 5. The same real jbig2enc text region with only its REFCORNER and TRANSPOSED bits rewritten. Those two fields sit in the segment header and change nothing about the arithmetic bitstream, so the patched stream stays a genuine jbig2enc encoding -- but every symbol instance lands somewhere different, which is what makes jbig2dec's output a real differential test of the placement rules for the corners jbig2enc itself never emits.
+    // 5. The same real jbig2enc text region with only its REFCORNER and TRANSPOSED bits rewritten. Those two fields sit in the segment header and change nothing about the arithmetic bitstream, so the patched stream stays a genuine jbig2enc encoding — but every symbol instance lands somewhere different, which is what makes jbig2dec's output a real differential test of the placement rules for the corners jbig2enc itself never emits.
     for (const [corner, transposed, label] of [
       [1, false, 'TOPLEFT'],
       [2, false, 'BOTTOMRIGHT'],
@@ -638,7 +638,7 @@ function run(dir) {
     }
   }
 
-  // 6. Hand-encoded symbol dictionary and text region: the coding paths jbig2enc's own fixed choices never reach -- several strips with SBSTRIPS > 1, a non-zero SBDSOFFSET, and refined symbol instances.
+  // 6. Hand-encoded symbol dictionary and text region: the coding paths jbig2enc's own fixed choices never reach — several strips with SBSTRIPS > 1, a non-zero SBDSOFFSET, and refined symbol instances.
   fixtures.push(...handEncodedTextFixtures(dir));
 
   // 7. Composition: two generic regions placed at different offsets on one page, and a standalone refinement region refining what a generic region already painted.
@@ -799,14 +799,14 @@ function emit(fixtures) {
   lines.push("import { base64ToBytes } from '../util/base64';");
   lines.push('');
   lines.push(
-    '// Real JBIG2 embedded streams -- the exact byte sequence a PDF /JBIG2Decode filter carries -- produced by jbig2enc 0.32 (Adam Langley\'s encoder, the one behind essentially every JBIG2 image in a real PDF), by libtiff 4.7.2 for the MMR-coded region, and, for the two generic-region templates jbig2enc never emits, by a hand-written T.88 Annex E arithmetic encoder in scripts/generate-jbig2-fixtures.mjs. Embedded as base64 so the suite needs no filesystem access.',
+    '// Real JBIG2 embedded streams — the exact byte sequence a PDF /JBIG2Decode filter carries — produced by jbig2enc 0.32 (Adam Langley\'s encoder, the one behind essentially every JBIG2 image in a real PDF), by libtiff 4.7.2 for the MMR-coded region, and, for the two generic-region templates jbig2enc never emits, by a hand-written T.88 Annex E arithmetic encoder in scripts/generate-jbig2-fixtures.mjs. Embedded as base64 so the suite needs no filesystem access.',
   );
   lines.push('//');
   lines.push(
-    "// Every stream here, hand-encoded ones included, was decoded by jbig2dec (Ghostscript's own independent JBIG2 implementation) before being written out, and `expected` below is jbig2dec's decoded bitmap -- not this package's. See the generator script's header for why that matters and for how the TPGDON-bearing hand-encoded fixtures pin the template context bit ordering specifically.",
+    "// Every stream here, hand-encoded ones included, was decoded by jbig2dec (Ghostscript's own independent JBIG2 implementation) before being written out, and `expected` below is jbig2dec's decoded bitmap — not this package's. See the generator script's header for why that matters and for how the TPGDON-bearing hand-encoded fixtures pin the template context bit ordering specifically.",
   );
   lines.push('//');
-  lines.push("// `expected` is one string per row, '#' for a black pixel -- JBIG2's own 1 bit, and the inverse of what a PDF /DeviceGray image stores.");
+  lines.push("// `expected` is one string per row, '#' for a black pixel — JBIG2's own 1 bit, and the inverse of what a PDF /DeviceGray image stores.");
   lines.push('');
   lines.push('export interface Jbig2Fixture {');
   lines.push('  readonly name: string;');

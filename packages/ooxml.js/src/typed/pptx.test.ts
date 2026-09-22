@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { decodePackage, zipPackage } from "../index";
 import { readPptxContent } from "./pptx/read";
 
-// Integration-level coverage for readPptxContent, exercised through a real zip round trip (decodePackage(zipPackage(...))) rather than raw Package/XmlElement fixtures -- the deep placeholder-inheritance, run-cascade, group-transform, and table coverage lives in ./pptx/read.test.ts and ./pptx/inherit.test.ts. This file replaces the pre-existing flat-shape (index/text/shapes/tables) test suite, which asserted a shape readPptxContent no longer has -- see the BREAKING CHANGE described in PptxDocument's own doc comment.
+// Integration-level coverage for readPptxContent, exercised through a real zip round trip (decodePackage(zipPackage(...))) rather than raw Package/XmlElement fixtures — the deep placeholder-inheritance, run-cascade, group-transform, and table coverage lives in ./pptx/read.test.ts and ./pptx/inherit.test.ts. This file replaces the pre-existing flat-shape (index/text/shapes/tables) test suite, which asserted a shape readPptxContent no longer has — see the BREAKING CHANGE described in PptxDocument's own doc comment.
 
 function enc(s: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(s);
@@ -93,7 +93,7 @@ describe("readPptxContent", () => {
     expect(shapeText(result.slides[1]?.shapes[1])).toBe("slide");
   });
 
-  it("yields an empty slide list when p:sldIdLst is empty -- slide order/presence comes from the presentation part, not from scanning slide files", () => {
+  it("yields an empty slide list when p:sldIdLst is empty — slide order/presence comes from the presentation part, not from scanning slide files", () => {
     const emptyPresentation = enc(
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:sldIdLst/></p:presentation>',
     );

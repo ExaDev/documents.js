@@ -21,7 +21,7 @@ describe("OdsSheet.cell / cellAt", () => {
     });
   });
 
-  it("cellAt reuses odf.js's own A1 parsing -- multi-letter columns resolve correctly", () => {
+  it("cellAt reuses odf.js's own A1 parsing — multi-letter columns resolve correctly", () => {
     const sheet = createOds().sheets()[0]!;
     sheet.cell(0, 27).value = { kind: "number", value: 1 }; // column 27 (0-based) is "AB"
     expect(sheet.cellAt("AB1").value).toEqual({ kind: "number", value: 1 });
@@ -34,7 +34,7 @@ describe("OdsSheet.cell / cellAt", () => {
     );
   });
 
-  it("resolving the same cell twice returns a live view over the SAME underlying node -- a mutation through one is visible through the other", () => {
+  it("resolving the same cell twice returns a live view over the SAME underlying node — a mutation through one is visible through the other", () => {
     const sheet = createOds().sheets()[0]!;
     const first = sheet.cell(2, 2);
     first.value = { kind: "number", value: 99 };
@@ -119,7 +119,7 @@ describe("OdsSheet.mergeCells", () => {
     expect(() => sheet.cell(3, 3)).not.toThrow();
   });
 
-  it('a 1x1 "merge" writes no span attributes at all -- an unmerged cell', () => {
+  it('a 1x1 "merge" writes no span attributes at all — an unmerged cell', () => {
     const sheet = createOds().sheets()[0]!;
     const anchor = sheet.mergeCells(0, 0, 1, 1);
     anchor.value = { kind: "number", value: 1 };
@@ -138,20 +138,20 @@ describe("OdsSheet.mergeCells", () => {
     expect(() => sheet.mergeCells(0, 1, 1, 1)).toThrow(/already covered/);
   });
 
-  it("reaching a merge far from the sheet's origin is cheap regardless of distance -- only the merge's own small area does real work", () => {
+  it("reaching a merge far from the sheet's origin is cheap regardless of distance — only the merge's own small area does real work", () => {
     const sheet = createOds().sheets()[0]!;
     const start = performance.now();
-    sheet.mergeCells(1000000, 1000, 2, 2); // far from the origin, but a tiny 2x2 rectangle -- reaching it must not cost anything proportional to row 1,000,000.
+    sheet.mergeCells(1000000, 1000, 2, 2); // far from the origin, but a tiny 2x2 rectangle — reaching it must not cost anything proportional to row 1,000,000.
     const elapsedMs = performance.now() - start;
     expect(elapsedMs).toBeLessThan(500);
   });
 
-  it("a merge's own area does genuinely proportional work -- a moderately large rectangle still completes in a bounded, CI-safe time", () => {
+  it("a merge's own area does genuinely proportional work — a moderately large rectangle still completes in a bounded, CI-safe time", () => {
     const sheet = createOds().sheets()[0]!;
     const start = performance.now();
-    sheet.mergeCells(0, 0, 100, 100); // 10,000 covered positions, each stamped individually -- see mergeCells' own doc comment on why this is O(area), not O(1).
+    sheet.mergeCells(0, 0, 100, 100); // 10,000 covered positions, each stamped individually — see mergeCells' own doc comment on why this is O(area), not O(1).
     const elapsedMs = performance.now() - start;
-    // The bound exists to catch accidental super-linearity (an O(area^2) or distance-proportional regression blows far past it), not to pin a wall-clock figure: nominal runtime is well under a second uninstrumented and idle. Raised from 10,000 to 60,000 (ExaDev/documents.js#1037) after Stryker's own coverageAnalysis:"perTest" dry run measured this same linear work at 14,210-14,452ms under CI contention -- the identical "wall-clock dominated by scheduling, not this test's own CPU work" shape already documented for document-outline.js's UNIT_TEST_TIMEOUT_MS (ExaDev/documents.js#997/#1030). Sixty seconds keeps an order of magnitude of headroom over every observed run without losing the ability to catch a genuine regression, which would blow past either bound by orders of magnitude regardless. The third `it()` argument raises this one test's own vitest timeout to match -- the file's shared CONVERSION_TEST_TIMEOUT_MS (10,000ms) exists for docx pagination fixtures elsewhere in this suite, not for this test, so it stays untouched.
+    // The bound exists to catch accidental super-linearity (an O(area^2) or distance-proportional regression blows far past it), not to pin a wall-clock figure: nominal runtime is well under a second uninstrumented and idle. Raised from 10,000 to 60,000 (ExaDev/documents.js#1037) after Stryker's own coverageAnalysis:"perTest" dry run measured this same linear work at 14,210-14,452ms under CI contention — the identical "wall-clock dominated by scheduling, not this test's own CPU work" shape already documented for document-outline.js's UNIT_TEST_TIMEOUT_MS (ExaDev/documents.js#997/#1030). Sixty seconds keeps an order of magnitude of headroom over every observed run without losing the ability to catch a genuine regression, which would blow past either bound by orders of magnitude regardless. The third `it()` argument raises this one test's own vitest timeout to match — the file's shared CONVERSION_TEST_TIMEOUT_MS (10,000ms) exists for docx pagination fixtures elsewhere in this suite, not for this test, so it stays untouched.
     expect(elapsedMs).toBeLessThan(60000);
   }, 60_000);
 });
@@ -210,7 +210,7 @@ describe("OdsSheet.printSettings", () => {
     expect(sheet.printSettings.gridlines).toBe(false); // the SECOND set's own value is what's actually in effect
   });
 
-  // Re-reads the ACTUAL SERIALIZED BYTES via odf.js's own real readOds parser (readOdsContent is a thin wrapper over it), not this package's own writer echoing its input back -- proves the page-layout/master-page/table-style chain writeSheetPrintSettings mints is genuinely valid, spec-shaped ODF, not merely an in-memory object this editor's own getter happens to read back correctly.
+  // Re-reads the ACTUAL SERIALIZED BYTES via odf.js's own real readOds parser (readOdsContent is a thin wrapper over it), not this package's own writer echoing its input back — proves the page-layout/master-page/table-style chain writeSheetPrintSettings mints is genuinely valid, spec-shaped ODF, not merely an in-memory object this editor's own getter happens to read back correctly.
   it("a set printSettings survives a real write -> reread round trip via odf.js's own readOdsContent parser", () => {
     const editor = createOds();
     editor.sheets()[0]!.printSettings = CUSTOM_PRINT_SETTINGS;
@@ -249,7 +249,7 @@ describe("OdsSheet.printSettings: printRange, scale/fitToPages, repeatRows/repea
     });
   });
 
-  it("scalePercent and fitToPages round-trip independently -- setting one never perturbs a separately-set other", () => {
+  it("scalePercent and fitToPages round-trip independently — setting one never perturbs a separately-set other", () => {
     const editor = createOds();
     const sheetA = editor.sheets()[0]!;
     sheetA.printSettings = { ...CUSTOM_PRINT_SETTINGS, scalePercent: 80 };
@@ -345,7 +345,7 @@ describe("OdsSheet.printSettings: printRange, scale/fitToPages, repeatRows/repea
   it("repeatColumns beyond any touched cell also stamps the exterior gap-fill columns (positions between coverage and the range start), not only the in-range ones", () => {
     const editor = createOds();
     const sheet = editor.sheets()[0]!;
-    // Touch only column 0; repeatColumns starts at 3, so replaceRun gap-fills columns 1-2 (positions between coverage and the range start) -- those exterior gap-fills must also carry a real default width, never the ambiguous 0.
+    // Touch only column 0; repeatColumns starts at 3, so replaceRun gap-fills columns 1-2 (positions between coverage and the range start) — those exterior gap-fills must also carry a real default width, never the ambiguous 0.
     sheet.cell(0, 0).value = { kind: "string", value: "only cell" };
     sheet.printSettings = {
       ...CUSTOM_PRINT_SETTINGS,
@@ -401,7 +401,7 @@ describe("OdsSheet.printSettings: printRange, scale/fitToPages, repeatRows/repea
       repeatRows: { start: 0, end: 0 },
     };
 
-    // Row 0 is now wrapped inside table:table-header-rows -- writing a SECOND cell on that same row must find the SAME wrapped row element, not create a duplicate direct-child row 0.
+    // Row 0 is now wrapped inside table:table-header-rows — writing a SECOND cell on that same row must find the SAME wrapped row element, not create a duplicate direct-child row 0.
     sheet.cell(0, 1).value = { kind: "string", value: "Header2" };
 
     const table = findTableElement(editor);
@@ -565,7 +565,7 @@ describe("OdsSheet.setColumnWidth / setRowHeight", () => {
       throw new Error("expected a spreadsheet ContentDocument");
     }
     expect(content.sheets[0]!.columns[0]?.widthPt).toBeCloseTo(150, 5);
-    // sheetB's own column was only ever touched by its own cell() call, never by sheetA's setColumnWidth -- it reads back at the ordinary cell()-materialization default (64pt), proving the two sheets' styles are genuinely independent rather than sharing one automatic style neither of them meant to share.
+    // sheetB's own column was only ever touched by its own cell() call, never by sheetA's setColumnWidth — it reads back at the ordinary cell()-materialization default (64pt), proving the two sheets' styles are genuinely independent rather than sharing one automatic style neither of them meant to share.
     expect(content.sheets[1]!.columns[0]?.widthPt).toBeCloseTo(64, 5);
   });
 
@@ -630,7 +630,7 @@ describe("OdsSheet.setColumnHidden / setRowHidden", () => {
     expect(content.sheets[0]!.rows[0]?.hidden).toBe(true);
   });
 
-  it("preserves a width/height already set on the same column/row -- hidden and sizing never collide, since table:visibility is a plain attribute, not a style property", () => {
+  it("preserves a width/height already set on the same column/row — hidden and sizing never collide, since table:visibility is a plain attribute, not a style property", () => {
     const editor = createOds();
     const sheet = editor.sheets()[0]!;
     sheet.cell(0, 0).value = { kind: "string", value: "x" };

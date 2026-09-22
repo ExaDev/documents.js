@@ -50,7 +50,7 @@ function buildOneOdpShapeBytes(): Uint8Array<ArrayBuffer> {
   return editor.toBytes();
 }
 
-// Opens the test document AND pushes shapeEditor for its one shape in a single effect, so this harness has exactly one screen swap to settle -- ShapeEditorScreen itself, not an intermediate slideList/slideDetail hop this file has no interest in exercising.
+// Opens the test document AND pushes shapeEditor for its one shape in a single effect, so this harness has exactly one screen swap to settle — ShapeEditorScreen itself, not an intermediate slideList/slideDetail hop this file has no interest in exercising.
 function OpenAtShapeEditor({
   format,
   bytes,
@@ -115,7 +115,7 @@ function renderShapeEditor(
   );
 }
 
-// PptxShape gained a real `rotationDeg` getter/setter alongside OdpShape's, so the rotation row now behaves identically for both formats -- these used to be two contrasting suites (pptx greyed out, odp editable); now each format gets its own copy of the same assertions rather than one leaning on the other for contrast.
+// PptxShape gained a real `rotationDeg` getter/setter alongside OdpShape's, so the rotation row now behaves identically for both formats — these used to be two contrasting suites (pptx greyed out, odp editable); now each format gets its own copy of the same assertions rather than one leaning on the other for contrast.
 describe("ShapeEditorScreen rotation row: pptx", () => {
   it("renders the rotation row as an editable, currently-unset value for a pptx shape", async () => {
     const { lastFrame } = renderShapeEditor("pptx", buildOnePptxShapeBytes());
@@ -130,7 +130,7 @@ describe("ShapeEditorScreen rotation row: pptx", () => {
     );
     await waitForText(lastFrame, "Slide 1, shape 1");
 
-    // Field order is text, x, y, width, height, rotation -- five downs from the initial text-row selection lands on rotation.
+    // Field order is text, x, y, width, height, rotation — five downs from the initial text-row selection lands on rotation.
     for (let i = 0; i < 5; i += 1) {
       await sendKey(stdin, "j");
     }

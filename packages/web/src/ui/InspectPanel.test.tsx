@@ -80,9 +80,9 @@ describe("InspectPanel", () => {
       <InspectPanel data={pdfResult({ pageCount: 2 })} />,
     );
     unmount = mounted.unmount;
-    // Checked precisely against the pageCount text itself -- the structure tree below separately renders a "pages [0]" node from layout.pages, a coincidental match a bare toContain("pages") can't tell apart from the pluralised count.
+    // Checked precisely against the pageCount text itself — the structure tree below separately renders a "pages [0]" node from layout.pages, a coincidental match a bare toContain("pages") can't tell apart from the pluralised count.
     expect(mounted.container.innerHTML).toContain(">2</strong> pages<");
-    // Checked as actual table rows, not loose substring search -- the structure tree below separately renders "images"/"pages [0]"/formatVersion's own "1", which coincidentally contain "image"/"1" regardless of whether the item-kind table itself renders anything at all.
+    // Checked as actual table rows, not loose substring search — the structure tree below separately renders "images"/"pages [0]"/formatVersion's own "1", which coincidentally contain "image"/"1" regardless of whether the item-kind table itself renders anything at all.
     const rows = mounted.container.querySelectorAll("tbody tr");
     expect(rows).toHaveLength(2);
     expect(rows[0]?.textContent).toBe("text3");

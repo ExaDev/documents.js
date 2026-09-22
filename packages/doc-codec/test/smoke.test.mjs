@@ -1,4 +1,4 @@
-// Smoke test: the built dist/ artifact loads and works under both ESM and CJS, and every module the exports map's `./*` wildcard advertises genuinely exists in dist. Run only via `pnpm test:smoke` (turbo's _build builds dist first) -- never part of the default `pnpm test` file set, since it requires a fresh build to mean anything. The deep-import half mirrors archive-codec's own smoke suite: tsdown.config.ts builds one dist file per src module (root: 'src'), and this suite fails loudly the moment a module stops being served at its advertised subpath -- neither publint nor attw catches a wildcard whose targets are missing.
+// Smoke test: the built dist/ artifact loads and works under both ESM and CJS, and every module the exports map's `./*` wildcard advertises genuinely exists in dist. Run only via `pnpm test:smoke` (turbo's _build builds dist first) — never part of the default `pnpm test` file set, since it requires a fresh build to mean anything. The deep-import half mirrors archive-codec's own smoke suite: tsdown.config.ts builds one dist file per src module (root: 'src'), and this suite fails loudly the moment a module stops being served at its advertised subpath — neither publint nor attw catches a wildcard whose targets are missing.
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import * as esm from '../dist/index.js';
@@ -66,7 +66,7 @@ describe('dist/ barrel exports are present in both builds', () => {
   }
 });
 
-// The module table in this package's README names each of these, and package.json's `./*` wildcard maps them onto ./dist/*.js -- so each must exist in dist in both module systems and export its own surface.
+// The module table in this package's README names each of these, and package.json's `./*` wildcard maps them onto ./dist/*.js — so each must exist in dist in both module systems and export its own surface.
 describe('dist/ deep imports resolve for every advertised module, in both builds', () => {
   const DEEP_MODULES = [
     { path: '../dist/errors.js', exports: ['DocFormatError', 'DocUnsupportedError'] },
@@ -105,7 +105,7 @@ describe('dist/ deep imports resolve for every advertised module, in both builds
   }
 });
 
-// [MS-DOC] 2.9.6's own worked example, byte for byte -- the one fixture that needs no test-support helper, since test-support is deliberately absent from dist.
+// [MS-DOC] 2.9.6's own worked example, byte for byte — the one fixture that needs no test-support helper, since test-support is deliberately absent from dist.
 const SPEC_EXAMPLE_CLX = new Uint8Array([
   0x02,
   0x28, 0x00, 0x00, 0x00,

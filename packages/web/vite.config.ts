@@ -9,14 +9,14 @@ import { defineConfig } from "vitest/config";
 import { BACKGROUND_COLOR, BRAND_COLOR } from "./src/design-tokens.ts";
 import { name as packageName } from "./package.json" with { type: "json" };
 
-// The sidebar's version link needs the real commit this build was produced from, and whether it happens to be an exact release tag -- read here rather than dry-running semantic-release, because CI's own job graph already guarantees the answer is sitting on disk by build time: the deploy job's checkout runs strictly after the release job (`needs: [..., release]`), re-fetching `ref: main` fresh, so if semantic-release just cut a release its version-bump commit and tag are already the checked-out HEAD. A dry run would only ever predict what real git state already states outright.
+// The sidebar's version link needs the real commit this build was produced from, and whether it happens to be an exact release tag — read here rather than dry-running semantic-release, because CI's own job graph already guarantees the answer is sitting on disk by build time: the deploy job's checkout runs strictly after the release job (`needs: [..., release]`), re-fetching `ref: main` fresh, so if semantic-release just cut a release its version-bump commit and tag are already the checked-out HEAD. A dry run would only ever predict what real git state already states outright.
 function execGit(args: string[]): string {
   return execFileSync("git", args, { encoding: "utf-8" }).trim();
 }
 
 function tryExecGit(args: string[]): string | undefined {
   try {
-    // 'no tag at HEAD' is an expected outcome for most commits, not a real failure -- stderr is piped rather than inherited so git's own "fatal: no tag exactly matches" doesn't scroll through every dev/build run.
+    // 'no tag at HEAD' is an expected outcome for most commits, not a real failure — stderr is piped rather than inherited so git's own "fatal: no tag exactly matches" doesn't scroll through every dev/build run.
     return execFileSync("git", args, {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"],
@@ -26,7 +26,7 @@ function tryExecGit(args: string[]): string | undefined {
   }
 }
 
-// Handles both the HTTPS form GitHub Actions' checkout uses (optionally with embedded credentials) and the SSH form a local clone might use -- the regex searches rather than anchors from the start, so a credentials prefix before "github.com" doesn't break the match. The repo group is deliberately non-greedy over "anything" rather than "anything but a dot": a repo name is free to contain dots of its own (this workspace's own origin, ExaDev/documents.js, is exactly such a name), and the non-greedy quantifier already stops at the shortest match that still lets the optional ".git" suffix and end-of-string anchor succeed, so a real ".git" suffix is still stripped correctly either way.
+// Handles both the HTTPS form GitHub Actions' checkout uses (optionally with embedded credentials) and the SSH form a local clone might use — the regex searches rather than anchors from the start, so a credentials prefix before "github.com" doesn't break the match. The repo group is deliberately non-greedy over "anything" rather than "anything but a dot": a repo name is free to contain dots of its own (this workspace's own origin, ExaDev/documents.js, is exactly such a name), and the non-greedy quantifier already stops at the shortest match that still lets the optional ".git" suffix and end-of-string anchor succeed, so a real ".git" suffix is still stripped correctly either way.
 function parseGitHubRepo(remoteUrl: string): { repo: string; url: string } {
   const match = /github\.com[:/]([^/]+)\/(.+?)(?:\.git)?$/.exec(remoteUrl);
   if (match === null)
@@ -50,18 +50,18 @@ function pagesBase(): string {
 }
 
 const commitSha = execGit(["rev-parse", "HEAD"]);
-// @exadev/semantic-release-workspace's tagFormat is '${pkg.name}@${version}' (see release-workspace.config.json and the orchestrator's own release.ts), not semantic-release's bare 'v${version}' default -- validated here so an unrelated tag some clone happens to have checked out, or a sibling package's release tag reachable from this same commit, can't be mistaken for this package's own release.
+// @exadev/semantic-release-workspace's tagFormat is '${pkg.name}@${version}' (see release-workspace.config.json and the orchestrator's own release.ts), not semantic-release's bare 'v${version}' default — validated here so an unrelated tag some clone happens to have checked out, or a sibling package's release tag reachable from this same commit, can't be mistaken for this package's own release.
 const exactTag = tryExecGit(["describe", "--tags", "--exact-match", "HEAD"]);
 const releaseTagPattern = new RegExp(
   `^${packageName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}@\\d+\\.\\d+\\.\\d+$`,
 );
 const releaseTag =
   exactTag !== undefined && releaseTagPattern.test(exactTag) ? exactTag : null;
-// %ct is the committer date as Unix seconds -- for a release commit this is effectively its release time (semantic-release commits, tags, and publishes the release in the same CI step), and for an ordinary commit it's simply when that commit was made. Multiplied to milliseconds for direct use with Date.now()-based relative time.
+// %ct is the committer date as Unix seconds — for a release commit this is effectively its release time (semantic-release commits, tags, and publishes the release in the same CI step), and for an ordinary commit it's simply when that commit was made. Multiplied to milliseconds for direct use with Date.now()-based relative time.
 const commitTimestampMs =
   Number(execGit(["show", "-s", "--format=%ct", "HEAD"])) * 1000;
 
-// documents.worker-*.js is ~3.7MB (by far the largest built asset) and is only ever constructed lazily inside getRpcClient() when a tool actually runs a job, never at page load. Workbox's default 2MiB precache size cutover would either silently exclude it or, if raised, block PWA install on downloading a chunk most users don't need on first paint -- excluded from the precache glob and instead cached at runtime on first use via a CacheFirst rule, which is safe because the filename is content-hashed by Vite's build (a new build is a new URL, so there is no staleness risk to revalidate against).
+// documents.worker-*.js is ~3.7MB (by far the largest built asset) and is only ever constructed lazily inside getRpcClient() when a tool actually runs a job, never at page load. Workbox's default 2MiB precache size cutover would either silently exclude it or, if raised, block PWA install on downloading a chunk most users don't need on first paint — excluded from the precache glob and instead cached at runtime on first use via a CacheFirst rule, which is safe because the filename is content-hashed by Vite's build (a new build is a new URL, so there is no staleness risk to revalidate against).
 const pwa = VitePWA({
   registerType: "autoUpdate",
   manifest: {
@@ -112,7 +112,7 @@ const pwa = VitePWA({
 });
 
 export default defineConfig(({ command, mode }) => ({
-  // Only the production build serves from GitHub Pages' project-site subpath. Base was previously computed from CI alone, at module scope, and applied unconditionally to `vite` (dev) too -- every CI run of the e2e suite starts the dev server under the same CI=true env var the real Pages build reads, so the dev server silently served every asset from /<repo>/ while the browser requested them from /, and the app never rendered at all. Gating on `command` (vite's own build/serve discriminator) instead of the env var alone is the actual fix, not a workaround: dev must always stay at '/' regardless of which environment it runs in.
+  // Only the production build serves from GitHub Pages' project-site subpath. Base was previously computed from CI alone, at module scope, and applied unconditionally to `vite` (dev) too — every CI run of the e2e suite starts the dev server under the same CI=true env var the real Pages build reads, so the dev server silently served every asset from /<repo>/ while the browser requested them from /, and the app never rendered at all. Gating on `command` (vite's own build/serve discriminator) instead of the env var alone is the actual fix, not a workaround: dev must always stay at '/' regardless of which environment it runs in.
   base: command === "build" && process.env.CI ? pagesBase() : "/",
   define: {
     __APP_COMMIT_SHA__: JSON.stringify(commitSha),
@@ -121,9 +121,9 @@ export default defineConfig(({ command, mode }) => ({
     __APP_COMMIT_TIMESTAMP__: JSON.stringify(commitTimestampMs),
   },
   plugins: [
-    // Must precede react(): the router plugin's route-tree codegen needs to run before plugin-react's JSX transform sees the generated imports. routeFileIgnorePattern excludes a route file's own unit tests from the generated route tree -- without it, the first test added directly under src/routes/ (e.g. index.test.ts) warns "does not export a Route" on every build and test run, and the existing dash-prefix convention (this directory's own -Sidebar.tsx, a genuine non-route support file) is the wrong fix for a test file: dash-prefixing every *.test.ts(x) here would read oddly next to every other test file in the package, which carries no such prefix.
+    // Must precede react(): the router plugin's route-tree codegen needs to run before plugin-react's JSX transform sees the generated imports. routeFileIgnorePattern excludes a route file's own unit tests from the generated route tree — without it, the first test added directly under src/routes/ (e.g. index.test.ts) warns "does not export a Route" on every build and test run, and the existing dash-prefix convention (this directory's own -Sidebar.tsx, a genuine non-route support file) is the wrong fix for a test file: dash-prefixing every *.test.ts(x) here would read oddly next to every other test file in the package, which carries no such prefix.
     //
-    // The whole plugin is omitted outright under mode "test" (vitest's own default mode, unless a run overrides it), not merely tuned via autoCodeSplitting as it was before -- a build-time concern must not leak into how tests execute, the identical reasoning `base` above is gated on `command`, just carried further once a second symptom of the same leak turned up. Neither a normal unit-test run nor Stryker's mutation run needs the plugin's codegen at all: no test file imports routeTree.gen.ts (which router.tsx alone consumes, and which is committed to the repo already, not regenerated per run) or mounts a route through the real router; every route test mounts Route.options.component directly, calling the runtime createFileRoute()/routeFile-object factories that ship in @tanstack/react-router itself, which need no Vite plugin to work. Confirmed as more than a latent risk, not merely a hygiene tidy-up: Stryker's instrumentation rewrites every mutable literal in a matched file into a stryMutAct-guarded conditional, including each route file's own `createFileRoute("/id")` argument -- and the plugin's own route-tree generator statically requires that argument to already be a plain string or template literal so it can rewrite it, so instrumenting any route file under the previous per-flag gating crashed route-tree generation outright ("expected route id to be a string literal or plain template literal") the moment a full mutation run touched more than one route file at once, taking the whole Stryker child process down with it rather than just marking one mutant erroneous.
+    // The whole plugin is omitted outright under mode "test" (vitest's own default mode, unless a run overrides it), not merely tuned via autoCodeSplitting as it was before — a build-time concern must not leak into how tests execute, the identical reasoning `base` above is gated on `command`, just carried further once a second symptom of the same leak turned up. Neither a normal unit-test run nor Stryker's mutation run needs the plugin's codegen at all: no test file imports routeTree.gen.ts (which router.tsx alone consumes, and which is committed to the repo already, not regenerated per run) or mounts a route through the real router; every route test mounts Route.options.component directly, calling the runtime createFileRoute()/routeFile-object factories that ship in @tanstack/react-router itself, which need no Vite plugin to work. Confirmed as more than a latent risk, not merely a hygiene tidy-up: Stryker's instrumentation rewrites every mutable literal in a matched file into a stryMutAct-guarded conditional, including each route file's own `createFileRoute("/id")` argument — and the plugin's own route-tree generator statically requires that argument to already be a plain string or template literal so it can rewrite it, so instrumenting any route file under the previous per-flag gating crashed route-tree generation outright ("expected route id to be a string literal or plain template literal") the moment a full mutation run touched more than one route file at once, taking the whole Stryker child process down with it rather than just marking one mutant erroneous.
     ...(mode === "test"
       ? []
       : [
@@ -183,7 +183,7 @@ export default defineConfig(({ command, mode }) => ({
           environment: "jsdom",
           include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
           setupFiles: ["./src/test/setup.ts"],
-          // Vitest stubs out CSS imports by default (an empty module, no rules ever reach jsdom's document.styleSheets) since most suites never need a real cascade. This package's own *.css.ts modules (vanilla-extract) are mutated by Stryker like any other source file, and the only way to kill a mutated style value is to read it back from an actually-applied stylesheet -- see src/test/cssRule.ts's own module comment for the read-back mechanics.
+          // Vitest stubs out CSS imports by default (an empty module, no rules ever reach jsdom's document.styleSheets) since most suites never need a real cascade. This package's own *.css.ts modules (vanilla-extract) are mutated by Stryker like any other source file, and the only way to kill a mutated style value is to read it back from an actually-applied stylesheet — see src/test/cssRule.ts's own module comment for the read-back mechanics.
           css: true,
         },
       },

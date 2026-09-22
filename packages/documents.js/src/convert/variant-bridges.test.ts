@@ -21,7 +21,7 @@ import {
   presentationToDrawing,
 } from "./variant-bridges";
 
-// The dedicated suite for the drawing <-> presentation content-variant transform. ContentShape is the identical type in both ContentDrawPage.shapes and ContentSlide.shapes (the layout engines already share convertShape verbatim), so shapes move across directly; the lossy axes are the ones the target variant has no slot for -- a slide carries no vectors, a draw page carries no notes.
+// The dedicated suite for the drawing <-> presentation content-variant transform. ContentShape is the identical type in both ContentDrawPage.shapes and ContentSlide.shapes (the layout engines already share convertShape verbatim), so shapes move across directly; the lossy axes are the ones the target variant has no slot for — a slide carries no vectors, a draw page carries no notes.
 
 const PAGE_SIZE = { widthPt: 400, heightPt: 300 };
 

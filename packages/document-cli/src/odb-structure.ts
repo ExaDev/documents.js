@@ -9,9 +9,9 @@ import type {
   OdbReportGroup,
 } from "documents.js";
 
-// The one place a `.odb`'s form and report STRUCTURE turns into text, shared by the `odb-forms`/`odb-reports` commands and by the TUI's own form/report detail screens -- the same relationship `src/format.ts` has to the two layers, and for the same reason: the CLI renders these lines joined by newlines while the TUI renders one per `ListView` row, so a flat `readonly string[]` of already-indented lines is the shape that genuinely serves both without either owning the other's rendering.
+// The one place a `.odb`'s form and report STRUCTURE turns into text, shared by the `odb-forms`/`odb-reports` commands and by the TUI's own form/report detail screens — the same relationship `src/format.ts` has to the two layers, and for the same reason: the CLI renders these lines joined by newlines while the TUI renders one per `ListView` row, so a flat `readonly string[]` of already-indented lines is the shape that genuinely serves both without either owning the other's rendering.
 //
-// This module never touches a package, a file, or documents.js's readers -- it is a pure function of the `OdbForm`/`OdbReport` values `readOdbForms`/`readOdbReports` hand back, which is what lets both layers' tests assert against real fixture-derived structure with no I/O of their own.
+// This module never touches a package, a file, or documents.js's readers — it is a pure function of the `OdbForm`/`OdbReport` values `readOdbForms`/`readOdbReports` hand back, which is what lets both layers' tests assert against real fixture-derived structure with no I/O of their own.
 
 const INDENT = "  ";
 
@@ -23,7 +23,7 @@ function quoted(value: string): string {
   return `"${value}"`;
 }
 
-// A form definition's own `command`/`commandType` pair, and a report's -- the "what data does this thing sit on top of" line both vocabularies express identically (`form:datasource`/`form:command`, `rpt:command`/`rpt:command-type`). `commandType` is genuinely optional in both models, so a command with no declared type still renders rather than being dropped.
+// A form definition's own `command`/`commandType` pair, and a report's — the "what data does this thing sit on top of" line both vocabularies express identically (`form:datasource`/`form:command`, `rpt:command`/`rpt:command-type`). `commandType` is genuinely optional in both models, so a command with no declared type still renders rather than being dropped.
 function describeDataSource(
   command: string | undefined,
   commandType: string | undefined,
@@ -92,7 +92,7 @@ export function describeOdbForm(form: OdbForm): string {
       total + countOdbFormDefinitionBoundControls(definition),
     0,
   );
-  return `${form.name} [${form.href}] -- ${form.forms.length} form${form.forms.length === 1 ? "" : "s"}, ${controlCount} control${controlCount === 1 ? "" : "s"} (${boundCount} bound)`;
+  return `${form.name} [${form.href}] — ${form.forms.length} form${form.forms.length === 1 ? "" : "s"}, ${controlCount} control${controlCount === 1 ? "" : "s"} (${boundCount} bound)`;
 }
 
 function formControlLines(
@@ -152,7 +152,7 @@ function formDefinitionLines(
   for (const control of definition.controls) {
     lines.push(...formControlLines(control, depth + 1));
   }
-  // A sub-form is an ordinary `form:form` nested inside its parent's own element, carrying its own command against a different table or query -- rendered with the identical shape one level in, since that is exactly what it is.
+  // A sub-form is an ordinary `form:form` nested inside its parent's own element, carrying its own command against a different table or query — rendered with the identical shape one level in, since that is exactly what it is.
   for (const subForm of definition.subForms) {
     lines.push(...formDefinitionLines(subForm, depth + 1, "subform"));
   }
@@ -168,7 +168,7 @@ export function formatOdbFormLines(form: OdbForm): readonly string[] {
   );
 }
 
-// `OdbForm.document` is the form sub-document's whole parsed `OdtDocument` (every paragraph, table, and style of the layout the controls sit on) -- orders of magnitude larger than the structure a caller asked for, and not what "print the form's bound controls" means. The JSON shape drops it and keeps the three fields that describe the form itself.
+// `OdbForm.document` is the form sub-document's whole parsed `OdtDocument` (every paragraph, table, and style of the layout the controls sit on) — orders of magnitude larger than the structure a caller asked for, and not what "print the form's bound controls" means. The JSON shape drops it and keeps the three fields that describe the form itself.
 export interface OdbFormSummary {
   readonly name: string;
   readonly href: string;
@@ -216,7 +216,7 @@ export function describeOdbReport(report: OdbReport): string {
     );
   const source =
     dataSource === undefined ? "no data source" : `on ${dataSource}`;
-  return `${report.name} [${report.href}] -- ${source}, ${groupCount} group${groupCount === 1 ? "" : "s"}, ${elementCount} element${elementCount === 1 ? "" : "s"}`;
+  return `${report.name} [${report.href}] — ${source}, ${groupCount} group${groupCount === 1 ? "" : "s"}, ${elementCount} element${elementCount === 1 ? "" : "s"}`;
 }
 
 function reportElementLine(element: OdbReportElement, depth: number): string {
@@ -273,7 +273,7 @@ function reportGroupLines(
   depth: number,
 ): readonly string[] {
   const headerParts: string[] = ["group"];
-  // A group key is an EXPRESSION, not a bare column name -- real Report Builder output writes `rpt:HASCHANGED("REGION")` here, and a group keyed on a user-defined function names that function rather than any column. Printed verbatim for exactly that reason.
+  // A group key is an EXPRESSION, not a bare column name — real Report Builder output writes `rpt:HASCHANGED("REGION")` here, and a group keyed on a user-defined function names that function rather than any column. Printed verbatim for exactly that reason.
   if (group.groupExpression !== undefined) {
     headerParts.push(group.groupExpression);
   }
@@ -305,7 +305,7 @@ function reportGroupLines(
   ];
 }
 
-// The report's own model shape, rendered structurally rather than in print order: bands in the order `OdbReport` declares them, groups nested as they nest, `detail` at report level (which is where the model puts it, even though the XML nests the detail band inside the innermost group). Nothing here is reordered or inferred -- what you read is the parsed structure.
+// The report's own model shape, rendered structurally rather than in print order: bands in the order `OdbReport` declares them, groups nested as they nest, `detail` at report level (which is where the model puts it, even though the XML nests the detail band inside the innermost group). Nothing here is reordered or inferred — what you read is the parsed structure.
 export function formatOdbReportLines(report: OdbReport): readonly string[] {
   const lines: string[] = [];
   const dataSource = describeDataSource(report.command, report.commandType);

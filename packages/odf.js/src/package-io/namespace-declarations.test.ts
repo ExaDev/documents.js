@@ -25,9 +25,9 @@ import {
 
 // THE STRUCTURAL GUARD AGAINST AN UNDECLARED NAMESPACE PREFIX, for every writer in this package at once.
 //
-// A qualified name reaches an emitted part verbatim: xml/build.ts writes whatever `tag`/attribute name an element carries, and nothing between a writer and the bytes ever checks that the prefix in that name is actually bound on the part's own root. A writer reaching for a prefix package-io/scaffold.ts's own ODF_DOCUMENT_PREFIXES does not declare therefore produces a part that is not namespace-well-formed XML -- bytes that look right, round-trip perfectly through this package's own (prefix-string-matching, namespace-unaware) reader, and that no real consumer can parse. That is not hypothetical: writeOdp shipped emitting presentation:notes/presentation:class against a root that declared no presentation: prefix at all, and LibreOffice's own import silently re-homed every slide's speaker notes onto its visible shape list rather than its notes page as a result.
+// A qualified name reaches an emitted part verbatim: xml/build.ts writes whatever `tag`/attribute name an element carries, and nothing between a writer and the bytes ever checks that the prefix in that name is actually bound on the part's own root. A writer reaching for a prefix package-io/scaffold.ts's own ODF_DOCUMENT_PREFIXES does not declare therefore produces a part that is not namespace-well-formed XML — bytes that look right, round-trip perfectly through this package's own (prefix-string-matching, namespace-unaware) reader, and that no real consumer can parse. That is not hypothetical: writeOdp shipped emitting presentation:notes/presentation:class against a root that declared no presentation: prefix at all, and LibreOffice's own import silently re-homed every slide's speaker notes onto its visible shape list rather than its notes page as a result.
 //
-// So rather than pinning the prefix list itself (which would only restate scaffold.ts's own constant), this suite drives each writer over a document exercising as much of its vocabulary as it has, then walks every XML part of the resulting package -- every element tag and every attribute name, at any depth -- and asserts each prefix used is one the part's own root binds. A future writer emitting a smil:/anim:/chart:/form: name fails here, whatever the prefix, without anyone having to remember this failure mode.
+// So rather than pinning the prefix list itself (which would only restate scaffold.ts's own constant), this suite drives each writer over a document exercising as much of its vocabulary as it has, then walks every XML part of the resulting package — every element tag and every attribute name, at any depth — and asserts each prefix used is one the part's own root binds. A future writer emitting a smil:/anim:/chart:/form: name fails here, whatever the prefix, without anyone having to remember this failure mode.
 //
 // The two ooo1 (OpenOffice.org 1.x) writers are included for the same reason and get the check for free: transformToOoo1Package rewrites a package's root namespace DECLARATIONS wholesale, so a prefix it renames on the root but not in the tree (or the reverse) is exactly this same defect wearing a different hat.
 
@@ -109,7 +109,7 @@ function undeclaredPrefixUses(pkg: Package): string[] {
 
 const MARGINS = { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 };
 
-// A 1x1 PNG, genuinely decodable (sniffImageFormat reads real magic bytes, not a name) -- the same fixture the writers' own suites use.
+// A 1x1 PNG, genuinely decodable (sniffImageFormat reads real magic bytes, not a name) — the same fixture the writers' own suites use.
 const PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 

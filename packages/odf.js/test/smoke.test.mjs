@@ -1,4 +1,4 @@
-// Smoke test: the built dist/ artifact loads and works under both ESM and CJS. Run only via `pnpm test:smoke` (tsdown, then vitest scoped to this file by vitest.config.ts's "smoke" project) -- never part of the default `pnpm test` file set, since it requires a fresh build to mean anything.
+// Smoke test: the built dist/ artifact loads and works under both ESM and CJS. Run only via `pnpm test:smoke` (tsdown, then vitest scoped to this file by vitest.config.ts's "smoke" project) — never part of the default `pnpm test` file set, since it requires a fresh build to mean anything.
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import * as esm from '../dist/index.js';

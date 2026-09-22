@@ -38,7 +38,7 @@ function findRelTarget(
   return undefined;
 }
 
-// SlideInheritanceContext is an internal cascade-resolution type (matching DocxStyleContext's own treatment in ../docx/styles.ts) -- it carries a DrawingTheme and ReadonlyMap, not natural Zod targets, and is never part of PptxDocument's own published shape.
+// SlideInheritanceContext is an internal cascade-resolution type (matching DocxStyleContext's own treatment in ../docx/styles.ts) — it carries a DrawingTheme and ReadonlyMap, not natural Zod targets, and is never part of PptxDocument's own published shape.
 export interface SlideInheritanceContext {
   readonly layoutRoot: XmlElement | undefined;
   readonly masterRoot: XmlElement | undefined;
@@ -46,7 +46,7 @@ export interface SlideInheritanceContext {
   readonly colorMap: ReadonlyMap<string, string>;
 }
 
-// Resolves a slide's layout -> master -> theme chain via each part's own relationships, and the master's own p:clrMap. A broken or missing link degrades to undefined/EMPTY_THEME rather than throwing -- a slide missing its layout is unusual but not a reason to fail the whole conversion.
+// Resolves a slide's layout -> master -> theme chain via each part's own relationships, and the master's own p:clrMap. A broken or missing link degrades to undefined/EMPTY_THEME rather than throwing — a slide missing its layout is unusual but not a reason to fail the whole conversion.
 export function resolveSlideInheritance(
   pkg: Package,
   slidePath: string,
@@ -112,7 +112,7 @@ function shapesOf(root: XmlElement | undefined): XmlElement[] {
   return root === undefined ? [] : elementsWithTag([root], "p:sp");
 }
 
-// Matches a placeholder by idx first (the most specific signal), falling back to normalized type -- ECMA-376's own two matching strategies (20.1.2.2.4 CT_Placeholder, section 19.3.1.36).
+// Matches a placeholder by idx first (the most specific signal), falling back to normalized type — ECMA-376's own two matching strategies (20.1.2.2.4 CT_Placeholder, section 19.3.1.36).
 export function findMatchingPlaceholder(
   root: XmlElement | undefined,
   key: PlaceholderKey,
@@ -147,7 +147,7 @@ function shapeXfrm(shape: XmlElement | undefined): DrawingXfrm | undefined {
     : readXfrm(childrenWithTag(spPr, "a:xfrm")[0]);
 }
 
-// Layout wins over master when both define geometry for the same placeholder -- the layout is the more specific level of the cascade.
+// Layout wins over master when both define geometry for the same placeholder — the layout is the more specific level of the cascade.
 export function resolvePlaceholderXfrm(
   key: PlaceholderKey,
   context: SlideInheritanceContext,
@@ -168,7 +168,7 @@ export interface DefaultRunProperties {
   readonly color?: Color;
 }
 
-// Reads the same property shape from either a real run's a:rPr or a txStyles level's a:defRPr -- both are CT_TextCharacterProperties, identically shaped.
+// Reads the same property shape from either a real run's a:rPr or a txStyles level's a:defRPr — both are CT_TextCharacterProperties, identically shaped.
 export function readRunPropertiesFromElement(
   rPr: XmlElement,
   context: SlideInheritanceContext,
@@ -210,7 +210,7 @@ function levelTag(level: number): string {
   return `a:lvl${clamped + 1}pPr`;
 }
 
-// The master's p:txStyles (titleStyle/bodyStyle/otherStyle) carry per-outline-level default run properties -- a placeholder's text that specifies no font/size/colour of its own inherits from here. Returns {} (every field undefined) when no matching style/level/defRPr exists, so callers can spread this over a run's own explicit properties without special-casing absence.
+// The master's p:txStyles (titleStyle/bodyStyle/otherStyle) carry per-outline-level default run properties — a placeholder's text that specifies no font/size/colour of its own inherits from here. Returns {} (every field undefined) when no matching style/level/defRPr exists, so callers can spread this over a run's own explicit properties without special-casing absence.
 export function resolveDefaultRunProperties(
   placeholderType: string | undefined,
   level: number,

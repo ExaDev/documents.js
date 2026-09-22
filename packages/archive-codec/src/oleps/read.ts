@@ -19,9 +19,9 @@ import {
   type PropertyValue,
 } from "./wire";
 
-// A generic reader for the [MS-OLEPS] Property Set Stream format: the stream header, the single PropertySet packet it names (Size, NumProperties, the PropertyIdentifierAndOffset dictionary, and the typed property values themselves), decoding VT_I2, VT_I4, VT_LPSTR, VT_LPWSTR, and VT_FILETIME -- the five PropertyType values ./summary-information.ts's own seven projected fields need. A real [MS-OSHARED] SummaryInformation stream can carry other PropertyType values this reader does not decode (PIDSI_THUMBNAIL/PID 0x11 is VT_CF, a clipboard-format thumbnail Word/Excel/PowerPoint write whenever "save preview picture" is on) and a VT_LPSTR under a CodePage other than CP_WINUNICODE/windows-1252 (a real, common case for non-Western documents): a property this reader cannot decode -- unsupported PropertyType, or an unsupported CodePage for VT_LPSTR -- is skipped rather than aborting the whole read, since an undecodable value is a gap in projection, not a structural nonconformance, and every PID this reader does decode still parses correctly around it. Zero document-format knowledge: it knows property identifiers and typed values, never that PID 2 means a title or that this stream is conventionally named "\x05SummaryInformation" -- that mapping lives one level up, in ./summary-information.ts, the same layering cfb/ole-package.ts gives the OLE Package stream on top of the generic CFB reader in ../cfb/read.ts.
+// A generic reader for the [MS-OLEPS] Property Set Stream format: the stream header, the single PropertySet packet it names (Size, NumProperties, the PropertyIdentifierAndOffset dictionary, and the typed property values themselves), decoding VT_I2, VT_I4, VT_LPSTR, VT_LPWSTR, and VT_FILETIME — the five PropertyType values ./summary-information.ts's own seven projected fields need. A real [MS-OSHARED] SummaryInformation stream can carry other PropertyType values this reader does not decode (PIDSI_THUMBNAIL/PID 0x11 is VT_CF, a clipboard-format thumbnail Word/Excel/PowerPoint write whenever "save preview picture" is on) and a VT_LPSTR under a CodePage other than CP_WINUNICODE/windows-1252 (a real, common case for non-Western documents): a property this reader cannot decode — unsupported PropertyType, or an unsupported CodePage for VT_LPSTR — is skipped rather than aborting the whole read, since an undecodable value is a gap in projection, not a structural nonconformance, and every PID this reader does decode still parses correctly around it. Zero document-format knowledge: it knows property identifiers and typed values, never that PID 2 means a title or that this stream is conventionally named "\x05SummaryInformation" — that mapping lives one level up, in ./summary-information.ts, the same layering cfb/ole-package.ts gives the OLE Package stream on top of the generic CFB reader in ../cfb/read.ts.
 //
-// Two genuine [MS-OLEPS] features are out of scope, deliberately, rather than by oversight: a PropertySetStream can carry two property sets in one physical stream (2.21 -- how DocumentSummaryInformation and its UserDefinedProperties share a stream), and a property set can carry named, dictionary-keyed properties (via PID 0, the Dictionary property) rather than purely numeric ones. Neither ever appears in a "\x05SummaryInformation" stream -- SummaryInformation is always exactly one property set, and its properties are always identified numerically -- so a reader that rejects both stays honest about not reading DocumentSummaryInformation while still parsing every real SummaryInformation stream in full.
+// Two genuine [MS-OLEPS] features are out of scope, deliberately, rather than by oversight: a PropertySetStream can carry two property sets in one physical stream (2.21 — how DocumentSummaryInformation and its UserDefinedProperties share a stream), and a property set can carry named, dictionary-keyed properties (via PID 0, the Dictionary property) rather than purely numeric ones. Neither ever appears in a "\x05SummaryInformation" stream — SummaryInformation is always exactly one property set, and its properties are always identified numerically — so a reader that rejects both stays honest about not reading DocumentSummaryInformation while still parsing every real SummaryInformation stream in full.
 
 export class PropertySetFormatError extends Error {
   constructor(message: string) {
@@ -30,7 +30,7 @@ export class PropertySetFormatError extends Error {
   }
 }
 
-// No offset<0/length<0 guard: every call site below derives both from a getUint32/getInt16 read (always non-negative) or a positive literal/constant, so neither can ever actually be negative -- a defensive check against an input this module never produces.
+// No offset<0/length<0 guard: every call site below derives both from a getUint32/getInt16 read (always non-negative) or a positive literal/constant, so neither can ever actually be negative — a defensive check against an input this module never produces.
 function requireBytes(
   byteLength: number,
   offset: number,
@@ -44,7 +44,7 @@ function requireBytes(
   }
 }
 
-// VT_I2's own Value field is a signed 16-bit integer, but a codepage above 32767 is conventionally stored as its negative two's-complement equivalent -- this undoes that back to the unsigned codepage number a real producer declared. Exported for direct testing: the resulting number is only ever compared against CP_WINUNICODE/WINDOWS_1252_CODEPAGE downstream, neither of which a boundary mistake at raw === 0 would ever produce either way, so no decoding outcome could otherwise distinguish the two.
+// VT_I2's own Value field is a signed 16-bit integer, but a codepage above 32767 is conventionally stored as its negative two's-complement equivalent — this undoes that back to the unsigned codepage number a real producer declared. Exported for direct testing: the resulting number is only ever compared against CP_WINUNICODE/WINDOWS_1252_CODEPAGE downstream, neither of which a boundary mistake at raw === 0 would ever produce either way, so no decoding outcome could otherwise distinguish the two.
 export function decodeCodepage(raw: number): number {
   return raw < 0 ? raw + 0x10000 : raw;
 }
@@ -52,7 +52,7 @@ export function decodeCodepage(raw: number): number {
 const ANSI_DECODER = new TextDecoder("windows-1252");
 const UTF16_DECODER = new TextDecoder("utf-16le");
 
-// Returns undefined, rather than throwing, for a CodePage this reader does not decode -- the property is skipped by its caller (readCodePageString) rather than aborting the whole stream, exactly like an unsupported PropertyType in the main switch below.
+// Returns undefined, rather than throwing, for a CodePage this reader does not decode — the property is skipped by its caller (readCodePageString) rather than aborting the whole stream, exactly like an unsupported PropertyType in the main switch below.
 function decodeAnsi(
   bytes: Uint8Array<ArrayBuffer>,
   codepage: number,
@@ -63,14 +63,14 @@ function decodeAnsi(
   return ANSI_DECODER.decode(bytes);
 }
 
-// [MS-OLEPS] 2.19/2.20: both string packets MAY carry embedded or additional trailing null characters beyond the first terminator, and how a reader "presents" such a string to its application is implementation-specific. This one truncates at the first null code unit -- what every string ./write.ts and ./summary-information.ts actually produce needs (a plain string, no embedded nulls), and what the spec's own worked SummaryInformation example requires to read an empty property back as "" rather than as embedded NUL characters (its KEYWORDS property is four zero bytes: Size 4, not the minimal Size 1 a null-terminator-only empty string would use).
+// [MS-OLEPS] 2.19/2.20: both string packets MAY carry embedded or additional trailing null characters beyond the first terminator, and how a reader "presents" such a string to its application is implementation-specific. This one truncates at the first null code unit — what every string ./write.ts and ./summary-information.ts actually produce needs (a plain string, no embedded nulls), and what the spec's own worked SummaryInformation example requires to read an empty property back as "" rather than as embedded NUL characters (its KEYWORDS property is four zero bytes: Size 4, not the minimal Size 1 a null-terminator-only empty string would use).
 // Exported for direct testing: every fixture this module's own tests decode already carries a real producer's null terminator, so a round trip alone never exercises the "no null present at all" branch.
 export function truncateAtNull(value: string): string {
   const index = value.indexOf("\u0000");
   return index === -1 ? value : value.slice(0, index);
 }
 
-// [MS-OLEPS] 2.19 CodePageString: Size(4) is the byte length of Characters including its null terminator but excluding padding; Characters is that many bytes, ANSI- or UTF-16LE-encoded depending on the property set's own CodePage property, padded to a 4-byte boundary. Returns undefined, rather than throwing, when the property set's CodePage is one this reader does not decode -- the property's structural framing (Size, Characters) is still validated, only its content is left undecoded, so the caller can skip just this one property.
+// [MS-OLEPS] 2.19 CodePageString: Size(4) is the byte length of Characters including its null terminator but excluding padding; Characters is that many bytes, ANSI- or UTF-16LE-encoded depending on the property set's own CodePage property, padded to a 4-byte boundary. Returns undefined, rather than throwing, when the property set's CodePage is one this reader does not decode — the property's structural framing (Size, Characters) is still validated, only its content is left undecoded, so the caller can skip just this one property.
 function readCodePageString(
   bytes: Uint8Array<ArrayBuffer>,
   view: DataView,
@@ -117,7 +117,7 @@ interface DictionaryEntry {
   readonly relativeOffset: number;
 }
 
-// Parses a [MS-OLEPS] Property Set Stream: the header (validating ByteOrder and the single-property-set requirement above), the PropertySet packet's dictionary, and every property's typed value. Throws PropertySetFormatError on any structural nonconformance (a bad ByteOrder, a truncated stream, a Dictionary property, non-zero TypedPropertyValue padding, a CodePage property of the wrong type) -- loud failure, never a partial property map that looks complete. A property this reader cannot decode -- an unsupported PropertyType, or a VT_LPSTR under an unsupported CodePage -- is absent from the returned map rather than thrown on, since that is a projection gap, not nonconformance (see the module comment above).
+// Parses a [MS-OLEPS] Property Set Stream: the header (validating ByteOrder and the single-property-set requirement above), the PropertySet packet's dictionary, and every property's typed value. Throws PropertySetFormatError on any structural nonconformance (a bad ByteOrder, a truncated stream, a Dictionary property, non-zero TypedPropertyValue padding, a CodePage property of the wrong type) — loud failure, never a partial property map that looks complete. A property this reader cannot decode — an unsupported PropertyType, or a VT_LPSTR under an unsupported CodePage — is absent from the returned map rather than thrown on, since that is a projection gap, not nonconformance (see the module comment above).
 export function readPropertySetStream(
   bytes: Uint8Array<ArrayBuffer>,
 ): PropertySet {
@@ -167,7 +167,7 @@ export function readPropertySetStream(
     const pid = view.getUint32(entryOffset, true);
     if (pid === PID_DICTIONARY) {
       throw new PropertySetFormatError(
-        'property set carries a Dictionary property (PID 0), which names string-keyed properties this reader does not support -- no "\\x05SummaryInformation" stream should carry one',
+        'property set carries a Dictionary property (PID 0), which names string-keyed properties this reader does not support — no "\\x05SummaryInformation" stream should carry one',
       );
     }
     entries.push({
@@ -176,7 +176,7 @@ export function readPropertySetStream(
     });
   }
 
-  // Two-pass: the CodePage property governs how every VT_LPSTR value in the SAME property set decodes, so it must be resolved before any string is read, regardless of where the dictionary lists PID 1 relative to the properties that need it. Absent CodePage is treated as windows-1252, the overwhelmingly common real-world default, rather than refused outright -- a stream a real producer wrote without one should still read.
+  // Two-pass: the CodePage property governs how every VT_LPSTR value in the SAME property set decodes, so it must be resolved before any string is read, regardless of where the dictionary lists PID 1 relative to the properties that need it. Absent CodePage is treated as windows-1252, the overwhelmingly common real-world default, rather than refused outright — a stream a real producer wrote without one should still read.
   let codepage = WINDOWS_1252_CODEPAGE;
   for (const entry of entries) {
     if (entry.pid !== PID_CODEPAGE) continue;
@@ -214,7 +214,7 @@ export function readPropertySetStream(
       );
     }
     const valueOffset = abs + TYPED_VALUE_HEADER_SIZE;
-    // A PropertyType this switch names no case for (e.g. VT_CF, a PIDSI_THUMBNAIL clipboard format) is skipped rather than aborting the whole read, since an undecodable value is a projection gap, not a structural violation (see the module comment above). No explicit default case: falling out of a switch with no matching case is already exactly that -- a no-op -- so a default whose own body is just `break` would only restate what already happens, and its break is otherwise dead code every case above it already itself carries.
+    // A PropertyType this switch names no case for (e.g. VT_CF, a PIDSI_THUMBNAIL clipboard format) is skipped rather than aborting the whole read, since an undecodable value is a projection gap, not a structural violation (see the module comment above). No explicit default case: falling out of a switch with no matching case is already exactly that — a no-op — so a default whose own body is just `break` would only restate what already happens, and its break is otherwise dead code every case above it already itself carries.
     switch (type) {
       case VT_I2: {
         requireBytes(
@@ -244,7 +244,7 @@ export function readPropertySetStream(
       }
       case VT_LPSTR: {
         const value = readCodePageString(bytes, view, valueOffset, codepage);
-        // undefined means an unsupported CodePage -- skip the property rather than aborting the whole read (see the module comment above).
+        // undefined means an unsupported CodePage — skip the property rather than aborting the whole read (see the module comment above).
         if (value !== undefined) {
           properties.set(entry.pid, { type: "VT_LPSTR", value });
         }

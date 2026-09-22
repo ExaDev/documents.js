@@ -23,7 +23,7 @@ describe("tokenizeSql", () => {
     ]);
   });
 
-  it('splits a qualified name into identifier, ".", identifier -- the parser reassembles it', () => {
+  it('splits a qualified name into identifier, ".", identifier — the parser reassembles it', () => {
     expect(tokenizeSql('"SALES"."REGION"').map((token) => token.kind)).toEqual([
       "identifier",
       "punctuation",

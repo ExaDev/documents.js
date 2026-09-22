@@ -43,7 +43,7 @@ describe("addQuantities / subtractQuantities", () => {
     expect(subtractQuantities(b, a)).toEqual(quantity(1, { length: 1 }));
   });
 
-  it("throws IncompatibleDimensionsError when dimensions differ -- never a silently wrong number", () => {
+  it("throws IncompatibleDimensionsError when dimensions differ — never a silently wrong number", () => {
     const metres = quantity(2, { length: 1 });
     const seconds = quantity(3, { time: 1 });
     expect(() => addQuantities(metres, seconds)).toThrow(
@@ -129,7 +129,7 @@ describe("powQuantity", () => {
   });
 
   it("raises a dimensionless base to a non-integer power without ever reaching the dimensioned-base integer check", () => {
-    // exponent.magnitude = 0.5 is not an integer -- if the dimensionless-base early return (isDimensionless(base.dimension)) were skipped or its condition flipped, this would fall through to `!Number.isInteger(exponent.magnitude)` and wrongly throw IncompatibleDimensionsError instead of returning 2.
+    // exponent.magnitude = 0.5 is not an integer — if the dimensionless-base early return (isDimensionless(base.dimension)) were skipped or its condition flipped, this would fall through to `!Number.isInteger(exponent.magnitude)` and wrongly throw IncompatibleDimensionsError instead of returning 2.
     expect(powQuantity(quantity(4, {}), quantity(0.5, {}))).toEqual(
       quantity(2, {}),
     );

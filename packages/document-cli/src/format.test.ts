@@ -64,7 +64,7 @@ describe("inferFormatFromExtension", () => {
   });
 
   it("treats a leading dot as the whole filename, not an extension, even when the remainder spells a real format", () => {
-    // ".docx" (a dotfile literally named that, with no further '.') must not extract "docx" as its extension -- dotIndex is 0 here, which is <= 0 (no extension) rather than a genuine split point. ".gitignore" above can't distinguish this on its own, since "gitignore" isn't a recognised format either way; this needs a leading-dot name whose remainder DOES match one.
+    // ".docx" (a dotfile literally named that, with no further '.') must not extract "docx" as its extension — dotIndex is 0 here, which is <= 0 (no extension) rather than a genuine split point. ".gitignore" above can't distinguish this on its own, since "gitignore" isn't a recognised format either way; this needs a leading-dot name whose remainder DOES match one.
     expect(inferFormatFromExtension(".docx")).toBeUndefined();
   });
 
@@ -118,7 +118,7 @@ describe("inferFormatFromExtension", () => {
 });
 
 describe("formatToExtension", () => {
-  // Not `formatToExtension(format) === format` any more: markdown breaks that identity (two extensions read as 'markdown', but only one -- 'md' -- is written), so this is an explicit lookup table instead, matching getFormatToExtension's own canonical choice one entry at a time rather than asserting a shortcut that no longer holds for every format. A typed tuple array, not `Object.entries` over a Record, so each format literal narrows on its own -- no type assertion needed to hand it back to formatToExtension.
+  // Not `formatToExtension(format) === format` any more: markdown breaks that identity (two extensions read as 'markdown', but only one — 'md' — is written), so this is an explicit lookup table instead, matching getFormatToExtension's own canonical choice one entry at a time rather than asserting a shortcut that no longer holds for every format. A typed tuple array, not `Object.entries` over a Record, so each format literal narrows on its own — no type assertion needed to hand it back to formatToExtension.
   it("maps every recognised format to its own canonical extension", () => {
     const cases: readonly (readonly [
       Parameters<typeof formatToExtension>[0],

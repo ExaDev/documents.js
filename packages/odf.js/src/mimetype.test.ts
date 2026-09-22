@@ -39,7 +39,7 @@ describe("writeMimetype", () => {
     expect(Object.keys(pkg.parts)).toEqual([MIMETYPE_PART]);
   });
 
-  it("stores exactly the ASCII bytes of the media type -- no trailing newline, no BOM -- at the fixed offsets ODF pins for the first zip entry", () => {
+  it("stores exactly the ASCII bytes of the media type — no trailing newline, no BOM — at the fixed offsets ODF pins for the first zip entry", () => {
     const pkg = emptyPackage();
     const mediaType = "application/vnd.oasis.opendocument.presentation";
     writeMimetype(pkg, mediaType);

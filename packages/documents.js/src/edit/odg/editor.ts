@@ -81,7 +81,7 @@ function findPageLayoutProperties(pkg: Package): XmlElement {
   return properties;
 }
 
-// The odg equivalent of odp/editor.ts's own OdpEditor: page-level add/remove/get over office:drawing's own draw:page children (document order IS page order, exactly like odp's draw:page/office:presentation -- see odf.js's own typed/odg/read.ts top-of-file note on the shared, format-agnostic draw:page content model). pageSize mirrors OdpEditor.slideSize's own deck-wide convenience getter/setter: every page this editor creates shares one style:page-layout via the master-page it references.
+// The odg equivalent of odp/editor.ts's own OdpEditor: page-level add/remove/get over office:drawing's own draw:page children (document order IS page order, exactly like odp's draw:page/office:presentation — see odf.js's own typed/odg/read.ts top-of-file note on the shared, format-agnostic draw:page content model). pageSize mirrors OdpEditor.slideSize's own deck-wide convenience getter/setter: every page this editor creates shares one style:page-layout via the master-page it references.
 export class OdgEditor {
   private readonly pkg: Package;
 
@@ -89,7 +89,7 @@ export class OdgEditor {
     this.pkg = pkg;
   }
 
-  // Reads/patches meta.xml directly on the live package -- ExaDev/documents.js#933's own "editor.metadata = {...}" gap, mirroring OdtEditor's own identical getter/setter exactly (src/edit/odt/editor.ts's own comment states the full title/author/subject/keywords-only rationale).
+  // Reads/patches meta.xml directly on the live package — ExaDev/documents.js#933's own "editor.metadata = {...}" gap, mirroring OdtEditor's own identical getter/setter exactly (src/edit/odt/editor.ts's own comment states the full title/author/subject/keywords-only rationale).
   get metadata(): LayoutMetadata {
     return readOdfMetadata(this.pkg);
   }
@@ -169,7 +169,7 @@ export interface CreateOdgOptions {
   readonly clock?: ClockPort;
 }
 
-// Creates a fresh odg with real office:meta creation/modification timestamps -- mirrors createDocx's own default-on clock behaviour exactly (src/edit/docx/editor.ts).
+// Creates a fresh odg with real office:meta creation/modification timestamps — mirrors createDocx's own default-on clock behaviour exactly (src/edit/docx/editor.ts).
 export function createOdg(options?: CreateOdgOptions): OdgEditor {
   const clock = options?.clock ?? systemClock;
   const metadata = resolveMetadataTimestamps({}, clock);

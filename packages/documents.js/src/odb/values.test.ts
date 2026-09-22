@@ -201,7 +201,7 @@ describe("aggregateCellValues", () => {
   });
 
   it("keeps the first-seen value on a tie, for both MIN and MAX", () => {
-    // Two structurally different values (a plain number and a currency) that compare numerically equal -- distinguishable by .kind alone, so which one "won" the tie is directly observable.
+    // Two structurally different values (a plain number and a currency) that compare numerically equal — distinguishable by .kind alone, so which one "won" the tie is directly observable.
     const first: ContentCellValue = { kind: "number", value: 5 };
     const second: ContentCellValue = {
       kind: "currency",

@@ -5,7 +5,7 @@ import { assembleBlocks } from "./table/read";
 import type { ReadContext } from "./text/paragraphs";
 import type { PieceTable } from "./text/piece-table";
 
-// Headers and footers, read as real block flow -- ooxml.js's own DocxDocument.headerFooterParts shape (typed/docx/read.ts's HeaderFooterPart: `{path, kind, blocks}`), adapted for a format with no named parts of its own: [MS-DOC]'s own Headers page states the header document is split into a FIXED sequence of stories by Plcfhdd -- six footnote/endnote separator stories (not modelled here: this reader carries no ContentDocument field for a separator, and neither does ooxml.js's own DocxDocument), then, per section in order, six more -- even header, odd header, even footer, odd footer, first-page header, first-page footer -- so a story's identity is its own (section index, slot) position rather than a path. An empty story ([MS-DOC]'s own "the beginning CP has the same value as the next CP") specifies "the header/footer of the corresponding type of the previous section is used" (or none, for the first section) rather than a genuinely blank header, so it is left out of the result entirely instead of being emitted as a hollow `{blocks: []}` entry a caller could misread as a deliberate blank one.
+// Headers and footers, read as real block flow — ooxml.js's own DocxDocument.headerFooterParts shape (typed/docx/read.ts's HeaderFooterPart: `{path, kind, blocks}`), adapted for a format with no named parts of its own: [MS-DOC]'s own Headers page states the header document is split into a FIXED sequence of stories by Plcfhdd — six footnote/endnote separator stories (not modelled here: this reader carries no ContentDocument field for a separator, and neither does ooxml.js's own DocxDocument), then, per section in order, six more — even header, odd header, even footer, odd footer, first-page header, first-page footer — so a story's identity is its own (section index, slot) position rather than a path. An empty story ([MS-DOC]'s own "the beginning CP has the same value as the next CP") specifies "the header/footer of the corresponding type of the previous section is used" (or none, for the first section) rather than a genuinely blank header, so it is left out of the result entirely instead of being emitted as a hollow `{blocks: []}` entry a caller could misread as a deliberate blank one.
 
 export type HeaderFooterSlot =
   | "evenHeader"
@@ -24,7 +24,7 @@ export interface HeaderFooterStory {
 
 export type HeaderFooterStories = readonly HeaderFooterStory[];
 
-/** The six per-section slots' own order within each of Plcfhdd's per-section groups, [MS-DOC]'s own Headers page: "The stories within each group MUST appear in the following order." Exported because subdocument-write.ts builds Plcfhdd in the identical order -- one source of it, so the two directions cannot drift. */
+/** The six per-section slots' own order within each of Plcfhdd's per-section groups, [MS-DOC]'s own Headers page: "The stories within each group MUST appear in the following order." Exported because subdocument-write.ts builds Plcfhdd in the identical order — one source of it, so the two directions cannot drift. */
 export const SLOT_ORDER: readonly HeaderFooterSlot[] = [
   "evenHeader",
   "oddHeader",
@@ -34,7 +34,7 @@ export const SLOT_ORDER: readonly HeaderFooterSlot[] = [
   "firstFooter",
 ];
 
-/** The six fixed footnote/endnote-separator stories preceding every section's own six -- footnote separator, footnote continuation separator, footnote continuation notice, endnote separator, endnote continuation separator, endnote continuation notice -- carried by Plcfhdd but not read here, since neither this package's own schema nor ooxml.js's DocxDocument has anywhere to put a separator story. Exported for subdocument-write.ts, which writes the same six slots as genuinely empty stories. */
+/** The six fixed footnote/endnote-separator stories preceding every section's own six — footnote separator, footnote continuation separator, footnote continuation notice, endnote separator, endnote continuation separator, endnote continuation notice — carried by Plcfhdd but not read here, since neither this package's own schema nor ooxml.js's DocxDocument has anywhere to put a separator story. Exported for subdocument-write.ts, which writes the same six slots as genuinely empty stories. */
 export const FIXED_SEPARATOR_STORY_COUNT = 6;
 
 export function readHeaderFooterStories(

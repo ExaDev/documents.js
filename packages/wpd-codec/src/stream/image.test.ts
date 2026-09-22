@@ -64,7 +64,7 @@ function tinyJpeg(
 }
 
 describe("bigEndianUint32At", () => {
-  // A distinct, nonzero digit in every byte position, so a wrong sign between any two terms or a wrong operator on any one of them changes the result -- every real PNG/JPEG fixture below keeps its own chunk/segment lengths small, leaving every byte but the last at zero, where a wrong sign or operator on that term would go unobserved.
+  // A distinct, nonzero digit in every byte position, so a wrong sign between any two terms or a wrong operator on any one of them changes the result — every real PNG/JPEG fixture below keeps its own chunk/segment lengths small, leaving every byte but the last at zero, where a wrong sign or operator on that term would go unobserved.
   it("assembles four bytes into one big-endian 32-bit value", () => {
     expect(bigEndianUint32At(new Uint8Array([0x12, 0x34, 0x56, 0x78]), 0)).toBe(
       0x12345678,
@@ -100,7 +100,7 @@ describe("scanImagePayload", () => {
         ...PNG_SIGNATURE,
         ...u32be(1000), // claims 1000 bytes of chunk data
         ...Array.from("IEND", (c) => c.charCodeAt(0)),
-        // no data, no crc -- the buffer ends immediately after the type
+        // no data, no crc — the buffer ends immediately after the type
       ]);
       expect(scanImagePayload(bytes)).toBeUndefined();
     });
@@ -117,7 +117,7 @@ describe("scanImagePayload", () => {
       const bytes = new Uint8Array([
         ...PNG_SIGNATURE,
         ...pngChunk("IHDR", [0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0]),
-        // no IEND -- the buffer simply ends
+        // no IEND — the buffer simply ends
       ]);
       expect(scanImagePayload(bytes)).toBeUndefined();
     });
@@ -138,7 +138,7 @@ describe("scanImagePayload", () => {
       expect(scanImagePayload(bytes)).toBeUndefined();
     });
 
-    // A chunk whose length + header + crc lands exactly on the buffer's own end -- the one boundary where "runs past" and "fits exactly" disagree.
+    // A chunk whose length + header + crc lands exactly on the buffer's own end — the one boundary where "runs past" and "fits exactly" disagree.
     it("accepts a final chunk whose own extent exactly fills the rest of the buffer", () => {
       const bytes = new Uint8Array([
         ...PNG_SIGNATURE,
@@ -203,7 +203,7 @@ describe("scanImagePayload", () => {
     });
 
     it("does not treat a marker just outside the restart range as standalone", () => {
-      // 0xD8 (SOI) reappearing mid-stream is not itself one of the RST0-RST7 (0xD0-0xD7) codes but IS separately named standalone -- 0xCF, one below 0xD0, is neither, and must be read as an ordinary length-carrying segment.
+      // 0xD8 (SOI) reappearing mid-stream is not itself one of the RST0-RST7 (0xD0-0xD7) codes but IS separately named standalone — 0xCF, one below 0xD0, is neither, and must be read as an ordinary length-carrying segment.
       const jpeg = [
         0xff,
         0xd8,
@@ -308,7 +308,7 @@ describe("scanImagePayload", () => {
     });
 
     it("refuses a malformed SOS length rather than searching arbitrarily far ahead for an EOI that happens to exist", () => {
-      // A length of 1 is invalid (smaller than the length field's own two bytes); skipping that guard for SOS specifically would let the entropy-search fall through to indexOf and find this later, genuine FF D9 -- masking the real malformed-length defect with a false decode.
+      // A length of 1 is invalid (smaller than the length field's own two bytes); skipping that guard for SOS specifically would let the entropy-search fall through to indexOf and find this later, genuine FF D9 — masking the real malformed-length defect with a false decode.
       const jpeg = [
         0xff,
         0xd8,
@@ -337,7 +337,7 @@ describe("scanImagePayload", () => {
       expect(scanImagePayload(new Uint8Array(jpeg))).toBeUndefined();
     });
 
-    // A segment whose own length exactly consumes the rest of the buffer -- the boundary where "runs past" and "fits exactly" disagree.
+    // A segment whose own length exactly consumes the rest of the buffer — the boundary where "runs past" and "fits exactly" disagree.
     it("accepts a length-carrying segment whose own extent exactly fills the rest of the buffer, then correctly finds no EOI", () => {
       const jpeg = [0xff, 0xd8, ...jpegSegment(0xe0, [0x00])]; // nothing after the segment at all
       expect(scanImagePayload(new Uint8Array(jpeg))).toBeUndefined();
@@ -375,7 +375,7 @@ describe("scanImagePayload", () => {
       expect(result?.bytes.length).toBe(jpeg.length);
     });
 
-    // The EOI marker landing exactly on the buffer's own final two bytes -- the one boundary where indexOf's own "does the needle still fit" check matters, since a strictly-off-by-one version would fail to find an EOI that is genuinely, completely present.
+    // The EOI marker landing exactly on the buffer's own final two bytes — the one boundary where indexOf's own "does the needle still fit" check matters, since a strictly-off-by-one version would fail to find an EOI that is genuinely, completely present.
     it("finds an EOI that is exactly the buffer's own last two bytes", () => {
       const jpeg = tinyJpeg();
       expect(jpeg[jpeg.length - 2]).toBe(0xff);

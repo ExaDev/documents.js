@@ -20,7 +20,7 @@ interface TableMerge {
   readonly colSpan: number;
 }
 
-// Reads the anchor cell's own colSpan/rowSpan fresh through readDocxContent/readOdtContent on every render -- TableViewScreen's own DocxTableCell/OdtTableCell.text getter tells us nothing about a merge, so this probe is how these tests observe the real MERGE_TABLE_CELLS mutation the reducer applied.
+// Reads the anchor cell's own colSpan/rowSpan fresh through readDocxContent/readOdtContent on every render — TableViewScreen's own DocxTableCell/OdtTableCell.text getter tells us nothing about a merge, so this probe is how these tests observe the real MERGE_TABLE_CELLS mutation the reducer applied.
 function AnchorSpanProbe({
   format,
   column,
@@ -54,7 +54,7 @@ function AnchorSpanProbe({
   );
 }
 
-// Builds a 3x3 table via a real APPEND_TABLE dispatch (no merge field -- the plain creation path) and lands on tableView for it, so these tests exercise MERGE_TABLE_CELLS as a genuine RETROFIT onto an already-built table, distinct from paragraph-family.test.tsx's own creation-time-merge coverage.
+// Builds a 3x3 table via a real APPEND_TABLE dispatch (no merge field — the plain creation path) and lands on tableView for it, so these tests exercise MERGE_TABLE_CELLS as a genuine RETROFIT onto an already-built table, distinct from paragraph-family.test.tsx's own creation-time-merge coverage.
 function TableViewHarness({
   format,
   merge,

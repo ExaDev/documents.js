@@ -8,13 +8,13 @@ import {
 import { ptToEmu } from "../../model/units";
 import { el, txt } from "../../xml/fragment";
 
-// A ContentVector as a real WordprocessingML floating shape -- the docx half of the shared DrawingML vector writer (src/edit/drawingml/vector.ts holds everything inside the shape-properties element, which pptx expresses identically inside its own p:spPr).
+// A ContentVector as a real WordprocessingML floating shape — the docx half of the shared DrawingML vector writer (src/edit/drawingml/vector.ts holds everything inside the shape-properties element, which pptx expresses identically inside its own p:spPr).
 //
-// WHY wps:wsp RATHER THAN pic:pic: a:graphicData's own @uri names the namespace of whatever DrawingML part it carries -- that is the extension point the element exists for (ECMA-376 20.1.2.2.17). A picture uses the pic: namespace (see src/edit/docx/image.ts's buildInlineDrawing); a non-picture SHAPE in a text document uses wps:, the wordprocessingShape part both Word 2010+ and LibreOffice write and read. WordprocessingML has no shape vocabulary of its own -- the pre-2010 alternative is VML (w:pict/v:shape), deprecated by ECMA-376 itself and deliberately not written here.
+// WHY wps:wsp RATHER THAN pic:pic: a:graphicData's own @uri names the namespace of whatever DrawingML part it carries — that is the extension point the element exists for (ECMA-376 20.1.2.2.17). A picture uses the pic: namespace (see src/edit/docx/image.ts's buildInlineDrawing); a non-picture SHAPE in a text document uses wps:, the wordprocessingShape part both Word 2010+ and LibreOffice write and read. WordprocessingML has no shape vocabulary of its own — the pre-2010 alternative is VML (w:pict/v:shape), deprecated by ECMA-376 itself and deliberately not written here.
 //
-// WHY ANCHORED AND NOT INLINE: a recovered vector carries page-absolute coordinates (src/layout/reconstruct.ts recovers geometry in page space), and wp:inline has no position at all -- it occupies a slot in the text flow at whatever size it declares, which for page-sized recovered geometry would push every following paragraph off the page. wp:anchor with both position axes relativeFrom="page" reproduces the recovered coordinates exactly. behindDoc="1" plus wp:wrapNone additionally keeps the geometry behind the text and out of its way, which is what the source was: painted fills and strokes underneath and around a page's glyphs, not an object the text flowed around.
+// WHY ANCHORED AND NOT INLINE: a recovered vector carries page-absolute coordinates (src/layout/reconstruct.ts recovers geometry in page space), and wp:inline has no position at all — it occupies a slot in the text flow at whatever size it declares, which for page-sized recovered geometry would push every following paragraph off the page. wp:anchor with both position axes relativeFrom="page" reproduces the recovered coordinates exactly. behindDoc="1" plus wp:wrapNone additionally keeps the geometry behind the text and out of its way, which is what the source was: painted fills and strokes underneath and around a page's glyphs, not an object the text flowed around.
 //
-// The honest limit of that choice, stated because it is real: the anchor still belongs to a PARAGRAPH, so which page the geometry lands on follows that paragraph, and a document that reflows differently in Word than it laid out in the source PDF moves the shape with it. There is no page-independent anchor in WordprocessingML to use instead -- a shape is always anchored to some run of text.
+// The honest limit of that choice, stated because it is real: the anchor still belongs to a PARAGRAPH, so which page the geometry lands on follows that paragraph, and a document that reflows differently in Word than it laid out in the source PDF moves the shape with it. There is no page-independent anchor in WordprocessingML to use instead — a shape is always anchored to some run of text.
 
 const DRAWING_NS = {
   wp: "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
@@ -44,7 +44,7 @@ function position(
   ]);
 }
 
-// `relativeHeight` is the shape's z-order among a page's floating objects, lowest painting first -- so passing the vector's own recovery index preserves the paint order the geometry was recovered in. Word requires the attribute regardless of whether anything overlaps.
+// `relativeHeight` is the shape's z-order among a page's floating objects, lowest painting first — so passing the vector's own recovery index preserves the paint order the geometry was recovered in. Word requires the attribute regardless of whether anything overlaps.
 export function buildAnchoredVectorDrawing(
   vector: ContentVector,
   drawingId: number,

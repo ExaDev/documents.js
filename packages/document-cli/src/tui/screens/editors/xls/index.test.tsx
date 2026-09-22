@@ -151,7 +151,7 @@ describe("XlsSheetListScreen", () => {
   });
 });
 
-// The spreadsheetGrid harness seeds a real cell at row 2/column 2 (C3) directly through XlsSheet's own cell() setter, then pushes the spreadsheetGrid screen for sheet 0 -- the identical shape the ods grid harness uses. The push happens exactly once (guarded by a ref, not by re-checking `top.kind === "sheetList"` on every effect run) so that popping back to the sheet list later -- which the "Escape when not mid-edit" test below exercises -- does not immediately re-trigger this same setup effect and push straight back onto the grid.
+// The spreadsheetGrid harness seeds a real cell at row 2/column 2 (C3) directly through XlsSheet's own cell() setter, then pushes the spreadsheetGrid screen for sheet 0 — the identical shape the ods grid harness uses. The push happens exactly once (guarded by a ref, not by re-checking `top.kind === "sheetList"` on every effect run) so that popping back to the sheet list later — which the "Escape when not mid-edit" test below exercises — does not immediately re-trigger this same setup effect and push straight back onto the grid.
 function GridHarness(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();

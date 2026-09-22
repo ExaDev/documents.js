@@ -49,7 +49,7 @@ describe("resolvePackagePath", () => {
   });
 
   it("does not treat a leading digit as a scheme, and resolves it as a relative reference instead", () => {
-    // A URI scheme must start with a letter -- a leading digit makes this a relative segment named "1http", not a scheme.
+    // A URI scheme must start with a letter — a leading digit makes this a relative segment named "1http", not a scheme.
     expect(resolvePackagePath("OEBPS", "1http://x")).toBe("OEBPS/1http:/x");
   });
 

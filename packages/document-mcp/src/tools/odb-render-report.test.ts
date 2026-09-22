@@ -30,7 +30,7 @@ import {
 import { OdbRenderReportOutputSchema } from "document-operations";
 import { odbReportNotSpecifiedResult } from "./odb-render-report";
 
-// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip -- not the tool callback in isolation -- so this proves the wiring: that `odb_render_report` is registered under that name, that it reaches documents.js's real readOdbReportContent/odbReportToDocx/odbReportToOdt/odbReportToPdf, and that the output really decodes as the report's own data, not merely non-empty bytes. Ground truth for the fixture's own SalesByRegion report (region/quarter groups, group totals, grand total) is documents.js's own src/odb/report/content.test.ts, which renders and hand-verifies the identical report against the identical fixture. Mirrors src/tools/odm.test.ts's own connection harness.
+// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip — not the tool callback in isolation — so this proves the wiring: that `odb_render_report` is registered under that name, that it reaches documents.js's real readOdbReportContent/odbReportToDocx/odbReportToOdt/odbReportToPdf, and that the output really decodes as the report's own data, not merely non-empty bytes. Ground truth for the fixture's own SalesByRegion report (region/quarter groups, group totals, grand total) is documents.js's own src/odb/report/content.test.ts, which renders and hand-verifies the identical report against the identical fixture. Mirrors src/tools/odm.test.ts's own connection harness.
 
 interface ConnectedPair {
   readonly client: Client;
@@ -52,7 +52,7 @@ async function connect(): Promise<ConnectedPair> {
   return { client, close: async () => client.close() };
 }
 
-// Recursively collects every run's own text out of a ContentBlock -- a top-level paragraph, or (a report band's own shape) a single-row table whose cells each carry a paragraph.
+// Recursively collects every run's own text out of a ContentBlock — a top-level paragraph, or (a report band's own shape) a single-row table whose cells each carry a paragraph.
 function collectBlockText(block: ContentBlock, texts: string[]): void {
   if (block.kind === "paragraph") {
     for (const run of block.runs) {
@@ -71,7 +71,7 @@ function collectBlockText(block: ContentBlock, texts: string[]): void {
   }
 }
 
-// Every run of text across a wordprocessing ContentDocument's sections, space-joined -- used to assert the rendered report's real band content (region names, quarter/region/grand totals) survived into real docx/odt bytes, not just that the file is non-empty.
+// Every run of text across a wordprocessing ContentDocument's sections, space-joined — used to assert the rendered report's real band content (region names, quarter/region/grand totals) survived into real docx/odt bytes, not just that the file is non-empty.
 function wordprocessingText(document: ContentDocument): string {
   if (document.kind !== "wordprocessing") {
     throw new Error(
@@ -156,7 +156,7 @@ describe("odb_render_report", () => {
     const document = readDocxContent(decodePackage(new Uint8Array(docxBytes)));
     expectReportText(wordprocessingText(document));
 
-    // content mirrors structuredContent as JSON text -- the same "content is JSON.stringify(structuredContent)" convention every other tool in this repo follows.
+    // content mirrors structuredContent as JSON text — the same "content is JSON.stringify(structuredContent)" convention every other tool in this repo follows.
     const [block] = result.content;
     expect(block?.type).toBe("text");
     expect(
@@ -248,7 +248,7 @@ describe("odb_render_report", () => {
   });
 });
 
-// The fixture this repo checks in declares exactly one report, so selectReport's own "declares no report at all, or more than one with none named" OdbReportNotSpecifiedError branch is unreachable through a real client/server round trip against it. Tested directly here instead, against a real OdbReportNotSpecifiedError instance -- no I/O, no fixture, just the exported helper this tool's own callback delegates to.
+// The fixture this repo checks in declares exactly one report, so selectReport's own "declares no report at all, or more than one with none named" OdbReportNotSpecifiedError branch is unreachable through a real client/server round trip against it. Tested directly here instead, against a real OdbReportNotSpecifiedError instance — no I/O, no fixture, just the exported helper this tool's own callback delegates to.
 describe("odbReportNotSpecifiedResult", () => {
   it("reports isError: true, the error message verbatim, and availableReports in structuredContent", () => {
     const error = new OdbReportNotSpecifiedError([

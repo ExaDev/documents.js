@@ -15,7 +15,7 @@ import { readOdbInventory } from "./read";
 import type { OdbInventory } from "./read";
 import { writeOdb } from "./write";
 
-// Direct, one-sided structural checks against the raw written XML, alongside the round-trip suite below: a round trip (write then read back, compare to the original inventory) cannot observe a mutation that changes what gets WRITTEN in a way the reader's own inverse tolerates or a fixture never exercises (see typed/shared/canonicalise.ts's own top-of-file note on this exact failure mode) -- e.g. a fixture whose components all share one asTemplate value can't distinguish "always writes true" from "writes the real value".
+// Direct, one-sided structural checks against the raw written XML, alongside the round-trip suite below: a round trip (write then read back, compare to the original inventory) cannot observe a mutation that changes what gets WRITTEN in a way the reader's own inverse tolerates or a fixture never exercises (see typed/shared/canonicalise.ts's own top-of-file note on this exact failure mode) — e.g. a fixture whose components all share one asTemplate value can't distinguish "always writes true" from "writes the real value".
 function databaseElement(pkg: Package): XmlElement {
   const part = pkg.parts["content.xml"];
   if (part?.kind !== "xml") {

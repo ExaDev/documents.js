@@ -16,7 +16,7 @@ import { XlsSheet } from "./sheet";
 // The spreadsheet member of the ContentDocument union, narrowed once so the editor's field keeps the constructor guard's shape for every later use.
 type SpreadsheetDocument = Extract<ContentDocument, { kind: "spreadsheet" }>;
 
-// The print settings a fresh sheet starts with: Letter portrait with 1in margins (the same page geometry createDoc gives a fresh wordprocessing document), gridlines and heading chrome on, the common page order -- the defaults a fresh spreadsheet application itself prints with.
+// The print settings a fresh sheet starts with: Letter portrait with 1in margins (the same page geometry createDoc gives a fresh wordprocessing document), gridlines and heading chrome on, the common page order — the defaults a fresh spreadsheet application itself prints with.
 const DEFAULT_PRINT_SETTINGS = {
   pageSize: PAGE_SIZE_LETTER,
   margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
@@ -29,7 +29,7 @@ export interface CreateXlsOptions {
   readonly clock?: ClockPort;
 }
 
-// A genuine live-view editor over a mutable in-memory spreadsheet ContentDocument -- the xls sibling of DocEditor/MarkdownEditor (xls-codec's reader and writer both operate on the plain ContentDocument directly, with no XmlElement tree to hold a reference into). Every XlsSheet/XlsCell it produces holds a direct reference into document.sheets (or the sheet's own sparse cells array); toBytes() re-serialises the whole workbook through writeXlsContent.
+// A genuine live-view editor over a mutable in-memory spreadsheet ContentDocument — the xls sibling of DocEditor/MarkdownEditor (xls-codec's reader and writer both operate on the plain ContentDocument directly, with no XmlElement tree to hold a reference into). Every XlsSheet/XlsCell it produces holds a direct reference into document.sheets (or the sheet's own sparse cells array); toBytes() re-serialises the whole workbook through writeXlsContent.
 export class XlsEditor {
   private readonly document: SpreadsheetDocument;
 
@@ -49,7 +49,7 @@ export class XlsEditor {
     return this.document.metadata;
   }
 
-  // The patch-style MetadataOverrides setter every other editor's own metadata setter takes (docx/pptx/odt/odp/ods/odg/pdf -- see src/metadata/core-patch.ts): only the fields the caller names change, so an override never clears a field it did not mention.
+  // The patch-style MetadataOverrides setter every other editor's own metadata setter takes (docx/pptx/odt/odp/ods/odg/pdf — see src/metadata/core-patch.ts): only the fields the caller names change, so an override never clears a field it did not mention.
   set metadata(value: MetadataOverrides) {
     this.document.metadata = mergeMetadata(this.document.metadata, value);
   }
@@ -101,7 +101,7 @@ export function openXls(
   return new XlsEditor(readXlsContent(bytes, password));
 }
 
-// Creates a fresh one-sheet workbook with real metadata timestamps -- mirrors createDoc/createMarkdownEditor's default-on clock behaviour. The first sheet is named the way a fresh spreadsheet application names its own ("Sheet1"), since a sheet with no name is not a shape the model allows.
+// Creates a fresh one-sheet workbook with real metadata timestamps — mirrors createDoc/createMarkdownEditor's default-on clock behaviour. The first sheet is named the way a fresh spreadsheet application names its own ("Sheet1"), since a sheet with no name is not a shape the model allows.
 export function createXls(options: CreateXlsOptions = {}): XlsEditor {
   const clock = options.clock ?? systemClock;
   const document: ContentDocument = {

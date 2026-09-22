@@ -10,7 +10,7 @@ import {
   taggedStructurePdf,
 } from "./test-support/pdf";
 
-// Tagged structure (#760): the /StructTreeRoot element tree (the /K walk, /RoleMap resolution, /ClassMap attribute resolution, per-element /T //Lang //Alt //ActualText) and the (page, MCID) association through /ParentTree that stamps an owning element id onto extracted items -- each page keyed by its OWN /StructParents value, whose entry is an array of owning elements indexed by MCID (14.7.4.4). This is the one place PDF carries real semantics natively; everything downstream (documents.js's heading levels, division constructs, and lattice-free table recovery) is a consumer of these two facts.
+// Tagged structure (#760): the /StructTreeRoot element tree (the /K walk, /RoleMap resolution, /ClassMap attribute resolution, per-element /T //Lang //Alt //ActualText) and the (page, MCID) association through /ParentTree that stamps an owning element id onto extracted items — each page keyed by its OWN /StructParents value, whose entry is an array of owning elements indexed by MCID (14.7.4.4). This is the one place PDF carries real semantics natively; everything downstream (documents.js's heading levels, division constructs, and lattice-free table recovery) is a consumer of these two facts.
 
 describe("readPdf: tagged structure tree", () => {
   it("reads the element tree with reader-minted ids, role-mapped types, and element attributes", () => {
@@ -79,7 +79,7 @@ describe("readPdf: marked-content association", () => {
       { text: "Alpha", structure: "struct8" },
       { text: "One", structure: "struct9" },
     ]);
-    // MCID 0 on page 2 belongs to a different element than MCID 0 on page 1 -- and unmarked text carries no field at all.
+    // MCID 0 on page 2 belongs to a different element than MCID 0 on page 1 — and unmarked text carries no field at all.
     expect(structureNames(1)).toEqual([
       { text: "Paragraphe francais", structure: "struct11" },
       { text: "Untagged" },
@@ -97,7 +97,7 @@ describe("readPdf: marked-content association", () => {
         text: t.text,
         ...(t.structure !== undefined ? { structure: t.structure } : {}),
       }));
-    // Page 1 declares /StructParents 7 and page 2 declares /StructParents 0 -- the inverse of their indices; a reader keying by position hands each page the other page's element.
+    // Page 1 declares /StructParents 7 and page 2 declares /StructParents 0 — the inverse of their indices; a reader keying by position hands each page the other page's element.
     expect(structureNames(0)).toEqual([
       { text: "First page", structure: "struct1" },
     ]);
@@ -116,9 +116,9 @@ describe("readPdf: marked-content association", () => {
     expect(textItem("Inherited form text")).toMatchObject({
       structure: "struct1",
     });
-    // FmB declares /StructParents 3 and marks its own MCID 0 under that key -- the /Stm-qualified channel, which must not resolve against the page's numbering even though FmB is invoked inside the /P <</MCID 1>> span.
+    // FmB declares /StructParents 3 and marks its own MCID 0 under that key — the /Stm-qualified channel, which must not resolve against the page's numbering even though FmB is invoked inside the /P <</MCID 1>> span.
     expect(textItem("Self-marked form text")).not.toHaveProperty("structure");
-    // Wrapping FmB's own Do in a page-level MCID span it never inherits from is exactly the point of this fixture, but that also makes the wrapper invisible to every assertion above (the item ends up with no `structure` property whether the span is there or not) -- check the raw content streams directly for the spans the fixture's own name and comment claim it declares.
+    // Wrapping FmB's own Do in a page-level MCID span it never inherits from is exactly the point of this fixture, but that also makes the wrapper invisible to every assertion above (the item ends up with no `structure` property whether the span is there or not) — check the raw content streams directly for the spans the fixture's own name and comment claim it declares.
     const text = new TextDecoder().decode(bytes);
     expect(text).toContain(
       "/P << /MCID 0 >> BDC\n/FmA Do\nEMC\n/P << /MCID 1 >> BDC\n/FmB Do\nEMC",

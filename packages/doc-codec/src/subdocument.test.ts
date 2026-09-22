@@ -12,7 +12,7 @@ import { buildDoc } from "./test-support/doc";
 import { storyText } from "./subdocument";
 import type { ParagraphEntry } from "./text/paragraphs";
 
-// Builds the identical well-formed two-footnote document patchedFootnoteDoc does, but instead adjusts the FIB's own declared lcbPlcffndTxt by `delta` bytes -- shortening or lengthening what readStoryPlexKeys is told to read without touching the plex bytes themselves, which a well-formed buildDoc fixture always writes as a whole number of 4-byte keys.
+// Builds the identical well-formed two-footnote document patchedFootnoteDoc does, but instead adjusts the FIB's own declared lcbPlcffndTxt by `delta` bytes — shortening or lengthening what readStoryPlexKeys is told to read without touching the plex bytes themselves, which a well-formed buildDoc fixture always writes as a whole number of 4-byte keys.
 function footnoteDocWithAdjustedLcb(delta: number): Uint8Array<ArrayBuffer> {
   const bytes = buildDoc({
     paragraphs: [{ runs: [{ text: "Main" }] }],
@@ -32,7 +32,7 @@ function footnoteDocWithAdjustedLcb(delta: number): Uint8Array<ArrayBuffer> {
   ]);
 }
 
-// Builds the same well-formed two-footnote document, but zeroes exactly one of ccpFtn (subdocLength) or lcbPlcffndTxt (boundaryLcb) directly in the FIB while leaving the other at its real, non-zero value -- a real document's own footnote count and its boundary plex size always agree (both zero, or both real), so only patching one independently of the other can isolate readSubdocumentStories' own `subdocLength <= 0 || boundaryLcb <= 0` guard down to a single disjunct.
+// Builds the same well-formed two-footnote document, but zeroes exactly one of ccpFtn (subdocLength) or lcbPlcffndTxt (boundaryLcb) directly in the FIB while leaving the other at its real, non-zero value — a real document's own footnote count and its boundary plex size always agree (both zero, or both real), so only patching one independently of the other can isolate readSubdocumentStories' own `subdocLength <= 0 || boundaryLcb <= 0` guard down to a single disjunct.
 function footnoteDocWithOneFieldZeroed(
   field: "ccpFtn" | "lcbPlcffndTxt",
 ): Uint8Array<ArrayBuffer> {
@@ -54,7 +54,7 @@ function footnoteDocWithOneFieldZeroed(
   ]);
 }
 
-// Builds a well-formed footnote document via buildDoc, then patches one raw PlcffndTxt key directly in the "1Table" stream bytes -- exercising readStoryPlexKeys' own leniency for a malformed key (out-of-range or descending), which a well-formed buildDoc fixture can never produce on its own, since buildDoc always writes ascending, in-range keys.
+// Builds a well-formed footnote document via buildDoc, then patches one raw PlcffndTxt key directly in the "1Table" stream bytes — exercising readStoryPlexKeys' own leniency for a malformed key (out-of-range or descending), which a well-formed buildDoc fixture can never produce on its own, since buildDoc always writes ascending, in-range keys.
 function patchedFootnoteDoc(
   patchKey: (view: DataView, fcPlcffndTxt: number) => void,
 ): Uint8Array<ArrayBuffer> {
@@ -98,7 +98,7 @@ describe("readSubdocumentStories leniency for malformed plex keys", () => {
   });
 
   it("raises a descending terminal key to its own immediate (non-zero) predecessor, not to zero", () => {
-    // keys are [0, 7, 15] for this fixture ("First" then "Second"); forcing the terminal key to 5 (descending, but still in-range) must raise it to 7 (key[1], the true predecessor) -- a reader that looked up the wrong predecessor (e.g. always 0) would raise it to 5 unchanged instead, corrupting the second footnote's own boundary.
+    // keys are [0, 7, 15] for this fixture ("First" then "Second"); forcing the terminal key to 5 (descending, but still in-range) must raise it to 7 (key[1], the true predecessor) — a reader that looked up the wrong predecessor (e.g. always 0) would raise it to 5 unchanged instead, corrupting the second footnote's own boundary.
     const bytes = patchedFootnoteDoc((view, fcPlcffndTxt) => {
       view.setInt32(fcPlcffndTxt + 8, 5, true);
     });
@@ -143,7 +143,7 @@ describe("readStoryPlexKeys' own size validation", () => {
   });
 
   it("rejects a declared lcb too short to hold even one key pair (fewer than 4 bytes)", () => {
-    // 16 bytes short by 9 is 7, above the 4-byte minimum but still not a multiple of 4 -- exercised separately from the previous case only to also cross the < 4 boundary on the way down; see the next test for exactly 4.
+    // 16 bytes short by 9 is 7, above the 4-byte minimum but still not a multiple of 4 — exercised separately from the previous case only to also cross the < 4 boundary on the way down; see the next test for exactly 4.
     const bytes = footnoteDocWithAdjustedLcb(-9);
     expect(() => readDocContent(bytes)).toThrow(
       /PlcffndTxt is 7 bytes, which does not yield a whole number of 4-byte keys/,
@@ -151,7 +151,7 @@ describe("readStoryPlexKeys' own size validation", () => {
   });
 
   it("accepts a declared lcb of exactly 4 bytes, the smallest a whole plex can be", () => {
-    // A single terminating key alone -- readSubdocumentStories' own trailing-slot drop then leaves no stories at all, matching a document that carries no footnote stories.
+    // A single terminating key alone — readSubdocumentStories' own trailing-slot drop then leaves no stories at all, matching a document that carries no footnote stories.
     const bytes = footnoteDocWithAdjustedLcb(-12);
     expect(() => readDocContent(bytes)).not.toThrow();
   });

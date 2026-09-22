@@ -2,21 +2,21 @@ import { parseClassDef, parseCoverage } from "./ot-layout-common";
 import type { SfntFont } from "./sfnt";
 import { hasBytes, i16, sfntTableBytes, u16, u32, u8 } from "./sfnt";
 
-// Reads a font's own 'GPOS' table (Microsoft's OpenType spec, "GPOS - Glyph Positioning Table") far enough to answer one question: how much does this font want the advance of glyph A adjusted when glyph B follows it. That is pair kerning, and it is the only part of GPOS this package has any use for -- a PDF content stream positions glyphs itself, so mark attachment, cursive joining, and contextual positioning have no consumer here, and parsing them would be building against a caller that does not exist.
+// Reads a font's own 'GPOS' table (Microsoft's OpenType spec, "GPOS - Glyph Positioning Table") far enough to answer one question: how much does this font want the advance of glyph A adjusted when glyph B follows it. That is pair kerning, and it is the only part of GPOS this package has any use for — a PDF content stream positions glyphs itself, so mark attachment, cursive joining, and contextual positioning have no consumer here, and parsing them would be building against a caller that does not exist.
 //
 // The vendored text fonts are the reason this exists at all and the reason it is GPOS rather than the older 'kern' table: neither Carlito nor Caladea ships a 'kern' table in any face, and both carry all of their real pair kerning in GPOS (verified directly against assets/fonts/{carlito,caladea}/*.ttf while this module was written). The two fonts also happen to exercise genuinely different corners of the format, which is why both PairPos subtable formats and the Extension indirection below are all real code paths rather than speculative ones: Carlito reaches its kerning exclusively through LookupType 9 (Extension Positioning) wrapping LookupType 2 PairPos format 2 subtables, while Caladea uses LookupType 2 directly and mixes format 1 (an explicit per-pair list) with format 2 (class-based) subtables in the same lookup.
 //
-// What is deliberately not modelled: only the horizontal advance adjustment applied to the FIRST glyph of a pair (ValueRecord's XAdvance) is read. A horizontal left-to-right run is the only case this package's own text layout produces, and in that case a second-glyph ValueRecord, the placement fields, and the vertical fields have nothing to contribute to where the next glyph starts. Device/VariationIndex tables are likewise skipped: they carry per-pixel-size hinting corrections for a rasteriser, and this codec emits scalable PDF text rather than rasterising. A lookup's own LookupFlag (ignore-marks, mark filtering, and so on) is not consulted either, since this API is asked about a pair of glyphs the caller has already decided are adjacent -- there is no glyph sequence here to skip anything within.
+// What is deliberately not modelled: only the horizontal advance adjustment applied to the FIRST glyph of a pair (ValueRecord's XAdvance) is read. A horizontal left-to-right run is the only case this package's own text layout produces, and in that case a second-glyph ValueRecord, the placement fields, and the vertical fields have nothing to contribute to where the next glyph starts. Device/VariationIndex tables are likewise skipped: they carry per-pixel-size hinting corrections for a rasteriser, and this codec emits scalable PDF text rather than rasterising. A lookup's own LookupFlag (ignore-marks, mark filtering, and so on) is not consulted either, since this API is asked about a pair of glyphs the caller has already decided are adjacent — there is no glyph sequence here to skip anything within.
 //
 // Every read is bounds-checked and any malformed structure degrades to "this font has no kerning" rather than throwing, matching cmap-table.ts's policy for the same reason: fonts embedded in arbitrary input documents are untrusted input, and an unreadable GPOS must cost the caller kerning, not the document.
 
-// The kerning adjustment, in font design units, this font applies to `leftGlyphId`'s advance when `rightGlyphId` immediately follows it, or `undefined` when no kerning subtable covers the pair at all. A pair a subtable genuinely does cover but assigns no adjustment reads back as `0` rather than `undefined` -- the distinction is between "this font says nothing about this pair" and "this font says this pair needs no adjustment", and reporting the font's real answer is more faithful than collapsing both into absence. Callers that treat them alike can simply add `?? 0`.
+// The kerning adjustment, in font design units, this font applies to `leftGlyphId`'s advance when `rightGlyphId` immediately follows it, or `undefined` when no kerning subtable covers the pair at all. A pair a subtable genuinely does cover but assigns no adjustment reads back as `0` rather than `undefined` — the distinction is between "this font says nothing about this pair" and "this font says this pair needs no adjustment", and reporting the font's real answer is more faithful than collapsing both into absence. Callers that treat them alike can simply add `?? 0`.
 export type GposKernLookup = (
   leftGlyphId: number,
   rightGlyphId: number,
 ) => number | undefined;
 
-// One PairPos subtable, reduced to the pair query it answers. `undefined` means this subtable does not describe the pair, which is what makes the caller move on to the next subtable in the lookup -- distinct from a subtable that does describe it and returns 0.
+// One PairPos subtable, reduced to the pair query it answers. `undefined` means this subtable does not describe the pair, which is what makes the caller move on to the next subtable in the lookup — distinct from a subtable that does describe it and returns 0.
 type PairPosSubtable = (
   leftGlyphId: number,
   rightGlyphId: number,
@@ -206,7 +206,7 @@ function parsePairPosFormat2(
   };
 }
 
-// One subtable of a kerning lookup, resolving LookupType 9 (Extension Positioning) transparently. Extension exists so a lookup's subtables can sit beyond the 64 KB an Offset16 can reach, which is exactly what a font with a large kerning table needs and precisely why Carlito -- whose GPOS is ~85 KB -- wraps every one of its PairPos subtables in one.
+// One subtable of a kerning lookup, resolving LookupType 9 (Extension Positioning) transparently. Extension exists so a lookup's subtables can sit beyond the 64 KB an Offset16 can reach, which is exactly what a font with a large kerning table needs and precisely why Carlito — whose GPOS is ~85 KB — wraps every one of its PairPos subtables in one.
 function parseSubtable(
   bytes: Uint8Array<ArrayBuffer>,
   lookupType: number,
@@ -245,7 +245,7 @@ function parseSubtable(
   return undefined;
 }
 
-// Every PairPos subtable of one lookup, in the order the lookup lists them -- which is the order they must be tried in, since the first subtable that describes a pair is the one that positions it.
+// Every PairPos subtable of one lookup, in the order the lookup lists them — which is the order they must be tried in, since the first subtable that describes a pair is the one that positions it.
 function parseLookupSubtables(
   bytes: Uint8Array<ArrayBuffer>,
   lookupOffset: number,
@@ -301,7 +301,7 @@ function parseDefaultLangSysFeatureIndices(
   return indices;
 }
 
-// The ScriptList entry this package positions text with: Latin if the font has it, the script-independent default if not, and otherwise the font's first script. Going through the ScriptList at all -- rather than sweeping the FeatureList for every feature tagged 'kern' -- is what keeps a font's Cyrillic or Greek kerning lookups from being applied to Latin text, which a font that scopes different lookups to different scripts would otherwise suffer.
+// The ScriptList entry this package positions text with: Latin if the font has it, the script-independent default if not, and otherwise the font's first script. Going through the ScriptList at all — rather than sweeping the FeatureList for every feature tagged 'kern' — is what keeps a font's Cyrillic or Greek kerning lookups from being applied to Latin text, which a font that scopes different lookups to different scripts would otherwise suffer.
 function findScriptOffset(
   bytes: Uint8Array<ArrayBuffer>,
   scriptListOffset: number,
@@ -328,7 +328,7 @@ function findScriptOffset(
   return scriptListOffset + u16(bytes, recordsOffset + 4);
 }
 
-// The lookup indices every 'kern' feature the chosen script enables points at, in feature order and de-duplicated. A script's language systems routinely enable several separate 'kern' feature records that all reference the same lookup (Carlito declares seven), so the same lookup must not be walked -- or applied -- more than once.
+// The lookup indices every 'kern' feature the chosen script enables points at, in feature order and de-duplicated. A script's language systems routinely enable several separate 'kern' feature records that all reference the same lookup (Carlito declares seven), so the same lookup must not be walked — or applied — more than once.
 function collectKernLookupIndices(
   bytes: Uint8Array<ArrayBuffer>,
   featureListOffset: number,
@@ -372,7 +372,7 @@ function collectKernLookupIndices(
   return lookupIndices;
 }
 
-// Builds a pair-kerning lookup from a font's own 'GPOS' table, or returns `undefined` when the font has no GPOS, no 'kern' feature reachable from the script it positions text with, or nothing readable behind one. The whole table is walked once here and reduced to a list of per-subtable closures, so a query costs a coverage bisection rather than a re-parse -- this runs once per adjacent glyph pair of every string laid out.
+// Builds a pair-kerning lookup from a font's own 'GPOS' table, or returns `undefined` when the font has no GPOS, no 'kern' feature reachable from the script it positions text with, or nothing readable behind one. The whole table is walked once here and reduced to a list of per-subtable closures, so a query costs a coverage bisection rather than a re-parse — this runs once per adjacent glyph pair of every string laid out.
 export function buildGposKernLookup(
   font: SfntFont,
 ): GposKernLookup | undefined {
@@ -407,7 +407,7 @@ export function buildGposKernLookup(
     return undefined;
   }
 
-  // Flattened across lookups deliberately: within one lookup the first subtable that describes a pair wins, and across lookups each is applied in turn, but since every subtable here contributes the same kind of adjustment to the same glyph, "first match wins" over the concatenation is the same answer either reading produces for a pair only one subtable describes -- which, in a real kerning table, is every pair.
+  // Flattened across lookups deliberately: within one lookup the first subtable that describes a pair wins, and across lookups each is applied in turn, but since every subtable here contributes the same kind of adjustment to the same glyph, "first match wins" over the concatenation is the same answer either reading produces for a pair only one subtable describes — which, in a real kerning table, is every pair.
   const subtables: PairPosSubtable[] = [];
   for (const lookupIndex of lookupIndices) {
     if (lookupIndex >= lookupCount) {

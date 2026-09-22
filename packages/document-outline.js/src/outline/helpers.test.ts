@@ -31,7 +31,7 @@ describe("flattenOutline", () => {
         ]),
       ]),
     ]);
-    // The table attaches at the current depth -- under list item B -- and the heading group pops the list nesting back under the chapter, so document order is before, the table, then after.
+    // The table attaches at the current depth — under list item B — and the heading group pops the list nesting back under the chapter, so document order is before, the table, then after.
     expect(flattenOutline(buildOutline(pkg))).toEqual([
       before,
       nestedTable,
@@ -83,7 +83,7 @@ describe("outlineLeafText", () => {
   });
 
   it("recurses into a nested table's own cells, joining a cell's own multiple blocks by space", () => {
-    // The nested cell carries TWO paragraph blocks so blockTexts(cell.blocks).join(" ") (the nested-table branch's own join, distinct from outlineLeafText's top-level row/cell joins) has more than one element to actually separate -- a single-block cell can't distinguish a space join from a no-separator join.
+    // The nested cell carries TWO paragraph blocks so blockTexts(cell.blocks).join(" ") (the nested-table branch's own join, distinct from outlineLeafText's top-level row/cell joins) has more than one element to actually separate — a single-block cell can't distinguish a space join from a no-separator join.
     const nested: ContentTable = {
       kind: "table",
       rows: [
@@ -245,7 +245,7 @@ describe("leafContentHash", () => {
   });
 
   it("names the document, not the factoring: a resolved leaf hashes equal to its unfactored twin", () => {
-    // Law ii at the hash layer: the factored package styles its heading anchor via a styles-table ref, the unfactored twin carries the same properties inline on the paragraph, and after effectivePackage both leaves are identical -- so their hashes are.
+    // Law ii at the hash layer: the factored package styles its heading anchor via a styles-table ref, the unfactored twin carries the same properties inline on the paragraph, and after effectivePackage both leaves are identical — so their hashes are.
     const entry = { paragraph: { indentLeftPt: 24 } };
     const factored = wordprocessingPackage(
       [

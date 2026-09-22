@@ -1,4 +1,4 @@
-// Smoke test: the built dist/ artifact loads and works under both ESM and CJS. Run only via `pnpm test:smoke` (tsdown, then vitest scoped to this file by vitest.config.ts's "smoke" project) -- never part of the default `pnpm test` file set, since it requires a fresh build to mean anything.
+// Smoke test: the built dist/ artifact loads and works under both ESM and CJS. Run only via `pnpm test:smoke` (tsdown, then vitest scoped to this file by vitest.config.ts's "smoke" project) — never part of the default `pnpm test` file set, since it requires a fresh build to mean anything.
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import * as esm from '../dist/index.js';
@@ -10,7 +10,7 @@ const cjs = require('../dist/index.cjs');
 const cjsRead = require('../dist/read.cjs');
 const cjsPdfText = require('../dist/pdf-text.cjs');
 
-// A representative slice of the public surface, not an exhaustive list -- enough to catch a genuinely broken dual build without duplicating src/index.ts's own export list here. Classes (ByteReader, ByteWriter, PdfParseError, PdfEncryptedError) are real invocable functions at runtime (typeof === 'function'), so they're checked here alongside ordinary functions rather than in OBJECTS below.
+// A representative slice of the public surface, not an exhaustive list — enough to catch a genuinely broken dual build without duplicating src/index.ts's own export list here. Classes (ByteReader, ByteWriter, PdfParseError, PdfEncryptedError) are real invocable functions at runtime (typeof === 'function'), so they're checked here alongside ordinary functions rather than in OBJECTS below.
 const FUNCTIONS = [
   'readPdf',
   'writePdf',
@@ -100,7 +100,7 @@ describe.each([
   });
 
 
-  // A real OpenJPEG-produced JPEG 2000 codestream (the "tiny" fixture from src/test-support/jpeg2000.ts, inlined so this file stays free of src/ imports), decoded through the built bundle. The expected samples are the PGM the encoder was handed, so this asserts the whole tier-2/tier-1/wavelet chain reaches dist/ and reproduces the original integers exactly -- not merely that a decode call returned something.
+  // A real OpenJPEG-produced JPEG 2000 codestream (the "tiny" fixture from src/test-support/jpeg2000.ts, inlined so this file stays free of src/ imports), decoded through the built bundle. The expected samples are the PGM the encoder was handed, so this asserts the whole tier-2/tier-1/wavelet chain reaches dist/ and reproduces the original integers exactly — not merely that a decode call returned something.
   describe('JPEG 2000 decoding', () => {
     const CODESTREAM =
       '/0//UQApAAAAAAAFAAAAAwAAAAAAAAAAAAAABQAAAAMAAAAAAAAAAAABBwEB/1IADAAAAAEAAQQEAAH/XAAHQEBISFD/ZAAlAAFDcmVhdGVkIGJ5IE9wZW5KUEVHIHZlcnNpb24gMi41LjT/kAAKAAAAAAAaAAH/k9+AQAeryAosLBLwgP/Z';
@@ -117,7 +117,7 @@ describe.each([
     });
   });
 
-  // A hand-built MathBox (a single glyph run, no MathML layout engine involved -- that engine stays in documents.js, see this package's own README) exercised through writePdf's own formulas side channel, proving the embedded STIX Two Math font asset survived the tsdown build unmangled and the CID composite font machinery (math-font.ts, math-font-write.ts, math-content-write.ts) reaches the built dist/ artifact. Mirrors documents.js's own odfToPdf smoke test assertion: the fraction/glyph run itself never becomes an ordinary LayoutItem (see write.ts's own module comment), so this checks the PDF actually contains a real embedded Type0/CIDFontType0C font resource rather than trying to recover the glyph text via readPdf.
+  // A hand-built MathBox (a single glyph run, no MathML layout engine involved — that engine stays in documents.js, see this package's own README) exercised through writePdf's own formulas side channel, proving the embedded STIX Two Math font asset survived the tsdown build unmangled and the CID composite font machinery (math-font.ts, math-font-write.ts, math-content-write.ts) reaches the built dist/ artifact. Mirrors documents.js's own odfToPdf smoke test assertion: the fraction/glyph run itself never becomes an ordinary LayoutItem (see write.ts's own module comment), so this checks the PDF actually contains a real embedded Type0/CIDFontType0C font resource rather than trying to recover the glyph text via readPdf.
   describe('formula embedding via writePdf({ formulas })', () => {
     it('embeds a real glyph run through the STIX Two Math font, producing a well-formed single-page PDF', () => {
       const box = {
@@ -174,7 +174,7 @@ describe.each([
   });
 });
 
-// The pdf-text deep module (package.json `./*` wildcard -> dist/pdf-text.js/.cjs): PDF string/date scalar decoding lives here, not on the read entry, per the README's entry-surface note -- the read entry carries only readPdf and the read pipeline's own helpers, while pdf-codec/pdf-text stays deep-importable and asset-free the same way. This block proves that advertised deep surface actually loads from the built artifact in both module formats.
+// The pdf-text deep module (package.json `./*` wildcard -> dist/pdf-text.js/.cjs): PDF string/date scalar decoding lives here, not on the read entry, per the README's entry-surface note — the read entry carries only readPdf and the read pipeline's own helpers, while pdf-codec/pdf-text stays deep-importable and asset-free the same way. This block proves that advertised deep surface actually loads from the built artifact in both module formats.
 describe.each([
   ['ESM', esmPdfText],
   ['CJS', cjsPdfText],

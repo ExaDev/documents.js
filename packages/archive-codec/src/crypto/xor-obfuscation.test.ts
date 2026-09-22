@@ -24,7 +24,7 @@ function fromHex(hex: string): Uint8Array<ArrayBuffer> {
 }
 
 describe("createXorObfuscationKey / createXorObfuscationPasswordVerifier", () => {
-  // Every vector below was computed independently in a from-scratch Python port of [MS-OFFCRYPTO] 2.3.7.1/2.3.7.2's own pseudocode, then cross-checked against Apache POI's own createXorKey1/createXorVerifier1 (CryptoFunctions.java) -- not inverted from this module's own implementation. The "123456789012345" vector is additionally the real password to a genuine Excel-generated XOR-obfuscated .xls fixture (nolze/msoffcrypto-tool's own tests/inputs/xor_password_123456789012345.xls, sourced from the openwall/john-samples corpus): 0x8265/0x9eb1 are that file's own stored FilePass key/verificationBytes fields, matched exactly.
+  // Every vector below was computed independently in a from-scratch Python port of [MS-OFFCRYPTO] 2.3.7.1/2.3.7.2's own pseudocode, then cross-checked against Apache POI's own createXorKey1/createXorVerifier1 (CryptoFunctions.java) — not inverted from this module's own implementation. The "123456789012345" vector is additionally the real password to a genuine Excel-generated XOR-obfuscated .xls fixture (nolze/msoffcrypto-tool's own tests/inputs/xor_password_123456789012345.xls, sourced from the openwall/john-samples corpus): 0x8265/0x9eb1 are that file's own stored FilePass key/verificationBytes fields, matched exactly.
   it.each([
     ["Test1234", 0xf7ff, 0xec87],
     ["a", 0x9d77, 0xce88],
@@ -54,7 +54,7 @@ describe("createXorObfuscationKey / createXorObfuscationPasswordVerifier", () =>
 
   it("rejects a password with a character outside single-byte ASCII/Latin-1", () => {
     expect(() => createXorObfuscationKey("pässwörd")).not.toThrow();
-    // U+00FF is the highest single-byte Latin-1 code point this module accepts -- the exact boundary the ASCII/Latin-1 check must get right.
+    // U+00FF is the highest single-byte Latin-1 code point this module accepts — the exact boundary the ASCII/Latin-1 check must get right.
     expect(() => createXorObfuscationKey("ÿ")).not.toThrow();
     // charCodeAt reads UTF-16 code units, so the emoji's own high surrogate (0xD83D = 55357) is what surfaces at index 4, not its full code point.
     expect(() => createXorObfuscationKey("pass\u{1F600}word")).toThrow(
@@ -83,7 +83,7 @@ describe("createXorObfuscationArray", () => {
 });
 
 describe("decryptXorObfuscationMethod1", () => {
-  // A real ciphertext span lifted directly from the genuine Excel-generated fixture above: FilePass's own key/verificationBytes (0x8265/0x9eb1) match password "123456789012345" (confirmed in the suite above), and this is that same workbook's own BoundSheet8 record data (after its own never-obfuscated 4-byte lbPlyPos prefix), 7 bytes starting at absolute Workbook-stream offset 1378 -- [MS-XLS] 2.2.10's own `(streamOffset + recordDataLength) % 16` rule (recordDataLength 11, the record's own full declared size including lbPlyPos) gives XorArrayIndex 13, independently confirmed against Apache POI's own `XORDecryptor.invokeCipher` comment ("XorArrayIndex = (FileOffset + Data.Length) % 16") and LibreOffice's `XclImpBiff5Decrypter::OnUpdate` (`Skip((nNewStrmPos + nRecSize) & 0x0F)`).
+  // A real ciphertext span lifted directly from the genuine Excel-generated fixture above: FilePass's own key/verificationBytes (0x8265/0x9eb1) match password "123456789012345" (confirmed in the suite above), and this is that same workbook's own BoundSheet8 record data (after its own never-obfuscated 4-byte lbPlyPos prefix), 7 bytes starting at absolute Workbook-stream offset 1378 — [MS-XLS] 2.2.10's own `(streamOffset + recordDataLength) % 16` rule (recordDataLength 11, the record's own full declared size including lbPlyPos) gives XorArrayIndex 13, independently confirmed against Apache POI's own `XORDecryptor.invokeCipher` comment ("XorArrayIndex = (FileOffset + Data.Length) % 16") and LibreOffice's `XclImpBiff5Decrypter::OnUpdate` (`Skip((nNewStrmPos + nRecSize) & 0x0F)`).
   it("decrypts a real Excel-generated BoundSheet8 span", () => {
     const array = createXorObfuscationArray(
       "123456789012345",
@@ -102,7 +102,7 @@ describe("decryptXorObfuscationMethod1", () => {
       XOR_OBFUSCATION_ROTATE_DISTANCE_METHOD1,
     );
     const plaintext = new TextEncoder().encode("round-trip test data");
-    // Method 1's transform is rotate-then-XOR for decrypt, so its own inverse (XOR-then-rotate-right) is exercised only here, locally, to build the round trip -- this package exports no encrypt direction (see xor-obfuscation.ts's own top comment).
+    // Method 1's transform is rotate-then-XOR for decrypt, so its own inverse (XOR-then-rotate-right) is exercised only here, locally, to build the round trip — this package exports no encrypt direction (see xor-obfuscation.ts's own top comment).
     const encode = (
       data: Uint8Array<ArrayBuffer>,
       initialIndex: number,
@@ -183,7 +183,7 @@ describe("decryptXorObfuscationMethod2", () => {
   });
 
   it("leaves a non-zero byte unmodified when XORing it against the array happens to produce zero", () => {
-    // [MS-OFFCRYPTO] 2.3.7.6's own zero-exception applies whenever EITHER the original byte or the transformed result is zero, not only when the input already was -- a byte that XORs to zero against its own array entry (transformed === 0) must stay as its own original, non-zero value, exactly as a genuinely zero input byte does.
+    // [MS-OFFCRYPTO] 2.3.7.6's own zero-exception applies whenever EITHER the original byte or the transformed result is zero, not only when the input already was — a byte that XORs to zero against its own array entry (transformed === 0) must stay as its own original, non-zero value, exactly as a genuinely zero input byte does.
     const array = createXorObfuscationArray(
       "Test1234",
       XOR_OBFUSCATION_ROTATE_DISTANCE_METHOD2,

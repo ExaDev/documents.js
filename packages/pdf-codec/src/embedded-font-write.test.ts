@@ -41,11 +41,11 @@ import {
 import type { AllocatedObject } from "./test-support/write-pdf-fixture";
 import { assemblePdf } from "./test-support/write-pdf-fixture";
 
-// The end-to-end proof this module exists for: take a real vendored face, cut a real subset of it for a real string, build the whole PDF object group, assemble a genuine PDF file around it by hand, and read that file back with this package's own readPdf. Nothing here is a synthetic fixture -- the font is the checked-in Carlito Regular, the subset is sfnt-subset.ts's own output, and the file is a complete, well-formed PDF with a real cross-reference table.
+// The end-to-end proof this module exists for: take a real vendored face, cut a real subset of it for a real string, build the whole PDF object group, assemble a genuine PDF file around it by hand, and read that file back with this package's own readPdf. Nothing here is a synthetic fixture — the font is the checked-in Carlito Regular, the subset is sfnt-subset.ts's own output, and the file is a complete, well-formed PDF with a real cross-reference table.
 //
-// The PDF is assembled here rather than through writePdf deliberately: writePdf has no embedded-text-font path yet (that is the next phase's work), and adding one purely so this test could call it would put the thing under test on both sides of the assertion. The assembly below is the minimum a conforming file needs -- Catalog, Pages, Page, a content stream, and the five font objects -- written through the same serialize.ts every real PDF this package emits goes through.
+// The PDF is assembled here rather than through writePdf deliberately: writePdf has no embedded-text-font path yet (that is the next phase's work), and adding one purely so this test could call it would put the thing under test on both sides of the assertion. The assembly below is the minimum a conforming file needs — Catalog, Pages, Page, a content stream, and the five font objects — written through the same serialize.ts every real PDF this package emits goes through.
 //
-// The string is chosen for what it forces rather than for being pretty: 'ö' and the digits are composite glyphs in Carlito, so their components have to survive the subset for those characters to render at all -- and those components are glyphs no character maps to, which is what makes the /W array and the ToUnicode CMap genuinely different sets rather than the same one twice.
+// The string is chosen for what it forces rather than for being pretty: 'ö' and the digits are composite glyphs in Carlito, so their components have to survive the subset for those characters to render at all — and those components are glyphs no character maps to, which is what makes the /W array and the ToUnicode CMap genuinely different sets rather than the same one twice.
 const TEXT = "Hello, wörld! 42";
 const FONT_SIZE_PT = 24;
 const TEXT_X_PT = 72;
@@ -54,7 +54,7 @@ const PAGE_WIDTH_PT = 612;
 const PAGE_HEIGHT_PT = 792;
 const FONT_RESOURCE_NAME = "F1";
 
-// The one text-showing sequence the page draws: the string's CIDs, big-endian, as a hex-string Tj operand against the embedded composite font -- exactly what math-content-write.ts already emits for the math font, and the only content-stream shape an Identity-H font can be shown with.
+// The one text-showing sequence the page draws: the string's CIDs, big-endian, as a hex-string Tj operand against the embedded composite font — exactly what math-content-write.ts already emits for the math font, and the only content-stream shape an Identity-H font can be shown with.
 function buildContentStream(
   codes: Uint8Array<ArrayBuffer>,
 ): Uint8Array<ArrayBuffer> {
@@ -219,9 +219,9 @@ describe("a real PDF carrying an embedded, subsetted Carlito, read back by this 
     if (item.kind !== "text") {
       throw new Error("unreachable");
     }
-    // The recovered width is the font's own measurement of this string at this size, which is only true if every /W entry survived the round trip -- /DW alone would put every glyph at 1000 and inflate this by roughly two thirds.
+    // The recovered width is the font's own measurement of this string at this size, which is only true if every /W entry survived the round trip — /DW alone would put every glyph at 1000 and inflate this by roughly two thirds.
     //
-    // The face's own pair kerning is subtracted back out rather than left in: this fixture's content stream is a single unkerned Tj (see buildContentStream above), while encodeForShowEmbedded's width additionally carries the kerning only a TJ array can actually draw. What is under test here is the /W array, so the expectation is the bare advance sum this page genuinely draws -- content-write.ts's own emission, not this fixture's, is where the kerned form is exercised.
+    // The face's own pair kerning is subtracted back out rather than left in: this fixture's content stream is a single unkerned Tj (see buildContentStream above), while encodeForShowEmbedded's width additionally carries the kerning only a TJ array can actually draw. What is under test here is the /W array, so the expectation is the bare advance sum this page genuinely draws — content-write.ts's own emission, not this fixture's, is where the kerned form is exercised.
     const shown = encodeForShowEmbedded(TEXT, face);
     const kerning1000 = shown.kerns.reduce(
       (total, kern) => total + kern.adjustment1000,
@@ -303,7 +303,7 @@ describe("a real PDF carrying an embedded, subsetted Carlito, read back by this 
     expect(asName(dictGet(fontFile.dict, "Filter"))).toBe("FlateDecode");
     const declaredLength = asNumber(dictGet(fontFile.dict, "Length"));
     const declaredLength1 = asNumber(dictGet(fontFile.dict, "Length1"));
-    // The whole point of /Length1: it is the length of the font program itself, before compression -- never the stream's own /Length, which is what a compressed stream's bytes actually measure.
+    // The whole point of /Length1: it is the length of the font program itself, before compression — never the stream's own /Length, which is what a compressed stream's bytes actually measure.
     expect(declaredLength1).toBe(subset.bytes.length);
     expect(declaredLength).toBeLessThan(declaredLength1!);
     // Not vacuous: the subset really is smaller than the face it was cut from, and really did compress.
@@ -387,9 +387,9 @@ describe("a real PDF carrying an embedded, subsetted Carlito, read back by this 
       4,
     );
     expect(asNumber(dictGet(descriptor!, "ItalicAngle"))).toBe(0);
-    expect(asNumber(dictGet(descriptor!, "StemV"))).toBe(80); // NOMINAL_STEM_V -- a nominal, spec-required value no conforming reader actually consults
+    expect(asNumber(dictGet(descriptor!, "StemV"))).toBe(80); // NOMINAL_STEM_V — a nominal, spec-required value no conforming reader actually consults
     expect(asName(dictGet(descriptor!, "Type"))).toBe("FontDescriptor");
-    // Every geometry field is in 1000-unit glyph space, not Carlito's own 2048-unit design grid -- so the bounding box read back here is roughly half the raw head-table one.
+    // Every geometry field is in 1000-unit glyph space, not Carlito's own 2048-unit design grid — so the bounding box read back here is roughly half the raw head-table one.
     //
     // A hard length assertion first, not just the forEach below: FontBBox is read through optional chaining because it's read from an already-round-tripped PDF dict (a genuinely absent key is a real, distinct outcome from an empty array), so a mutant blanking out the FontBBox key would otherwise leave the forEach body silently unrun and this test vacuously green.
     const bbox = asArray(dictGet(descriptor!, "FontBBox"));
@@ -454,7 +454,7 @@ describe("the subset tag", () => {
   });
 
   it("differs when the glyph set differs, which is the whole reason it exists", () => {
-    // Two subsets of one face carrying different glyphs must not be mistaken for one another -- when documents are merged, a shared tag would let one subset's font program answer for the other's CIDs.
+    // Two subsets of one face carrying different glyphs must not be mistaken for one another — when documents are merged, a shared tag would let one subset's font program answer for the other's CIDs.
     expect(embeddedSubsetTag("Carlito-Regular", [0, 15, 59])).not.toBe(
       embeddedSubsetTag("Carlito-Regular", [0, 15, 60]),
     );
@@ -480,7 +480,7 @@ describe("the subset tag", () => {
   });
 
   it("derives its six letters as a base-26, most-significant-letter-first encoding of the CRC32 hash", () => {
-    // Computed independently of embeddedSubsetTag's own implementation, using the package's own separately-tested crc32() as the trusted primitive -- proves the exact digit-extraction direction (most significant letter first, via repeated floor-division) rather than merely that some six letters come out.
+    // Computed independently of embeddedSubsetTag's own implementation, using the package's own separately-tested crc32() as the trusted primitive — proves the exact digit-extraction direction (most significant letter first, via repeated floor-division) rather than merely that some six letters come out.
     const postScriptName = "Test-Face";
     const glyphIds = [3, 90, 4000];
     const codeSpace = 26 ** 6;
@@ -503,7 +503,7 @@ describe("buildEmbeddedFontObjects: FLAG_SERIF", () => {
   it("sets the SERIF descriptor bit for a face whose own metrics declare it serif", () => {
     const sfnt = parseSfnt(caladeaRegularBytes())!;
     const face = loadEmbeddedFace(sfnt)!;
-    expect(face.metrics.serif).toBe(true); // real Caladea data, not a synthetic fixture -- confirms this test exercises the branch it claims to
+    expect(face.metrics.serif).toBe(true); // real Caladea data, not a synthetic fixture — confirms this test exercises the branch it claims to
     const subset = subsetSfnt(sfnt, [0x41])!;
     const usedGlyphs = collectEmbeddedGlyphs(["A"], face);
     const { descriptor } = buildEmbeddedFontObjects(
@@ -528,7 +528,7 @@ describe("buildEmbeddedFontObjects: FLAG_ITALIC", () => {
   it("sets the ITALIC descriptor bit for a face whose own italicAngleDegrees is non-zero", () => {
     const sfnt = parseSfnt(caladeaItalicBytes())!;
     const face = loadEmbeddedFace(sfnt)!;
-    expect(face.metrics.italicAngleDegrees).not.toBe(0); // real Caladea Italic data, not a synthetic fixture -- confirms this test exercises the branch it claims to
+    expect(face.metrics.italicAngleDegrees).not.toBe(0); // real Caladea Italic data, not a synthetic fixture — confirms this test exercises the branch it claims to
     const subset = subsetSfnt(sfnt, [0x41])!;
     const usedGlyphs = collectEmbeddedGlyphs(["A"], face);
     const { descriptor } = buildEmbeddedFontObjects(

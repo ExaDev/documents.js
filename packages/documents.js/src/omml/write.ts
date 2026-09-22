@@ -18,21 +18,21 @@ import { miIntrinsicDefault, VARIANT_RUN_PROPERTIES } from "./shared";
 
 // MathML presentation markup -> OMML (Office Math Markup Language, ECMA-376 Part 1 §22.1's own `m:` vocabulary), the write-side counterpart to src/mathml/layout.ts's own MathML -> MathBox typesetting engine. Both consume the identical MathMlNode tree and cover the identical construct set, deliberately: a formula rendered to PDF and the same formula written into a docx should degrade in the same places, never one silently better than the other.
 //
-// This is a STRUCTURAL translation, not a rendering one -- it emits no geometry, measures nothing, and loads no font. OMML is a semantic math vocabulary of its own (m:f for a fraction, m:rad for a radical, m:sSub/m:sSup for scripts, m:m for a matrix), so every construct below maps onto a real OMML element Word itself both writes and renders, rather than onto positioned glyphs. That is what makes a formula crossing the odt -> docx bridge arrive as genuinely editable Word math rather than the plain-text stand-in it used to become.
+// This is a STRUCTURAL translation, not a rendering one — it emits no geometry, measures nothing, and loads no font. OMML is a semantic math vocabulary of its own (m:f for a fraction, m:rad for a radical, m:sSub/m:sSup for scripts, m:m for a matrix), so every construct below maps onto a real OMML element Word itself both writes and renders, rather than onto positioned glyphs. That is what makes a formula crossing the odt -> docx bridge arrive as genuinely editable Word math rather than the plain-text stand-in it used to become.
 //
-// Why this module lives outside src/mathml/: that directory is deliberately self-contained (no ooxml.js, no odf.js, no document-schema.js -- see its own module comments), and this translator's whole output type is ooxml.js's XmlElement. It consumes src/mathml/'s own node helpers, operator dictionary, and mathvariant type, and nothing else local.
+// Why this module lives outside src/mathml/: that directory is deliberately self-contained (no ooxml.js, no odf.js, no document-schema.js — see its own module comments), and this translator's whole output type is ooxml.js's XmlElement. It consumes src/mathml/'s own node helpers, operator dictionary, and mathvariant type, and nothing else local.
 
-// http://schemas.openxmlformats.org/officeDocument/2006/math -- OMML's own namespace, declared on the fragment's own root element rather than on the host document's w:document, so a fragment stays valid when appended to ANY docx, including one this package did not scaffold (openDocx over a third-party file whose root declares only xmlns:w). Redundant namespace declarations on a descendant are ordinary, valid XML; a missing one is not.
+// http://schemas.openxmlformats.org/officeDocument/2006/math — OMML's own namespace, declared on the fragment's own root element rather than on the host document's w:document, so a fragment stays valid when appended to ANY docx, including one this package did not scaffold (openDocx over a third-party file whose root declares only xmlns:w). Redundant namespace declarations on a descendant are ordinary, valid XML; a missing one is not.
 const OMML_NS = "http://schemas.openxmlformats.org/officeDocument/2006/math";
 
 export interface OmmlWriteResult {
-  // undefined when the source MathML produced no OMML content at all -- an empty formula, or one whose every node was a non-element (a whitespace text node between siblings). A caller then falls back to whatever whole-formula stand-in it already has (src/model/formula.ts's formulaPlaceholderText), rather than writing an empty equation.
+  // undefined when the source MathML produced no OMML content at all — an empty formula, or one whose every node was a non-element (a whitespace text node between siblings). A caller then falls back to whatever whole-formula stand-in it already has (src/model/formula.ts's formulaPlaceholderText), rather than writing an empty equation.
   readonly element: XmlElement | undefined;
   readonly diagnostics: readonly OmmlDiagnostic[];
 }
 
 interface WriteContext {
-  // undefined = "no ancestor mstyle set one" -- a token element then applies its own intrinsic default, matching src/mathml/layout.ts's own LayoutContext.inheritedVariant exactly.
+  // undefined = "no ancestor mstyle set one" — a token element then applies its own intrinsic default, matching src/mathml/layout.ts's own LayoutContext.inheritedVariant exactly.
   readonly inheritedVariant: MathVariant | undefined;
   readonly displayStyle: boolean;
   readonly diagnostics: OmmlDiagnostic[];
@@ -53,7 +53,7 @@ function diagnose(
   ctx.diagnostics.push({ kind, detail: elementLocalName(element) });
 }
 
-// A math text run: <m:r>[<m:rPr>…</m:rPr>]<m:t>…</m:t></m:r>. `text` is a raw string (XML-encoded here, matching src/xml/fragment.ts's own "values must already be encoded" contract), and carries xml:space="preserve" whenever leading/trailing whitespace would otherwise be collapsed -- the same rule w:t already follows in src/edit/docx/run.ts.
+// A math text run: <m:r>[<m:rPr>…</m:rPr>]<m:t>…</m:t></m:r>. `text` is a raw string (XML-encoded here, matching src/xml/fragment.ts's own "values must already be encoded" contract), and carries xml:space="preserve" whenever leading/trailing whitespace would otherwise be collapsed — the same rule w:t already follows in src/edit/docx/run.ts.
 function mathRun(text: string, properties: XmlElement | undefined): XmlElement {
   const tAttrs: Record<string, string> = needsSpacePreserve(text)
     ? { "xml:space": "preserve" }
@@ -66,7 +66,7 @@ function mathRun(text: string, properties: XmlElement | undefined): XmlElement {
   return el("m:r", {}, children);
 }
 
-// CT_MRPr's own element sequence is lit, nor, scr, sty, brk, aln -- only scr/sty and nor are ever written here, so emitting scr before sty is all the ordering this needs.
+// CT_MRPr's own element sequence is lit, nor, scr, sty, brk, aln — only scr/sty and nor are ever written here, so emitting scr before sty is all the ordering this needs.
 function variantRunProperties(variant: MathVariant): XmlElement {
   const mapped = VARIANT_RUN_PROPERTIES[variant];
   const children: XmlElement[] = [];
@@ -89,7 +89,7 @@ function tokenVariant(
   return ctx.inheritedVariant ?? intrinsicDefault;
 }
 
-// mtext is MathML's "ordinary text inside a formula" token, and OMML's own m:nor ("normal text") is its exact counterpart -- a run marked m:nor renders in the surrounding paragraph's text font rather than the math font, which is precisely what mtext means and what Word itself writes for literal text inside an equation. An mtext carrying an explicit mathvariant is treated as an ordinary styled math token instead, since m:nor and m:scr/m:sty describe mutually exclusive run kinds.
+// mtext is MathML's "ordinary text inside a formula" token, and OMML's own m:nor ("normal text") is its exact counterpart — a run marked m:nor renders in the surrounding paragraph's text font rather than the math font, which is precisely what mtext means and what Word itself writes for literal text inside an equation. An mtext carrying an explicit mathvariant is treated as an ordinary styled math token instead, since m:nor and m:scr/m:sty describe mutually exclusive run kinds.
 function tokenRun(
   element: MathMlElement,
   rawText: string,
@@ -120,7 +120,7 @@ function argSlot(
   return el(tag, {}, child === undefined ? [] : convertElement(child, ctx));
 }
 
-// msqrt's own content model is an IMPLICIT mrow of every child (MathML3 3.3.6), unlike mroot's fixed (radicand, index) pair -- so its slot takes the whole child list rather than one element.
+// msqrt's own content model is an IMPLICIT mrow of every child (MathML3 3.3.6), unlike mroot's fixed (radicand, index) pair — so its slot takes the whole child list rather than one element.
 function argSlotFromChildren(
   tag: string,
   children: readonly MathMlElement[],
@@ -153,7 +153,7 @@ function convertFraction(
   return el("m:f", {}, parts);
 }
 
-// msqrt/mroot -> m:rad. CT_Rad's own sequence is radPr?, deg, e -- m:deg is present and EMPTY for a square root, with m:radPr/m:degHide marking it hidden, exactly as Word itself writes one. mroot's MathML child order is (radicand, index); OMML's is the reverse (degree first), so the two are swapped here rather than passed through.
+// msqrt/mroot -> m:rad. CT_Rad's own sequence is radPr?, deg, e — m:deg is present and EMPTY for a square root, with m:radPr/m:degHide marking it hidden, exactly as Word itself writes one. mroot's MathML child order is (radicand, index); OMML's is the reverse (degree first), so the two are swapped here rather than passed through.
 function convertRadical(
   element: MathMlElement,
   kind: "msqrt" | "mroot",
@@ -201,11 +201,11 @@ function isMovableLimitsOperator(element: MathMlElement | undefined): boolean {
   );
 }
 
-// munder/mover/munderover -> m:limLow/m:limUpp, nested for the both-limits case: OMML has no single element carrying an under AND an over script, so munderover becomes an m:limUpp whose own base is an m:limLow -- a real, valid, Word-renderable composition, and exactly what Word itself produces when a limit is added to an already-limited base.
+// munder/mover/munderover -> m:limLow/m:limUpp, nested for the both-limits case: OMML has no single element carrying an under AND an over script, so munderover becomes an m:limUpp whose own base is an m:limLow — a real, valid, Word-renderable composition, and exactly what Word itself produces when a limit is added to an already-limited base.
 //
-// Deliberately NOT m:nary, even for the ∑/∏/∫ case m:nary exists for: m:nary's own m:e slot is the OPERAND being summed/integrated, and MathML records no operand at all inside munderover -- it sits outside, as a following sibling of the mrow, with no grouping marking where it ends. Choosing one would be guessing at operand scope, which this package's conventions rule out; nesting limUpp/limLow guesses nothing and loses nothing but the auto-grown operator glyph.
+// Deliberately NOT m:nary, even for the ∑/∏/∫ case m:nary exists for: m:nary's own m:e slot is the OPERAND being summed/integrated, and MathML records no operand at all inside munderover — it sits outside, as a following sibling of the mrow, with no grouping marking where it ends. Choosing one would be guessing at operand scope, which this package's conventions rule out; nesting limUpp/limLow guesses nothing and loses nothing but the auto-grown operator glyph.
 //
-// A movablelimits operator (∑, ∏, ⋃, ...) outside display style takes its limits as an ordinary sub/sup pair instead -- the same \nolimits-vs-\limits distinction src/mathml/layout.ts's own layoutUnderOverElement makes, resolved here identically so the docx and PDF paths agree.
+// A movablelimits operator (∑, ∏, ⋃, ...) outside display style takes its limits as an ordinary sub/sup pair instead — the same \nolimits-vs-\limits distinction src/mathml/layout.ts's own layoutUnderOverElement makes, resolved here identically so the docx and PDF paths agree.
 function convertUnderOver(
   element: MathMlElement,
   kind: "munder" | "mover" | "munderover",
@@ -287,7 +287,7 @@ function convertTable(element: MathMlElement, ctx: WriteContext): XmlElement {
   return el("m:m", {}, children);
 }
 
-// mspace has no OMML counterpart that preserves its width: OMML expresses a space only as literal space characters in an m:t run, with no width-parameterised spacer element anywhere in its vocabulary. A positive width becomes exactly one literal space (a real space, just not the requested one) with an 'approximated-element' diagnostic; a zero or absent width becomes nothing at all, which is exactly what it renders as. The width is parsed against a font size of 1 purely to test its sign -- every unit parseMathLength understands is a positive multiple of the size it is given, so positivity is size-independent.
+// mspace has no OMML counterpart that preserves its width: OMML expresses a space only as literal space characters in an m:t run, with no width-parameterised spacer element anywhere in its vocabulary. A positive width becomes exactly one literal space (a real space, just not the requested one) with an 'approximated-element' diagnostic; a zero or absent width becomes nothing at all, which is exactly what it renders as. The width is parsed against a font size of 1 purely to test its sign — every unit parseMathLength understands is a positive multiple of the size it is given, so positivity is size-independent.
 function convertSpace(element: MathMlElement, ctx: WriteContext): XmlElement[] {
   const width = attrValue(element, "width");
   const widthValue =
@@ -299,7 +299,7 @@ function convertSpace(element: MathMlElement, ctx: WriteContext): XmlElement[] {
   return [mathRun(" ", el("m:rPr", {}, [el("m:nor")]))];
 }
 
-// semantics wraps its real content plus one or more parallel-markup annotations -- only the first non-annotation child is translated, matching src/mathml/layout.ts's own layoutSemantics exactly. A formula's StarMath annotation is separately available to a caller as ContentFormula.starMath, so nothing is lost by skipping it here.
+// semantics wraps its real content plus one or more parallel-markup annotations — only the first non-annotation child is translated, matching src/mathml/layout.ts's own layoutSemantics exactly. A formula's StarMath annotation is separately available to a caller as ContentFormula.starMath, so nothing is lost by skipping it here.
 function convertSemantics(
   element: MathMlElement,
   ctx: WriteContext,
@@ -368,17 +368,17 @@ function convertElement(node: MathMlElement, ctx: WriteContext): XmlElement[] {
       return [convertTable(node, ctx)];
     case "mtr":
     case "mtd":
-      // Reached only when a caller hands one over directly rather than through 'mtable' (a malformed tree) -- treated as an implicit row of its own children, the same fallback src/mathml/layout.ts applies.
+      // Reached only when a caller hands one over directly rather than through 'mtable' (a malformed tree) — treated as an implicit row of its own children, the same fallback src/mathml/layout.ts applies.
       return convertNodes(node.children, ctx);
     default: {
-      // No OMML equivalent: degrade this ONE construct to a literal-text math run carrying its own text content, and report it. The rest of the formula still translates -- a single unsupported element never fails the document.
+      // No OMML equivalent: degrade this ONE construct to a literal-text math run carrying its own text content, and report it. The rest of the formula still translates — a single unsupported element never fails the document.
       diagnose(ctx, "unsupported-element", node);
       return tokenRun(node, textContent(node), "normal", ctx, true);
     }
   }
 }
 
-// A non-element node (a whitespace text node between siblings -- normal, valid MathML formatting) contributes nothing and is not a diagnostic-worthy event, matching src/mathml/layout.ts's own layoutNode.
+// A non-element node (a whitespace text node between siblings — normal, valid MathML formatting) contributes nothing and is not a diagnostic-worthy event, matching src/mathml/layout.ts's own layoutNode.
 function convertNodes(
   nodes: readonly MathMlNode[],
   ctx: WriteContext,
@@ -412,7 +412,7 @@ export function buildOfficeMath(
   };
 }
 
-// The same translation wrapped in m:oMathPara -- OMML's own DISPLAY equation container, the correct form for a formula that occupies a paragraph of its own (which is exactly what a ContentEmbeddedObjectBlock is). The namespace declaration moves to the outer element so the fragment still carries exactly one.
+// The same translation wrapped in m:oMathPara — OMML's own DISPLAY equation container, the correct form for a formula that occupies a paragraph of its own (which is exactly what a ContentEmbeddedObjectBlock is). The namespace declaration moves to the outer element so the fragment still carries exactly one.
 export function buildOfficeMathParagraph(
   mathml: readonly MathMlNode[],
 ): OmmlWriteResult {

@@ -1,14 +1,14 @@
 # History-shape guards (fast) plus lint-staged (eslint --fix on staged files, run in each
 # staged file's own package). The typecheck/test gate runs on pre-push so commits stay fast.
 
-# Enforce linear history on main -- reject merge commits.
+# Enforce linear history on main — reject merge commits.
 branch=$(git rev-parse --abbrev-ref HEAD)
 if [ "$branch" = "main" ] && git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
   echo "Error: merge commits are not allowed on main. Rebase instead."
   exit 1
 fi
 
-# Ban squash merges -- `git merge --squash` collapses granular history into one commit. git
+# Ban squash merges — `git merge --squash` collapses granular history into one commit. git
 # leaves a SQUASH_MSG file in the git dir during a squash merge, so its presence at commit
 # time is the reliable signal. Rebase to preserve history.
 if [ -f "$(git rev-parse --git-dir)/SQUASH_MSG" ]; then

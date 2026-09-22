@@ -38,7 +38,7 @@ const WRITABLE_FORMATS = [
 const WritableFormatSchema = z.enum(WRITABLE_FORMATS);
 type WritableFormat = z.infer<typeof WritableFormatSchema>;
 
-// Every field docx's and odt's own RunInit/ParagraphInit accept (identical shapes in both -- see edit/docx/run.ts and edit/odt/run.ts), plus markdown's own divergent extras (hyperlink, code) validated as unsupported outside markdown below rather than silently dropped. There is deliberately no separate pptx/odp/ods/odg paragraph-append operation here: this first editor surface covers only the wordprocessing paragraph/run family (docx/odt/markdown) -- slide/sheet/drawing editing is real remaining scope, tracked separately.
+// Every field docx's and odt's own RunInit/ParagraphInit accept (identical shapes in both — see edit/docx/run.ts and edit/odt/run.ts), plus markdown's own divergent extras (hyperlink, code) validated as unsupported outside markdown below rather than silently dropped. There is deliberately no separate pptx/odp/ods/odg paragraph-append operation here: this first editor surface covers only the wordprocessing paragraph/run family (docx/odt/markdown) — slide/sheet/drawing editing is real remaining scope, tracked separately.
 const RunSchema = z.object({
   text: z.string().optional().describe("The run's own text content."),
   bold: z.boolean().optional(),
@@ -58,7 +58,7 @@ const RunSchema = z.object({
   code: z
     .boolean()
     .optional()
-    .describe("markdown only -- renders the run as an inline code span."),
+    .describe("markdown only — renders the run as an inline code span."),
 });
 type RunInput = z.infer<typeof RunSchema>;
 
@@ -90,7 +90,7 @@ const ParagraphSchema = z.object({
 });
 type ParagraphInput = z.infer<typeof ParagraphSchema>;
 
-// Fields present on `input` that `unsupported` names as not valid for the current target format -- reported together in one error rather than one at a time, so a caller sees every field to remove in a single round trip instead of fixing them one rejection at a time.
+// Fields present on `input` that `unsupported` names as not valid for the current target format — reported together in one error rather than one at a time, so a caller sees every field to remove in a single round trip instead of fixing them one rejection at a time.
 function unsupportedFieldNames(
   input: Record<string, unknown>,
   unsupported: readonly string[],
@@ -107,7 +107,7 @@ function rejectUnsupportedFields(
   const present = unsupportedFieldNames(input, unsupported);
   if (present.length > 0) {
     throw new Error(
-      `${context} does not support ${present.join(", ")} for ${formatLabel} -- remove ${present.length === 1 ? "it" : "them"} or target docx/odt instead.`,
+      `${context} does not support ${present.join(", ")} for ${formatLabel} — remove ${present.length === 1 ? "it" : "them"} or target docx/odt instead.`,
     );
   }
 }
@@ -279,7 +279,7 @@ export const documentCreateOperation = defineOperation({
   name: "document_create",
   title: "Create a blank document",
   description:
-    "Creates a fresh, blank document in the given format via documents.js's own live-view editors (createDocx/createOdt/createMarkdownEditor/...), the same construction document_append_paragraphs's own edit calls build on. Returns an empty document with no content -- follow with document_append_paragraphs (docx/odt/markdown) to add text.",
+    "Creates a fresh, blank document in the given format via documents.js's own live-view editors (createDocx/createOdt/createMarkdownEditor/...), the same construction document_append_paragraphs's own edit calls build on. Returns an empty document with no content — follow with document_append_paragraphs (docx/odt/markdown) to add text.",
   inputSchema: DocumentCreateInputSchema,
   outputSchema: ResolvedDocumentOutputSchema,
   async run({ format, output }) {
@@ -308,14 +308,14 @@ export const documentAppendParagraphsOperation = defineOperation({
   name: "document_append_paragraphs",
   title: "Append paragraphs to a wordprocessing document",
   description:
-    "Appends one or more paragraphs -- each optionally built from several independently-formatted runs -- to the end of a docx, odt, or markdown document, through documents.js's own live-view editors (the same DocxBody.appendParagraph/OdtBody.appendParagraph/MarkdownBody.appendParagraph document-cli's own TUI uses). Does not convert format -- the source document's own format and targetFormat must match. docx and odt share an identical field set (underline, fontFamily, sizePt, colorHex, headingLevel, alignment all supported); markdown supports a different, smaller set (hyperlink, code) and rejects the docx/odt-only fields outright rather than silently dropping them. This covers wordprocessing paragraph/run editing only -- slides, sheets, drawings, tables, lists, and images are a separate, larger editing surface not exposed here yet.",
+    "Appends one or more paragraphs — each optionally built from several independently-formatted runs — to the end of a docx, odt, or markdown document, through documents.js's own live-view editors (the same DocxBody.appendParagraph/OdtBody.appendParagraph/MarkdownBody.appendParagraph document-cli's own TUI uses). Does not convert format — the source document's own format and targetFormat must match. docx and odt share an identical field set (underline, fontFamily, sizePt, colorHex, headingLevel, alignment all supported); markdown supports a different, smaller set (hyperlink, code) and rejects the docx/odt-only fields outright rather than silently dropping them. This covers wordprocessing paragraph/run editing only — slides, sheets, drawings, tables, lists, and images are a separate, larger editing surface not exposed here yet.",
   inputSchema: DocumentAppendParagraphsInputSchema,
   outputSchema: ResolvedDocumentOutputSchema,
   async run({ source, targetFormat, paragraphs, output }) {
     const { bytes, format } = await resolveDocumentInput(source);
     if (format !== targetFormat) {
       throw new Error(
-        `source document is "${format}", but targetFormat is "${targetFormat}" -- document_append_paragraphs never converts format, so the two must match.`,
+        `source document is "${format}", but targetFormat is "${targetFormat}" — document_append_paragraphs never converts format, so the two must match.`,
       );
     }
     let resultBytes: Uint8Array<ArrayBuffer>;

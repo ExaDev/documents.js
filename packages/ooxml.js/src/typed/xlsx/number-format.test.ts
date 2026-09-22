@@ -79,7 +79,7 @@ describe("the formats typed/xlsx/build.ts writes classify back to the kind they 
 
   it("writes the boolean display format as real, quoted three-section markup, matching LibreOffice's own numFmtId 165 verbatim", () => {
     expect(codeOf(BOOLEAN_NUMBER_FORMAT)).toBe('"TRUE";"TRUE";"FALSE"');
-    // Its own classification is irrelevant to reading a boolean back (t="b" decides that outright, before any format is consulted) -- it exists so real Excel and Calc DISPLAY the stored 1/0 as TRUE/FALSE.
+    // Its own classification is irrelevant to reading a boolean back (t="b" decides that outright, before any format is consulted) — it exists so real Excel and Calc DISPLAY the stored 1/0 as TRUE/FALSE.
     expect(classifyNumberFormat(codeOf(BOOLEAN_NUMBER_FORMAT))).toEqual({
       kind: "number",
     });

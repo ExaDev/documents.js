@@ -26,7 +26,7 @@ describe("FieldWizard", () => {
         />,
       ),
     ).toThrow(
-      "FieldWizard stepIndex 0 is out of range for 0 fields -- onComplete always fires before stepIndex can advance past the last field, so this indicates a bug in that advance.",
+      "FieldWizard stepIndex 0 is out of range for 0 fields — onComplete always fires before stepIndex can advance past the last field, so this indicates a bug in that advance.",
     );
   });
 });

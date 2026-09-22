@@ -18,7 +18,7 @@ import type { FontMetricsPort, PdfObjectResolver } from "./interpret";
 import type { PdfDict, PdfObject } from "./objects";
 import { asArray, asName, asNumber, dictGet, isName } from "./objects";
 
-// Resolves a /Font resource dict into everything the read pipeline needs: a glyph-width table (for interpret.ts's FontMetricsPort, so text positions advance correctly) and Unicode decoding (for turning an ExtractedTextRun's raw show-string bytes into real text, once interpretation is done). Two font shapes are handled -- simple (1-byte codes: /Type1, /TrueType, /MMType1) and composite Type0/Identity-H (2-byte codes, the dominant shape Word/PowerPoint/Chrome actually emit) -- everything else (predefined non-Identity CMaps, Type3) degrades to a best-effort width/decode with a diagnostic rather than throwing.
+// Resolves a /Font resource dict into everything the read pipeline needs: a glyph-width table (for interpret.ts's FontMetricsPort, so text positions advance correctly) and Unicode decoding (for turning an ExtractedTextRun's raw show-string bytes into real text, once interpretation is done). Two font shapes are handled — simple (1-byte codes: /Type1, /TrueType, /MMType1) and composite Type0/Identity-H (2-byte codes, the dominant shape Word/PowerPoint/Chrome actually emit) — everything else (predefined non-Identity CMaps, Type3) degrades to a best-effort width/decode with a diagnostic rather than throwing.
 
 // A glyph's vertical metrics, all in 1000ths of text space to match PDF's own /Widths and /W2 convention (ISO 32000-1 9.7.4.3). `displacementY` is w1y, the amount the text position moves per glyph, normally negative because a vertical line runs down the page. `positionX`/`positionY` are the position vector v, which maps the glyph's horizontal-writing origin onto its vertical-writing one, so the glyph paints v away from where the text position sits.
 export interface VerticalGlyphMetrics {
@@ -86,7 +86,7 @@ function builtinSymbolGlyphNameLookup(
   return undefined;
 }
 
-// The embedded font program a /FontDescriptor carries, whichever of the three keys it is under: /FontFile (Type 1), /FontFile2 (TrueType), /FontFile3 (CFF, or a whole sfnt under /Subtype /OpenType). The bytes themselves say which shape they are, so the key they arrived under is not consulted -- a producer that files a TrueType program under /FontFile3 (a real and not especially rare malformation) is still read correctly.
+// The embedded font program a /FontDescriptor carries, whichever of the three keys it is under: /FontFile (Type 1), /FontFile2 (TrueType), /FontFile3 (CFF, or a whole sfnt under /Subtype /OpenType). The bytes themselves say which shape they are, so the key they arrived under is not consulted — a producer that files a TrueType program under /FontFile3 (a real and not especially rare malformation) is still read correctly.
 function readFontProgram(
   descriptor: PdfDict | undefined,
   context: FontReadContext,
@@ -175,7 +175,7 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
   if (widthsArr !== undefined) {
     widthOf = (code) => asNumber(widthsArr[code - firstChar]) ?? missingWidth;
   } else {
-    // No /Widths at all is only valid for the standard 14, which a reader is expected to already know the metrics of (ISO 32000-1 9.6.2.2) -- fall back to the same AFM table the write path uses.
+    // No /Widths at all is only valid for the standard 14, which a reader is expected to already know the metrics of (ISO 32000-1 9.6.2.2) — fall back to the same AFM table the write path uses.
     const standardMatch = resolveStandardFont(baseFamily, bold, italic);
     widthOf = (code) => widthOfCode(standardMatch.standardName, code);
     if (!standardMatch.matched) {
@@ -213,7 +213,7 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
   );
   const programEncoding = lazyFontProgram(descriptor, context);
 
-  // What a code neither /ToUnicode nor /Differences resolves falls back to, in order. A font whose /BaseFont is literally one of the two standard-14 symbol faces, and any font flagged Symbolic, is encoded by its own font program rather than by any of the standard tables (ISO 32000-1 9.6.6.2 -- WinAnsi/MacRoman/StandardEncoding are never valid for Symbol or ZapfDingbats, and 9.6.6.4 has a symbolic TrueType font's /Encoding ignored outright), so the embedded program is consulted first and the two fixed standard-14 symbol tables next. An ordinary text font is the other way round: an explicitly named base encoding is the font dictionary stating what its codes mean, and only a font that states nothing falls through to its own program, then to WinAnsi -- ISO 32000-1's own default for a Type1/TrueType built-in encoding. Where every source is silent the code stays unmapped rather than being guessed at, since a plausible-looking wrong Latin letter is worse than a visible replacement character.
+  // What a code neither /ToUnicode nor /Differences resolves falls back to, in order. A font whose /BaseFont is literally one of the two standard-14 symbol faces, and any font flagged Symbolic, is encoded by its own font program rather than by any of the standard tables (ISO 32000-1 9.6.6.2 — WinAnsi/MacRoman/StandardEncoding are never valid for Symbol or ZapfDingbats, and 9.6.6.4 has a symbolic TrueType font's /Encoding ignored outright), so the embedded program is consulted first and the two fixed standard-14 symbol tables next. An ordinary text font is the other way round: an explicitly named base encoding is the font dictionary stating what its codes mean, and only a font that states nothing falls through to its own program, then to WinAnsi — ISO 32000-1's own default for a Type1/TrueType built-in encoding. Where every source is silent the code stays unmapped rather than being guessed at, since a plausible-looking wrong Latin letter is worse than a visible replacement character.
   const symbolEncoded = symbolic || builtinGlyphName !== undefined;
   const byGlyphName =
     (source: (code: number) => string | undefined) =>
@@ -491,7 +491,7 @@ function buildCompositeFont(
   };
 
   const toUnicode = readToUnicodeCMap(fontDict, context);
-  // With Identity-H and the default /CIDToGIDMap, a CID is the embedded program's own glyph ID, so the program itself can say what a glyph is when the font dictionary carries no /ToUnicode CMap (or an incomplete one) -- through the glyph's own name, or by reading the program's Unicode mapping backwards. Any other /Encoding or a /CIDToGIDMap stream breaks that identity, and the program is not consulted at all rather than being read against the wrong glyph.
+  // With Identity-H and the default /CIDToGIDMap, a CID is the embedded program's own glyph ID, so the program itself can say what a glyph is when the font dictionary carries no /ToUnicode CMap (or an incomplete one) — through the glyph's own name, or by reading the program's Unicode mapping backwards. Any other /Encoding or a /CIDToGIDMap stream breaks that identity, and the program is not consulted at all rather than being read against the wrong glyph.
   const cidToGidMap =
     descendantDict !== undefined
       ? dictGet(descendantDict, "CIDToGIDMap")

@@ -1,8 +1,8 @@
-// A real, complete TrueType font that declares the family "Calibri" -- the one fixture src/commands/convert-fonts.test.ts cannot get any other way. Proving that --font-file beats documents.js's own vendored Carlito substitute needs a font whose family name genuinely matches the family the document asked for (pdf-codec's FontRegistry resolves a caller-supplied face by exact normalized family, so a font declaring anything else would simply never be reached), and no such font is portably available: a system Calibri exists only on machines with Microsoft Office installed, and nothing in this repo or its dependencies ships one.
+// A real, complete TrueType font that declares the family "Calibri" — the one fixture src/commands/convert-fonts.test.ts cannot get any other way. Proving that --font-file beats documents.js's own vendored Carlito substitute needs a font whose family name genuinely matches the family the document asked for (pdf-codec's FontRegistry resolves a caller-supplied face by exact normalized family, so a font declaring anything else would simply never be reached), and no such font is portably available: a system Calibri exists only on machines with Microsoft Office installed, and nothing in this repo or its dependencies ships one.
 //
 // So it is built rather than found: the vendored Caladea face documents.js already carries is recovered through the public createFontRegistry API, and only its 'name' table is replaced, leaving every outline, metric, and cmap byte of a genuine font untouched. Its PostScript name is set to a deliberately synthetic value, so a PDF's own /BaseFont entry says exactly which face was embedded and can never be confused with either the vendored Carlito substitute or the real Caladea it was cut from.
 //
-// Table offsets and the 'name' table layout are ISO/IEC 14496-22 clause 4 and clause 5.2.7 respectively -- the same clauses src/runtime/font-face.ts reads, which is deliberate: this builder is that reader's write-side inverse, so a test feeding one into the other proves both against real font bytes rather than against each other's assumptions alone.
+// Table offsets and the 'name' table layout are ISO/IEC 14496-22 clause 4 and clause 5.2.7 respectively — the same clauses src/runtime/font-face.ts reads, which is deliberate: this builder is that reader's write-side inverse, so a test feeding one into the other proves both against real font bytes rather than against each other's assumptions alone.
 import { createFontRegistry } from "documents.js";
 
 // What the fixture font declares as its family: the family the fixture document below also asks for, and the family documents.js's own vendored-substitute table maps to Carlito.
@@ -50,7 +50,7 @@ function decodeTag(view: DataView, offset: number): string {
   return tag;
 }
 
-// A format-0 'name' table carrying only Windows/Unicode-BMP/en-US records -- the platform every font a real caller passes declares, and the first one src/runtime/font-face.ts's own platform preference reaches for.
+// A format-0 'name' table carrying only Windows/Unicode-BMP/en-US records — the platform every font a real caller passes declares, and the first one src/runtime/font-face.ts's own platform preference reaches for.
 function buildNameTable(
   entries: readonly NameEntry[],
 ): Uint8Array<ArrayBuffer> {
@@ -85,7 +85,7 @@ function buildNameTable(
   return table;
 }
 
-// Appends the replacement table at the (4-byte-aligned) end of the file and repoints the directory's own 'name' record at it, rather than rewriting the whole file's table layout. The original table's bytes stay in place as unreferenced padding, which is legal and invisible: an sfnt reader reaches every table exclusively through the directory's offset/length pair. Table checksums and 'head' checkSumAdjustment are deliberately left stale -- no reader in this family verifies them, and recomputing them would add a second, unrelated piece of format machinery to a fixture builder.
+// Appends the replacement table at the (4-byte-aligned) end of the file and repoints the directory's own 'name' record at it, rather than rewriting the whole file's table layout. The original table's bytes stay in place as unreferenced padding, which is legal and invisible: an sfnt reader reaches every table exclusively through the directory's offset/length pair. Table checksums and 'head' checkSumAdjustment are deliberately left stale — no reader in this family verifies them, and recomputing them would add a second, unrelated piece of format machinery to a fixture builder.
 function replaceNameTable(
   font: Uint8Array<ArrayBuffer>,
   nameTable: Uint8Array<ArrayBuffer>,
@@ -116,7 +116,7 @@ function replaceNameTable(
   );
 }
 
-// One of the four vendored Caladea faces documents.js already ships, recovered through the only public API that exposes real font bytes: a FontRegistry resolving 'Cambria', which its own vendored-substitute table maps to Caladea. Exported so a test needing a genuine, unmodified font -- one whose own 'name'/'OS/2' tables were written by a real font tool rather than by the builder below -- has one without shipping a font file in this repository.
+// One of the four vendored Caladea faces documents.js already ships, recovered through the only public API that exposes real font bytes: a FontRegistry resolving 'Cambria', which its own vendored-substitute table maps to Caladea. Exported so a test needing a genuine, unmodified font — one whose own 'name'/'OS/2' tables were written by a real font tool rather than by the builder below — has one without shipping a font file in this repository.
 export function vendoredCaladeaFaceBytes(options: {
   readonly bold: boolean;
   readonly italic: boolean;

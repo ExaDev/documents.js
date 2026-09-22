@@ -8,7 +8,7 @@ export interface MathMlViewProps {
   className?: string;
 }
 
-// Renders a parsed MathML tree as native browser MathML instead of routing through a PDF rendition -- shared by FormulaPreview (a standalone formula document filling its own preview panel) and contentBlocks.tsx (an embedded formula object inline in a wordprocessing/slide block flow). Requires a browser with MathML support (Firefox, Safari, Chrome 109+); a browser without it shows the formula's text content unstyled.
+// Renders a parsed MathML tree as native browser MathML instead of routing through a PDF rendition — shared by FormulaPreview (a standalone formula document filling its own preview panel) and contentBlocks.tsx (an embedded formula object inline in a wordprocessing/slide block flow). Requires a browser with MathML support (Firefox, Safari, Chrome 109+); a browser without it shows the formula's text content unstyled.
 export function MathMlView({ mathml, className }: MathMlViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 

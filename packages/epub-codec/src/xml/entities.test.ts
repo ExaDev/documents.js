@@ -17,7 +17,7 @@ describe("decodeEntities", () => {
   });
 
   it("decodes HTML named entities beyond the five XML defines", () => {
-    // \u00a0 is a real non-breaking space, not a plain U+0020 -- confirms the decode, not merely something that renders the same.
+    // \u00a0 is a real non-breaking space, not a plain U+0020 — confirms the decode, not merely something that renders the same.
     expect(decodeEntities("a&nbsp;b")).toBe("a\u00a0b");
     expect(decodeEntities("&mdash;")).toBe("\u2014");
     expect(decodeEntities("&copy; 2026")).toBe("\u00a9 2026");

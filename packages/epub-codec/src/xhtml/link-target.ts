@@ -1,6 +1,6 @@
 import { dirname, resolvePackagePath } from "../path";
 
-// Resolves an <a href> to the specific in-package (document, fragment) pair it names, or undefined for anything this package cannot resolve to one: an external URI (carries a scheme, RFC 3986 -- the same test src/xhtml/inline.ts's own LINK_TARGET_EXTERNAL_ONLY diagnostic already uses), an empty href, or an href with no fragment at all. The last case is deliberate, not an oversight: document-schema.js's internal `link` target and `anchor` construct both name a specific addressable point in the document, and a bare "chapter2.xhtml" (no "#id") names the whole document, which has no addressable name of its own in this package's vocabulary (ContentSection is a page-geometry container, not a named construct) -- so it is left unresolved here and falls through to this package's existing external-style hyperlink degrade, exactly as before this module existed.
+// Resolves an <a href> to the specific in-package (document, fragment) pair it names, or undefined for anything this package cannot resolve to one: an external URI (carries a scheme, RFC 3986 — the same test src/xhtml/inline.ts's own LINK_TARGET_EXTERNAL_ONLY diagnostic already uses), an empty href, or an href with no fragment at all. The last case is deliberate, not an oversight: document-schema.js's internal `link` target and `anchor` construct both name a specific addressable point in the document, and a bare "chapter2.xhtml" (no "#id") names the whole document, which has no addressable name of its own in this package's vocabulary (ContentSection is a page-geometry container, not a named construct) — so it is left unresolved here and falls through to this package's existing external-style hyperlink degrade, exactly as before this module existed.
 //
 // A same-document fragment ("#note1") resolves against sourceHref itself; any other href resolves its own path portion against sourceHref's own directory via src/path.ts's resolvePackagePath, the identical resolution src/read.ts already applies to a manifest href and an <img src>.
 export interface HrefTarget {
@@ -14,7 +14,7 @@ export function resolveHrefTarget(
   sourceHref: string,
   href: string,
 ): HrefTarget | undefined {
-  // No separate `href.length === 0` guard: an empty href can never contain "#", so the hashIndex check immediately below already returns undefined for it -- a length check first would only duplicate that.
+  // No separate `href.length === 0` guard: an empty href can never contain "#", so the hashIndex check immediately below already returns undefined for it — a length check first would only duplicate that.
   if (URI_SCHEME_PATTERN.test(href)) {
     return undefined;
   }

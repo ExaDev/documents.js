@@ -24,7 +24,7 @@ describe("resolveTargetFormat", () => {
     const result = resolveTargetFormat(undefined, undefined, undefined);
     expect(result).toStrictEqual({
       errorMessage:
-        "cannot infer a target format -- pass an output path with a recognised extension, --out with one, or --to <format>",
+        "cannot infer a target format — pass an output path with a recognised extension, --out with one, or --to <format>",
     });
   });
 

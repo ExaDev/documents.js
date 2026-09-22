@@ -62,7 +62,7 @@ describe("parseSvgPathData", () => {
   });
 
   it("reflects S's first control through the current point exactly (the previous cubic's second control)", () => {
-    // After C lands at (20,10) with second control (10,10), S\'s own first control must be the mirror image (30,10) -- the author\'s intended smooth join, reproduced with no approximation.
+    // After C lands at (20,10) with second control (10,10), S\'s own first control must be the mirror image (30,10) — the author\'s intended smooth join, reproduced with no approximation.
     const parsed = parseSvgPathData("M 0 0 C 10 0 10 10 20 10 S 30 20 30 30");
     expect(parsed).toEqual([
       {
@@ -150,7 +150,7 @@ describe("parseSvgPathData", () => {
   });
 
   it("degenerates T to the current point as control when no quadratic precedes it, per the spec's own rule", () => {
-    // With no previous quadratic control to reflect, the control is the current point (0,0) itself, and the same exact elevation applies -- control2 sits 2/3 of the way back from the endpoint, expressed here as the identical arithmetic so the assertion is bit-exact.
+    // With no previous quadratic control to reflect, the control is the current point (0,0) itself, and the same exact elevation applies — control2 sits 2/3 of the way back from the endpoint, expressed here as the identical arithmetic so the assertion is bit-exact.
     const parsed = parseSvgPathData("M 0 0 T 10 10");
     expect(parsed).toEqual([
       {
@@ -202,7 +202,7 @@ describe("parseSvgPathData", () => {
   });
 
   it("reads arc flags as single characters even when fused with the surrounding numbers", () => {
-    // "01100" must split into flag 0, flag 1, and the number 100 -- the classic packed-flag form a number-based parser misreads. A half circle from (0,0) to (100,0), sweep 1.
+    // "01100" must split into flag 0, flag 1, and the number 100 — the classic packed-flag form a number-based parser misreads. A half circle from (0,0) to (100,0), sweep 1.
     const parsed = parseSvgPathData("M 0 0 A 50 50 0 01100 0");
     expect(parsed).toBeDefined();
     const segments = parsed![0]!.segments;
@@ -279,7 +279,7 @@ describe("parseSvgPathData", () => {
   });
 
   it("returns undefined for malformed data rather than a partial parse", () => {
-    // A drawing command before the first moveto has no subpath to draw into; an unknown command letter and an argument-count shortfall have no meaning at all -- none may half-parse.
+    // A drawing command before the first moveto has no subpath to draw into; an unknown command letter and an argument-count shortfall have no meaning at all — none may half-parse.
     expect(parseSvgPathData("L 10 10")).toBeUndefined();
     expect(parseSvgPathData("M 0 0 X 10 10")).toBeUndefined();
     expect(parseSvgPathData("M 0 0 C 10 10 20")).toBeUndefined();

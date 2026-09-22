@@ -69,7 +69,7 @@ describe("MarkdownParagraph.quoteDepth", () => {
     const editor = openMarkdown("");
     const paragraph = editor.body.appendParagraph();
     paragraph.appendRun({ text: "Plain text" });
-    // No quotable styleId (Quote/CodeBlock/HorizontalRule/HTMLPreformatted/Heading1..6) is set -- this indent has no markdown representation to render into.
+    // No quotable styleId (Quote/CodeBlock/HorizontalRule/HTMLPreformatted/Heading1..6) is set — this indent has no markdown representation to render into.
     paragraph.quoteDepth = 1;
     expect(paragraph.quoteDepth).toBe(1);
 

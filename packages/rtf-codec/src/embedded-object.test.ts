@@ -14,7 +14,7 @@ import {
   writeEmbeddedObjectData,
 } from "./embedded-object";
 
-// A LengthPrefixedAnsiString, hand-built from [MS-OLEDS] 2.1.4's own definition rather than by calling anything embedded-object.ts exports -- these tests exist precisely to prove the reader parses the real, independently-specified wire format, not merely its own writer's output.
+// A LengthPrefixedAnsiString, hand-built from [MS-OLEDS] 2.1.4's own definition rather than by calling anything embedded-object.ts exports — these tests exist precisely to prove the reader parses the real, independently-specified wire format, not merely its own writer's output.
 function lengthPrefixedAnsiString(value: string): number[] {
   if (value.length === 0) {
     return [0, 0, 0, 0];
@@ -39,7 +39,7 @@ function uint32Le(value: number): number[] {
   ];
 }
 
-// A real [MS-OLEDS] 2.2.5 EmbeddedObject: an ObjectHeader (2.2.4 -- OLEVersion, FormatID, ClassName/TopicName/ItemName), NativeDataSize and NativeData, then the mandatory fourth field, Presentation -- built byte-by-byte from the spec's own field layout, with `nativeData` (a real [MS-CFB] compound file) as NativeData's own payload and presentationObjectBytes() below as Presentation's.
+// A real [MS-OLEDS] 2.2.5 EmbeddedObject: an ObjectHeader (2.2.4 — OLEVersion, FormatID, ClassName/TopicName/ItemName), NativeDataSize and NativeData, then the mandatory fourth field, Presentation — built byte-by-byte from the spec's own field layout, with `nativeData` (a real [MS-CFB] compound file) as NativeData's own payload and presentationObjectBytes() below as Presentation's.
 function buildEmbeddedObjectBytes(options: {
   readonly formatId: number;
   readonly className: string;
@@ -47,11 +47,11 @@ function buildEmbeddedObjectBytes(options: {
   readonly presentation?: readonly number[];
 }): Uint8Array<ArrayBuffer> {
   const header = [
-    ...uint32Le(0x00000501), // OLEVersion -- "any arbitrary value ... MUST be ignored on receipt"
+    ...uint32Le(0x00000501), // OLEVersion — "any arbitrary value ... MUST be ignored on receipt"
     ...uint32Le(options.formatId),
     ...lengthPrefixedAnsiString(options.className),
-    ...lengthPrefixedAnsiString(""), // TopicName -- empty for an EmbeddedObject
-    ...lengthPrefixedAnsiString(""), // ItemName -- empty for an EmbeddedObject
+    ...lengthPrefixedAnsiString(""), // TopicName — empty for an EmbeddedObject
+    ...lengthPrefixedAnsiString(""), // ItemName — empty for an EmbeddedObject
   ];
   return Uint8Array.from([
     ...header,
@@ -61,13 +61,13 @@ function buildEmbeddedObjectBytes(options: {
   ]);
 }
 
-// A real [MS-OLEDS] Presentation field: a StandardClipboardFormatPresentationObject (2.2.3.2) -- a ClipboardFormatHeader (2.2.3.1: a PresentationObjectHeader, then ClipboardFormat), then PresentationDataSize and PresentationData -- hand-built the same way buildEmbeddedObjectBytes is, independently of embedded-object.ts's own writer. PresentationData's own content is never read back by readEmbeddedObjectData, only its presence and framing, so four arbitrary bytes stand in for a real CF_DIB image here.
+// A real [MS-OLEDS] Presentation field: a StandardClipboardFormatPresentationObject (2.2.3.2) — a ClipboardFormatHeader (2.2.3.1: a PresentationObjectHeader, then ClipboardFormat), then PresentationDataSize and PresentationData — hand-built the same way buildEmbeddedObjectBytes is, independently of embedded-object.ts's own writer. PresentationData's own content is never read back by readEmbeddedObjectData, only its presence and framing, so four arbitrary bytes stand in for a real CF_DIB image here.
 function presentationObjectBytes(): number[] {
   const header = [
-    ...uint32Le(0x00000501), // PresentationObjectHeader.OLEVersion -- arbitrary, "MUST be ignored on processing"
-    ...uint32Le(0x00000005), // PresentationObjectHeader.FormatID -- a ClassName follows
-    ...lengthPrefixedAnsiString(""), // ClassName -- empty, neither "METAFILEPICT", "DIB" nor "BITMAP"
-    ...uint32Le(0x00000008), // ClipboardFormatHeader.ClipboardFormat -- CF_DIB
+    ...uint32Le(0x00000501), // PresentationObjectHeader.OLEVersion — arbitrary, "MUST be ignored on processing"
+    ...uint32Le(0x00000005), // PresentationObjectHeader.FormatID — a ClassName follows
+    ...lengthPrefixedAnsiString(""), // ClassName — empty, neither "METAFILEPICT", "DIB" nor "BITMAP"
+    ...uint32Le(0x00000008), // ClipboardFormatHeader.ClipboardFormat — CF_DIB
   ];
   const presentationData = [0, 0, 0, 0];
   return [...header, ...uint32Le(presentationData.length), ...presentationData];
@@ -101,22 +101,22 @@ describe("readEmbeddedObjectData", () => {
 
   it("reads its own writer's output, whose [MS-CFB] magic bytes now sit behind the ObjectHeader/NativeDataSize envelope rather than at the payload's start", () => {
     const bytes = writeEmbeddedObjectData(embedded);
-    // D0 CF 11 E0 is the [MS-CFB] header magic -- it must NOT be the payload's first four bytes any more, since ObjectHeader/NativeDataSize now precede it.
+    // D0 CF 11 E0 is the [MS-CFB] header magic — it must NOT be the payload's first four bytes any more, since ObjectHeader/NativeDataSize now precede it.
     expect(Array.from(bytes.subarray(0, 4))).not.toEqual([
       0xd0, 0xcf, 0x11, 0xe0,
     ]);
     expect(readEmbeddedObjectData(bytes)).toEqual(embedded);
   });
 
-  it("writes real bytes after NativeData -- the mandatory Presentation field [MS-OLEDS] 2.2.5 requires as EmbeddedObject's own fourth field, not a payload that ends at NativeData", () => {
+  it("writes real bytes after NativeData — the mandatory Presentation field [MS-OLEDS] 2.2.5 requires as EmbeddedObject's own fourth field, not a payload that ends at NativeData", () => {
     const bytes = writeEmbeddedObjectData(embedded);
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    // ObjectHeader (OLEVersion + FormatID + three empty LengthPrefixedAnsiStrings, each 4 bytes of zero length) is 8 + 4*3 = 20 bytes for this writer's own fixed ClassName/TopicName/ItemName shape ("Package"/""/"" -- ClassName's own length-prefixed bytes add "Package"'s own 8 characters including the terminating null).
+    // ObjectHeader (OLEVersion + FormatID + three empty LengthPrefixedAnsiStrings, each 4 bytes of zero length) is 8 + 4*3 = 20 bytes for this writer's own fixed ClassName/TopicName/ItemName shape ("Package"/""/"" — ClassName's own length-prefixed bytes add "Package"'s own 8 characters including the terminating null).
     const classNameLength = "Package".length + 1;
     const objectHeaderLength = 8 + (4 + classNameLength) + 4 + 4;
     const nativeDataSize = view.getUint32(objectHeaderLength, true);
     const presentationStart = objectHeaderLength + 4 + nativeDataSize;
-    // There must genuinely be bytes there -- a payload that ends exactly at NativeData (the pre-fix shape) would leave nothing here at all.
+    // There must genuinely be bytes there — a payload that ends exactly at NativeData (the pre-fix shape) would leave nothing here at all.
     expect(bytes.length).toBeGreaterThan(presentationStart);
     // Those bytes must themselves be a real, structurally valid Presentation field: a PresentationObjectHeader (OLEVersion, FormatID 0x00000005, an empty ClassName) then ClipboardFormat CF_DIB (0x00000008), matching what [MS-OLEDS] 2.2.3.1/2.2.3.2 require, not arbitrary filler of the right length.
     const presentationOleVersion = view.getUint32(presentationStart, true);
@@ -127,7 +127,7 @@ describe("readEmbeddedObjectData", () => {
       presentationStart + 8,
       true,
     );
-    expect(presentationClassNameLength).toBe(0); // an empty ClassName -- see writePresentationObjectHeader's own reasoning in embedded-object.ts
+    expect(presentationClassNameLength).toBe(0); // an empty ClassName — see writePresentationObjectHeader's own reasoning in embedded-object.ts
     const clipboardFormat = view.getUint32(presentationStart + 12, true);
     expect(clipboardFormat).toBe(0x00000008); // CF_DIB
   });
@@ -136,7 +136,7 @@ describe("readEmbeddedObjectData", () => {
     const bytes = writeEmbeddedObjectData(embedded);
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     expect(view.getUint32(0, true)).toBe(0x00000501); // OLEVersion
-    expect(view.getUint32(4, true)).toBe(0x00000002); // FormatID -- EmbeddedObject
+    expect(view.getUint32(4, true)).toBe(0x00000002); // FormatID — EmbeddedObject
     const classNameLength = view.getUint32(8, true);
     expect(classNameLength).toBe("Package".length + 1); // + the terminating null character
     const classNameChars = Array.from(
@@ -159,12 +159,12 @@ describe("readEmbeddedObjectData", () => {
     expect(view.getInt32(dibStart + 4, true)).toBe(1); // Width
     expect(view.getInt32(dibStart + 8, true)).toBe(1); // Height
     expect(view.getUint16(dibStart + 12, true)).toBe(1); // Planes
-    expect(view.getUint16(dibStart + 14, true)).toBe(1); // BitCount -- monochrome
-    expect(view.getUint32(dibStart + 16, true)).toBe(0); // Compression -- BI_RGB
+    expect(view.getUint16(dibStart + 14, true)).toBe(1); // BitCount — monochrome
+    expect(view.getUint32(dibStart + 16, true)).toBe(0); // Compression — BI_RGB
     expect(view.getUint32(dibStart + 20, true)).toBe(0); // ImageSize
     expect(view.getInt32(dibStart + 24, true)).toBe(0); // XPelsPerMeter
     expect(view.getInt32(dibStart + 28, true)).toBe(0); // YPelsPerMeter
-    expect(view.getUint32(dibStart + 32, true)).toBe(2); // ColorUsed -- both entries of the 2-colour table
+    expect(view.getUint32(dibStart + 32, true)).toBe(2); // ColorUsed — both entries of the 2-colour table
     expect(view.getUint32(dibStart + 36, true)).toBe(0); // ColorImportant
     // Two RGBQuad entries: black then white.
     expect(Array.from(bytes.subarray(dibStart + 40, dibStart + 44))).toEqual([
@@ -173,7 +173,7 @@ describe("readEmbeddedObjectData", () => {
     expect(Array.from(bytes.subarray(dibStart + 44, dibStart + 48))).toEqual([
       0xff, 0xff, 0xff, 0x00,
     ]);
-    // rowBytes (4, from the (Width*Planes*BitCount+31)&~31)/8 formula) * abs(Height) (1) = 4 bytes of packed monochrome pixel data, already all-zero -- the one pixel indexes colour 0 (black).
+    // rowBytes (4, from the (Width*Planes*BitCount+31)&~31)/8 formula) * abs(Height) (1) = 4 bytes of packed monochrome pixel data, already all-zero — the one pixel indexes colour 0 (black).
     expect(bytes.length - (dibStart + 48)).toBe(4);
     // The whole DIB is exactly HeaderSize(40) + 2 colours * 4 bytes + 4 bytes of pixel data = 52 bytes, and PresentationDataSize must declare exactly that.
     const presentationDataSize = view.getUint32(presentationStart + 16, true);
@@ -202,7 +202,7 @@ describe("readEmbeddedObjectData", () => {
   });
 
   it("finds the Package stream by name, not merely by being present in the compound file", () => {
-    // [MS-CFB] 2.6.4's own directory-entry sort compares by name LENGTH first, then content, so a name shorter than "Package" (7 characters) is what actually guarantees it sorts, and therefore reads back, before "Package" -- picking whichever stream happens to come first, rather than the one actually named "Package", would hand readOlePackage bytes it cannot parse.
+    // [MS-CFB] 2.6.4's own directory-entry sort compares by name LENGTH first, then content, so a name shorter than "Package" (7 characters) is what actually guarantees it sorts, and therefore reads back, before "Package" — picking whichever stream happens to come first, rather than the one actually named "Package", would hand readOlePackage bytes it cannot parse.
     const packageBytes = writeOlePackage({
       label: "test.json",
       sourcePath: "",
@@ -249,7 +249,7 @@ describe("readEmbeddedObjectData", () => {
       formatId: 0x00000002,
       className: "Package",
       nativeData: packagedJson(embedded),
-      presentation: [...uint32Le(0x00000501)], // OLEVersion only -- FormatID never arrives
+      presentation: [...uint32Le(0x00000501)], // OLEVersion only — FormatID never arrives
     });
     expect(readEmbeddedObjectData(bytes)).toBeUndefined();
   });
@@ -301,7 +301,7 @@ describe("readEmbeddedObjectData", () => {
   });
 
   it("tolerates a LinkedObject-shaped FormatID (0x00000001) as a deliberate leniency, not a spec requirement of this context", () => {
-    // [MS-OLEDS] 2.2.4's own generic ObjectHeader definition allows either 0x00000001 or 0x00000002 structurally -- but 2.2.5's EmbeddedObject, the specific structure readEmbeddedObjectData decodes, narrows that: "The FormatID field of the Header MUST be set to 0x00000002." A genuine FormatID 0x00000001 marks a LinkedObject (2.2.6) instead, whose Header is followed by NetworkName/Reserved1/LinkUpdateOption, not NativeDataSize/NativeData -- fields this reader would misread as NativeDataSize/NativeData for a real LinkedObject. readObjectHeader accepts both values anyway, as a leniency matching ObjectHeader's own generic definition rather than a spec requirement for this context; the NativeData still decodes as this package's own payload here only because the test built it that way (real LinkedObject bytes in NativeData's place would simply fail the CFB/JSON decode below and degrade to undefined, exactly like any other foreign payload).
+    // [MS-OLEDS] 2.2.4's own generic ObjectHeader definition allows either 0x00000001 or 0x00000002 structurally — but 2.2.5's EmbeddedObject, the specific structure readEmbeddedObjectData decodes, narrows that: "The FormatID field of the Header MUST be set to 0x00000002." A genuine FormatID 0x00000001 marks a LinkedObject (2.2.6) instead, whose Header is followed by NetworkName/Reserved1/LinkUpdateOption, not NativeDataSize/NativeData — fields this reader would misread as NativeDataSize/NativeData for a real LinkedObject. readObjectHeader accepts both values anyway, as a leniency matching ObjectHeader's own generic definition rather than a spec requirement for this context; the NativeData still decodes as this package's own payload here only because the test built it that way (real LinkedObject bytes in NativeData's place would simply fail the CFB/JSON decode below and degrade to undefined, exactly like any other foreign payload).
     const bytes = buildEmbeddedObjectBytes({
       formatId: 0x00000001,
       className: "Package",
@@ -326,14 +326,14 @@ describe("readEmbeddedObjectData", () => {
   });
 
   it("rejects a NativeDataSize that overruns the bytes actually present", () => {
-    // No Presentation field here at all -- isolating this test to the NativeDataSize/NativeData boundary specifically means the buffer's own last 4 bytes are unambiguously NativeDataSize when NativeData is empty, regardless of what a real EmbeddedObject would carry after it.
+    // No Presentation field here at all — isolating this test to the NativeDataSize/NativeData boundary specifically means the buffer's own last 4 bytes are unambiguously NativeDataSize when NativeData is empty, regardless of what a real EmbeddedObject would carry after it.
     const header = buildEmbeddedObjectBytes({
       formatId: 0x00000002,
       className: "Package",
       nativeData: new Uint8Array(0),
       presentation: [],
     });
-    // Overwrite the NativeDataSize field (the 4 bytes immediately before the -- now empty -- NativeData) to claim far more data than exists.
+    // Overwrite the NativeDataSize field (the 4 bytes immediately before the — now empty — NativeData) to claim far more data than exists.
     const withOverrun = header.slice();
     const view = new DataView(withOverrun.buffer);
     view.setUint32(withOverrun.length - 4, 0xffffff, true);
@@ -392,7 +392,7 @@ describe("readEmbeddedObjectData", () => {
     expect(readEmbeddedObjectData(bytes)).toEqual(withSource);
   });
 
-  // isContentEmbeddedObject (the guard behind ContentEmbeddedObjectSchema.safeParse above) never inspects `source` at all, so a forged \objdata payload's `source` value reaches knownContentEmbeddedObjectFields exactly as a hostile author wrote it -- these shapes must all be dropped rather than carried through into the returned ContentEmbeddedObject, where a downstream same-format writer could otherwise be persuaded to re-emit them verbatim as if they were real quarantined residue.
+  // isContentEmbeddedObject (the guard behind ContentEmbeddedObjectSchema.safeParse above) never inspects `source` at all, so a forged \objdata payload's `source` value reaches knownContentEmbeddedObjectFields exactly as a hostile author wrote it — these shapes must all be dropped rather than carried through into the returned ContentEmbeddedObject, where a downstream same-format writer could otherwise be persuaded to re-emit them verbatim as if they were real quarantined residue.
   it.each([
     [
       "a format string SourceResidueSchema does not enumerate",
@@ -470,12 +470,12 @@ describe("readEmbeddedObjectData", () => {
   );
 });
 
-// readEmbeddedObjectData's single shared catch discards whatever these three throw, along with skipPresentationObject's own return value (never read back by any caller) -- so their exact thrown text and return offset need direct coverage here, not another round trip through readEmbeddedObjectData, to be observed at all.
+// readEmbeddedObjectData's single shared catch discards whatever these three throw, along with skipPresentationObject's own return value (never read back by any caller) — so their exact thrown text and return offset need direct coverage here, not another round trip through readEmbeddedObjectData, to be observed at all.
 describe("skipPresentationObjectHeader", () => {
   it("throws the exact FormatID this module's own writer never produces, zero-padded to 8 hex digits", () => {
     const bytes = Uint8Array.from([
       ...uint32Le(0x00000501), // OLEVersion
-      ...uint32Le(0x00000000), // FormatID -- wrong
+      ...uint32Le(0x00000000), // FormatID — wrong
       ...lengthPrefixedAnsiString(""),
     ]);
     expect(() => skipPresentationObjectHeader(bytes, 0)).toThrow(

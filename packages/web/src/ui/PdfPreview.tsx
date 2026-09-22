@@ -19,7 +19,7 @@ export interface PdfPreviewProps {
   error?: unknown;
 }
 
-// Every document.js format can render to PDF (odf included, via odfToPdf), so previewing any format -- not just PDF itself -- is a matter of rendering its PDF rendition. The caller decides whether that rendition needs generating (a non-PDF format) or already exists (the format is PDF outright).
+// Every document.js format can render to PDF (odf included, via odfToPdf), so previewing any format — not just PDF itself — is a matter of rendering its PDF rendition. The caller decides whether that rendition needs generating (a non-PDF format) or already exists (the format is PDF outright).
 export function PdfPreview({
   label,
   format,

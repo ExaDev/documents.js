@@ -1,17 +1,17 @@
-// The SVG path-data grammar (SVG 2, "B (Shape) Grammar"), parsed into the subpath vocabulary the ContentVector path variant already carries: subpaths of pure line and cubic Bezier segments in the same user space the d attribute itself lives in (the reader transforms them through the active CTM afterwards -- an affine maps lines to lines and cubics to cubics exactly, so that step loses nothing). This is deliberately a sibling of odf.js's own parseOdfPathData rather than an import of it: ODF's svg:d is the SVG subset LibreOffice emits (M/L/H/V/C/Z only), while a real-world .svg additionally uses S/Q/T/A and the relative lowercase forms, so this parser implements the full SVG command set on top of the identical scanner discipline.
+// The SVG path-data grammar (SVG 2, "B (Shape) Grammar"), parsed into the subpath vocabulary the ContentVector path variant already carries: subpaths of pure line and cubic Bezier segments in the same user space the d attribute itself lives in (the reader transforms them through the active CTM afterwards — an affine maps lines to lines and cubics to cubics exactly, so that step loses nothing). This is deliberately a sibling of odf.js's own parseOdfPathData rather than an import of it: ODF's svg:d is the SVG subset LibreOffice emits (M/L/H/V/C/Z only), while a real-world .svg additionally uses S/Q/T/A and the relative lowercase forms, so this parser implements the full SVG command set on top of the identical scanner discipline.
 //
 // The three commands beyond the M/L/H/V/C/Z subset, and their exactness contracts:
-// - S (smooth cubic): the first control point is the reflection of the previous cubic's second control through the current point -- EXACT, it reproduces the author's intended curve with no approximation.
-// - Q (quadratic): elevated to a cubic EXACTLY -- a quadratic Bezier is the degree-2 special case of a cubic, with controls at the 2/3 marks toward the shared control point, so the elevated cubic is the same curve at every parameter.
-// - T (smooth quadratic): reflects the previous quadratic's control the way S does; when the previous command was not Q/T the SVG spec itself defines the reflected control as the current point, degenerating to a straight line -- exact either way.
-// - A (elliptical arc): the one genuinely approximate conversion. The standard endpoint-to-centre parameterisation (SVG 2, F.6.5) recovers the arc's centre and angles exactly; the arc is then split into segments of at most 90 degrees, each emitted as one cubic whose controls sit kappa = 4/3*tan(delta/4) along the segment's own boundary tangents -- the same bounded construction every Bezier-based renderer uses for circular arcs (the 90-degree worst case is the classical kappa approximation, accurate to a fraction of a point at document scale, and the error shrinks as segments shorten).
+// - S (smooth cubic): the first control point is the reflection of the previous cubic's second control through the current point — EXACT, it reproduces the author's intended curve with no approximation.
+// - Q (quadratic): elevated to a cubic EXACTLY — a quadratic Bezier is the degree-2 special case of a cubic, with controls at the 2/3 marks toward the shared control point, so the elevated cubic is the same curve at every parameter.
+// - T (smooth quadratic): reflects the previous quadratic's control the way S does; when the previous command was not Q/T the SVG spec itself defines the reflected control as the current point, degenerating to a straight line — exact either way.
+// - A (elliptical arc): the one genuinely approximate conversion. The standard endpoint-to-centre parameterisation (SVG 2, F.6.5) recovers the arc's centre and angles exactly; the arc is then split into segments of at most 90 degrees, each emitted as one cubic whose controls sit kappa = 4/3*tan(delta/4) along the segment's own boundary tangents — the same bounded construction every Bezier-based renderer uses for circular arcs (the 90-degree worst case is the classical kappa approximation, accurate to a fraction of a point at document scale, and the error shrinks as segments shorten).
 
 export interface ParsedPathPoint {
   readonly x: number;
   readonly y: number;
 }
 
-// A discriminated union rather than optional control fields, so a consumer narrowing on kind: 'cubic' gets non-optional controls with no assertion -- the same discipline the ContentSubpath vocabulary itself uses.
+// A discriminated union rather than optional control fields, so a consumer narrowing on kind: 'cubic' gets non-optional controls with no assertion — the same discipline the ContentSubpath vocabulary itself uses.
 export type ParsedPathSegment =
   | { readonly kind: "line"; readonly to: ParsedPathPoint }
   | {
@@ -48,7 +48,7 @@ class PathScanner {
     return this.pos >= this.source.length;
   }
 
-  // A leading sign is itself a separator for the next number ("1-2" is two numbers -- the grammar's own rule), which the sticky pattern handles by matching the signed form first wherever the cursor sits.
+  // A leading sign is itself a separator for the next number ("1-2" is two numbers — the grammar's own rule), which the sticky pattern handles by matching the signed form first wherever the cursor sits.
   nextNumber(): number | undefined {
     this.skipSeparators();
     PATH_NUMBER.lastIndex = this.pos;
@@ -83,7 +83,7 @@ class PathScanner {
   }
 }
 
-// The running cursor the commands mutate: the current point, the start of the open subpath (Z returns to it), and the previous cubic's second control / previous quadratic's control for S/T reflection. Both reflection anchors are cleared by every command outside their own family and by Z/M (a broken curve chain has nothing to reflect) -- exactly the spec's "the previous control point" scoping.
+// The running cursor the commands mutate: the current point, the start of the open subpath (Z returns to it), and the previous cubic's second control / previous quadratic's control for S/T reflection. Both reflection anchors are cleared by every command outside their own family and by Z/M (a broken curve chain has nothing to reflect) — exactly the spec's "the previous control point" scoping.
 interface PathCursor {
   x: number;
   y: number;
@@ -145,7 +145,7 @@ function addQuad(
     },
     to,
   );
-  // T reflects the previous quadratic's OWN control (the point named in the Q command, not the elevated cubic's control), and the addCubic delegation above just cleared the quad family's state -- restore it so a following T reflects the right point.
+  // T reflects the previous quadratic's OWN control (the point named in the Q command, not the elevated cubic's control), and the addCubic delegation above just cleared the quad family's state — restore it so a following T reflects the right point.
   cursor.lastQuadControl = control;
 }
 
@@ -173,7 +173,7 @@ function addArc(
   const sinRot = Math.sin(xRot);
   const dx = (from.x - to.x) / 2;
   const dy = (from.y - to.y) / 2;
-  // The endpoint midpoint translated into the arc's own rotated frame -- F.6.5's (x1', y1').
+  // The endpoint midpoint translated into the arc's own rotated frame — F.6.5's (x1', y1').
   const x1p = cosRot * dx + sinRot * dy;
   const y1p = -sinRot * dx + cosRot * dy;
 
@@ -229,7 +229,7 @@ function addArc(
     deltaTheta += 2 * Math.PI;
   }
 
-  // At most 90 degrees per cubic segment -- ceil(|delta| / (pi/2)), never fewer than one segment even for a tiny arc.
+  // At most 90 degrees per cubic segment — ceil(|delta| / (pi/2)), never fewer than one segment even for a tiny arc.
   const segmentCount = Math.max(
     1,
     Math.ceil(Math.abs(deltaTheta) / (Math.PI / 2)),
@@ -237,7 +237,7 @@ function addArc(
   const deltaPerSegment = deltaTheta / segmentCount;
   const kappa = (4 / 3) * Math.tan(deltaPerSegment / 4);
 
-  // The arc's own parametrisation and tangent in user space: point(t) = centre + R(rot) * (rx cos t, ry sin t), tangent(t) = R(rot) * (-rx sin t, ry cos t). A cubic segment from t0 to t1 takes its controls kappa times the tangent length away from each endpoint (P1 = P0 + kappa*T(t0), P2 = P3 - kappa*T(t1)) -- the standard bounded arc-to-cubic construction.
+  // The arc's own parametrisation and tangent in user space: point(t) = centre + R(rot) * (rx cos t, ry sin t), tangent(t) = R(rot) * (-rx sin t, ry cos t). A cubic segment from t0 to t1 takes its controls kappa times the tangent length away from each endpoint (P1 = P0 + kappa*T(t0), P2 = P3 - kappa*T(t1)) — the standard bounded arc-to-cubic construction.
   const pointAt = (t: number): ParsedPathPoint => ({
     x: cx + rx * cosRot * Math.cos(t) - ry * sinRot * Math.sin(t),
     y: cy + rx * sinRot * Math.cos(t) + ry * cosRot * Math.sin(t),
@@ -410,7 +410,7 @@ export function parseSvgPathData(
           }
         } else {
           if (acc.current === undefined) {
-            // Any drawing command before the first moveto is malformed -- there is no open subpath to draw into.
+            // Any drawing command before the first moveto is malformed — there is no open subpath to draw into.
             return undefined;
           }
           switch (upper) {
@@ -505,7 +505,7 @@ export function parseSvgPathData(
   return acc.subpaths.filter((subpath) => subpath.segments.length > 0);
 }
 
-// Probes whether the next non-separator character continues a number (digit, dot, or sign) without consuming anything -- the implicit-repetition boundary test. A sticky zero-width lookahead on the shared pattern would advance lastIndex, so this peeks the raw character class instead.
+// Probes whether the next non-separator character continues a number (digit, dot, or sign) without consuming anything — the implicit-repetition boundary test. A sticky zero-width lookahead on the shared pattern would advance lastIndex, so this peeks the raw character class instead.
 function hasNextNumberToken(scanner: PathScanner): boolean {
   let probe = scanner.pos;
   while (

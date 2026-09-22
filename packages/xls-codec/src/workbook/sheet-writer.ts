@@ -64,17 +64,17 @@ import { hasComment, writeSheetComments } from "./comment-writer";
 import { GENERAL_CELL_XF_INDEX } from "./globals-writer";
 import type { SheetDrawingWrite } from "./drawing-writer";
 
-// The worksheet substream ([MS-XLS] 2.1.7.20.5), write side: the page setup, grid geometry, and cell table for one sheet, the counterpart of workbook/sheet.ts's own readSheetRecords. See xls-codec's README for exactly which worksheet-substream records this writer emits (the print-settings group, Dimensions, ColInfo, Row, the value-cell family, MergeCells) and which it deliberately omits (Window2, the calc-state family, Index/DBCell) -- real content, not per-window UI state or a lookup optimisation this reader (or any reader) does not require to find a cell.
+// The worksheet substream ([MS-XLS] 2.1.7.20.5), write side: the page setup, grid geometry, and cell table for one sheet, the counterpart of workbook/sheet.ts's own readSheetRecords. See xls-codec's README for exactly which worksheet-substream records this writer emits (the print-settings group, Dimensions, ColInfo, Row, the value-cell family, MergeCells) and which it deliberately omits (Window2, the calc-state family, Index/DBCell) — real content, not per-window UI state or a lookup optimisation this reader (or any reader) does not require to find a cell.
 //
-// A blank cell -- ContentCellValue's own 'empty' kind -- splits in two. One carrying no formatting is written as nothing at all, which is what round-trips: content.ts's mapCell drops an unformatted blank it reads, and applyMerges reconstructs an empty anchor for a merged range from the MergeCells record alone. One carrying a background, a border, or a non-default alignment is a Blank record ([MS-XLS] 2.4.20), because its formatting exists only in the XF that record's ixfe names and there is no other record in the sheet to hang it on. written-cells.ts holds the predicate deciding which, shared with write.ts's own workbook-wide scans so the two cannot disagree.
+// A blank cell — ContentCellValue's own 'empty' kind — splits in two. One carrying no formatting is written as nothing at all, which is what round-trips: content.ts's mapCell drops an unformatted blank it reads, and applyMerges reconstructs an empty anchor for a merged range from the MergeCells record alone. One carrying a background, a border, or a non-default alignment is a Blank record ([MS-XLS] 2.4.20), because its formatting exists only in the XF that record's ixfe names and there is no other record in the sheet to hang it on. written-cells.ts holds the predicate deciding which, shared with write.ts's own workbook-wide scans so the two cannot disagree.
 //
 // MulBlank, RK, and MulRk stay unimplemented: unlike Blank, each is a pure compaction optimisation over information a plain Blank/Number record already carries losslessly.
 
-/** BIFF8's own 16-bit row index and 8-bit column index ceilings ([MS-XLS] 2.4.221's Rw structure and 2.4.53's Col256U structure): 65536 rows (0-65535), 256 columns (0-255) -- unlike xlsx's much larger grid. A cell outside this range cannot be expressed in BIFF8 at all, so it is refused rather than silently truncated into a wrapped index. */
+/** BIFF8's own 16-bit row index and 8-bit column index ceilings ([MS-XLS] 2.4.221's Rw structure and 2.4.53's Col256U structure): 65536 rows (0-65535), 256 columns (0-255) — unlike xlsx's much larger grid. A cell outside this range cannot be expressed in BIFF8 at all, so it is refused rather than silently truncated into a wrapped index. */
 const MAX_ROW_INDEX = 0xffff;
 const MAX_COLUMN_INDEX = 0xff;
 
-/** Excel 97-2003's own classic default row height (12.75pt) and default column width (in coldx units), used for a row/column this writer emits a record for but that carries no explicit size of its own -- a row with only `hidden` declared, or a ColInfo entry with no `widthPt`. */
+/** Excel 97-2003's own classic default row height (12.75pt) and default column width (in coldx units), used for a row/column this writer emits a record for but that carries no explicit size of its own — a row with only `hidden` declared, or a ColInfo entry with no `widthPt`. */
 const DEFAULT_ROW_HEIGHT_TWIPS = 255;
 const DEFAULT_COLUMN_WIDTH_UNITS = 2340;
 
@@ -86,9 +86,9 @@ const ROW_FLAG_UNSYNCED_BIT = 6;
 const COLINFO_FLAG_HIDDEN = 0x0001;
 
 export interface SheetWriteContext {
-  /** The icv a colour resolves to through the workbook's own palette plan (write.ts's buildPalettePlan) -- the same colour-table resolution a cell decoration's own fill already draws, offered to the conditional-format writer whose DXFN style colours are palette references too. Every colour this is called with must already have been registered during that plan's own workbook-wide scan. */
+  /** The icv a colour resolves to through the workbook's own palette plan (write.ts's buildPalettePlan) — the same colour-table resolution a cell decoration's own fill already draws, offered to the conditional-format writer whose DXFN style colours are palette references too. Every colour this is called with must already have been registered during that plan's own workbook-wide scan. */
   icvOf: (color: Color) => number;
-  /** The XF index ([MS-XLS] 2.5.168 IXFCell) a cell's own (number format, alignment, decoration) combination resolves to -- GENERAL_CELL_XF_INDEX for a cell with General formatting, general/bottom alignment, and no background/borders, one of the workbook's other cell XFs otherwise. write.ts's own cell-format interning pass is what assigns and deduplicates these. */
+  /** The XF index ([MS-XLS] 2.5.168 IXFCell) a cell's own (number format, alignment, decoration) combination resolves to — GENERAL_CELL_XF_INDEX for a cell with General formatting, general/bottom alignment, and no background/borders, one of the workbook's other cell XFs otherwise. write.ts's own cell-format interning pass is what assigns and deduplicates these. */
   xfIndexForCell(cell: ContentSheetCell): number;
   /** The shared string table index for a string cell's own text; every string a sheet writes must already be registered in the workbook-wide table before this is called. */
   sstIndexFor(text: string): number;
@@ -102,7 +102,7 @@ function checkedCellPosition(cell: ContentSheetCell): void {
   }
 }
 
-/** The smallest and largest of a number list (undefined for an empty one), computed by a single reduce pass rather than `Math.min(...values)`/`Math.max(...values)` -- a spread call over a large cell/row list would risk the same argument-count ceiling biff/strings.ts's own readCharacters comment notes for String.fromCharCode. Folded through `reduce` rather than indexed (`values[0]`) so the accumulator's own null-check is what narrows the running min/max, never an assertion that the array is non-empty. */
+/** The smallest and largest of a number list (undefined for an empty one), computed by a single reduce pass rather than `Math.min(...values)`/`Math.max(...values)` — a spread call over a large cell/row list would risk the same argument-count ceiling biff/strings.ts's own readCharacters comment notes for String.fromCharCode. Folded through `reduce` rather than indexed (`values[0]`) so the accumulator's own null-check is what narrows the running min/max, never an assertion that the array is non-empty. */
 function minMax(
   values: readonly number[],
 ): { min: number; max: number } | undefined {
@@ -118,7 +118,7 @@ function minMax(
   );
 }
 
-/** Dimensions ([MS-XLS] 2.4.90): the sheet's used range, derived from exactly the cells this writer emits a record for -- so a decorated empty cell counts (a real producer's used range covers a cell carrying direct formatting) while an undecorated one, having neither data nor formatting, does not. */
+/** Dimensions ([MS-XLS] 2.4.90): the sheet's used range, derived from exactly the cells this writer emits a record for — so a decorated empty cell counts (a real producer's used range covers a cell carrying direct formatting) while an undecorated one, having neither data nor formatting, does not. */
 function writeDimensionsRecord(
   writtenCells: readonly ContentSheetCell[],
 ): Uint8Array<ArrayBuffer> {
@@ -138,7 +138,7 @@ function writeDimensionsRecord(
   return writeRecord(RECORD_DIMENSIONS, data);
 }
 
-/** ColInfo ([MS-XLS] 2.4.53): one record per input column entry, covering exactly that one column (colFirst === colLast) rather than merging adjacent same-width columns into a range -- both are legal, and workbook/sheet.ts's own readColInfo expands either shape back into one RawColumn per column, so the two round-trip identically. */
+/** ColInfo ([MS-XLS] 2.4.53): one record per input column entry, covering exactly that one column (colFirst === colLast) rather than merging adjacent same-width columns into a range — both are legal, and workbook/sheet.ts's own readColInfo expands either shape back into one RawColumn per column, so the two round-trip identically. */
 function writeColInfoRecord(
   column: ContentSheetColumn,
 ): Uint8Array<ArrayBuffer> {
@@ -201,7 +201,7 @@ interface MergeRange {
   readonly endColumn: number;
 }
 
-/** Every merged range the sheet's own cells declare via colSpan/rowSpan, regardless of whether the anchor cell carries a value -- an 'empty'-kind anchor still merges, and content.ts's own applyMerges reconstructs it independently from the MergeCells record this produces. */
+/** Every merged range the sheet's own cells declare via colSpan/rowSpan, regardless of whether the anchor cell carries a value — an 'empty'-kind anchor still merges, and content.ts's own applyMerges reconstructs it independently from the MergeCells record this produces. */
 function mergedRangesOf(cells: readonly ContentSheetCell[]): MergeRange[] {
   const ranges: MergeRange[] = [];
   for (const cell of cells) {
@@ -219,7 +219,7 @@ function mergedRangesOf(cells: readonly ContentSheetCell[]): MergeRange[] {
   return ranges;
 }
 
-/** MergeCells ([MS-XLS] 2.4.168): a count then that many Ref8 structures ([MS-XLS] 2.5.208), each rowFirst/rowLast/colFirst/colLast -- the order workbook/sheet.ts's own readMergeCells reads them in. */
+/** MergeCells ([MS-XLS] 2.4.168): a count then that many Ref8 structures ([MS-XLS] 2.5.208), each rowFirst/rowLast/colFirst/colLast — the order workbook/sheet.ts's own readMergeCells reads them in. */
 function writeMergeCellsRecord(
   ranges: readonly MergeRange[],
 ): Uint8Array<ArrayBuffer> {
@@ -244,7 +244,7 @@ const CALC_ITERATION_DELTA = 0.001;
 /**
  * The calculation-state records [MS-XLS] 2.1.7.20.6's GLOBALS production requires ahead of PrintRowCol, none of which carries anything document-schema.js models.
  *
- * They are written for two reasons, one of them empirical. The grammar makes them mandatory -- `GLOBALS = CalcMode CalcCount CalcRefMode CalcIter CalcDelta CalcSaveRecalc PrintRowCol PrintGrid GridSet Guts DefaultRowHeight WsBool ...`, with no brackets on any of them -- so a substream that opens straight with a print setting is not a conformant worksheet at all. And LibreOffice's own BIFF8 importer silently discards whichever page-settings record comes FIRST in a worksheet substream: with PrintRowCol in that slot, a `.xls` this writer produced with row and column headers enabled opened in LibreOffice with them off, while every other print setting in the same file came through correctly. Moving any other record into that slot fixes it, which is what these do -- verified by writing the same workbook with and without them and re-reading each through `soffice --convert-to fods`.
+ * They are written for two reasons, one of them empirical. The grammar makes them mandatory — `GLOBALS = CalcMode CalcCount CalcRefMode CalcIter CalcDelta CalcSaveRecalc PrintRowCol PrintGrid GridSet Guts DefaultRowHeight WsBool ...`, with no brackets on any of them — so a substream that opens straight with a print setting is not a conformant worksheet at all. And LibreOffice's own BIFF8 importer silently discards whichever page-settings record comes FIRST in a worksheet substream: with PrintRowCol in that slot, a `.xls` this writer produced with row and column headers enabled opened in LibreOffice with them off, while every other print setting in the same file came through correctly. Moving any other record into that slot fixes it, which is what these do — verified by writing the same workbook with and without them and re-reading each through `soffice --convert-to fods`.
  *
  * The values are Excel's own defaults (automatic recalculation, A1 references, iteration off), matching what a real LibreOffice-written file carries for a workbook nobody has changed the calculation settings of. CalcMode is deliberately not among them: the production names it, but LibreOffice does not write one into a worksheet substream either, and the records below already satisfy the constraint this comment exists for.
  */
@@ -273,7 +273,7 @@ const SETUP_PRINT_RESOLUTION_DPI = 300;
 const SETUP_COPIES = 1;
 /** Setup's own numHdr/numFtr ([MS-XLS] 2.4.257), the header and footer margins in inches. Excel's own Normal preset value; Margins has no header/footer field for a real one to come from, and content.ts's read side discards these for the same reason. */
 const SETUP_HEADER_FOOTER_MARGIN_INCHES = 0.3;
-/** Setup's own iFitWidth/iFitHeight when the sheet is not in fit-to-page mode at all. Written rather than left at 0 because 0 means "as many pages as necessary" -- a real value a reader must not see while fFitToPage is clear and mistake for an intent the sheet never had. */
+/** Setup's own iFitWidth/iFitHeight when the sheet is not in fit-to-page mode at all. Written rather than left at 0 because 0 means "as many pages as necessary" — a real value a reader must not see while fFitToPage is clear and mistake for an intent the sheet never had. */
 const SETUP_INACTIVE_FIT_PAGES = 1;
 /** Setup's own iScale when the sheet IS in fit-to-page mode: 100%, actual size, the inactive value a real producer leaves behind (confirmed against LibreOffice-written BIFF8, whose fit-to-page sheets carry exactly this). */
 const SETUP_INACTIVE_SCALE_PERCENT = 100;
@@ -288,7 +288,7 @@ const SETUP_MAX_SCALE_PERCENT = 0xffff;
 /**
  * Clamps a schema value into the range its own Setup field can hold, since `ContentSheetPrintSettings` bounds neither a scale percentage nor a fit-to-page count from above.
  *
- * Clamping rather than throwing, and rather than letting the value wrap: a print scale is a presentational field, and refusing a whole workbook over an absurd one would lose its cells for no gain (the same trade the paper-code case above settles the same way). Silently wrapping is the option neither of those beats -- a scale of 65540% would land in the file as 4%, which is a different intent stated confidently.
+ * Clamping rather than throwing, and rather than letting the value wrap: a print scale is a presentational field, and refusing a whole workbook over an absurd one would lose its cells for no gain (the same trade the paper-code case above settles the same way). Silently wrapping is the option neither of those beats — a scale of 65540% would land in the file as 4%, which is a different intent stated confidently.
  */
 function clampedSetupField(
   value: number,
@@ -301,9 +301,9 @@ function clampedSetupField(
 /**
  * Setup ([MS-XLS] 2.4.257): iPaperSize, iScale, iPageStart, iFitWidth, iFitHeight, the flags word, iRes, iVRes, numHdr, numFtr, iCopies.
  *
- * fNoPls is deliberately never set. It would declare this record's own paper size, scale, and orientation undefined -- exactly the three fields it exists here to carry -- and [MS-XLS] pairs it with a Pls record holding a printer driver's DEVMODE blob, which this writer has none of.
+ * fNoPls is deliberately never set. It would declare this record's own paper size, scale, and orientation undefined — exactly the three fields it exists here to carry — and [MS-XLS] pairs it with a Pls record holding a printer driver's DEVMODE blob, which this writer has none of.
  *
- * A page size no code in the table names is written as SETUP_CUSTOM_PAPER_SIZE rather than as a standard paper it is not. The dimensions themselves are genuinely unwritable -- Setup addresses paper only by code, and [MS-XLS]'s own escape hatch for a size outside the table is that same Pls record -- so the choice is between saying "custom" and saying something false. Saying "custom" is what the spec's own iPaperSize table provides the value for, and it leaves a reader (this package's own included) free to fall back to its documented default instead of confidently reporting Letter for a page that is not Letter. This matters in practice rather than in theory: a spreadsheet converted from a slide deck or a drawing carries that source's own canvas as its page size, which is almost never a named paper, and refusing the conversion outright over a presentational field would lose the cells too.
+ * A page size no code in the table names is written as SETUP_CUSTOM_PAPER_SIZE rather than as a standard paper it is not. The dimensions themselves are genuinely unwritable — Setup addresses paper only by code, and [MS-XLS]'s own escape hatch for a size outside the table is that same Pls record — so the choice is between saying "custom" and saying something false. Saying "custom" is what the spec's own iPaperSize table provides the value for, and it leaves a reader (this package's own included) free to fall back to its documented default instead of confidently reporting Letter for a page that is not Letter. This matters in practice rather than in theory: a spreadsheet converted from a slide deck or a drawing carries that source's own canvas as its page size, which is almost never a named paper, and refusing the conversion outright over a presentational field would lose the cells too.
  */
 function writeSetupRecord(
   settings: ContentSheetPrintSettings,
@@ -335,7 +335,7 @@ function writeSetupRecord(
     leftToRight: settings.pageOrder === "overThenDown",
     portrait: paper.portrait,
     noPls: false,
-    // fNoOrient clear, so fPortrait above is what selects the orientation -- setting it would make [MS-XLS] 2.4.257's own "Pages are printed using portrait mode" override it and silently lose every landscape page.
+    // fNoOrient clear, so fPortrait above is what selects the orientation — setting it would make [MS-XLS] 2.4.257's own "Pages are printed using portrait mode" override it and silently lose every landscape page.
     noOrientation: false,
   };
   const data = new RecordBuilder()
@@ -354,7 +354,7 @@ function writeSetupRecord(
   return writeRecord(RECORD_SETUP, data);
 }
 
-/** Any of the four margin records ([MS-XLS] 2.4.151, 2.4.219, 2.4.328, 2.4.27): a single Xnum stating that margin in inches. All four share one field layout, so one writer serves them all -- the mirror of workbook/sheet.ts's own single readMargin. */
+/** Any of the four margin records ([MS-XLS] 2.4.151, 2.4.219, 2.4.328, 2.4.27): a single Xnum stating that margin in inches. All four share one field layout, so one writer serves them all — the mirror of workbook/sheet.ts's own single readMargin. */
 function writeMarginRecord(
   recordType: number,
   points: number,
@@ -376,7 +376,7 @@ function writeBooleanRecord(
   );
 }
 
-/** WsBool ([MS-XLS] 2.4.351). Only fFitToPage is set from real data; every other bit is written clear, which is what a sheet with no outline, no dialog behaviour, no synchronised scrolling, and no transition formula handling means -- and is exactly the set of facts ContentSheet carries nothing about. */
+/** WsBool ([MS-XLS] 2.4.351). Only fFitToPage is set from real data; every other bit is written clear, which is what a sheet with no outline, no dialog behaviour, no synchronised scrolling, and no transition formula handling means — and is exactly the set of facts ContentSheet carries nothing about. */
 function writeWsBoolRecord(fitToPage: boolean): Uint8Array<ArrayBuffer> {
   return writeRecord(
     RECORD_WSBOOL,
@@ -387,7 +387,7 @@ function writeWsBoolRecord(fitToPage: boolean): Uint8Array<ArrayBuffer> {
 /**
  * HorizontalPageBreaks ([MS-XLS] 2.4.142) or VerticalPageBreaks ([MS-XLS] 2.4.343): a count then that many six-byte structures, each the break's own index followed by the start and end of its extent along the other axis.
  *
- * Both structures share that three-field shape, so one writer serves both -- the extent's own end differs, which is what `extentEnd` carries: ContentSheetPrintSettings models a break as a whole-axis index with no extent, so every break written here runs the full width or height of BIFF8's own grid. Written in ascending index order, which is the sort [MS-XLS] requires of both arrays; the caller's own indices are sorted first rather than assumed sorted.
+ * Both structures share that three-field shape, so one writer serves both — the extent's own end differs, which is what `extentEnd` carries: ContentSheetPrintSettings models a break as a whole-axis index with no extent, so every break written here runs the full width or height of BIFF8's own grid. Written in ascending index order, which is the sort [MS-XLS] requires of both arrays; the caller's own indices are sorted first rather than assumed sorted.
  */
 function writePageBreaksRecord(
   recordType: number,
@@ -403,7 +403,7 @@ function writePageBreaksRecord(
 }
 
 /**
- * `manualBreaks.rows`/`.columns` is not bounded to BIFF8's own grid the way a cell's own row/column is (`writeCellRecord`'s `MAX_ROW_INDEX`/`MAX_COLUMN_INDEX` guard above throws for exactly that reason). `writePageBreaksRecord` writes each index into a 16-bit field regardless (`RecordBuilder.u16` masks with `0xffff`), so an out-of-grid break would otherwise silently wrap to a plausible-looking in-grid one -- a break asked for at row 70000 landing at row 4464 -- with nothing downstream to notice.
+ * `manualBreaks.rows`/`.columns` is not bounded to BIFF8's own grid the way a cell's own row/column is (`writeCellRecord`'s `MAX_ROW_INDEX`/`MAX_COLUMN_INDEX` guard above throws for exactly that reason). `writePageBreaksRecord` writes each index into a 16-bit field regardless (`RecordBuilder.u16` masks with `0xffff`), so an out-of-grid break would otherwise silently wrap to a plausible-looking in-grid one — a break asked for at row 70000 landing at row 4464 — with nothing downstream to notice.
  *
  * Dropped rather than clamped: unlike a print range or a repeated header band, where clamping to the grid's own last row/column is genuinely what "to the bottom of the sheet" means once the grid shrinks under it (print-names.ts's own clampToGrid), a page break is a single position, and clamping one would insert a break at the grid's own edge the caller never asked for. Dropping states the honest thing an out-of-grid break means once BIFF8's own ceiling has been applied: no such row/column exists for it to sit at.
  */
@@ -414,9 +414,9 @@ function inGridBreaks(indices: readonly number[], maxIndex: number): number[] {
 /**
  * Every print-settings record one sheet needs, in [MS-XLS] 2.1.7.20.6's own order.
  *
- * That order is two productions, back to back, both of which the worksheet substream places ahead of COLUMNS, Dimensions, and the cell table: `GLOBALS = ... PrintRowCol PrintGrid GridSet Guts DefaultRowHeight WsBool [Sync] [LPr] [HorizontalPageBreaks] [VerticalPageBreaks]` and `PAGESETUP = Header Footer HCenter VCenter [LeftMargin] [RightMargin] [TopMargin] [BottomMargin] [Pls *Continue] [Setup]`. The mandatory records this writer does not emit at all (the calculation-state family, GridSet, Guts, DefaultRowHeight, Header/Footer, HCenter/VCenter) are the same UI and interoperability bookkeeping it already omits everywhere else -- see this package's README -- so what remains is the optional subset that actually carries print settings, in the relative order those two productions give it.
+ * That order is two productions, back to back, both of which the worksheet substream places ahead of COLUMNS, Dimensions, and the cell table: `GLOBALS = ... PrintRowCol PrintGrid GridSet Guts DefaultRowHeight WsBool [Sync] [LPr] [HorizontalPageBreaks] [VerticalPageBreaks]` and `PAGESETUP = Header Footer HCenter VCenter [LeftMargin] [RightMargin] [TopMargin] [BottomMargin] [Pls *Continue] [Setup]`. The mandatory records this writer does not emit at all (the calculation-state family, GridSet, Guts, DefaultRowHeight, Header/Footer, HCenter/VCenter) are the same UI and interoperability bookkeeping it already omits everywhere else — see this package's README — so what remains is the optional subset that actually carries print settings, in the relative order those two productions give it.
  *
- * Every record here is written unconditionally, including for a sheet whose settings are exactly the Normal preset. A print setting has no "absent" spelling in ContentSheetPrintSettings -- gridlines, headers, page order, page size, and all four margins are required fields -- so there is no way to tell a sheet that asked for the preset from one that never stated anything, and writing the values out is what makes the round trip exact either way.
+ * Every record here is written unconditionally, including for a sheet whose settings are exactly the Normal preset. A print setting has no "absent" spelling in ContentSheetPrintSettings — gridlines, headers, page order, page size, and all four margins are required fields — so there is no way to tell a sheet that asked for the preset from one that never stated anything, and writing the values out is what makes the round trip exact either way.
  */
 function writePrintSettingsRecords(
   settings: ContentSheetPrintSettings,
@@ -466,7 +466,7 @@ function cellHeader(cell: ContentSheetCell, xfIndex: number): RecordBuilder {
   return new RecordBuilder().u16(cell.row).u16(cell.column).u16(xfIndex);
 }
 
-/** One cell record, keyed by ContentCellValue's own discriminant: Number for every numeric/temporal kind ([MS-XLS] 2.4.180 -- always the full IEEE 754 double, never the packed RK encoding, which is a compaction optimisation this writer does not implement), LabelSst for a string ([MS-XLS] 2.4.149, through the workbook-wide shared string table), BoolErr for a boolean or error value ([MS-XLS] 2.4.24), and Blank for an 'empty' cell whose formatting is the only thing it carries ([MS-XLS] 2.4.20 -- a cell header and nothing else, so the XF its ixfe names is the whole content). An unformatted empty cell never reaches here at all: written-cells.ts's own predicate filters it out upstream, since there is nothing for it to say. */
+/** One cell record, keyed by ContentCellValue's own discriminant: Number for every numeric/temporal kind ([MS-XLS] 2.4.180 — always the full IEEE 754 double, never the packed RK encoding, which is a compaction optimisation this writer does not implement), LabelSst for a string ([MS-XLS] 2.4.149, through the workbook-wide shared string table), BoolErr for a boolean or error value ([MS-XLS] 2.4.24), and Blank for an 'empty' cell whose formatting is the only thing it carries ([MS-XLS] 2.4.20 — a cell header and nothing else, so the XF its ixfe names is the whole content). An unformatted empty cell never reaches here at all: written-cells.ts's own predicate filters it out upstream, since there is nothing for it to say. */
 function writeCellValueRecord(
   cell: ContentSheetCell,
   xfIndex: number,
@@ -560,7 +560,7 @@ function taggedFormulaValueBytes(
     .build();
 }
 
-/** The Formula record's own 8-byte FormulaValue field for `cell.value` -- a plain little-endian f64 of the cell's own numeric/temporal serial for every numeric-shaped kind, or one of the tagged shapes above for a string, boolean, or error result. `empty` has no BIFF8 encoding that this package's own reader reads back as `empty` (a tagged-blank result reads back as an empty STRING, not an empty cell -- see workbook/sheet.ts's own taggedFormulaValue), so a formula whose value resolves to `empty` is refused outright rather than written as something the round trip would silently change the kind of. */
+/** The Formula record's own 8-byte FormulaValue field for `cell.value` — a plain little-endian f64 of the cell's own numeric/temporal serial for every numeric-shaped kind, or one of the tagged shapes above for a string, boolean, or error result. `empty` has no BIFF8 encoding that this package's own reader reads back as `empty` (a tagged-blank result reads back as an empty STRING, not an empty cell — see workbook/sheet.ts's own taggedFormulaValue), so a formula whose value resolves to `empty` is refused outright rather than written as something the round trip would silently change the kind of. */
 function formulaValueBytes(cell: ContentSheetCell): Uint8Array<ArrayBuffer> {
   const value = cell.value;
   switch (value.kind) {
@@ -601,7 +601,7 @@ function formulaValueBytes(cell: ContentSheetCell): Uint8Array<ArrayBuffer> {
   }
 }
 
-/** Formula ([MS-XLS] 2.4.127): a Cell, the 8-byte FormulaValue above, a flags word and a 4-byte calculation cache this writer has no data for (both written zero -- see the module comment on RECORD_CALCCOUNT and friends for the same "nothing this schema models" reasoning), then a CellParsedFormula -- a two-byte cce and that many bytes of compiled Ptg tokens from biff/ptg-writer.ts's own compileFormulaText. Never carries an RgbExtra trailer: this writer's formula compiler refuses any construct (an array-constant literal, a shared/array formula) that would need one, so cce always accounts for the whole of rgce. A string-kind result is followed by a String record ([MS-XLS] 2.4.268) carrying the cached text, exactly as workbook/sheet.ts's own reader expects to find it. `formula` is the caller's own already-narrowed `cell.formula` (writeCellRecords' `cell.formula !== undefined` check), passed rather than re-read and re-checked here, so a cell with no formula can only ever reach writeCellValueRecord instead -- there is no second, unreachable "no formula" branch inside this function for a defensive message to rot behind. */
+/** Formula ([MS-XLS] 2.4.127): a Cell, the 8-byte FormulaValue above, a flags word and a 4-byte calculation cache this writer has no data for (both written zero — see the module comment on RECORD_CALCCOUNT and friends for the same "nothing this schema models" reasoning), then a CellParsedFormula — a two-byte cce and that many bytes of compiled Ptg tokens from biff/ptg-writer.ts's own compileFormulaText. Never carries an RgbExtra trailer: this writer's formula compiler refuses any construct (an array-constant literal, a shared/array formula) that would need one, so cce always accounts for the whole of rgce. A string-kind result is followed by a String record ([MS-XLS] 2.4.268) carrying the cached text, exactly as workbook/sheet.ts's own reader expects to find it. `formula` is the caller's own already-narrowed `cell.formula` (writeCellRecords' `cell.formula !== undefined` check), passed rather than re-read and re-checked here, so a cell with no formula can only ever reach writeCellValueRecord instead — there is no second, unreachable "no formula" branch inside this function for a defensive message to rot behind. */
 function writeFormulaRecords(
   cell: ContentSheetCell,
   formula: string,
@@ -624,7 +624,7 @@ function writeFormulaRecords(
   return records;
 }
 
-/** The one or two records one cell contributes to the worksheet substream's cell table -- a Formula record (plus its String result, for a string-kind cell) when the cell carries a formula, the plain value record from writeCellValueRecord otherwise. */
+/** The one or two records one cell contributes to the worksheet substream's cell table — a Formula record (plus its String result, for a string-kind cell) when the cell carries a formula, the plain value record from writeCellValueRecord otherwise. */
 function writeCellRecords(
   cell: ContentSheetCell,
   xfIndex: number,
@@ -693,13 +693,13 @@ export function buildWorksheetSubstream(
     pieces.push(writeMergeCellsRecord(merges));
   }
 
-  // No commentedCells.length>0 guard: writeSheetComments already returns an empty array for an empty input (nothing to sort, nothing to map), so spreading its result pushes nothing regardless -- a guard here would only ever decide between calling a function that does nothing and not calling it.
+  // No commentedCells.length>0 guard: writeSheetComments already returns an empty array for an empty input (nothing to sort, nothing to map), so spreading its result pushes nothing regardless — a guard here would only ever decide between calling a function that does nothing and not calling it.
   pieces.push(...writeSheetComments(sheet.cells.filter(hasComment)));
 
   // A comment's own Note/Obj/Txo triple takes object ids 1..N (writeSheetComments above); drawing-writer.ts's own buildDrawingWritePlan continues object-id assignment from N+1, so every image/embedded-object shape's MsoDrawing/Obj records are placed after the comments' own, matching what that plan already assumes about the ids it minted.
   pieces.push(...drawing.msoDrawingRecords, ...drawing.objRecords);
 
-  // The conditional-format groups and the DataValidationTable follow the cell table and its notes, in that order -- [MS-XLS] 2.1.7.20.5's own WORKSHEETCONTENT production places CONDFMTS ahead of [DVAL] (`... *MergeCells [LRng] *QUERYTABLE [PHONETICINFO] CONDFMTS *HLINK [DVAL] ... EOF`), so a Dval/Dv pair arriving before the conditional formats would sit outside the grammar even though this package's own order-tolerant reader walk accepts either.
+  // The conditional-format groups and the DataValidationTable follow the cell table and its notes, in that order — [MS-XLS] 2.1.7.20.5's own WORKSHEETCONTENT production places CONDFMTS ahead of [DVAL] (`... *MergeCells [LRng] *QUERYTABLE [PHONETICINFO] CONDFMTS *HLINK [DVAL] ... EOF`), so a Dval/Dv pair arriving before the conditional formats would sit outside the grammar even though this package's own order-tolerant reader walk accepts either.
   pieces.push(...writeSheetConditionalFormats(sheet, ctx.icvOf));
   pieces.push(...writeSheetDataValidations(sheet));
 

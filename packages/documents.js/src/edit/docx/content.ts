@@ -45,7 +45,7 @@ import { addRelationship } from "../../opc/rels";
 import type { DocxParagraph } from "./paragraph";
 import type { DocxTableCell } from "./table";
 
-// Reports every MathML construct that degraded or was approximated while an embedded formula was translated into OMML (see src/omml/write.ts). `sourcePath` is the formula block's own path back into the source ContentDocument, when it carries one, so a caller can name which formula each diagnostic came from rather than only which construct. `clock` resolves content.metadata's own createdIso/modifiedIso the same way createDocx does (src/model/metadata.ts's resolveMetadataTimestamps) -- systemClock by default, so a rebuilt document still gets real timestamps, but never overwriting a createdIso/modifiedIso the source content already carried.
+// Reports every MathML construct that degraded or was approximated while an embedded formula was translated into OMML (see src/omml/write.ts). `sourcePath` is the formula block's own path back into the source ContentDocument, when it carries one, so a caller can name which formula each diagnostic came from rather than only which construct. `clock` resolves content.metadata's own createdIso/modifiedIso the same way createDocx does (src/model/metadata.ts's resolveMetadataTimestamps) — systemClock by default, so a rebuilt document still gets real timestamps, but never overwriting a createdIso/modifiedIso the source content already carried.
 export interface BuildDocxPackageOptions {
   readonly onMathDiagnostic?: (
     diagnostic: OmmlDiagnostic,
@@ -54,7 +54,7 @@ export interface BuildDocxPackageOptions {
   readonly clock?: ClockPort;
 }
 
-// ContentDocument -> a fresh docx Package, built entirely through the same edit/docx/* live-view primitives a caller would use by hand -- the write-side counterpart to src/ooxml/docx/read.ts's readDocxContent. Used by the PDF->docx conversion path (src/layout/reconstruct.ts's output never contains a ContentTable, since PDF table reconstruction degrades to tab-separated text), but written to handle the full ContentBlock union for any other caller that wants a ContentDocument turned into real docx bytes. Constructs its own package directly (createEmptyDocxPackage + DocxEditor) rather than calling createDocx(), since createDocx() always starts metadata from {} -- this function needs the SOURCE content's own metadata to reach resolveMetadataTimestamps, not an empty object.
+// ContentDocument -> a fresh docx Package, built entirely through the same edit/docx/* live-view primitives a caller would use by hand — the write-side counterpart to src/ooxml/docx/read.ts's readDocxContent. Used by the PDF->docx conversion path (src/layout/reconstruct.ts's output never contains a ContentTable, since PDF table reconstruction degrades to tab-separated text), but written to handle the full ContentBlock union for any other caller that wants a ContentDocument turned into real docx bytes. Constructs its own package directly (createEmptyDocxPackage + DocxEditor) rather than calling createDocx(), since createDocx() always starts metadata from {} — this function needs the SOURCE content's own metadata to reach resolveMetadataTimestamps, not an empty object.
 // The block-level construct marker state one build carries: bookmark anchors mint a fresh, document-unique w:id on their start half and hold it open until the matching end, and every opened construct (bookmark or not) is stacked so a dropped construct's own end marker pops the right entry rather than a bookmark's.
 class ConstructMarkerState {
   private nextBookmarkId = 1;
@@ -76,17 +76,17 @@ class ConstructMarkerState {
       return;
     }
     if (detail.kind === "contentControl") {
-      // An SDT region: the blocks between the markers land inside the control's own w:sdtContent, the shape Word itself writes -- round-tripping through ooxml.js's own reader recovers the identical construct pair.
+      // An SDT region: the blocks between the markers land inside the control's own w:sdtContent, the shape Word itself writes — round-tripping through ooxml.js's own reader recovers the identical construct pair.
       this.open.push({ kind: "region" });
       body.openContentControlRegion(detail);
       return;
     }
     if (detail.kind === "provenance" && body.openProvenanceRegion(detail)) {
-      // A tracked-change region: the blocks between the markers land inside the change's own w:ins/w:del/w:moveFrom/w:moveTo element, with the deletion spellings re-spelling their runs' text w:delText on close. formatChange falls through to the dropped stack below -- it has no block-level element to open.
+      // A tracked-change region: the blocks between the markers land inside the change's own w:ins/w:del/w:moveFrom/w:moveTo element, with the deletion spellings re-spelling their runs' text w:delText on close. formatChange falls through to the dropped stack below — it has no block-level element to open.
       this.open.push({ kind: "region" });
       return;
     }
-    // Every other construct kind is wrapper-shaped through machinery this builder has no editor surface for (a tracked-change w:ins/w:del region, an ODF division with no Word spelling at block scope) or carries no write path at all, and is dropped as the README's construct-marker note states -- stacked here so its own end marker still balances.
+    // Every other construct kind is wrapper-shaped through machinery this builder has no editor surface for (a tracked-change w:ins/w:del region, an ODF division with no Word spelling at block scope) or carries no write path at all, and is dropped as the README's construct-marker note states — stacked here so its own end marker still balances.
     this.open.push({ kind: "dropped" });
   }
 
@@ -159,7 +159,7 @@ export function buildDocxPackage(
       : content.sections;
   sections.forEach((section, sectionIndex) => {
     if (sectionIndex > 0) {
-      // A section boundary becomes a page break -- distinct per-section page size/margins (w:sectPr per section) isn't modelled by this bridge yet, since createDocx()'s single scaffolded section covers every caller this function currently has.
+      // A section boundary becomes a page break — distinct per-section page size/margins (w:sectPr per section) isn't modelled by this bridge yet, since createDocx()'s single scaffolded section covers every caller this function currently has.
       editor.body.appendPageBreak();
     }
     appendBlocks(editor.body, section.blocks, options, markers);
@@ -167,7 +167,7 @@ export function buildDocxPackage(
   return editor.toPackage();
 }
 
-// ooxml.js's flat docx reader (real docx image reading since ooxml.js 2.6.1) always represents an inline image as TWO adjacent ContentBlocks sourced from the one physical <w:p>: a paragraph block carrying that paragraph's own (possibly all-empty) text runs, immediately followed by an image block for the w:drawing found inside it -- there is no signal in ContentDocument distinguishing that pairing from a genuinely separate, intentionally-blank paragraph that happens to sit immediately before an unrelated image. Writing both blocks back as two independent paragraphs (the naive per-block loop) is round-trip-safe for the rare separate-blank-paragraph case but wrong for the overwhelmingly common inline-image case, inserting a spurious extra empty paragraph before every image on every docx round trip. isMergeableImageParagraph/appendBlocks instead special-case exactly the pattern readDocxContent always produces for a genuine inline image (a paragraph whose runs are all empty text, directly followed by an image block) and write it back as the single physical paragraph it came from, by populating the paragraph's own properties/runs and then calling insertImageAfter on that SAME paragraph rather than a fresh one -- consuming both ContentBlocks in one step. A paragraph with any non-empty run text is never merged, since ooxml.js's own reader only ever emits the image as a trailing sibling of an all-empty-runs paragraph (confirmed against real readDocxContent output: a drawing inside a paragraph that also carries real text produces the drawing's own empty-text run inline within that SAME paragraph block, never as a separate block at all -- see this repo's README Gotchas).
+// ooxml.js's flat docx reader (real docx image reading since ooxml.js 2.6.1) always represents an inline image as TWO adjacent ContentBlocks sourced from the one physical <w:p>: a paragraph block carrying that paragraph's own (possibly all-empty) text runs, immediately followed by an image block for the w:drawing found inside it — there is no signal in ContentDocument distinguishing that pairing from a genuinely separate, intentionally-blank paragraph that happens to sit immediately before an unrelated image. Writing both blocks back as two independent paragraphs (the naive per-block loop) is round-trip-safe for the rare separate-blank-paragraph case but wrong for the overwhelmingly common inline-image case, inserting a spurious extra empty paragraph before every image on every docx round trip. isMergeableImageParagraph/appendBlocks instead special-case exactly the pattern readDocxContent always produces for a genuine inline image (a paragraph whose runs are all empty text, directly followed by an image block) and write it back as the single physical paragraph it came from, by populating the paragraph's own properties/runs and then calling insertImageAfter on that SAME paragraph rather than a fresh one — consuming both ContentBlocks in one step. A paragraph with any non-empty run text is never merged, since ooxml.js's own reader only ever emits the image as a trailing sibling of an all-empty-runs paragraph (confirmed against real readDocxContent output: a drawing inside a paragraph that also carries real text produces the drawing's own empty-text run inline within that SAME paragraph block, never as a separate block at all — see this repo's README Gotchas).
 function isMergeableImageParagraph(
   block: ContentBlock,
 ): block is ContentParagraph {
@@ -176,8 +176,8 @@ function isMergeableImageParagraph(
   );
 }
 
-// Walks blocks recursively (paragraphs at any level, including inside table cells), collecting every distinct list numId and the set of levels each uses -- the input to the numbering.xml synthesis pre-pass above.
-// The pre-pass map is keyed by a membership's numId OR its absence (undefined): numId is optional since schema 4.0.0 -- an OOXML drawing paragraph or a de-numIded bridge product carries only a level -- and every distinct key, present or absent, needs its own numbering definition for the numIds DocxParagraph.list writes to resolve. All memberships sharing the absent key land on one shared w:num, which is exactly right for a bullet-template table: the only thing a numbering definition distinguishes is the marker template, and every level of every entry this synthesiser emits is the same bullet anyway.
+// Walks blocks recursively (paragraphs at any level, including inside table cells), collecting every distinct list numId and the set of levels each uses — the input to the numbering.xml synthesis pre-pass above.
+// The pre-pass map is keyed by a membership's numId OR its absence (undefined): numId is optional since schema 4.0.0 — an OOXML drawing paragraph or a de-numIded bridge product carries only a level — and every distinct key, present or absent, needs its own numbering definition for the numIds DocxParagraph.list writes to resolve. All memberships sharing the absent key land on one shared w:num, which is exactly right for a bullet-template table: the only thing a numbering definition distinguishes is the marker template, and every level of every entry this synthesiser emits is the same bullet anyway.
 function collectListNumIds(
   blocks: readonly ContentBlock[],
   out: Map<string | undefined, Set<number>>,
@@ -246,7 +246,7 @@ function appendBlocks(
       isMergeableImageParagraph(block) &&
       next?.kind === "image"
     ) {
-      // Only the paragraph's own properties are written here, never its runs -- every run.text in a mergeable paragraph is an empty placeholder for the drawing's own run position (see this function's own top comment), and writing it via populateParagraph would add a real, spurious empty-text run alongside the one insertImageAfter is about to add for the drawing itself, doubling up on the re-read.
+      // Only the paragraph's own properties are written here, never its runs — every run.text in a mergeable paragraph is an empty placeholder for the drawing's own run position (see this function's own top comment), and writing it via populateParagraph would add a real, spurious empty-text run alongside the one insertImageAfter is about to add for the drawing itself, doubling up on the re-read.
       const paragraph = body.appendParagraph();
       paragraph.styleId = block.styleId;
       paragraph.alignment = block.alignment;
@@ -349,7 +349,7 @@ interface DocxRowCell {
   readonly verticalMerge?: "restart" | "continue";
 }
 
-// The w:tc elements one dense row writes, in order. A ContentTable row holds one entry per grid column, but docx has an element only where a cell has its own place: an anchor writes a w:tc carrying its w:gridSpan (and a w:vMerge restart when it spans rows); a position covered along its own row writes nothing, since ECMA-376 has no element for a column a w:gridSpan already reaches (unlike ODF, whose covered-table-cell -- see appendTable in src/edit/odt/content.ts -- is written explicitly); and a position covered from an earlier row writes one bare w:vMerge continuation at the covering anchor's first column only, as wide as the anchor's own gridSpan so the continuation is exactly as wide as the cell it continues.
+// The w:tc elements one dense row writes, in order. A ContentTable row holds one entry per grid column, but docx has an element only where a cell has its own place: an anchor writes a w:tc carrying its w:gridSpan (and a w:vMerge restart when it spans rows); a position covered along its own row writes nothing, since ECMA-376 has no element for a column a w:gridSpan already reaches (unlike ODF, whose covered-table-cell — see appendTable in src/edit/odt/content.ts — is written explicitly); and a position covered from an earlier row writes one bare w:vMerge continuation at the covering anchor's first column only, as wide as the anchor's own gridSpan so the continuation is exactly as wide as the cell it continues.
 function docxRowCells(
   positions: readonly TableGridPosition[],
   positionsByRow: readonly (readonly TableGridPosition[])[],
@@ -425,7 +425,7 @@ function appendCellBlock(cell: DocxTableCell, block: ContentBlock): void {
   if (block.kind === "paragraph") {
     populateParagraph(cell.appendParagraph(), block);
   }
-  // Nested tables and images inside a table cell are out of scope for this bridge -- ContentBlock permits arbitrary nesting, but PDF-sourced content (the one caller today) never produces it.
+  // Nested tables and images inside a table cell are out of scope for this bridge — ContentBlock permits arbitrary nesting, but PDF-sourced content (the one caller today) never produces it.
 }
 
 function appendBlock(
@@ -459,11 +459,11 @@ function appendBlock(
   }
 }
 
-// An embedded formula becomes a paragraph carrying a REAL OMML display equation (m:oMathPara > m:oMath), structurally translated from the block's own MathML by src/omml/write.ts -- genuinely editable Word math, not a picture and not a plain-text stand-in. This is what makes a formula survive the odt -> docx bridge and an .odm chapter as math rather than as text.
+// An embedded formula becomes a paragraph carrying a REAL OMML display equation (m:oMathPara > m:oMath), structurally translated from the block's own MathML by src/omml/write.ts — genuinely editable Word math, not a picture and not a plain-text stand-in. This is what makes a formula survive the odt -> docx bridge and an .odm chapter as math rather than as text.
 //
-// The plain-text stand-in (the formula's own StarMath annotation, or the literal "[formula]") remains the fallback for exactly one case: a formula whose MathML produced no OMML content at all -- an empty mathml array, or a block whose document is not a formula document. Writing nothing there would make the formula vanish without trace, the silent-loss failure mode this codebase's conventions rule out. An individual MathML construct with no OMML counterpart degrades on its own, inside the equation, with a diagnostic -- see src/omml/write.ts -- rather than dragging the whole formula down to text.
+// The plain-text stand-in (the formula's own StarMath annotation, or the literal "[formula]") remains the fallback for exactly one case: a formula whose MathML produced no OMML content at all — an empty mathml array, or a block whose document is not a formula document. Writing nothing there would make the formula vanish without trace, the silent-loss failure mode this codebase's conventions rule out. An individual MathML construct with no OMML counterpart degrades on its own, inside the equation, with a diagnostic — see src/omml/write.ts — rather than dragging the whole formula down to text.
 //
-// A 'drawing' objectKind -- what reconstructWordprocessing wraps a page's recovered vector primitives in (src/layout/reconstruct.ts) -- becomes a paragraph carrying one real page-anchored DrawingML shape per vector (src/edit/docx/vector.ts, built on the shared preset/custom-geometry writer pptx uses too). The remaining objectKinds (a nested wordprocessing/presentation/spreadsheet document) are still unhandled: no reader this package depends on produces one.
+// A 'drawing' objectKind — what reconstructWordprocessing wraps a page's recovered vector primitives in (src/layout/reconstruct.ts) — becomes a paragraph carrying one real page-anchored DrawingML shape per vector (src/edit/docx/vector.ts, built on the shared preset/custom-geometry writer pptx uses too). The remaining objectKinds (a nested wordprocessing/presentation/spreadsheet document) are still unhandled: no reader this package depends on produces one.
 function appendEmbeddedObject(
   body: DocxBody,
   block: ContentEmbeddedObjectBlock,

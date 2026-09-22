@@ -25,7 +25,7 @@ function expectWellFormedHeaderAndTrailer(bytes: Uint8Array): string {
   return text;
 }
 
-// Verifies every in-use entry in a SINGLE, full (0..N) classic xref section points at that object's own "N 0 obj" header -- the same style of check write.test.ts already applies to our own writer's output, applied here to hand-built fixtures instead.
+// Verifies every in-use entry in a SINGLE, full (0..N) classic xref section points at that object's own "N 0 obj" header — the same style of check write.test.ts already applies to our own writer's output, applied here to hand-built fixtures instead.
 function verifyFullClassicXref(bytes: Uint8Array): void {
   const text = decode(bytes);
   const xrefIdx = text.lastIndexOf("\nxref\n") + 1;

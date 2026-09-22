@@ -1,13 +1,13 @@
 import type { ContentCellValue } from "document-schema.js";
 
-// The ContentCellValue comparison and aggregation semantics shared by both .odb expression engines: src/odb/sql/ (a bounded SELECT, with optional INNER JOINs) and src/odb/formula/ (Report Builder rpt formulas). Both compare values, both implement the identical five aggregates over the identical NULL-skipping rules, and both are handed exactly the ContentCellValue[] rows readOdbTables produces -- so the semantics live here once rather than being restated in each, where a fix to one would silently leave the other wrong.
+// The ContentCellValue comparison and aggregation semantics shared by both .odb expression engines: src/odb/sql/ (a bounded SELECT, with optional INNER JOINs) and src/odb/formula/ (Report Builder rpt formulas). Both compare values, both implement the identical five aggregates over the identical NULL-skipping rules, and both are handed exactly the ContentCellValue[] rows readOdbTables produces — so the semantics live here once rather than being restated in each, where a fix to one would silently leave the other wrong.
 //
 // The one thing this module deliberately does NOT own is which error a violation raises: a comparison failure inside a SELECT is an HsqldbSqlEvaluationError quoting the offending statement, and the same failure inside a report formula is an RptFormulaEvaluationError quoting the offending formula. Each function therefore takes a `fail` factory and throws what the caller builds, rather than owning an error type neither engine would want.
 //
 // Two semantic rules are stated here rather than in either caller, because both callers depend on them being the same:
 //
-// 1. Values compare within three classes -- numeric (number/percentage/currency), boolean (false < true), and text (string/date/time/dateTime/error) -- and a comparison ACROSS classes throws rather than coercing, since coercing is exactly how an expression engine silently produces a wrong answer. Text comparison is UTF-16 code-unit order, not a locale collation: correct for the ISO-8601 date/time strings this package's readers produce, and deliberately not pretending to implement a database's own collation rules.
-// 2. COUNT counts non-NULL values; SUM/AVG/MIN/MAX skip NULLs and return NULL for a set with no non-NULL value at all -- SQL's own rule, and the reason AVG over an all-NULL column is NULL rather than a division by zero. (SQL's COUNT(*), which counts ROWS rather than values, never reaches here: src/odb/sql/evaluate.ts answers it directly from the group's own row count.)
+// 1. Values compare within three classes — numeric (number/percentage/currency), boolean (false < true), and text (string/date/time/dateTime/error) — and a comparison ACROSS classes throws rather than coercing, since coercing is exactly how an expression engine silently produces a wrong answer. Text comparison is UTF-16 code-unit order, not a locale collation: correct for the ISO-8601 date/time strings this package's readers produce, and deliberately not pretending to implement a database's own collation rules.
+// 2. COUNT counts non-NULL values; SUM/AVG/MIN/MAX skip NULLs and return NULL for a set with no non-NULL value at all — SQL's own rule, and the reason AVG over an all-NULL column is NULL rather than a division by zero. (SQL's COUNT(*), which counts ROWS rather than values, never reaches here: src/odb/sql/evaluate.ts answers it directly from the group's own row count.)
 
 export type CellValueClass = "numeric" | "boolean" | "text";
 
@@ -24,7 +24,7 @@ export type CellValueFailure = (message: string) => Error;
 
 export const CELL_NULL: ContentCellValue = { kind: "empty" };
 
-// A value's comparison class and comparable payload, or undefined for NULL -- every caller resolves NULL to its own answer (UNKNOWN in a SQL predicate, a sort position, a skipped aggregate input) before comparing.
+// A value's comparison class and comparable payload, or undefined for NULL — every caller resolves NULL to its own answer (UNKNOWN in a SQL predicate, a sort position, a skipped aggregate input) before comparing.
 export function cellComparisonKey(
   value: ContentCellValue,
 ): CellComparisonKey | undefined {
@@ -51,7 +51,7 @@ export function compareCellKeys(
   right: CellComparisonKey,
   fail: CellValueFailure,
 ): number {
-  // Ordered as less-than-first rather than equality-first: with equality checked first, the surrounding guard already rules out left === right by the time a `<` (or `<=`) comparison runs, making the two relational spellings produce identical output for every reachable input -- an unkillable, permanently-equivalent mutant. Checking `<` first means a `<`-to-`<=` mutation is reachable at the equal-values input (it would wrongly report -1 instead of 0), so this ordering carries no equivalent-mutant gap.
+  // Ordered as less-than-first rather than equality-first: with equality checked first, the surrounding guard already rules out left === right by the time a `<` (or `<=`) comparison runs, making the two relational spellings produce identical output for every reachable input — an unkillable, permanently-equivalent mutant. Checking `<` first means a `<`-to-`<=` mutation is reachable at the equal-values input (it would wrongly report -1 instead of 0), so this ordering carries no equivalent-mutant gap.
   if (left.valueClass === "numeric" && right.valueClass === "numeric") {
     return left.numeric < right.numeric
       ? -1
@@ -70,7 +70,7 @@ export function compareCellKeys(
   );
 }
 
-// Both operands are known non-NULL by the time this runs -- every caller resolves NULL to its own answer (or to a sort position) before comparing.
+// Both operands are known non-NULL by the time this runs — every caller resolves NULL to its own answer (or to a sort position) before comparing.
 export function compareCellValues(
   left: ContentCellValue,
   right: ContentCellValue,
@@ -86,7 +86,7 @@ export function compareCellValues(
   return compareCellKeys(leftKey, rightKey, fail);
 }
 
-// Whether two values are the same value. Total where compareCellValues is partial: two values of different classes are unambiguously not equal, so this answers false rather than throwing the way an ordering comparison across classes has to. Two NULLs are equal to each other and to nothing else. It lives beside compareCellKeys because the two rules must agree wherever both apply -- equal here exactly when compareCellKeys would return 0 -- and src/odb/formula/'s rpt:HASCHANGED, which is nothing but "is this row's value different from the last row's", is what needs the total version.
+// Whether two values are the same value. Total where compareCellValues is partial: two values of different classes are unambiguously not equal, so this answers false rather than throwing the way an ordering comparison across classes has to. Two NULLs are equal to each other and to nothing else. It lives beside compareCellKeys because the two rules must agree wherever both apply — equal here exactly when compareCellKeys would return 0 — and src/odb/formula/'s rpt:HASCHANGED, which is nothing but "is this row's value different from the last row's", is what needs the total version.
 export function cellValuesEqual(
   left: ContentCellValue,
   right: ContentCellValue,
@@ -123,7 +123,7 @@ function numericOf(
   return key.numeric;
 }
 
-// Aggregates a set of values that has already been gathered -- a GROUP BY partition's own column values in the SQL engine, a group instance's own row range in the report engine. Equality of the two callers' semantics is the point of this function existing.
+// Aggregates a set of values that has already been gathered — a GROUP BY partition's own column values in the SQL engine, a group instance's own row range in the report engine. Equality of the two callers' semantics is the point of this function existing.
 export function aggregateCellValues(
   aggregate: CellAggregateFunction,
   values: readonly ContentCellValue[],

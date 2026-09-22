@@ -7,7 +7,7 @@ import { mountWithProviders } from "../test/mountComponent";
 
 vi.mock("../rpc/client", () => ({ getRpcClient: vi.fn() }));
 
-// Stands in for the real FileUpload (already covered by its own dedicated test suite): OdbPage's own logic -- calling readOdb.mutate with the picked file's bytes and surfacing the inventory/error/pending states -- is what this file exercises.
+// Stands in for the real FileUpload (already covered by its own dedicated test suite): OdbPage's own logic — calling readOdb.mutate with the picked file's bytes and surfacing the inventory/error/pending states — is what this file exercises.
 let latestOnFile: ((file: OpenedFile) => void) | undefined;
 let latestAccept: Record<string, string[]> | undefined;
 vi.mock("../ui/FileUpload", () => ({

@@ -1,4 +1,4 @@
-// Little-endian integer readers over raw zip bytes, shared by every test that walks a zip's physical local-file-header layout rather than trusting a round trip through unzipPackage's Record (which makes no ordering promise of its own to test against). Never imported by src/index.ts and never reaches dist/ -- test-only, mirroring the same test-only, never-exported convention as this family's other test-support helpers.
+// Little-endian integer readers over raw zip bytes, shared by every test that walks a zip's physical local-file-header layout rather than trusting a round trip through unzipPackage's Record (which makes no ordering promise of its own to test against). Never imported by src/index.ts and never reaches dist/ — test-only, mirroring the same test-only, never-exported convention as this family's other test-support helpers.
 
 // A DataView read, not a hand-rolled undefined-checking one: DataView's own getUint16/getUint32 already throw a RangeError for an offset whose read would run past the buffer's own end, so there is no separate bounds check to hand-write (and no separate error message to keep in sync with it).
 
@@ -36,7 +36,7 @@ export function localFileHeaderNames(bytes: Uint8Array): string[] {
   return names;
 }
 
-// The compression method (0 = stored, 8 = deflated) of a given entry's local file header, walked in the same physical order as localFileHeaderNames. Local header layout per the ZIP application-note: signature (4 bytes), version needed (2), general-purpose flags (2), compression method (2) -- so the method field sits at byte offset 8 within each header.
+// The compression method (0 = stored, 8 = deflated) of a given entry's local file header, walked in the same physical order as localFileHeaderNames. Local header layout per the ZIP application-note: signature (4 bytes), version needed (2), general-purpose flags (2), compression method (2) — so the method field sits at byte offset 8 within each header.
 export function localHeaderCompressionMethod(
   bytes: Uint8Array,
   entryIndex: number,

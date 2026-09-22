@@ -1,4 +1,4 @@
-// Parses a MathML length attribute value (mspace's width/height/depth, mtable's columnspacing/rowspacing, mfrac's linethickness, ...) into points at `fontSizePt`. MathML3 (https://www.w3.org/TR/MathML3/chapter2.html#fund.units) permits a signed number followed by a unit -- em/ex (font-relative), px/in/cm/mm/pt/pc (absolute), a bare '%' (percentage of fontSizePt), or one of the seven named "MathSpace" keywords (thickmathspace etc.) -- or a bare unitless number, which MathML treats as 'em'. Returns undefined for anything this parser doesn't recognise (an empty string, a malformed number, an unknown unit) rather than throwing -- callers fall back to their own construct-specific default, the same "unsupported input degrades, it doesn't crash layout" policy the rest of this module follows.
+// Parses a MathML length attribute value (mspace's width/height/depth, mtable's columnspacing/rowspacing, mfrac's linethickness, ...) into points at `fontSizePt`. MathML3 (https://www.w3.org/TR/MathML3/chapter2.html#fund.units) permits a signed number followed by a unit — em/ex (font-relative), px/in/cm/mm/pt/pc (absolute), a bare '%' (percentage of fontSizePt), or one of the seven named "MathSpace" keywords (thickmathspace etc.) — or a bare unitless number, which MathML treats as 'em'. Returns undefined for anything this parser doesn't recognise (an empty string, a malformed number, an unknown unit) rather than throwing — callers fall back to their own construct-specific default, the same "unsupported input degrades, it doesn't crash layout" policy the rest of this module follows.
 const NAMED_MATH_SPACES: ReadonlyMap<string, number> = new Map([
   // In em, per MathML3's own defined values (an arithmetic progression from 1/18em to 6/18em).
   ["veryverythinmathspace", 1 / 18],
@@ -10,7 +10,7 @@ const NAMED_MATH_SPACES: ReadonlyMap<string, number> = new Map([
   ["veryverythickmathspace", 7 / 18],
 ]);
 
-// ex (x-height) has no reliable per-font measurement in this module's own MathFontMetrics port (see metrics.ts's own note on why only advance width, italic correction, and top-accent attachment are exposed per glyph, not a general ink bounding box) -- 0.5em is the same fixed approximation CSS itself falls back to when a real x-height is unavailable.
+// ex (x-height) has no reliable per-font measurement in this module's own MathFontMetrics port (see metrics.ts's own note on why only advance width, italic correction, and top-accent attachment are exposed per glyph, not a general ink bounding box) — 0.5em is the same fixed approximation CSS itself falls back to when a real x-height is unavailable.
 const EX_APPROXIMATION_OF_EM = 0.5;
 
 const LENGTH_PATTERN =

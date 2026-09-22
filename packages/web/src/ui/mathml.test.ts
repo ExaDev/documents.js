@@ -57,7 +57,7 @@ describe("appendMathMlNodes", () => {
   });
 
   it("strips a single-character namespace prefix, distinguishing 'no colon found' from 'colon found at index 1'", () => {
-    // indexOf returns -1 for "no colon" and a real, non-negative index otherwise -- a one-character prefix (colon at index 1) is the case that tells "index === -1" apart from a mutation that instead checks "index === 1": both "mfrac" (colonIndex -1) and "math:mfrac" (colonIndex 4) happen to slice or pass through identically either way, so neither on its own can kill that mutation.
+    // indexOf returns -1 for "no colon" and a real, non-negative index otherwise — a one-character prefix (colon at index 1) is the case that tells "index === -1" apart from a mutation that instead checks "index === 1": both "mfrac" (colonIndex -1) and "math:mfrac" (colonIndex 4) happen to slice or pass through identically either way, so neither on its own can kill that mutation.
     const parent = render([element("m:mfrac")]);
     expect(parent.firstElementChild?.tagName).toBe("mfrac");
   });

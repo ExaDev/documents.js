@@ -9,7 +9,7 @@ import type { OpenDocument } from "../state/types.js";
 import { ExportOptionsScreen } from "./export-options.js";
 import { NewDocumentPickerScreen } from "./new-document-picker.js";
 
-// A type guard against the two already-imported bindings' own real types, not an inline `import('../format/export-pdf.js')` type query -- avoids needing any project-wide consistent-type-imports exception for this one test file, and is a genuine runtime check besides, unlike an unverified generic type parameter on importOriginal().
+// A type guard against the two already-imported bindings' own real types, not an inline `import('../format/export-pdf.js')` type query — avoids needing any project-wide consistent-type-imports exception for this one test file, and is a genuine runtime check besides, unlike an unverified generic type parameter on importOriginal().
 function isExportPdfModule(value: unknown): value is {
   exportToPdf: typeof exportToPdf;
   defaultPdfPathFor: typeof defaultPdfPathFor;
@@ -62,7 +62,7 @@ async function renderWithOpenDocument(): Promise<ReturnType<typeof render>> {
   return rendered;
 }
 
-// The screen is a two-field form: Enter on the destination field moves focus to the font-file field, Enter there exports. Both Enters cannot be written back to back -- focus moves on a state change, so the second keystroke has to wait for the re-render that actually hands the font field the keyboard, exactly as a real user's second keypress does. The hint line is what says which field is live, so it is what this waits on.
+// The screen is a two-field form: Enter on the destination field moves focus to the font-file field, Enter there exports. Both Enters cannot be written back to back — focus moves on a state change, so the second keystroke has to wait for the re-render that actually hands the font field the keyboard, exactly as a real user's second keypress does. The hint line is what says which field is live, so it is what this waits on.
 const SUBMIT = "\r";
 const FONTS_FIELD_HINT = "Enter to export";
 
@@ -159,7 +159,7 @@ describe("ExportOptionsScreen", () => {
       expect(mockedExport).toHaveBeenCalledTimes(1);
     });
     const call = mockedExport.mock.calls[0];
-    // The destination field starts pre-filled with the default export path and the cursor at its end, so typed text appends to it rather than replacing it -- unchanged behaviour, asserted here only to show the destination and the fonts stayed in their own fields.
+    // The destination field starts pre-filled with the default export path and the cursor at its end, so typed text appends to it rather than replacing it — unchanged behaviour, asserted here only to show the destination and the fonts stayed in their own fields.
     expect(call?.[1]).toMatch(/branded\.pdf$/);
     expect(call?.[2].fontFiles).toStrictEqual([
       "/fonts/Brand-Regular.ttf",

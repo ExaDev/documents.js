@@ -13,7 +13,7 @@ import {
   writeScheduleWord,
 } from "./hash";
 
-// The SHA-256 implementation is pinned against the specification's own published digests (FIPS 180-4 example vectors): the empty string exercises the single-block padding, 'abc' a short message, and the 55-character string forces exactly two padded blocks with the length word in the second -- the padding edge a hand-rolled implementation most easily gets wrong.
+// The SHA-256 implementation is pinned against the specification's own published digests (FIPS 180-4 example vectors): the empty string exercises the single-block padding, 'abc' a short message, and the 55-character string forces exactly two padded blocks with the length word in the second — the padding edge a hand-rolled implementation most easily gets wrong.
 describe("sha256", () => {
   const digest = (text: string): string => {
     const bytes = new TextEncoder().encode(text);
@@ -89,12 +89,12 @@ describe("stableContentHash", () => {
         a: { $schema: "https://example.test/package-4.0.0.json", b: 1 },
       }),
     ).toBe(stableContentHash({ a: { b: 1 } }));
-    // Only the label key is excluded -- a field merely named similarly still counts as content.
+    // Only the label key is excluded — a field merely named similarly still counts as content.
     expect(stableContentHash({ schema: "x" })).not.toBe(stableContentHash({}));
   });
 
   it("hashes a serialised package identically with and without its $schema envelope label", () => {
-    // documentTreeWithSchema is the schema's own serialisation helper: it stamps the release-pinned $schema URI onto a package. The same package, serialised against two different schema releases, must hash equal -- the exact reserialisation case the strip exists for.
+    // documentTreeWithSchema is the schema's own serialisation helper: it stamps the release-pinned $schema URI onto a package. The same package, serialised against two different schema releases, must hash equal — the exact reserialisation case the strip exists for.
     const pkg = wordprocessingPackage([sectionGroup([paragraph("body")])]);
     expect(stableContentHash(documentTreeWithSchema(pkg))).toBe(
       stableContentHash(pkg),

@@ -23,9 +23,9 @@ import {
   RECORD_USREXCL,
 } from "../biff/record-types";
 
-// [MS-XLS] 2.4.117's FilePass record, and the two [MS-OFFCRYPTO] schemes it can name, decrypted end to end: reading FilePass's own header fields, verifying the caller's password against the header's own verifier, then decrypting every other record's data in the workbook stream that [MS-XLS] 2.2.10 requires encrypted -- the RC4 encryption header (2.3.6.1/2.3.6.2) and XOR obfuscation Method 1 (2.3.7, see archive-codec's own crypto/xor-obfuscation.ts for the real, cross-validated algorithm and why it diverges from the published spec text). https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/cf9ae8d5-4e8c-40a2-95f1-3b31f16b5529
+// [MS-XLS] 2.4.117's FilePass record, and the two [MS-OFFCRYPTO] schemes it can name, decrypted end to end: reading FilePass's own header fields, verifying the caller's password against the header's own verifier, then decrypting every other record's data in the workbook stream that [MS-XLS] 2.2.10 requires encrypted — the RC4 encryption header (2.3.6.1/2.3.6.2) and XOR obfuscation Method 1 (2.3.7, see archive-codec's own crypto/xor-obfuscation.ts for the real, cross-validated algorithm and why it diverges from the published spec text). https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/cf9ae8d5-4e8c-40a2-95f1-3b31f16b5529
 //
-// The RC4 CryptoAPI encryption header ([MS-OFFCRYPTO] 2.3.5.1, a different header shape and derivation entirely -- ppt-codec's own scheme, tracked separately as ExaDev/documents.js#1116) is explicitly out of scope, and reported as a distinct, named failure rather than folded into "wrong password" or a generic parse error.
+// The RC4 CryptoAPI encryption header ([MS-OFFCRYPTO] 2.3.5.1, a different header shape and derivation entirely — ppt-codec's own scheme, tracked separately as ExaDev/documents.js#1116) is explicitly out of scope, and reported as a distinct, named failure rather than folded into "wrong password" or a generic parse error.
 
 /** [MS-XLS] 2.4.117's own wEncryptionType. */
 const ENCRYPTION_TYPE_XOR = 0x0000;
@@ -36,7 +36,7 @@ const RC4_HEADER_VERSION_MINOR = 1;
 /** The first four bytes of a BoundSheet8 record's own data ([MS-XLS] 2.4.28): lbPlyPos, the one field [MS-XLS] 2.2.10 names as never encrypted even though the rest of the record is. */
 const BOUNDSHEET8_LBPLYPOS_SIZE = 4;
 
-/** [MS-XLS] 2.2.10's own list of records that "MUST NOT be obfuscated or encrypted" wherever they occur in the workbook stream -- BOF and FilePass are checked ahead of this set by their callers, since both matter beyond encryption too. */
+/** [MS-XLS] 2.2.10's own list of records that "MUST NOT be obfuscated or encrypted" wherever they occur in the workbook stream — BOF and FilePass are checked ahead of this set by their callers, since both matter beyond encryption too. */
 const NEVER_ENCRYPTED_RECORD_TYPES = new Set<number>([
   RECORD_BOF,
   RECORD_FILEPASS,
@@ -54,7 +54,7 @@ interface OfficeRc4EncryptionHeader {
   readonly encryptedVerifierHash: Uint8Array<ArrayBuffer>;
 }
 
-/** [MS-XLS] 2.4.117's own XORObfuscation structure (encryptionInfo when wEncryptionType is 0x0000): `key` is createXorObfuscationKey's own output, `verificationBytes` is createXorObfuscationPasswordVerifier's own output, both recomputed from the caller's password and compared directly -- there is no encrypted-verifier round trip to decrypt the way RC4's own EncryptedVerifier/EncryptedVerifierHash needs, since XOR obfuscation's own verifier fields are plain, unencrypted checksums of the password itself. */
+/** [MS-XLS] 2.4.117's own XORObfuscation structure (encryptionInfo when wEncryptionType is 0x0000): `key` is createXorObfuscationKey's own output, `verificationBytes` is createXorObfuscationPasswordVerifier's own output, both recomputed from the caller's password and compared directly — there is no encrypted-verifier round trip to decrypt the way RC4's own EncryptedVerifier/EncryptedVerifierHash needs, since XOR obfuscation's own verifier fields are plain, unencrypted checksums of the password itself. */
 interface XorObfuscationHeader {
   readonly kind: "xor";
   readonly key: number;
@@ -97,7 +97,7 @@ function readFilePassHeader(filePassRecord: BiffRecord): FilePassHeader {
   };
 }
 
-/** Decrypts one record's own data against the derived RC4 base hash, honouring every [MS-XLS] 2.2.10 exclusion: a never-encrypted record's data is returned unchanged, BoundSheet8's own lbPlyPos prefix is preserved while the rest of its data is decrypted, and everything else is decrypted whole. `record.offset` is the record's own header start, so its data begins `HEADER_SIZE` bytes further into the stream -- the position [MS-OFFCRYPTO]'s block-keyed keystream is defined against. */
+/** Decrypts one record's own data against the derived RC4 base hash, honouring every [MS-XLS] 2.2.10 exclusion: a never-encrypted record's data is returned unchanged, BoundSheet8's own lbPlyPos prefix is preserved while the rest of its data is decrypted, and everything else is decrypted whole. `record.offset` is the record's own header start, so its data begins `HEADER_SIZE` bytes further into the stream — the position [MS-OFFCRYPTO]'s block-keyed keystream is defined against. */
 function decryptRecordRc4(
   record: BiffRecord,
   baseHash: Uint8Array<ArrayBuffer>,
@@ -124,7 +124,7 @@ function decryptRecordRc4(
   };
 }
 
-/** [MS-XLS] 2.2.10's own XorArrayIndex rule for a record's decrypted span starting `spanOffset` bytes into the Workbook stream: `(streamOffset + recordDataLength) % 16`, where `recordDataLength` is the record's own FULL declared data length -- not the length of `spanOffset`'s own remaining span, which for BoundSheet8 is 4 bytes shorter than the record's own declared size. Confirmed against Apache POI's own `XORDecryptor.invokeCipher` comment ("XorArrayIndex = (FileOffset + Data.Length) % 16") and LibreOffice's `XclImpBiff5Decrypter::OnUpdate`, and directly against a real Excel-generated XOR-obfuscated fixture -- see archive-codec's own crypto/xor-obfuscation.test.ts. */
+/** [MS-XLS] 2.2.10's own XorArrayIndex rule for a record's decrypted span starting `spanOffset` bytes into the Workbook stream: `(streamOffset + recordDataLength) % 16`, where `recordDataLength` is the record's own FULL declared data length — not the length of `spanOffset`'s own remaining span, which for BoundSheet8 is 4 bytes shorter than the record's own declared size. Confirmed against Apache POI's own `XORDecryptor.invokeCipher` comment ("XorArrayIndex = (FileOffset + Data.Length) % 16") and LibreOffice's `XclImpBiff5Decrypter::OnUpdate`, and directly against a real Excel-generated XOR-obfuscated fixture — see archive-codec's own crypto/xor-obfuscation.test.ts. */
 function xorArrayIndexFor(
   spanOffset: number,
   recordDataLength: number,
@@ -164,7 +164,7 @@ function decryptRecordXor(
   };
 }
 
-/** [MS-OFFCRYPTO] 2.3.6.4's own password verification: block 0's key decrypts EncryptedVerifier, and MD5 of the result must equal the same block's decryption of EncryptedVerifierHash. Both verifier fields sit in one continuous keystream starting at position 0, not two independently-reset ones -- though decryptOfficeRc4 regenerates its keystream fresh from block start on every call regardless, so decrypting them as two separate 16-byte calls at offsets 0 and 16 is equivalent to one 32-byte call, not merely close to it. */
+/** [MS-OFFCRYPTO] 2.3.6.4's own password verification: block 0's key decrypts EncryptedVerifier, and MD5 of the result must equal the same block's decryption of EncryptedVerifierHash. Both verifier fields sit in one continuous keystream starting at position 0, not two independently-reset ones — though decryptOfficeRc4 regenerates its keystream fresh from block start on every call regardless, so decrypting them as two separate 16-byte calls at offsets 0 and 16 is equivalent to one 32-byte call, not merely close to it. */
 function decryptWorkbookRecordsRc4(
   records: readonly BiffRecord[],
   header: OfficeRc4EncryptionHeader,
@@ -182,7 +182,7 @@ function decryptWorkbookRecordsRc4(
     header.encryptedVerifierHash,
   );
   const computedHash = md5(decryptedVerifier);
-  // No length check first: md5's own digest is always exactly 16 bytes, and decryptedVerifierHash is always exactly OFFICE_RC4_VERIFIER_LENGTH (16) bytes too -- decrypted from a fixed-size EncryptedVerifierHash field readFilePassHeader already took with take(OFFICE_RC4_VERIFIER_LENGTH). The two are never a different length to compare in the first place.
+  // No length check first: md5's own digest is always exactly 16 bytes, and decryptedVerifierHash is always exactly OFFICE_RC4_VERIFIER_LENGTH (16) bytes too — decrypted from a fixed-size EncryptedVerifierHash field readFilePassHeader already took with take(OFFICE_RC4_VERIFIER_LENGTH). The two are never a different length to compare in the first place.
   const matches = computedHash.every(
     (byte, index) => byte === decryptedVerifierHash[index],
   );
@@ -198,7 +198,7 @@ function decryptWorkbookRecordsXor(
   header: XorObfuscationHeader,
   password: string,
 ): readonly BiffRecord[] {
-  // A password too long or carrying a character outside single-byte ASCII/Latin-1 cannot be the real one -- XOR obfuscation has no representation for it -- so archive-codec's own RangeError is folded into the same "incorrect password" report a caller sees for any other wrong password, rather than surfacing as a different error type.
+  // A password too long or carrying a character outside single-byte ASCII/Latin-1 cannot be the real one — XOR obfuscation has no representation for it — so archive-codec's own RangeError is folded into the same "incorrect password" report a caller sees for any other wrong password, rather than surfacing as a different error type.
   let computedKey: number;
   let computedVerifier: number;
   try {
@@ -228,7 +228,7 @@ function decryptWorkbookRecordsXor(
 /**
  * Decrypts every record of a workbook stream protected by [MS-XLS] 2.4.117's FilePass record, under whichever of the two schemes it names (the [MS-OFFCRYPTO] 2.3.6.1 RC4 encryption header, or 2.3.7's XOR obfuscation), given the `FilePass` record already located within `records` and the password to decrypt it with.
  *
- * Throws `BiffFormatError` for a missing password, an incorrect one, or an encryption scheme this module does not implement (RC4 CryptoAPI) -- there is no partial or best-effort result to return in any of those cases.
+ * Throws `BiffFormatError` for a missing password, an incorrect one, or an encryption scheme this module does not implement (RC4 CryptoAPI) — there is no partial or best-effort result to return in any of those cases.
  */
 export function decryptWorkbookRecords(
   records: readonly BiffRecord[],

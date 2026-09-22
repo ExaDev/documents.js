@@ -260,7 +260,7 @@ function AppShell({
     if (startPath === undefined) {
       return;
     }
-    // A property on a const holder rather than a bare `let`, because the only write happens in the cleanup closure below. TypeScript ignores assignments made inside a nested function when narrowing the enclosing scope, so a `let` here reads as its initialiser at both checks and both guards look statically dead -- while the write genuinely happens and the guards are what stop a dispatch after unmount.
+    // A property on a const holder rather than a bare `let`, because the only write happens in the cleanup closure below. TypeScript ignores assignments made inside a nested function when narrowing the enclosing scope, so a `let` here reads as its initialiser at both checks and both guards look statically dead — while the write genuinely happens and the guards are what stop a dispatch after unmount.
     const lifecycle = { cancelled: false };
     void (async () => {
       try {
@@ -360,7 +360,7 @@ function AppShell({
     { isActive: !overlayOpen },
   );
 
-  // The screen stays mounted underneath an open overlay -- unmounting it would throw away its local cursor state and the context the overlay is being used against. A screen must therefore pass `isActive: !anyOverlayOpen(state)` to its own input hooks, exactly as this shell does above, so only one component reacts to a key press.
+  // The screen stays mounted underneath an open overlay — unmounting it would throw away its local cursor state and the context the overlay is being used against. A screen must therefore pass `isActive: !anyOverlayOpen(state)` to its own input hooks, exactly as this shell does above, so only one component reacts to a key press.
   return (
     <Box flexDirection="column">
       <ScreenBody screen={currentScreen(state)} />

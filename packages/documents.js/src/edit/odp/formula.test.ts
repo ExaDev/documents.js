@@ -25,7 +25,7 @@ import { formulaDocument } from "../../model/formula";
 import { buildOdpPackage } from "./content";
 import { OdpEditor } from "./editor";
 
-// The odp counterpart to src/edit/odt/formula.test.ts -- ExaDev/documents.js#563's "odp can read an embedded formula but its writer drops it" gap. OdpSlide.addFormula (slide.ts) and buildOdpPackage's own appendShape (content.ts) reuse the identical src/odf-package/formula.ts machinery odt/ods already write through; only the referencing draw:frame's own positioning differs (real svg:x/svg:y, like every other odp shape, not odt's text-flow "as-char" anchoring).
+// The odp counterpart to src/edit/odt/formula.test.ts — ExaDev/documents.js#563's "odp can read an embedded formula but its writer drops it" gap. OdpSlide.addFormula (slide.ts) and buildOdpPackage's own appendShape (content.ts) reuse the identical src/odf-package/formula.ts machinery odt/ods already write through; only the referencing draw:frame's own positioning differs (real svg:x/svg:y, like every other odp shape, not odt's text-flow "as-char" anchoring).
 
 function mel(tag: string, children: MathMlNode[] = []): MathMlElement {
   return { type: "element", tag, attributes: [], children };
@@ -137,7 +137,7 @@ describe("OdpSlide.addFormula", () => {
     expect(signature(recovered.mathml)).toBe("mfrac(mi(a),mi(b))");
   });
 
-  it("references the sub-document from a draw:object inside a positioned frame -- real svg:x/svg:y, unlike odt's as-char anchoring", () => {
+  it("references the sub-document from a draw:object inside a positioned frame — real svg:x/svg:y, unlike odt's as-char anchoring", () => {
     const editor = new OdpEditor(buildOdpPackage(presentationDoc([])));
     const slide = editor.slides()[0]!;
     slide.addFormula(FRAME, FRACTION);

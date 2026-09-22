@@ -1,34 +1,34 @@
 import { z } from "zod";
 import { SourceResidueSchema } from "./source";
 
-// The harmonised semantic construct vocabulary (ExaDev/document-schema.js#22, landed additively per ExaDev/document-schema.js#24): the descriptor payloads a package-tree group may carry in place of a container descriptor or an anchor paragraph. The tree was designed construct-capable from day one -- a group is `{ node, children }`, and a construct is exactly that shape with a descriptor as its node and its extent as its children -- so these kinds land without a second structural break: a 4.0.0 tree contains none of them and parses identically under this release.
+// The harmonised semantic construct vocabulary (ExaDev/document-schema.js#22, landed additively per ExaDev/document-schema.js#24): the descriptor payloads a package-tree group may carry in place of a container descriptor or an anchor paragraph. The tree was designed construct-capable from day one — a group is `{ node, children }`, and a construct is exactly that shape with a descriptor as its node and its extent as its children — so these kinds land without a second structural break: a 4.0.0 tree contains none of them and parses identically under this release.
 
-// The vocabulary is format-agnostic by construction: every kind below is confirmed by at least two of the four codec inventories (ExaDev/ooxml.js#65, ExaDev/odf.js#59, ExaDev/markdown-codec#63, ExaDev/pdf-codec#66), and a construct with no cross-format analogue never gets a bespoke kind -- it degrades to the nearest kind here with its format-specific specifics quarantined in the residue channel (src/source.ts, landed by ExaDev/documents.js#718). That channel is a per-node and package-level `source` facility spanning the whole content model, and it reaches this module the only way it can without minting the parallel shape a descriptor-only escape hatch would have made: the identical field, shape, and opacity contract, spelt on each descriptor below because a descriptor is a node position -- the construct group's own node payload -- never as a local special case. `division` was the one exception until this major: its `source` already named the external-chapter link (DivisionSource below, landed 4.1.0), and one name could not mean two facts. ExaDev/documents.js#743 renames that field to `linked`, freeing `source` to carry residue here exactly like every other descriptor -- division's own residue rows (ODF text:filter-name) land with it.
+// The vocabulary is format-agnostic by construction: every kind below is confirmed by at least two of the four codec inventories (ExaDev/ooxml.js#65, ExaDev/odf.js#59, ExaDev/markdown-codec#63, ExaDev/pdf-codec#66), and a construct with no cross-format analogue never gets a bespoke kind — it degrades to the nearest kind here with its format-specific specifics quarantined in the residue channel (src/source.ts, landed by ExaDev/documents.js#718). That channel is a per-node and package-level `source` facility spanning the whole content model, and it reaches this module the only way it can without minting the parallel shape a descriptor-only escape hatch would have made: the identical field, shape, and opacity contract, spelt on each descriptor below because a descriptor is a node position — the construct group's own node payload — never as a local special case. `division` was the one exception until this major: its `source` already named the external-chapter link (DivisionSource below, landed 4.1.0), and one name could not mean two facts. ExaDev/documents.js#743 renames that field to `linked`, freeing `source` to carry residue here exactly like every other descriptor — division's own residue rows (ODF text:filter-name) land with it.
 
-// EXTENT SCOPE, stated once because it bounds every kind below: a construct group wraps BLOCK-scoped extents -- the block flow of a section, a heading group, a shape, or a list item. It does not wrap a sub-sequence of one paragraph's runs: that is the run-level extent mechanism's job, landed as ContentParagraph.constructs (RunConstructExtent, src/content.ts) -- a descriptor plus a half-open run range on the paragraph itself, additively, so the paragraph it sits in is never split to host a wrapper. The two scopes never share an occurrence: a construct bracketing whole blocks is a construct group in the tree and a marker pair in the flat form; a construct covering a sub-sequence of one paragraph's runs is an entry on that paragraph, in both encodings, carried verbatim across the flat/tree boundary exactly the way a table cell's own markers are (the paragraph is atomic to decomposition -- a leaf or an anchor, its runs never regrouped -- so decompose and flatten embed the field rather than transform it). An external hyperlink stays on ContentRun.hyperlink regardless (the standing reconciliation on ExaDev/document-schema.js#22 -- `link` groups are for block-scoped and annotated extents a flat run field cannot express, never a replacement for it).
+// EXTENT SCOPE, stated once because it bounds every kind below: a construct group wraps BLOCK-scoped extents — the block flow of a section, a heading group, a shape, or a list item. It does not wrap a sub-sequence of one paragraph's runs: that is the run-level extent mechanism's job, landed as ContentParagraph.constructs (RunConstructExtent, src/content.ts) — a descriptor plus a half-open run range on the paragraph itself, additively, so the paragraph it sits in is never split to host a wrapper. The two scopes never share an occurrence: a construct bracketing whole blocks is a construct group in the tree and a marker pair in the flat form; a construct covering a sub-sequence of one paragraph's runs is an entry on that paragraph, in both encodings, carried verbatim across the flat/tree boundary exactly the way a table cell's own markers are (the paragraph is atomic to decomposition — a leaf or an anchor, its runs never regrouped — so decompose and flatten embed the field rather than transform it). An external hyperlink stays on ContentRun.hyperlink regardless (the standing reconciliation on ExaDev/document-schema.js#22 — `link` groups are for block-scoped and annotated extents a flat run field cannot express, never a replacement for it).
 //
-// CROSSING AND BOUNDARY-STRADDLING BLOCK EXTENTS ARE DELIBERATELY NOT ENCODED -- a ratified drop, recorded here rather than left as silence (ExaDev/documents.js#741). Two block-scoped constructs whose extents cross (the first ends inside the second, the second inside the first) have no encoding in either form, and the reason is structural, not incidental: the tree states a construct as a GROUP -- `{ node, children }` -- and two crossing extents would need two crossing subtrees, which no tree holds; the flat form states one as a balanced bracket pair, and bracket matching re-pairs a crossing couple into a different nesting than the source meant. The one mechanism that could express them -- producer-minted ids pairing the halves, WordprocessingML's own w:id spelling -- is exactly what the marker contract already refuses (src/content.ts, WHY NO ID): an id has no home on the tree side (a construct group carries a descriptor and its children, nothing else) and no deterministic way back through flatten. The same holds for an extent straddling a block-list boundary -- a section break, a table cell's wall -- because each block list is its own bracket scope and cross-list pairing is ids again. Within one paragraph, by contrast, crossing extents ARE encodable, precisely because run ranges are data rather than brackets; this ratification covers the block scope only. A codec reading a crossing or straddling pair (ooxml.js's acceptProperlyNested is the concrete producer evidence) drops the crossing extent and keeps the properly nested one -- deterministic, and the honest alternative to emitting a pair that would decode to a nesting the source never had.
+// CROSSING AND BOUNDARY-STRADDLING BLOCK EXTENTS ARE DELIBERATELY NOT ENCODED — a ratified drop, recorded here rather than left as silence (ExaDev/documents.js#741). Two block-scoped constructs whose extents cross (the first ends inside the second, the second inside the first) have no encoding in either form, and the reason is structural, not incidental: the tree states a construct as a GROUP — `{ node, children }` — and two crossing extents would need two crossing subtrees, which no tree holds; the flat form states one as a balanced bracket pair, and bracket matching re-pairs a crossing couple into a different nesting than the source meant. The one mechanism that could express them — producer-minted ids pairing the halves, WordprocessingML's own w:id spelling — is exactly what the marker contract already refuses (src/content.ts, WHY NO ID): an id has no home on the tree side (a construct group carries a descriptor and its children, nothing else) and no deterministic way back through flatten. The same holds for an extent straddling a block-list boundary — a section break, a table cell's wall — because each block list is its own bracket scope and cross-list pairing is ids again. Within one paragraph, by contrast, crossing extents ARE encodable, precisely because run ranges are data rather than brackets; this ratification covers the block scope only. A codec reading a crossing or straddling pair (ooxml.js's acceptProperlyNested is the concrete producer evidence) drops the crossing extent and keeps the properly nested one — deterministic, and the honest alternative to emitting a pair that would decode to a nesting the source never had.
 
 // A typed container of content: docx block and inline SDTs (`w:sdt`/`w:sdtContent`), docx legacy form fields (`w:ffData`), ODF `office:forms` controls in ordinary odt, ODF TOC and index wrappers as typed containers, and PDF AcroForm widgets with their field tree. The member set is the union of what those four producers actually spell, with each member named by a real inventory row rather than invented for symmetry: a control's own rendered content is its children, and this names what kind of control produced it.
 export const ContentControlTypeSchema = z.enum([
   "richText", // docx rich-text SDT at block and inline level; the general "container of arbitrary content" case
   "plainText", // docx plain-text SDT, docx `w:ffData` textInput, PDF AcroForm `/FT /Tx`
   "checkbox", // docx checkbox SDT, docx `w:ffData` checkbox, PDF AcroForm `/FT /Btn` checkbox, ODF form checkbox
-  "dropDown", // docx `w:dropDownList` SDT, docx `w:ffData` ddList, PDF AcroForm `/FT /Ch` list box, ODF form listbox -- a closed list, no free text
-  "comboBox", // docx `w:comboBox` SDT, PDF AcroForm `/FT /Ch` with the combo flag, ODF form combobox -- a list that also accepts free text
+  "dropDown", // docx `w:dropDownList` SDT, docx `w:ffData` ddList, PDF AcroForm `/FT /Ch` list box, ODF form listbox — a closed list, no free text
+  "comboBox", // docx `w:comboBox` SDT, PDF AcroForm `/FT /Ch` with the combo flag, ODF form combobox — a list that also accepts free text
   "date", // docx date SDT
   "picture", // docx picture SDT
   "repeatingSection", // docx repeatingSection SDT
   "button", // PDF AcroForm push button, ODF form button
-  "index", // ODF `text:table-of-content`/`text:alphabetical-index`/`text:bibliography`/`text:illustration-index`/`text:table-index`/`text:user-index`/`text:object-index`, and docx's TOC-as-SDT (`w:docPartObj` gallery) -- the wrapper, with its cached rendered entries as children
+  "index", // ODF `text:table-of-content`/`text:alphabetical-index`/`text:bibliography`/`text:illustration-index`/`text:table-index`/`text:user-index`/`text:object-index`, and docx's TOC-as-SDT (`w:docPartObj` gallery) — the wrapper, with its cached rendered entries as children
   "group", // a container of other controls carrying no value of its own: PDF AcroForm non-terminal `/Fields` nodes, ODF `office:forms`
 ]);
 export type ContentControlType = z.infer<typeof ContentControlTypeSchema>;
 
-// What a producer locked, harmonised across the three spellings that exist: docx `w:lock` (`contentLocked`/`sdtLocked`/`sdtContentLocked`), PDF AcroForm's `/Ff` ReadOnly bit, and ODF form controls' read-only flag. Absent means nothing is locked -- there is deliberately no 'none' member, because an absent key and a key naming the absence of a lock are the same fact and two spellings of one fact is how tables drift.
+// What a producer locked, harmonised across the three spellings that exist: docx `w:lock` (`contentLocked`/`sdtLocked`/`sdtContentLocked`), PDF AcroForm's `/Ff` ReadOnly bit, and ODF form controls' read-only flag. Absent means nothing is locked — there is deliberately no 'none' member, because an absent key and a key naming the absence of a lock are the same fact and two spellings of one fact is how tables drift.
 export const ContentControlLockSchema = z.enum([
-  "content", // the contents cannot be edited, but the control itself can be removed -- docx `contentLocked`, AcroForm ReadOnly, ODF read-only
-  "container", // the control cannot be removed, but its contents can be edited -- docx `sdtLocked`
+  "content", // the contents cannot be edited, but the control itself can be removed — docx `contentLocked`, AcroForm ReadOnly, ODF read-only
+  "container", // the control cannot be removed, but its contents can be edited — docx `sdtLocked`
   "both", // docx `sdtContentLocked`
 ]);
 export type ContentControlLock = z.infer<typeof ContentControlLockSchema>;
@@ -39,10 +39,10 @@ export const ContentControlDescriptorSchema = z.strictObject({
   tag: z.string().optional(), // the machine-readable identifier a producer addresses this control by: docx `w:tag`, PDF AcroForm's partial field name `/T`
   alias: z.string().optional(), // the human-readable label shown to an author: docx `w:alias`, PDF AcroForm's alternate description `/TU`
   lock: ContentControlLockSchema.optional(),
-  value: z.string().optional(), // the control's current scalar value where it has one -- PDF AcroForm `/V`, a date control's date, a text input's text. A control whose value IS its rendered content carries that content in `children` and leaves this absent.
+  value: z.string().optional(), // the control's current scalar value where it has one — PDF AcroForm `/V`, a date control's date, a text input's text. A control whose value IS its rendered content carries that content in `children` and leaves this absent.
   checked: z.boolean().optional(), // a checkbox or radio control's state, which is a boolean in every format that has one and would lose its type spelled through `value`
   options: z.array(z.string()).optional(), // the choice list of a dropDown/comboBox control: docx `w:listItem` entries, PDF AcroForm `/Opt`, an ODF form control's list source
-  source: SourceResidueSchema.optional(), // quarantined residue (src/source.ts) -- the format-specific specifics of a control that degraded to this kind, e.g. a docx SDT's own w:docPartObj gallery
+  source: SourceResidueSchema.optional(), // quarantined residue (src/source.ts) — the format-specific specifics of a control that degraded to this kind, e.g. a docx SDT's own w:docPartObj gallery
 });
 export type ContentControlDescriptor = z.infer<
   typeof ContentControlDescriptorSchema
@@ -50,16 +50,16 @@ export type ContentControlDescriptor = z.infer<
 
 // Instruction plus cached result, with the field's extent expressed as containment rather than as the marker pairs the formats serialise: docx `w:fldChar` begin/separate/end ranges and `w:fldSimple`, the ODF field-master families and the everyday simple-field set, ODF cross-reference displays, and pptx `a:fld` (which is what confirms the kind is genuinely cross-format rather than a docx-only shape).
 //
-// There is deliberately no harmonised `fieldType` enum here. `instruction` is required and verbatim, so nothing is lost without one; the harmonised type vocabulary is the kind of shape the four inventories' own corpus gate exists to settle (several field families have no real producer fixture in any repo yet), and ExaDev/document-schema.js#24 asks for exactly one new vocabulary -- the internal-target vocabulary on `link` below -- rather than one per kind. Minting a type enum from spec recollection now would freeze the member set before a single real file has been read against it.
+// There is deliberately no harmonised `fieldType` enum here. `instruction` is required and verbatim, so nothing is lost without one; the harmonised type vocabulary is the kind of shape the four inventories' own corpus gate exists to settle (several field families have no real producer fixture in any repo yet), and ExaDev/document-schema.js#24 asks for exactly one new vocabulary — the internal-target vocabulary on `link` below — rather than one per kind. Minting a type enum from spec recollection now would freeze the member set before a single real file has been read against it.
 export const FieldDescriptorSchema = z.strictObject({
   kind: z.literal("field"),
   instruction: z.string(), // the producer's own field code, verbatim: docx `w:instrText` text or `w:fldSimple/@w:instr`, an ODF field element with its attributes, a pptx `a:fld/@type`
-  cachedResult: z.string().optional(), // the field's last-computed display text where the producer cached a scalar one (an ODF field element's own text content, a pptx `a:fld`'s `a:t`). A field whose result is block content carries that content in `children` and leaves this absent -- the two are the block and the scalar case of one fact, never two encodings of the same one.
+  cachedResult: z.string().optional(), // the field's last-computed display text where the producer cached a scalar one (an ODF field element's own text content, a pptx `a:fld`'s `a:t`). A field whose result is block content carries that content in `children` and leaves this absent — the two are the block and the scalar case of one fact, never two encodings of the same one.
   source: SourceResidueSchema.optional(), // quarantined residue (src/source.ts)
 });
 export type FieldDescriptor = z.infer<typeof FieldDescriptorSchema>;
 
-// What an anchor marks. A bookmark is a named target and nothing else; the other three are reference-site markers whose body lives in a definitions-table entry -- the marker-plus-definition split all four inventories independently landed on, and the reason a footnote is not a contiguous extent.
+// What an anchor marks. A bookmark is a named target and nothing else; the other three are reference-site markers whose body lives in a definitions-table entry — the marker-plus-definition split all four inventories independently landed on, and the reason a footnote is not a contiguous extent.
 export const AnchorTypeSchema = z.enum([
   "bookmark", // docx `w:bookmarkStart`/`w:bookmarkEnd`, ODF `text:bookmark` and `text:reference-mark*`, a PDF named destination's target site
   "footnote", // docx `w:footnoteReference`, ODF `text:note` with note-class footnote, a markdown `[^n]` marker
@@ -68,13 +68,13 @@ export const AnchorTypeSchema = z.enum([
 ]);
 export type AnchorType = z.infer<typeof AnchorTypeSchema>;
 
-// A named extent or a reference-site marker. A point anchor -- a footnote reference, a bookmark with no range -- is a group with no children; a ranged anchor -- a docx bookmark pair, a comment extent -- wraps the blocks it spans.
+// A named extent or a reference-site marker. A point anchor — a footnote reference, a bookmark with no range — is a group with no children; a ranged anchor — a docx bookmark pair, a comment extent — wraps the blocks it spans.
 //
-// Scope note, because one inventory row cannot land as this kind: a sheet-scoped named range (xlsx defined names and tables, ODF `table:named-expressions`) has no block-flow extent to wrap -- a sheet group's children are its images and embedded documents, never a block flow -- so those ride a definitions-table entry naming their range, which is the odf inventory's own verdict for the identical construct. `anchor` covers block-flow extents.
+// Scope note, because one inventory row cannot land as this kind: a sheet-scoped named range (xlsx defined names and tables, ODF `table:named-expressions`) has no block-flow extent to wrap — a sheet group's children are its images and embedded documents, never a block flow — so those ride a definitions-table entry naming their range, which is the odf inventory's own verdict for the identical construct. `anchor` covers block-flow extents.
 export const AnchorDescriptorSchema = z.strictObject({
   kind: z.literal("anchor"),
   anchorType: AnchorTypeSchema,
-  name: z.string(), // the anchor's own name: docx `w:name`, ODF `text:name`, a PDF destination name. Required -- an anchor nothing can address is not an anchor.
+  name: z.string(), // the anchor's own name: docx `w:name`, ODF `text:name`, a PDF destination name. Required — an anchor nothing can address is not an anchor.
   definition: z.string().optional(), // the definitions-table key holding this marker's body, for the note and comment cases; the entry's own tenant vocabulary carries the body, its author, and its date
   source: SourceResidueSchema.optional(), // quarantined residue (src/source.ts)
 });
@@ -88,12 +88,12 @@ export const LinkTargetSchema = z.discriminatedUnion("kind", [
   }),
   z.strictObject({
     kind: z.literal("internal"),
-    anchor: z.string(), // the name of an `anchor` construct in this document, or of a `destinations` table entry -- one namespace, so a resolver has one place to look
+    anchor: z.string(), // the name of an `anchor` construct in this document, or of a `destinations` table entry — one namespace, so a resolver has one place to look
   }),
 ]);
 export type LinkTarget = z.infer<typeof LinkTargetSchema>;
 
-// Target plus the extent it wraps, reserved for exactly what a flat `ContentRun.hyperlink` cannot express: a block-scoped extent (a PDF link annotation whose rect matches no recovered run), an annotated one (a markdown link or image title), and an internal target. Run-level external hyperlinks stay on ContentRun.hyperlink per the standing reconciliation on ExaDev/document-schema.js#22 -- this kind does not replace them, and a producer that emits both encodings for one link has emitted it twice.
+// Target plus the extent it wraps, reserved for exactly what a flat `ContentRun.hyperlink` cannot express: a block-scoped extent (a PDF link annotation whose rect matches no recovered run), an annotated one (a markdown link or image title), and an internal target. Run-level external hyperlinks stay on ContentRun.hyperlink per the standing reconciliation on ExaDev/document-schema.js#22 — this kind does not replace them, and a producer that emits both encodings for one link has emitted it twice.
 export const LinkDescriptorSchema = z.strictObject({
   kind: z.literal("link"),
   target: LinkTargetSchema,
@@ -102,7 +102,7 @@ export const LinkDescriptorSchema = z.strictObject({
 });
 export type LinkDescriptor = z.infer<typeof LinkDescriptorSchema>;
 
-// What kind of tracked change a provenance wrapper records. The five members are the union of docx's `w:ins`/`w:del`/`w:moveFrom`/`w:moveTo`/`w:rPrChange`-`w:pPrChange` and ODF's `text:changed-region` children (`text:insertion`, `text:deletion`, `text:format-change`); the move relation itself -- which moveFrom pairs with which moveTo -- has no ODF counterpart and stays residue, per the ooxml inventory's own verdict.
+// What kind of tracked change a provenance wrapper records. The five members are the union of docx's `w:ins`/`w:del`/`w:moveFrom`/`w:moveTo`/`w:rPrChange`-`w:pPrChange` and ODF's `text:changed-region` children (`text:insertion`, `text:deletion`, `text:format-change`); the move relation itself — which moveFrom pairs with which moveTo — has no ODF counterpart and stays residue, per the ooxml inventory's own verdict.
 export const ProvenanceChangeSchema = z.enum([
   "insertion",
   "deletion",
@@ -112,20 +112,20 @@ export const ProvenanceChangeSchema = z.enum([
 ]);
 export type ProvenanceChange = z.infer<typeof ProvenanceChangeSchema>;
 
-// An author/date wrapper around content: docx `w:ins`/`w:del` and move tracking, ODF `text:tracked-changes`/`text:changed-region` with its inline markers. A deletion's children are the deleted content -- carried, not dropped, which is the whole point of the kind: today's readers merge insertions anonymously and drop deletions outright.
+// An author/date wrapper around content: docx `w:ins`/`w:del` and move tracking, ODF `text:tracked-changes`/`text:changed-region` with its inline markers. A deletion's children are the deleted content — carried, not dropped, which is the whole point of the kind: today's readers merge insertions anonymously and drop deletions outright.
 export const ProvenanceDescriptorSchema = z.strictObject({
   kind: z.literal("provenance"),
   change: ProvenanceChangeSchema,
   author: z.string().optional(),
   dateIso: z.string().optional(), // ISO-8601, matching LayoutMetadata's own createdIso/modifiedIso spelling rather than minting a second date convention
-  source: SourceResidueSchema.optional(), // quarantined residue (src/source.ts) -- e.g. the move relation pairing moveFrom with moveTo, which the ooxml inventory's own verdict leaves as residue
+  source: SourceResidueSchema.optional(), // quarantined residue (src/source.ts) — e.g. the move relation pairing moveFrom with moveTo, which the ooxml inventory's own verdict leaves as residue
 });
 export type ProvenanceDescriptor = z.infer<typeof ProvenanceDescriptorSchema>;
 
 // The external-chapter link of a division: ODF `text:section-source`, which the odm reader already reads verbatim as its chapter model. Rides `DivisionDescriptor.linked` (renamed from `source` by ExaDev/documents.js#743, to free `source` for residue). `text:filter-name` has no cross-format meaning and stays residue there.
 export const DivisionSourceSchema = z.strictObject({
-  href: z.string(), // `xlink:href` -- the document this division's content is linked from
-  sectionName: z.string().optional(), // `text:section-name` -- which named division inside that document, when the link is to part of it
+  href: z.string(), // `xlink:href` — the document this division's content is linked from
+  sectionName: z.string().optional(), // `text:section-name` — which named division inside that document, when the link is to part of it
 });
 export type DivisionSource = z.infer<typeof DivisionSourceSchema>;
 
@@ -135,14 +135,14 @@ export type DivisionSource = z.infer<typeof DivisionSourceSchema>;
 export const DivisionDescriptorSchema = z.strictObject({
   kind: z.literal("division"),
   name: z.string().optional(), // ODF `text:name`; how the odm chapter model and cross-document links address a division
-  columnCount: z.number().int().positive().optional(), // the column count a division sets over its own flow, which is pre-layout geometry with no other home -- the styles table carries paragraph and run properties only
-  protected: z.boolean().optional(), // ODF `text:protected` -- the content is not editable in place
+  columnCount: z.number().int().positive().optional(), // the column count a division sets over its own flow, which is pre-layout geometry with no other home — the styles table carries paragraph and run properties only
+  protected: z.boolean().optional(), // ODF `text:protected` — the content is not editable in place
   linked: DivisionSourceSchema.optional(), // the external-chapter link (ODF text:section-source); named `linked`, not `source`, so `source` below can carry residue like every other descriptor
-  source: SourceResidueSchema.optional(), // quarantined residue (src/source.ts) -- e.g. ODF text:section-source's own text:filter-name, which has no cross-format meaning
+  source: SourceResidueSchema.optional(), // quarantined residue (src/source.ts) — e.g. ODF text:section-source's own text:filter-name, which has no cross-format meaning
 });
 export type DivisionDescriptor = z.infer<typeof DivisionDescriptorSchema>;
 
-// The node payload of a construct group, discriminated on `kind` exactly as the container descriptors are. Adding a member here is schema-additive (a value carrying it simply starts parsing) and TS-breaking only for a consumer switching exhaustively over the union -- which is the whole reason these kinds could land in a minor after the tree major rather than needing one of their own.
+// The node payload of a construct group, discriminated on `kind` exactly as the container descriptors are. Adding a member here is schema-additive (a value carrying it simply starts parsing) and TS-breaking only for a consumer switching exhaustively over the union — which is the whole reason these kinds could land in a minor after the tree major rather than needing one of their own.
 export const ConstructDescriptorSchema = z.discriminatedUnion("kind", [
   ContentControlDescriptorSchema,
   FieldDescriptorSchema,

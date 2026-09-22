@@ -1,8 +1,8 @@
 // Fidelity model for this file.
 //
-// Idempotency (decode -> encode -> decode producing a deep-equal Package) does NOT by itself prove original-fidelity: a construct the parser drops entirely still round-trips stably, because the dropped state is itself a fixed point. The DOCTYPE finding below is the clearest example -- the declaration and its internal ENTITY subset vanish from the node tree, yet decode -> encode -> decode stays deep-equal because there is nothing left to lose. The preservation assertions in this file are therefore what actually guards against silent loss: each one walks the decoded node tree and confirms the specific XmlNode variant (cdata, comment, pi, text, element) survived in the right place with the right value, or, for the documented limitations, asserts precisely what was lost so the ceiling is explicit and regresses loudly if behaviour changes.
+// Idempotency (decode -> encode -> decode producing a deep-equal Package) does NOT by itself prove original-fidelity: a construct the parser drops entirely still round-trips stably, because the dropped state is itself a fixed point. The DOCTYPE finding below is the clearest example — the declaration and its internal ENTITY subset vanish from the node tree, yet decode -> encode -> decode stays deep-equal because there is nothing left to lose. The preservation assertions in this file are therefore what actually guards against silent loss: each one walks the decoded node tree and confirms the specific XmlNode variant (cdata, comment, pi, text, element) survived in the right place with the right value, or, for the documented limitations, asserts precisely what was lost so the ceiling is explicit and regresses loudly if behaviour changes.
 //
-// Coverage here is part-content-faithful, not ZIP-container byte-identical: the parsed node forest and the set of parts round-trip, but serialisation normalises details that do not affect the infoset -- empty elements re-serialise as open/close pairs rather than self-closing tags, the XML declaration whitespace is normalised, and entity references stay as raw entity-reference strings in text and attribute values rather than being decoded to characters (processEntities is false on both parser and builder).
+// Coverage here is part-content-faithful, not ZIP-container byte-identical: the parsed node forest and the set of parts round-trip, but serialisation normalises details that do not affect the infoset — empty elements re-serialise as open/close pairs rather than self-closing tags, the XML declaration whitespace is normalised, and entity references stay as raw entity-reference strings in text and attribute values rather than being decoded to characters (processEntities is false on both parser and builder).
 
 import { describe, expect, it } from "vitest";
 import { decodePackage, encodePackage, zipPackage } from "./index";
@@ -115,7 +115,7 @@ describe("XML construct fidelity", () => {
   });
 
   describe("non-XML processing instruction", () => {
-    // Documented limitation, not a failing round-trip: the processing-instruction node survives decode, but its pseudo-attribute payload (data="1") is dropped on parse -- the PI re-serialises as <?custom?> with an empty content string. The representation is stable and lossy; the assertions below pin both halves of that behaviour so a future change to either surfaces here.
+    // Documented limitation, not a failing round-trip: the processing-instruction node survives decode, but its pseudo-attribute payload (data="1") is dropped on parse — the PI re-serialises as <?custom?> with an empty content string. The representation is stable and lossy; the assertions below pin both halves of that behaviour so a future change to either surfaces here.
     const parts = packageWithDocumentXml(
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><r><?custom data="1"?>text</r></w:body></w:document>',
     );
@@ -160,7 +160,7 @@ describe("XML construct fidelity", () => {
   });
 
   describe("DOCTYPE declaration", () => {
-    // Documented limitation, not a failing round-trip: fast-xml-parser silently discards the DOCTYPE and its internal ENTITY subset (<!ENTITY x "y">). The XmlNode model has no doctype variant, so nothing in the tree represents it; the document degrades to a [declaration, root element] forest. This is security-positive (it neutralises XXE and billion-laughs expansion) but it is a real fidelity ceiling -- a DOCX carrying a DOCTYPE will not round-trip. The assertions below pin the dropped state.
+    // Documented limitation, not a failing round-trip: fast-xml-parser silently discards the DOCTYPE and its internal ENTITY subset (<!ENTITY x "y">). The XmlNode model has no doctype variant, so nothing in the tree represents it; the document degrades to a [declaration, root element] forest. This is security-positive (it neutralises XXE and billion-laughs expansion) but it is a real fidelity ceiling — a DOCX carrying a DOCTYPE will not round-trip. The assertions below pin the dropped state.
     const parts = packageWithDocumentXml(
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><!DOCTYPE root [<!ENTITY x "y">]><root><e/></root>',
     );

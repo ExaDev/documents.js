@@ -8,9 +8,9 @@ import {
 import { DocFormatError } from "../errors";
 import { parsePlc } from "../plc";
 
-// The piece table, [MS-DOC] 2.8.35 and 2.9.6 -- the mechanism the entire format hangs on. A .doc's logical text is not one contiguous run of bytes: it is assembled from pieces, each naming a byte range of the WordDocument stream and the character positions that range supplies. Every other structure in the format addresses text by character position (CP), and a CP only becomes a byte offset by passing through this table, so a piece table read wrongly does not fail -- it yields a document of real characters in the wrong order, from the wrong places, at the wrong sizes.
+// The piece table, [MS-DOC] 2.8.35 and 2.9.6 — the mechanism the entire format hangs on. A .doc's logical text is not one contiguous run of bytes: it is assembled from pieces, each naming a byte range of the WordDocument stream and the character positions that range supplies. Every other structure in the format addresses text by character position (CP), and a CP only becomes a byte offset by passing through this table, so a piece table read wrongly does not fail — it yields a document of real characters in the wrong order, from the wrong places, at the wrong sizes.
 //
-// Two details carry most of the risk, and both are encoded in one 32-bit field (FcCompressed, [MS-DOC] 2.8.25). The low 30 bits are a byte offset. Bit 30 says whether the piece's text is 16-bit (the flag clear, offset used as-is, two bytes per character) or 8-bit (the flag set, the REAL offset being that value halved, one byte per character). Halving is easy to forget and produces text from a plausible-looking but wrong place in the stream; the spec's own worked example makes the point directly -- "Because fCompressed is 1, the actual offset is fc/2, or 0x00000400" -- and is reproduced verbatim in this module's tests.
+// Two details carry most of the risk, and both are encoded in one 32-bit field (FcCompressed, [MS-DOC] 2.8.25). The low 30 bits are a byte offset. Bit 30 says whether the piece's text is 16-bit (the flag clear, offset used as-is, two bytes per character) or 8-bit (the flag set, the REAL offset being that value halved, one byte per character). Halving is easy to forget and produces text from a plausible-looking but wrong place in the stream; the spec's own worked example makes the point directly — "Because fCompressed is 1, the actual offset is fc/2, or 0x00000400" — and is reproduced verbatim in this module's tests.
 
 /** A Clx's leading Prc marker byte, [MS-DOC] 2.9.20: "This value MUST be 0x01." */
 const CLXT_PRC = 0x01;
@@ -29,13 +29,13 @@ export interface Piece {
   readonly cpStart: number;
   /** One past the last character position this piece supplies, PlcPcd.aCp[i + 1]. */
   readonly cpEnd: number;
-  /** FcCompressed's 30-bit offset field as stored -- NOT yet halved for a compressed piece. Use characterOffset() rather than this directly. */
+  /** FcCompressed's 30-bit offset field as stored — NOT yet halved for a compressed piece. Use characterOffset() rather than this directly. */
   readonly fc: number;
   /** True when the piece's characters occupy one byte each and its real byte offset is `fc / 2`. */
   readonly compressed: boolean;
   /** Pcd's fNoParaLast: "If this bit is 1, the text MUST NOT contain a paragraph mark." */
   readonly noParaLast: boolean;
-  /** Pcd.Prm, [MS-DOC] 2.8.36 -- further property modifications for this piece's text, carried verbatim and not yet applied (see README's scope note). */
+  /** Pcd.Prm, [MS-DOC] 2.8.36 — further property modifications for this piece's text, carried verbatim and not yet applied (see README's scope note). */
   readonly prm: number;
 }
 
@@ -47,7 +47,7 @@ export interface PieceTable {
   readonly lastCp: number;
 }
 
-// Parses a Clx ([MS-DOC] 2.9.4): "an array of zero, 1, or more Prcs followed by a Pcdt". The Prcs carry property sets this reader does not yet apply, but they must still be walked to find where the Pcdt begins -- their sizes are the only way past them.
+// Parses a Clx ([MS-DOC] 2.9.4): "an array of zero, 1, or more Prcs followed by a Pcdt". The Prcs carry property sets this reader does not yet apply, but they must still be walked to find where the Pcdt begins — their sizes are the only way past them.
 export function parseClx(clx: Uint8Array): PieceTable {
   let cursor = 0;
   for (;;) {
@@ -93,14 +93,14 @@ export function parseClx(clx: Uint8Array): PieceTable {
     });
   }
 
-  // A PLC always carries count + 1 keys (see parsePlc's own invariant), and count is a non-negative integer, so there is always at least one key here -- keyAt's own bounds check is never actually reachable from a real Plc, but going through it rather than raw indexing keeps this the one place that fact is asserted instead of assumed.
+  // A PLC always carries count + 1 keys (see parsePlc's own invariant), and count is a non-negative integer, so there is always at least one key here — keyAt's own bounds check is never actually reachable from a real Plc, but going through it rather than raw indexing keeps this the one place that fact is asserted instead of assumed.
   const lastCp = plc.keyAt(plc.keys.length - 1);
   return { pieces, cpKeys: plc.keys, lastCp };
 }
 
 // The byte offset in the WordDocument stream of the character at `cp`, per [MS-DOC] 2.4.1 "Retrieving Text" steps 5 and 6: for an uncompressed piece "the character at position cp is a 16-bit Unicode character at offset FcCompressed.fc + 2(cp - PlcPcd.aCp[i])"; for a compressed one "an 8-bit ANSI character at offset (FcCompressed.fc / 2) + (cp - PlcPcd.aCp[i])".
 //
-// The same value serves the formatting lookups too: [MS-DOC] 2.4.2's Determining Paragraph Boundaries computes its own fc as `fcPcd + 2(cp - aCp[i])`, halved when fCompressed is one -- algebraically the identical result -- so a character's byte offset is one fact, computed once, and used for the piece table, the CHPX bin table, and the PAPX bin table alike.
+// The same value serves the formatting lookups too: [MS-DOC] 2.4.2's Determining Paragraph Boundaries computes its own fc as `fcPcd + 2(cp - aCp[i])`, halved when fCompressed is one — algebraically the identical result — so a character's byte offset is one fact, computed once, and used for the piece table, the CHPX bin table, and the PAPX bin table alike.
 export function characterOffset(piece: Piece, cp: number): number {
   if (!Number.isInteger(cp) || cp < piece.cpStart || cp >= piece.cpEnd) {
     throw new DocFormatError(

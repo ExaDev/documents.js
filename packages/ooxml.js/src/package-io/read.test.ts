@@ -62,7 +62,7 @@ describe("packageFromEntries: binary classification", () => {
   });
 
   it("classifies a part whose first three bytes only partially match the UTF-8 BOM as binary, isolating each BOM byte's own necessity", () => {
-    // Each variant corrupts exactly one of the three real BOM bytes (0xef, 0xbb, 0xbf) while leaving the other two correct and a real '<' immediately after -- if any single byte's own comparison were dropped from the BOM check, one of these three would be misclassified as xml instead.
+    // Each variant corrupts exactly one of the three real BOM bytes (0xef, 0xbb, 0xbf) while leaving the other two correct and a real '<' immediately after — if any single byte's own comparison were dropped from the BOM check, one of these three would be misclassified as xml instead.
     const wrongFirst = new Uint8Array([0x00, 0xbb, 0xbf, ...enc("<a/>")]);
     const wrongSecond = new Uint8Array([0xef, 0x00, 0xbf, ...enc("<a/>")]);
     const wrongThird = new Uint8Array([0xef, 0xbb, 0x00, ...enc("<a/>")]);

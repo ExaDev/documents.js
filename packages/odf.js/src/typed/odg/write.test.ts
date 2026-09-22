@@ -20,7 +20,7 @@ import {
 import { assertMimetypeEntryLayout } from "../../test-support/zip";
 import { writeOdgContent } from "./write";
 
-// The write side's XML-shape suite: what writeOdgContent actually emits, construct by construct -- the drawing mirror of typed/odp/write.test.ts (and, through it, of typed/odt/write.test.ts, whose own top-of-file note states why this suite exists alongside the round-trip one: a writer and reader that agree with each other and with nobody else would round-trip perfectly and open nowhere). Every attribute asserted below is one typed/draw/shapes.ts genuinely reads, and the package README's own LibreOffice-verification section records what a real, independent ODF implementation made of the same output.
+// The write side's XML-shape suite: what writeOdgContent actually emits, construct by construct — the drawing mirror of typed/odp/write.test.ts (and, through it, of typed/odt/write.test.ts, whose own top-of-file note states why this suite exists alongside the round-trip one: a writer and reader that agree with each other and with nobody else would round-trip perfectly and open nowhere). Every attribute asserted below is one typed/draw/shapes.ts genuinely reads, and the package README's own LibreOffice-verification section records what a real, independent ODF implementation made of the same output.
 
 const RED = rgbHexToColor("#cc0000");
 const BLUE = rgbHexToColor("#0033ff");
@@ -103,7 +103,7 @@ function firstPageChildren(pkg: Package): XmlElement[] {
   );
 }
 
-// The style:graphic-properties of the graphic-family automatic style an element's own draw:style-name names -- the one place a vector's fill and stroke actually live, since ODF has no direct formatting.
+// The style:graphic-properties of the graphic-family automatic style an element's own draw:style-name names — the one place a vector's fill and stroke actually live, since ODF has no direct formatting.
 function graphicPropertiesOf(pkg: Package, element: XmlElement): XmlElement {
   const styleName = attrValue(element, "draw:style-name");
   if (styleName === undefined) {
@@ -385,7 +385,7 @@ describe("writeOdgContent: vector elements", () => {
     );
   });
 
-  // The ODF `length` datatype has no exponent form (typed/shared/units.ts's LENGTH_PATTERN), and a rotation about a pivot near the page origin is the ordinary way to reach that magnitude -- the terms cancel to trig rounding dust rather than a clean zero. The same defect the odp writer's own suite pins, reached here through a vector rather than a frame.
+  // The ODF `length` datatype has no exponent form (typed/shared/units.ts's LENGTH_PATTERN), and a rotation about a pivot near the page origin is the ordinary way to reach that magnitude — the terms cancel to trig rounding dust rather than a clean zero. The same defect the odp writer's own suite pins, reached here through a vector rather than a frame.
   it("writes no exponent-notation length for a vector rotated at the page origin", () => {
     const pkg = writeOdgContent(
       documentOf([
@@ -402,7 +402,7 @@ describe("writeOdgContent: vector elements", () => {
     expect(transform).not.toMatch(/[\d.]e[+-]?\d/i);
   });
 
-  // The rotate() ANGLE is a bare radians value with no unit suffix, distinct from the translate() lengths the test above covers -- a tiny non-zero rotationDeg (never zero, which collapses to no transform at all) drives angleRad itself into JavaScript's own exponent spelling, exactly as invalid to the ODF `length`/number grammar as an exponent-form translate() component. The same defect the odp writer's own suite pins, reached here through a vector rather than a frame.
+  // The rotate() ANGLE is a bare radians value with no unit suffix, distinct from the translate() lengths the test above covers — a tiny non-zero rotationDeg (never zero, which collapses to no transform at all) drives angleRad itself into JavaScript's own exponent spelling, exactly as invalid to the ODF `length`/number grammar as an exponent-form translate() component. The same defect the odp writer's own suite pins, reached here through a vector rather than a frame.
   it("writes no exponent-notation angle in draw:transform's rotate() for a very small non-zero rotationDeg", () => {
     const pkg = writeOdgContent(
       documentOf([page([rect({ rotationDeg: 1e-9 })])]),
@@ -441,7 +441,7 @@ describe("writeOdgContent: fill and stroke", () => {
     expect(attrValue(properties, "draw:stroke")).toBe("dash");
   });
 
-  // An ABSENT declaration means "inherit" in ODF, not "none" -- a consumer's own default graphic style supplies a fill, so an unfilled rect has to say so explicitly or it renders filled.
+  // An ABSENT declaration means "inherit" in ODF, not "none" — a consumer's own default graphic style supplies a fill, so an unfilled rect has to say so explicitly or it renders filled.
   it("states draw:fill=none and draw:stroke=none explicitly for a vector with neither", () => {
     const pkg = writeOdgContent(documentOf([page([rect()])]));
     const properties = graphicPropertiesOf(pkg, firstPageChildren(pkg)[0]!);
@@ -565,7 +565,7 @@ describe("writeOdgContent: refusals", () => {
     ).toThrow(/frame of 0pt x 10pt/);
   });
 
-  // The shape-level refusals are typed/draw/write-shapes.ts's own planShapeContent, reached unchanged from here -- a drawing adds none of its own and relaxes none.
+  // The shape-level refusals are typed/draw/write-shapes.ts's own planShapeContent, reached unchanged from here — a drawing adds none of its own and relaxes none.
   it("refuses a heading inside a shape's own text, the same way every writer here does", () => {
     expect(() =>
       writeOdgContent(
@@ -614,7 +614,7 @@ describe("writeOdgContent: shapes and vectors on one page", () => {
   });
 });
 
-// ContentVector.paintOrder -> draw:z-index, exactly as ContentShape.paintOrder already does through typed/draw/write-shapes.ts's odfZIndexOf -- the one spelling ODF has for a stacking order independent of document position, and the one typed/draw/shapes.ts's paintOrderKey reads back.
+// ContentVector.paintOrder -> draw:z-index, exactly as ContentShape.paintOrder already does through typed/draw/write-shapes.ts's odfZIndexOf — the one spelling ODF has for a stacking order independent of document position, and the one typed/draw/shapes.ts's paintOrderKey reads back.
 describe("writeOdgContent: paint order", () => {
   it("writes a vector's paintOrder as draw:z-index", () => {
     const pkg = writeOdgContent(
@@ -649,7 +649,7 @@ describe("writeOdgContent: paint order", () => {
     ).toEqual(["0", "1", "2"]);
   });
 
-  // The bug this pins: an item with no attribute at all reads back on a real consumer as APPENDED AFTER every item that does carry one, regardless of its own resolved paint order relative to them (confirmed against real LibreOffice output -- see the review that found this). A page mixing an explicit paintOrder shape with an unspelled-paintOrder vector must therefore never omit draw:z-index on either: both resolve through the identical odfZIndexOf(paintOrder) ?? documentIndex this page's own canonicalDrawShape/canonicalDrawVector already use, and BOTH are written -- one shape (index 0), one vector whose own document-encounter index is shapes.length (1) plus its position (0), so 1.
+  // The bug this pins: an item with no attribute at all reads back on a real consumer as APPENDED AFTER every item that does carry one, regardless of its own resolved paint order relative to them (confirmed against real LibreOffice output — see the review that found this). A page mixing an explicit paintOrder shape with an unspelled-paintOrder vector must therefore never omit draw:z-index on either: both resolve through the identical odfZIndexOf(paintOrder) ?? documentIndex this page's own canonicalDrawShape/canonicalDrawVector already use, and BOTH are written — one shape (index 0), one vector whose own document-encounter index is shapes.length (1) plus its position (0), so 1.
   it("writes an explicit draw:z-index for every item on a page mixing an explicit paintOrder shape with an unspelled-paintOrder vector, spanning both arrays", () => {
     const pkg = writeOdgContent(
       documentOf([page([rect()], [shape({ paintOrder: 3 })])]),

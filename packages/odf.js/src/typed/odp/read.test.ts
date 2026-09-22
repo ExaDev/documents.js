@@ -24,7 +24,7 @@ function loadFixture(name: string): Package {
   return parsePackage(bytes);
 }
 
-// A full, real-shape .odp fixture assembled from XML shapes verified against genuine LibreOffice 26.2 output (soffice --headless --convert-to odp on hand-built .fodp source, and an odp -> odp round trip to confirm LibreOffice's OWN writer's exact serialization -- see this repository's own commit history for the verification method): multiple draw:page elements in native document order, a rotated text frame, a grouped pair of shapes, an image, a table, and speaker notes, matching this package's other typed-reader tests' established convention of building packages programmatically from ground-truth-verified shapes rather than loading a committed binary fixture (mirroring ooxml.js's own src/typed/pptx/read.test.ts). The residue-row suite below additionally loads one genuine committed Impress fixture (fixtures/transitions.odp, built through the same UNO properties the Impress slide-transition sidebar writes) -- the placement facts it pins (transitions on the slide's own drawing-page style) are exactly the kind a programmatic fixture got wrong before it, so real producer output holds them.
+// A full, real-shape .odp fixture assembled from XML shapes verified against genuine LibreOffice 26.2 output (soffice --headless --convert-to odp on hand-built .fodp source, and an odp -> odp round trip to confirm LibreOffice's OWN writer's exact serialization — see this repository's own commit history for the verification method): multiple draw:page elements in native document order, a rotated text frame, a grouped pair of shapes, an image, a table, and speaker notes, matching this package's other typed-reader tests' established convention of building packages programmatically from ground-truth-verified shapes rather than loading a committed binary fixture (mirroring ooxml.js's own src/typed/pptx/read.test.ts). The residue-row suite below additionally loads one genuine committed Impress fixture (fixtures/transitions.odp, built through the same UNO properties the Impress slide-transition sidebar writes) — the placement facts it pins (transitions on the slide's own drawing-page style) are exactly the kind a programmatic fixture got wrong before it, so real producer output holds them.
 
 function tinyPngBase64(): string {
   return bytesToBase64(
@@ -187,7 +187,7 @@ function buildFixturePackage(): Package {
   };
 }
 
-// A dedicated fixture for text:list content inside slide text frames (draw:frame > draw:text-box): one slide carrying a "Body" frame whose text box holds a plain paragraph, a styled (bullet) 2-level text:list, and a second unstyled sibling text:list, plus an "Aside" frame with a third text:list of its own -- so nesting depth, per-encounter identity, cross-frame identity, the ordered:/bullet: kind prefix, and the no-membership case are all exercisable against one real-shape package. The text:list-style lives in content.xml's office:automatic-styles, the placement real LibreOffice output uses.
+// A dedicated fixture for text:list content inside slide text frames (draw:frame > draw:text-box): one slide carrying a "Body" frame whose text box holds a plain paragraph, a styled (bullet) 2-level text:list, and a second unstyled sibling text:list, plus an "Aside" frame with a third text:list of its own — so nesting depth, per-encounter identity, cross-frame identity, the ordered:/bullet: kind prefix, and the no-membership case are all exercisable against one real-shape package. The text:list-style lives in content.xml's office:automatic-styles, the placement real LibreOffice output uses.
 function buildListFixturePackage(): Package {
   const styledList = el("text:list", { "text:style-name": "L1" }, [
     el("text:list-item", {}, [el("text:p", {}, [txt("Alpha")])]),
@@ -307,7 +307,7 @@ describe("readOdpContent: text:list content inside slide text frames", () => {
     ]).toEqual([numId, numId, numId, numId]);
   });
 
-  it("mints a distinct numId per top-level text:list encounter -- a sibling list in the same text box and a list in a different frame never share an identity", () => {
+  it("mints a distinct numId per top-level text:list encounter — a sibling list in the same text box and a list in a different frame never share an identity", () => {
     const { slides } = readOdpContent(buildListFixturePackage());
     const body = paragraphsWithText(slides, "Body", [
       "Intro",
@@ -346,7 +346,7 @@ describe("readOdpContent: text:list content inside slide text frames", () => {
     ).not.toHaveProperty("list");
   });
 
-  it("resolves the ordered-vs-bullet kind prefix from the referenced text:list-style, and leaves an unstyled list unprefixed -- the same shared numId convention the odt reader mints", () => {
+  it("resolves the ordered-vs-bullet kind prefix from the referenced text:list-style, and leaves an unstyled list unprefixed — the same shared numId convention the odt reader mints", () => {
     const paragraphs = paragraphsWithText(
       readOdpContent(buildListFixturePackage()).slides,
       "Body",
@@ -483,7 +483,7 @@ describe("readOdp: the package-native reader over the same fixture", () => {
 
     expect(documentPackage.kind).toBe("presentation");
     expect(documentPackage.metadata).toEqual(content.metadata);
-    // One slide group per ContentSlide, each holding its own shapes as groups -- never one slide's paragraphs flattened across its shapes.
+    // One slide group per ContentSlide, each holding its own shapes as groups — never one slide's paragraphs flattened across its shapes.
     expect(documentPackage.children).toHaveLength(content.slides.length);
     assertPackageRoundTrip(documentPackage, {
       kind: "presentation",
@@ -512,7 +512,7 @@ describe("readOdp: the package-native reader over the same fixture", () => {
   });
 });
 
-// The odp residue rows (ExaDev/documents.js#769): presentation transitions/sound/animations and the unmapped shape kinds quarantine on their own slide's residue, and non-content parts quarantine at the package tier. Slide transitions sit on the page's OWN drawing-page style (style:drawing-page-properties, referenced by draw:style-name), never as attributes of draw:page itself -- no ODF schema version (1.1, 1.2) puts them there, and real LibreOffice output writes them in the style (the transitions.odp fixture below is genuine Impress output).
+// The odp residue rows (ExaDev/documents.js#769): presentation transitions/sound/animations and the unmapped shape kinds quarantine on their own slide's residue, and non-content parts quarantine at the package tier. Slide transitions sit on the page's OWN drawing-page style (style:drawing-page-properties, referenced by draw:style-name), never as attributes of draw:page itself — no ODF schema version (1.1, 1.2) puts them there, and real LibreOffice output writes them in the style (the transitions.odp fixture below is genuine Impress output).
 describe("readOdpContent: residue rows", () => {
   function slidePackage(
     page: ReturnType<typeof el>,
@@ -584,7 +584,7 @@ describe("readOdpContent: residue rows", () => {
       throw new Error("expected a slide");
     }
     expect(slide.source?.format).toBe("odp");
-    // The transition attributes ride a children-stripped style:drawing-page-properties carrying ONLY the transition attributes, from both spellings -- the style's non-transition decoration facts (background visibility) stay out.
+    // The transition attributes ride a children-stripped style:drawing-page-properties carrying ONLY the transition attributes, from both spellings — the style's non-transition decoration facts (background visibility) stay out.
     expect(slide.source?.xml).toContain("<style:drawing-page-properties ");
     expect(slide.source?.xml).toContain(
       'presentation:transition-type="automatic"',
@@ -621,7 +621,7 @@ describe("readOdpContent: residue rows", () => {
   });
 
   it("finds no drawing-page style at all when the slide carries no draw:style-name, even if a nameless drawing-page style happens to exist", () => {
-    // The automatic style below carries a "drawing-page" family but no style:name attribute at all, so attrValue(style, "style:name") itself resolves to undefined -- coincidentally equal to an undefined draw:style-name -- if findDrawingPageProperties didn't short-circuit before ever reaching the style walk.
+    // The automatic style below carries a "drawing-page" family but no style:name attribute at all, so attrValue(style, "style:name") itself resolves to undefined — coincidentally equal to an undefined draw:style-name — if findDrawingPageProperties didn't short-circuit before ever reaching the style walk.
     const automaticStyles = el("office:automatic-styles", {}, [
       el("style:style", { "style:family": "drawing-page" }, [
         el("style:drawing-page-properties", {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { crc32 } from "./crc32";
 
-// The published CRC-32/ISO-HDLC check values (the same polynomial PNG chunks and ZIP entries use), taken from the algorithm's own standard test vectors rather than from this implementation's output -- so they pin the table generation and the fold loop against an external definition, not against themselves.
+// The published CRC-32/ISO-HDLC check values (the same polynomial PNG chunks and ZIP entries use), taken from the algorithm's own standard test vectors rather than from this implementation's output — so they pin the table generation and the fold loop against an external definition, not against themselves.
 describe("crc32 against the standard CRC-32/ISO-HDLC check values", () => {
   it("returns the identity value 0 for empty input, since the initial and final complements cancel", () => {
     expect(crc32(new Uint8Array(0))).toBe(0);

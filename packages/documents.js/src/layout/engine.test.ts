@@ -25,7 +25,7 @@ import { loadMathFont } from "pdf-codec";
 const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
 import { convertWordprocessingToLayout } from "./engine";
 
-// Every character is sizePt/10 pt wide; lineHeightAtSize is 1.2x, ascender 0.8x, descender -0.2x -- the same fake-measurer convention already used across pdf-codec's own text-layout.test.ts, src/layout/slides.test.ts, and src/layout/shared.test.ts.
+// Every character is sizePt/10 pt wide; lineHeightAtSize is 1.2x, ascender 0.8x, descender -0.2x — the same fake-measurer convention already used across pdf-codec's own text-layout.test.ts, src/layout/slides.test.ts, and src/layout/shared.test.ts.
 function fakeMeasurer(): TextMeasurer {
   return {
     widthOfTextAtSize: (text, _font, sizePt) =>
@@ -311,7 +311,7 @@ describe("convertWordprocessingToLayout: tables", () => {
   });
 
   it("emits no background rect at all for a pattern fill that resolves to no colour, rather than a fill-less no-op one", () => {
-    // A 'pattern' fill stating neither foregroundColor nor backgroundColor (the reserved gray125 scaffolding pattern, or a theme/indexed colour this reader could not resolve) is exactly the case resolveCellFillColor's own doc comment names as returning undefined -- genuinely no fill, not a reason to still push a rect item that would render invisibly.
+    // A 'pattern' fill stating neither foregroundColor nor backgroundColor (the reserved gray125 scaffolding pattern, or a theme/indexed colour this reader could not resolve) is exactly the case resolveCellFillColor's own doc comment names as returning undefined — genuinely no fill, not a reason to still push a rect item that would render invisibly.
     const table: ContentTable = {
       kind: "table",
       columnWidthsPt: [100],
@@ -358,7 +358,7 @@ describe("convertWordprocessingToLayout: tables", () => {
     const lines = layout.pages[0]!.items.filter(
       (i): i is LayoutLine => i.kind === "line",
     );
-    expect(lines).toHaveLength(2); // top and bottom only -- left/right were never declared
+    expect(lines).toHaveLength(2); // top and bottom only — left/right were never declared
     // Page height 50, cell frame y-down (0, 0, 100, 20): top edge at PDF y 50, bottom edge at PDF y 30.
     expect(lines).toContainEqual(
       expect.objectContaining({
@@ -605,7 +605,7 @@ describe("convertWordprocessingToLayout: indentation and alignment", () => {
   });
 
   it("stretches inter-word gaps on a justified paragraph's own wrapped (non-final) lines, but leaves its final line at natural, unstretched spacing", () => {
-    // Content width 7pt; each word ('aa'/'bb'/'cc'/'dd') is 2pt wide, a space 1pt -- "aa bb" (5pt) fits, "aa bb cc" (8pt) doesn't, so this wraps into two lines of two words each: "aa bb" then "cc dd", both naturally 5pt wide.
+    // Content width 7pt; each word ('aa'/'bb'/'cc'/'dd') is 2pt wide, a space 1pt — "aa bb" (5pt) fits, "aa bb cc" (8pt) doesn't, so this wraps into two lines of two words each: "aa bb" then "cc dd", both naturally 5pt wide.
     const layout = convert([
       section(
         [
@@ -627,12 +627,12 @@ describe("convertWordprocessingToLayout: indentation and alignment", () => {
       "dd",
     ]);
 
-    // Non-final line ("aa bb"): natural width 5pt against a 7pt target line box -- 2pt of slack, one gap, so the whole 2pt lands on 'bb', which is otherwise naturally 1pt after 'aa'.
+    // Non-final line ("aa bb"): natural width 5pt against a 7pt target line box — 2pt of slack, one gap, so the whole 2pt lands on 'bb', which is otherwise naturally 1pt after 'aa'.
     expect(aa?.xPt).toBe(0);
     expect(bb?.xPt).toBe(5); // natural offset 3 + 2pt of distributed slack
     const nonFinalGapPt = (bb?.xPt ?? 0) - (aa?.xPt ?? 0) - 2; // 2 = width of 'aa'
 
-    // Final line ("cc dd") is never stretched, even though it has the identical 2pt of slack available -- it renders at its own natural, single-space gap instead.
+    // Final line ("cc dd") is never stretched, even though it has the identical 2pt of slack available — it renders at its own natural, single-space gap instead.
     expect(cc?.xPt).toBe(0);
     expect(dd?.xPt).toBe(3);
     const finalGapPt = (dd?.xPt ?? 0) - (cc?.xPt ?? 0) - 2;
@@ -718,7 +718,7 @@ describe("convertWordprocessingToLayout: list markers", () => {
     expect(markers).toEqual(["•", "-", "*"]);
   });
 
-  it('a docx/odt-conventional numId ("1", "list1") always degrades to a bullet -- ContentListMembership carries no format field to distinguish ordered from bullet for those sources', () => {
+  it('a docx/odt-conventional numId ("1", "list1") always degrades to a bullet — ContentListMembership carries no format field to distinguish ordered from bullet for those sources', () => {
     const layout = convert([
       section([
         paragraph([run("First", { sizePt: 10 })], {

@@ -2,22 +2,22 @@ import { ByteWriter } from "./bytes/writer";
 import type { PdfObject } from "./objects";
 import { pdfNum } from "./objects";
 
-// PDF numbers must never use exponential notation -- Number.prototype.toString() can produce '1e-7', which is not valid PDF syntax, and this is a genuine bug class, not a hypothetical one. Rounds to 4 decimal places (0.0001pt is far below any real output device's resolution), strips trailing zeros and a bare trailing '.', and normalises '-0' to '0'.
+// PDF numbers must never use exponential notation — Number.prototype.toString() can produce '1e-7', which is not valid PDF syntax, and this is a genuine bug class, not a hypothetical one. Rounds to 4 decimal places (0.0001pt is far below any real output device's resolution), strips trailing zeros and a bare trailing '.', and normalises '-0' to '0'.
 const NUMBER_DECIMAL_PLACES = 4;
 const NUMBER_EPSILON = 10 ** -NUMBER_DECIMAL_PLACES;
 
 export function formatNumber(n: number): string {
-  // Every magnitude that would ever round to "-0" at NUMBER_DECIMAL_PLACES (including -0 itself) already satisfies `abs(n) < NUMBER_EPSILON` above and returns "0" there, since NUMBER_EPSILON is exactly one unit in the last of those decimal places -- there is no reachable n for which toFixed still needs a separate "-0" normalisation below.
+  // Every magnitude that would ever round to "-0" at NUMBER_DECIMAL_PLACES (including -0 itself) already satisfies `abs(n) < NUMBER_EPSILON` above and returns "0" there, since NUMBER_EPSILON is exactly one unit in the last of those decimal places — there is no reachable n for which toFixed still needs a separate "-0" normalisation below.
   if (Math.abs(n) < NUMBER_EPSILON) {
     return "0";
   }
-  // toFixed(NUMBER_DECIMAL_PLACES) always emits a decimal point (NUMBER_DECIMAL_PLACES is a fixed 4, never 0), so this string always has trailing zeros or a bare "." to strip -- there is no toFixed output an `if (formatted.includes("."))` guard would ever need to skip.
+  // toFixed(NUMBER_DECIMAL_PLACES) always emits a decimal point (NUMBER_DECIMAL_PLACES is a fixed 4, never 0), so this string always has trailing zeros or a bare "." to strip — there is no toFixed output an `if (formatted.includes("."))` guard would ever need to skip.
   return n.toFixed(NUMBER_DECIMAL_PLACES).replace(/0+$/, "").replace(/\.$/, "");
 }
 
 // PDF names encode any character outside the safe printable-ASCII set (or one of the delimiter/ special characters) with a #XX hex escape. Every name this writer emits is a plain ASCII identifier we chose ourselves (Type, Catalog, F1, Im3, ...), so this is a defensive general implementation rather than one tuned to a specific known-safe input set.
 //
-// No upfront "is this name already safe" regex test to short-circuit the loop below: for any name where that test would say yes, every character already satisfies the per-character check's own negation, so the loop would rebuild the identical string one character at a time -- the two branches always agree, and a whole-name pattern test here would just be a slower way to reach the same per-character loop this function already needs to run anyway to handle the escaped case.
+// No upfront "is this name already safe" regex test to short-circuit the loop below: for any name where that test would say yes, every character already satisfies the per-character check's own negation, so the loop would rebuild the identical string one character at a time — the two branches always agree, and a whole-name pattern test here would just be a slower way to reach the same per-character loop this function already needs to run anyway to handle the escaped case.
 function escapeName(name: string): string {
   let out = "";
   for (const ch of name) {
@@ -52,7 +52,7 @@ function writeDictBody(
   writer.writeAscii(">>");
 }
 
-// Serializes a single PdfObject's own syntax into `writer`. Composing multiple objects into a full indirect-object body ("N G obj ... endobj") and tracking byte offsets for the xref table is write.ts's job, not this module's -- this is purely "PdfObject -> its PDF syntax".
+// Serializes a single PdfObject's own syntax into `writer`. Composing multiple objects into a full indirect-object body ("N G obj ... endobj") and tracking byte offsets for the xref table is write.ts's job, not this module's — this is purely "PdfObject -> its PDF syntax".
 export function writeObject(writer: ByteWriter, obj: PdfObject): void {
   if (obj.kind === "null") {
     writer.writeAscii("null");
@@ -63,7 +63,7 @@ export function writeObject(writer: ByteWriter, obj: PdfObject): void {
   } else if (obj.kind === "name") {
     writer.writeAscii(`/${escapeName(obj.name)}`);
   } else if (obj.kind === "string") {
-    // Always emitted as a hex string regardless of obj.hex -- this sidesteps literal-string escaping ('(', ')', '\', control bytes, octal runs) entirely. See write.ts's module doc.
+    // Always emitted as a hex string regardless of obj.hex — this sidesteps literal-string escaping ('(', ')', '\', control bytes, octal runs) entirely. See write.ts's module doc.
     writer.writeAscii(`<${bytesToHex(obj.bytes)}>`);
   } else if (obj.kind === "array") {
     writer.writeAscii("[");
@@ -77,7 +77,7 @@ export function writeObject(writer: ByteWriter, obj: PdfObject): void {
   } else if (obj.kind === "dict") {
     writeDictBody(writer, obj.entries);
   } else if (obj.kind === "stream") {
-    // /Length is always derived from the actual raw byte length here, overriding whatever (if anything) is already in obj.dict.entries -- this guarantees the declared length can never drift from the bytes that actually follow.
+    // /Length is always derived from the actual raw byte length here, overriding whatever (if anything) is already in obj.dict.entries — this guarantees the declared length can never drift from the bytes that actually follow.
     const entries = new Map(obj.dict.entries);
     entries.set("Length", pdfNum(obj.raw.length));
     writeDictBody(writer, entries);
@@ -95,7 +95,7 @@ export function serializeObject(obj: PdfObject): Uint8Array<ArrayBuffer> {
   return writer.toBytes();
 }
 
-// The same syntax as text -- the form the quarantined residue channel carries (document-schema.js's SourceResidue `xml` values): an opaque annotation dictionary, an output intent, a viewer-preferences blob. PDF syntax is ASCII-plus-hex-strings by construction here (writeObject always emits strings as hex), so a TextDecoder round trip is lossless.
+// The same syntax as text — the form the quarantined residue channel carries (document-schema.js's SourceResidue `xml` values): an opaque annotation dictionary, an output intent, a viewer-preferences blob. PDF syntax is ASCII-plus-hex-strings by construction here (writeObject always emits strings as hex), so a TextDecoder round trip is lossless.
 export function serializeObjectToText(obj: PdfObject): string {
   return new TextDecoder().decode(serializeObject(obj));
 }

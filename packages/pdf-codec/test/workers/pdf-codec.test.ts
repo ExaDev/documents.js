@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { readPdf } from '../../src/read';
 import { createFontRegistry, writePdf } from '../../src';
 
-// Proves pdf-codec's read path executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. The read test imports through src/read.ts -- the module behind the package.json `./read` entry point -- so one test proves both that the read pipeline executes in the isolate and that the read-only entry itself works; the module-graph-width half of that entry's guarantee is held separately by src/read-graph.test.ts. The write test below exercises the opposite end: a real font registry resolving Calibri onto the vendored, metric-compatible Carlito face, which decodes the embedded asset, subsets it, and embeds a genuine TrueType font program -- exactly the modules the read entry exists to exclude, proven to run in the isolate when a caller does want them. Fixtures are built inline rather than read from disk because workerd exposes no node:fs -- and building them from the package's own format rules (object table, classic cross-reference, parenthesised content-stream string) is itself a check that nothing in the construction path needs Node either. This is the runtime complement to attw's static module-resolution check.
+// Proves pdf-codec's read path executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. The read test imports through src/read.ts — the module behind the package.json `./read` entry point — so one test proves both that the read pipeline executes in the isolate and that the read-only entry itself works; the module-graph-width half of that entry's guarantee is held separately by src/read-graph.test.ts. The write test below exercises the opposite end: a real font registry resolving Calibri onto the vendored, metric-compatible Carlito face, which decodes the embedded asset, subsets it, and embeds a genuine TrueType font program — exactly the modules the read entry exists to exclude, proven to run in the isolate when a caller does want them. Fixtures are built inline rather than read from disk because workerd exposes no node:fs — and building them from the package's own format rules (object table, classic cross-reference, parenthesised content-stream string) is itself a check that nothing in the construction path needs Node either. This is the runtime complement to attw's static module-resolution check.
 
-// A minimal, structurally ordinary single-page PDF built by literal ASCII concatenation with inline byte-offset tracking -- the same construction idea src/test-support/pdf.ts uses for the node fixtures, reimplemented here so the workerd test stays self-contained and pulls in no test-support code (only the package src barrel). Produces: Catalog -> Pages -> one Page (MediaBox [0 0 200 100]) with a Helvetica /F1 font and a content stream drawing "(Hello)", plus a classic (ISO 32000-1 7.5.4) cross-reference table. Each xref entry is padded to the mandatory fixed 20 bytes.
+// A minimal, structurally ordinary single-page PDF built by literal ASCII concatenation with inline byte-offset tracking — the same construction idea src/test-support/pdf.ts uses for the node fixtures, reimplemented here so the workerd test stays self-contained and pulls in no test-support code (only the package src barrel). Produces: Catalog -> Pages -> one Page (MediaBox [0 0 200 100]) with a Helvetica /F1 font and a content stream drawing "(Hello)", plus a classic (ISO 32000-1 7.5.4) cross-reference table. Each xref entry is padded to the mandatory fixed 20 bytes.
 function minimalClassicXrefPdf(): Uint8Array<ArrayBuffer> {
   const enc = new TextEncoder();
   const chunks: Uint8Array[] = [];
@@ -23,7 +23,7 @@ function minimalClassicXrefPdf(): Uint8Array<ArrayBuffer> {
     offsets.set(num, length);
     ascii(`${num} 0 obj\n${body}\nendobj\n`);
   };
-  // `dictWithoutLength` must omit /Length -- it is computed from the stream payload's actual byte length and inserted here, mirroring the real writer's guarantee that /Length can never drift from the bytes that follow.
+  // `dictWithoutLength` must omit /Length — it is computed from the stream payload's actual byte length and inserted here, mirroring the real writer's guarantee that /Length can never drift from the bytes that follow.
   const stream = (num: number, dictWithoutLength: string, payload: Uint8Array): void => {
     offsets.set(num, length);
     const dict = dictWithoutLength.replace(/>>\s*$/, ` /Length ${payload.length} >>`);
@@ -68,7 +68,7 @@ describe('pdf-codec under the Cloudflare Workers runtime', () => {
   });
 
   it('writePdf embeds the vendored Carlito face through a font registry inside a workerd isolate', () => {
-    // Read a real document back, relabel its one text run's family as Calibri, and write it through a registry: the registry resolves Calibri onto the vendored Carlito face, so this exercises the asset modules the read-only entry exists to exclude -- font-registry.ts's module-scope asset imports, the sfnt parse, the glyph subsetting, and the /Type0 + /CIDFontType2 + /FontFile2 embedding group -- inside the isolate.
+    // Read a real document back, relabel its one text run's family as Calibri, and write it through a registry: the registry resolves Calibri onto the vendored Carlito face, so this exercises the asset modules the read-only entry exists to exclude — font-registry.ts's module-scope asset imports, the sfnt parse, the glyph subsetting, and the /Type0 + /CIDFontType2 + /FontFile2 embedding group — inside the isolate.
     const doc = readPdf(minimalClassicXrefPdf());
     const calibriDoc = {
       ...doc,

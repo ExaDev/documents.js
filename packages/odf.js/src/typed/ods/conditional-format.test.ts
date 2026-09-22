@@ -16,7 +16,7 @@ import {
   synthesiseConditionValue,
 } from "./conditional-format";
 
-// calcext:conditional-formats has no OASIS-published grammar at all -- every value/attribute name exercised here is transcribed from LibreOffice's own real reader (sc/source/filter/xml/xmlcondformat.cxx), see conditional-format.ts's own top-of-file note for the exact source functions. A real LibreOffice-produced fixture (fixtures/conditional-format.ods) exists and is exercised in read.test.ts's own "conditional-format.ods (real LibreOffice output)" describe block -- it directly caught a real entity-decoding bug this file's own synthetic cases below could not have found on their own (a producer that escapes '>' as '&gt;' in calcext:value), since a hand-built package only ever contains what its author thought to escape. Every OTHER variant exercised here (colour-scale, data-bar, icon-set, date-is, every condition mode) has no real fixture available, so those packages are hand-built (el/txt) to the identical wire shape xmlcondformat.cxx establishes, matching data-validation.test.ts's own established fallback for a producer-specific mini-language a real fixture wasn't available for.
+// calcext:conditional-formats has no OASIS-published grammar at all — every value/attribute name exercised here is transcribed from LibreOffice's own real reader (sc/source/filter/xml/xmlcondformat.cxx), see conditional-format.ts's own top-of-file note for the exact source functions. A real LibreOffice-produced fixture (fixtures/conditional-format.ods) exists and is exercised in read.test.ts's own "conditional-format.ods (real LibreOffice output)" describe block — it directly caught a real entity-decoding bug this file's own synthetic cases below could not have found on their own (a producer that escapes '>' as '&gt;' in calcext:value), since a hand-built package only ever contains what its author thought to escape. Every OTHER variant exercised here (colour-scale, data-bar, icon-set, date-is, every condition mode) has no real fixture available, so those packages are hand-built (el/txt) to the identical wire shape xmlcondformat.cxx establishes, matching data-validation.test.ts's own established fallback for a producer-specific mini-language a real fixture wasn't available for.
 
 describe("parseConditionValue", () => {
   it("parses unique/duplicate as no-operand keywords", () => {
@@ -157,7 +157,7 @@ describe("parseConditionValue", () => {
     expect(parseConditionValue("some-future-mode(1)")).toBeUndefined();
   });
 
-  it("matches every no-operand keyword by PREFIX, not by suffix -- a trailing operand list still identifies the mode even though the value no longer ENDS with the bare keyword", () => {
+  it("matches every no-operand keyword by PREFIX, not by suffix — a trailing operand list still identifies the mode even though the value no longer ENDS with the bare keyword", () => {
     const cases: [string, string][] = [
       ["unique(ignored)", "unique"],
       ["duplicate(ignored)", "duplicate"],
@@ -298,7 +298,7 @@ describe("readConditionalFormats (synthetic packages, real calcext wire shapes)"
     ]);
   });
 
-  it('decodes an XML-escaped comparison operator (a real LibreOffice producer writes calcext:value=">3" as literally &gt;3 on disk -- typed/ods/fixtures/conditional-format.ods\'s own content.xml, confirmed directly)', () => {
+  it('decodes an XML-escaped comparison operator (a real LibreOffice producer writes calcext:value=">3" as literally &gt;3 on disk — typed/ods/fixtures/conditional-format.ods\'s own content.xml, confirmed directly)', () => {
     const table = tableWith(
       el("calcext:conditional-formats", {}, [
         el(

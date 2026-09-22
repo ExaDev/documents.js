@@ -63,10 +63,10 @@ import { buildWorksheetSubstream } from "./workbook/sheet-writer";
 import * as drawingWriterModule from "./workbook/drawing-writer";
 import { GENERAL_CELL_XF_INDEX } from "./workbook/globals-writer";
 
-// Genuine .xls bytes -- a real [MS-CFB] compound file holding a real BIFF8 Workbook stream -- built by this package's own writer and read back through its own reader, the "primary verification method" this session's writers use throughout (the CFB writer, rtf-codec, wpd-codec). Every test here is a round trip: build a ContentDocument, write it, read it back, and check the read result reflects what was written -- exercising the writer against a reader whose own correctness is independently pinned by content.test.ts's hand-built byte sequences.
+// Genuine .xls bytes — a real [MS-CFB] compound file holding a real BIFF8 Workbook stream — built by this package's own writer and read back through its own reader, the "primary verification method" this session's writers use throughout (the CFB writer, rtf-codec, wpd-codec). Every test here is a round trip: build a ContentDocument, write it, read it back, and check the read result reflects what was written — exercising the writer against a reader whose own correctness is independently pinned by content.test.ts's hand-built byte sequences.
 
 const POINTS_PER_INCH = 72;
-/** Excel's own "Normal" preset, which is what a sheet with nothing else to say about printing carries -- and, since the reader falls back to exactly these values for a file stating none of the print records, what a round trip through this pair reproduces either way. The print-settings round trips at the end of this file are the ones that exercise real, non-default values. */
+/** Excel's own "Normal" preset, which is what a sheet with nothing else to say about printing carries — and, since the reader falls back to exactly these values for a file stating none of the print records, what a round trip through this pair reproduces either way. The print-settings round trips at the end of this file are the ones that exercise real, non-default values. */
 const PRINT_SETTINGS: ContentSheetPrintSettings = {
   pageSize: PAGE_SIZE_LETTER,
   margins: {
@@ -105,7 +105,7 @@ function cell(
   return { row, column, value, displayText: displayTextFor(value), ...extra };
 }
 
-/** Mirrors content.ts's own private displayTextOf exactly, so a test fixture's displayText is what a real reader would also produce for the same value -- required because ContentSheetCellSchema documents displayText as always present. */
+/** Mirrors content.ts's own private displayTextOf exactly, so a test fixture's displayText is what a real reader would also produce for the same value — required because ContentSheetCellSchema documents displayText as always present. */
 function displayTextFor(value: ContentCellValue): string {
   switch (value.kind) {
     case "number":
@@ -157,7 +157,7 @@ describe("writeXlsContent", () => {
     const readBack = findCell(content, 0, 0, 0);
     expect(readBack?.value).toStrictEqual({ kind: "number", value: 42 });
     expect(readBack?.displayText).toBe("42");
-    // The same "General" stamping content.test.ts already pins for a real .xls's plain cells -- XF 15's own ifmt (0) resolves through the built-in table.
+    // The same "General" stamping content.test.ts already pins for a real .xls's plain cells — XF 15's own ifmt (0) resolves through the built-in table.
     expect(readBack?.numberFormatCode).toBe("General");
   });
 
@@ -303,7 +303,7 @@ describe("writeXlsContent", () => {
       kind: "currency",
       value: 19.99,
     });
-    // No numberFormatCode was given and this writer's own default currency format carries no [$XXX-nnn] marker, so no ISO code is recovered either -- an honest round trip of what was actually written, not an invented one.
+    // No numberFormatCode was given and this writer's own default currency format carries no [$XXX-nnn] marker, so no ISO code is recovered either — an honest round trip of what was actually written, not an invented one.
     expect(currencyCell?.value).not.toHaveProperty("currency");
     expect(findCell(content, 0, 0, 2)?.value).toStrictEqual({
       kind: "date",
@@ -348,7 +348,7 @@ describe("writeXlsContent", () => {
           cell(0, 0, { kind: "currency", value: 7.99, currency: "USD" }),
           // A lowercase code is still an ISO-code shape; the bracket states it in ISO 4217's own uppercase spelling, which is what reads back.
           cell(0, 1, { kind: "currency", value: 4.5, currency: "gbp" }),
-          // A display symbol is not an ISO-code shape and cannot go inside the bracket, so the cell falls back to the plain currency format -- the kind preserved, the code honestly lost.
+          // A display symbol is not an ISO-code shape and cannot go inside the bracket, so the cell falls back to the plain currency format — the kind preserved, the code honestly lost.
           cell(0, 2, { kind: "currency", value: 3, currency: "£" }),
         ]),
       ]),
@@ -415,7 +415,7 @@ describe("writeXlsContent", () => {
   describe("cell decoration", () => {
     const red = rgbHexToColor("ff0000");
     const blue = rgbHexToColor("0000ff");
-    // Coral: genuinely absent from the fixed default table, so a workbook using it can only be written by minting a real Palette record. Checked against xf-colors.ts's own DEFAULT_PALETTE_TABLE rather than assumed -- teal (008080), the obvious candidate, is in fact one of that table's own entries, so a test built on it would have exercised the no-Palette fast path while claiming the opposite.
+    // Coral: genuinely absent from the fixed default table, so a workbook using it can only be written by minting a real Palette record. Checked against xf-colors.ts's own DEFAULT_PALETTE_TABLE rather than assumed — teal (008080), the obvious candidate, is in fact one of that table's own entries, so a test built on it would have exercised the no-Palette fast path while claiming the opposite.
     const coral = rgbHexToColor("ff7f50");
     const redFill = { kind: "solid" as const, color: red };
     const coralFill = { kind: "solid" as const, color: coral };
@@ -462,7 +462,7 @@ describe("writeXlsContent", () => {
     });
 
     it("distinguishes four cells each bordered identically on a different single side", () => {
-      // Each cell's own decoration-signature string must name which side it is, not just the style/colour that side shares with every other cell here -- otherwise two of these would collide onto the same interned XF and each other's cell would read back with the wrong side bordered.
+      // Each cell's own decoration-signature string must name which side it is, not just the style/colour that side shares with every other cell here — otherwise two of these would collide onto the same interned XF and each other's cell would read back with the wrong side bordered.
       const border = { color: blue, widthPt: 0.75 } as const;
       const bytes = writeXlsContent(
         document([
@@ -609,7 +609,7 @@ describe("writeXlsContent", () => {
           ]),
         ]),
       );
-      // red (255,0,0) is icv 10 in the fixed default table -- resolvable with no Palette record present, and readXlsContent must still recover it correctly through that fallback.
+      // red (255,0,0) is icv 10 in the fixed default table — resolvable with no Palette record present, and readXlsContent must still recover it correctly through that fallback.
       expect(
         findCell(readXlsContent(bytes), 0, 0, 0)?.background,
       ).toStrictEqual(redFill);
@@ -668,7 +668,7 @@ describe("writeXlsContent", () => {
       );
     });
 
-    /** `count` cells whose only content is a distinct background colour each -- the shape the palette budget has to count exactly, since every one is written (as a Blank record) while carrying no value. */
+    /** `count` cells whose only content is a distinct background colour each — the shape the palette budget has to count exactly, since every one is written (as a Blank record) while carrying no value. */
     function distinctlyColouredEmptyCells(
       count: number,
     ): readonly ContentSheetCell[] {
@@ -703,7 +703,7 @@ describe("writeXlsContent", () => {
     });
 
     it("round-trips a decorated empty cell through a real Blank record", () => {
-      // The cell has no value at all, so its background and borders live entirely in the XF a Blank record points at. Writing nothing for it -- which is right for an undecorated empty cell -- would discard them outright.
+      // The cell has no value at all, so its background and borders live entirely in the XF a Blank record points at. Writing nothing for it — which is right for an undecorated empty cell — would discard them outright.
       const bytes = writeXlsContent(
         document([
           sheet("Sheet1", [
@@ -769,7 +769,7 @@ describe("writeXlsContent", () => {
     });
 
     it("shares one XF between a decorated empty cell and a valued cell with the same decoration", () => {
-      // A Blank record's ixfe indexes the same cell-XF table every value record's does, so the interning pass has to treat both kinds of cell alike -- a regression would show as the wrong decoration on one of the two.
+      // A Blank record's ixfe indexes the same cell-XF table every value record's does, so the interning pass has to treat both kinds of cell alike — a regression would show as the wrong decoration on one of the two.
       const bytes = writeXlsContent(
         document([
           sheet("Sheet1", [
@@ -834,7 +834,7 @@ describe("writeXlsContent", () => {
       expect(findCell(content, 0, 0, 1)?.alignment).toBe("center");
       expect(findCell(content, 0, 0, 2)?.alignment).toBe("right");
       expect(findCell(content, 0, 0, 3)?.alignment).toBe("justify");
-      // Own-property check, not just a value check: a horizontal-only cell must leave the verticalAlignment KEY absent, not merely undefined when read through optional chaining -- a bug materialising the key with an explicit undefined value would pass a plain .toBeUndefined() assertion just as easily as a genuinely absent key would.
+      // Own-property check, not just a value check: a horizontal-only cell must leave the verticalAlignment KEY absent, not merely undefined when read through optional chaining — a bug materialising the key with an explicit undefined value would pass a plain .toBeUndefined() assertion just as easily as a genuinely absent key would.
       expect(
         Object.hasOwn(findCell(content, 0, 0, 0) ?? {}, "verticalAlignment"),
       ).toBe(false);
@@ -866,7 +866,7 @@ describe("writeXlsContent", () => {
       const content = readXlsContent(bytes);
       expect(findCell(content, 0, 0, 0)?.verticalAlignment).toBe("top");
       expect(findCell(content, 0, 0, 1)?.verticalAlignment).toBe("middle");
-      // Own-property check, not just a value check: a vertical-only cell must leave the alignment KEY absent, not merely undefined when read through optional chaining -- see the mirrored check in the horizontal-alignment test above for why a plain .toBeUndefined() would not catch this.
+      // Own-property check, not just a value check: a vertical-only cell must leave the alignment KEY absent, not merely undefined when read through optional chaining — see the mirrored check in the horizontal-alignment test above for why a plain .toBeUndefined() would not catch this.
       expect(Object.hasOwn(findCell(content, 0, 0, 0) ?? {}, "alignment")).toBe(
         false,
       );
@@ -911,7 +911,7 @@ describe("writeXlsContent", () => {
     });
 
     it("round-trips a decorated-alignment-only empty cell through a real Blank record", () => {
-      // No value and no fill/border either -- alignment alone is what makes this cell worth a Blank record, mirroring the equivalent decoration-only empty-cell test above.
+      // No value and no fill/border either — alignment alone is what makes this cell worth a Blank record, mirroring the equivalent decoration-only empty-cell test above.
       const bytes = writeXlsContent(
         document([
           sheet("Sheet1", [
@@ -925,7 +925,7 @@ describe("writeXlsContent", () => {
     });
 
     it("round-trips a border-only empty cell through a real Blank record, with neither fill nor alignment involved", () => {
-      // Isolates the borders leg of mapCell's own blank-drop conjunction from every sibling leg (background/alignment/verticalAlignment/font) -- a cell whose ONLY reason to survive is its own border must still survive when nothing else about it is decorated.
+      // Isolates the borders leg of mapCell's own blank-drop conjunction from every sibling leg (background/alignment/verticalAlignment/font) — a cell whose ONLY reason to survive is its own border must still survive when nothing else about it is decorated.
       const border = { color: rgbHexToColor("0000ff"), widthPt: 0.75 } as const;
       const bytes = writeXlsContent(
         document([
@@ -940,7 +940,7 @@ describe("writeXlsContent", () => {
     });
 
     it("round-trips a vertical-alignment-only empty cell through a real Blank record, with neither fill nor a border involved", () => {
-      // Isolates the verticalAlignment leg of mapCell's own blank-drop conjunction from every sibling leg -- a cell whose ONLY reason to survive is its own vertical alignment must still survive when nothing else about it is decorated.
+      // Isolates the verticalAlignment leg of mapCell's own blank-drop conjunction from every sibling leg — a cell whose ONLY reason to survive is its own vertical alignment must still survive when nothing else about it is decorated.
       const bytes = writeXlsContent(
         document([
           sheet("Sheet1", [
@@ -1048,7 +1048,7 @@ describe("writeXlsContent", () => {
     const content = readXlsContent(bytes);
     const column0 = content.sheets[0]?.columns.find((col) => col.index === 0);
     const column3 = content.sheets[0]?.columns.find((col) => col.index === 3);
-    // toStrictEqual on the width, not just .toBeCloseTo: a column carrying only widthPt must not also carry a spuriously-materialised hidden key, which a per-field check reading only widthPt would miss entirely. column3 always round-trips with SOME widthPt too -- a real ColInfo record always states a column's own width, whether or not the document that produced it declared one -- so hidden alone is confirmed directly instead.
+    // toStrictEqual on the width, not just .toBeCloseTo: a column carrying only widthPt must not also carry a spuriously-materialised hidden key, which a per-field check reading only widthPt would miss entirely. column3 always round-trips with SOME widthPt too — a real ColInfo record always states a column's own width, whether or not the document that produced it declared one — so hidden alone is confirmed directly instead.
     expect(column0?.widthPt).toBeCloseTo(100, 0);
     expect(column0).toStrictEqual({ index: 0, widthPt: column0?.widthPt });
     expect(column3?.hidden).toBe(true);
@@ -1185,7 +1185,7 @@ describe("writeXlsContent", () => {
       const bytes = writeXlsContent(
         document([
           sheet("Sheet1", [
-            // A cell stating no font of its own -- it must read back with no font field, referencing the Normal font's own table entry rather than restating it.
+            // A cell stating no font of its own — it must read back with no font field, referencing the Normal font's own table entry rather than restating it.
             cell(0, 0, { kind: "string", value: "plain" }),
             cell(
               0,
@@ -1222,7 +1222,7 @@ describe("writeXlsContent", () => {
         italic: true,
         sizePt: 8,
       });
-      // icv 10 is the default palette's own duplicate of Red, which is what a { r: 1, g: 0, b: 0 } colour resolves to without forcing a Palette record -- the identical quantisation the fill round trips already pin.
+      // icv 10 is the default palette's own duplicate of Red, which is what a { r: 1, g: 0, b: 0 } colour resolves to without forcing a Palette record — the identical quantisation the fill round trips already pin.
       expect(findCell(content, 0, 0, 3)?.font).toStrictEqual({
         fontFamily: "Courier New",
         underline: true,
@@ -1564,7 +1564,7 @@ describe("print settings", () => {
     return readXlsContent(writeXlsContent(content)).sheets[0]?.printSettings;
   }
 
-  /** The same settings with no scalePercent and no repeatColumns -- spelled as its own literal rather than derived by deletion, so an optional field a round trip wrongly re-added shows up as an extra key rather than as a matching undefined. */
+  /** The same settings with no scalePercent and no repeatColumns — spelled as its own literal rather than derived by deletion, so an optional field a round trip wrongly re-added shows up as an extra key rather than as a matching undefined. */
   const WITHOUT_SCALE_AND_REPEAT_COLUMNS: ContentSheetPrintSettings = {
     pageSize: FULL_PRINT_SETTINGS.pageSize,
     margins: FULL_PRINT_SETTINGS.margins,
@@ -1583,7 +1583,7 @@ describe("print settings", () => {
   });
 
   it("round-trips fit-to-page in place of a scale percentage", () => {
-    // The two are mutually exclusive in BIFF8 -- WsBool's own fFitToPage decides which of Setup's fields is live -- so a fit-to-page sheet states no scale at all, in either direction.
+    // The two are mutually exclusive in BIFF8 — WsBool's own fFitToPage decides which of Setup's fields is live — so a fit-to-page sheet states no scale at all, in either direction.
     const settings: ContentSheetPrintSettings = {
       ...WITHOUT_SCALE_AND_REPEAT_COLUMNS,
       repeatColumns: FULL_PRINT_SETTINGS.repeatColumns,
@@ -1602,7 +1602,7 @@ describe("print settings", () => {
   });
 
   it("round-trips a sheet whose settings are exactly the Normal preset", () => {
-    // Nothing in ContentSheetPrintSettings can say "this sheet states nothing", so the writer emits the preset's own values rather than omitting the records -- and the reader's own fallback then agrees with them.
+    // Nothing in ContentSheetPrintSettings can say "this sheet states nothing", so the writer emits the preset's own values rather than omitting the records — and the reader's own fallback then agrees with them.
     expect(roundTripped(PRINT_SETTINGS)).toStrictEqual(PRINT_SETTINGS);
   });
 
@@ -1647,7 +1647,7 @@ describe("print settings", () => {
   });
 
   it("writes a page size no paper code names as custom, rather than as a paper it is not", () => {
-    // Unlike xlsx's pageSetup element, [MS-XLS] 2.4.257's Setup record addresses paper only by code, so the dimensions genuinely cannot be written. iPaperSize 0 is that section's own "custom printer paper sizes", which is true; substituting Letter would not be. The size therefore does not survive the round trip -- the reader falls back to its documented default -- but the sheet, its cells, and every other print setting do.
+    // Unlike xlsx's pageSetup element, [MS-XLS] 2.4.257's Setup record addresses paper only by code, so the dimensions genuinely cannot be written. iPaperSize 0 is that section's own "custom printer paper sizes", which is true; substituting Letter would not be. The size therefore does not survive the round trip — the reader falls back to its documented default — but the sheet, its cells, and every other print setting do.
     const content = document([
       sheet("Odd", [cell(0, 0, { kind: "number", value: 1 })], {
         printSettings: {
@@ -1665,7 +1665,7 @@ describe("print settings", () => {
   });
 
   it("states the Setup record's own fPortrait bit from a custom page size's own dimensions, since no paper code survives to carry it", () => {
-    // Custom page sizes never round-trip their dimensions at all (the reader falls back to Letter regardless, per the test above), so the orientation flag this specific case writes is invisible to any round trip through readXlsContent -- reading the raw Setup record's own grbit word is the only way to check it.
+    // Custom page sizes never round-trip their dimensions at all (the reader falls back to Letter regardless, per the test above), so the orientation flag this specific case writes is invisible to any round trip through readXlsContent — reading the raw Setup record's own grbit word is the only way to check it.
     function grbitFor(widthPt: number, heightPt: number): number {
       const bytes = buildWorksheetSubstream(
         sheet("S", [cell(0, 0, { kind: "number", value: 1 })], {
@@ -1694,7 +1694,7 @@ describe("print settings", () => {
   });
 
   it("clamps a scale and a fit-to-page count past what their own Setup fields can hold", () => {
-    // ContentSheetPrintSettings bounds neither from above, and Setup's own fields are 16-bit -- so an unclamped value would wrap and state a different intent confidently. [MS-XLS] 2.4.257 caps iFitWidth/iFitHeight at 32767; iScale has only its field's own width.
+    // ContentSheetPrintSettings bounds neither from above, and Setup's own fields are 16-bit — so an unclamped value would wrap and state a different intent confidently. [MS-XLS] 2.4.257 caps iFitWidth/iFitHeight at 32767; iScale has only its field's own width.
     expect(
       roundTripped({ ...PRINT_SETTINGS, scalePercent: 200_000 })?.scalePercent,
     ).toBe(0xffff);
@@ -1707,9 +1707,9 @@ describe("print settings", () => {
   });
 
   it("clamps a print range and a repeated band past BIFF8's own row/column ceiling, rather than wrapping to an in-grid coordinate", () => {
-    // printRange/repeatRows/repeatColumns are bounded from above by neither ContentSheetPrintRange/ContentSheetRepeatRange nor writeArea3d's own 16-bit field -- an unclamped end row of 70000 would wrap to 4464, a plausible-looking coordinate that silently states a smaller range than asked for.
+    // printRange/repeatRows/repeatColumns are bounded from above by neither ContentSheetPrintRange/ContentSheetRepeatRange nor writeArea3d's own 16-bit field — an unclamped end row of 70000 would wrap to 4464, a plausible-looking coordinate that silently states a smaller range than asked for.
     //
-    // repeatRows/repeatColumns both start past 0: a band clamped to first 0/last MAX_*_INDEX on the axis it already fully spans by construction would ALSO fully span the perpendicular one, making it shape-ambiguous with "the whole sheet" (see print-names.ts's own classification note) and reading back as neither band -- an existing, documented tradeoff of the shape-based discriminant, not something this clamp introduces or is responsible for working around.
+    // repeatRows/repeatColumns both start past 0: a band clamped to first 0/last MAX_*_INDEX on the axis it already fully spans by construction would ALSO fully span the perpendicular one, making it shape-ambiguous with "the whole sheet" (see print-names.ts's own classification note) and reading back as neither band — an existing, documented tradeoff of the shape-based discriminant, not something this clamp introduces or is responsible for working around.
     const settings: ContentSheetPrintSettings = {
       ...PRINT_SETTINGS,
       printRange: {
@@ -1782,7 +1782,7 @@ describe("print settings", () => {
   });
 
   it("writes no defined name at all for a workbook declaring no print range or band", () => {
-    // The SupBook and ExternSheet a defined name's own 3D reference resolves through exist only to serve one -- a print name or a document-level name alike -- so a workbook needing none stays as minimal as it was before either was written.
+    // The SupBook and ExternSheet a defined name's own 3D reference resolves through exist only to serve one — a print name or a document-level name alike — so a workbook needing none stays as minimal as it was before either was written.
     const bytes = writeXlsContent(
       document([sheet("Plain", [cell(0, 0, { kind: "number", value: 1 })])]),
     );
@@ -2079,7 +2079,7 @@ describe("cell comments", () => {
 });
 
 describe("writeXlsContent: images and embedded objects written (#971)", () => {
-  // A minimal but genuinely valid 1x1 PNG (a real signature, IHDR, IDAT, IEND chain) -- the identical fixture drawing/blips.test.ts uses, since resolveBlip only checks image.format, never the bytes' own structure.
+  // A minimal but genuinely valid 1x1 PNG (a real signature, IHDR, IDAT, IEND chain) — the identical fixture drawing/blips.test.ts uses, since resolveBlip only checks image.format, never the bytes' own structure.
   const PNG_BYTES = new Uint8Array([
     0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
     0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
@@ -2102,7 +2102,7 @@ describe("writeXlsContent: images and embedded objects written (#971)", () => {
 
   const SMALL_PNG_BASE64 = base64Of(PNG_BYTES);
 
-  /** Bytes large enough on their own to push a single BSE entry (or a single sheet's own shape tree, repeated many times over) past the 8224-byte single-record ceiling, forcing writeRecordChain to split its record onto a Continue chain -- a non-repeating pattern so a byte-exact round trip can't pass by coincidence (e.g. every byte happening to be zero). */
+  /** Bytes large enough on their own to push a single BSE entry (or a single sheet's own shape tree, repeated many times over) past the 8224-byte single-record ceiling, forcing writeRecordChain to split its record onto a Continue chain — a non-repeating pattern so a byte-exact round trip can't pass by coincidence (e.g. every byte happening to be zero). */
   function largeBytes(length: number): Uint8Array {
     const bytes = new Uint8Array(length);
     for (let index = 0; index < length; index += 1) {
@@ -2328,7 +2328,7 @@ describe("writeXlsContent: data validations written (#971)", () => {
   });
 
   it("round-trips a notBetween rule's two formulas", () => {
-    // 'between' alone does not prove the writer's own isTwoOperand check actually names BOTH two-operand operators rather than just the one the sibling test above already exercises -- a rule refused for missing its second formula only when it should be, or accepted with one only for the operator that never needed it, would pass that test regardless.
+    // 'between' alone does not prove the writer's own isTwoOperand check actually names BOTH two-operand operators rather than just the one the sibling test above already exercises — a rule refused for missing its second formula only when it should be, or accepted with one only for the operator that never needed it, would pass that test regardless.
     const rule: ContentSheetDataValidation = {
       ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }],
       type: "decimal",
@@ -2467,7 +2467,7 @@ describe("writeXlsContent: data validations written (#971)", () => {
     };
     const overRow: ContentSheetDataValidation = {
       ...base,
-      // endRow deliberately stays in-grid (0), unlike the other three edges below sharing one deviant field with its own pair: an overRow fixture whose own endRow ALSO exceeds 0xffff would still throw with the startRow check dropped entirely, since the endRow check alone already catches it -- only isolating startRow as the sole out-of-range field actually exercises that check on its own.
+      // endRow deliberately stays in-grid (0), unlike the other three edges below sharing one deviant field with its own pair: an overRow fixture whose own endRow ALSO exceeds 0xffff would still throw with the startRow check dropped entirely, since the endRow check alone already catches it — only isolating startRow as the sole out-of-range field actually exercises that check on its own.
       ranges: [{ startRow: 0x10000, endRow: 0, startColumn: 0, endColumn: 0 }],
     };
     const overEndRow: ContentSheetDataValidation = {
@@ -2492,7 +2492,7 @@ describe("writeXlsContent: data validations written (#971)", () => {
   });
 
   it("accepts a range sitting exactly on BIFF8's own grid boundary, not just short of it", () => {
-    // 0xffff and 0xff are the largest row/column index BIFF8's own u16/u8 fields can carry -- a range naming exactly these values is still addressable, unlike the one-past-the-edge values the previous test throws on, so the boundary check must be a strict `>`, not `>=`.
+    // 0xffff and 0xff are the largest row/column index BIFF8's own u16/u8 fields can carry — a range naming exactly these values is still addressable, unlike the one-past-the-edge values the previous test throws on, so the boundary check must be a strict `>`, not `>=`.
     const rule: ContentSheetDataValidation = {
       ranges: [
         {
@@ -2555,7 +2555,7 @@ describe("writeXlsContent: conditional formats written (#971)", () => {
     expect(reread.sheets[0]?.conditionalFormats).toStrictEqual([rule]);
   });
 
-  it("round-trips a cellIs rule under each of the remaining single-operand operators cpOf's own switch names -- between/notBetween/equal/greaterThan already exercised above", () => {
+  it("round-trips a cellIs rule under each of the remaining single-operand operators cpOf's own switch names — between/notBetween/equal/greaterThan already exercised above", () => {
     const operators = [
       "between",
       "notEqual",
@@ -2715,7 +2715,7 @@ describe("writeXlsContent: conditional formats written (#971)", () => {
     ).toStrictEqual(["a", "b", "c"]);
   });
 
-  // nID only matters to a real consumer resolving a later CFEx record's own cross-reference (this package's own reader never emits or needs one on a self-written file, and explicitly skips CondFmt12's copy of the field as unused) -- so its correctness is invisible to every round-trip test above and has to be read directly out of the raw CondFmt/CondFmt12 bytes instead.
+  // nID only matters to a real consumer resolving a later CFEx record's own cross-reference (this package's own reader never emits or needs one on a self-written file, and explicitly skips CondFmt12's copy of the field as unused) — so its correctness is invisible to every round-trip test above and has to be read directly out of the raw CondFmt/CondFmt12 bytes instead.
   it("writes each base CondFmt group's own nID as its 1-based position among the sheet's rules, not the position minus one", () => {
     const range = { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 };
     const rules: ContentSheetConditionalFormat[] = [
@@ -2872,7 +2872,7 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
   });
 
   it("resolves each of iconSetThresholdCount's own three boundaries to the exact right count, not just one interior set from each band", () => {
-    // 3Symbols2 (index 7) and 4Arrows (index 8) straddle the first boundary; 4TrafficLights (index 12) and 5Arrows (index 13) straddle the second -- each pair proves that boundary is <=, not < or <=-one-off.
+    // 3Symbols2 (index 7) and 4Arrows (index 8) straddle the first boundary; 4TrafficLights (index 12) and 5Arrows (index 13) straddle the second — each pair proves that boundary is <=, not < or <=-one-off.
     const caseFor = (
       iconSetType: string,
       count: number,
@@ -2965,7 +2965,7 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
       percent: true,
       bottom: true,
       priority: 2,
-      // Red and pale yellow -- the identical pair the cellIs style round trip above uses, both exact under the reader's 255ths colour quantisation and present in the fixed default palette, so the DXFN icv path round-trips them byte-exactly.
+      // Red and pale yellow — the identical pair the cellIs style round trip above uses, both exact under the reader's 255ths colour quantisation and present in the fixed default palette, so the DXFN icv path round-trips them byte-exactly.
       style: {
         textColor: { r: 1, g: 0, b: 0 },
         background: { r: 1, g: 1, b: 0.8 },
@@ -3267,7 +3267,7 @@ describe("writeXlsContent: CF12-era conditional formats written (#1186)", () => 
 });
 
 describe("buildWorksheetSubstream: Dimensions bytes content.ts never reads back", () => {
-  // content.ts's own readSheetRecords stores RECORD_DIMENSIONS into usedRange, but nothing downstream of that ever reads the field back into a ContentSheet -- so no round trip through readXlsContent can distinguish a correct Dimensions record from a subtly wrong one, and these tests call the writer directly instead.
+  // content.ts's own readSheetRecords stores RECORD_DIMENSIONS into usedRange, but nothing downstream of that ever reads the field back into a ContentSheet — so no round trip through readXlsContent can distinguish a correct Dimensions record from a subtly wrong one, and these tests call the writer directly instead.
   const NO_DRAWING = { msoDrawingRecords: [], objRecords: [] };
   const NO_STYLE_CTX = {
     icvOf: () => 0,
@@ -3356,7 +3356,7 @@ describe("buildWorksheetSubstream: sheet-writer.ts's own boundary and array-empt
     ).getUint16(offset, true);
   }
 
-  /** RECORD_ROW's own first two u16 fields are rowIndex then colMic -- filters a records list down to the one Row record naming the given index, since a sheet with several rows produces several. */
+  /** RECORD_ROW's own first two u16 fields are rowIndex then colMic — filters a records list down to the one Row record naming the given index, since a sheet with several rows produces several. */
   function rowRecordAt(
     records: ReturnType<typeof readRecords>,
     rowIndex: number,
@@ -3392,7 +3392,7 @@ describe("buildWorksheetSubstream: sheet-writer.ts's own boundary and array-empt
   });
 
   it("writes no MergeCells record at all for a sheet whose cells carry no real span", () => {
-    // Every ordinary cell resolves rowSpan/colSpan to exactly 1 by default -- the degenerate case a real merge (either axis greater than one) must be told apart from, not just "rowSpan or colSpan stated at all".
+    // Every ordinary cell resolves rowSpan/colSpan to exactly 1 by default — the degenerate case a real merge (either axis greater than one) must be told apart from, not just "rowSpan or colSpan stated at all".
     const records = recordsOf([cell(0, 0, { kind: "number", value: 1 })]);
     expect(records.some((record) => record.type === RECORD_MERGECELLS)).toBe(
       false,
@@ -3451,7 +3451,7 @@ describe("buildWorksheetSubstream: sheet-writer.ts's own boundary and array-empt
   });
 
   it("writes the Setup record's own iScale as the inactive-scale sentinel when fitToPages is stated, even if scalePercent is also present", () => {
-    // ContentSheetPrintSettings does not enforce the two as mutually exclusive at the type level -- fitToPages being stated is what must win, not merely scalePercent being absent.
+    // ContentSheetPrintSettings does not enforce the two as mutually exclusive at the type level — fitToPages being stated is what must win, not merely scalePercent being absent.
     const records = recordsOf([], {
       printSettings: {
         ...PRINT_SETTINGS,
@@ -3482,7 +3482,7 @@ describe("buildWorksheetSubstream: sheet-writer.ts's own boundary and array-empt
   });
 
   it("writes HorizontalPageBreaks' own break indices in ascending order on the wire, not the declared order, before any read-side re-sorting could mask it", () => {
-    // Reading a break back through ContentSheetPrintSettings' own round trip re-sorts on the read side too (sheet.ts's ascendingDistinct), so a roundtrip assertion alone cannot tell a writer that sorts from one that does not -- this reads the raw HorizontalPageBreaks record directly instead.
+    // Reading a break back through ContentSheetPrintSettings' own round trip re-sorts on the read side too (sheet.ts's ascendingDistinct), so a roundtrip assertion alone cannot tell a writer that sorts from one that does not — this reads the raw HorizontalPageBreaks record directly instead.
     const records = recordsOf([], {
       printSettings: {
         ...PRINT_SETTINGS,
@@ -3506,7 +3506,7 @@ describe("buildWorksheetSubstream: sheet-writer.ts's own boundary and array-empt
     expect(records.some((record) => record.type === RECORD_MERGECELLS)).toBe(
       false,
     );
-    // RECORD_NOTE ([MS-XLS] 0x001C) is writeSheetComments' own leading record -- absent entirely for a sheet with no commented cells.
+    // RECORD_NOTE ([MS-XLS] 0x001C) is writeSheetComments' own leading record — absent entirely for a sheet with no commented cells.
     expect(records.some((record) => record.type === 0x001c)).toBe(false);
   });
 
@@ -3541,7 +3541,7 @@ describe("buildWorksheetSubstream: sheet-writer.ts's own boundary and array-empt
   });
 
   it("throws sheet-writer's own internal-error message when a cell reaches writeCellValueRecord disagreeing with written-cells.ts's own filter about its formatting", () => {
-    // written-cells.ts's own writesCellRecord calls cellCarriesFormatting as a same-module, unmocked local binding -- vi.spyOn on the exported name never intercepts that internal call, only a cross-module import of it, which is exactly the call writeCellValueRecord makes. So the cell given here carries REAL formatting (a genuine background), satisfying writesCellRecord's own unmocked check honestly and letting the cell reach the cell table; only writeCellValueRecord's own cross-module call is mocked false, the disagreement this internal-error guard exists to catch -- proving the guard actually fires and says what it claims to, rather than being unreachable dead code.
+    // written-cells.ts's own writesCellRecord calls cellCarriesFormatting as a same-module, unmocked local binding — vi.spyOn on the exported name never intercepts that internal call, only a cross-module import of it, which is exactly the call writeCellValueRecord makes. So the cell given here carries REAL formatting (a genuine background), satisfying writesCellRecord's own unmocked check honestly and letting the cell reach the cell table; only writeCellValueRecord's own cross-module call is mocked false, the disagreement this internal-error guard exists to catch — proving the guard actually fires and says what it claims to, rather than being unreachable dead code.
     const spy = vi
       .spyOn(writtenCellsModule, "cellCarriesFormatting")
       .mockReturnValueOnce(false);
@@ -3627,7 +3627,7 @@ describe("writeSheetConditionalFormats: bytes the reader never inspects (#971/#1
     expect(u32At(data, CB_DXF_OFFSET)).toBeGreaterThan(0);
   });
 
-  // A colour-scale CF12's rgbCt (CFGradient, [MS-XLS] 2.5.32) starts right after the shared skeleton: cbDxf(4, always reading 0 here since ct 0x03 pins cbDxf to 0) + the empty dxf itself (0 bytes) + fmlaActive.cce(2) + fStopIfTrue(1) + ipriority(2) + icfTemplate(2) + cbTemplateParm(1) + templateParams(16) = 28 bytes after CB_DXF_OFFSET's own 4, i.e. CB_DXF_OFFSET + 4 + 28 = 50 is wrong -- rechecked directly below against the record's own declared cbDxf/cbTemplateParm fields rather than hardcoded a second time, so a change to any one of those fixed sizes cannot silently desync this offset from the real layout.
+  // A colour-scale CF12's rgbCt (CFGradient, [MS-XLS] 2.5.32) starts right after the shared skeleton: cbDxf(4, always reading 0 here since ct 0x03 pins cbDxf to 0) + the empty dxf itself (0 bytes) + fmlaActive.cce(2) + fStopIfTrue(1) + ipriority(2) + icfTemplate(2) + cbTemplateParm(1) + templateParams(16) = 28 bytes after CB_DXF_OFFSET's own 4, i.e. CB_DXF_OFFSET + 4 + 28 = 50 is wrong — rechecked directly below against the record's own declared cbDxf/cbTemplateParm fields rather than hardcoded a second time, so a change to any one of those fixed sizes cannot silently desync this offset from the real layout.
   function gradientOffsetOf(data: Uint8Array): number {
     const cbDxf = u32At(data, CB_DXF_OFFSET);
     const cbTemplateParmOffset = CB_DXF_OFFSET + 4 + cbDxf + 2 + 1 + 2 + 2; // + fmlaActive.cce + fStopIfTrue + ipriority + icfTemplate
@@ -3635,7 +3635,7 @@ describe("writeSheetConditionalFormats: bytes the reader never inspects (#971/#1
     return cbTemplateParmOffset + 1 + cbTemplateParm;
   }
 
-  // CFGradient's own header (unused(2) + reserved1(1) + cInterpCurve(1) + cGradientCurve(1) + flags(1) = 6 bytes), then rgInterp: cInterpCurve entries of CFGradientInterpItem (a CFVO -- 3 bytes for a fixed min/max stop, cce=0 -- then the stop's own interpolation-position float, 8 bytes).
+  // CFGradient's own header (unused(2) + reserved1(1) + cInterpCurve(1) + cGradientCurve(1) + flags(1) = 6 bytes), then rgInterp: cInterpCurve entries of CFGradientInterpItem (a CFVO — 3 bytes for a fixed min/max stop, cce=0 — then the stop's own interpolation-position float, 8 bytes).
   function interpFractionAt(data: Uint8Array, stopIndex: number): number {
     const rgInterpStart = gradientOffsetOf(data) + 6;
     const stopStart = rgInterpStart + stopIndex * (3 + 8);
@@ -3661,7 +3661,7 @@ describe("writeSheetConditionalFormats: bytes the reader never inspects (#971/#1
       ranges: [RANGE],
       stops: [
         { value: { type: "min" }, color: { r: 0, g: 0, b: 0 } },
-        // "min" again (rather than a value-bearing type): every stop here must compile to the identical fixed 3-byte CFVO (cce 0, no rgce) for interpFractionAt's own fixed stride assumption to address the right byte offset -- the middle stop's own threshold value is irrelevant to what this test checks.
+        // "min" again (rather than a value-bearing type): every stop here must compile to the identical fixed 3-byte CFVO (cce 0, no rgce) for interpFractionAt's own fixed stride assumption to address the right byte offset — the middle stop's own threshold value is irrelevant to what this test checks.
         { value: { type: "min" }, color: { r: 0.5, g: 0.5, b: 0.5 } },
         { value: { type: "max" }, color: { r: 1, g: 1, b: 1 } },
       ],
@@ -3955,7 +3955,7 @@ describe("buildCellXfPlan", () => {
   });
 
   it("gives each of the four border sides its own distinct cell-XF entry, against an otherwise-identical undecorated baseline", () => {
-    // Every cell here shares the identical background, so the only thing that could tell two of their cell-Xf signatures apart is which single border side (if any) each one states -- proving each side's own segment of the signature genuinely carries the side's identity, not just its style/colour.
+    // Every cell here shares the identical background, so the only thing that could tell two of their cell-Xf signatures apart is which single border side (if any) each one states — proving each side's own segment of the signature genuinely carries the side's identity, not just its style/colour.
     const backgroundOnly = {
       kind: "solid",
       color: rgbHexToColor("00ff00"),
@@ -4073,7 +4073,7 @@ describe("buildWorkbookStream", () => {
   });
 
   it("refuses a workbook whose own drawing plan produced fewer sheet-drawing entries than the document has sheets", () => {
-    // buildDrawingWritePlan's own contract guarantees one sheetDrawings entry per sheet, so this can only be reached by a genuine disagreement between the two -- proven here by making the real function lie about it, rather than by a document this writer could ever produce on its own.
+    // buildDrawingWritePlan's own contract guarantees one sheetDrawings entry per sheet, so this can only be reached by a genuine disagreement between the two — proven here by making the real function lie about it, rather than by a document this writer could ever produce on its own.
     const spy = vi
       .spyOn(drawingWriterModule, "buildDrawingWritePlan")
       .mockReturnValue({
@@ -4087,7 +4087,7 @@ describe("buildWorkbookStream", () => {
           document([sheet("S", [cell(0, 0, { kind: "number", value: 1 })])]),
         ),
       ).toThrow(
-        "internal error: sheet 0 has no drawing plan entry -- buildDrawingWritePlan produced fewer entries than there are sheets",
+        "internal error: sheet 0 has no drawing plan entry — buildDrawingWritePlan produced fewer entries than there are sheets",
       );
     } finally {
       spy.mockRestore();

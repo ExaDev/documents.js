@@ -1,17 +1,17 @@
 // The RTF lexer: raw bytes to the flat token stream the destination state machine in src/parse.ts walks.
 //
-// RTF is tokenised plain text rather than a markup language, so nothing in this family's XML plumbing (ooxml.js, odf.js) applies -- this layer is the RTF equivalent of markdown-codec's src/scan, and like it is deliberately a separate stage from the structural one above it, because the tokenization rules are fully local (they depend on the current byte and at most a two-byte lookahead) while the structural ones depend on an arbitrarily deep group/destination stack.
+// RTF is tokenised plain text rather than a markup language, so nothing in this family's XML plumbing (ooxml.js, odf.js) applies — this layer is the RTF equivalent of markdown-codec's src/scan, and like it is deliberately a separate stage from the structural one above it, because the tokenization rules are fully local (they depend on the current byte and at most a two-byte lookahead) while the structural ones depend on an arbitrarily deep group/destination stack.
 //
 // The rules implemented here are exactly the ones the specification states, in RTF 1.9.1's "Control Word", "Control Symbol", "Group", "Special Characters" and "Conventions of an RTF Reader" sections:
 //
-// - A control word is a backslash, then ASCII letters (32 at most -- "A control word's name cannot be longer than 32 letters"), then an optional parameter: an ASCII minus sign and/or digits, up to ten digits ("An RTF parser must allow for up to 10 digits optionally preceded by a minus sign"). One space after the word or its parameter is the delimiter and is discarded; any second space is text. Any other non-letter, non-digit terminates the word and is NOT consumed.
-// - A control symbol is a backslash and one non-alphabetical character, with no delimiter at all -- "a space following a control symbol is treated as text, not a delimiter".
+// - A control word is a backslash, then ASCII letters (32 at most — "A control word's name cannot be longer than 32 letters"), then an optional parameter: an ASCII minus sign and/or digits, up to ten digits ("An RTF parser must allow for up to 10 digits optionally preceded by a minus sign"). One space after the word or its parameter is the delimiter and is discarded; any second space is text. Any other non-letter, non-digit terminates the word and is NOT consumed.
+// - A control symbol is a backslash and one non-alphabetical character, with no delimiter at all — "a space following a control symbol is treated as text, not a delimiter".
 // - `\'hh` is a hexadecimal byte value in the document's own codepage; it is lexed here as its own token kind rather than as a control symbol, since the two hex digits belong to it and a consumer must not see them as text.
 // - A backslash immediately before a CR or LF is a \par ("A carriage return ... is treated as a \par control if the character is preceded by a backslash").
 // - A bare CR or LF is ignored ("CRLFs should be ignored by RTF readers except that they can act as control word delimiters").
-// - `\binN` is the one control word whose argument changes lexing: exactly N raw bytes follow the delimiter and may contain braces and backslashes, so the lexer -- not the parser -- has to consume them. Emitting them as their own token kind keeps that byte run out of the text stream, where a `{` inside it would otherwise open a phantom group.
+// - `\binN` is the one control word whose argument changes lexing: exactly N raw bytes follow the delimiter and may contain braces and backslashes, so the lexer — not the parser — has to consume them. Emitting them as their own token kind keeps that byte run out of the text stream, where a `{` inside it would otherwise open a phantom group.
 //
-// Text bytes are emitted in runs rather than one token per byte, for the obvious reason, but a consumer that has to count individual characters -- the \uN skip mechanism, whose count is in characters and where "any RTF control word or symbol is considered a single character" -- can still do so by walking a run's bytes; src/parse.ts's skip logic does exactly that.
+// Text bytes are emitted in runs rather than one token per byte, for the obvious reason, but a consumer that has to count individual characters — the \uN skip mechanism, whose count is in characters and where "any RTF control word or symbol is considered a single character" — can still do so by walking a run's bytes; src/parse.ts's skip logic does exactly that.
 //
 // The lexer never throws and never validates structure: an unbalanced brace, an unknown control word, and a truncated \binN run are all the parser's or the reader's problem, reported through the diagnostic tiers in src/diagnostics.ts. Its one job is to say what the bytes are.
 
@@ -65,7 +65,7 @@ interface ControlWordScan {
 function scanControlWord(input: Uint8Array, start: number): ControlWordScan {
   let cursor = start;
   let name = "";
-  // No explicit cursor < input.length bound: past the end, input[cursor] is undefined, `?? 0` turns that into the NUL byte, and isAsciiLetter(0) is false -- already the one real stopping condition, exactly the way decodeDbcsBytes' identical shape of loop states it in codepage.ts.
+  // No explicit cursor < input.length bound: past the end, input[cursor] is undefined, `?? 0` turns that into the NUL byte, and isAsciiLetter(0) is false — already the one real stopping condition, exactly the way decodeDbcsBytes' identical shape of loop states it in codepage.ts.
   while (
     name.length < MAX_CONTROL_WORD_LETTERS &&
     isAsciiLetter(input[cursor] ?? 0)
@@ -118,7 +118,7 @@ export function tokenizeRtf(input: Uint8Array): RtfToken[] {
   };
 
   const pushTextByte = (byte: number): void => {
-    // Unconditional: textStart's own value is never read except as an "is a run pending" flag (flushText's === -1 check) -- it is never used as an actual byte offset back into `input`, so there is no need to preserve whichever cursor position started the run, only that it is no longer -1.
+    // Unconditional: textStart's own value is never read except as an "is a run pending" flag (flushText's === -1 check) — it is never used as an actual byte offset back into `input`, so there is no need to preserve whichever cursor position started the run, only that it is no longer -1.
     textStart = cursor;
     pendingText.push(byte);
   };

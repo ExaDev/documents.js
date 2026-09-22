@@ -7,7 +7,7 @@ import { useAppDispatch, useAppState } from "../../../state/context.js";
 import { anyOverlayOpen } from "../../../state/types.js";
 import { requireOdbDocument } from "./shared.js";
 
-// One row per report the database declares, reached from the table list with `r`. Like a form, a report is a static ODF sub-document -- this browses its declared band/group structure, never a rendered report, since rendering one would mean executing its own SQL against a live engine (categorically outside documents.js's scope).
+// One row per report the database declares, reached from the table list with `r`. Like a form, a report is a static ODF sub-document — this browses its declared band/group structure, never a rendered report, since rendering one would mean executing its own SQL against a live engine (categorically outside documents.js's scope).
 export function OdbReportListScreen(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();

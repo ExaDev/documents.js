@@ -15,7 +15,7 @@ import {
 import { createProgram } from "../program";
 import { EXIT_NEEDS_INFO, EXIT_SUCCESS } from "../runtime/exit-codes";
 
-// Drives the real assembled commander program end to end against a real multi-sheet .ods and a real multi-page .odg, asserting the three csv/svg edge selections this CLI threads into documents.js's own ConversionOptions: a csv target that would be ambiguous fails with exit 3 naming the sheets (the CLI's own translation of CsvSheetNotSpecifiedError), --sheet answers it, --delimiter reaches both the csv write edge (and the csv read edge, via the read-side fixture below), and --page picks which page an svg target draws. The odg pages carry a rect each at disjoint coordinates rather than textboxes because buildSvgText itself draws vectors only -- a draw:frame shape has no SVG vector representation and is reported as svg/shape-unsupported instead, so a textbox would assert nothing.
+// Drives the real assembled commander program end to end against a real multi-sheet .ods and a real multi-page .odg, asserting the three csv/svg edge selections this CLI threads into documents.js's own ConversionOptions: a csv target that would be ambiguous fails with exit 3 naming the sheets (the CLI's own translation of CsvSheetNotSpecifiedError), --sheet answers it, --delimiter reaches both the csv write edge (and the csv read edge, via the read-side fixture below), and --page picks which page an svg target draws. The odg pages carry a rect each at disjoint coordinates rather than textboxes because buildSvgText itself draws vectors only — a draw:frame shape has no SVG vector representation and is reported as svg/shape-unsupported instead, so a textbox would assert nothing.
 
 let workspace: string;
 

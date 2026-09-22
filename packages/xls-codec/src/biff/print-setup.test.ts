@@ -108,7 +108,7 @@ describe("paperSelectionFor", () => {
   });
 
   it("requires BOTH landscape dimensions to match, not just one", () => {
-    // 1224pt matches US Tabloid/11x17's own heightPt exactly, but 999pt matches no code's widthPt at all -- a size genuinely this shape names no paper, which is what proves the landscape check is a conjunction rather than "either dimension is close enough".
+    // 1224pt matches US Tabloid/11x17's own heightPt exactly, but 999pt matches no code's widthPt at all — a size genuinely this shape names no paper, which is what proves the landscape check is a conjunction rather than "either dimension is close enough".
     expect(paperSelectionFor({ widthPt: 1224, heightPt: 999 })).toBeUndefined();
   });
 

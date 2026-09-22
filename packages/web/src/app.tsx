@@ -8,7 +8,7 @@ import { theme } from "./theme";
 
 const queryClient = new QueryClient();
 
-// No cookie-based colorSchemeManager or <ColorSchemeScript> needed here (unlike a Next.js SSR shell) -- this is a pure client-only static SPA with no server-rendered HTML to flash-mismatch, so Mantine's own localStorage manager is sufficient.
+// No cookie-based colorSchemeManager or <ColorSchemeScript> needed here (unlike a Next.js SSR shell) — this is a pure client-only static SPA with no server-rendered HTML to flash-mismatch, so Mantine's own localStorage manager is sufficient.
 const colorSchemeManager = localStorageColorSchemeManager({
   key: "documents-color-scheme",
 });

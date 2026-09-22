@@ -229,7 +229,7 @@ describe("parseJp2Container", () => {
   });
 
   it("reports the codestream-missing message, not the format-unrecognised one, once a real signature box was seen even beyond the data actually provided", () => {
-    // A box whose declared length's top byte is nonzero (so the array's own first byte is nonzero, the condition the format-unrecognised message also keys off) but which is otherwise truncated to far less than that declared length -- readBox clamps the box to the data actually present, exactly as a genuinely truncated PDF stream would look.
+    // A box whose declared length's top byte is nonzero (so the array's own first byte is nonzero, the condition the format-unrecognised message also keys off) but which is otherwise truncated to far less than that declared length — readBox clamps the box to the data actually present, exactly as a genuinely truncated PDF stream would look.
     const hugeLength = 0x01000010;
     const data = Uint8Array.from([
       (hugeLength >>> 24) & 0xff,
@@ -381,7 +381,7 @@ describe("parseJp2Container", () => {
   });
 
   it("returns no channel definitions when a cdef box declares entries but carries no room for even one", () => {
-    // Count field only (2 bytes): entry + 6 always exceeds the box's own end here, so the loop must break before pushing anything -- distinguishes the break's own `>` from both `<` and a reversed arithmetic offset, which would instead read past this box into whatever data follows it.
+    // Count field only (2 bytes): entry + 6 always exceeds the box's own end here, so the loop must break before pushing anything — distinguishes the break's own `>` from both `<` and a reversed arithmetic offset, which would instead read past this box into whatever data follows it.
     const data = Uint8Array.from([
       ...SIGNATURE_BOX,
       ...box("jp2h", [
@@ -441,7 +441,7 @@ describe("parseJp2Container", () => {
   });
 
   it("reports the 'no contiguous codestream' message, not the format-unrecognised one, when there is no signature box but the data is still box-shaped", () => {
-    // No SIGNATURE_BOX prefix, so sawSignature is genuinely false; the leading bytes are jp2h's own small length field, so data[0] is genuinely 0x00 -- the one combination that distinguishes this branch's real condition from a mutant that forces it true regardless.
+    // No SIGNATURE_BOX prefix, so sawSignature is genuinely false; the leading bytes are jp2h's own small length field, so data[0] is genuinely 0x00 — the one combination that distinguishes this branch's real condition from a mutant that forces it true regardless.
     const data = Uint8Array.from([
       ...box("jp2h", box("ihdr", imageHeaderPayload(4, 5, 1, 7))),
     ]);
@@ -450,7 +450,7 @@ describe("parseJp2Container", () => {
   });
 
   it("reads exactly the declared channel-definition count, not a byte from the box's own header", () => {
-    // The count field's low byte would coincide with the tail of the cdef box's own type ('cdef') if the read drifted by one byte, so the payload deliberately provides far more capacity than the declared count needs -- a wrong, larger count would visibly read past the 3 real entries into the padding.
+    // The count field's low byte would coincide with the tail of the cdef box's own type ('cdef') if the read drifted by one byte, so the payload deliberately provides far more capacity than the declared count needs — a wrong, larger count would visibly read past the 3 real entries into the padding.
     const realCount = 3;
     const capacity = 200;
     const payload = [(realCount >> 8) & 0xff, realCount & 0xff];

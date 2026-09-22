@@ -9,11 +9,11 @@ import {
 import { bytesToBase64 } from "byte-codec";
 import { writeEpubContent } from "./write";
 
-// A real end-to-end round trip: a hand-built ContentDocument covering most of the element list ExaDev/documents.js#801 asks for, written to a genuine EPUB 3 zip via writeEpubContent, then read back via readEpubContent -- proving the two sides agree on every convention this package invents (list numId grammar, footnote descriptor shape, HorizontalRule styleId, monospace-as-code-block detection) without a real EPUB library on either side to fall back on.
+// A real end-to-end round trip: a hand-built ContentDocument covering most of the element list ExaDev/documents.js#801 asks for, written to a genuine EPUB 3 zip via writeEpubContent, then read back via readEpubContent — proving the two sides agree on every convention this package invents (list numId grammar, footnote descriptor shape, HorizontalRule styleId, monospace-as-code-block detection) without a real EPUB library on either side to fall back on.
 //
 // The image fixture is a bare IHDR-only PNG (fakePng1x1 below), not a real decodable image file: this package's own reader never walks past a PNG's IHDR chunk (see src/image/dimensions.ts), so a genuinely complete PNG with real pixel data and a valid IDAT/IEND buys this test nothing a hand-built header does not already prove.
 
-// A PNG carrying only what src/image/dimensions.ts reads: the 8-byte signature plus an IHDR chunk declaring 1x1 -- this package's own reader never walks past IHDR (no full pixel decode, see that module's own top-of-file note), so a real IDAT/IEND is not needed for this round trip to exercise real dimension detection.
+// A PNG carrying only what src/image/dimensions.ts reads: the 8-byte signature plus an IHDR chunk declaring 1x1 — this package's own reader never walks past IHDR (no full pixel decode, see that module's own top-of-file note), so a real IDAT/IEND is not needed for this round trip to exercise real dimension detection.
 function fakePng1x1(): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(33);
   bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
@@ -67,7 +67,7 @@ describe("writeEpubContent -> readEpubContent round trip", () => {
               runs: [{ text: "second" }],
               list: { numId: "epub1:bullet", level: 0, itemId: "item2" },
             },
-            // A plain, list-less paragraph is required here to close the list scope before non-list content resumes: document-schema.js's own decompose() (src/xhtml/write.ts's own dependency) attaches a non-paragraph block (a table, an image, a construct) to whatever list item is still open rather than resetting the scope itself -- only a paragraph carrying no list membership does that. A real EPUB's own <ul>...</ul> closing tag makes this automatic on read (src/xhtml/read.ts's readList only ever consumes one list element's own <li> children), so this spacer exists purely because this fixture is a hand-built ContentDocument rather than something this package's own reader produced. Non-empty, deliberately: an empty paragraph carries no runs for buildInlineRuns to produce, so readContainerChildren's own "phrasing content that produced nothing is dropped" rule (needed so a bare `<p></p>` a producer emits for CSS spacing doesn't become a bogus empty ContentParagraph on read) would silently vanish it on the way back, breaking this exact round trip.
+            // A plain, list-less paragraph is required here to close the list scope before non-list content resumes: document-schema.js's own decompose() (src/xhtml/write.ts's own dependency) attaches a non-paragraph block (a table, an image, a construct) to whatever list item is still open rather than resetting the scope itself — only a paragraph carrying no list membership does that. A real EPUB's own <ul>...</ul> closing tag makes this automatic on read (src/xhtml/read.ts's readList only ever consumes one list element's own <li> children), so this spacer exists purely because this fixture is a hand-built ContentDocument rather than something this package's own reader produced. Non-empty, deliberately: an empty paragraph carries no runs for buildInlineRuns to produce, so readContainerChildren's own "phrasing content that produced nothing is dropped" rule (needed so a bare `<p></p>` a producer emits for CSS spacing doesn't become a bogus empty ContentParagraph on read) would silently vanish it on the way back, breaking this exact round trip.
             { kind: "paragraph", runs: [{ text: "Back to plain flow." }] },
             {
               kind: "table",
@@ -271,7 +271,7 @@ describe("writeEpubContent -> readEpubContent round trip", () => {
       target: { kind: "internal", anchor: "local-target" },
     });
 
-    // The cross-section link/bookmark pair is re-read from the written EPUB (a genuine "section2.xhtml#remote-target" href, discovered fresh by the whole-spine pass): its own name is re-qualified with the target document's own path, exactly the way any other cross-document reference is (this package's own "restorable, not byte-identical" tier for constructs, matching every sibling codec's own documented degrade for markup order and similar round-trip-neutral reshaping) -- what matters is that it is still internally consistent, i.e. the reference's own target names the SAME construct the second section's constructStart actually carries.
+    // The cross-section link/bookmark pair is re-read from the written EPUB (a genuine "section2.xhtml#remote-target" href, discovered fresh by the whole-spine pass): its own name is re-qualified with the target document's own path, exactly the way any other cross-document reference is (this package's own "restorable, not byte-identical" tier for constructs, matching every sibling codec's own documented degrade for markup order and similar round-trip-neutral reshaping) — what matters is that it is still internally consistent, i.e. the reference's own target names the SAME construct the second section's constructStart actually carries.
     const remoteExtent =
       paragraph?.kind === "paragraph" ? paragraph.constructs?.[1] : undefined;
     expect(remoteExtent?.descriptor.kind).toBe("link");
@@ -377,7 +377,7 @@ describe("writeEpubContent -> readEpubContent round trip", () => {
   });
 
   it("writes the OCF-mandated mimetype-first/stored byte layout at the full pipeline level", () => {
-    // Not a byte-for-byte determinism check across two writes: writeOpf mints a fresh dc:identifier per call (ExaDev/documents.js#801's own explicit "generated identifier" write scope), so the OPF entry's own compressed bytes genuinely differ between two writes of the identical document -- that is correct, not a gap in the fixed-mtime/ordered-entries discipline src/zip.ts's own unit tests already pin at the fflate-wrapper level. What IS a fixed, checkable invariant at this full-pipeline level is the physical layout OCF requires: "mimetype" first, stored uncompressed, and META-INF/container.xml immediately after it.
+    // Not a byte-for-byte determinism check across two writes: writeOpf mints a fresh dc:identifier per call (ExaDev/documents.js#801's own explicit "generated identifier" write scope), so the OPF entry's own compressed bytes genuinely differ between two writes of the identical document — that is correct, not a gap in the fixed-mtime/ordered-entries discipline src/zip.ts's own unit tests already pin at the fflate-wrapper level. What IS a fixed, checkable invariant at this full-pipeline level is the physical layout OCF requires: "mimetype" first, stored uncompressed, and META-INF/container.xml immediately after it.
     const document: ContentDocument = {
       kind: "wordprocessing",
       metadata: {},

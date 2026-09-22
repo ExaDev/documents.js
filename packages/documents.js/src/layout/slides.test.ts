@@ -27,7 +27,7 @@ import { convertPresentationToLayout } from "./slides";
 const BLACK = { r: 0, g: 0, b: 0 };
 const RED = { r: 1, g: 0, b: 0 };
 
-// Every character is exactly sizePt/10 pt wide -- the same fake measurer convention already used in pdf-codec's own text-layout.test.ts and content-write.test.ts, so wrap-point and position assertions can be exact.
+// Every character is exactly sizePt/10 pt wide — the same fake measurer convention already used in pdf-codec's own text-layout.test.ts and content-write.test.ts, so wrap-point and position assertions can be exact.
 function fakeMeasurer(): TextMeasurer {
   return {
     widthOfTextAtSize: (text, _font, sizePt) =>
@@ -193,8 +193,8 @@ describe("convertPresentationToLayout: alignment", () => {
     expect(text?.xPt).toBe(98);
   });
 
-  it("stretches inter-word gaps on a justified shape paragraph's own wrapped (non-final) lines, but leaves its final line at natural, unstretched spacing -- mirroring src/layout/engine.ts's own identical justify behaviour", () => {
-    // Content width 7pt; each word ('aa'/'bb'/'cc'/'dd') is 2pt wide, a space 1pt -- "aa bb" (5pt) fits, "aa bb cc" (8pt) doesn't, so this wraps into two lines of two words each: "aa bb" then "cc dd", both naturally 5pt wide.
+  it("stretches inter-word gaps on a justified shape paragraph's own wrapped (non-final) lines, but leaves its final line at natural, unstretched spacing — mirroring src/layout/engine.ts's own identical justify behaviour", () => {
+    // Content width 7pt; each word ('aa'/'bb'/'cc'/'dd') is 2pt wide, a space 1pt — "aa bb" (5pt) fits, "aa bb cc" (8pt) doesn't, so this wraps into two lines of two words each: "aa bb" then "cc dd", both naturally 5pt wide.
     const s = shape({
       frame: { xPt: 0, yPt: 0, widthPt: 7, heightPt: 50 },
       blocks: [
@@ -212,11 +212,11 @@ describe("convertPresentationToLayout: alignment", () => {
       "dd",
     ]);
 
-    // Non-final line ("aa bb"): natural width 5pt against a 7pt target line box -- 2pt of slack, one gap, so the whole 2pt lands on 'bb', which is otherwise naturally 1pt after 'aa'.
+    // Non-final line ("aa bb"): natural width 5pt against a 7pt target line box — 2pt of slack, one gap, so the whole 2pt lands on 'bb', which is otherwise naturally 1pt after 'aa'.
     expect(aa?.xPt).toBe(0);
     expect(bb?.xPt).toBe(5); // natural offset 3 + 2pt of distributed slack
 
-    // Final line ("cc dd") is never stretched, even though it has the identical 2pt of slack available -- it renders at its own natural, single-space gap instead.
+    // Final line ("cc dd") is never stretched, even though it has the identical 2pt of slack available — it renders at its own natural, single-space gap instead.
     expect(cc?.xPt).toBe(0);
     expect(dd?.xPt).toBe(3);
   });
@@ -503,7 +503,7 @@ describe("convertPresentationToLayout: tables", () => {
   });
 
   it("emits no background rect at all for a pattern fill that resolves to no colour, rather than a fill-less no-op one", () => {
-    // A 'pattern' fill stating neither foregroundColor nor backgroundColor (the reserved gray125 scaffolding pattern, or a theme/indexed colour this reader could not resolve) is exactly the case resolveCellFillColor's own doc comment names as returning undefined -- genuinely no fill, not a reason to still push a rect item that would render invisibly.
+    // A 'pattern' fill stating neither foregroundColor nor backgroundColor (the reserved gray125 scaffolding pattern, or a theme/indexed colour this reader could not resolve) is exactly the case resolveCellFillColor's own doc comment names as returning undefined — genuinely no fill, not a reason to still push a rect item that would render invisibly.
     const table: ContentTable = {
       kind: "table",
       columnWidthsPt: [50],

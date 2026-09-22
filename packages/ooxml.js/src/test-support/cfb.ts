@@ -1,4 +1,4 @@
-// A compact compound-file builder specialised to the single shape the embedded-object fixtures need: a classic OLE .bin payload (word|ppt/embeddings/oleObject1.bin) whose root storage holds one 'Package' stream wrapping the packaged file -- the exact real-world spelling of a Word/PowerPoint OLE embed of a non-OLE file. Mirrors archive-codec's own test-support writer (src/test-support/cfb.ts there, where the layout's full construction is documented); kept local rather than imported because test-support is excluded from every package's published dist, so it cannot cross package boundaries. Layout: sector 0 is the FAT, sector 1 the directory (root entry plus the Package stream entry), then the Package stream's own sectors when it is at or above the 4096-byte cutoff, then the mini stream and mini-FAT sectors when it is below. Test-support only, never published.
+// A compact compound-file builder specialised to the single shape the embedded-object fixtures need: a classic OLE .bin payload (word|ppt/embeddings/oleObject1.bin) whose root storage holds one 'Package' stream wrapping the packaged file — the exact real-world spelling of a Word/PowerPoint OLE embed of a non-OLE file. Mirrors archive-codec's own test-support writer (src/test-support/cfb.ts there, where the layout's full construction is documented); kept local rather than imported because test-support is excluded from every package's published dist, so it cannot cross package boundaries. Layout: sector 0 is the FAT, sector 1 the directory (root entry plus the Package stream entry), then the Package stream's own sectors when it is at or above the 4096-byte cutoff, then the mini stream and mini-FAT sectors when it is below. Test-support only, never published.
 
 const SECTOR_SIZE = 512;
 const MINI_SECTOR_SIZE = 64;
@@ -69,10 +69,10 @@ function writeEntry(
   put32(entry, 0x4c, childId);
   put32(entry, 0x74, startSector);
   put32(entry, 0x78, size);
-  // No high-32-bits-of-size write at 0x7c: entry is always a fresh 128-byte slice of a zero-initialised directory buffer, so it is already 0 there -- every size this test-support builder ever writes fits in 32 bits regardless.
+  // No high-32-bits-of-size write at 0x7c: entry is always a fresh 128-byte slice of a zero-initialised directory buffer, so it is already 0 there — every size this test-support builder ever writes fits in 32 bits regardless.
 }
 
-// Builds the .bin bytes: a version-3 compound file whose root storage carries the packaged file as its stream -- 'Package' by default, overridable for fixtures that need the no-Package-stream shape a native legacy embed produces. The stream is placed by the mini-stream cutoff exactly as a real producer would place it (below the cutoff in the mini stream, at or above it in its own FAT-chained sectors).
+// Builds the .bin bytes: a version-3 compound file whose root storage carries the packaged file as its stream — 'Package' by default, overridable for fixtures that need the no-Package-stream shape a native legacy embed produces. The stream is placed by the mini-stream cutoff exactly as a real producer would place it (below the cutoff in the mini stream, at or above it in its own FAT-chained sectors).
 export function oleObjectBin(
   fileBytes: Uint8Array<ArrayBuffer>,
   options: { readonly streamName?: string } = {},
@@ -100,14 +100,14 @@ export function oleObjectBin(
   put16(view, 0x1c, 0xfffe);
   put16(view, 0x1e, 9);
   put16(view, 0x20, 6);
-  // No writes for 0x28 (reserved), 0x48 (number of mini-FAT sectors -- always 0 or 1, tracked instead by the mini-FAT's own presence at 0x3c), or 0x4c's own DIFAT[0] slot: file is a fresh, zero-initialised buffer, and all three fields' real values happen to be 0 -- an explicit write there is indistinguishable from leaving the default alone. DIFAT[0] being 0 is still what says "the FAT is sector 0"; it is just never written explicitly, since 0 is already what a fresh buffer holds there.
+  // No writes for 0x28 (reserved), 0x48 (number of mini-FAT sectors — always 0 or 1, tracked instead by the mini-FAT's own presence at 0x3c), or 0x4c's own DIFAT[0] slot: file is a fresh, zero-initialised buffer, and all three fields' real values happen to be 0 — an explicit write there is indistinguishable from leaving the default alone. DIFAT[0] being 0 is still what says "the FAT is sector 0"; it is just never written explicitly, since 0 is already what a fresh buffer holds there.
   put32(view, 0x2c, 1); // one FAT sector
   put32(view, 0x30, 1); // directory chain starts at sector 1
   put32(view, 0x38, MINI_STREAM_CUTOFF);
   put32(view, 0x3c, small ? miniFatSector : ENDOFCHAIN); // mini-FAT present only when the stream is mini-stream-resident
   put32(view, 0x40, small ? 1 : 0);
   put32(view, 0x44, ENDOFCHAIN);
-  // DIFAT[1..108]: every slot the header can hold beyond DIFAT[0] is unused padding (this builder always declares exactly one FAT sector), marked FREESECT. Array.from rather than a hand-bounded for loop: the loop's own last iteration is masked by the FAT sector's own bytes being (re)written immediately below regardless of where this range ends, so an off-by-one here has nothing left to observably corrupt -- removing the comparison as an AST node entirely is the honest reflection of that, rather than a test straining to observe a difference that cannot exist.
+  // DIFAT[1..108]: every slot the header can hold beyond DIFAT[0] is unused padding (this builder always declares exactly one FAT sector), marked FREESECT. Array.from rather than a hand-bounded for loop: the loop's own last iteration is masked by the FAT sector's own bytes being (re)written immediately below regardless of where this range ends, so an off-by-one here has nothing left to observably corrupt — removing the comparison as an AST node entirely is the honest reflection of that, rather than a test straining to observe a difference that cannot exist.
   Array.from({ length: 108 }, (_, i) => i + 1).forEach((i) => {
     put32(view, 0x4c + i * 4, FREESECT);
   });

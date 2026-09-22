@@ -1,4 +1,4 @@
-// Hand-built ChpxFkp and PapxFkp pages for the reader's tests, laid out directly from [MS-DOC] 2.9.23 and 2.9.175: a fixed 512-byte page whose element count lives in its LAST byte, an rgfc array of (count + 1) 4-byte stream offsets at the front, a parallel array of byte offsets in the middle, and the property records themselves packed after that -- at offsets stated as HALVES, so every one must land on an even byte.
+// Hand-built ChpxFkp and PapxFkp pages for the reader's tests, laid out directly from [MS-DOC] 2.9.23 and 2.9.175: a fixed 512-byte page whose element count lives in its LAST byte, an rgfc array of (count + 1) 4-byte stream offsets at the front, a parallel array of byte offsets in the middle, and the property records themselves packed after that — at offsets stated as HALVES, so every one must land on an even byte.
 //
 // Test-support only: excluded from the published dist (tsdown.config.ts drops src/test-support/**), never imported by src/index.ts.
 
@@ -80,7 +80,7 @@ export function buildPapxFkp(
       (paragraph.istd >> 8) & 0xff,
       ...grpprl,
     ];
-    // Which of PapxInFkp's two length spellings applies is decided entirely by parity, not by preference: the one-byte form gives a GrpPrlAndIstd of 2xcb-1 bytes, always ODD, and the two-byte form gives 2xcb' bytes, always EVEN. Since GrpPrlAndIstd is the 2-byte istd plus the grpprl, an odd-length grpprl takes the one-byte form and an even-length one (including the empty grpprl) takes the two-byte form -- exactly as [MS-DOC] 2.9.176's own worked example shows, where a record of istd plus two 3-byte Prls uses cb 0 with cb' 4, and a record of istd alone uses cb 0 with cb' 1.
+    // Which of PapxInFkp's two length spellings applies is decided entirely by parity, not by preference: the one-byte form gives a GrpPrlAndIstd of 2xcb-1 bytes, always ODD, and the two-byte form gives 2xcb' bytes, always EVEN. Since GrpPrlAndIstd is the 2-byte istd plus the grpprl, an odd-length grpprl takes the one-byte form and an even-length one (including the empty grpprl) takes the two-byte form — exactly as [MS-DOC] 2.9.176's own worked example shows, where a record of istd plus two 3-byte Prls uses cb 0 with cb' 4, and a record of istd alone uses cb 0 with cb' 1.
     const record: number[] =
       grpPrlAndIstd.length % 2 === 1
         ? [(grpPrlAndIstd.length + 1) / 2, ...grpPrlAndIstd]

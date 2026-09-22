@@ -53,9 +53,9 @@ import {
   writeSxdContent,
 } from "./write";
 
-// The write side's correctness suite for .sxw, mirroring typed/odt/write-round-trip.test.ts's own law: a document written by writeSxwContent and read back through the EXISTING readSxwContent reader (readOdtContent run over transformOoo1Package's own forward transform -- unmodified by anything in this PR) reproduces the document it was given, up to the exact same canonical form normaliseOdtContent already states for the plain .odt writer. That reuse is deliberate, not a shortcut: writeSxwContent is writeOdtContent's own output run through transformToOoo1Package and back through transformOoo1Package on the way in, so the two writers share one correctness law by construction, and a normalisation gap in one is a normalisation gap in both.
+// The write side's correctness suite for .sxw, mirroring typed/odt/write-round-trip.test.ts's own law: a document written by writeSxwContent and read back through the EXISTING readSxwContent reader (readOdtContent run over transformOoo1Package's own forward transform — unmodified by anything in this PR) reproduces the document it was given, up to the exact same canonical form normaliseOdtContent already states for the plain .odt writer. That reuse is deliberate, not a shortcut: writeSxwContent is writeOdtContent's own output run through transformToOoo1Package and back through transformOoo1Package on the way in, so the two writers share one correctness law by construction, and a normalisation gap in one is a normalisation gap in both.
 //
-// A second, independent kind of assertion sits alongside the round trip: that the PACKAGE writeSxwContent produces actually LOOKS like OpenOffice.org 1.x XML -- declares its own namespace URIs, carries no "mimetype" part, splits nothing into ODF's typed style:*-properties family, wraps nothing in a draw:frame -- rather than happening to round-trip only because transformOoo1Package's own catch-all passthrough tolerates whatever shape it was handed. A writer that merely round-trips without genuinely changing shape would pass the round-trip law by accident (see this module's own top-of-file note on why transformToOoo1Package must produce authentically OpenOffice.org 1.x-shaped output, not just something transformOoo1Package happens not to choke on).
+// A second, independent kind of assertion sits alongside the round trip: that the PACKAGE writeSxwContent produces actually LOOKS like OpenOffice.org 1.x XML — declares its own namespace URIs, carries no "mimetype" part, splits nothing into ODF's typed style:*-properties family, wraps nothing in a draw:frame — rather than happening to round-trip only because transformOoo1Package's own catch-all passthrough tolerates whatever shape it was handed. A writer that merely round-trips without genuinely changing shape would pass the round-trip law by accident (see this module's own top-of-file note on why transformToOoo1Package must produce authentically OpenOffice.org 1.x-shaped output, not just something transformOoo1Package happens not to choke on).
 
 const MARGINS = { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 };
 const PNG_BASE64 =
@@ -234,7 +234,7 @@ describe("the sxw round-trip law", () => {
   it("holds through the tree form as well as the flat one", () => {
     const tree = assembleTree(KITCHEN_SINK);
     const pkg = decodePackage(encodePackage(writeSxw(tree)));
-    // The round trip alone cannot distinguish genuine OpenOffice.org 1.x output from writeOdt's own plain ODF passed straight through: transformOoo1Package returns anything it does not detect as OpenOffice.org 1.x unchanged, so a writeSxw that silently skipped transformToOoo1Package would still round-trip correctly here (identity composed with identity). isOoo1Package is the assertion that actually catches that -- see the "genuine OpenOffice.org 1.x XML" describe block below for the same check on writeSxwContent's own output.
+    // The round trip alone cannot distinguish genuine OpenOffice.org 1.x output from writeOdt's own plain ODF passed straight through: transformOoo1Package returns anything it does not detect as OpenOffice.org 1.x unchanged, so a writeSxw that silently skipped transformToOoo1Package would still round-trip correctly here (identity composed with identity). isOoo1Package is the assertion that actually catches that — see the "genuine OpenOffice.org 1.x XML" describe block below for the same check on writeSxwContent's own output.
     expect(isOoo1Package(pkg)).toBe(true);
     expect(normaliseOdtContent(flattenTree(readSxw(pkg)))).toEqual(
       normaliseOdtContent(KITCHEN_SINK),
@@ -300,7 +300,7 @@ describe("writeSxwContent produces genuine OpenOffice.org 1.x XML, not merely so
     expect(isOoo1Package(pkg)).toBe(true);
   });
 
-  it("declares the .stw template media type in the manifest root entry when template is requested -- derived from writeOdtContent's own template option through ooo1MediaTypeForOdfMediaType, with no template-specific code of its own", () => {
+  it("declares the .stw template media type in the manifest root entry when template is requested — derived from writeOdtContent's own template option through ooo1MediaTypeForOdfMediaType, with no template-specific code of its own", () => {
     const pkg = writeSxwContent(
       documentOf([{ kind: "paragraph", runs: [{ text: "x" }] }]),
       { template: true },
@@ -485,7 +485,7 @@ describe("writeSxwContent produces genuine OpenOffice.org 1.x XML, not merely so
 
 // --- .sxc: the OpenOffice.org 1.x Calc writer -------------------------------------------------------------------------
 //
-// The same two-part discipline as the .sxw suite above: THE LAW below is the round-trip correctness proof (normaliseOdsContent(readSxcContent(writeSxcContent(document))) equals normaliseOdsContent(document), mirroring typed/ods/write-round-trip.test.ts's own law exactly, run through one more transform each way), and the "genuine OpenOffice.org 1.x XML" describe block that follows it makes the same second, independent kind of assertion the .sxw suite makes above: that the package writeSxcContent produces actually LOOKS like OpenOffice.org 1.x XML -- declares its own namespace URIs, carries no "mimetype" part, keeps a cell's value on table:value-type/table:value rather than ODF's office:value-type/office:value, splits nothing into ODF's typed style:table-cell-properties, wraps nothing in a draw:frame -- rather than happening to round-trip only because transformOoo1Package's own catch-all passthrough tolerates whatever shape it was handed.
+// The same two-part discipline as the .sxw suite above: THE LAW below is the round-trip correctness proof (normaliseOdsContent(readSxcContent(writeSxcContent(document))) equals normaliseOdsContent(document), mirroring typed/ods/write-round-trip.test.ts's own law exactly, run through one more transform each way), and the "genuine OpenOffice.org 1.x XML" describe block that follows it makes the same second, independent kind of assertion the .sxw suite makes above: that the package writeSxcContent produces actually LOOKS like OpenOffice.org 1.x XML — declares its own namespace URIs, carries no "mimetype" part, keeps a cell's value on table:value-type/table:value rather than ODF's office:value-type/office:value, splits nothing into ODF's typed style:table-cell-properties, wraps nothing in a draw:frame — rather than happening to round-trip only because transformOoo1Package's own catch-all passthrough tolerates whatever shape it was handed.
 
 const SHEET_MARGINS = { topPt: 36, rightPt: 36, bottomPt: 36, leftPt: 36 };
 
@@ -1024,9 +1024,9 @@ describe("writeSxcContent produces genuine OpenOffice.org 1.x XML, not merely so
   });
 });
 
-// The same two-part discipline as the .sxw/.sxc suites above: THE LAW below is the round-trip correctness proof (normaliseOdpContent(readSxiContent(writeSxiContent(document))) equals normaliseOdpContent(document), mirroring typed/odp/write-round-trip.test.ts's own law exactly, run through one more transform each way, including that suite's own rotated-shape tolerance exception), and the "genuine OpenOffice.org 1.x XML" describe block that follows makes the same second, independent assertion the .sxw/.sxc suites make: that writeSxiContent's own output actually LOOKS like OpenOffice.org 1.x XML -- declares its own namespace URIs, carries no "mimetype" part, puts office:body's content directly inside it with no office:presentation genre wrapper, and writes a shape as a bare draw:text-box rather than ODF's draw:frame-wrapped one -- rather than happening to round-trip only because transformOoo1Package's own catch-all passthrough tolerates whatever shape it was handed.
+// The same two-part discipline as the .sxw/.sxc suites above: THE LAW below is the round-trip correctness proof (normaliseOdpContent(readSxiContent(writeSxiContent(document))) equals normaliseOdpContent(document), mirroring typed/odp/write-round-trip.test.ts's own law exactly, run through one more transform each way, including that suite's own rotated-shape tolerance exception), and the "genuine OpenOffice.org 1.x XML" describe block that follows makes the same second, independent assertion the .sxw/.sxc suites make: that writeSxiContent's own output actually LOOKS like OpenOffice.org 1.x XML — declares its own namespace URIs, carries no "mimetype" part, puts office:body's content directly inside it with no office:presentation genre wrapper, and writes a shape as a bare draw:text-box rather than ODF's draw:frame-wrapped one — rather than happening to round-trip only because transformOoo1Package's own catch-all passthrough tolerates whatever shape it was handed.
 
-// A 1x1 PNG, genuinely decodable (sniffImageFormat reads real magic bytes) -- the same fixture typed/odp/write-round-trip.test.ts's own suite uses.
+// A 1x1 PNG, genuinely decodable (sniffImageFormat reads real magic bytes) — the same fixture typed/odp/write-round-trip.test.ts's own suite uses.
 const SXI_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
@@ -1139,7 +1139,7 @@ describe("the sxi round-trip law", () => {
     });
   });
 
-  // A rotated shape's own frame/rotationDeg is an exact algebraic inverse (typed/draw/write-shapes.ts's own frameGeometryAttrs) verified with a numeric tolerance rather than the blanket expectPresentationRoundTrip helper above, exactly mirroring typed/odp/write-round-trip.test.ts's own identical exception (two independent trig evaluations on either side of a real round trip -- here run through transformToOoo1Package/transformOoo1Package on top of writeOdp/readOdp -- are not guaranteed bit-identical).
+  // A rotated shape's own frame/rotationDeg is an exact algebraic inverse (typed/draw/write-shapes.ts's own frameGeometryAttrs) verified with a numeric tolerance rather than the blanket expectPresentationRoundTrip helper above, exactly mirroring typed/odp/write-round-trip.test.ts's own identical exception (two independent trig evaluations on either side of a real round trip — here run through transformToOoo1Package/transformOoo1Package on top of writeOdp/readOdp — are not guaranteed bit-identical).
   it("round-trips a rotated shape's geometry within floating-point tolerance", () => {
     const written = presentationRoundTrip(
       presentationDocumentOf([
@@ -1279,7 +1279,7 @@ describe("writeSxiContent produces genuine OpenOffice.org 1.x XML, not merely so
 
 // --- .sxd: the OpenOffice.org 1.x Draw writer --------------------------------------------------------------------------
 //
-// The same two-part discipline as the .sxw/.sxc/.sxi suites above: THE LAW below is the round-trip correctness proof (normaliseOdgContent(readSxdContent(writeSxdContent(document))) equals normaliseOdgContent(document), mirroring typed/odg/write-round-trip.test.ts's own law exactly, run through one more transform each way, including that suite's own rotated-geometry tolerance exception), and the "genuine OpenOffice.org 1.x XML" describe block that follows makes the same second, independent assertion the other three suites make: that writeSxdContent's own output actually LOOKS like OpenOffice.org 1.x XML -- declares its own namespace URIs, carries no "mimetype" part, puts office:body's content directly inside it with no office:drawing genre wrapper, writes a text-in-a-frame shape as a bare draw:text-box rather than ODF's draw:frame-wrapped one, and keeps a vector's fill and stroke in one bare style:properties rather than ODF's typed style:graphic-properties -- rather than happening to round-trip only because transformOoo1Package's own catch-all passthrough tolerates whatever shape it was handed.
+// The same two-part discipline as the .sxw/.sxc/.sxi suites above: THE LAW below is the round-trip correctness proof (normaliseOdgContent(readSxdContent(writeSxdContent(document))) equals normaliseOdgContent(document), mirroring typed/odg/write-round-trip.test.ts's own law exactly, run through one more transform each way, including that suite's own rotated-geometry tolerance exception), and the "genuine OpenOffice.org 1.x XML" describe block that follows makes the same second, independent assertion the other three suites make: that writeSxdContent's own output actually LOOKS like OpenOffice.org 1.x XML — declares its own namespace URIs, carries no "mimetype" part, puts office:body's content directly inside it with no office:drawing genre wrapper, writes a text-in-a-frame shape as a bare draw:text-box rather than ODF's draw:frame-wrapped one, and keeps a vector's fill and stroke in one bare style:properties rather than ODF's typed style:graphic-properties — rather than happening to round-trip only because transformOoo1Package's own catch-all passthrough tolerates whatever shape it was handed.
 //
 // What this suite covers that the .sxi one structurally cannot is a drawing page's own second array: the VECTOR PRIMITIVES (rect/ellipse/line/path with fill and stroke) a ContentShape has no vocabulary for at all, and the paint order that has to hold BETWEEN the two arrays rather than within one of them.
 
@@ -1457,7 +1457,7 @@ describe("the sxd round-trip law", () => {
     );
   });
 
-  // A rotated shape's and a rotated vector's own frame/rotationDeg is an exact algebraic inverse (typed/draw/write-shapes.ts's own frameGeometryAttrs) verified with a numeric tolerance rather than the blanket expectDrawingRoundTrip helper above, exactly mirroring typed/odg/write-round-trip.test.ts's own identical exception (two independent trig evaluations on either side of a real round trip -- here run through transformToOoo1Package/transformOoo1Package on top of writeOdg/readOdg -- are not guaranteed bit-identical).
+  // A rotated shape's and a rotated vector's own frame/rotationDeg is an exact algebraic inverse (typed/draw/write-shapes.ts's own frameGeometryAttrs) verified with a numeric tolerance rather than the blanket expectDrawingRoundTrip helper above, exactly mirroring typed/odg/write-round-trip.test.ts's own identical exception (two independent trig evaluations on either side of a real round trip — here run through transformToOoo1Package/transformOoo1Package on top of writeOdg/readOdg — are not guaranteed bit-identical).
   it("round-trips a rotated vector's geometry within floating-point tolerance", () => {
     const frame = { xPt: 60, yPt: 200, widthPt: 200, heightPt: 80 };
     const written = drawingRoundTrip(

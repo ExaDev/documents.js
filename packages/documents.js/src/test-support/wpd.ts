@@ -1,6 +1,6 @@
 import { WPD_INDEX_RECORD_SIZE } from "wpd-codec/container/prefix";
 
-// A minimal but structurally authentic WordPerfect 6.x file: a real 512-byte prefix header, a one-record (index-header-only) index area, no packets, and a document area built from real WPFF function bytes -- the identical minimal shape wpd-codec's own read.test.ts exercises via its test-support/build-wpd.ts (buildWpdFile with no packets). That module is deliberately excluded from wpd-codec's published dist (its own tsdown.config.ts, matching every sibling codec's own test-support exclusion), so it cannot be imported across the package boundary; this is a small, self-contained port of just the two pieces a packet-free fixture needs (the prefix/index layout and the ASCII-to-function-byte text encoding), grounded in the same WPFF Document Structure fields wpd-codec's own container reader parses. wpd-codec has no writer at all (see that package's own Scope), so unlike every other format's fixture here there is no editor API to build this through -- hand-constructing the container bytes is the only option.
+// A minimal but structurally authentic WordPerfect 6.x file: a real 512-byte prefix header, a one-record (index-header-only) index area, no packets, and a document area built from real WPFF function bytes — the identical minimal shape wpd-codec's own read.test.ts exercises via its test-support/build-wpd.ts (buildWpdFile with no packets). That module is deliberately excluded from wpd-codec's published dist (its own tsdown.config.ts, matching every sibling codec's own test-support exclusion), so it cannot be imported across the package boundary; this is a small, self-contained port of just the two pieces a packet-free fixture needs (the prefix/index layout and the ASCII-to-function-byte text encoding), grounded in the same WPFF Document Structure fields wpd-codec's own container reader parses. wpd-codec has no writer at all (see that package's own Scope), so unlike every other format's fixture here there is no editor API to build this through — hand-constructing the container bytes is the only option.
 
 const PREFIX_HEADER_SIZE = 512;
 const FILE_ID = [0xff, 0x57, 0x50, 0x43];
@@ -16,7 +16,7 @@ function putUint32(bytes: Uint8Array, offset: number, value: number): void {
   putUint16(bytes, offset + 2, (value >>> 16) & 0xffff);
 }
 
-// The ASCII characters of a string as document-area bytes -- every character in the single-byte printable range passes through unchanged except a space, which WordPerfect represents as the Soft Space function (0x80) rather than byte 0x20 (the international shorthand for the sharp s), matching wpd-codec's own test-support/build-wpd.ts.
+// The ASCII characters of a string as document-area bytes — every character in the single-byte printable range passes through unchanged except a space, which WordPerfect represents as the Soft Space function (0x80) rather than byte 0x20 (the international shorthand for the sharp s), matching wpd-codec's own test-support/build-wpd.ts.
 function documentAreaText(value: string): number[] {
   return [...value].map((character) => {
     const code = character.charCodeAt(0);
@@ -48,7 +48,7 @@ function buildPacketFreeWpdFile(documentArea: readonly number[]): Uint8Array {
   return bytes;
 }
 
-// Two paragraphs of real text, separated by a hard end of line, matching this package's own rtf/markdown sweep fixtures in substance (a heading-like first paragraph, a plain second one) -- WordPerfect's function stream carries no heading construct of its own, so both read back as plain paragraphs.
+// Two paragraphs of real text, separated by a hard end of line, matching this package's own rtf/markdown sweep fixtures in substance (a heading-like first paragraph, a plain second one) — WordPerfect's function stream carries no heading construct of its own, so both read back as plain paragraphs.
 export function minimalWpdBytes(): Uint8Array<ArrayBuffer> {
   return buildPacketFreeWpdFile([
     ...documentAreaText("Heading"),

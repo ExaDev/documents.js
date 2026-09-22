@@ -1,4 +1,4 @@
-// BIFF8 stores every date and time as a bare serial number -- a day count plus a fraction of a day -- with nothing in the cell itself saying it is temporal at all; that lives entirely in the number format its XF points at (see number-format.ts). This module converts one into the canonical ISO spellings document-schema.js's own ContentCellValue fixes for its three temporal variants: 'date' is YYYY-MM-DD, 'time' is a 24-hour zero-padded HH:MM:SS wall-clock time of day, and 'dateTime' is YYYY-MM-DDTHH:MM:SS -- and, since the writer added in xls-codec#815, the other direction as well: isoDateToSerial/isoTimeToSerial/isoDateTimeToSerial turn one of those ISO strings back into the serial a Number record carries.
+// BIFF8 stores every date and time as a bare serial number — a day count plus a fraction of a day — with nothing in the cell itself saying it is temporal at all; that lives entirely in the number format its XF points at (see number-format.ts). This module converts one into the canonical ISO spellings document-schema.js's own ContentCellValue fixes for its three temporal variants: 'date' is YYYY-MM-DD, 'time' is a 24-hour zero-padded HH:MM:SS wall-clock time of day, and 'dateTime' is YYYY-MM-DDTHH:MM:SS — and, since the writer added in xls-codec#815, the other direction as well: isoDateToSerial/isoTimeToSerial/isoDateTimeToSerial turn one of those ISO strings back into the serial a Number record carries.
 //
 // Which epoch a workbook's serials count from is read from the file's own Date1904 record ([MS-XLS] 2.4.77) rather than assumed: getting it wrong shifts every date in the workbook by 1462 days. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/4a5e900a-0eb0-4355-8fc1-81aab8f46e8b The writer always emits the 1900 system and never writes a Date1904 record: that is this reader's own default when the record is absent, so a workbook this package writes and reads back agrees with itself without needing to state the epoch explicitly.
 
@@ -12,7 +12,7 @@ const MS_PER_SECOND = 1000;
 /** The serial the 1900 system reserves for a day that never existed: 1900-02-29. Lotus 1-2-3 treated 1900 as a leap year and Excel reproduced the bug for file compatibility, so serials at or above 61 are one day ahead of a true day count from 1899-12-31, and serial 60 itself denotes a date with no place on the calendar. */
 const PHANTOM_LEAP_DAY_SERIAL = 60;
 
-/** The three day-count origins, named once so a serial and its parts can never be counted from different days. Below the phantom leap day the 1900 system is a true offset from 1899-12-31 (serial 1 = 1900-01-01); at and above it every serial is one too high, expressed by moving the origin back a day rather than by subtracting from the count. The 1904 system is a plain day count from its own epoch, with serial 0 being 1904-01-01 -- no phantom day, since 1904 genuinely was a leap year and the count starts after February. */
+/** The three day-count origins, named once so a serial and its parts can never be counted from different days. Below the phantom leap day the 1900 system is a true offset from 1899-12-31 (serial 1 = 1900-01-01); at and above it every serial is one too high, expressed by moving the origin back a day rather than by subtracting from the count. The 1904 system is a plain day count from its own epoch, with serial 0 being 1904-01-01 — no phantom day, since 1904 genuinely was a leap year and the count starts after February. */
 const ORIGIN_1900_BELOW_PHANTOM_UTC_MS = Date.UTC(1899, 11, 31);
 const ORIGIN_1900_ABOVE_PHANTOM_UTC_MS = Date.UTC(1899, 11, 30);
 const ORIGIN_1904_UTC_MS = Date.UTC(1904, 0, 1);
@@ -22,7 +22,7 @@ interface SplitSerial {
   msWithinDay: number;
 }
 
-/** Rounding the fractional part to the nearest millisecond is what recovers a clean wall-clock time from a serial a producer stored to fifteen significant digits (14:30 is commonly stored as 0.604166666666667, whose exact product with 86400000 is 52199999.999999 ms). Rounding can legitimately reach a full day -- 0.9999999 rounds to 86400000 ms -- which rolls into the next day rather than producing an impossible 24:00:00. */
+/** Rounding the fractional part to the nearest millisecond is what recovers a clean wall-clock time from a serial a producer stored to fifteen significant digits (14:30 is commonly stored as 0.604166666666667, whose exact product with 86400000 is 52199999.999999 ms). Rounding can legitimately reach a full day — 0.9999999 rounds to 86400000 ms — which rolls into the next day rather than producing an impossible 24:00:00. */
 function splitSerial(serial: number): SplitSerial {
   const days = Math.floor(serial);
   const msWithinDay = Math.round((serial - days) * MS_PER_DAY);
@@ -41,7 +41,7 @@ function isoDateOfUtcMs(ms: number): string {
   return `${pad(date.getUTCFullYear(), 4)}-${pad(date.getUTCMonth() + 1, 2)}-${pad(date.getUTCDate(), 2)}`;
 }
 
-/** The day-count half of a serial, as a calendar date -- undefined when the serial names no real date, which the caller degrades to a plain number rather than emitting an invalid one. Two cases produce that: a negative serial (no date exists before either epoch), and serial 60 in the 1900 system (the phantom leap day). */
+/** The day-count half of a serial, as a calendar date — undefined when the serial names no real date, which the caller degrades to a plain number rather than emitting an invalid one. Two cases produce that: a negative serial (no date exists before either epoch), and serial 60 in the 1900 system (the phantom leap day). */
 function isoDateOfDayCount(
   days: number,
   date1904: boolean,
@@ -56,7 +56,7 @@ function isoDateOfDayCount(
   if (phantomOffset === 0) {
     return undefined;
   }
-  // A plain `days < PHANTOM_LEAP_DAY_SERIAL` reads the same, but the exact-match case above already peels off the one value (60) a strict and a non-strict comparison against that same threshold would ever disagree on -- leaving `<` and `<=` equivalent for every day count this line can still see. Math.sign's result is one of exactly three values, and the one shared by both operators (0) is excluded above, so testing for the specific remaining value -1 (rather than a threshold either operator would classify identically) makes BELOW and ABOVE genuinely swappable by a mutation, not merely restatable.
+  // A plain `days < PHANTOM_LEAP_DAY_SERIAL` reads the same, but the exact-match case above already peels off the one value (60) a strict and a non-strict comparison against that same threshold would ever disagree on — leaving `<` and `<=` equivalent for every day count this line can still see. Math.sign's result is one of exactly three values, and the one shared by both operators (0) is excluded above, so testing for the specific remaining value -1 (rather than a threshold either operator would classify identically) makes BELOW and ABOVE genuinely swappable by a mutation, not merely restatable.
   const originUtcMs =
     phantomOffset === -1
       ? ORIGIN_1900_BELOW_PHANTOM_UTC_MS
@@ -80,7 +80,7 @@ export function serialToIsoDate(
     : undefined;
 }
 
-/** A time-of-day format renders only the fractional part -- a serial of 2.5 under `h:mm` displays as noon, not as "two days and twelve hours" -- so the day count is discarded here rather than made an error. Sub-second precision is discarded too: ContentCellValue's own 'time' spelling is fixed at HH:MM:SS. */
+/** A time-of-day format renders only the fractional part — a serial of 2.5 under `h:mm` displays as noon, not as "two days and twelve hours" — so the day count is discarded here rather than made an error. Sub-second precision is discarded too: ContentCellValue's own 'time' spelling is fixed at HH:MM:SS. */
 export function serialToIsoTime(serial: number): string | undefined {
   return Number.isFinite(serial) && serial >= 0
     ? isoTimeOfMsWithinDay(splitSerial(serial).msWithinDay)
@@ -106,7 +106,7 @@ export function serialToIsoDateTime(
 const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const ISO_TIME_PATTERN = /^(\d{2}):(\d{2}):(\d{2})$/;
 
-/** The calendar day count a real date maps to, inverting isoDateOfDayCount: below the 1900 system's phantom leap day (1900-02-29) the day count is a plain offset from 1899-12-31; on or after it, one day is added to skip over the phantom date the calendar never had. The date1904 system has no such adjustment -- 1904 genuinely was a leap year, so its serial 0 origin needs no correction. */
+/** The calendar day count a real date maps to, inverting isoDateOfDayCount: below the 1900 system's phantom leap day (1900-02-29) the day count is a plain offset from 1899-12-31; on or after it, one day is added to skip over the phantom date the calendar never had. The date1904 system has no such adjustment — 1904 genuinely was a leap year, so its serial 0 origin needs no correction. */
 function isoDateToDayCount(isoDate: string, date1904: boolean): number {
   const match = ISO_DATE_PATTERN.exec(isoDate);
   if (match === null) {
@@ -160,7 +160,7 @@ export function isoTimeToSerial(isoTime: string): number {
 }
 
 /**
- * A combined ISO date-time back to its serial. Accepts a trailing fractional-seconds part and/or a 'Z'/offset suffix -- document-schema.js's own wire contract permits both when the source genuinely carried one -- but a BIFF8 serial has no timezone concept at all (see the read direction's own comment above), so any offset is dropped rather than applied: the wall-clock digits are taken as written, exactly as they would be typed into Excel directly.
+ * A combined ISO date-time back to its serial. Accepts a trailing fractional-seconds part and/or a 'Z'/offset suffix — document-schema.js's own wire contract permits both when the source genuinely carried one — but a BIFF8 serial has no timezone concept at all (see the read direction's own comment above), so any offset is dropped rather than applied: the wall-clock digits are taken as written, exactly as they would be typed into Excel directly.
  */
 export function isoDateTimeToSerial(
   isoDateTime: string,

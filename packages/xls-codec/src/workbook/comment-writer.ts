@@ -14,11 +14,11 @@ import {
 } from "../biff/string-writer";
 import { BiffWriteError } from "../biff/write-errors";
 
-// The write-side counterpart of workbook/comments.ts: a cell's own ContentSheetCellComment written back out as the same Note/Obj/TxO triple BIFF8 splits a legacy comment across ([MS-XLS] 2.4.179/2.4.181/2.4.329) -- see that module's own top comment for the full citation of how the three join. Legacy BIFF8 comments carry no threading and no per-comment timestamp at all, so ContentSheetCellComment.replies and .createdAt have nowhere to land here: only .text and .author round-trip through an .xls, exactly the read side's own documented scope.
+// The write-side counterpart of workbook/comments.ts: a cell's own ContentSheetCellComment written back out as the same Note/Obj/TxO triple BIFF8 splits a legacy comment across ([MS-XLS] 2.4.179/2.4.181/2.4.329) — see that module's own top comment for the full citation of how the three join. Legacy BIFF8 comments carry no threading and no per-comment timestamp at all, so ContentSheetCellComment.replies and .createdAt have nowhere to land here: only .text and .author round-trip through an .xls, exactly the read side's own documented scope.
 //
 // Written as two groups, matching how a real producer (and this reader's own ordering-tolerant pass) lays a worksheet's comments out: every Note record first, then, for each comment in the same order, its own Obj record immediately followed by a TxO record and the one Continue record carrying that TxO's own text and minimal formatting-run trailer.
 
-/** [MS-XLS] 2.5.213 ObjId: the drawing-object type a comment's Obj record names -- workbook/comments.ts's own OBJECT_TYPE_NOTE, restated here since the two modules read/write the identical constant independently rather than sharing an import across the read/write boundary (matching this package's existing convention of one module per direction). */
+/** [MS-XLS] 2.5.213 ObjId: the drawing-object type a comment's Obj record names — workbook/comments.ts's own OBJECT_TYPE_NOTE, restated here since the two modules read/write the identical constant independently rather than sharing an import across the read/write boundary (matching this package's existing convention of one module per direction). */
 const OBJECT_TYPE_NOTE = 0x0019;
 
 const FTCMO_FT = 0x0015;
@@ -26,7 +26,7 @@ const FTCMO_CB = 0x0012;
 const FTNTS_FT = 0x000d;
 const FTNTS_CB = 0x0016;
 
-/** FtCmo ([MS-XLS] 2.5.92, 22 bytes): the common properties every Obj record opens with. Every flag bit beyond ot/id is either a UI concern (locked, default size, printed) this writer has no data for, or explicitly reserved -- so grbit and the three trailing "unused" fields are all written zero. */
+/** FtCmo ([MS-XLS] 2.5.92, 22 bytes): the common properties every Obj record opens with. Every flag bit beyond ot/id is either a UI concern (locked, default size, printed) this writer has no data for, or explicitly reserved — so grbit and the three trailing "unused" fields are all written zero. */
 function writeFtCmo(objId: number): Uint8Array<ArrayBuffer> {
   return new RecordBuilder()
     .u16(FTCMO_FT)
@@ -40,14 +40,14 @@ function writeFtCmo(objId: number): Uint8Array<ArrayBuffer> {
     .build();
 }
 
-/** A pseudo-random 16-byte GUID for FtNts's own comment identifier -- [MS-XLS] requires the field to be present and does not require it to be globally unique across files, only present, so a fresh random value per comment (rather than a fixed or zero one) is what a real producer's own GUID allocation looks like without this package needing a GUID-formatting dependency. Worker-isomorphic: globalThis.crypto is available in both Node and a Cloudflare Workers isolate, unlike Node's own node:crypto module. */
+/** A pseudo-random 16-byte GUID for FtNts's own comment identifier — [MS-XLS] requires the field to be present and does not require it to be globally unique across files, only present, so a fresh random value per comment (rather than a fixed or zero one) is what a real producer's own GUID allocation looks like without this package needing a GUID-formatting dependency. Worker-isomorphic: globalThis.crypto is available in both Node and a Cloudflare Workers isolate, unlike Node's own node:crypto module. */
 function randomGuidBytes(): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(16);
   globalThis.crypto.getRandomValues(bytes);
   return bytes;
 }
 
-/** FtNts ([MS-XLS] 2.5.163... 2.5.b0991167, 26 bytes): the note-specific properties following FtCmo in a comment's own Obj record. fSharedNote is always written clear -- this writer has no shared-comment concept to express. */
+/** FtNts ([MS-XLS] 2.5.163... 2.5.b0991167, 26 bytes): the note-specific properties following FtCmo in a comment's own Obj record. fSharedNote is always written clear — this writer has no shared-comment concept to express. */
 function writeFtNts(): Uint8Array<ArrayBuffer> {
   return new RecordBuilder()
     .u16(FTNTS_FT)
@@ -68,7 +68,7 @@ function writeObjRecordForNote(objId: number): Uint8Array<ArrayBuffer> {
   return writeRecord(RECORD_OBJ, data);
 }
 
-/** TxORuns' own minimal shape for plain, unformatted text ([MS-XLS] 2.5.31cd7d1e/d738ffef/6fb4c0e3): one Run (an all-default FormatRun -- ich 0, ifnt 0 -- plus its own six reserved bytes) followed by the mandatory TxOLastRun sentinel naming cchText again. 16 bytes total, the minimum [MS-XLS]'s own "cbRuns MUST be >= 16 and a multiple of 8" rule allows -- this writer never carries real per-character formatting for a comment's text (workbook/comments.ts's own read side does not model TxORuns either, for the identical reason). */
+/** TxORuns' own minimal shape for plain, unformatted text ([MS-XLS] 2.5.31cd7d1e/d738ffef/6fb4c0e3): one Run (an all-default FormatRun — ich 0, ifnt 0 — plus its own six reserved bytes) followed by the mandatory TxOLastRun sentinel naming cchText again. 16 bytes total, the minimum [MS-XLS]'s own "cbRuns MUST be >= 16 and a multiple of 8" rule allows — this writer never carries real per-character formatting for a comment's text (workbook/comments.ts's own read side does not model TxORuns either, for the identical reason). */
 function writeMinimalTxoRuns(cchText: number): Uint8Array<ArrayBuffer> {
   return new RecordBuilder()
     .u16(0) // Run.formatRun.ich
@@ -84,7 +84,7 @@ function writeMinimalTxoRuns(cchText: number): Uint8Array<ArrayBuffer> {
 const TXO_HALIGN_LEFT = 1;
 const TXO_VALIGN_TOP = 1;
 
-/** TxO ([MS-XLS] 2.4.329) plus the one Continue record carrying its text and formatting-run trailer -- see this module's own top comment for why both text and runs can share a single Continue rather than needing one each. cchText is 0 for an empty comment, in which case [MS-XLS] itself requires cbRuns to be 0 too and no Continue record follows at all. */
+/** TxO ([MS-XLS] 2.4.329) plus the one Continue record carrying its text and formatting-run trailer — see this module's own top comment for why both text and runs can share a single Continue rather than needing one each. cchText is 0 for an empty comment, in which case [MS-XLS] itself requires cbRuns to be 0 too and no Continue record follows at all. */
 function writeTxoRecords(text: string): Uint8Array<ArrayBuffer>[] {
   const cchText = text.length;
   const cbRuns = cchText === 0 ? 0 : 16;
@@ -111,9 +111,9 @@ function writeTxoRecords(text: string): Uint8Array<ArrayBuffer>[] {
 }
 
 /**
- * Note ([MS-XLS] 2.4.179, wrapping a NoteSh structure): the comment's own cell anchor and author, naming the Obj record that carries its text through idObj. fShow/fRwHidden/fColHidden are always written clear -- this writer tracks none of the on-screen display state they carry.
+ * Note ([MS-XLS] 2.4.179, wrapping a NoteSh structure): the comment's own cell anchor and author, naming the Obj record that carries its text through idObj. fShow/fRwHidden/fColHidden are always written clear — this writer tracks none of the on-screen display state they carry.
  *
- * A comment with no recorded author writes stAuthor as an empty string, rather than a non-empty placeholder -- [MS-XLS] 2.5.163 itself documents stAuthor's own length as "MUST be greater than or equal to 1", but this reader (workbook/comments.ts's own readNoteAnchor) only ever promotes a NON-empty stAuthor to ContentSheetCellComment.author, meaning a placeholder would round-trip back as a fabricated author nobody wrote. An empty string is the one spelling that round-trips through this reader as "no author", matching every other lossless-round-trip choice this writer makes in favour of what its own reader reads back over strict textual conformance to a field length rule real producers routinely leave unenforced anyway.
+ * A comment with no recorded author writes stAuthor as an empty string, rather than a non-empty placeholder — [MS-XLS] 2.5.163 itself documents stAuthor's own length as "MUST be greater than or equal to 1", but this reader (workbook/comments.ts's own readNoteAnchor) only ever promotes a NON-empty stAuthor to ContentSheetCellComment.author, meaning a placeholder would round-trip back as a fabricated author nobody wrote. An empty string is the one spelling that round-trips through this reader as "no author", matching every other lossless-round-trip choice this writer makes in favour of what its own reader reads back over strict textual conformance to a field length rule real producers routinely leave unenforced anyway.
  */
 function writeNoteRecord(
   cell: ContentSheetCell,
@@ -132,7 +132,7 @@ function writeNoteRecord(
 
 const MAX_OBJECT_ID = 0xffff;
 
-/** A cell known to carry a comment -- what `writeSheetComments` actually needs, and a stronger contract than `ContentSheetCell` states on its own (`comment` is optional there, since most cells carry none). Narrowing the parameter to this type, rather than accepting any `ContentSheetCell` and throwing on one whose `comment` turned out to be absent, moves the "does this cell actually have a comment" question to the one place -- the caller's own filter -- that can answer it with real information, rather than restating it here as a runtime check nothing can fail without a bug in that caller. */
+/** A cell known to carry a comment — what `writeSheetComments` actually needs, and a stronger contract than `ContentSheetCell` states on its own (`comment` is optional there, since most cells carry none). Narrowing the parameter to this type, rather than accepting any `ContentSheetCell` and throwing on one whose `comment` turned out to be absent, moves the "does this cell actually have a comment" question to the one place — the caller's own filter — that can answer it with real information, rather than restating it here as a runtime check nothing can fail without a bug in that caller. */
 export type CommentedCell = ContentSheetCell & {
   readonly comment: NonNullable<ContentSheetCell["comment"]>;
 };
@@ -145,7 +145,7 @@ export function hasComment(cell: ContentSheetCell): cell is CommentedCell {
 /**
  * Every Note/Obj/TxO record a sheet's own commented cells need, in the order described above.
  *
- * Object ids are assigned sequentially from 1: [MS-XLS] 2.5.92's own FtCmo.id must be unique "among all Obj records within ... Worksheet Substream ABNF", and this writer never emits any other kind of Obj record (no shapes, charts, or form controls yet -- see this package's README), so a per-sheet counter starting at 1 is already unique on its own.
+ * Object ids are assigned sequentially from 1: [MS-XLS] 2.5.92's own FtCmo.id must be unique "among all Obj records within ... Worksheet Substream ABNF", and this writer never emits any other kind of Obj record (no shapes, charts, or form controls yet — see this package's README), so a per-sheet counter starting at 1 is already unique on its own.
  */
 export function writeSheetComments(
   commentedCells: readonly CommentedCell[],

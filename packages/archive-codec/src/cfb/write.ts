@@ -1,10 +1,10 @@
 import type { CompoundFileStream } from "./read";
 
-// The write half of the classic OLE compound-file container ([MS-CFB]): given the same named-stream vocabulary readCompoundFile returns, it emits a conformant compound file -- header, FAT, DIFAT (header array and chained DIFAT sectors), directory entries as genuine red-black sibling trees, and the mini-FAT/mini-stream allocation small streams take. It exists because the family's legacy binary codecs (doc-codec, xls-codec, ppt-codec, wpd-codec) can read their [MS-CFB]-contained formats but cannot produce them: a .doc, .xls, or .ppt writer needs a compound file to put its own binary streams into, and that container is structural knowledge exactly as the reader's is -- sectors, chains, and directory entries, never that any stream is a document (see documents.js#815, #816, #817).
+// The write half of the classic OLE compound-file container ([MS-CFB]): given the same named-stream vocabulary readCompoundFile returns, it emits a conformant compound file — header, FAT, DIFAT (header array and chained DIFAT sectors), directory entries as genuine red-black sibling trees, and the mini-FAT/mini-stream allocation small streams take. It exists because the family's legacy binary codecs (doc-codec, xls-codec, ppt-codec, wpd-codec) can read their [MS-CFB]-contained formats but cannot produce them: a .doc, .xls, or .ppt writer needs a compound file to put its own binary streams into, and that container is structural knowledge exactly as the reader's is — sectors, chains, and directory entries, never that any stream is a document (see documents.js#815, #816, #817).
 //
-// Deliberately the mirror image of readCompoundFile: it takes the array that returns, so writeCompoundFile(readCompoundFile(bytes)) is a well-typed round trip rather than a translation between two vocabularies. Nested storages come with that symmetry -- the reader emits slash-joined paths for streams inside storages, so a writer that could not accept one would not be able to re-write what its own package had just read, even though no legacy-format codec needs nesting for its own streams.
+// Deliberately the mirror image of readCompoundFile: it takes the array that returns, so writeCompoundFile(readCompoundFile(bytes)) is a well-typed round trip rather than a translation between two vocabularies. Nested storages come with that symmetry — the reader emits slash-joined paths for streams inside storages, so a writer that could not accept one would not be able to re-write what its own package had just read, even though no legacy-format codec needs nesting for its own streams.
 //
-// Size, and why only one ceiling is checked. The header's own DIFAT array names 109 FAT sectors, which for version 3 covers 6.875 MB ([MS-CFB] 2.5) -- a limit a real .doc or .xls passes routinely, so chained DIFAT sectors are written rather than a size cap being imposed. What remains is the version 3 per-stream ceiling of 0x80000000 bytes, which is checked and throws, because past it the 64-bit stream-size field would need its high half and the spec forbids that in a version 3 file. The format's own sector-number ceiling (MAXREGSECT, 0xFFFFFFFA) is not checked because it cannot be reached: at the smallest sector size it stands for roughly 2 TB, and this writer builds the file in one Uint8Array, whose own allocation limit is orders of magnitude lower and fails loudly on its own.
+// Size, and why only one ceiling is checked. The header's own DIFAT array names 109 FAT sectors, which for version 3 covers 6.875 MB ([MS-CFB] 2.5) — a limit a real .doc or .xls passes routinely, so chained DIFAT sectors are written rather than a size cap being imposed. What remains is the version 3 per-stream ceiling of 0x80000000 bytes, which is checked and throws, because past it the 64-bit stream-size field would need its high half and the spec forbids that in a version 3 file. The format's own sector-number ceiling (MAXREGSECT, 0xFFFFFFFA) is not checked because it cannot be reached: at the smallest sector size it stands for roughly 2 TB, and this writer builds the file in one Uint8Array, whose own allocation limit is orders of magnitude lower and fails loudly on its own.
 
 // [MS-CFB] 2.3 special FAT values, and 2.6.1's sibling/child terminator. Restated here rather than imported from ./read: the reader keeps them private, and a writer that shared a mutable module-level surface with the reader would couple the two halves for no gain beyond four constants.
 const ENDOFCHAIN = 0xfffffffe;
@@ -12,7 +12,7 @@ const FREESECT = 0xffffffff;
 const FATSECT = 0xfffffffd;
 const DIFSECT = 0xfffffffc;
 const NOSTREAM = 0xffffffff;
-// A FREESECT is four 0xFF bytes, so filling a byte range with this is filling it with FREESECT entries -- which is how every FAT, mini-FAT, and DIFAT region below starts out, and how the spec's requirement that entries past the end of the file read FREESECT is met without a second pass over the tail.
+// A FREESECT is four 0xFF bytes, so filling a byte range with this is filling it with FREESECT entries — which is how every FAT, mini-FAT, and DIFAT region below starts out, and how the spec's requirement that entries past the end of the file read FREESECT is met without a second pass over the tail.
 const FREESECT_FILL_BYTE = FREESECT & 0xff;
 // [MS-CFB] 2.2: the header is 512 bytes whatever the sector size, and its own DIFAT array names the first 109 FAT sectors.
 const HEADER_DIFAT_ENTRIES = 109;
@@ -20,7 +20,7 @@ const HEADER_DIFAT_OFFSET = 0x4c;
 // [MS-CFB] 2.6.1: every directory entry is exactly 128 bytes, and its name field holds at most 32 UTF-16 code points including the terminating null.
 const DIRECTORY_ENTRY_SIZE = 128;
 const MAX_NAME_CODE_UNITS = 31;
-// [MS-CFB] 2.2: the mini sector size is fixed at 2^6, and the cutoff MUST be written as 0x00001000 -- a stream at or above it is allocated from the FAT, below it from the mini FAT.
+// [MS-CFB] 2.2: the mini sector size is fixed at 2^6, and the cutoff MUST be written as 0x00001000 — a stream at or above it is allocated from the FAT, below it from the mini FAT.
 const MINI_SECTOR_SHIFT = 6;
 const MINI_SECTOR_SIZE = 1 << MINI_SECTOR_SHIFT;
 const MINI_STREAM_CUTOFF = 0x1000;
@@ -30,14 +30,14 @@ const OBJECT_TYPE_STREAM = 2;
 const OBJECT_TYPE_ROOT = 5;
 const COLOUR_RED = 0;
 const COLOUR_BLACK = 1;
-// The first directory entry's name is not load-bearing -- readers reach the entry by its position and its type-5 object type -- but "Root Entry" is what every producer writes and what an inspecting human expects to see.
+// The first directory entry's name is not load-bearing — readers reach the entry by its position and its type-5 object type — but "Root Entry" is what every producer writes and what an inspecting human expects to see.
 const ROOT_ENTRY_NAME = "Root Entry";
 // [MS-CFB] 2.6.1: a version 3 file's stream size MUST be at most 0x80000000, so the high half of the 64-bit size field is always zero there. Version 4 has no such ceiling.
 const MAX_VERSION_3_STREAM_BYTES = 0x80000000;
 // [MS-CFB] 2.6.1: '/' cannot reach a name at all, since this API spells storage nesting with it; the other three are rejected here.
 const ILLEGAL_NAME_CHARACTERS = ["\\", ":", "!"] as const;
 
-// Thrown when the streams a caller asked to write cannot be expressed as a conformant compound file: an illegal or over-long name, an empty path segment, or two siblings whose names collide under the format's own case-insensitive ordering. A distinct class from the reader's CompoundFileFormatError because the two describe opposite failures -- that one says the bytes handed in are malformed, this one says the request is unwritable -- and a consumer that catches one has no business swallowing the other.
+// Thrown when the streams a caller asked to write cannot be expressed as a conformant compound file: an illegal or over-long name, an empty path segment, or two siblings whose names collide under the format's own case-insensitive ordering. A distinct class from the reader's CompoundFileFormatError because the two describe opposite failures — that one says the bytes handed in are malformed, this one says the request is unwritable — and a consumer that catches one has no business swallowing the other.
 export class CompoundFileWriteError extends Error {
   constructor(message: string) {
     super(message);
@@ -75,7 +75,7 @@ function objectTypeOf(entry: PlannedEntry): number {
   return isStorage(entry.node) ? OBJECT_TYPE_STORAGE : OBJECT_TYPE_STREAM;
 }
 
-// One directory entry under construction. Its name, type, and content are fixed when the path tree is built; its sibling links and colour are filled in by the red-black construction, and its sector and size once the layout is known -- three passes over one object rather than three parallel arrays indexed by entry id.
+// One directory entry under construction. Its name, type, and content are fixed when the path tree is built; its sibling links and colour are filled in by the red-black construction, and its sector and size once the layout is known — three passes over one object rather than three parallel arrays indexed by entry id.
 interface PlannedEntry {
   readonly id: number;
   readonly node: TreeNode;
@@ -100,7 +100,7 @@ function upperCodeUnit(value: string, index: number): number {
   return upper.length === 1 ? upper.charCodeAt(0) : unit;
 }
 
-// The [MS-CFB] 2.6.4 sorting relationship: a shorter name is less than a longer one, and equal-length names compare by uppercased UTF-16 code point. Length is compared as the code-unit count rather than the Directory Entry Name Length field the spec names, because that field is exactly (code units + 1) * 2 -- a strictly increasing function of the same quantity, so the two orderings are identical. Names that compare equal are the same name to the format, which is why this doubles as the sibling-uniqueness test. Walks left.split("") rather than a `for` loop bound by left.length: since both strings are already known equal-length here, an out-of-range comparison one iteration too long would compare charCodeAt(left.length) against itself on both sides (NaN against NaN, by construction identical), an equivalent mutant no input could ever distinguish -- split("") has no such bound to mismeasure in the first place, and .every's own short-circuit on returning false reproduces the early-return-on-first-difference behavior.
+// The [MS-CFB] 2.6.4 sorting relationship: a shorter name is less than a longer one, and equal-length names compare by uppercased UTF-16 code point. Length is compared as the code-unit count rather than the Directory Entry Name Length field the spec names, because that field is exactly (code units + 1) * 2 — a strictly increasing function of the same quantity, so the two orderings are identical. Names that compare equal are the same name to the format, which is why this doubles as the sibling-uniqueness test. Walks left.split("") rather than a `for` loop bound by left.length: since both strings are already known equal-length here, an out-of-range comparison one iteration too long would compare charCodeAt(left.length) against itself on both sides (NaN against NaN, by construction identical), an equivalent mutant no input could ever distinguish — split("") has no such bound to mismeasure in the first place, and .every's own short-circuit on returning false reproduces the early-return-on-first-difference behavior.
 function compareEntryNames(left: string, right: string): number {
   if (left.length !== right.length) {
     return left.length - right.length;
@@ -174,14 +174,14 @@ function addStream(
   }
 }
 
-// The depth of the deepest node in the balanced tree linkSiblings builds over `count` siblings. Each recursion halves the sibling count, so the deepest node sits at floor(log2(count)) -- computed by bit length rather than Math.log2, which is a float operation whose rounding at exact powers of two would silently mis-colour a whole level. Exported for direct testing: its sole call site is deepestDepth(children.length), and when children.length is genuinely 0 (an empty storage, e.g. writeCompoundFile([])'s own root), linkSiblings returns undefined before ever reading the `deepest` argument at all -- so that one real call site can never observe whether count === 0 is handled correctly.
+// The depth of the deepest node in the balanced tree linkSiblings builds over `count` siblings. Each recursion halves the sibling count, so the deepest node sits at floor(log2(count)) — computed by bit length rather than Math.log2, which is a float operation whose rounding at exact powers of two would silently mis-colour a whole level. Exported for direct testing: its sole call site is deepestDepth(children.length), and when children.length is genuinely 0 (an empty storage, e.g. writeCompoundFile([])'s own root), linkSiblings returns undefined before ever reading the `deepest` argument at all — so that one real call site can never observe whether count === 0 is handled correctly.
 export function deepestDepth(count: number): number {
   return count === 0 ? 0 : 31 - Math.clz32(count);
 }
 
 // Builds one storage's sibling red-black tree over its already-sorted children, returning its root, and satisfies every [MS-CFB] 2.6.4 constraint by construction rather than by rebalancing: splitting a sorted list at its midpoint gives a binary search tree whose nodes sit at depths 0..D for D = floor(log2 n) and whose empty positions sit at depths no shallower than floor(log2(n+1)) >= D, so colouring exactly the depth-D nodes red makes every root-to-leaf path carry D + 1 black nodes (a path reaching depth D + 1 does so only through a red node, which adds none) with no two reds adjacent (reds share only black parents at depth D - 1) and a black root (depth 0 is red only when D is 0, the lone-sibling case, which is coloured black instead).
 //
-// The spec permits the degenerate all-black colouring, and readers that only traverse would accept a right-sibling chain too -- but a chain is not a search tree, so a reader that binary-searches the siblings by name (which is what the tree is for) would fail to find entries in one. Building the balanced tree costs nothing here and is the shape real producers emit.
+// The spec permits the degenerate all-black colouring, and readers that only traverse would accept a right-sibling chain too — but a chain is not a search tree, so a reader that binary-searches the siblings by name (which is what the tree is for) would fail to find entries in one. Building the balanced tree costs nothing here and is the shape real producers emit.
 function linkSiblings(
   siblings: readonly PlannedEntry[],
   depth: number,
@@ -207,7 +207,7 @@ interface DirectoryPlan {
   readonly plans: readonly PlannedEntry[];
 }
 
-// Assigns directory entry ids and sibling trees. Ids run breadth-first with each storage's children in the format's own name order, so the directory a caller gets back depends only on the set of paths, never on the order they were supplied in -- two callers building the same file from differently ordered lists produce identical bytes. The walk is iterative because storage nesting depth is whatever the caller's paths say it is, and a deep path must not become a deep call stack.
+// Assigns directory entry ids and sibling trees. Ids run breadth-first with each storage's children in the format's own name order, so the directory a caller gets back depends only on the set of paths, never on the order they were supplied in — two callers building the same file from differently ordered lists produce identical bytes. The walk is iterative because storage nesting depth is whatever the caller's paths say it is, and a deep path must not become a deep call stack.
 function planDirectory(root: StorageNode): DirectoryPlan {
   const plans: PlannedEntry[] = [];
   const plan = (node: TreeNode): PlannedEntry => {
@@ -259,12 +259,12 @@ export function exceedsVersion3StreamCeiling(
   return majorVersion === 3 && byteLength > MAX_VERSION_3_STREAM_BYTES;
 }
 
-// [MS-CFB] 2.6.1: the directory entry's stream-size field is a 64-bit little-endian quantity split across two 32-bit words; this is the high word (the low 32 bits, `size >>> 0`, need no such helper -- that operator has no other numeric reading a mutant could quietly substitute). Exported for direct testing against plain numbers for the same reason as exceedsVersion3StreamCeiling above: proving this arithmetic holds would otherwise need constructing and writing an actual 4 GiB+ stream.
+// [MS-CFB] 2.6.1: the directory entry's stream-size field is a 64-bit little-endian quantity split across two 32-bit words; this is the high word (the low 32 bits, `size >>> 0`, need no such helper — that operator has no other numeric reading a mutant could quietly substitute). Exported for direct testing against plain numbers for the same reason as exceedsVersion3StreamCeiling above: proving this arithmetic holds would otherwise need constructing and writing an actual 4 GiB+ stream.
 export function highSizeWord(size: number): number {
   return Math.floor(size / 4294967296);
 }
 
-// Writes the streams as a compound file. Version 3 (512-byte sectors) unless options say otherwise. Throws CompoundFileWriteError when the request itself cannot be expressed -- an illegal name, an empty path segment, colliding siblings, or a version 3 stream past the 2 GB the format allows one -- rather than emitting a file that only looks valid.
+// Writes the streams as a compound file. Version 3 (512-byte sectors) unless options say otherwise. Throws CompoundFileWriteError when the request itself cannot be expressed — an illegal name, an empty path segment, colliding siblings, or a version 3 stream past the 2 GB the format allows one — rather than emitting a file that only looks valid.
 export function writeCompoundFile(
   streams: readonly CompoundFileStream[],
   options: WriteCompoundFileOptions = {},
@@ -288,7 +288,7 @@ export function writeCompoundFile(
   }
   const { rootPlan, plans } = planDirectory(root);
 
-  // Streams split by the header's own cutoff: at or above it a stream gets whole FAT-chained sectors, below it a run of 64-byte mini sectors carved out of the root entry's own stream. A zero-length stream takes neither -- it has no chain at all, and its starting sector is meaningless ([MS-CFB] 2.6.1). Each partition carries its bytes alongside its entry, so the emission passes below never have to re-narrow a storage back out of a list that by construction holds only streams.
+  // Streams split by the header's own cutoff: at or above it a stream gets whole FAT-chained sectors, below it a run of 64-byte mini sectors carved out of the root entry's own stream. A zero-length stream takes neither — it has no chain at all, and its starting sector is meaningless ([MS-CFB] 2.6.1). Each partition carries its bytes alongside its entry, so the emission passes below never have to re-narrow a storage back out of a list that by construction holds only streams.
   const miniResident: ResidentStream[] = [];
   const fatResident: ResidentStream[] = [];
   for (const entry of plans) {
@@ -342,12 +342,12 @@ export function writeCompoundFile(
           entriesPerFatSector,
       ),
     );
-    // No neededFat <= HEADER_DIFAT_ENTRIES guard: HEADER_DIFAT_ENTRIES (109) is smaller than difatEntriesPerSector (127 for 512-byte sectors, 1023 for 4096-byte) for every sector size this writer supports, so whenever neededFat is genuinely at or under 109, (neededFat - HEADER_DIFAT_ENTRIES) is a negative number whose magnitude never reaches difatEntriesPerSector -- Math.ceil of that is always 0 (or -0, numerically identical) regardless, exactly the value the guard's own true branch spelled out a second time. Math.max(0, ...) makes that "never negative" invariant explicit rather than leaving it to a subtle cancellation between two magic numbers, and steers clear of -0 ever surfacing.
+    // No neededFat <= HEADER_DIFAT_ENTRIES guard: HEADER_DIFAT_ENTRIES (109) is smaller than difatEntriesPerSector (127 for 512-byte sectors, 1023 for 4096-byte) for every sector size this writer supports, so whenever neededFat is genuinely at or under 109, (neededFat - HEADER_DIFAT_ENTRIES) is a negative number whose magnitude never reaches difatEntriesPerSector — Math.ceil of that is always 0 (or -0, numerically identical) regardless, exactly the value the guard's own true branch spelled out a second time. Math.max(0, ...) makes that "never negative" invariant explicit rather than leaving it to a subtle cancellation between two magic numbers, and steers clear of -0 ever surfacing.
     const neededDifat = Math.max(
       0,
       Math.ceil((neededFat - HEADER_DIFAT_ENTRIES) / difatEntriesPerSector),
     );
-    // No `&& neededDifat === difatSectorCount` half to this check: difatSectorCount only ever gets set, a few lines below, to neededDifat computed from that same round's neededFat -- so difatSectorCount === g(fatSectorCount) is an invariant this loop maintains from its very first iteration (0 === g(1) initially, and every subsequent round re-establishes it by construction). The moment neededFat matches fatSectorCount, neededDifat = g(neededFat) = g(fatSectorCount), which by the invariant already equals difatSectorCount -- so the second comparison could never once observe a mismatch the first didn't already rule out.
+    // No `&& neededDifat === difatSectorCount` half to this check: difatSectorCount only ever gets set, a few lines below, to neededDifat computed from that same round's neededFat — so difatSectorCount === g(fatSectorCount) is an invariant this loop maintains from its very first iteration (0 === g(1) initially, and every subsequent round re-establishes it by construction). The moment neededFat matches fatSectorCount, neededDifat = g(neededFat) = g(fatSectorCount), which by the invariant already equals difatSectorCount — so the second comparison could never once observe a mismatch the first didn't already rule out.
     if (neededFat === fatSectorCount) {
       break;
     }
@@ -416,7 +416,7 @@ export function writeCompoundFile(
     }
   };
 
-  // The FAT describes its own sectors and the DIFAT's with role markers rather than chaining them ([MS-CFB] 2.3, 2.5); everything else is a chain. Both loops walk Array.from's own bounded index list rather than a hand-written comparison: an off-by-one here would mark one sector past its own region, but that sector is always the very first one the next region's own chain-writing call (the DIFAT loop below, or directoryStart's chainSectors when there is no DIFAT region at all) writes right afterwards -- so a stray extra iteration here is invisible in the finished file regardless, and removing the comparison removes the mutation opportunity along with it.
+  // The FAT describes its own sectors and the DIFAT's with role markers rather than chaining them ([MS-CFB] 2.3, 2.5); everything else is a chain. Both loops walk Array.from's own bounded index list rather than a hand-written comparison: an off-by-one here would mark one sector past its own region, but that sector is always the very first one the next region's own chain-writing call (the DIFAT loop below, or directoryStart's chainSectors when there is no DIFAT region at all) writes right afterwards — so a stray extra iteration here is invisible in the finished file regardless, and removing the comparison removes the mutation opportunity along with it.
   for (const i of Array.from({ length: fatSectorCount }, (_unused, n) => n)) {
     setFat(i, FATSECT);
   }
@@ -436,7 +436,7 @@ export function writeCompoundFile(
   }
   for (let sector = 0; sector < difatSectorCount; sector++) {
     const base = sectorOffset(difatStart + sector);
-    // Walks Array.from's own bounded index list rather than a hand-written comparison: an off-by-one running one slot past difatEntriesPerSector would write into the exact byte offset (base + difatEntriesPerSector * 4) the unconditional terminator write below writes to next, for this same sector -- so a stray extra iteration here is always overwritten immediately afterwards regardless, and removing the comparison removes the mutation opportunity along with it.
+    // Walks Array.from's own bounded index list rather than a hand-written comparison: an off-by-one running one slot past difatEntriesPerSector would write into the exact byte offset (base + difatEntriesPerSector * 4) the unconditional terminator write below writes to next, for this same sector — so a stray extra iteration here is always overwritten immediately afterwards regardless, and removing the comparison removes the mutation opportunity along with it.
     for (const i of Array.from(
       { length: difatEntriesPerSector },
       (_unused, n) => n,
@@ -492,7 +492,7 @@ export function writeCompoundFile(
     const base = entryOffset(entry.id);
     const node = entry.node;
     const name = node.name;
-    // Walks Array.from's own bounded index list, by UTF-16 code unit (matching name.length, unlike code-point iteration which would miscount a surrogate pair) rather than a hand-written comparison: an off-by-one would write one code unit past the real name, but MAX_NAME_CODE_UNITS guarantees at least two zero bytes of gap remain there before the length field at 0x40 regardless, already zero from the allocation -- the extra write, charCodeAt() returning NaN past the string's own length and putU16 coercing that to 0 per DataView.setUint16's own ToUint16 semantics, changes nothing, so there is no comparison left here for a mutation to alter.
+    // Walks Array.from's own bounded index list, by UTF-16 code unit (matching name.length, unlike code-point iteration which would miscount a surrogate pair) rather than a hand-written comparison: an off-by-one would write one code unit past the real name, but MAX_NAME_CODE_UNITS guarantees at least two zero bytes of gap remain there before the length field at 0x40 regardless, already zero from the allocation — the extra write, charCodeAt() returning NaN past the string's own length and putU16 coercing that to 0 per DataView.setUint16's own ToUint16 semantics, changes nothing, so there is no comparison left here for a mutation to alter.
     for (const i of Array.from({ length: name.length }, (_unused, n) => n)) {
       putU16(base + i * 2, name.charCodeAt(i));
     }
@@ -503,7 +503,7 @@ export function writeCompoundFile(
     putU32(base + 0x44, entry.left);
     putU32(base + 0x48, entry.right);
     putU32(base + 0x4c, entry.child);
-    // CLSID (0x50), state bits (0x60), creation time (0x64), and modified time (0x6c) stay zero: [MS-CFB] 2.6.1 requires that of a stream entry and of the root's timestamps, and an implementation that does not let callers set a storage's class or state bits MUST default them to zero -- which is exactly this one, since none of it survives a round trip through the stream vocabulary this writer takes.
+    // CLSID (0x50), state bits (0x60), creation time (0x64), and modified time (0x6c) stay zero: [MS-CFB] 2.6.1 requires that of a stream entry and of the root's timestamps, and an implementation that does not let callers set a storage's class or state bits MUST default them to zero — which is exactly this one, since none of it survives a round trip through the stream vocabulary this writer takes.
     putU32(base + 0x74, entry.startSector);
     putU32(base + 0x78, entry.size >>> 0);
     putU32(base + 0x7c, highSizeWord(entry.size));
@@ -527,7 +527,7 @@ export function writeCompoundFile(
   putU16(0x1c, 0xfffe); // byte order mark: little-endian
   putU16(0x1e, sectorShift);
   putU16(0x20, MINI_SECTOR_SHIFT);
-  // The directory-sector count MUST be zero in a version 3 file -- the field is unsupported there -- and carries the real count in version 4.
+  // The directory-sector count MUST be zero in a version 3 file — the field is unsupported there — and carries the real count in version 4.
   putU32(0x28, majorVersion === 3 ? 0 : directorySectorCount);
   putU32(0x2c, fatSectorCount);
   putU32(0x30, directoryStart);

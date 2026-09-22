@@ -14,7 +14,7 @@ function assertWordprocessingTree(
   expect(tree.kind).toBe('wordprocessing');
 }
 
-// Proves document-schema.js's Zod schemas and helpers parse inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. The package is pure Zod by design -- no node:fs, no Buffer, no process -- and zod is isomorphic, so if any schema (or its zod dependency) touched a Node-only API the workerd isolate would throw rather than these passing. This is the runtime complement to the static node test suite.
+// Proves document-schema.js's Zod schemas and helpers parse inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. The package is pure Zod by design — no node:fs, no Buffer, no process — and zod is isomorphic, so if any schema (or its zod dependency) touched a Node-only API the workerd isolate would throw rather than these passing. This is the runtime complement to the static node test suite.
 describe('document-schema.js under the Cloudflare Workers runtime', () => {
   it('ContentDocumentSchema parses a minimal wordprocessing document', () => {
     const document = {
@@ -128,7 +128,7 @@ describe('document-schema.js under the Cloudflare Workers runtime', () => {
   });
 
   // The package boundary is the one part of the published surface that is behaviour rather than schema, so it needs the same runtime proof: it walks and rebuilds plain objects with no platform API at all, and running the whole assemble/mint/flatten round trip here turns that from a design claim into a workerd-executed fact.
-  it('runs the flat/tree transform end to end -- decompose, mint, and flatten back -- inside the isolate', () => {
+  it('runs the flat/tree transform end to end — decompose, mint, and flatten back — inside the isolate', () => {
     const content = {
       kind: 'wordprocessing',
       metadata: {},

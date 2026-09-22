@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Downloads this package's gitignored genuine-Word corpus under test/corpus/word/, ready for `pnpm test:corpus`. Every file is a real document saved by Microsoft Word itself -- the producer this package's reader had never been checked against before this corpus existed -- drawn from Apache POI's public test-data set (itself assembled from attachments to real bug reports and, for two files, from public university and orchestra websites). Provenance is verified per file, not assumed, at two tiers: the download must match the sha256 recorded here, the WordDocument stream must open with the 0xA5EC signature every Word Binary File carries, and the effective nFib ([MS-DOC] 2.5.1's "Determining the nFib" rule) must equal the version this manifest records; on top of that, every file stating a producer in this manifest must have the "\x05SummaryInformation" stream's own application-name property say so -- "Microsoft Word 8.0"/"9.0"/"10.0" for the era-explicit files, "Microsoft Office Word" with a .dot template for Word 2003, and "Microsoft Office Word" with a .dotm template for the one Word-2007-or-later compatibility save. The one file whose stream carries no application name at all is recorded at the nFib-only tier and flagged in its own origin note. A file failing any check fails the fetch loudly rather than landing in the corpus unverified. Run from the package root after a build: `pnpm build && node scripts/fetch-word-corpus.mjs` (requires network; writes test/corpus/word/ wholesale, leaving scripts/generate-corpus.mjs's own output beside it untouched).
+// Downloads this package's gitignored genuine-Word corpus under test/corpus/word/, ready for `pnpm test:corpus`. Every file is a real document saved by Microsoft Word itself — the producer this package's reader had never been checked against before this corpus existed — drawn from Apache POI's public test-data set (itself assembled from attachments to real bug reports and, for two files, from public university and orchestra websites). Provenance is verified per file, not assumed, at two tiers: the download must match the sha256 recorded here, the WordDocument stream must open with the 0xA5EC signature every Word Binary File carries, and the effective nFib ([MS-DOC] 2.5.1's "Determining the nFib" rule) must equal the version this manifest records; on top of that, every file stating a producer in this manifest must have the "\x05SummaryInformation" stream's own application-name property say so — "Microsoft Word 8.0"/"9.0"/"10.0" for the era-explicit files, "Microsoft Office Word" with a .dot template for Word 2003, and "Microsoft Office Word" with a .dotm template for the one Word-2007-or-later compatibility save. The one file whose stream carries no application name at all is recorded at the nFib-only tier and flagged in its own origin note. A file failing any check fails the fetch loudly rather than landing in the corpus unverified. Run from the package root after a build: `pnpm build && node scripts/fetch-word-corpus.mjs` (requires network; writes test/corpus/word/ wholesale, leaving scripts/generate-corpus.mjs's own output beside it untouched).
 import { createHash } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -147,7 +147,7 @@ const MANIFEST = [
   {
     file: "ListEntryNoListTable.doc",
     origin:
-      "Apache POI test-data (bug-report attachment); a list whose entries reference a list definition beyond the document's PlfLfo -- the shape the issue naming it tracked",
+      "Apache POI test-data (bug-report attachment); a list whose entries reference a list definition beyond the document's PlfLfo — the shape the issue naming it tracked",
     producer: { nFib: 0x00d9, appName: "Microsoft Word 9.0" },
     sha256: "bf4b76eeefad70e4ea104f20e6e38ded976a7a95595a650c05a8845def106dcc",
     expect: { sections: 1, needles: ["Coucou"] },
@@ -155,7 +155,7 @@ const MANIFEST = [
   {
     file: "o_kurs.doc",
     origin:
-      "Apache POI test-data (bug-report attachment); a Russian coursework title page. Every body paragraph carries sprmPFInTable with no cell or row mark anywhere -- the not-a-table shape this package now degrades to paragraphs. Carries no \\x05SummaryInformation stream at all, so its producer evidence is its nFib alone (the weaker tier this manifest records where present)",
+      "Apache POI test-data (bug-report attachment); a Russian coursework title page. Every body paragraph carries sprmPFInTable with no cell or row mark anywhere — the not-a-table shape this package now degrades to paragraphs. Carries no \\x05SummaryInformation stream at all, so its producer evidence is its nFib alone (the weaker tier this manifest records where present)",
     producer: { nFib: 0x00d9 },
     sha256: "fd87d25008e5daad8ede2e17976250b1f2dd519102f32135af0a29cbf0789685",
     expect: { sections: 1, needles: ["ВЫСШАЯ КОММЕРЧЕСКАЯ ШКОЛА", "Москва"] },
@@ -210,7 +210,7 @@ const MANIFEST = [
   {
     file: "vector_image.doc",
     origin:
-      "Apache POI test-data (bug-report attachment); an anchored vector drawing -- the reader drops the unsupported blip and keeps the paragraph, which is the documented degrade this pins",
+      "Apache POI test-data (bug-report attachment); an anchored vector drawing — the reader drops the unsupported blip and keeps the paragraph, which is the documented degrade this pins",
     producer: { nFib: 0x0101, appName: "Microsoft Word 10.0" },
     sha256: "747eb4c44a9ff7ac646f267fad6d4006b596a8beaec211fe27cb67f018800850",
     expect: { sections: 1, needles: [] },
@@ -254,7 +254,7 @@ const MANIFEST = [
   {
     file: "Bug61268.doc",
     origin:
-      "Apache POI test-data (attachment to POI issue 61268); a 3GPP technical report whose seven-column history tables close their rows through sprmPHugePapx -- the indirect row-mark spelling this package now resolves",
+      "Apache POI test-data (attachment to POI issue 61268); a 3GPP technical report whose seven-column history tables close their rows through sprmPHugePapx — the indirect row-mark spelling this package now resolves",
     producer: {
       nFib: 0x0112,
       appName: "Microsoft Office Word",
@@ -368,7 +368,7 @@ async function fetchVerified(entry) {
   }
   peekFibBaseFlags(wordDocument.bytes);
   parseFib(wordDocument.bytes);
-  // The effective nFib per [MS-DOC]'s own "Determining the nFib" rule: FibBase.nFib when cswNew is 0, FibRgCswNew.nFibNew otherwise -- computed from the raw stream because parseFib surfaces only the base value.
+  // The effective nFib per [MS-DOC]'s own "Determining the nFib" rule: FibBase.nFib when cswNew is 0, FibRgCswNew.nFibNew otherwise — computed from the raw stream because parseFib surfaces only the base value.
   const wd = wordDocument.bytes;
   const view = new DataView(wd.buffer, wd.byteOffset, wd.byteLength);
   const cbRgFcLcb = view.getUint16(152, true);
@@ -412,7 +412,7 @@ async function fetchVerified(entry) {
   return bytes;
 }
 
-// The corpus harness: reads each verified file through this package's own reader and asserts the manifest's expectations against the recovered ContentDocument. Generated by the fetch script alongside the files -- the whole test/corpus/ layer is local-only by the family's convention, and this script plus its embedded manifest is the committed source of truth.
+// The corpus harness: reads each verified file through this package's own reader and asserts the manifest's expectations against the recovered ContentDocument. Generated by the fetch script alongside the files — the whole test/corpus/ layer is local-only by the family's convention, and this script plus its embedded manifest is the committed source of truth.
 const CORPUS_TEST = `import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";

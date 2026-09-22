@@ -2682,7 +2682,7 @@ They are the same functions, published by the package that owns both encodings.
 
 * a tree-form package is the only accepted input shape.
 * onDocument and ConversionResult.package carry the tree-form
-DocumentPackage of schema 4.0.0 -- children hold the decomposed groups and the
+DocumentPackage of schema 4.0.0 — children hold the decomposed groups and the
 minted styles table instead of the flat content envelope.
 * LAYOUT_FORMAT_VERSION and the Layout* item types re-export
 from pdf-codec; layoutDocumentWithSchema and LayoutDocumentJson no longer exist.

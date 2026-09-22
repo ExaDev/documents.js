@@ -3,11 +3,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-// Guards the read-only entry's module graph (#582's regression test): everything statically reachable from src/convert/from-pdf.ts (the documents.js/read entry) must exclude every X-to-PDF renderer and therefore every vendored font asset, so a consumer that only converts FROM pdf never bundles the write path it cannot execute -- on Cloudflare Workers' free plan (3 MB gzipped for an entire Worker) that is most of the budget. Like pdf-codec's own src/read-graph.test.ts, the check is a static walk over source import statements rather than an esbuild/rolldown metafile, because the package carries no bundler dependency and tsdown compiles src/ module-for-module -- the source import graph is the shipped dist import graph.
+// Guards the read-only entry's module graph (#582's regression test): everything statically reachable from src/convert/from-pdf.ts (the documents.js/read entry) must exclude every X-to-PDF renderer and therefore every vendored font asset, so a consumer that only converts FROM pdf never bundles the write path it cannot execute — on Cloudflare Workers' free plan (3 MB gzipped for an entire Worker) that is most of the budget. Like pdf-codec's own src/read-graph.test.ts, the check is a static walk over source import statements rather than an esbuild/rolldown metafile, because the package carries no bundler dependency and tsdown compiles src/ module-for-module — the source import graph is the shipped dist import graph.
 //
-// The walk crosses the workspace boundary into pdf-codec's own src/: 'pdf-codec/read' resolves through that package's real exports map (read from its package.json at test time, so the test follows exactly what a bundler follows) onto src/read.ts, and relative imports inside pdf-codec keep walking from there. This is what makes the check end-to-end honest: a documents.js module that value-imports the pdf-codec ROOT barrel pulls pdf-codec's src/index.ts into the walk, whose own font-registry/math-font imports then fail the test -- the write path cannot sneak back in through any edge. Other bare specifiers (document-schema.js, ooxml.js, odf.js, markdown-codec, byte-codec, zod, fflate) terminate the walk: none of those packages vendors font assets, so the invariant under test has nothing to say about their graphs.
+// The walk crosses the workspace boundary into pdf-codec's own src/: 'pdf-codec/read' resolves through that package's real exports map (read from its package.json at test time, so the test follows exactly what a bundler follows) onto src/read.ts, and relative imports inside pdf-codec keep walking from there. This is what makes the check end-to-end honest: a documents.js module that value-imports the pdf-codec ROOT barrel pulls pdf-codec's src/index.ts into the walk, whose own font-registry/math-font imports then fail the test — the write path cannot sneak back in through any edge. Other bare specifiers (document-schema.js, ooxml.js, odf.js, markdown-codec, byte-codec, zod, fflate) terminate the walk: none of those packages vendors font assets, so the invariant under test has nothing to say about their graphs.
 //
-// Type-only statements ('import type' / 'export type') are skipped because tsdown erases them -- a type import adds zero runtime graph weight, which is what lets read-side modules keep typing against pdf-codec's root barrel while their runtime graph stays narrow.
+// Type-only statements ('import type' / 'export type') are skipped because tsdown erases them — a type import adds zero runtime graph weight, which is what lets read-side modules keep typing against pdf-codec's root barrel while their runtime graph stays narrow.
 
 const SRC_DIR = fileURLToPath(new URL("./", import.meta.url));
 const PDF_CODEC_ROOT = join(SRC_DIR, "..", "..", "pdf-codec");
@@ -59,7 +59,7 @@ function resolvePdfCodecSpecifier(specifier: string): string {
   return sourceTarget;
 }
 
-// Resolves an extensionless relative specifier to its ts source file, failing loudly on anything the walk cannot resolve -- a silently skipped edge would silently skip whatever it reaches.
+// Resolves an extensionless relative specifier to its ts source file, failing loudly on anything the walk cannot resolve — a silently skipped edge would silently skip whatever it reaches.
 function resolveRelativeSpecifier(fromFile: string, specifier: string): string {
   const base = join(dirname(fromFile), specifier);
   const asFile = `${base}.ts`;
@@ -85,7 +85,7 @@ function resolveSpecifier(fromFile: string, specifier: string): string {
   return "";
 }
 
-// Extracts a module's runtime import edges from its source text: comment-stripped source minus type-only statements, then every remaining specifier in one of the three runtime import forms -- `from '...'` (named, default, and re-export statements all end in one), bare `import '...'` (side-effect), and `import('...')` with a string-literal specifier (dynamic, but a bundler still ships the target). Comment stripping comes first because this codebase's module comments quote specifiers in prose and a prose mention must never count as an edge. A dynamic import with a computed (non-literal) specifier is not statically walkable by any means this test has; none exists in this package.
+// Extracts a module's runtime import edges from its source text: comment-stripped source minus type-only statements, then every remaining specifier in one of the three runtime import forms — `from '...'` (named, default, and re-export statements all end in one), bare `import '...'` (side-effect), and `import('...')` with a string-literal specifier (dynamic, but a bundler still ships the target). Comment stripping comes first because this codebase's module comments quote specifiers in prose and a prose mention must never count as an edge. A dynamic import with a computed (non-literal) specifier is not statically walkable by any means this test has; none exists in this package.
 function runtimeImportSpecifiers(source: string): readonly string[] {
   const withoutComments = source
     .replace(/\/\*[\s\S]*?\*\//g, "")
@@ -168,7 +168,7 @@ function chainTo(
   return chain.map(displayPath).join(" -> ");
 }
 
-// The modules whose reachability from the read entry is the defect #582 describes, all inside pdf-codec (the only package in the graph that vendors font assets): the write entry itself, the two modules that eagerly import the vendored fonts at module scope, and the asset modules those pull in. Everything else on the write side is caught transitively -- it reaches one of these, most often through pdf-codec's root barrel. Two documents.js-side modules are named too (#744): the both-directions codec registry (src/codecs/registry.ts, whose write halves import writePdf from the pdf-codec root barrel) and the composition engine's write half (src/convert/composition-to-pdf.ts, home of every X-to-PDF renderer binding), so a regression that pulls either in fails with the offending chain named directly rather than only through whatever pdf-codec module they drag along.
+// The modules whose reachability from the read entry is the defect #582 describes, all inside pdf-codec (the only package in the graph that vendors font assets): the write entry itself, the two modules that eagerly import the vendored fonts at module scope, and the asset modules those pull in. Everything else on the write side is caught transitively — it reaches one of these, most often through pdf-codec's root barrel. Two documents.js-side modules are named too (#744): the both-directions codec registry (src/codecs/registry.ts, whose write halves import writePdf from the pdf-codec root barrel) and the composition engine's write half (src/convert/composition-to-pdf.ts, home of every X-to-PDF renderer binding), so a regression that pulls either in fails with the offending chain named directly rather than only through whatever pdf-codec module they drag along.
 function isForbidden(module: string): boolean {
   const pdfRelative = module.startsWith(PDF_CODEC_ROOT)
     ? module.slice(PDF_CODEC_ROOT.length + 1)
@@ -220,7 +220,7 @@ describe("the documents.js/read entry module graph excludes every X-to-PDF rende
     expect(
       readDocumentMetadata("pdf", docxToPdf(minimalDocxBytes())).producer,
     ).toBe("documents.js");
-  }, 60_000); // A real docxToPdf conversion plus a metadata read, timed out at almost exactly vitest's default 10s ceiling under CI/local contention (measured 10008-10016ms wall clock, but only ~5.5s of combined user+system CPU time -- 19% average utilization) rather than any genuine slowness in the code under test: a clean re-run of the identical, unmodified test with no timeout override completed in ~28s wall clock for that same ~5.5s of real work (ExaDev/documents.js#1039). Raised well past every observed contended run, the same "wall-clock dominated by scheduling, not this test's own CPU work" shape already documented for document-outline.js's UNIT_TEST_TIMEOUT_MS (ExaDev/documents.js#997/#1030) and this file's own sibling ODS mergeCells test (ExaDev/documents.js#1037).
+  }, 60_000); // A real docxToPdf conversion plus a metadata read, timed out at almost exactly vitest's default 10s ceiling under CI/local contention (measured 10008-10016ms wall clock, but only ~5.5s of combined user+system CPU time — 19% average utilization) rather than any genuine slowness in the code under test: a clean re-run of the identical, unmodified test with no timeout override completed in ~28s wall clock for that same ~5.5s of real work (ExaDev/documents.js#1039). Raised well past every observed contended run, the same "wall-clock dominated by scheduling, not this test's own CPU work" shape already documented for document-outline.js's UNIT_TEST_TIMEOUT_MS (ExaDev/documents.js#997/#1030) and this file's own sibling ODS mergeCells test (ExaDev/documents.js#1037).
 
   it("the package.json ./read export maps onto the read entry, pinning documents.js/read", () => {
     const parsed: unknown = JSON.parse(
@@ -232,7 +232,7 @@ describe("the documents.js/read entry module graph excludes every X-to-PDF rende
       !isRecord(parsed.exports["./read"])
     ) {
       throw new Error(
-        "read-graph guard: package.json exports has no ./read entry -- the read-only entry point must stay declared, not just wildcard-reachable",
+        "read-graph guard: package.json exports has no ./read entry — the read-only entry point must stay declared, not just wildcard-reachable",
       );
     }
     expect(parsed.exports["./read"].import).toBe("./dist/convert/from-pdf.js");

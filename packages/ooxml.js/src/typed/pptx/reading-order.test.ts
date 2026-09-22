@@ -21,7 +21,7 @@ function shape(
   };
 }
 
-// The names in reading order -- read back off the `readingOrder` ranks, since the array itself is
+// The names in reading order — read back off the `readingOrder` ranks, since the array itself is
 // deliberately returned in document order.
 const order = (shapes: ContentShape[]): (string | undefined)[] =>
   [...assignReadingOrder(shapes)]
@@ -71,7 +71,7 @@ describe("assignReadingOrder", () => {
   });
 
   it("breaks an EXACT tie between the two axes' relative gaps in favour of rows", () => {
-    // A symmetric grid (square boxes, an identical gap on both axes) makes the column ratio and row ratio come out exactly equal, not merely close -- a >= comparison would wrongly treat this as "columns win" and read down each column first, producing r1c1, r2c1, r1c2, r2c2 instead.
+    // A symmetric grid (square boxes, an identical gap on both axes) makes the column ratio and row ratio come out exactly equal, not merely close — a >= comparison would wrongly treat this as "columns win" and read down each column first, producing r1c1, r2c1, r1c2, r2c2 instead.
     const shapes = [
       shape("r1c1", 0, 0, 100, 100),
       shape("r1c2", 150, 0, 100, 100),
@@ -93,7 +93,7 @@ describe("assignReadingOrder", () => {
   });
 
   it("recurses into each row, so a row's own internal columns are ordered within that row", () => {
-    // Each row's own two shapes overlap slightly in y (a right-hand shape a touch higher than its left-hand neighbour), so a flat sort of the whole set by y would read right-before-left within a row -- only cutting each row out FIRST, then ordering left-to-right inside it, gets this right.
+    // Each row's own two shapes overlap slightly in y (a right-hand shape a touch higher than its left-hand neighbour), so a flat sort of the whole set by y would read right-before-left within a row — only cutting each row out FIRST, then ordering left-to-right inside it, gets this right.
     const shapes = [
       shape("r1-right", 300, 40, 100, 100),
       shape("r1-left", 0, 50, 100, 100),
@@ -110,7 +110,7 @@ describe("assignReadingOrder", () => {
   });
 
   it("computes an axis's extent as its true span, not the sum of its earliest start and latest end", () => {
-    // x stays near zero (so a start+end sum barely differs from a real end-start span there), while y is pushed far from zero -- large enough that summing y's own start and end, instead of subtracting, shrinks the vertical ratio to near nothing. The horizontal and vertical gaps are otherwise identical, so the correct (subtracting) computation ties them and breaks the tie in favour of rows; a summing bug would instead make the corrupted vertical ratio lose outright, flipping the result to columns.
+    // x stays near zero (so a start+end sum barely differs from a real end-start span there), while y is pushed far from zero — large enough that summing y's own start and end, instead of subtracting, shrinks the vertical ratio to near nothing. The horizontal and vertical gaps are otherwise identical, so the correct (subtracting) computation ties them and breaks the tie in favour of rows; a summing bug would instead make the corrupted vertical ratio lose outright, flipping the result to columns.
     const shapes = [
       shape("r1c1", 0, 100000, 100, 100),
       shape("r1c2", 150, 100000, 100, 100),
@@ -160,7 +160,7 @@ describe("assignReadingOrder", () => {
   });
 
   it("does not treat two shapes touching exactly at a shared boundary as a gap", () => {
-    // X and Y share a boundary on the vertical axis with zero space between them (X ends at y=100 exactly where Y starts) -- a real gap requires a strictly positive distance, not merely non-overlap, or this touching pair would wrongly be split into two separate rows before Z's own genuine gap is even considered. Grouped correctly as one row, [X, Y] recurses and finds a genuine horizontal gap between them, reading Y (left) before X (right); split incorrectly into two rows, they would instead read in their row order, X then Y.
+    // X and Y share a boundary on the vertical axis with zero space between them (X ends at y=100 exactly where Y starts) — a real gap requires a strictly positive distance, not merely non-overlap, or this touching pair would wrongly be split into two separate rows before Z's own genuine gap is even considered. Grouped correctly as one row, [X, Y] recurses and finds a genuine horizontal gap between them, reading Y (left) before X (right); split incorrectly into two rows, they would instead read in their row order, X then Y.
     const shapes = [
       shape("x", 100, 0, 100, 100),
       shape("y", 0, 100, 50, 50),
@@ -171,14 +171,14 @@ describe("assignReadingOrder", () => {
   });
 
   it("measures a gap as the true distance between shapes, not their start plus the reach before them", () => {
-    // Vertically, A sits a mere 10pt below a very tall preceding reach (1000pt), so summing start and reach instead of subtracting would inflate that gap into easily the largest ratio in the whole comparison -- wrongly making rows the winning axis even though the real vertical gap is tiny next to the real horizontal one. A is placed above-right and B below-left so that choosing the wrong axis (rows, sorted top to bottom) reverses their order from the correct one (columns, sorted left to right).
+    // Vertically, A sits a mere 10pt below a very tall preceding reach (1000pt), so summing start and reach instead of subtracting would inflate that gap into easily the largest ratio in the whole comparison — wrongly making rows the winning axis even though the real vertical gap is tiny next to the real horizontal one. A is placed above-right and B below-left so that choosing the wrong axis (rows, sorted top to bottom) reverses their order from the correct one (columns, sorted left to right).
     const shapes = [shape("a", 0, 1010, 50, 40), shape("b", 80, 0, 50, 1000)];
 
     expect(order(shapes)).toEqual(["a", "b"]);
   });
 
   it("measures an axis's extent from its true earliest start, not its latest one", () => {
-    // extentAlong spans from the EARLIEST start to the latest end; substituting the latest start for the earliest one shrinks the denominator of whichever ratio it feeds. Here the two columns sit only 50pt apart -- a modest gap next to the genuine 240pt-tall extent real code measures -- so the real vertical ratio (from the tall lists) beats the real horizontal one and rows win, reading each heading immediately before its own list. Using the latest start instead collapses the vertical extent down to the last shape's own 150pt height, inflating that ratio past the horizontal one and flipping the cut to columns, which would instead read both headings before either list.
+    // extentAlong spans from the EARLIEST start to the latest end; substituting the latest start for the earliest one shrinks the denominator of whichever ratio it feeds. Here the two columns sit only 50pt apart — a modest gap next to the genuine 240pt-tall extent real code measures — so the real vertical ratio (from the tall lists) beats the real horizontal one and rows win, reading each heading immediately before its own list. Using the latest start instead collapses the vertical extent down to the last shape's own 150pt height, inflating that ratio past the horizontal one and flipping the cut to columns, which would instead read both headings before either list.
     const shapes = [
       shape("left-heading", 0, 0, 100, 40),
       shape("right-heading", 150, 0, 100, 40),

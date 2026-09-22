@@ -19,7 +19,7 @@ function enc(value: number): number[] {
   return value >= -107 && value <= 107 ? [value + 139] : csInt16(value);
 }
 
-// Runs a font built with exactly one glyph (glyph 0) and returns its ink bounds -- the common shape every hand-built charstring-interpreter test below drives.
+// Runs a font built with exactly one glyph (glyph 0) and returns its ink bounds — the common shape every hand-built charstring-interpreter test below drives.
 function boundsOfOnlyGlyph(bytes: Uint8Array<ArrayBuffer>) {
   const bounds = parseCffGlyphBounds(bytes);
   if (bounds === undefined) {
@@ -28,7 +28,7 @@ function boundsOfOnlyGlyph(bytes: Uint8Array<ArrayBuffer>) {
   return bounds.bounds(0);
 }
 
-// Every bounding box asserted below was cross-checked against fontTools 4.61.1's own BoundsPen run over the same vendored assets/fonts/STIXTwoMath-Regular.otf -- an independent, mature implementation of the same computation, not this package's own output re-asserted against itself. That comparison was run across the font's whole 5543-glyph repertoire while building this module: every glyph matched to within 0.01 design units, and every glyph fontTools reported as drawing nothing this module reports as `undefined`.
+// Every bounding box asserted below was cross-checked against fontTools 4.61.1's own BoundsPen run over the same vendored assets/fonts/STIXTwoMath-Regular.otf — an independent, mature implementation of the same computation, not this package's own output re-asserted against itself. That comparison was run across the font's whole 5543-glyph repertoire while building this module: every glyph matched to within 0.01 design units, and every glyph fontTools reported as drawing nothing this module reports as `undefined`.
 //
 // The font's nominal vertical metrics, for the "tighter than the metric it replaces" assertions: unitsPerEm 1000, hhea ascent 762, hhea descent -238.
 const UNITS_PER_EM = 1000;
@@ -234,7 +234,7 @@ describe("CFF programs parseCffGlyphBounds refuses to walk", () => {
   });
 });
 
-// Every charstring below is hand-written specifically to reach an interpreter limit or a malformed-input path in execute()/executeEscaped(): the vendored STIX Two Math font is a well-formed program from a real font toolchain, so none of these ever arise from walking it -- a subroutine nesting past the spec's own limit, an operator count run away by a degenerate charstring, an operand stack overrun, a truncated hintmask, a reserved operator byte, and a call to a subroutine that does not exist are all things a real font's own charstrings simply never do.
+// Every charstring below is hand-written specifically to reach an interpreter limit or a malformed-input path in execute()/executeEscaped(): the vendored STIX Two Math font is a well-formed program from a real font toolchain, so none of these ever arise from walking it — a subroutine nesting past the spec's own limit, an operator count run away by a degenerate charstring, an operand stack overrun, a truncated hintmask, a reserved operator byte, and a call to a subroutine that does not exist are all things a real font's own charstrings simply never do.
 describe("parseCffGlyphBounds's charstring interpreter, driven by hand-built charstrings", () => {
   const OP_CALLSUBR = 10;
   const OP_CALLGSUBR = 29;
@@ -262,7 +262,7 @@ describe("parseCffGlyphBounds's charstring interpreter, driven by hand-built cha
   });
 
   it("refuses a glyph whose own operator count runs past the per-glyph ceiling", () => {
-    // One CharString of MAX_OPERATIONS_PER_GLYPH + 1 repetitions of a single-byte, zero-operand hstem: each is individually well-formed (an hstem with no operand pairs declares zero stems), so only the sheer repetition count -- never a malformed byte -- is what trips the ceiling.
+    // One CharString of MAX_OPERATIONS_PER_GLYPH + 1 repetitions of a single-byte, zero-operand hstem: each is individually well-formed (an hstem with no operand pairs declares zero stems), so only the sheer repetition count — never a malformed byte — is what trips the ceiling.
     const runaway = new Array<number>(MAX_OPERATIONS_PER_GLYPH + 1).fill(
       OP_HSTEM,
     );
@@ -286,7 +286,7 @@ describe("parseCffGlyphBounds's charstring interpreter, driven by hand-built cha
   });
 
   it("refuses a hintmask whose own mask bytes run past the end of the charstring", () => {
-    // Two operand bytes declare one implicit vstem (hintmask's own leading-vstem-list rule), so the mask needs ceil(1/8) = 1 trailing byte -- and this charstring supplies none.
+    // Two operand bytes declare one implicit vstem (hintmask's own leading-vstem-list rule), so the mask needs ceil(1/8) = 1 trailing byte — and this charstring supplies none.
     const truncatedHintmask = [ZERO_OPERAND, ZERO_OPERAND, OP_HINTMASK];
     const bytes = cffFontWithCharstrings({
       name: "TruncatedHintmask",
@@ -328,7 +328,7 @@ describe("parseCffGlyphBounds's charstring interpreter, driven by hand-built cha
   });
 
   it("refuses endchar's own four-argument seac-like accented-character form", () => {
-    // Per this module's own documented scope, endchar's seac-like composition (an accented glyph built from two other glyphs by registry-encoding index) needs the charset and Standard Encoding, neither of which this module reads -- so it reports the glyph as undefined rather than guessing.
+    // Per this module's own documented scope, endchar's seac-like composition (an accented glyph built from two other glyphs by registry-encoding index) needs the charset and Standard Encoding, neither of which this module reads — so it reports the glyph as undefined rather than guessing.
     const seacLike = [
       ZERO_OPERAND,
       ZERO_OPERAND,
@@ -351,7 +351,7 @@ describe("parseCffGlyphBounds's charstring interpreter, driven by hand-built cha
         [...enc(5), OP_HLINETO, ...enc(999), OP_ENDCHAR], // draw, then a single width-only operand ahead of endchar
       ],
     });
-    // If width-shifting were broken, endchar's own arity check would see 1 leftover operand and treat it identically to the seac case's own boundary -- this must draw successfully instead.
+    // If width-shifting were broken, endchar's own arity check would see 1 leftover operand and treat it identically to the seac case's own boundary — this must draw successfully instead.
     expect(boundsOfOnlyGlyph(bytes)).toEqual({
       xMin: 0,
       yMin: 0,
@@ -381,7 +381,7 @@ describe("parseCffGlyphBounds's charstring interpreter, driven by hand-built cha
   });
 
   it("draws normally through a real Local Subrs INDEX reached via callsubr", () => {
-    // The mirror image of the two refusal cases above: a genuine, present, in-range local subroutine that draws a single line, called from the glyph's own charstring -- proof callsubr's success path (not just its failure paths) is exercised directly, without relying on the vendored font's own subroutine usage.
+    // The mirror image of the two refusal cases above: a genuine, present, in-range local subroutine that draws a single line, called from the glyph's own charstring — proof callsubr's success path (not just its failure paths) is exercised directly, without relying on the vendored font's own subroutine usage.
     const OP_HLINETO = 6;
     const DX_100 = 100 + 139; // the single-byte small-integer encoding of 100 (bias 139)
     const lineSubr = [DX_100, OP_HLINETO]; // dx=100 hlineto: draws from (0,0) to (100,0)
@@ -416,12 +416,12 @@ describe("parseCffGlyphBounds's charstring interpreter, driven by hand-built cha
         ],
       ],
     });
-    // Draws nothing (only stems and an endchar), so the only observable difference from a malformed charstring is that this one parses to a defined-but-empty result rather than undefined -- proving the hintmask's own byte-consumption arithmetic didn't run past or short of the charstring.
+    // Draws nothing (only stems and an endchar), so the only observable difference from a malformed charstring is that this one parses to a defined-but-empty result rather than undefined — proving the hintmask's own byte-consumption arithmetic didn't run past or short of the charstring.
     expect(boundsOfOnlyGlyph(bytes)).toBeUndefined();
   });
 
   it("switches a Local Subrs INDEX from the small to the medium subroutine bias exactly at a count of 1240 entries", () => {
-    // subrBias (TN 5177 section 16, "Subrs INDEX bias"): count < 1240 biases by 107, count < 33900 biases by 1131. A callsubr operand is stored as (real index - bias), so calling subroutine 0 needs an operand of exactly -bias -- getting the bias wrong for a given count makes callsubr resolve a different (or out-of-range) subroutine entirely, which is exactly what distinguishes the two branches here.
+    // subrBias (TN 5177 section 16, "Subrs INDEX bias"): count < 1240 biases by 107, count < 33900 biases by 1131. A callsubr operand is stored as (real index - bias), so calling subroutine 0 needs an operand of exactly -bias — getting the bias wrong for a given count makes callsubr resolve a different (or out-of-range) subroutine entirely, which is exactly what distinguishes the two branches here.
     const OP_HLINETO = 6;
     const DX_100 = 100 + 139; // the single-byte small-integer encoding of 100 (bias 139)
     const lineSubr = [DX_100, OP_HLINETO]; // draws from (0,0) to (100,0)
@@ -444,7 +444,7 @@ describe("parseCffGlyphBounds's charstring interpreter, driven by hand-built cha
     });
     expect(boundsOfOnlyGlyph(atThreshold)).toEqual(drawnBounds);
 
-    // The 1240-entry font's own charstring, reinterpreted against the SMALL bias instead of MEDIUM, resolves to a wildly out-of-range subroutine index and so must fail to draw -- confirming the atThreshold case above is actually pinned on the bias switching, not merely on 1240 entries happening to still work under either bias.
+    // The 1240-entry font's own charstring, reinterpreted against the SMALL bias instead of MEDIUM, resolves to a wildly out-of-range subroutine index and so must fail to draw — confirming the atThreshold case above is actually pinned on the bias switching, not merely on 1240 entries happening to still work under either bias.
     const atThresholdWithWrongOperand = cffFontWithCharstrings({
       name: "SubrBiasMediumWrongOperand",
       charStrings: [[32, OP_CALLSUBR]],
@@ -500,7 +500,7 @@ describe("parseCffGlyphBounds's charstring interpreter: hmoveto/vmoveto, escaped
   const MAX_OPERAND_STACK = 48;
   const MAX_OPERATIONS_PER_GLYPH = 100_000;
 
-  // A chain of `depth` distinct global subroutines, each calling the next, the last one drawing a single horizontal line -- lets a test reach an EXACT nesting depth (rather than only "eventually recurses past the limit", which the self-calling DeepRecursion fixture above already covers) to pin the interpreter's own off-by-one boundary.
+  // A chain of `depth` distinct global subroutines, each calling the next, the last one drawing a single horizontal line — lets a test reach an EXACT nesting depth (rather than only "eventually recurses past the limit", which the self-calling DeepRecursion fixture above already covers) to pin the interpreter's own off-by-one boundary.
   function callChainOfDepth(depth: number): {
     charStrings: number[][];
     globalSubrs: number[][];
@@ -533,7 +533,7 @@ describe("parseCffGlyphBounds's charstring interpreter: hmoveto/vmoveto, escaped
   });
 
   it("draws through exactly MAX_OPERAND_STACK operands cleared by one operator, one short of the overrun this module already refuses", () => {
-    // MAX_OPERAND_STACK single-byte zero operands, THEN a stack-clearing hstem: the stack never exceeds the limit because hstem clears it before another operand is pushed, unlike the StackOverflow fixture above, which never clears the stack at all. A trailing draw after the hstem makes the "succeeds" claim observable -- a glyph that draws nothing reports undefined regardless of whether it was rejected for overflowing or genuinely walked to completion, so only a real box proves the walk actually continued.
+    // MAX_OPERAND_STACK single-byte zero operands, THEN a stack-clearing hstem: the stack never exceeds the limit because hstem clears it before another operand is pushed, unlike the StackOverflow fixture above, which never clears the stack at all. A trailing draw after the hstem makes the "succeeds" claim observable — a glyph that draws nothing reports undefined regardless of whether it was rejected for overflowing or genuinely walked to completion, so only a real box proves the walk actually continued.
     const zeros = new Array<number>(MAX_OPERAND_STACK).fill(139);
     const bytes = cffFontWithCharstrings({
       name: "ExactOperandStack",
@@ -720,7 +720,7 @@ describe("parseCffGlyphBounds's charstring interpreter: hmoveto/vmoveto, escaped
   });
 
   it("finds both of a cubic curve's own interior extrema when the derivative's quadratic has two distinct real roots", () => {
-    // Both axes share control points 0, 30, -30, 0 (an S-shaped overshoot: the curve swings past its own two endpoints in both directions before returning to 0). The derivative's quadratic (a=180, b=-180, c=30) has two real, distinct roots strictly inside (0,1) -- t=0.2113 and t=0.7887 -- giving an exact extremum of +-5*sqrt(3) on each axis, verified independently by dense sampling.
+    // Both axes share control points 0, 30, -30, 0 (an S-shaped overshoot: the curve swings past its own two endpoints in both directions before returning to 0). The derivative's quadratic (a=180, b=-180, c=30) has two real, distinct roots strictly inside (0,1) — t=0.2113 and t=0.7887 — giving an exact extremum of +-5*sqrt(3) on each axis, verified independently by dense sampling.
     const OP_RRCURVETO = 8;
     const bytes = cffFontWithCharstrings({
       name: "CurveTwoRealRoots",
@@ -784,7 +784,7 @@ describe("parseCffGlyphBounds's charstring interpreter: hmoveto/vmoveto, escaped
   });
 
   it("uses parity (evenArgs), not a fixed expected count, to detect a stack-clearing hint operator's own leading width", () => {
-    // 9 zero-width stem pairs (18 operands, even -- no width to shift) registered via hstemhm, followed by a bare hintmask that must consume exactly ceil(9/8)=2 mask bytes. If the width-detection wrongly used "stack.length > 0" instead of parity, it would shift one operand off, leaving 17 (8 stems, ceil(8/8)=1 mask byte) -- desyncing the byte stream, so the hlineto that follows would be misread and the draw would fail instead of producing this exact box.
+    // 9 zero-width stem pairs (18 operands, even — no width to shift) registered via hstemhm, followed by a bare hintmask that must consume exactly ceil(9/8)=2 mask bytes. If the width-detection wrongly used "stack.length > 0" instead of parity, it would shift one operand off, leaving 17 (8 stems, ceil(8/8)=1 mask byte) — desyncing the byte stream, so the hlineto that follows would be misread and the draw would fail instead of producing this exact box.
     const pairs18 = new Array<number>(18).fill(139); // 9 zero-width stem pairs
     const bytes = cffFontWithCharstrings({
       name: "HstemWidthParity",
@@ -852,7 +852,7 @@ describe("parseCffGlyphBounds's charstring interpreter: hmoveto/vmoveto, escaped
   });
 
   it("treats an rcurveline stack too short to reserve its own trailing line pair as a bare line, not a curve", () => {
-    // 7 operands: not enough to fit a 6-argument curve AND still reserve 2 for the mandatory trailing line, so the whole stack is read as just the trailing line -- the first two operands only, the other five ignored.
+    // 7 operands: not enough to fit a 6-argument curve AND still reserve 2 for the mandatory trailing line, so the whole stack is read as just the trailing line — the first two operands only, the other five ignored.
     const bytes = cffFontWithCharstrings({
       name: "RcurvelineShortStack",
       charStrings: [
@@ -920,7 +920,7 @@ describe("parseCffGlyphBounds's charstring interpreter: hmoveto/vmoveto, escaped
   });
 
   it("propagates a failure from deeper in the charstring even after this glyph has already drawn something", () => {
-    // Each of these draws a line first (box.drawn becomes true), then hits a failure that must still make the WHOLE glyph undefined -- proving the failure genuinely propagates rather than being masked by the box already having content, which is exactly the difference a `return true` in place of the interpreter's own `return false` would hide.
+    // Each of these draws a line first (box.drawn becomes true), then hits a failure that must still make the WHOLE glyph undefined — proving the failure genuinely propagates rather than being masked by the box already having content, which is exactly the difference a `return true` in place of the interpreter's own `return false` would hide.
     const drawFirst = [...enc(5), ...enc(0), OP_HLINETO];
 
     const emptyCallsubrStack = cffFontWithCharstrings({
@@ -1113,7 +1113,7 @@ describe("parseCffGlyphBounds's charstring interpreter: hmoveto/vmoveto, escaped
   });
 
   it("draws the flex1 operator (escape 12 37), whose own final delta applies to whichever axis moved further", () => {
-    // The five leading deltas move further in x (30 total) than in y (4 total), so the last delta (d6) applies to x and y returns exactly to its own start -- the branch a wrong Math.abs comparison would swap for its opposite.
+    // The five leading deltas move further in x (30 total) than in y (4 total), so the last delta (d6) applies to x and y returns exactly to its own start — the branch a wrong Math.abs comparison would swap for its opposite.
     const bytes = cffFontWithCharstrings({
       name: "Flex1",
       charStrings: [

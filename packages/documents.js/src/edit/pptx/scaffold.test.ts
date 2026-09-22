@@ -161,7 +161,7 @@ describe("createEmptyPptxPackage", () => {
     ).toBe("ppt/slideMasters/slideMaster1.xml");
   });
 
-  // p:notesSz is required alongside p:sldSz per CT_Presentation, even before any slide ever uses speaker notes -- confirmed present in every real PowerPoint/Keynote-authored presentation.xml.
+  // p:notesSz is required alongside p:sldSz per CT_Presentation, even before any slide ever uses speaker notes — confirmed present in every real PowerPoint/Keynote-authored presentation.xml.
   it("declares a US-Letter-portrait p:notesSz", () => {
     const pkg = createEmptyPptxPackage();
     const root = rootElement(pkg.parts["ppt/presentation.xml"]);

@@ -81,7 +81,7 @@ describe("layoutMetadataToSummaryInformation", () => {
     expect(info).not.toHaveProperty("language");
   });
 
-  it("does not validate createdIso/modifiedIso as real dates -- that is each caller's own responsibility", () => {
+  it("does not validate createdIso/modifiedIso as real dates — that is each caller's own responsibility", () => {
     const metadata: LayoutMetadata = { createdIso: "not-a-real-date" };
     expect(() => layoutMetadataToSummaryInformation(metadata)).not.toThrow();
     expect(layoutMetadataToSummaryInformation(metadata).createdIso).toBe(

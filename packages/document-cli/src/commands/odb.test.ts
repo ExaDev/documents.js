@@ -20,7 +20,7 @@ import {
 } from "../runtime/exit-codes";
 import { FORM_AND_REPORT_ODB_PATH } from "../test-support/odb-fixture";
 
-// A DocxTable/OdtTable structural shape, not either concrete class -- both expose the identical rows()/cells()/cell.text surface (see documents.js's own README, "src/edit/" architecture entry: OdpShape and friends reuse OdtParagraph/OdtTable wholesale), so one helper reads a rendered report's own printed-band content back out of either format.
+// A DocxTable/OdtTable structural shape, not either concrete class — both expose the identical rows()/cells()/cell.text surface (see documents.js's own README, "src/edit/" architecture entry: OdpShape and friends reuse OdtParagraph/OdtTable wholesale), so one helper reads a rendered report's own printed-band content back out of either format.
 interface CellTextTable {
   rows(): readonly { cells(): readonly { readonly text: string }[] }[];
 }
@@ -31,7 +31,7 @@ function allTableCellText(tables: readonly CellTextTable[]): string[] {
   );
 }
 
-// Drives the real assembled commander program against the real `.odb` fixture (see test-support/odb-fixture.ts), not the formatting functions in isolation -- that half is covered by src/odb-structure.test.ts. What this file proves is the wiring: that `odb-forms`/`odb-reports` are registered under those names, that each reads and decodes a genuine .odb through odf.js's decodePackage rather than documents.js's OOXML same-named function, that the structure reaches stdout, and that `--json` emits parseable JSON of the same structure. `createProgram()` never parses argv or exits by itself (see program.ts), so calling `parseAsync` here is the whole command path minus the bin's own process wiring.
+// Drives the real assembled commander program against the real `.odb` fixture (see test-support/odb-fixture.ts), not the formatting functions in isolation — that half is covered by src/odb-structure.test.ts. What this file proves is the wiring: that `odb-forms`/`odb-reports` are registered under those names, that each reads and decodes a genuine .odb through odf.js's decodePackage rather than documents.js's OOXML same-named function, that the structure reaches stdout, and that `--json` emits parseable JSON of the same structure. `createProgram()` never parses argv or exits by itself (see program.ts), so calling `parseAsync` here is the whole command path minus the bin's own process wiring.
 
 // Commander's action sets `process.exitCode` on the real process; a command that failed would otherwise leave a non-zero code behind and fail the whole vitest run for reasons unrelated to any assertion here.
 let savedExitCode: typeof process.exitCode;
@@ -80,7 +80,7 @@ beforeEach(() => {
 
 afterEach(() => {
   process.exitCode = savedExitCode;
-  // Every real runOdb* call registers its own SIGINT listener via createRuntimeSignal and never removes it -- harmless for a real one-shot CLI process, but this file alone now drives enough real invocations in one vitest worker to cross Node's default MaxListeners (10) and print a warning straight to the captured stderr some of the tests above assert is empty (the same fix outline.test.ts already applies for the identical reason).
+  // Every real runOdb* call registers its own SIGINT listener via createRuntimeSignal and never removes it — harmless for a real one-shot CLI process, but this file alone now drives enough real invocations in one vitest worker to cross Node's default MaxListeners (10) and print a warning straight to the captured stderr some of the tests above assert is empty (the same fix outline.test.ts already applies for the identical reason).
   process.removeAllListeners("SIGINT");
 });
 
@@ -311,12 +311,12 @@ describe("odb-forms", () => {
     expect(stderr).toBe("");
     expect(exitCode).toBe(EXIT_SUCCESS);
     expect(stdout).toContain(
-      "SalesForm [forms/Obj11] -- 1 form, 6 controls (5 bound)",
+      "SalesForm [forms/Obj11] — 1 form, 6 controls (5 bound)",
     );
     expect(stdout).toContain('form SalesForm on table "SALES"');
     expect(stdout).toContain("form:text txtCustomer -> CUSTOMER");
     expect(stdout).toContain("form:listbox lstQuarter -> QUARTER");
-    // The sub-form sits on a saved query rather than on its parent's table -- the one structural fact a form reader is most likely to flatten away.
+    // The sub-form sits on a saved query rather than on its parent's table — the one structural fact a form reader is most likely to flatten away.
     expect(stdout).toContain(
       'subform HighValueSubForm on query "HighValueSales"',
     );
@@ -351,7 +351,7 @@ describe("odb-reports", () => {
     expect(stderr).toBe("");
     expect(exitCode).toBe(EXIT_SUCCESS);
     expect(stdout).toContain(
-      'SalesByRegion [reports/Obj11] -- on query "HighValueSales", 2 groups, 13 elements',
+      'SalesByRegion [reports/Obj11] — on query "HighValueSales", 2 groups, 13 elements',
     );
     expect(stdout).toContain('data source: query "HighValueSales"');
     expect(stdout).toContain('report-header "Report Header"');
@@ -534,7 +534,7 @@ describe("odb-render-report", () => {
       output,
     ]);
 
-    // Not asserted empty: unlike odb-forms/odb-reports/odb-tables above, this command follows buildConversionAction's own convention of a one-line stderr summary on success (wrote N bytes ...) -- see the `wrote` assertion below.
+    // Not asserted empty: unlike odb-forms/odb-reports/odb-tables above, this command follows buildConversionAction's own convention of a one-line stderr summary on success (wrote N bytes ...) — see the `wrote` assertion below.
     expect(stderr).toContain(`wrote`);
     expect(exitCode).toBe(EXIT_SUCCESS);
     const editor = openDocx(new Uint8Array(await readFile(output)));

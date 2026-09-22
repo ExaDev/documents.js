@@ -4,7 +4,7 @@ export function isAsciiWhitespace(byte: number | undefined): boolean {
   return byte !== undefined && ASCII_WHITESPACE_BYTES.has(byte);
 }
 
-// A forward-only cursor over a byte buffer, with explicit mark()/reset() for the backtracking a tokenizer needs -- e.g. the PDF lexer's `N G R` (a reference) vs `N G obj` (an indirect object header) ambiguity, resolved only by trying to read two integers and a keyword, then rewinding if it doesn't match.
+// A forward-only cursor over a byte buffer, with explicit mark()/reset() for the backtracking a tokenizer needs — e.g. the PDF lexer's `N G R` (a reference) vs `N G obj` (an indirect object header) ambiguity, resolved only by trying to read two integers and a keyword, then rewinding if it doesn't match.
 export class ByteReader {
   private readonly bytes: Uint8Array<ArrayBuffer>;
   private position = 0;

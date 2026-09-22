@@ -233,13 +233,13 @@ describe("readJpegInfo: marker padding and scanning", () => {
   });
 
   it("must genuinely skip a non-0xff byte rather than treat its own position as a marker lead-in", () => {
-    // If the non-0xff skip were disabled, position 2 (0xab) would itself be read as if it led a marker: markerOffset=3 lands on 0xc0 (a real SOF0 code, but here just incidental scan bytes), and the encoder would misparse the following junk bytes as a bogus SOF payload -- returning wildly wrong dimensions instead of ever reaching the real, later SOF0 segment.
+    // If the non-0xff skip were disabled, position 2 (0xab) would itself be read as if it led a marker: markerOffset=3 lands on 0xc0 (a real SOF0 code, but here just incidental scan bytes), and the encoder would misparse the following junk bytes as a bogus SOF payload — returning wildly wrong dimensions instead of ever reaching the real, later SOF0 segment.
     const bogusIfMisparsed = [1, 2, 3, 4, 5, 6];
     const jpeg = new Uint8Array([
       0xff,
       0xd8, // SOI
-      0xab, // stray byte -- must be skipped one at a time, not treated as a lead-in
-      0xc0, // NOT preceded by a real 0xff here -- just incidental non-marker bytes
+      0xab, // stray byte — must be skipped one at a time, not treated as a lead-in
+      0xc0, // NOT preceded by a real 0xff here — just incidental non-marker bytes
       0,
       8,
       ...bogusIfMisparsed,
@@ -293,7 +293,7 @@ describe("readJpegInfo: Adobe APP14 transform", () => {
   });
 
   it("never reads an Adobe transform from a non-APP14 marker, even one with a payload at least 14 bytes long", () => {
-    // A DQT (0xdb) segment carrying a 14-byte payload -- the same length threshold APP14 uses -- but the wrong marker code entirely. Only APP14 segments carry an Adobe transform byte.
+    // A DQT (0xdb) segment carrying a 14-byte payload — the same length threshold APP14 uses — but the wrong marker code entirely. Only APP14 segments carry an Adobe transform byte.
     const jpeg = buildJpeg([
       { marker: 0xd8 },
       { marker: 0xdb, payload: app14Payload(2) }, // 14-byte payload, but not APP14

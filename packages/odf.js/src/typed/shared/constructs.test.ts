@@ -210,7 +210,7 @@ describe("odfDivisionDescriptor", () => {
 
   it("resolves a section's own column count only from the exact style matching both family and name", () => {
     const styles = [
-      // right name, wrong family -- must not match
+      // right name, wrong family — must not match
       el(
         "style:style",
         { "style:family": "paragraph", "style:name": "Sect1" },
@@ -220,13 +220,13 @@ describe("odfDivisionDescriptor", () => {
           ]),
         ],
       ),
-      // right family, wrong name -- must not match
+      // right family, wrong name — must not match
       el("style:style", { "style:family": "section", "style:name": "Other" }, [
         el("style:section-properties", {}, [
           el("style:columns", { "fo:column-count": "9" }),
         ]),
       ]),
-      // right family and name -- the real match
+      // right family and name — the real match
       el("style:style", { "style:family": "section", "style:name": "Sect1" }, [
         el("style:section-properties", {}, [
           el("style:columns", { "fo:column-count": "3" }),
@@ -302,7 +302,7 @@ function paragraphWithSiblings(
 }
 
 describe("isContentBearingNode (via odfMarkerHalfEventIndex)", () => {
-  // A half is judged NOT at a paragraph edge (interior) exactly when a genuinely content-bearing sibling precedes it -- so each case below plants exactly one such sibling before the half and checks the half stops qualifying as "leading".
+  // A half is judged NOT at a paragraph edge (interior) exactly when a genuinely content-bearing sibling precedes it — so each case below plants exactly one such sibling before the half and checks the half stops qualifying as "leading".
   const contentBearingBefore: { label: string; sibling: XmlNode }[] = [
     { label: "a non-empty text node", sibling: txt("hi") },
     { label: "a field element", sibling: el("text:date", {}) },
@@ -385,7 +385,7 @@ describe("isContentBearingNode (via odfMarkerHalfEventIndex)", () => {
   });
 
   it("returns undefined when the half's own recorded parent is not the paragraph passed in, even though the half is a genuine child of that other parent", () => {
-    // The half's own recorded parent is a real container that DOES hold it as a child (so a bypassed guard would not accidentally bail out on the later indexOf === -1 check instead) -- only the mismatch against the paragraph argument itself should short-circuit this.
+    // The half's own recorded parent is a real container that DOES hold it as a child (so a bypassed guard would not accidentally bail out on the later indexOf === -1 check instead) — only the mismatch against the paragraph argument itself should short-circuit this.
     const half = el("text:bookmark-start", { "text:name": "b" });
     const other = el("text:p", {}, [half]);
     const marker: OdfMarkerHalf = {
@@ -437,7 +437,7 @@ function half(overrides: Partial<OdfMarkerHalf>): OdfMarkerHalf {
 describe("pairOdfMarkerHalves", () => {
   const paragraph = el("text:p", {});
 
-  // Every start/end half below carries a genuinely RESOLVING descriptor -- so if a bypassed length check let the pairing proceed anyway, it would actually build an extent from starts[0]/ends[0], not merely fall through some other guard (an unresolved descriptor) that would mask the very check under test.
+  // Every start/end half below carries a genuinely RESOLVING descriptor — so if a bypassed length check let the pairing proceed anyway, it would actually build an extent from starts[0]/ends[0], not merely fall through some other guard (an unresolved descriptor) that would mask the very check under test.
   const resolvingDescriptor: RunConstructExtent["descriptor"] = {
     kind: "anchor",
     anchorType: "bookmark",
@@ -597,7 +597,7 @@ function event(overrides: Partial<OdfMarkerEvent>): OdfMarkerEvent {
 }
 
 describe("resolveOdfMarkerEvents", () => {
-  // Every start/end event below carries a genuinely RESOLVING descriptor -- so if a bypassed length check let the pairing proceed anyway, it would actually build an extent from starts[0]/ends[0], not merely fall through some other guard (an unresolved descriptor) that would mask the very check under test.
+  // Every start/end event below carries a genuinely RESOLVING descriptor — so if a bypassed length check let the pairing proceed anyway, it would actually build an extent from starts[0]/ends[0], not merely fall through some other guard (an unresolved descriptor) that would mask the very check under test.
   const resolvingDescriptor: RunConstructExtent["descriptor"] = {
     kind: "anchor",
     anchorType: "bookmark",
@@ -724,7 +724,7 @@ describe("insertOdfConstructMarkers", () => {
       order: 1,
       descriptor: { kind: "division", name: "inner" },
     };
-    // Passed inner-first, deliberately the wrong order, so a real sort is what puts the outer extent ahead of the inner one -- a comparator collapsed to always-equal (a stable sort's no-op) would leave this input order untouched instead.
+    // Passed inner-first, deliberately the wrong order, so a real sort is what puts the outer extent ahead of the inner one — a comparator collapsed to always-equal (a stable sort's no-op) would leave this input order untouched instead.
     const result = insertOdfConstructMarkers(blocks, [inner, outer]);
     // The outer extent (endIndex 1) must open before the inner one (endIndex 0), which itself closes immediately (a point extent) before the outer's own block.
     expect(result).toEqual([
@@ -741,7 +741,7 @@ describe("insertOdfConstructMarkers", () => {
       { kind: "paragraph", runs: [{ text: "a" }] },
       { kind: "paragraph", runs: [{ text: "b" }] },
     ];
-    // A long-running extent starting first but ending LAST, and a short point extent starting second but ending FIRST -- a comparator that fell back to comparing end index (as it would if the start-index clause were dropped from the OR chain) would sort these in the opposite order, and would additionally reject the long extent outright as improperly nested inside the point extent.
+    // A long-running extent starting first but ending LAST, and a short point extent starting second but ending FIRST — a comparator that fell back to comparing end index (as it would if the start-index clause were dropped from the OR chain) would sort these in the opposite order, and would additionally reject the long extent outright as improperly nested inside the point extent.
     const long: OdfConstructExtent = {
       startIndex: 0,
       endIndex: 2,
@@ -1393,7 +1393,7 @@ describe("odfIndexWrapperTag / writeOdfIndexWrapper", () => {
   });
 
   it("really checks for the -source suffix specifically, not merely that the tag has some suffix", () => {
-    // Blindly slicing the last 7 characters off "text:bibliography-sourcX" (a tag that does NOT end in "-source") lands exactly on the real "text:bibliography" wrapper tag -- so a weakened endsWith check that let this through would silently succeed instead of throwing.
+    // Blindly slicing the last 7 characters off "text:bibliography-sourcX" (a tag that does NOT end in "-source") lands exactly on the real "text:bibliography" wrapper tag — so a weakened endsWith check that let this through would silently succeed instead of throwing.
     expect(() =>
       odfIndexWrapperTag(
         descriptorWithSourceXml("<text:bibliography-sourcX/>"),

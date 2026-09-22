@@ -10,7 +10,7 @@ import {
   type ConstructDescriptor,
 } from "./construct";
 
-// Each accepted case below is a real construct from one of the four inventories, spelled with the fields that inventory's own verdict row said the kind has to carry -- not a synthetic minimal object -- so a field quietly dropped from a descriptor fails here rather than at the codec that needed it.
+// Each accepted case below is a real construct from one of the four inventories, spelled with the fields that inventory's own verdict row said the kind has to carry — not a synthetic minimal object — so a field quietly dropped from a descriptor fails here rather than at the codec that needed it.
 
 describe("contentControl accepts the real control shapes the inventories name", () => {
   it("accepts a docx block SDT with its tag, alias, and lock (ooxml.js#65: w:sdtPr alias/tag/lock)", () => {
@@ -102,7 +102,7 @@ describe("contentControl accepts the real control shapes the inventories name", 
     ).toBe(false);
   });
 
-  it("rejects a control with no controlType -- the kind exists to say what kind of control produced the content", () => {
+  it("rejects a control with no controlType — the kind exists to say what kind of control produced the content", () => {
     expect(
       ContentControlDescriptorSchema.safeParse({ kind: "contentControl" })
         .success,
@@ -204,7 +204,7 @@ describe("link carries the target vocabulary a flat run field cannot express", (
     ).toBe(true);
   });
 
-  it("accepts an internal target -- docx @w:anchor, a pptx slide jump, a PDF GoTo//Dest (the one new vocabulary #24 asks for)", () => {
+  it("accepts an internal target — docx @w:anchor, a pptx slide jump, a PDF GoTo//Dest (the one new vocabulary #24 asks for)", () => {
     expect(
       LinkDescriptorSchema.safeParse({
         kind: "link",
@@ -291,7 +291,7 @@ describe("division is the ODF text:section shape, decided first-class rather tha
     ).toBe(true);
   });
 
-  it("accepts a bare division -- every field is optional because only ODF requires a name", () => {
+  it("accepts a bare division — every field is optional because only ODF requires a name", () => {
     expect(
       DivisionDescriptorSchema.safeParse({ kind: "division" }).success,
     ).toBe(true);
@@ -315,7 +315,7 @@ describe("division is the ODF text:section shape, decided first-class rather tha
   });
 
   it("rejects text:filter-name smuggled onto the linked DivisionSource, a DivisionSource smuggled onto source, and a bad-format residue on source", () => {
-    // `linked` is a strict DivisionSource (href/sectionName only -- ODF's own text:filter-name has no home there), `source` is a strict SourceResidue (format/xml only), and neither accepts the other's shape: one name, one fact, on both fields.
+    // `linked` is a strict DivisionSource (href/sectionName only — ODF's own text:filter-name has no home there), `source` is a strict SourceResidue (format/xml only), and neither accepts the other's shape: one name, one fact, on both fields.
     expect(
       DivisionDescriptorSchema.safeParse({
         kind: "division",
@@ -339,7 +339,7 @@ describe("division is the ODF text:section shape, decided first-class rather tha
     ).toBe(false);
   });
 
-  it('is not spelled "section" -- that kind is the page-geometry container descriptor, and one word cannot mean both', () => {
+  it('is not spelled "section" — that kind is the page-geometry container descriptor, and one word cannot mean both', () => {
     expect(
       ConstructDescriptorSchema.safeParse({
         kind: "section",
@@ -397,7 +397,7 @@ describe("the construct descriptor union", () => {
 });
 
 describe("the quarantined residue field on construct descriptors", () => {
-  // A construct with no cross-format analogue degrades to the nearest semantic kind with its format-specific specifics quarantined in residue -- the descriptor IS the construct's node payload, so the descriptor carries the same per-node `source` field every content node carries, and a matched marker pair moves it across the flat/tree boundary untouched (the descriptor object is embedded, never copied). This is the channel reaching the descriptor's node position, not the descriptor-only escape hatch the module header warns against: the field, its shape, and its opacity contract are src/source.ts's, spelt identically everywhere.
+  // A construct with no cross-format analogue degrades to the nearest semantic kind with its format-specific specifics quarantined in residue — the descriptor IS the construct's node payload, so the descriptor carries the same per-node `source` field every content node carries, and a matched marker pair moves it across the flat/tree boundary untouched (the descriptor object is embedded, never copied). This is the channel reaching the descriptor's node position, not the descriptor-only escape hatch the module header warns against: the field, its shape, and its opacity contract are src/source.ts's, spelt identically everywhere.
 
   it("rides on every descriptor kind, including division, riding the flat form inside the constructStart marker's own descriptor payload", () => {
     const residue = {

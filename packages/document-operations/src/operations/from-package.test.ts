@@ -106,7 +106,7 @@ describe("fromPackageOperation", () => {
     editor.body.appendParagraph({ text: "Round trip me." });
     const tree = readNativeDocumentTree("docx", editor.toBytes());
     const dump = documentTreeWithSchema(tree);
-    // A DocumentTree's own kind must be a recognised literal -- corrupting it keeps $schema pointing at a real, current DocumentTree schema (so the version/stem checks all pass) while failing DocumentTreeSchema.parse itself with a genuine ZodError.
+    // A DocumentTree's own kind must be a recognised literal — corrupting it keeps $schema pointing at a real, current DocumentTree schema (so the version/stem checks all pass) while failing DocumentTreeSchema.parse itself with a genuine ZodError.
     const corrupted = { ...dump, kind: "not-a-real-kind" };
 
     const error = await captureRejection(
@@ -143,7 +143,7 @@ describe("fromPackageOperation", () => {
         targetFormat: "docx",
       }),
     ).rejects.toThrow(
-      "'source' is a ContentDocument, not a DocumentTree -- only a file carrying a real DocumentTree (e.g. written by a caller's own --dump-package-equivalent step) can be read back by this operation",
+      "'source' is a ContentDocument, not a DocumentTree — only a file carrying a real DocumentTree (e.g. written by a caller's own --dump-package-equivalent step) can be read back by this operation",
     );
   });
 });

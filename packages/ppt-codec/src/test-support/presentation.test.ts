@@ -61,7 +61,7 @@ import {
   syntheticPresentation,
 } from "./presentation";
 
-// This file is deliberately a fidelity test of the FIXTURE's own bytes, not of anything read.ts observes: several [MS-PPT]/[MS-ODRAW] header fields exercised below (an atom's own recVer, an FBSE's own blip-type instance, a font entity's name, an OfficeArtBStoreContainer's own recInstance count) are real, spec-mandated parts of a genuine PowerPoint binary document that this package's own reader deliberately tolerates a wrong, default, or unset value for -- so a test written only against read.ts's own observable output could never catch a regression in one of them. These assertions instead re-parse the constructed record tree directly, the same way record/header.test.ts pins header bytes directly rather than only through something that consumes them, and check each value against what the spec (and the fixture's own comments) say a real file states.
+// This file is deliberately a fidelity test of the FIXTURE's own bytes, not of anything read.ts observes: several [MS-PPT]/[MS-ODRAW] header fields exercised below (an atom's own recVer, an FBSE's own blip-type instance, a font entity's name, an OfficeArtBStoreContainer's own recInstance count) are real, spec-mandated parts of a genuine PowerPoint binary document that this package's own reader deliberately tolerates a wrong, default, or unset value for — so a test written only against read.ts's own observable output could never catch a regression in one of them. These assertions instead re-parse the constructed record tree directly, the same way record/header.test.ts pins header bytes directly rather than only through something that consumes them, and check each value against what the spec (and the fixture's own comments) say a real file states.
 
 function resolveDocumentContainer(
   currentUserStream: Uint8Array<ArrayBuffer>,
@@ -146,7 +146,7 @@ function resolveSlideContainer(
   );
 }
 
-// The document's own slide list container itself (RT_SlideListWithText, recInstance SLIDES) -- distinct from resolveSlideContainer, which follows its own SlidePersistAtom on to the actual SlideContainer. Needed for fidelity checks against the list's own raw entries (a SlidePersistAtom's cTexts field, an inserted phantom record) rather than anything the slide container holds.
+// The document's own slide list container itself (RT_SlideListWithText, recInstance SLIDES) — distinct from resolveSlideContainer, which follows its own SlidePersistAtom on to the actual SlideContainer. Needed for fidelity checks against the list's own raw entries (a SlidePersistAtom's cTexts field, an inserted phantom record) rather than anything the slide container holds.
 function resolveSlideListRecord(
   currentUserStream: Uint8Array<ArrayBuffer>,
   powerPointDocumentStream: Uint8Array<ArrayBuffer>,
@@ -166,7 +166,7 @@ function resolveSlideListRecord(
   return slideList;
 }
 
-// Recursively asserts no record anywhere beneath `record` has recType 0 -- the header a run of raw zero bytes decodes as. A mutant that splices non-byte content (a string, `undefined`) into a children array this package's own writeContainer/concatBytes then silently coerces to zero bytes is otherwise invisible to any test that only checks the real records' own content, since a handful of zero bytes can decode as one or more harmless, ignored phantom records rather than a parse failure.
+// Recursively asserts no record anywhere beneath `record` has recType 0 — the header a run of raw zero bytes decodes as. A mutant that splices non-byte content (a string, `undefined`) into a children array this package's own writeContainer/concatBytes then silently coerces to zero bytes is otherwise invisible to any test that only checks the real records' own content, since a handful of zero bytes can decode as one or more harmless, ignored phantom records rather than a parse failure.
 function assertNoPhantomRecords(record: PptRecord): void {
   for (const child of childRecords(record)) {
     expect(child.header.recType).not.toBe(0);
@@ -282,7 +282,7 @@ describe("syntheticPresentation's own byte-level fidelity", () => {
     const colorSchemeAtoms = childRecords(masterContainer).filter(
       (record) => record.header.recType === RT_ColorSchemeAtom,
     );
-    // Two "extra" colour schemes (recInstance 0x006), then the real one (recInstance 0x001) -- the spelling a real producer's own master opens with.
+    // Two "extra" colour schemes (recInstance 0x006), then the real one (recInstance 0x001) — the spelling a real producer's own master opens with.
     expect(colorSchemeAtoms.map((record) => record.header.recInstance)).toEqual(
       [0x006, 0x006, 0x001],
     );
@@ -385,7 +385,7 @@ describe("syntheticPresentation's own byte-level fidelity", () => {
     expect(fdggBlocks).toHaveLength(1);
   });
 
-  // [MS-ODRAW] 2.2.32's own fixed 36-byte FBSE head (btWin32, btMacOS, rgbUid, tag, size, cRef, foDelay, three unused bytes, cbName) precedes an embedded blip's own record -- mirrored from blips.ts's own FBSE_FIXED_SIZE, which is not exported since nothing outside that module otherwise needs it.
+  // [MS-ODRAW] 2.2.32's own fixed 36-byte FBSE head (btWin32, btMacOS, rgbUid, tag, size, cRef, foDelay, three unused bytes, cbName) precedes an embedded blip's own record — mirrored from blips.ts's own FBSE_FIXED_SIZE, which is not exported since nothing outside that module otherwise needs it.
   const FBSE_FIXED_SIZE = 36;
 
   it("states each format's own real blip-type instance on the FBSE and the embedded blip record", () => {
@@ -467,7 +467,7 @@ describe("syntheticPresentation's own byte-level fidelity", () => {
       powerPointDocumentStream,
       currentUser.offsetToCurrentEdit,
     );
-    // Every other persist object is RC4-encrypted in place, so reading it as a plain record without decrypting first would parse ciphertext as a bogus header -- the crypt session's own persist ID is the one this package's own reader already knows how to find without decrypting anything, since a decryptor has to read this atom before it knows any key at all.
+    // Every other persist object is RC4-encrypted in place, so reading it as a plain record without decrypting first would parse ciphertext as a bogus header — the crypt session's own persist ID is the one this package's own reader already knows how to find without decrypting anything, since a decryptor has to read this atom before it knows any key at all.
     if (currentEdit.encryptSessionPersistIdRef === undefined) {
       throw new Error(
         "test fixture asked for a password and so states an encryptSessionPersistIdRef",
@@ -484,7 +484,7 @@ describe("syntheticPresentation's own byte-level fidelity", () => {
   });
 
   it("resolves a master with a plain OfficeArtSpContainer group anchor, matching a real drawing's own coordinate system", () => {
-    // Structural smoke check that the two record types this file's own fidelity assertions above depend on (RT_Document and RT_Slide as the outer persist container types, rather than atoms) really are containers -- a fixture bug here would silently make every resolveDocumentContainer/resolveMasterContainer call above resolve the wrong thing without any of them failing on their own.
+    // Structural smoke check that the two record types this file's own fidelity assertions above depend on (RT_Document and RT_Slide as the outer persist container types, rather than atoms) really are containers — a fixture bug here would silently make every resolveDocumentContainer/resolveMasterContainer call above resolve the wrong thing without any of them failing on their own.
     const { currentUserStream, powerPointDocumentStream } =
       syntheticPresentation();
     const documentContainer = resolveDocumentContainer(
@@ -526,7 +526,7 @@ describe("syntheticPresentation's own byte-level fidelity", () => {
   });
 
   it("sets the PIB property's own fBid bit on a picture shape", () => {
-    // OfficeArtFOPTEOPID's own bit layout (drawing/properties.ts's top comment): a 14-bit opid, fComplex (bit 14), fBid (bit 15) -- mirrored here rather than exported, since nothing outside that module otherwise needs the raw bit positions.
+    // OfficeArtFOPTEOPID's own bit layout (drawing/properties.ts's top comment): a 14-bit opid, fComplex (bit 14), fBid (bit 15) — mirrored here rather than exported, since nothing outside that module otherwise needs the raw bit positions.
     const OPID_MASK_BITS = 0x3fff;
     const OPID_FBID_BIT = 1 << 15;
     const { currentUserStream, powerPointDocumentStream } =
@@ -554,7 +554,7 @@ describe("syntheticPresentation's own byte-level fidelity", () => {
   });
 
   it("writes no PROPERTY_ROTATION entry at all on an unrotated table group", () => {
-    // read.ts's own rotationDegOf treats a stated rotation of exactly 0 identically to an absent one (both read as "no rotationDeg"), so a behavioural test alone cannot tell "wrote 0" apart from "wrote nothing" -- this checks the raw property table directly instead.
+    // read.ts's own rotationDegOf treats a stated rotation of exactly 0 identically to an absent one (both read as "no rotationDeg"), so a behavioural test alone cannot tell "wrote 0" apart from "wrote nothing" — this checks the raw property table directly instead.
     const { currentUserStream, powerPointDocumentStream } =
       syntheticPresentation({ table: { rows: [["x"]] } });
     const slideContainer = resolveSlideContainer(
@@ -575,12 +575,12 @@ describe("syntheticPresentation's own byte-level fidelity", () => {
     expect(readShapeProperties(tableGroupShape).has(PROPERTY_ROTATION)).toBe(
       false,
     );
-    // Exactly the FSPGR coordinate atom, this group's own fsp, the tertiary property table, and the client anchor -- catches a phantom record splicing extra bytes in without adding any real property, which the has(PROPERTY_ROTATION) check above cannot see on its own.
+    // Exactly the FSPGR coordinate atom, this group's own fsp, the tertiary property table, and the client anchor — catches a phantom record splicing extra bytes in without adding any real property, which the has(PROPERTY_ROTATION) check above cannot see on its own.
     expect(childRecords(tableGroupShape)).toHaveLength(4);
   });
 
   it("assigns each table cell shape its own distinct spid, sequential by row-major position", () => {
-    // Nothing in drawing/shapes.ts's own read path inspects a content shape's spid at all (shapes-write.ts's own top comment states this directly) -- so no behavioural test could ever observe a wrong formula here, only a direct read of each cell's own OfficeArtFSP.
+    // Nothing in drawing/shapes.ts's own read path inspects a content shape's spid at all (shapes-write.ts's own top comment states this directly) — so no behavioural test could ever observe a wrong formula here, only a direct read of each cell's own OfficeArtFSP.
     const { currentUserStream, powerPointDocumentStream } =
       syntheticPresentation({
         table: {
@@ -625,7 +625,7 @@ describe("syntheticPresentation's own byte-level fidelity", () => {
   });
 
   it("actually adds the two degenerate gridline shapes when asked, each with its own distinct spid", () => {
-    // Both gridline shapes are filtered out of the final table (they are degenerate: zero width or zero height), so a purely behavioural test of the table's own output cannot tell "two gridline shapes were added and correctly filtered" apart from "no gridline shapes were added at all" -- only counting the group's own raw children directly can.
+    // Both gridline shapes are filtered out of the final table (they are degenerate: zero width or zero height), so a purely behavioural test of the table's own output cannot tell "two gridline shapes were added and correctly filtered" apart from "no gridline shapes were added at all" — only counting the group's own raw children directly can.
     const { currentUserStream, powerPointDocumentStream } =
       syntheticPresentation({
         table: { rows: [["x"]], includeGridlineShapes: true },
@@ -827,7 +827,7 @@ describe("syntheticPresentation's own byte-level fidelity", () => {
   });
 
   it("writes the master's own colour scheme exactly, all eight slots, not just the one slot a run resolves through", () => {
-    // read.ts only ever resolves whichever single slot a run's own ColorIndexStruct names (the masterTitleBold test in read.test.ts exercises slot 5, Accent 1) -- the other seven slots have no behavioural path to observe through, so only a direct byte comparison against the fixture's own MASTER_COLOR_SCHEME can pin them.
+    // read.ts only ever resolves whichever single slot a run's own ColorIndexStruct names (the masterTitleBold test in read.test.ts exercises slot 5, Accent 1) — the other seven slots have no behavioural path to observe through, so only a direct byte comparison against the fixture's own MASTER_COLOR_SCHEME can pin them.
     const { currentUserStream, powerPointDocumentStream } =
       syntheticPresentation();
     const masterContainer = resolveMasterContainer(
@@ -849,7 +849,7 @@ describe("syntheticPresentation's own byte-level fidelity", () => {
   });
 
   it("states the slide's own SlideAtom notesIdRef, matching whichever notes slide it names", () => {
-    // read.ts's own notes resolution matches a NotesContainer to its slide by slideId (see read.ts's own top-of-function comment on readNotesBySlideId), never by this field -- so a wrong notesIdRef here has no behavioural path to observe through, only a direct read of the SlideAtom's own bytes.
+    // read.ts's own notes resolution matches a NotesContainer to its slide by slideId (see read.ts's own top-of-function comment on readNotesBySlideId), never by this field — so a wrong notesIdRef here has no behavioural path to observe through, only a direct read of the SlideAtom's own bytes.
     const withoutNotes = syntheticPresentation();
     const withNotes = syntheticPresentation({ notesText: "Speaker notes" });
     for (const [
@@ -877,7 +877,7 @@ describe("syntheticPresentation's own byte-level fidelity", () => {
   });
 
   it("states the slide's own SlideAtom masterIdRef, matching the fixture's real master unless told to mismatch it", () => {
-    // read.ts's own master lookup (mastersById.get(masterIdRef)) is the only behavioural path this field reaches, and it only ever distinguishes "found" from "not found" -- MASTER_ID + 2 would throw the identical "does not contain" error MASTER_ID + 1 does, so only a direct read of the SlideAtom's own bytes can pin the exact mismatched value this fixture states.
+    // read.ts's own master lookup (mastersById.get(masterIdRef)) is the only behavioural path this field reaches, and it only ever distinguishes "found" from "not found" — MASTER_ID + 2 would throw the identical "does not contain" error MASTER_ID + 1 does, so only a direct read of the SlideAtom's own bytes can pin the exact mismatched value this fixture states.
     const plain = syntheticPresentation();
     const mismatched = syntheticPresentation({
       slideMasterIdRefMismatch: true,
@@ -886,7 +886,7 @@ describe("syntheticPresentation's own byte-level fidelity", () => {
       { currentUserStream, powerPointDocumentStream },
       expectedMasterIdRef,
     ] of [
-      // [MS-PPT] 2.2.13: a MasterId MUST be at or above 0x80000000 -- matching master-write.ts's own MASTER_SLIDE_ID and this file's own MASTER_ID.
+      // [MS-PPT] 2.2.13: a MasterId MUST be at or above 0x80000000 — matching master-write.ts's own MASTER_SLIDE_ID and this file's own MASTER_ID.
       [plain, 0x80000000],
       [mismatched, 0x80000001],
     ] as const) {
@@ -956,7 +956,7 @@ describe("syntheticPresentation's own byte-level fidelity", () => {
   });
 
   it("states the UserEditAtom's own persistIdSeed, one past the highest persist ID already minted", () => {
-    // Nothing in this package's own reader consumes persistIdSeed (it matters only to a future incremental edit, which this reader never performs) -- stream/persist.test.ts already pins the field's own byte offset directly, so this test instead pins the fixture's own arithmetic: the seed a real producer states after writing N persist objects is N + 1, not N - 1 or any other neighbouring value.
+    // Nothing in this package's own reader consumes persistIdSeed (it matters only to a future incremental edit, which this reader never performs) — stream/persist.test.ts already pins the field's own byte offset directly, so this test instead pins the fixture's own arithmetic: the seed a real producer states after writing N persist objects is N + 1, not N - 1 or any other neighbouring value.
     const { currentUserStream, powerPointDocumentStream } =
       syntheticPresentation();
     const currentUser = readCurrentUserAtom(currentUserStream);
@@ -1001,7 +1001,7 @@ describe("syntheticPresentation's own byte-level fidelity", () => {
   });
 
   it("keeps the slide container free of phantom records when neither a picture nor a table is added", () => {
-    // The earlier "never splices a phantom record" test exercises a fixture carrying both a picture and a table, taking the truthy branch of each option's own `!== undefined` guard -- this instead exercises the plain default fixture, where both guards fall to their own "nothing to add" branch.
+    // The earlier "never splices a phantom record" test exercises a fixture carrying both a picture and a table, taking the truthy branch of each option's own `!== undefined` guard — this instead exercises the plain default fixture, where both guards fall to their own "nothing to add" branch.
     const { currentUserStream, powerPointDocumentStream } =
       syntheticPresentation();
     assertNoPhantomRecords(

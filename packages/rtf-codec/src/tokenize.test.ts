@@ -78,7 +78,7 @@ describe("control word tokenization", () => {
   });
 
   it("includes the letters at both ends of each ASCII letter range", () => {
-    // 'A'/'Z' and 'a'/'z' are the exact boundaries isAsciiLetter checks -- an off-by-one there would exclude exactly these four letters.
+    // 'A'/'Z' and 'a'/'z' are the exact boundaries isAsciiLetter checks — an off-by-one there would exclude exactly these four letters.
     expect(tokenizeRtf(bytes("\\AzaZ"))).toEqual([
       { kind: "controlWord", name: "AzaZ" },
     ]);
@@ -154,7 +154,7 @@ describe("control symbol tokenization", () => {
   });
 
   it("falls back to a control symbol when the byte just past 'f'/'F' isn't a hex digit", () => {
-    // 'g' (0x67) and 'G' (0x47) are the bytes immediately past hexDigitValue's own lowercase/uppercase ranges -- a boundary error would misread them as valid hex digits instead of falling through to the ordinary control-symbol production.
+    // 'g' (0x67) and 'G' (0x47) are the bytes immediately past hexDigitValue's own lowercase/uppercase ranges — a boundary error would misread them as valid hex digits instead of falling through to the ordinary control-symbol production.
     expect(tokenizeRtf(bytes("\\'gg"))).toEqual([
       { kind: "controlSymbol", symbol: "'" },
       { kind: "text", bytes: bytes("gg") },
@@ -162,7 +162,7 @@ describe("control symbol tokenization", () => {
   });
 
   it("falls back to a control symbol when the byte just before 'A' isn't a hex digit", () => {
-    // '@' (0x40) is the byte immediately below hexDigitValue's own uppercase-letter range -- a lower-bound error there would misread it as a valid hex digit worth 9 instead of falling through.
+    // '@' (0x40) is the byte immediately below hexDigitValue's own uppercase-letter range — a lower-bound error there would misread it as a valid hex digit worth 9 instead of falling through.
     expect(tokenizeRtf(bytes("\\'@@"))).toEqual([
       { kind: "controlSymbol", symbol: "'" },
       { kind: "text", bytes: bytes("@@") },
@@ -245,7 +245,7 @@ describe("group and text tokenization", () => {
     ]);
   });
 
-  it("does not treat \\bin0 as a binary run at all -- N must be strictly positive", () => {
+  it("does not treat \\bin0 as a binary run at all — N must be strictly positive", () => {
     expect(tokenizeRtf(bytes("\\bin0 x"))).toEqual([
       { kind: "controlWord", name: "bin", param: 0 },
       { kind: "text", bytes: bytes("x") },

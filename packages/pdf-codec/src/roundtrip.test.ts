@@ -14,7 +14,7 @@ import { LAYOUT_FORMAT_VERSION, LayoutDocumentSchema } from "./layout";
 import { readPdf } from "./read";
 import { writePdf } from "./write";
 
-// write.test.ts and read.test.ts each test writePdf/readPdf in isolation -- the former against emitted content-stream bytes, the latter against PDFs hand-built independently in test-support/pdf.ts, deliberately never through writePdf itself (see that file's own top-of-file rationale). Neither proves the two halves agree with each other. This file is the one place that runs writePdf then readPdf back-to-back, proving LayoutDocument -- the structured, Zod-validated, plain-JSON pivot model both functions speak (see document-schema.js's own layout.test.ts JSON.stringify/parse test) -- actually survives a real write/read cycle through this package's own codec, not just its own schema in isolation. Every painted item kind now round-trips as its own kind: text, image, link, and general path directly, and rect/line/ellipse via interpret.ts's characteristic-shape detection, which recognises the specific pattern each is always written as (a four-corner axis-aligned closed polygon, a single stroked segment, four kappa-ratio Bezier quadrants) and recovers the shape rather than the undifferentiated path PDF's own operators reduce it to.
+// write.test.ts and read.test.ts each test writePdf/readPdf in isolation — the former against emitted content-stream bytes, the latter against PDFs hand-built independently in test-support/pdf.ts, deliberately never through writePdf itself (see that file's own top-of-file rationale). Neither proves the two halves agree with each other. This file is the one place that runs writePdf then readPdf back-to-back, proving LayoutDocument — the structured, Zod-validated, plain-JSON pivot model both functions speak (see document-schema.js's own layout.test.ts JSON.stringify/parse test) — actually survives a real write/read cycle through this package's own codec, not just its own schema in isolation. Every painted item kind now round-trips as its own kind: text, image, link, and general path directly, and rect/line/ellipse via interpret.ts's characteristic-shape detection, which recognises the specific pattern each is always written as (a four-corner axis-aligned closed polygon, a single stroked segment, four kappa-ratio Bezier quadrants) and recovers the shape rather than the undifferentiated path PDF's own operators reduce it to.
 
 const HELVETICA = {
   family: "Helvetica",
@@ -39,7 +39,7 @@ function docWithItems(items: LayoutItem[]): LayoutDocument {
 function tinyPngAsset(): LayoutImageAsset {
   const width = 2;
   const height = 2;
-  // 4 solid-colour pixels, RGB, no alpha -- shape mirrors write.test.ts's own tinyPngAsset fixture.
+  // 4 solid-colour pixels, RGB, no alpha — shape mirrors write.test.ts's own tinyPngAsset fixture.
   const data = new Uint8Array([255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0]);
   const bytes = encodePng({ width, height, channels: 3, data });
   return {
@@ -198,7 +198,7 @@ describe("writePdf -> readPdf: structural round trip", () => {
     ]);
   });
 
-  // The strongest possible check on the new general-path machinery: not interpret.ts in isolation (interpret.test.ts) and not writePath in isolation (write-path.test.ts), but the two run genuinely back to back through this package's own writePdf/readPdf codec -- proving the write and read halves of path recovery actually agree with each other, not just that each independently does something plausible. The triangle here is deliberate: a rectangle would come back as a LayoutRect (see the shape-detection tests below), which would prove the detector works rather than that general paths survive.
+  // The strongest possible check on the new general-path machinery: not interpret.ts in isolation (interpret.test.ts) and not writePath in isolation (write-path.test.ts), but the two run genuinely back to back through this package's own writePdf/readPdf codec — proving the write and read halves of path recovery actually agree with each other, not just that each independently does something plausible. The triangle here is deliberate: a rectangle would come back as a LayoutRect (see the shape-detection tests below), which would prove the detector works rather than that general paths survive.
   it("recovers a closed straight-line path with fill and stroke both set", () => {
     const path: LayoutPath = {
       kind: "path",
@@ -253,7 +253,7 @@ describe("writePdf -> readPdf: structural round trip", () => {
     expect(result.pages[0]!.items).toEqual([path]);
   });
 
-  it('recovers multiple subpaths under an even-odd fill rule -- the standard "hole" construction', () => {
+  it('recovers multiple subpaths under an even-odd fill rule — the standard "hole" construction', () => {
     const path: LayoutPath = {
       kind: "path",
       fill: BLACK,
@@ -408,7 +408,7 @@ describe("writePdf -> readPdf: structural round trip", () => {
   });
 });
 
-// content-write.ts's writeStrokeStyleState emits a real dash-array operator for 'dashed'/'dotted' (see that module's own top-of-block comment for the exact arrays); until interpret.ts's own `d`-operator handling and strokeStyleFromDashArray landed, nothing on the read side recovered it, so a dashed or dotted line/path this package wrote itself came back with no `style` field at all -- ContentStrokeStyleSchema's own 'solid' default, i.e. silently flattened to a plain line. These tests are the self-inflicted-asymmetry check the README's Gotchas section used to warn about.
+// content-write.ts's writeStrokeStyleState emits a real dash-array operator for 'dashed'/'dotted' (see that module's own top-of-block comment for the exact arrays); until interpret.ts's own `d`-operator handling and strokeStyleFromDashArray landed, nothing on the read side recovered it, so a dashed or dotted line/path this package wrote itself came back with no `style` field at all — ContentStrokeStyleSchema's own 'solid' default, i.e. silently flattened to a plain line. These tests are the self-inflicted-asymmetry check the README's Gotchas section used to warn about.
 describe("writePdf -> readPdf: stroke style round trip", () => {
   it("recovers a dashed LayoutLine's style, not just its geometry and colour", () => {
     const line: LayoutLine = {
@@ -520,7 +520,7 @@ describe("writePdf -> readPdf: stroke style round trip", () => {
 });
 
 describe("writePdf -> readPdf: structural round trip", () => {
-  // page.notes carries pptx speaker notes through the PDF round trip (see layout/slides.ts and layout/reconstruct.ts) as a hidden /Subtype /Text annotation (write.ts's buildNotesAnnotDict) -- PDF has no native concept of presenter notes, so this is this package's own round-trip mechanism, confirmed here at the LayoutDocument level and separately confirmed against real Keynote (see editor.test.ts and this project's own manual verification).
+  // page.notes carries pptx speaker notes through the PDF round trip (see layout/slides.ts and layout/reconstruct.ts) as a hidden /Subtype /Text annotation (write.ts's buildNotesAnnotDict) — PDF has no native concept of presenter notes, so this is this package's own round-trip mechanism, confirmed here at the LayoutDocument level and separately confirmed against real Keynote (see editor.test.ts and this project's own manual verification).
   it("recovers page.notes from the hidden notes annotation, and omits it entirely when absent", () => {
     const withNotes = docWithPages([
       {
@@ -567,11 +567,11 @@ describe("writePdf -> readPdf: structural round trip", () => {
       kind: "text",
       text: "Visible",
     });
-    // Proves the hidden notes annotation is excluded from the annotations list itself, on its /T marker -- not merely that its kind never becomes a visible LayoutItem, which the assertion above already covers by a different mechanism.
+    // Proves the hidden notes annotation is excluded from the annotations list itself, on its /T marker — not merely that its kind never becomes a visible LayoutItem, which the assertion above already covers by a different mechanism.
     expect(result.pages[0]!.annotations).toBeUndefined();
   });
 
-  // Internal links and the destinations table they resolve against (#721): the writer emits each internalLink as a /Dest direct destination array naming the target page object, so the link and its table entry both survive -- the reader re-mints a fresh destN name for the array on the way back, which is the documented round-trip shape (names are the reader's minting, positions are the file's facts).
+  // Internal links and the destinations table they resolve against (#721): the writer emits each internalLink as a /Dest direct destination array naming the target page object, so the link and its table entry both survive — the reader re-mints a fresh destN name for the array on the way back, which is the documented round-trip shape (names are the reader's minting, positions are the file's facts).
   it("round-trips an internal link item and its destinations-table entry", () => {
     const doc = docWithPages([
       {

@@ -70,7 +70,7 @@ describe("markdown image resolution through options.images", () => {
     expect(firstImageBlockKind(captured)).toBe("image");
   });
 
-  it("without a resolver the image still degrades to alt-text (no ContentImageBlock) -- the resolver is opt-in", () => {
+  it("without a resolver the image still degrades to alt-text (no ContentImageBlock) — the resolver is opt-in", () => {
     let captured: DocumentTree | undefined;
     markdownToPdf(LOCAL_IMAGE_MD, {
       onDocument: (pkg) => {

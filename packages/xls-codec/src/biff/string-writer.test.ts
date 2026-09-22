@@ -54,7 +54,7 @@ describe("writeXLUnicodeString", () => {
   });
 
   it("refuses a string longer than the two-byte cch can hold, naming its own shape and a 40-character truncation of the text in the message", () => {
-    // A repeated single character can't distinguish a truncated slice from the whole text by content alone -- it distinguishes them by LENGTH, since the message states the exact overflow count separately from the truncated text it embeds; only the message's own exact shape (which characters are followed by literal "...", where the closing quote lands) proves the truncation happened at 40 characters and not 0 or all 65536.
+    // A repeated single character can't distinguish a truncated slice from the whole text by content alone — it distinguishes them by LENGTH, since the message states the exact overflow count separately from the truncated text it embeds; only the message's own exact shape (which characters are followed by literal "...", where the closing quote lands) proves the truncation happened at 40 characters and not 0 or all 65536.
     const text = "x".repeat(0x10000);
     expect(() => writeXLUnicodeString(text)).toThrow(
       `XLUnicodeString cannot hold ${text.length} UTF-16 code units, above its own 65535-unit limit (text: "${"x".repeat(40)}...")`,

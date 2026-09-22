@@ -2,9 +2,9 @@ import type { Alignment } from "document-schema.js";
 import { readInt16LE, readUint16LE, readUint32LE, readUint8 } from "../bytes";
 import { SGC, type Prl } from "./sprm";
 
-// Paragraph properties, [MS-DOC] 2.6.2 -- the subset of the paragraph-property sprm table this reader converts. As with the character side, an opcode this package does not act on is absent rather than present-and-ignored.
+// Paragraph properties, [MS-DOC] 2.6.2 — the subset of the paragraph-property sprm table this reader converts. As with the character side, an opcode this package does not act on is absent rather than present-and-ignored.
 //
-// Several properties exist in two spellings: a "physical" or "80" form kept for compatibility with pre-2000 producers, and a "logical" form that supersedes it. Both are read, in the table order the specification lists them, so a later logical sprm naturally wins over an earlier physical one through the same last-Prl-wins fold every other property uses -- no precedence special case needed.
+// Several properties exist in two spellings: a "physical" or "80" form kept for compatibility with pre-2000 producers, and a "logical" form that supersedes it. Both are read, in the table order the specification lists them, so a later logical sprm naturally wins over an earlier physical one through the same last-Prl-wins fold every other property uses — no precedence special case needed.
 
 /** sprmPIstd: the istd of the paragraph style. */
 const SPRM_P_ISTD = 0x4600;
@@ -38,9 +38,9 @@ const SPRM_P_F_TTP = 0x2417;
 const SPRM_P_ILVL = 0x260a;
 /** sprmPIlfo: which list the paragraph is in, as an index into PlfLfo.rgLfo. */
 const SPRM_P_ILFO = 0x460b;
-/** sprmPItap: the paragraph's own table depth -- read only far enough to detect a depth greater than 1 (a table nested inside a table cell), which this package refuses rather than mis-reads. */
+/** sprmPItap: the paragraph's own table depth — read only far enough to detect a depth greater than 1 (a table nested inside a table cell), which this package refuses rather than mis-reads. */
 const SPRM_P_ITAP = 0x6649;
-/** sprmPFInnerTableCell / sprmPFInnerTtp: a nested table's (table depth greater than 1) own cell-ending or row-ending mark, [MS-DOC] 2.4.3's Overview of Tables -- the paragraph-mark (0x000D) analogues of sprmPFInTable's cell-mark (0x0007) boundary and sprmPFTtp's row-mark at depth 1. */
+/** sprmPFInnerTableCell / sprmPFInnerTtp: a nested table's (table depth greater than 1) own cell-ending or row-ending mark, [MS-DOC] 2.4.3's Overview of Tables — the paragraph-mark (0x000D) analogues of sprmPFInTable's cell-mark (0x0007) boundary and sprmPFTtp's row-mark at depth 1. */
 const SPRM_P_F_INNER_TABLE_CELL = 0x244b;
 const SPRM_P_F_INNER_TTP = 0x244c;
 
@@ -77,9 +77,9 @@ export interface ParagraphProperties {
   listId?: number;
   /** sprmPItap's own table depth, present only when the sprm is; a value greater than 1 marks a paragraph belonging to a table nested inside a table cell. */
   tableDepth?: number;
-  /** True on a nested table's (depth greater than 1) own cell-ending paragraph mark -- the sprmPFInnerTableCell analogue of sprmPFInTable's own cell-mark boundary at depth 1. */
+  /** True on a nested table's (depth greater than 1) own cell-ending paragraph mark — the sprmPFInnerTableCell analogue of sprmPFInTable's own cell-mark boundary at depth 1. */
   innerTableCellMark?: boolean;
-  /** True on a nested table's (depth greater than 1) own row-ending paragraph mark -- the sprmPFInnerTtp analogue of sprmPFTtp's own row-mark boundary at depth 1. */
+  /** True on a nested table's (depth greater than 1) own row-ending paragraph mark — the sprmPFInnerTtp analogue of sprmPFTtp's own row-mark boundary at depth 1. */
   innerTtpMark?: boolean;
 }
 
@@ -87,7 +87,7 @@ function twipsToPoints(twips: number): number {
   return twips / TWIPS_PER_POINT;
 }
 
-// Both justification sprms share the first four values with ECMA-376's ST_Jc. The remaining values are compression-ratio and Kashida variants of justified text, all of which the shared content schema spells "justify" -- there is no finer alignment vocabulary to map them onto, and mapping them to "left" would be a visible layout change rather than a lost nuance.
+// Both justification sprms share the first four values with ECMA-376's ST_Jc. The remaining values are compression-ratio and Kashida variants of justified text, all of which the shared content schema spells "justify" — there is no finer alignment vocabulary to map them onto, and mapping them to "left" would be a visible layout change rather than a lost nuance.
 function alignmentFromJc(value: number): Alignment | undefined {
   switch (value) {
     case 0:
@@ -109,7 +109,7 @@ function alignmentFromJc(value: number): Alignment | undefined {
   }
 }
 
-// LSPD, [MS-DOC] 2.9.150. Only the multiplier form maps onto the shared schema's `lineSpacing`, which is documented as a multiple of the single line height. The absolute forms -- "the line spacing, in twips, is exactly 0x10000 minus dyaLine" for an exact value, and "dyaLine or the number of twips necessary for single spacing, whichever value is greater" for an at-least value -- are spacing in absolute units, which that field cannot express, so they are left unset rather than converted through a font size this reader does not know.
+// LSPD, [MS-DOC] 2.9.150. Only the multiplier form maps onto the shared schema's `lineSpacing`, which is documented as a multiple of the single line height. The absolute forms — "the line spacing, in twips, is exactly 0x10000 minus dyaLine" for an exact value, and "dyaLine or the number of twips necessary for single spacing, whichever value is greater" for an at-least value — are spacing in absolute units, which that field cannot express, so they are left unset rather than converted through a font size this reader does not know.
 function lineSpacingFromLspd(operand: Uint8Array): number | undefined {
   const dyaLine = readInt16LE(operand, 0);
   const fMultLinespace = readUint16LE(operand, 2);
@@ -120,7 +120,7 @@ function lineSpacingFromLspd(operand: Uint8Array): number | undefined {
   return multiple > 0 ? multiple : undefined;
 }
 
-// Folds a grpprl's paragraph sprms into `into`, in order, so the last Prl to touch a property determines it -- the precedence rule [MS-DOC] 2.6's Applying Properties states. The caller layers the paragraph style's own grpprl first and the direct PAPX exception second, matching [MS-DOC] 2.4.6.6.
+// Folds a grpprl's paragraph sprms into `into`, in order, so the last Prl to touch a property determines it — the precedence rule [MS-DOC] 2.6's Applying Properties states. The caller layers the paragraph style's own grpprl first and the direct PAPX exception second, matching [MS-DOC] 2.4.6.6.
 export function applyParagraphSprms(
   prls: readonly Prl[],
   into: ParagraphProperties,

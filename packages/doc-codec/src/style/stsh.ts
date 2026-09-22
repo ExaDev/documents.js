@@ -2,9 +2,9 @@ import { readInt16LE, readUint16LE, slice } from "../bytes";
 import { DocFormatError } from "../errors";
 import { readGrpprl, type Prl } from "../prop/sprm";
 
-// The style sheet, [MS-DOC] 2.9.271 -- a size-prefixed header followed by one entry per style, indexed by istd. This reader takes each style's identity from it (its name, its kind, and the style it inherits from) and, for a paragraph or character style, its own property set too: STD.grLPUpxSw, whose shape varies by style kind (parseGrLPUpxSw below) and whose values resolveStyleFormatting walks up the istdBase inheritance chain to fold, most-specific style winning, beneath a paragraph's or run's own direct exceptions (ExaDev/documents.js#1005). A table or numbering style's own formatting set (StkTableGRLPUPX/StkListGRLPUPX) is a genuine layer of the format this package has not built, and that consequence is stated plainly in the README rather than approximated here.
+// The style sheet, [MS-DOC] 2.9.271 — a size-prefixed header followed by one entry per style, indexed by istd. This reader takes each style's identity from it (its name, its kind, and the style it inherits from) and, for a paragraph or character style, its own property set too: STD.grLPUpxSw, whose shape varies by style kind (parseGrLPUpxSw below) and whose values resolveStyleFormatting walks up the istdBase inheritance chain to fold, most-specific style winning, beneath a paragraph's or run's own direct exceptions (ExaDev/documents.js#1005). A table or numbering style's own formatting set (StkTableGRLPUPX/StkListGRLPUPX) is a genuine layer of the format this package has not built, and that consequence is stated plainly in the README rather than approximated here.
 //
-// Two sizing rules make the entry array walkable and are easy to skip past. cbStshi gives the header's total size, and it is the only safe way forward: the header ends with an explicitly ignorable STSHIB whose length is not otherwise derivable, so a reader that adds up the fields it knows lands short. And every LPStd begins on an even byte, with the padding excluded from cbStd -- "LPStd structures are stored on even-byte boundaries, but this length MUST NOT include this padding" -- so an odd-length entry is followed by one byte belonging to no entry.
+// Two sizing rules make the entry array walkable and are easy to skip past. cbStshi gives the header's total size, and it is the only safe way forward: the header ends with an explicitly ignorable STSHIB whose length is not otherwise derivable, so a reader that adds up the fields it knows lands short. And every LPStd begins on an even byte, with the padding excluded from cbStd — "LPStd structures are stored on even-byte boundaries, but this length MUST NOT include this padding" — so an odd-length entry is followed by one byte belonging to no entry.
 
 /** Stshif is a fixed 18 bytes: cstd, cbSTDBaseInFile, a bit field, stiMaxWhenSaved, istdMaxFixedWhenSaved, nVerBuiltInNamesWhenSaved, and the three default font indexes. */
 const STSHIF_SIZE = 18;
@@ -14,7 +14,7 @@ const STDF_SIZE_WITH_POST_2000 = 0x0012;
 /** StdfBase.sti's "0x0FFE for user-defined styles"; anything else is an application-defined style whose sti identifies it. */
 export const STI_USER_DEFINED = 0x0ffe;
 
-/** StdfBase.stk, [MS-DOC] 2.9.269 -- which of ECMA-376's ST_StyleType values this style is. */
+/** StdfBase.stk, [MS-DOC] 2.9.269 — which of ECMA-376's ST_StyleType values this style is. */
 export const STK = {
   paragraph: 1,
   character: 2,
@@ -32,9 +32,9 @@ export interface Style {
   readonly istdBase: number | undefined;
   /** The style's primary name, from the STD's own Xstz. */
   readonly name: string;
-  /** The style's own paragraph formatting -- StkParaGRLPUPX's lpUpxPapx.PAPX.grpprlPapx -- present only for a paragraph style (STK.paragraph). Undefined for every other stk: table and numbering styles carry their own formatting shapes this package does not read (see the README's own scope note). */
+  /** The style's own paragraph formatting — StkParaGRLPUPX's lpUpxPapx.PAPX.grpprlPapx — present only for a paragraph style (STK.paragraph). Undefined for every other stk: table and numbering styles carry their own formatting shapes this package does not read (see the README's own scope note). */
   readonly grpprlPapx: readonly Prl[] | undefined;
-  /** The style's own character formatting -- a paragraph style's StkParaGRLPUPX.lpUpxChpx.CHPX.grpprlChpx (the run-level defaults a heading's own text falls back to) or a character style's StkCharGRLPUPX.lpUpxChpx.CHPX.grpprlChpx -- present for STK.paragraph and STK.character, undefined otherwise. */
+  /** The style's own character formatting — a paragraph style's StkParaGRLPUPX.lpUpxChpx.CHPX.grpprlChpx (the run-level defaults a heading's own text falls back to) or a character style's StkCharGRLPUPX.lpUpxChpx.CHPX.grpprlChpx — present for STK.paragraph and STK.character, undefined otherwise. */
   readonly grpprlChpx: readonly Prl[] | undefined;
 }
 
@@ -118,7 +118,7 @@ function parseStd(
   };
 }
 
-// Xstz, [MS-DOC] 2.9.351: an Xst -- a 2-byte character count followed by that many 16-bit code units -- then a 2-byte null terminator. The count is of CHARACTERS, not bytes, so the string occupies twice as many bytes as it declares.
+// Xstz, [MS-DOC] 2.9.351: an Xst — a 2-byte character count followed by that many 16-bit code units — then a 2-byte null terminator. The count is of CHARACTERS, not bytes, so the string occupies twice as many bytes as it declares.
 function readXstz(bytes: Uint8Array, offset: number, what: string): string {
   const cch = readUint16LE(bytes, offset);
   const chars = slice(bytes, offset + 2, cch * 2, what);
@@ -129,13 +129,13 @@ function readXstz(bytes: Uint8Array, offset: number, what: string): string {
   return out;
 }
 
-// The Xstz's own total byte length -- the 2-byte character count, the characters themselves (2 bytes each), and the 2-byte null terminator that follows them -- so a caller can find whatever comes after it (STD's own grLPUpxSw) without re-deriving the same arithmetic readXstz already did to produce the string.
+// The Xstz's own total byte length — the 2-byte character count, the characters themselves (2 bytes each), and the 2-byte null terminator that follows them — so a caller can find whatever comes after it (STD's own grLPUpxSw) without re-deriving the same arithmetic readXstz already did to produce the string.
 function xstzByteLength(bytes: Uint8Array, offset: number): number {
   const cch = readUint16LE(bytes, offset);
   return 2 + cch * 2 + 2;
 }
 
-// One LPUpxPapx/LPUpxChpx entry, [MS-DOC] 2.9.140/2.9.138: a 2-byte cbUpx giving the UPX's own length (excluding padding), followed by that many bytes, followed by one zero byte of padding if cbUpx is odd -- "This structure is padded to an even length, but the length in cbUpx MUST NOT include this padding."
+// One LPUpxPapx/LPUpxChpx entry, [MS-DOC] 2.9.140/2.9.138: a 2-byte cbUpx giving the UPX's own length (excluding padding), followed by that many bytes, followed by one zero byte of padding if cbUpx is odd — "This structure is padded to an even length, but the length in cbUpx MUST NOT include this padding."
 function readLpUpx(
   std: Uint8Array,
   offset: number,
@@ -146,7 +146,7 @@ function readLpUpx(
   return { upx, next: offset + 2 + cbUpx + (cbUpx % 2) };
 }
 
-// GrLPUpxSw, [MS-DOC] 2.9.113: a style's own formatting sets, shaped by its stk. Only StkParaGRLPUPX (stk 1: lpUpxPapx then lpUpxChpx, [MS-DOC] 2.9.267) and StkCharGRLPUPX (stk 2: lpUpxChpx alone, 2.9.263) are read here -- table and numbering styles (stk 3/4) carry TAPX and a differently-shaped formatting set this package does not read, matching every other table-style gap this package's own README already states. A revision-marked style (StdfPost2000.fHasOriginalStyle) carries one further trailing structure (StkParaLPUpxGrLPUpxRM/StkCharLPUpxGrLPUpxRM) after the members read here; it is never reached, since neither member read here needs to walk past what it already has.
+// GrLPUpxSw, [MS-DOC] 2.9.113: a style's own formatting sets, shaped by its stk. Only StkParaGRLPUPX (stk 1: lpUpxPapx then lpUpxChpx, [MS-DOC] 2.9.267) and StkCharGRLPUPX (stk 2: lpUpxChpx alone, 2.9.263) are read here — table and numbering styles (stk 3/4) carry TAPX and a differently-shaped formatting set this package does not read, matching every other table-style gap this package's own README already states. A revision-marked style (StdfPost2000.fHasOriginalStyle) carries one further trailing structure (StkParaLPUpxGrLPUpxRM/StkCharLPUpxGrLPUpxRM) after the members read here; it is never reached, since neither member read here needs to walk past what it already has.
 function parseGrLPUpxSw(
   std: Uint8Array,
   offset: number,
@@ -195,7 +195,7 @@ export interface ResolvedStyleFormatting {
   readonly characterPrls: readonly Prl[];
 }
 
-// Walks StdfBase.istdBase from the given istd up to its root, then folds each style's own grpprlPapx/grpprlChpx from ROOT to LEAF -- the opposite direction from how [MS-DOC] 2.4.6.5 itself constructs the combined array ("append [this style's own array] to the beginning of the array from the base style", i.e. leaf-first). That construction only states the array's shape; 2.6's own "Applying Properties" rule -- "the last Prl applied determines the value of that property" -- is what actually assigns precedence, and folding a leaf-first array in that order would let a base style's own property overwrite what the more specific derived style set on top of it. Resolving root-to-leaf and applying each level's own grpprl last, as this function does, gives the derived style precedence instead -- the ordinary "more specific wins" behaviour every style-inheritance model shares, and the only reading consistent with a style overriding a property its own base already set.
+// Walks StdfBase.istdBase from the given istd up to its root, then folds each style's own grpprlPapx/grpprlChpx from ROOT to LEAF — the opposite direction from how [MS-DOC] 2.4.6.5 itself constructs the combined array ("append [this style's own array] to the beginning of the array from the base style", i.e. leaf-first). That construction only states the array's shape; 2.6's own "Applying Properties" rule — "the last Prl applied determines the value of that property" — is what actually assigns precedence, and folding a leaf-first array in that order would let a base style's own property overwrite what the more specific derived style set on top of it. Resolving root-to-leaf and applying each level's own grpprl last, as this function does, gives the derived style precedence instead — the ordinary "more specific wins" behaviour every style-inheritance model shares, and the only reading consistent with a style overriding a property its own base already set.
 export function resolveStyleFormatting(
   styleSheet: StyleSheet,
   istd: number,
@@ -219,7 +219,7 @@ export function resolveStyleFormatting(
 
   const paragraphPrls: Prl[] = [];
   const characterPrls: Prl[] = [];
-  // chain holds only the Style values the while loop above actually pushed -- every entry is genuinely defined, so folding it back to front needs no absent-entry guard of its own.
+  // chain holds only the Style values the while loop above actually pushed — every entry is genuinely defined, so folding it back to front needs no absent-entry guard of its own.
   for (const style of [...chain].reverse()) {
     if (style.grpprlPapx !== undefined) paragraphPrls.push(...style.grpprlPapx);
     if (style.grpprlChpx !== undefined) characterPrls.push(...style.grpprlChpx);
@@ -234,7 +234,7 @@ export function headingLevelFromIstd(istd: number): number | undefined {
   return istd >= 1 && istd <= 9 ? istd : undefined;
 }
 
-/** The first istd writeDocContent assigns a non-heading named style -- istd 0 stays reserved for a paragraph with neither styleId nor an in-range headingLevel, and istd 1-9 for headingLevelFromIstd's own heading-implied slots, so the first genuinely free slot for an arbitrary style name is 10. */
+/** The first istd writeDocContent assigns a non-heading named style — istd 0 stays reserved for a paragraph with neither styleId nor an in-range headingLevel, and istd 1-9 for headingLevelFromIstd's own heading-implied slots, so the first genuinely free slot for an arbitrary style name is 10. */
 const FIRST_NON_HEADING_ISTD = 10;
 /** headingLevelFromIstd's own upper bound restated here as a named constant, so mintStyleIstds' own range check and the read-side rule it must agree with can never drift apart silently. */
 const MAX_HEADING_ISTD = 9;
@@ -248,11 +248,11 @@ export interface StyleIdentityInput {
 export interface MintedStyleIstds {
   /** One istd per input paragraph, in the same order. */
   readonly istds: readonly number[];
-  /** Every minted istd's own style name -- a heading-implied 1-9 slot's default ("Heading N") or the paragraph's own styleId, and every named style's own styleId -- ready for buildStshForStyles. An istd no paragraph reached (including istd 0, whenever no paragraph's own styleId is genuinely "Normal") carries no entry. */
+  /** Every minted istd's own style name — a heading-implied 1-9 slot's default ("Heading N") or the paragraph's own styleId, and every named style's own styleId — ready for buildStshForStyles. An istd no paragraph reached (including istd 0, whenever no paragraph's own styleId is genuinely "Normal") carries no entry. */
   readonly styleNames: ReadonlyMap<number, string>;
 }
 
-// Mints a real istd for every distinct paragraph style: a headingLevel of 1-9 maps directly to that istd (headingLevelFromIstd's own read-side rule, so a re-read derives the identical headingLevel back regardless of what styleId names it), and every other named styleId gets its own istd starting at FIRST_NON_HEADING_ISTD. This mints style IDENTITY only -- name, kind, istd -- with no formatting of its own: every property writeDocContent itself emits is already, unconditionally, a direct exception (see buildStshForStyles's own comment and the README's scope note, ExaDev/documents.js#1059). A paragraph with neither styleId nor an in-range headingLevel gets istd 0, left an empty hole rather than a real "Normal" entry -- minting one there unconditionally would round-trip an absent styleId into a real "Normal" string on the next read, which is not what the source document stated. A paragraph whose own styleId literally IS "Normal" is treated like any other named style and mints its own real entry (not necessarily at istd 0), so that distinction survives. A headingLevel outside 1-9 (the schema's own field is unbounded, "ODF alone permits ten levels") has no istd slot to round-trip through at all -- a genuine format-boundary limit, so such a paragraph falls back to its styleId (or istd 0) exactly as if it carried no headingLevel. Extracted out of writeDocContent's own body (ExaDev/documents.js) so this rule's own boundaries -- the heading range, first-use istd assignment, and per-heading-number name defaulting -- are directly testable rather than only reachable through a full write+read round trip.
+// Mints a real istd for every distinct paragraph style: a headingLevel of 1-9 maps directly to that istd (headingLevelFromIstd's own read-side rule, so a re-read derives the identical headingLevel back regardless of what styleId names it), and every other named styleId gets its own istd starting at FIRST_NON_HEADING_ISTD. This mints style IDENTITY only — name, kind, istd — with no formatting of its own: every property writeDocContent itself emits is already, unconditionally, a direct exception (see buildStshForStyles's own comment and the README's scope note, ExaDev/documents.js#1059). A paragraph with neither styleId nor an in-range headingLevel gets istd 0, left an empty hole rather than a real "Normal" entry — minting one there unconditionally would round-trip an absent styleId into a real "Normal" string on the next read, which is not what the source document stated. A paragraph whose own styleId literally IS "Normal" is treated like any other named style and mints its own real entry (not necessarily at istd 0), so that distinction survives. A headingLevel outside 1-9 (the schema's own field is unbounded, "ODF alone permits ten levels") has no istd slot to round-trip through at all — a genuine format-boundary limit, so such a paragraph falls back to its styleId (or istd 0) exactly as if it carried no headingLevel. Extracted out of writeDocContent's own body (ExaDev/documents.js) so this rule's own boundaries — the heading range, first-use istd assignment, and per-heading-number name defaulting — are directly testable rather than only reachable through a full write+read round trip.
 export function mintStyleIstds(
   paragraphs: readonly StyleIdentityInput[],
 ): MintedStyleIstds {
@@ -284,11 +284,11 @@ export function mintStyleIstds(
   return { istds, styleNames };
 }
 
-// Mints a real STSH from a set of paragraph-kind style names, keyed by the istd each occupies -- a heading-implied istd 1-9 per headingLevelFromIstd's own rule, every other named style at its own istd >= 10 in whatever order the caller assigned. An istd this map has no entry for -- including istd 0 whenever no paragraph's own styleId is genuinely "Normal" -- is left an empty hole ([MS-DOC] 2.9.271's own "A style definition can be empty, in which case cbStd MUST be 0"), so a heading level (or istd 0) the document never names need not occupy real bytes; an empty names map (cstd 0) is the same genuinely spec-conformant zero-style STSH this package always wrote before #1059 minted real entries at all -- write.ts always writes one, never omits fcStshf/lcbStshf entirely, because FibRgFcLcb97's own lcbStshf field "MUST be a nonzero value" (a document with no style sheet at all is not a construct [MS-DOC] permits, even though this package's own reader tolerates lcbStshf 0 -- see read.ts). Every entry is written with an empty grLPUpxSw -- two LPUpxPapx/LPUpxChpx entries, both zero-length -- since writeDocContent has no style-vs-direct-formatting split to draw a real one from: every property it writes is already, unconditionally, a paragraph's or run's own direct exception (see the README's own scope note). This mints style IDENTITY only, so a paragraph's own styleId/headingLevel round-trips through a real STSH entry instead of always reading back istd 0 (ExaDev/documents.js#1059).
+// Mints a real STSH from a set of paragraph-kind style names, keyed by the istd each occupies — a heading-implied istd 1-9 per headingLevelFromIstd's own rule, every other named style at its own istd >= 10 in whatever order the caller assigned. An istd this map has no entry for — including istd 0 whenever no paragraph's own styleId is genuinely "Normal" — is left an empty hole ([MS-DOC] 2.9.271's own "A style definition can be empty, in which case cbStd MUST be 0"), so a heading level (or istd 0) the document never names need not occupy real bytes; an empty names map (cstd 0) is the same genuinely spec-conformant zero-style STSH this package always wrote before #1059 minted real entries at all — write.ts always writes one, never omits fcStshf/lcbStshf entirely, because FibRgFcLcb97's own lcbStshf field "MUST be a nonzero value" (a document with no style sheet at all is not a construct [MS-DOC] permits, even though this package's own reader tolerates lcbStshf 0 — see read.ts). Every entry is written with an empty grLPUpxSw — two LPUpxPapx/LPUpxChpx entries, both zero-length — since writeDocContent has no style-vs-direct-formatting split to draw a real one from: every property it writes is already, unconditionally, a paragraph's or run's own direct exception (see the README's own scope note). This mints style IDENTITY only, so a paragraph's own styleId/headingLevel round-trips through a real STSH entry instead of always reading back istd 0 (ExaDev/documents.js#1059).
 export function buildStshForStyles(
   names: ReadonlyMap<number, string>,
 ): Uint8Array {
-  // Math.max's own no-argument case (-1 supplied here, so an empty map's spread contributes nothing) already returns -1 for an empty map without any size check of our own -- every real key is >= 0, so -1 never wins once the map holds one -- which makes a `names.size === 0 ? 0 : ...` guard here provably redundant: both branches produce the identical byte-level result (0) for an empty map (Math.max()+1 alone would coerce to the same 0 through push16's own bitwise truncation of -Infinity, but -1 makes that agreement explicit rather than accidental) and the same result as each other for a non-empty one, so the ternary was never observably distinguishing anything.
+  // Math.max's own no-argument case (-1 supplied here, so an empty map's spread contributes nothing) already returns -1 for an empty map without any size check of our own — every real key is >= 0, so -1 never wins once the map holds one — which makes a `names.size === 0 ? 0 : ...` guard here provably redundant: both branches produce the identical byte-level result (0) for an empty map (Math.max()+1 alone would coerce to the same 0 through push16's own bitwise truncation of -Infinity, but -1 makes that agreement explicit rather than accidental) and the same result as each other for a non-empty one, so the ternary was never observably distinguishing anything.
   const cstd = Math.max(-1, ...names.keys()) + 1;
   const stshi: number[] = [];
   const push16 = (target: number[], value: number): void => {
@@ -312,7 +312,7 @@ export function buildStshForStyles(
     ...stshi,
   ];
 
-  // One LPUpxPapx/LPUpxChpx entry: a 2-byte cbUpx (the payload's own length) followed by the payload. [MS-DOC] 2.9.140/2.9.138 pads an odd-length payload to an even boundary, but both call sites below pass a payload whose own length is fixed -- 2 bytes (an istd) or 0 bytes (an empty UpxPapx/UpxChpx, since mintStyleIstds mints style IDENTITY only, never real formatting, per this function's own doc comment) -- always even, so that padding byte can never actually apply to anything this writer mints.
+  // One LPUpxPapx/LPUpxChpx entry: a 2-byte cbUpx (the payload's own length) followed by the payload. [MS-DOC] 2.9.140/2.9.138 pads an odd-length payload to an even boundary, but both call sites below pass a payload whose own length is fixed — 2 bytes (an istd) or 0 bytes (an empty UpxPapx/UpxChpx, since mintStyleIstds mints style IDENTITY only, never real formatting, per this function's own doc comment) — always even, so that padding byte can never actually apply to anything this writer mints.
   const pushLpUpx = (target: number[], payload: readonly number[]): void => {
     push16(target, payload.length);
     target.push(...payload);
@@ -325,7 +325,7 @@ export function buildStshForStyles(
       continue;
     }
     const std: number[] = [];
-    // StdfBase: sti (STI_USER_DEFINED -- this mints a style identity, not a known application-defined one), stk (paragraph), istdBase (none), cupx/istdNext (unused), bchUpe/grfstd (zero).
+    // StdfBase: sti (STI_USER_DEFINED — this mints a style identity, not a known application-defined one), stk (paragraph), istdBase (none), cupx/istdNext (unused), bchUpe/grfstd (zero).
     const word0 = STI_USER_DEFINED & 0x0fff;
     const word1 = (STK.paragraph & 0x000f) | (ISTD_BASE_NONE << 4);
     push16(std, word0);
@@ -339,12 +339,12 @@ export function buildStshForStyles(
       push16(std, character.charCodeAt(0));
     }
     push16(std, 0);
-    // grLPUpxSw: StkParaGRLPUPX's own two members, both empty -- UpxPapx's own istd (redundant with this entry's own position in the array, [MS-DOC] 2.9.338's own "MUST be equal to the current style") plus a zero-length grpprlPapx, then a zero-length grpprlChpx.
+    // grLPUpxSw: StkParaGRLPUPX's own two members, both empty — UpxPapx's own istd (redundant with this entry's own position in the array, [MS-DOC] 2.9.338's own "MUST be equal to the current style") plus a zero-length grpprlPapx, then a zero-length grpprlChpx.
     pushLpUpx(std, [istd & 0xff, (istd >> 8) & 0xff]);
     pushLpUpx(std, []);
     push16(out, std.length);
     out.push(...std);
-    // "LPStd structures are stored on even-byte boundaries, but this length MUST NOT include this padding." -- but std.length here is always 20 + 2 * name.length (10 bytes of StdfBase, an Xstz that is 4 + 2 * name.length since name.length counts UTF-16 code units, a 4-byte empty UpxPapx, and a 2-byte empty UpxChpx), which is even for any name, so this entry never actually needs the pad byte the format's own rule allows for.
+    // "LPStd structures are stored on even-byte boundaries, but this length MUST NOT include this padding." — but std.length here is always 20 + 2 * name.length (10 bytes of StdfBase, an Xstz that is 4 + 2 * name.length since name.length counts UTF-16 code units, a 4-byte empty UpxPapx, and a 2-byte empty UpxChpx), which is even for any name, so this entry never actually needs the pad byte the format's own rule allows for.
   }
   return new Uint8Array(out);
 }

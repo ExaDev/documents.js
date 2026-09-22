@@ -21,7 +21,7 @@ describe("groupVectorsByShapePosition", () => {
   });
 
   it("a vector sharing a shape's own paintOrder exactly is NOT counted as coming before that shape", () => {
-    // odf.js's real, single shared counter can never actually produce this collision (see the module comment on the function under test), but the boundary itself -- strictly less than, not less-than-or-equal -- is still this function's own contract and worth pinning directly.
+    // odf.js's real, single shared counter can never actually produce this collision (see the module comment on the function under test), but the boundary itself — strictly less than, not less-than-or-equal — is still this function's own contract and worth pinning directly.
     const groups = groupVectorsByShapePosition([5], [rect(5)]);
     expect(groups).toHaveLength(1);
     expect(groups[0]?.insertBeforeShapeIndex).toBe(0);

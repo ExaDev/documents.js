@@ -62,7 +62,7 @@ describe("readPageForm", () => {
     expect(readPageForm(new Uint8Array(20))).toBeUndefined();
   });
 
-  // A field list one byte shy of eighty-two, but long enough that every field it declares (including the orientation byte at offset 8) still reads a genuine, non-zero value -- so a version of readPageForm that dropped the length guard entirely would still build a real form from these same bytes, rather than failing some other way.
+  // A field list one byte shy of eighty-two, but long enough that every field it declares (including the orientation byte at offset 8) still reads a genuine, non-zero value — so a version of readPageForm that dropped the length guard entirely would still build a real form from these same bytes, rather than failing some other way.
   it("declines a short form even though the bytes it can reach would otherwise parse as a real size", () => {
     const bytes = new Uint8Array(9);
     bytes.set(word(100), 3);
@@ -94,7 +94,7 @@ describe("readPageForm", () => {
 });
 
 describe("readMarginPt", () => {
-  // All four margin functions -- the Page group's top and bottom, the Column group's left and right -- share one "[size of non-deletable information = 2]" shape, so one reader serves them all.
+  // All four margin functions — the Page group's top and bottom, the Column group's left and right — share one "[size of non-deletable information = 2]" shape, so one reader serves them all.
   it("reads a one-inch margin as seventy-two points", () => {
     expect(readMarginPt(new Uint8Array(word(ONE_INCH_WPU)))).toBe(72);
   });

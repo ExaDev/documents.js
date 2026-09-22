@@ -1,4 +1,4 @@
-// A minimal but structurally authentic WordPerfect 6.x file: a real 512-byte prefix header, a one-record (index-header-only) index area, no packets, and a document area built from real WPFF Document Structure function bytes -- mirroring this package's own src/test-support/odf-formula-fixture.ts convention (that file hand-authors odf's own byte structure since neither odf.js nor documents.js exposes a writer for it; wpd-codec exposes no writer at all, for the identical reason). documents.js's own internal src/test-support/wpd.ts carries the same construction (never exported, so not reusable directly from this package either) -- this is that same small, spec-grounded port, not a new design.
+// A minimal but structurally authentic WordPerfect 6.x file: a real 512-byte prefix header, a one-record (index-header-only) index area, no packets, and a document area built from real WPFF Document Structure function bytes — mirroring this package's own src/test-support/odf-formula-fixture.ts convention (that file hand-authors odf's own byte structure since neither odf.js nor documents.js exposes a writer for it; wpd-codec exposes no writer at all, for the identical reason). documents.js's own internal src/test-support/wpd.ts carries the same construction (never exported, so not reusable directly from this package either) — this is that same small, spec-grounded port, not a new design.
 import { WPD_INDEX_RECORD_SIZE } from "wpd-codec/container/prefix";
 
 const PREFIX_HEADER_SIZE = 512;
@@ -14,7 +14,7 @@ function putUint32(bytes: Uint8Array, offset: number, value: number): void {
   putUint16(bytes, offset + 2, (value >>> 16) & 0xffff);
 }
 
-// The ASCII characters of a string as document-area bytes -- every character in the single-byte printable range passes through unchanged except a space, which WordPerfect represents as the Soft Space function (0x80) rather than byte 0x20 (the international shorthand for the sharp s).
+// The ASCII characters of a string as document-area bytes — every character in the single-byte printable range passes through unchanged except a space, which WordPerfect represents as the Soft Space function (0x80) rather than byte 0x20 (the international shorthand for the sharp s).
 function documentAreaText(value: string): number[] {
   return [...value].map((character) => {
     const code = character.charCodeAt(0);

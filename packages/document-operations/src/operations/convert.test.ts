@@ -13,7 +13,7 @@ import {
   listDocumentConversionsOperation,
 } from "./convert";
 
-// The same real 1x1 PNG markdown-codec's own lower.test.ts (and documents.js's own convert/markdown-image.test.ts) resolves through a MarkdownImageResolver -- decoded so detectImageFormat/readImageDimensions accept it and a genuine image block is produced rather than the alt-text degradation an unresolvable image becomes.
+// The same real 1x1 PNG markdown-codec's own lower.test.ts (and documents.js's own convert/markdown-image.test.ts) resolves through a MarkdownImageResolver — decoded so detectImageFormat/readImageDimensions accept it and a genuine image block is produced rather than the alt-text degradation an unresolvable image becomes.
 const ONE_PIXEL_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
@@ -54,7 +54,7 @@ describe("convertDocumentOperation", () => {
   });
 
   it("propagates an already-aborted signal for a path source", async () => {
-    // A path that does not exist, so a real fs error (not the conversion's own abort check) would result if resolveDocumentInput's own signal forwarding were ever dropped -- a real file's read would succeed either way, masking the difference behind the SAME signal still aborting the conversion downstream.
+    // A path that does not exist, so a real fs error (not the conversion's own abort check) would result if resolveDocumentInput's own signal forwarding were ever dropped — a real file's read would succeed either way, masking the difference behind the SAME signal still aborting the conversion downstream.
     const controller = new AbortController();
     controller.abort();
 

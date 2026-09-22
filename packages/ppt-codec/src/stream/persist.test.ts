@@ -16,7 +16,7 @@ import {
   resolvePersistObject,
 } from "./persist";
 
-// Built from [MS-PPT] 2.3.3's own field table: lastSlideIdRef, version, minorVersion, majorVersion, offsetLastEdit, offsetPersistDirectory, docPersistIdRef, persistIdSeed, lastView, unused -- 28 bytes (0x1C) -- plus an optional 4-byte encryptSessionPersistIdRef that makes recLen 0x20 instead. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/3ffb3fab-95de-4873-98aa-d508fbbac981
+// Built from [MS-PPT] 2.3.3's own field table: lastSlideIdRef, version, minorVersion, majorVersion, offsetLastEdit, offsetPersistDirectory, docPersistIdRef, persistIdSeed, lastView, unused — 28 bytes (0x1C) — plus an optional 4-byte encryptSessionPersistIdRef that makes recLen 0x20 instead. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/3ffb3fab-95de-4873-98aa-d508fbbac981
 function userEditAtom(options: {
   offsetLastEdit?: number;
   offsetPersistDirectory?: number;
@@ -161,7 +161,7 @@ describe("readPersistDirectoryAtom", () => {
   });
 
   it("names a second entry's own real byte offset in the cPersist-0 rejection, not the first entry's", () => {
-    // The first entry consumes 8 bytes (4-byte header word plus one offset) before the second, invalid entry is even reached -- at 0 for a first-entry violation (the existing test above) cannot tell dataOffset + at apart from dataOffset - at, since adding or subtracting 0 is identical either way.
+    // The first entry consumes 8 bytes (4-byte header word plus one offset) before the second, invalid entry is even reached — at 0 for a first-entry violation (the existing test above) cannot tell dataOffset + at apart from dataOffset - at, since adding or subtracting 0 is identical either way.
     const bytes = persistDirectoryAtom(
       persistDirectoryEntry(5, [0x1000]),
       persistDirectoryEntry(9, []),

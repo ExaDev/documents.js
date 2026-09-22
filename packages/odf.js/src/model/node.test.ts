@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { isXmlNode } from "./node";
 
-// isXmlNode is a hand-written recursive structural guard (used via z.custom, since a genuinely recursive Zod schema collapses to `unknown` under z.lazy in this pinned version) with no direct unit tests at all -- every place it runs is exercised only as a side effect of parsing a real XML document, which never constructs the malformed shapes below.
+// isXmlNode is a hand-written recursive structural guard (used via z.custom, since a genuinely recursive Zod schema collapses to `unknown` under z.lazy in this pinned version) with no direct unit tests at all — every place it runs is exercised only as a side effect of parsing a real XML document, which never constructs the malformed shapes below.
 
 describe("isXmlNode: non-object/malformed input", () => {
   it("rejects null, a primitive, and an array outright", () => {

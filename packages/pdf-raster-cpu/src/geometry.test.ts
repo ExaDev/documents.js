@@ -66,7 +66,7 @@ describe("flattenCubic", () => {
   });
 
   it("treats a distance exactly at the tolerance as flat, and does not subdivide", () => {
-    // chordY is 0 here (p0 and p1 share a y), which collapses the perpendicular-distance formula to plain |control.y|: both control points sit at exactly FLATTEN_TOLERANCE_PX, so this pins the <= boundary precisely -- a mutated < or > both reject the boundary case and force at least one extra subdivision.
+    // chordY is 0 here (p0 and p1 share a y), which collapses the perpendicular-distance formula to plain |control.y|: both control points sit at exactly FLATTEN_TOLERANCE_PX, so this pins the <= boundary precisely — a mutated < or > both reject the boundary case and force at least one extra subdivision.
     const p0 = { x: 0, y: 0 };
     const p1 = { x: 10, y: 0 };
     const c1 = { x: 5, y: 0.05 };
@@ -85,7 +85,7 @@ describe("flattenCubic", () => {
   });
 
   it("caps recursion at the documented depth for a curve whose flatness never converges under floating-point precision", () => {
-    // At this coordinate scale (~5.6e15) the double-precision ULP is itself larger than FLATTEN_TOLERANCE_PX, so the distance-to-chord measurement never settles below tolerance and only the depth cap terminates the recursion -- a curve that instead relied on the tolerance check alone at ordinary coordinate scales would never exercise this branch, or the depth+1 counter, at all. A mutated depth comparison (>, <, or a forced false) or a depth step of -1 instead of +1 removes the only termination condition this input can reach, and the recursion runs away until it exhausts the call stack.
+    // At this coordinate scale (~5.6e15) the double-precision ULP is itself larger than FLATTEN_TOLERANCE_PX, so the distance-to-chord measurement never settles below tolerance and only the depth cap terminates the recursion — a curve that instead relied on the tolerance check alone at ordinary coordinate scales would never exercise this branch, or the depth+1 counter, at all. A mutated depth comparison (>, <, or a forced false) or a depth step of -1 instead of +1 removes the only termination condition this input can reach, and the recursion runs away until it exhausts the call stack.
     const base = 5623413251903491;
     const p0 = { x: base, y: base };
     const p1 = { x: base + 1, y: base };
@@ -97,7 +97,7 @@ describe("flattenCubic", () => {
   });
 
   it("caps recursion at the documented depth on the second half of a subdivided curve too", () => {
-    // The same precision-limited curve as the previous test, walked in the opposite direction (endpoints and control points swapped): the two recursive calls the subdivision makes are not interchangeable -- each carries its own depth argument -- and the previous test's specific curve happens to only ever drive the FIRST of those two calls deep enough to need the cap. Reversing the curve moves the precision-limited region onto the SECOND call's own side of the split, so this is what actually exercises its depth bookkeeping independently of the first.
+    // The same precision-limited curve as the previous test, walked in the opposite direction (endpoints and control points swapped): the two recursive calls the subdivision makes are not interchangeable — each carries its own depth argument — and the previous test's specific curve happens to only ever drive the FIRST of those two calls deep enough to need the cap. Reversing the curve moves the precision-limited region onto the SECOND call's own side of the split, so this is what actually exercises its depth bookkeeping independently of the first.
     const base = 5623413251903491;
     const p0 = { x: base + 1, y: base };
     const p1 = { x: base, y: base };

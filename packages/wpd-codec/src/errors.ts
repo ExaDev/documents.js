@@ -14,7 +14,7 @@ export class WpdNotAWordPerfectFileError extends WpdFormatError {
   }
 }
 
-// The header's encryption word is non-zero and the caller supplied no password. Corel's own wording: "nothing beyond the file header will be intelligible to an application program" -- so there is no partial read to offer, and this throws rather than returning the header alone. Source: WPFF Document Structure, "Encryption field".
+// The header's encryption word is non-zero and the caller supplied no password. Corel's own wording: "nothing beyond the file header will be intelligible to an application program" — so there is no partial read to offer, and this throws rather than returning the header alone. Source: WPFF Document Structure, "Encryption field".
 export class WpdEncryptedDocumentError extends WpdFormatError {
   constructor(message: string) {
     super(message);
@@ -22,7 +22,7 @@ export class WpdEncryptedDocumentError extends WpdFormatError {
   }
 }
 
-// A password was supplied for an encrypted document, but the 16-bit checksum the header's encryption word carries does not match the checksum of that password (see src/container/encryption.ts for where both come from). The message deliberately names both readings of a mismatch, because the header word cannot distinguish them: either the password is wrong, or the file uses WordPerfect 9-and-later "enhanced encryption" -- a different, unpublished cipher whose header word is not a standard-mode password checksum -- which this reader does not support at all.
+// A password was supplied for an encrypted document, but the 16-bit checksum the header's encryption word carries does not match the checksum of that password (see src/container/encryption.ts for where both come from). The message deliberately names both readings of a mismatch, because the header word cannot distinguish them: either the password is wrong, or the file uses WordPerfect 9-and-later "enhanced encryption" — a different, unpublished cipher whose header word is not a standard-mode password checksum — which this reader does not support at all.
 export class WpdWrongPasswordError extends WpdFormatError {
   // The header's own word and the password's computed checksum, carried so a caller can distinguish the two mismatch readings only a human can settle (retry with another password vs an unsupported file) without parsing the message.
   constructor(

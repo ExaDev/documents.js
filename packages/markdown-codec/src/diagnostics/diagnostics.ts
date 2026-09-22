@@ -10,7 +10,7 @@ import {
 export type MarkdownDiagnosticSeverity = "info" | "warning";
 
 export interface MarkdownDiagnostic {
-  // A stable, namespaced code (e.g. 'md/unclosed-fence', 'md/code-span-as-monospace-run') -- callers are expected to branch on this, not on `message`, which is free text for humans. See MarkdownDiagnosticCodes below for the codes this layer already names.
+  // A stable, namespaced code (e.g. 'md/unclosed-fence', 'md/code-span-as-monospace-run') — callers are expected to branch on this, not on `message`, which is free text for humans. See MarkdownDiagnosticCodes below for the codes this layer already names.
   readonly code: string;
   readonly severity: MarkdownDiagnosticSeverity;
   readonly message: string;
@@ -21,14 +21,14 @@ export interface MarkdownDiagnostic {
 // Recover/degrade-tier issues are reported through a sink rather than thrown, so a single unclosed fence or unsupported construct degrades that one element rather than aborting the whole document. A no-op sink is a legitimate choice for a caller that doesn't want diagnostics.
 export type MarkdownDiagnosticSink = (diagnostic: MarkdownDiagnostic) => void;
 
-// Deliberately prefixed (NOT the bare "NOOP_DIAGNOSTIC_SINK" pdf-codec's own src/diagnostics.ts already uses) -- documents.js will import both this package's and pdf-codec's own no-op sink into the same modules once it composes markdown alongside docx/pptx/odt/pdf conversions, and an unprefixed name here would collide on import.
+// Deliberately prefixed (NOT the bare "NOOP_DIAGNOSTIC_SINK" pdf-codec's own src/diagnostics.ts already uses) — documents.js will import both this package's and pdf-codec's own no-op sink into the same modules once it composes markdown alongside docx/pptx/odt/pdf conversions, and an unprefixed name here would collide on import.
 export const NOOP_MARKDOWN_DIAGNOSTIC_SINK: MarkdownDiagnosticSink = () => {
-  /* discards every diagnostic -- the deliberate default for a caller that doesn't want them */
+  /* discards every diagnostic — the deliberate default for a caller that doesn't want them */
 };
 
-// Recover tier: markdown that parses under CommonMark/GFM's own grammar without error, but that a real author almost certainly did not intend -- worth flagging, not worth failing over. Non-exhaustive: further recover-tier codes will be added as src/block/src/inline gain more of the constructs each covers.
+// Recover tier: markdown that parses under CommonMark/GFM's own grammar without error, but that a real author almost certainly did not intend — worth flagging, not worth failing over. Non-exhaustive: further recover-tier codes will be added as src/block/src/inline gain more of the constructs each covers.
 //
-// Degrade tier: an individual construct src/lower's ContentDocument mapping (or src/emit's inverse) cannot represent faithfully, named per the mapping table in the repository's own task history -- see src/lower/ and src/emit/'s own top-of-file comments for the read/write side each code belongs to. Every one of these is reachable from real markdown/ContentDocument input; src/lower.test.ts and src/emit.test.ts each exercise the codes their own stage produces, and src/diagnostics/diagnostics.test.ts asserts the whole MarkdownDiagnosticCodes table has no dead entry.
+// Degrade tier: an individual construct src/lower's ContentDocument mapping (or src/emit's inverse) cannot represent faithfully, named per the mapping table in the repository's own task history — see src/lower/ and src/emit/'s own top-of-file comments for the read/write side each code belongs to. Every one of these is reachable from real markdown/ContentDocument input; src/lower.test.ts and src/emit.test.ts each exercise the codes their own stage produces, and src/diagnostics/diagnostics.test.ts asserts the whole MarkdownDiagnosticCodes table has no dead entry.
 export const MarkdownDiagnosticCodes = {
   UNCLOSED_FENCE: "md/unclosed-fence",
   UNCLOSED_MATH_BLOCK: "md/unclosed-math-block",
@@ -89,7 +89,7 @@ export class MarkdownUndecodableTextError extends MarkdownParseError {
   }
 }
 
-// ReadMarkdownOptions.maxInputBytes exceeded -- a resource-limit guard, not a content problem, so it throws rather than degrading.
+// ReadMarkdownOptions.maxInputBytes exceeded — a resource-limit guard, not a content problem, so it throws rather than degrading.
 export class MarkdownInputTooLargeError extends MarkdownParseError {
   readonly maxInputBytes: number;
   readonly actualBytes: number;
@@ -105,7 +105,7 @@ export class MarkdownInputTooLargeError extends MarkdownParseError {
   }
 }
 
-// ReadMarkdownOptions.maxBlockNesting exceeded (default DEFAULT_MAX_BLOCK_NESTING, src/defaults) -- guards the block-structure algorithm's own open-block stack against pathological/adversarial input (thousands of nested blockquotes or list items), the same class of guard cmark's own reference implementation applies.
+// ReadMarkdownOptions.maxBlockNesting exceeded (default DEFAULT_MAX_BLOCK_NESTING, src/defaults) — guards the block-structure algorithm's own open-block stack against pathological/adversarial input (thousands of nested blockquotes or list items), the same class of guard cmark's own reference implementation applies.
 export class MarkdownNestingLimitExceededError extends MarkdownParseError {
   readonly maxNesting: number;
 
@@ -119,7 +119,7 @@ export class MarkdownNestingLimitExceededError extends MarkdownParseError {
   }
 }
 
-// The write-side counterpart to MarkdownParseError -- input this package's writeMarkdown cannot meaningfully render at all, regardless of what a diagnostic sink could report about it. Carries the same `code` vocabulary convention.
+// The write-side counterpart to MarkdownParseError — input this package's writeMarkdown cannot meaningfully render at all, regardless of what a diagnostic sink could report about it. Carries the same `code` vocabulary convention.
 export class MarkdownWriteError extends Error {
   readonly code: string;
 
@@ -130,9 +130,9 @@ export class MarkdownWriteError extends Error {
   }
 }
 
-// Thrown by writeMarkdown when handed a ContentDocument whose block list's construct boundary markers (document-schema.js 4.2.0's ContentConstructStart/ContentConstructEnd) do not pair up as balanced brackets -- an end with no construct open at that point, or a start still open when the list ended. This is the throw tier rather than a degrade because an unbalanced list is malformed input rather than a shape to repair: the schema's own bracket-matching contract states outright that the blocks between a matched pair ARE the construct's extent, so with the pairing broken there is no extent to render and no correct guess about which blocks the producer meant to include. Detected via document-schema.js's own findConstructMarkerImbalance -- the one shared definition of the check, which every codec that emits a pair and documents.js's own decompose all have to agree on exactly.
+// Thrown by writeMarkdown when handed a ContentDocument whose block list's construct boundary markers (document-schema.js 4.2.0's ContentConstructStart/ContentConstructEnd) do not pair up as balanced brackets — an end with no construct open at that point, or a start still open when the list ended. This is the throw tier rather than a degrade because an unbalanced list is malformed input rather than a shape to repair: the schema's own bracket-matching contract states outright that the blocks between a matched pair ARE the construct's extent, so with the pairing broken there is no extent to render and no correct guess about which blocks the producer meant to include. Detected via document-schema.js's own findConstructMarkerImbalance — the one shared definition of the check, which every codec that emits a pair and documents.js's own decompose all have to agree on exactly.
 export class MarkdownUnbalancedConstructMarkersError extends MarkdownWriteError {
-  // Which end of the pairing failed, and the offending block's own index in its section's block list -- carried verbatim from findConstructMarkerImbalance so a caller can locate it without re-running the walk.
+  // Which end of the pairing failed, and the offending block's own index in its section's block list — carried verbatim from findConstructMarkerImbalance so a caller can locate it without re-running the walk.
   readonly imbalanceKind: "unmatchedEnd" | "unclosedStart";
   readonly blockIndex: number;
 
@@ -168,9 +168,9 @@ export class MarkdownTableGridFaultError extends MarkdownWriteError {
   }
 }
 
-// Thrown by writeMarkdown/writeMarkdownContent when a paragraph's run-level construct extent (document-schema.js's RunConstructExtent, ContentParagraph.constructs) does not name real runs -- an inverted range, or bounds reaching outside 0..runs.length. The run-level twin of MarkdownUnbalancedConstructMarkersError, detected through document-schema.js's own findRunConstructFault for the same reason that check uses findConstructMarkerImbalance: one shared definition of "well-formed" every codec and consumer agrees on. The throw tier rather than a degrade because a range that names no real runs has no position to render anything at -- guessing one would silently move a construct onto runs the producer never pointed it at.
+// Thrown by writeMarkdown/writeMarkdownContent when a paragraph's run-level construct extent (document-schema.js's RunConstructExtent, ContentParagraph.constructs) does not name real runs — an inverted range, or bounds reaching outside 0..runs.length. The run-level twin of MarkdownUnbalancedConstructMarkersError, detected through document-schema.js's own findRunConstructFault for the same reason that check uses findConstructMarkerImbalance: one shared definition of "well-formed" every codec and consumer agrees on. The throw tier rather than a degrade because a range that names no real runs has no position to render anything at — guessing one would silently move a construct onto runs the producer never pointed it at.
 export class MarkdownInvalidRunConstructExtentError extends MarkdownWriteError {
-  // Which way the range was faulty and the offending entry's own index in the paragraph's constructs array -- carried verbatim from findRunConstructFault so a caller can locate it without re-running the walk.
+  // Which way the range was faulty and the offending entry's own index in the paragraph's constructs array — carried verbatim from findRunConstructFault so a caller can locate it without re-running the walk.
   readonly faultKind: "invertedRange" | "beyondRuns";
   readonly entryIndex: number;
 
@@ -189,7 +189,7 @@ export class MarkdownInvalidRunConstructExtentError extends MarkdownWriteError {
   }
 }
 
-// Thrown by writeMarkdown when handed a ContentDocument whose kind is not 'wordprocessing' -- markdown has no presentation/spreadsheet/drawing equivalent to render, matching ooxml.js's buildXlsxPackage's own "throw outright for the wrong document kind" convention (see documents.js's src/ooxml/xlsx precedent) rather than accepting a value a caller would need to pre-check themselves. Extends MarkdownWriteError, not MarkdownParseError -- this is a write-time failure (writeMarkdown's own entry point), never reachable from readMarkdown at all.
+// Thrown by writeMarkdown when handed a ContentDocument whose kind is not 'wordprocessing' — markdown has no presentation/spreadsheet/drawing equivalent to render, matching ooxml.js's buildXlsxPackage's own "throw outright for the wrong document kind" convention (see documents.js's src/ooxml/xlsx precedent) rather than accepting a value a caller would need to pre-check themselves. Extends MarkdownWriteError, not MarkdownParseError — this is a write-time failure (writeMarkdown's own entry point), never reachable from readMarkdown at all.
 export class MarkdownUnsupportedDocumentKindError extends MarkdownWriteError {
   readonly kind: string;
 
@@ -203,7 +203,7 @@ export class MarkdownUnsupportedDocumentKindError extends MarkdownWriteError {
   }
 }
 
-// Thrown by writeMarkdown when document-schema.js's own flattenTree rejects the package it was handed -- a group carrying a style ref with no top-level styles table to resolve it against is the one case reachable for a 'wordprocessing' package (writeMarkdown's own kind check above rules out the formula/spreadsheet-specific cases flattenTree also guards). flattenTree itself throws a bare Error for this, which is not part of this package's own documented error hierarchy -- wrapped here so a caller catching MarkdownWriteError catches it too, rather than needing to know about a dependency's own internal exception type.
+// Thrown by writeMarkdown when document-schema.js's own flattenTree rejects the package it was handed — a group carrying a style ref with no top-level styles table to resolve it against is the one case reachable for a 'wordprocessing' package (writeMarkdown's own kind check above rules out the formula/spreadsheet-specific cases flattenTree also guards). flattenTree itself throws a bare Error for this, which is not part of this package's own documented error hierarchy — wrapped here so a caller catching MarkdownWriteError catches it too, rather than needing to know about a dependency's own internal exception type.
 export class MarkdownPackageFlattenError extends MarkdownWriteError {
   constructor(cause: unknown) {
     const detail = cause instanceof Error ? cause.message : String(cause);

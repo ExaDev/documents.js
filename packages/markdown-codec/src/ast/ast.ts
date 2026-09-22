@@ -1,9 +1,9 @@
-// This package's own markdown AST node types -- the intermediate representation src/block/src/inline build and src/lower/ consumes to produce a ContentDocument. Every block node type carries its own children shape (a document/paragraph/blockquote/listItem holds further block or inline children; a table/tableRow/tableCell holds the GFM table shape specifically); every inline node type is a leaf or holds further inline children.
+// This package's own markdown AST node types — the intermediate representation src/block/src/inline build and src/lower/ consumes to produce a ContentDocument. Every block node type carries its own children shape (a document/paragraph/blockquote/listItem holds further block or inline children; a table/tableRow/tableCell holds the GFM table shape specifically); every inline node type is a leaf or holds further inline children.
 //
-// Deliberately NO Zod schema here, matching pdf-codec's own PdfObject precedent exactly (see that package's src/objects.ts top-of-file comment): this type never crosses a public boundary, never round-trips through JSON, and is constructed and consumed exclusively by this package's own scan/block/inline/lower pipeline -- validating it would be validating our own output. Narrowing is plain TypeScript control flow on each node's own `type` discriminant (a switch or `===` check), the same reason PdfObject picks a hand-written discriminant over z.lazy/z.discriminatedUnion for its own recursive type.
+// Deliberately NO Zod schema here, matching pdf-codec's own PdfObject precedent exactly (see that package's src/objects.ts top-of-file comment): this type never crosses a public boundary, never round-trips through JSON, and is constructed and consumed exclusively by this package's own scan/block/inline/lower pipeline — validating it would be validating our own output. Narrowing is plain TypeScript control flow on each node's own `type` discriminant (a switch or `===` check), the same reason PdfObject picks a hand-written discriminant over z.lazy/z.discriminatedUnion for its own recursive type.
 
 export interface MarkdownPosition {
-  // 1-based line/column, matching src/scan's own ScanPosition convention. Column is tab-expanded (see src/scan) -- it measures the position a human editor would show, not a raw string index.
+  // 1-based line/column, matching src/scan's own ScanPosition convention. Column is tab-expanded (see src/scan) — it measures the position a human editor would show, not a raw string index.
   readonly startLine: number;
   readonly startColumn: number;
   readonly endLine: number;
@@ -78,7 +78,7 @@ export interface MarkdownListNode {
 
 export interface MarkdownListItemNode {
   readonly type: "listItem";
-  // GFM task list item checkbox state ([ ] / [x]) -- undefined when the item is not a task list item at all, matching how MarkdownImageNode.widthPx/heightPx are undefined rather than a sentinel when unresolved.
+  // GFM task list item checkbox state ([ ] / [x]) — undefined when the item is not a task list item at all, matching how MarkdownImageNode.widthPx/heightPx are undefined rather than a sentinel when unresolved.
   readonly checked?: boolean;
   readonly children: MarkdownBlockNode[];
   readonly position?: MarkdownPosition;
@@ -102,7 +102,7 @@ export interface MarkdownThematicBreakNode {
 
 export interface MarkdownHtmlBlockNode {
   readonly type: "htmlBlock";
-  // The block's literal source text, verbatim -- CommonMark does not require block HTML to be balanced or otherwise valid, so this is never parsed as markup, only recognised by its own start/end conditions (src/html).
+  // The block's literal source text, verbatim — CommonMark does not require block HTML to be balanced or otherwise valid, so this is never parsed as markup, only recognised by its own start/end conditions (src/html).
   readonly literal: string;
   readonly position?: MarkdownPosition;
 }
@@ -127,22 +127,22 @@ export interface MarkdownTableRowNode {
 
 export interface MarkdownTableCellNode {
   readonly type: "tableCell";
-  // A GFM table cell holds inline content only -- no nested block content, unlike a docx/odt table cell.
+  // A GFM table cell holds inline content only — no nested block content, unlike a docx/odt table cell.
   readonly children: MarkdownInlineNode[];
   readonly position?: MarkdownPosition;
 }
 
-// Pandoc/GitHub math-extension display math: a $$ line, raw LaTeX content, a closing $$ line (ExaDev/markdown-codec#53). Modelled on MarkdownCodeBlockNode's own fenced convention -- literal is the content BETWEEN the two delimiter lines, never including them (src/block/block.ts's tryMathBlockStart/finalizeMathBlock regenerate a fresh $$ pair on the way back out, exactly as a fenced code block regenerates its own fence rather than preserving the original). Never parsed as LaTeX or converted to MathML by this package -- src/lower/lower.ts preserves it as literal text; that conversion is a documents.js question (ExaDev/documents.js#563).
+// Pandoc/GitHub math-extension display math: a $$ line, raw LaTeX content, a closing $$ line (ExaDev/markdown-codec#53). Modelled on MarkdownCodeBlockNode's own fenced convention — literal is the content BETWEEN the two delimiter lines, never including them (src/block/block.ts's tryMathBlockStart/finalizeMathBlock regenerate a fresh $$ pair on the way back out, exactly as a fenced code block regenerates its own fence rather than preserving the original). Never parsed as LaTeX or converted to MathML by this package — src/lower/lower.ts preserves it as literal text; that conversion is a documents.js question (ExaDev/documents.js#563).
 export interface MarkdownMathBlockNode {
   readonly type: "mathBlock";
   readonly literal: string;
   readonly position?: MarkdownPosition;
 }
 
-// A footnote definition's own tail-of-document block (`[^label]: body`, ExaDev/markdown-codec#66) -- a CONTAINER, not a leaf: its body is ordinary block content (further paragraphs, code blocks, tables, quotes, nested lists), continued by four columns of indentation exactly as a list item's own body is. That containment is what the definition's ContentDocument mapping needs: src/lower/lower.ts lowers this node to an `anchor` construct's boundary-marker pair (document-schema.js 4.2.0) bracketing the lowered body blocks, and AnchorDescriptor's own `definition` field names a package-level definitions-table key that a flat ContentDocument has no root to carry -- so the body rides the construct's own extent rather than a table entry.
+// A footnote definition's own tail-of-document block (`[^label]: body`, ExaDev/markdown-codec#66) — a CONTAINER, not a leaf: its body is ordinary block content (further paragraphs, code blocks, tables, quotes, nested lists), continued by four columns of indentation exactly as a list item's own body is. That containment is what the definition's ContentDocument mapping needs: src/lower/lower.ts lowers this node to an `anchor` construct's boundary-marker pair (document-schema.js 4.2.0) bracketing the lowered body blocks, and AnchorDescriptor's own `definition` field names a package-level definitions-table key that a flat ContentDocument has no root to carry — so the body rides the construct's own extent rather than a table entry.
 export interface MarkdownFootnoteDefinitionNode {
   readonly type: "footnoteDefinition";
-  // The identifier between `[^` and `]`, verbatim -- matched against a reference's own label exactly, with no case folding (see src/inline/footnote.ts).
+  // The identifier between `[^` and `]`, verbatim — matched against a reference's own label exactly, with no case folding (see src/inline/footnote.ts).
   readonly label: string;
   readonly children: MarkdownBlockNode[];
   readonly position?: MarkdownPosition;
@@ -214,7 +214,7 @@ export interface MarkdownImageNode {
   readonly title?: string;
   // The image description flattened to plain text, per CommonMark's own rule that an image's inline content becomes its alt text rather than being rendered as nested inline markup.
   readonly alt: string;
-  // Resolved by src/image's readImageDimensions for a data: URI image, only when ReadMarkdownOptions.images is enabled -- undefined for a remote (http/https/relative-path) image src/lower has no bytes to inspect, or when dimension resolution is disabled or the image bytes could not be measured.
+  // Resolved by src/image's readImageDimensions for a data: URI image, only when ReadMarkdownOptions.images is enabled — undefined for a remote (http/https/relative-path) image src/lower has no bytes to inspect, or when dimension resolution is disabled or the image bytes could not be measured.
   readonly widthPx?: number;
   readonly heightPx?: number;
   readonly position?: MarkdownPosition;
@@ -222,7 +222,7 @@ export interface MarkdownImageNode {
 
 export interface MarkdownAutolinkNode {
   readonly type: "autolink";
-  // The URI or email address exactly as written between < and > -- CommonMark autolinks are never re-encoded.
+  // The URI or email address exactly as written between < and > — CommonMark autolinks are never re-encoded.
   readonly destination: string;
   readonly email: boolean;
   readonly position?: MarkdownPosition;
@@ -248,21 +248,21 @@ export interface MarkdownEntityNode {
   readonly type: "entity";
   // The literal source text, e.g. '&amp;', '&#169;', or '&#x3C;'.
   readonly raw: string;
-  // The resolved character(s) the entity decodes to -- may be more than one UTF-16 code unit (a named reference can map to more than one codepoint, e.g. '&NotEqualTilde;').
+  // The resolved character(s) the entity decodes to — may be more than one UTF-16 code unit (a named reference can map to more than one codepoint, e.g. '&NotEqualTilde;').
   readonly value: string;
   readonly position?: MarkdownPosition;
 }
 
-// Pandoc/GitHub math-extension inline math: \( \) (ExaDev/markdown-codec#53). Deliberately NOT single-dollar $...$ -- the classic currency false-positive failure mode. Modelled on MarkdownCodeSpanNode's own convention: literal is the INNER LaTeX only, \( and \) excluded -- src/lower/inline.ts marks the lowered run with a dedicated ContentRun.fontFamily (MATH_INLINE_FONT_MARKER, src/shared/style-constants.ts, the same opportunistic-reuse trick a code span's own Courier New marker already plays) rather than folding the delimiters into the run's own text, because escapeMarkdownText (src/emit/inline.ts) backslash-escapes literal '(' and ')' in ORDINARY text -- a self-describing "\(...\) in the text is always math" rule would misrecognise any ordinary escaped parenthetical remark as math on reparse. Never parsed as LaTeX or converted to MathML by this package -- that conversion is a documents.js question (ExaDev/documents.js#563).
+// Pandoc/GitHub math-extension inline math: \( \) (ExaDev/markdown-codec#53). Deliberately NOT single-dollar $...$ — the classic currency false-positive failure mode. Modelled on MarkdownCodeSpanNode's own convention: literal is the INNER LaTeX only, \( and \) excluded — src/lower/inline.ts marks the lowered run with a dedicated ContentRun.fontFamily (MATH_INLINE_FONT_MARKER, src/shared/style-constants.ts, the same opportunistic-reuse trick a code span's own Courier New marker already plays) rather than folding the delimiters into the run's own text, because escapeMarkdownText (src/emit/inline.ts) backslash-escapes literal '(' and ')' in ORDINARY text — a self-describing "\(...\) in the text is always math" rule would misrecognise any ordinary escaped parenthetical remark as math on reparse. Never parsed as LaTeX or converted to MathML by this package — that conversion is a documents.js question (ExaDev/documents.js#563).
 export interface MarkdownMathInlineNode {
   readonly type: "mathInline";
   readonly literal: string;
   readonly position?: MarkdownPosition;
 }
 
-// A footnote REFERENCE site (`[^label]` in running text, ExaDev/markdown-codec#66). Produced only when the document also carries a definition under that exact label -- an unmatched `[^label]` is ordinary text, which is GitHub's own reading and the only one that keeps a bracketed aside from silently becoming a dangling note.
+// A footnote REFERENCE site (`[^label]` in running text, ExaDev/markdown-codec#66). Produced only when the document also carries a definition under that exact label — an unmatched `[^label]` is ordinary text, which is GitHub's own reading and the only one that keeps a bracketed aside from silently becoming a dangling note.
 //
-// Deliberately a leaf carrying its label and nothing else: unlike the definition above, a reference has no extent -- it is a POINT, which is exactly what it lowers onto: a run-level point `anchor` extent on the paragraph it sits inside (RunConstructExtent, src/lower/inline.ts's own footnoteReference case), the mechanism document-schema.js 4.5.0 shipped for precisely this mid-paragraph shape.
+// Deliberately a leaf carrying its label and nothing else: unlike the definition above, a reference has no extent — it is a POINT, which is exactly what it lowers onto: a run-level point `anchor` extent on the paragraph it sits inside (RunConstructExtent, src/lower/inline.ts's own footnoteReference case), the mechanism document-schema.js 4.5.0 shipped for precisely this mid-paragraph shape.
 export interface MarkdownFootnoteReferenceNode {
   readonly type: "footnoteReference";
   readonly label: string;

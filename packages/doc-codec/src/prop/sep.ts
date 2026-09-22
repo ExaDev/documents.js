@@ -3,11 +3,11 @@ import type { Fib } from "../fib/fib";
 import { parsePlc } from "../plc";
 import { SGC, readGrpprl, type Prl } from "./sprm";
 
-/** Sed, [MS-DOC] 2.9.269: fn(2, ignored) + fcSepx(4) + fnMpr(2, ignored) + fcMpr(4, ignored) -- 12 bytes, the fixed element size parsePlc needs for PlcfSed. */
+/** Sed, [MS-DOC] 2.9.269: fn(2, ignored) + fcSepx(4) + fnMpr(2, ignored) + fcMpr(4, ignored) — 12 bytes, the fixed element size parsePlc needs for PlcfSed. */
 const SED_SIZE = 12;
 const SED_FC_SEPX_OFFSET = 2;
 
-// Section properties, [MS-DOC] 2.6.4 -- the subset of the section-property sprm table this reader converts: page size and the four page margins, which is all document-schema.js's own ContentSection (pageSize + margins) has anywhere to hold. Every other section sprm (columns, headers/footers distance, vertical justification, page borders, line numbering, the rest of the roughly seventy the specification names) is absent rather than present-and-ignored, the identical documented-gap convention pap.ts already uses for paragraph sprms this package does not convert.
+// Section properties, [MS-DOC] 2.6.4 — the subset of the section-property sprm table this reader converts: page size and the four page margins, which is all document-schema.js's own ContentSection (pageSize + margins) has anywhere to hold. Every other section sprm (columns, headers/footers distance, vertical justification, page borders, line numbering, the rest of the roughly seventy the specification names) is absent rather than present-and-ignored, the identical documented-gap convention pap.ts already uses for paragraph sprms this package does not convert.
 
 /** sprmSXaPage: page width, an unsigned 2-byte twips value. */
 const SPRM_S_XA_PAGE = 0xb01f;
@@ -16,7 +16,7 @@ const SPRM_S_YA_PAGE = 0xb020;
 /** sprmSDxaLeft / sprmSDxaRight: an XAS_nonNeg (unsigned 2-byte twips) left/right margin. */
 const SPRM_S_DXA_LEFT = 0xb021;
 const SPRM_S_DXA_RIGHT = 0xb022;
-/** sprmSDyaTop / sprmSDyaBottom: a YAS (signed 2-byte twips) top/bottom margin -- positive is a minimum margin that grows to avoid a header/footer, negative a fixed margin whose absolute value is used regardless. document-schema.js's Margins has no minimum/fixed distinction, so both forms report the same absolute size (see marginFromYas below). */
+/** sprmSDyaTop / sprmSDyaBottom: a YAS (signed 2-byte twips) top/bottom margin — positive is a minimum margin that grows to avoid a header/footer, negative a fixed margin whose absolute value is used regardless. document-schema.js's Margins has no minimum/fixed distinction, so both forms report the same absolute size (see marginFromYas below). */
 const SPRM_S_DYA_TOP = 0x9023;
 const SPRM_S_DYA_BOTTOM = 0x9024;
 
@@ -40,7 +40,7 @@ export interface SectionProperties {
   marginBottomPt?: number;
 }
 
-// Folds a Sepx's grpprl into `into`, in order, so the last Prl to touch a property determines it -- the same precedence rule applyParagraphSprms/applyCharacterSprms already apply to their own property families ([MS-DOC] 2.6's Applying Properties).
+// Folds a Sepx's grpprl into `into`, in order, so the last Prl to touch a property determines it — the same precedence rule applyParagraphSprms/applyCharacterSprms already apply to their own property families ([MS-DOC] 2.6's Applying Properties).
 export function applySectionSprms(
   prls: readonly Prl[],
   into: SectionProperties,
@@ -73,12 +73,12 @@ export function applySectionSprms(
   return into;
 }
 
-/** One section's own resolved properties (page size, margins) alongside `startCp`, the character position PlcfSed.aCp[i] names as where its text begins in the main document -- [MS-DOC] 2.8.26: "Each CP specifies the beginning of a range of text in the main document that constitutes a section." read.ts's own splitIntoSections groups the main document's paragraph entries by these boundaries. */
+/** One section's own resolved properties (page size, margins) alongside `startCp`, the character position PlcfSed.aCp[i] names as where its text begins in the main document — [MS-DOC] 2.8.26: "Each CP specifies the beginning of a range of text in the main document that constitutes a section." read.ts's own splitIntoSections groups the main document's paragraph entries by these boundaries. */
 export interface DocSectionProperties extends SectionProperties {
   readonly startCp: number;
 }
 
-/** Resolves every section PlcfSed/Sepx states, in document order -- a single zero-start entry with no properties when the file carries no PlcfSed at all (lcbPlcfSed 0) or an empty one, which read.ts's own DEFAULT_PAGE_SIZE/DEFAULT_MARGINS then stand in for field by field, exactly as an individual unstated sprm already does, matching what a single-section document with no PlcfSed at all would resolve to anyway. */
+/** Resolves every section PlcfSed/Sepx states, in document order — a single zero-start entry with no properties when the file carries no PlcfSed at all (lcbPlcfSed 0) or an empty one, which read.ts's own DEFAULT_PAGE_SIZE/DEFAULT_MARGINS then stand in for field by field, exactly as an individual unstated sprm already does, matching what a single-section document with no PlcfSed at all would resolve to anyway. */
 export function readAllSectionProperties(
   wordDocument: Uint8Array,
   table: Uint8Array,

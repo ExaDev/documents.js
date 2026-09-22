@@ -81,7 +81,7 @@ describe("writeCellXfRecord", () => {
     const data = parsed?.data ?? new Uint8Array(0);
     const cursor = new BlockCursor([data]);
     cursor.skip(6); // ifnt, ifmt, flags
-    cursor.skip(4); // word1 -- alignment, not under test here
+    cursor.skip(4); // word1 — alignment, not under test here
     const word2 = cursor.u32();
     const word3 = cursor.u32();
     const word4 = cursor.u16();
@@ -98,7 +98,7 @@ describe("writeCellXfRecord", () => {
   });
 
   it("forces the fill foreground/background back to 'Automatic' for a border-only decoration (no fill pattern)", () => {
-    // fls=0 renders nothing regardless of icvFore/icvBack's own values ([MS-XLS] CellXF), but a real Excel-written border-only cell still carries the same Automatic defaults an undecorated XF does -- this keeps that convention rather than leaking stale values through.
+    // fls=0 renders nothing regardless of icvFore/icvBack's own values ([MS-XLS] CellXF), but a real Excel-written border-only cell still carries the same Automatic defaults an undecorated XF does — this keeps that convention rather than leaking stale values through.
     const record = writeCellXfRecord({
       fontIndex: 0,
       formatId: 0,

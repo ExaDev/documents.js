@@ -90,7 +90,7 @@ describe("addRelationship", () => {
 const CORE_PROPERTIES_TYPE =
   "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties";
 
-// addRelationship(pkg, '', rel) -- the only way to add a root relationship before addRootRelationship existed -- derives its .rels path via relsPathFor(''), which produces "/_rels/.rels" (a leading slash): a different Package.parts key from "_rels/.rels", the one every scaffold in this codebase and every real OOXML package writer actually uses. resolveRelationships(pkg, '') has the identical bug (it calls the same relsPathFor('') internally), so these tests read the raw "_rels/.rels" part directly via rootElement/childrenWithTag/attr, mirroring src/fonts/ooxml.ts's own officeDocumentPartPath -- rather than through resolveRelationships, which cannot see the correct root path either.
+// addRelationship(pkg, '', rel) — the only way to add a root relationship before addRootRelationship existed — derives its .rels path via relsPathFor(''), which produces "/_rels/.rels" (a leading slash): a different Package.parts key from "_rels/.rels", the one every scaffold in this codebase and every real OOXML package writer actually uses. resolveRelationships(pkg, '') has the identical bug (it calls the same relsPathFor('') internally), so these tests read the raw "_rels/.rels" part directly via rootElement/childrenWithTag/attr, mirroring src/fonts/ooxml.ts's own officeDocumentPartPath — rather than through resolveRelationships, which cannot see the correct root path either.
 describe("addRootRelationship", () => {
   it('writes the relationship into "_rels/.rels", not "/_rels/.rels"', () => {
     const pkg: Package = { parts: {} };

@@ -76,7 +76,7 @@ function line(
   return { kind: "line", x1Pt, y1Pt, x2Pt, y2Pt, color: BLACK, widthPt: 0.5 };
 }
 
-// The generic-path shape a stroke can still arrive in when it misses pdf-codec's own LayoutLine shape pattern (several segments in one subpath, or a subpath that is also filled), and the shape every stroke arrived in before that pattern existed. detectGridLattice accepts it alongside a genuine LayoutLine so a hand-built LayoutDocument, an older recorded one, and a freshly round-tripped one all detect identically -- which the "built from stroked LayoutPath items" test below is what actually pins.
+// The generic-path shape a stroke can still arrive in when it misses pdf-codec's own LayoutLine shape pattern (several segments in one subpath, or a subpath that is also filled), and the shape every stroke arrived in before that pattern existed. detectGridLattice accepts it alongside a genuine LayoutLine so a hand-built LayoutDocument, an older recorded one, and a freshly round-tripped one all detect identically — which the "built from stroked LayoutPath items" test below is what actually pins.
 function strokedLinePath(
   x1Pt: number,
   y1Pt: number,
@@ -207,11 +207,11 @@ describe("reconstructWordprocessing: paragraph clustering", () => {
     expect(paras[1]!.runs[0]!.text).toContain("Indented");
   });
 
-  // ExaDev/documents.js#584: a heading sits tight above its body at ordinary line spacing, so the gap signal alone glues them into one paragraph -- the observed "**Part 1 Scope **This is body..." merge. A font-size discontinuity between adjacent lines is a third break signal, the same one the presentation direction's own clusterIntoBlocks already refuses to merge across (its fontSizesClose merge condition).
+  // ExaDev/documents.js#584: a heading sits tight above its body at ordinary line spacing, so the gap signal alone glues them into one paragraph — the observed "**Part 1 Scope **This is body..." merge. A font-size discontinuity between adjacent lines is a third break signal, the same one the presentation direction's own clusterIntoBlocks already refuses to merge across (its fontSizesClose merge condition).
   it("starts a new paragraph at a font-size discontinuity even when the vertical gap alone would not trigger one", () => {
     const pg = page(612, 792, [
       text({ text: "A Heading", xPt: 50, yPt: 700, widthPt: 80, sizePt: 22 }),
-      text({ text: "body one", xPt: 50, yPt: 688, widthPt: 50 }), // gap 12 = modal spacing, same margin -- only the size differs
+      text({ text: "body one", xPt: 50, yPt: 688, widthPt: 50 }), // gap 12 = modal spacing, same margin — only the size differs
       text({ text: "body two", xPt: 50, yPt: 676, widthPt: 50 }),
     ]);
     const doc = reconstructWordprocessing(docFrom([pg]));
@@ -235,7 +235,7 @@ describe("reconstructWordprocessing: paragraph clustering", () => {
 });
 
 describe("reconstructWordprocessing: heading inference from font size", () => {
-  // The layout engine's own heading render sizes (src/layout/shared.ts HEADING_STYLES: 28/22/18/14pt against a 12pt body) are what this inference must invert, so the fixture mirrors them: two distinct sizes above the body, ranked largest-first into Heading1 and Heading2 -- exactly what a markdownToPdf of '# Title / ## Section / body' draws.
+  // The layout engine's own heading render sizes (src/layout/shared.ts HEADING_STYLES: 28/22/18/14pt against a 12pt body) are what this inference must invert, so the fixture mirrors them: two distinct sizes above the body, ranked largest-first into Heading1 and Heading2 — exactly what a markdownToPdf of '# Title / ## Section / body' draws.
   it("assigns Heading1/Heading2 by rank of distinct sizes above the modal body size", () => {
     const pg = page(612, 792, [
       text({ text: "The Title", xPt: 50, yPt: 740, widthPt: 90, sizePt: 28 }),
@@ -264,12 +264,12 @@ describe("reconstructWordprocessing: heading inference from font size", () => {
     ]);
   });
 
-  // ExaDev/documents.js#868: a heading-styled paragraph whose only content is whitespace -- an editorial spacer in a Word-authored specification, or a decorative leader drawn as a stretched space -- carries a real, large font size (a genuine visible Tj, not the empty string convertText already drops before a LayoutText exists) but no text of its own. Classifying it as a heading purely from that font size produced exactly the reported symptom: a bare '#'-'######' marker with nothing after it once markdown-codec's own '#'.repeat(level) + text renders a whitespace-only run.
+  // ExaDev/documents.js#868: a heading-styled paragraph whose only content is whitespace — an editorial spacer in a Word-authored specification, or a decorative leader drawn as a stretched space — carries a real, large font size (a genuine visible Tj, not the empty string convertText already drops before a LayoutText exists) but no text of its own. Classifying it as a heading purely from that font size produced exactly the reported symptom: a bare '#'-'######' marker with nothing after it once markdown-codec's own '#'.repeat(level) + text renders a whitespace-only run.
   it("does not classify a whitespace-only item as a heading, however large its font", () => {
     const pg = page(612, 792, [
       text({ text: "The Title", xPt: 50, yPt: 740, widthPt: 90, sizePt: 28 }),
       text({ text: "body line one", xPt: 50, yPt: 700, widthPt: 80 }),
-      // A lone space at a heading-sized font, positioned as its own paragraph far below the body text -- the same shape a spacer/leader run takes once clustered.
+      // A lone space at a heading-sized font, positioned as its own paragraph far below the body text — the same shape a spacer/leader run takes once clustered.
       text({ text: " ", xPt: 50, yPt: 500, widthPt: 20, sizePt: 22 }),
       text({ text: "trailing body", xPt: 50, yPt: 460, widthPt: 80 }),
     ]);
@@ -290,10 +290,10 @@ describe("reconstructWordprocessing: heading inference from font size", () => {
     ]);
   });
 
-  // A blank item's own font size must not seed a phantom heading bucket either -- it would otherwise shift a real heading's rank (a genuine Heading1 misranked to Heading2 because a spacer's own unrelated size claimed rank 1), the census-side counterpart to the per-paragraph check above. Three body lines (matching the "assigns Heading1/Heading2 by rank" fixture above) give the real 12pt body size a genuine majority over any single-occurrence size, so modeOf's own tie-break can't accidentally pick the blank spacer's or the title's size as the body size instead.
+  // A blank item's own font size must not seed a phantom heading bucket either — it would otherwise shift a real heading's rank (a genuine Heading1 misranked to Heading2 because a spacer's own unrelated size claimed rank 1), the census-side counterpart to the per-paragraph check above. Three body lines (matching the "assigns Heading1/Heading2 by rank" fixture above) give the real 12pt body size a genuine majority over any single-occurrence size, so modeOf's own tie-break can't accidentally pick the blank spacer's or the title's size as the body size instead.
   it("excludes a whitespace-only item's font size from the heading-size census entirely", () => {
     const pg = page(612, 792, [
-      // A blank spacer at 40pt, well above every real heading size present -- if the census counted it, it would claim Heading1 and demote "The Title" to Heading2.
+      // A blank spacer at 40pt, well above every real heading size present — if the census counted it, it would claim Heading1 and demote "The Title" to Heading2.
       text({ text: " ", xPt: 50, yPt: 760, widthPt: 20, sizePt: 40 }),
       text({ text: "The Title", xPt: 50, yPt: 740, widthPt: 90, sizePt: 28 }),
       text({ text: "body line one", xPt: 50, yPt: 700, widthPt: 80 }),
@@ -324,7 +324,7 @@ describe("reconstructWordprocessing: heading inference from font size", () => {
     expect(paras[0]!.runs[0]!.bold).toBe(true);
   });
 
-  it("drops run-level bold on an inferred heading -- the heading style carries the weight", () => {
+  it("drops run-level bold on an inferred heading — the heading style carries the weight", () => {
     const pg = page(612, 792, [
       text({
         text: "The Title",
@@ -342,7 +342,7 @@ describe("reconstructWordprocessing: heading inference from font size", () => {
     const [heading] = paragraphs(doc);
     expect(heading!.styleId).toBe("Heading1");
     expect(heading!.runs.every((r) => r.bold !== true)).toBe(true);
-    // Dropped means the key is absent, not present-with-undefined -- an explicit `bold: undefined` survives 'bold' in run and trips toStrictEqual against a key-absent object, so the dropped run must be shape-identical to a run that was never bold.
+    // Dropped means the key is absent, not present-with-undefined — an explicit `bold: undefined` survives 'bold' in run and trips toStrictEqual against a key-absent object, so the dropped run must be shape-identical to a run that was never bold.
     expect(heading!.runs.every((r) => !("bold" in r))).toBe(true);
   });
 
@@ -417,7 +417,7 @@ describe("reconstructWordprocessing: duplicate-paint collapsing", () => {
   it("collapses an exact duplicate paint of the same text at (nearly) the same position to a single run", () => {
     const pg = page(612, 792, [
       text({ text: "Hello", xPt: 50, yPt: 700, widthPt: 30 }),
-      // Float-noise-level repeat of the identical paint -- the shape a repeated content-stream operator produces, not a deliberate second location.
+      // Float-noise-level repeat of the identical paint — the shape a repeated content-stream operator produces, not a deliberate second location.
       text({ text: "Hello", xPt: 50.001, yPt: 700.0008, widthPt: 30 }),
     ]);
     const doc = reconstructWordprocessing(docFrom([pg]));
@@ -445,9 +445,9 @@ describe("reconstructWordprocessing: duplicate-paint collapsing", () => {
     expect(para!.runs.map((r) => r.text)).toEqual(["Hello ", "World"]);
   });
 
-  it("collapses several duplicated sub-word fragments sharing one position down to coherent text (regression: novus-power/hive#1543 -- an untagged table region whose duplicated paints previously spliced into scrambled output once several such runs shared a baseline)", () => {
+  it("collapses several duplicated sub-word fragments sharing one position down to coherent text (regression: novus-power/hive#1543 — an untagged table region whose duplicated paints previously spliced into scrambled output once several such runs shared a baseline)", () => {
     const pg = page(612, 792, [
-      // "co"+"mp" -> "comp", each half independently repainted several times at (almost) the same position -- the exact shape the corrupted source produced ("cocococompmpmpmp") before this collapsing existed.
+      // "co"+"mp" -> "comp", each half independently repainted several times at (almost) the same position — the exact shape the corrupted source produced ("cocococompmpmpmp") before this collapsing existed.
       text({ text: "co", xPt: 50, yPt: 700, widthPt: 10 }),
       text({ text: "co", xPt: 50.001, yPt: 700, widthPt: 10 }),
       text({ text: "co", xPt: 49.999, yPt: 700.002, widthPt: 10 }),
@@ -464,7 +464,7 @@ describe("reconstructWordprocessing: duplicate-paint collapsing", () => {
 
   it("collapses a long run redrawn across a wider span (one paint per underlying table column) once its own width overlaps the next occurrence", () => {
     const pg = page(612, 792, [
-      // Width (150) far exceeds the 35pt spacing to the next copy -- the two occurrences would visually collide if both were genuinely distinct content, so this is the same repeated-block defect as the exact-position case above, just spread wider.
+      // Width (150) far exceeds the 35pt spacing to the next copy — the two occurrences would visually collide if both were genuinely distinct content, so this is the same repeated-block defect as the exact-position case above, just spread wider.
       text({
         text: "Long repeated phrase",
         xPt: 50,
@@ -485,7 +485,7 @@ describe("reconstructWordprocessing: duplicate-paint collapsing", () => {
 
   it("keeps a short value genuinely repeated across separate, non-overlapping table columns on one line (never collapsed merely for repeating)", () => {
     const pg = page(612, 792, [
-      // Each occurrence's own width (10) sits well inside the 35pt gap to the next -- no overlap at all, unlike the long-run case above, so this is a real repeated cell value (e.g. a grade table's "Op" column), not a redundant redraw.
+      // Each occurrence's own width (10) sits well inside the 35pt gap to the next — no overlap at all, unlike the long-run case above, so this is a real repeated cell value (e.g. a grade table's "Op" column), not a redundant redraw.
       text({ text: "Op", xPt: 50, yPt: 700, widthPt: 10 }),
       text({ text: "Op", xPt: 85, yPt: 700, widthPt: 10 }),
       text({ text: "Op", xPt: 120, yPt: 700, widthPt: 10 }),
@@ -509,7 +509,7 @@ describe("reconstructWordprocessing: fuzzy redraw collapsing (ExaDev/documents.j
       text({ text: "Access", xPt: 50, yPt: 700, widthPt: 36 }),
       text({ text: "control", xPt: 86, yPt: 700, widthPt: 42 }),
       text({ text: "policies", xPt: 128, yPt: 700, widthPt: 48 }),
-      // Redraw 2 (dropped): the identical sentence, but split at different points and drifted slightly in x -- the shape a different kerning pass through the same content stream produces. No fragment here shares an exact position or exact text with any fragment above, so neither dropDuplicatePaints nor dropOverlappingRepeatsWithinLine would ever collapse this pair.
+      // Redraw 2 (dropped): the identical sentence, but split at different points and drifted slightly in x — the shape a different kerning pass through the same content stream produces. No fragment here shares an exact position or exact text with any fragment above, so neither dropDuplicatePaints nor dropOverlappingRepeatsWithinLine would ever collapse this pair.
       text({ text: "Acce", xPt: 50.3, yPt: 700, widthPt: 24 }),
       text({ text: "sscontrolpo", xPt: 74.3, yPt: 700, widthPt: 66 }),
       text({ text: "licies", xPt: 140.3, yPt: 700, widthPt: 36 }),
@@ -521,7 +521,7 @@ describe("reconstructWordprocessing: fuzzy redraw collapsing (ExaDev/documents.j
     );
   });
 
-  it("collapses a redraw that differs from the kept occurrence by a little wording drift, not just fragment boundaries (regression: novus-power/hive#1543 -- source editions merged into the corpus PDF disagree by a character where the same sentence is redrawn)", () => {
+  it("collapses a redraw that differs from the kept occurrence by a little wording drift, not just fragment boundaries (regression: novus-power/hive#1543 — source editions merged into the corpus PDF disagree by a character where the same sentence is redrawn)", () => {
     const pg = page(612, 792, [
       text({
         text: "Access control policies remain effective for compliance",
@@ -947,7 +947,7 @@ describe("reconstructDrawing: vector mapping", () => {
     ]);
   });
 
-  // A cubic segment's control points are never on the curve itself, but the curve is guaranteed to lie within their convex hull -- so the reconstructed frame must include them, not just the segment's start/end points. Both endpoints here share yPt=0, so a bounding box computed from endpoints alone would collapse to zero height; the control points alone reach yPt=100, which is what this test actually proves is captured.
+  // A cubic segment's control points are never on the curve itself, but the curve is guaranteed to lie within their convex hull — so the reconstructed frame must include them, not just the segment's start/end points. Both endpoints here share yPt=0, so a bounding box computed from endpoints alone would collapse to zero height; the control points alone reach yPt=100, which is what this test actually proves is captured.
   it("includes cubic control points in the path bounding frame, not just segment endpoints", () => {
     const item: LayoutItem = {
       kind: "path",
@@ -1020,7 +1020,7 @@ describe("reconstructDrawing: shape mapping", () => {
     });
   });
 
-  // Unlike reconstructPresentation's own blockToShape (which can merge several LayoutText items into one shape and therefore drops rotation entirely, since no single rotation would be correct for a merged result), reconstructDrawing maps one LayoutText item to exactly one ContentShape, so there is no such ambiguity -- rotation carries straight across, negated, the same LayoutImage counter-clockwise -> ContentShape clockwise convention already established below.
+  // Unlike reconstructPresentation's own blockToShape (which can merge several LayoutText items into one shape and therefore drops rotation entirely, since no single rotation would be correct for a merged result), reconstructDrawing maps one LayoutText item to exactly one ContentShape, so there is no such ambiguity — rotation carries straight across, negated, the same LayoutImage counter-clockwise -> ContentShape clockwise convention already established below.
   it("negates a LayoutText item's rotationDeg into ContentShape.rotationDeg, unlike reconstructPresentation's own blockToShape", () => {
     const item: LayoutText = {
       ...text({ text: "R", xPt: 50, yPt: 50, widthPt: 20 }),
@@ -1104,11 +1104,11 @@ describe("reconstructDrawing: paint order and page structure", () => {
       }),
     );
     const [pg] = drawPages(doc);
-    expect(pg!.vectors).toHaveLength(2); // rectA then rectB -- the interleaved text/image items are dropped from this array entirely
+    expect(pg!.vectors).toHaveLength(2); // rectA then rectB — the interleaved text/image items are dropped from this array entirely
     expect(pg!.shapes.map((s) => s.blocks[0]!.kind)).toEqual([
       "paragraph",
       "image",
-    ]); // textItem then imageItem -- the interleaved rects are dropped from this array entirely
+    ]); // textItem then imageItem — the interleaved rects are dropped from this array entirely
   });
 
   it("drops link items entirely, since a drawing page has no link-equivalent construct", () => {
@@ -1176,7 +1176,7 @@ function sheets(
   return doc.sheets;
 }
 
-// Groups a sheet's own sparse ContentSheetCell[] back into a dense 2D array of displayText, indexed [row][column] -- the natural shape to assert a whole recovered grid against in one expect(...).toEqual(...) call.
+// Groups a sheet's own sparse ContentSheetCell[] back into a dense 2D array of displayText, indexed [row][column] — the natural shape to assert a whole recovered grid against in one expect(...).toEqual(...) call.
 function grid(sheet: ContentSheet): string[][] {
   const byRow = new Map<number, string[]>();
   for (const cell of sheet.cells) {
@@ -1188,7 +1188,7 @@ function grid(sheet: ContentSheet): string[][] {
 }
 
 describe("reconstructSpreadsheet: gridline lattice detection", () => {
-  // Deliberately misaligns each row's own text x-position within its own column (row 0's items sit near the LEFT edge of each column band, row 1's sit near the RIGHT edge) -- text-position clustering alone (COLUMN_ALIGNMENT_TOLERANCE_PT=3) would never merge x=10 and x=90 into the same recovered column, so a correct grouping here is only possible because the drawn gridline lattice's own boundaries -- not text alignment -- decided the columns.
+  // Deliberately misaligns each row's own text x-position within its own column (row 0's items sit near the LEFT edge of each column band, row 1's sit near the RIGHT edge) — text-position clustering alone (COLUMN_ALIGNMENT_TOLERANCE_PT=3) would never merge x=10 and x=90 into the same recovered column, so a correct grouping here is only possible because the drawn gridline lattice's own boundaries — not text alignment — decided the columns.
   it("uses a drawn gridline lattice directly as cell boundaries, not text-position clustering", () => {
     const items: LayoutItem[] = [
       // Row boundaries (top=200, middle=150, bottom=100) and column boundaries (left=0, middle=120, right=300).
@@ -1296,7 +1296,7 @@ describe("reconstructSpreadsheet: text-position column clustering (no gridlines)
   it("joins multiple text items assigned to the same recovered cell with a single space, matching this module's own word-gap convention", () => {
     const items: LayoutItem[] = [
       text({ text: "Hello", xPt: 50, yPt: 200, widthPt: 30 }),
-      text({ text: "World", xPt: 85, yPt: 200, widthPt: 30 }), // gap = 85-(50+30) = 5, > MIN_WORD_GAP_PT -- same cell, space-joined
+      text({ text: "World", xPt: 85, yPt: 200, widthPt: 30 }), // gap = 85-(50+30) = 5, > MIN_WORD_GAP_PT — same cell, space-joined
     ];
     const doc = reconstructSpreadsheet(docFrom([page(300, 300, items)]));
     const [sheet] = sheets(doc);
@@ -1399,7 +1399,7 @@ describe("reconstructDrawing: shared paintOrder", () => {
 
 // --- Vector recovery generalized into the wordprocessing/presentation directions -------------------------------
 
-// Both directions carry recovered vectors in a ContentEmbeddedObjectBlock whose nested document is a real one-page drawing document -- the container ContentSection/ContentSlide lack a vectors array of their own. Reading one back out is the same narrowing in both, so both suites share this helper.
+// Both directions carry recovered vectors in a ContentEmbeddedObjectBlock whose nested document is a real one-page drawing document — the container ContentSection/ContentSlide lack a vectors array of their own. Reading one back out is the same narrowing in both, so both suites share this helper.
 function drawingVectorsOf(block: ContentBlock | undefined): ContentVector[] {
   if (block?.kind !== "embeddedObject") {
     throw new Error(
@@ -1466,7 +1466,7 @@ describe("reconstructWordprocessing: vector recovery", () => {
       fill: RED,
       paintOrder: 0,
     });
-    // The text is untouched by vector recovery -- it still clusters into its own paragraph.
+    // The text is untouched by vector recovery — it still clusters into its own paragraph.
     expect(blocks.filter((b) => b.kind === "paragraph")).toHaveLength(1);
   });
 
@@ -1483,7 +1483,7 @@ describe("reconstructWordprocessing: vector recovery", () => {
     expect(blocks.map((b) => b.kind)).toEqual(["paragraph"]);
   });
 
-  // The recovered drawing sorts into the page's own block flow by its topmost vector, not pinned to the top or bottom -- so a rule drawn below a paragraph reads after it.
+  // The recovered drawing sorts into the page's own block flow by its topmost vector, not pinned to the top or bottom — so a rule drawn below a paragraph reads after it.
   it("positions the recovered drawing among the page's other blocks by its own topmost recovered edge", () => {
     const items: LayoutItem[] = [
       text({ text: "Above the rule", xPt: 50, yPt: 700, widthPt: 80 }),
@@ -1662,7 +1662,7 @@ describe("reconstructWordprocessing: gridline-gated table recovery", () => {
     expect(blocks.some((b) => b.kind === "table")).toBe(false);
   });
 
-  // A table's borders in real output are drawn per cell edge, not as one line across the whole row (src/layout/shared.ts's own border emission) -- so the detector must union collinear touching segments before measuring a boundary's span, or a multi-column table never reaches the span-consistency bar.
+  // A table's borders in real output are drawn per cell edge, not as one line across the whole row (src/layout/shared.ts's own border emission) — so the detector must union collinear touching segments before measuring a boundary's span, or a multi-column table never reaches the span-consistency bar.
   it("detects a lattice whose boundaries are drawn as per-cell segments rather than full-width lines", () => {
     const items: LayoutItem[] = [
       line(0, 200, 120, 200),
@@ -1763,7 +1763,7 @@ describe("reconstructWordprocessing: gridline-gated table recovery", () => {
     ]);
   });
 
-  // ExaDev/documents.js#1077: a real production document's every page carried a full-width header rule and footer rule, so the "table" bounding box the old whole-page detector picked became the whole page (the header/footer rules closing the top/bottom edges, nothing ever closing the sides) -- recovering zero tables from a document whose entire payload was six ruled tables. Header and footer rules never cross any of the table's own column lines, so they now fall into their own rejected clusters instead of contaminating the real one.
+  // ExaDev/documents.js#1077: a real production document's every page carried a full-width header rule and footer rule, so the "table" bounding box the old whole-page detector picked became the whole page (the header/footer rules closing the top/bottom edges, nothing ever closing the sides) — recovering zero tables from a document whose entire payload was six ruled tables. Header and footer rules never cross any of the table's own column lines, so they now fall into their own rejected clusters instead of contaminating the real one.
   it("still recovers the table when the page also carries a header rule and a footer rule (regression: ExaDev/documents.js#1077)", () => {
     const items: LayoutItem[] = [
       ...latticeItems(),
@@ -1807,14 +1807,14 @@ describe("reconstructWordprocessing: gridline-gated table recovery", () => {
     expect(table.rows.map((r) => r.heightPt)).toEqual([50, 50]);
   });
 
-  // ExaDev/documents.js#1077: a border interrupted by one real gap (a single row whose own side rule a producer never drew) is still overwhelmingly a drawn boundary -- scoring it by its longest unbroken run alone (the old bestRunCoverageRatio) rejected an edge that was ~97% drawn.
+  // ExaDev/documents.js#1077: a border interrupted by one real gap (a single row whose own side rule a producer never drew) is still overwhelmingly a drawn boundary — scoring it by its longest unbroken run alone (the old bestRunCoverageRatio) rejected an edge that was ~97% drawn.
   it("still recovers the table when one edge is drawn as two segments with a small real gap between them (regression: ExaDev/documents.js#1077)", () => {
     const items: LayoutItem[] = [
       line(0, 300, 300, 300),
       line(0, 200, 300, 200),
       line(0, 100, 300, 100),
       line(0, 100, 0, 197), // left column, lower segment
-      line(0, 203, 0, 300), // left column, upper segment -- 6pt gap out of a 200pt span
+      line(0, 203, 0, 300), // left column, upper segment — 6pt gap out of a 200pt span
       line(150, 100, 150, 300),
       line(300, 100, 300, 300),
       text({ text: "Name", xPt: 10, yPt: 280, widthPt: 30 }),
@@ -1845,9 +1845,9 @@ describe("reconstructWordprocessing: irregular gridlines recover colSpan/rowSpan
       line(0, 100, 300, 100),
       line(0, 100, 0, 200),
       line(300, 100, 300, 200),
-      // The column divider runs the full height -- both rows are split into two columns.
+      // The column divider runs the full height — both rows are split into two columns.
       line(150, 100, 150, 200),
-      // The row divider is drawn ONLY under the right column: the left column's own cell (Ref) spans both rows, so no boundary is drawn under it at y=150 at all -- exactly the "this row boundary's own merged width is narrower than the table's" symptom reported in #810 (94.4pt/134.3pt/... never converging to one consistent span).
+      // The row divider is drawn ONLY under the right column: the left column's own cell (Ref) spans both rows, so no boundary is drawn under it at y=150 at all — exactly the "this row boundary's own merged width is narrower than the table's" symptom reported in #810 (94.4pt/134.3pt/... never converging to one consistent span).
       line(150, 150, 300, 150),
       text({ text: "Ref", xPt: 10, yPt: 180, widthPt: 30 }),
       text({ text: "Name", xPt: 160, yPt: 180, widthPt: 30 }),
@@ -1885,9 +1885,9 @@ describe("reconstructWordprocessing: irregular gridlines recover colSpan/rowSpan
       line(0, 100, 300, 100),
       line(0, 100, 0, 200),
       line(300, 100, 300, 200),
-      // The row divider runs the full width -- the header row is fully separated from the body.
+      // The row divider runs the full width — the header row is fully separated from the body.
       line(0, 150, 300, 150),
-      // The column dividers are drawn ONLY under the bottom row: the header spans all three columns, so no vertical stroke crosses it at x=100/x=200 -- the mirror image of the rowSpan case above, on the column axis instead of the row axis.
+      // The column dividers are drawn ONLY under the bottom row: the header spans all three columns, so no vertical stroke crosses it at x=100/x=200 — the mirror image of the rowSpan case above, on the column axis instead of the row axis.
       line(100, 100, 100, 150),
       line(200, 100, 200, 150),
       text({ text: "Title", xPt: 10, yPt: 180, widthPt: 30 }),
@@ -1981,7 +1981,7 @@ describe("reconstructWordprocessing: irregular gridlines recover colSpan/rowSpan
       line(0, 100, 300, 100),
       line(0, 100, 0, 200),
       line(300, 100, 300, 200),
-      // The column divider is drawn for the TOP row only; the row divider is drawn for the LEFT column only -- so the top-right, bottom-left, and bottom-right atomic cells all merge transitively into one region while the top-left stays alone, a shape no single colSpan/rowSpan cell can express.
+      // The column divider is drawn for the TOP row only; the row divider is drawn for the LEFT column only — so the top-right, bottom-left, and bottom-right atomic cells all merge transitively into one region while the top-left stays alone, a shape no single colSpan/rowSpan cell can express.
       line(150, 150, 150, 200),
       line(0, 150, 150, 150),
       text({ text: "Solo", xPt: 10, yPt: 180, widthPt: 30 }),
@@ -1990,7 +1990,7 @@ describe("reconstructWordprocessing: irregular gridlines recover colSpan/rowSpan
       reconstructWordprocessing(docFrom([page(300, 300, items)])),
     );
     expect(blocks.some((b) => b.kind === "table")).toBe(false);
-    // A rejected lattice's own text still recovers as an ordinary paragraph, and its strokes as loose vectors -- exactly as "does not fire on too few parallel lines" and "rejects a lattice with no text inside it" already establish for the other rejection paths above.
+    // A rejected lattice's own text still recovers as an ordinary paragraph, and its strokes as loose vectors — exactly as "does not fire on too few parallel lines" and "rejects a lattice with no text inside it" already establish for the other rejection paths above.
     expect(
       blocks.some(
         (b) =>
@@ -2006,7 +2006,7 @@ describe("reconstructWordprocessing: irregular gridlines recover colSpan/rowSpan
       line(0, 100, 300, 100),
       line(0, 100, 0, 200),
       line(300, 100, 300, 200),
-      // Both interior candidates exist (long enough to qualify, and far enough from the outer edges to be their own distinct boundary) but neither one's own drawn length covers a meaningful fraction of any atomic cell's own edge -- a stray mark, not a real divider anywhere on the grid.
+      // Both interior candidates exist (long enough to qualify, and far enough from the outer edges to be their own distinct boundary) but neither one's own drawn length covers a meaningful fraction of any atomic cell's own edge — a stray mark, not a real divider anywhere on the grid.
       line(0, 150, 5, 150),
       line(150, 100, 150, 105),
       text({ text: "Solo", xPt: 10, yPt: 180, widthPt: 30 }),

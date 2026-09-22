@@ -28,7 +28,7 @@ function entryParagraphs(
   return body;
 }
 
-// The block-scope construct rows of the fidelity vocabulary (ExaDev/documents.js#719): text:section as a division, the TOC/index wrappers as index content controls, tracked changes as provenance, and the definitions-table tenants. Every fixture here is a programmatic package built with el/txt -- the fixture gate the issue itself states: real-producer verification for these constructs is outstanding, and the shapes below follow the OASIS ODF 1.2 element/attribute grammar rather than any single producer's output.
+// The block-scope construct rows of the fidelity vocabulary (ExaDev/documents.js#719): text:section as a division, the TOC/index wrappers as index content controls, tracked changes as provenance, and the definitions-table tenants. Every fixture here is a programmatic package built with el/txt — the fixture gate the issue itself states: real-producer verification for these constructs is outstanding, and the shapes below follow the OASIS ODF 1.2 element/attribute grammar rather than any single producer's output.
 
 function odtPackage(
   textChildren: XmlElement[],
@@ -220,7 +220,7 @@ describe("readOdtContent: text:section as a division construct", () => {
   });
 
   it("places a nested section's marker pair over the nested section's own blocks when a paragraph precedes the outer wrapper", () => {
-    // The nested wrapper's extent must be indexed against the ONE flat block list, not the recursive call's own local array: with 'before' occupying block 0, Inner's pair belongs around 'inner text' (inside Outer), and Outer's around everything of its own -- never around 'before'.
+    // The nested wrapper's extent must be indexed against the ONE flat block list, not the recursive call's own local array: with 'before' occupying block 0, Inner's pair belongs around 'inner text' (inside Outer), and Outer's around everything of its own — never around 'before'.
     const pkg = odtPackage([
       paragraph("before"),
       el("text:section", { "text:name": "Outer" }, [
@@ -579,7 +579,7 @@ describe("readOdtContent: cross-paragraph bookmark pairing at block scope", () =
     });
   });
 
-  it("drops the later-opening extent of a genuinely crossing pair (bookmark opened before a section, closed inside it), keeping the earlier one -- the deterministic rule the docx reader applies to the identical shape", () => {
+  it("drops the later-opening extent of a genuinely crossing pair (bookmark opened before a section, closed inside it), keeping the earlier one — the deterministic rule the docx reader applies to the identical shape", () => {
     const pkg = odtPackage([
       el("text:p", {}, [
         el("text:bookmark-start", { "text:name": "straddler" }),
@@ -595,7 +595,7 @@ describe("readOdtContent: cross-paragraph bookmark pairing at block scope", () =
       paragraph("after"),
     ]);
     const blocks = firstSectionBlocks(pkg);
-    // The bookmark opens at block 0 and closes at 2; the division spans 1..3. The pair crosses, so exactly one survives: the bookmark, whose start precedes the division's -- the same outermost/earliest-start resolution acceptProperlyNested applies in the docx reader, and the drop document-schema.js ratifies for block-scoped crossings. The section's own blocks still read; only its wrapper marker is lost.
+    // The bookmark opens at block 0 and closes at 2; the division spans 1..3. The pair crosses, so exactly one survives: the bookmark, whose start precedes the division's — the same outermost/earliest-start resolution acceptProperlyNested applies in the docx reader, and the drop document-schema.js ratifies for block-scoped crossings. The section's own blocks still read; only its wrapper marker is lost.
     expect(blocks.map((block) => block.kind)).toEqual([
       "constructStart",
       "paragraph",
@@ -647,7 +647,7 @@ describe("readOdtContent: cross-paragraph reference-mark pairing at block scope"
   });
 
   it("pairs a reference-mark across paragraphs independently of a same-named bookmark spanning the same blocks", () => {
-    // Two families under one name, both block-scoped over the same range: each pairs with its own spelling, producing two marker pairs rather than one -- the same-name separation the paragraph-level pairing applies, at block scope.
+    // Two families under one name, both block-scoped over the same range: each pairs with its own spelling, producing two marker pairs rather than one — the same-name separation the paragraph-level pairing applies, at block scope.
     const pkg = odtPackage([
       el("text:p", {}, [
         el("text:bookmark-start", { "text:name": "shared" }),
@@ -682,7 +682,7 @@ describe("readOdtContent: cross-paragraph reference-mark pairing at block scope"
 });
 
 describe("readOdtContent: anchored draw:frames in text flow", () => {
-  // A 1x1 transparent PNG -- the smallest bytes sniffImageFormat accepts as a real image part.
+  // A 1x1 transparent PNG — the smallest bytes sniffImageFormat accepts as a real image part.
   const PNG_BASE64 =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
@@ -732,7 +732,7 @@ describe("readOdtContent: anchored draw:frames in text flow", () => {
     expect(blocks[1].heightPt).toBeCloseTo(28.35, 0);
   });
 
-  it("contributes nothing for frames at all under frames: 'none' -- the opt-out a consumer with its own frame-detection passes takes", () => {
+  it("contributes nothing for frames at all under frames: 'none' — the opt-out a consumer with its own frame-detection passes takes", () => {
     const { sections } = readOdtContent(imagePackage(), { frames: "none" });
     expect(sections[0]?.blocks).toHaveLength(1);
     expect(sections[0]?.blocks[0]?.kind).toBe("paragraph");
@@ -772,7 +772,7 @@ describe("readOdtContent: anchored draw:frames in text flow", () => {
   });
 
   it("extends a block-scoped bookmark ending after a paragraph's anchored frame over that frame's lifted block", () => {
-    // The bookmark-end physically follows the frame in the paragraph's own child order, so the bookmark's block extent covers the paragraph AND the frame's lifted block -- the lifted encoding places those blocks after the paragraph precisely because they sat inside the bookmark's physical range.
+    // The bookmark-end physically follows the frame in the paragraph's own child order, so the bookmark's block extent covers the paragraph AND the frame's lifted block — the lifted encoding places those blocks after the paragraph precisely because they sat inside the bookmark's physical range.
     const pkg = odtPackage([
       el("text:p", {}, [
         el("text:bookmark-start", { "text:name": "around-frame" }),
@@ -810,7 +810,7 @@ describe("readOdtContent: anchored draw:frames in text flow", () => {
   });
 
   it("excludes a paragraph's lifted frame from a bookmark whose end physically precedes the frame", () => {
-    // The frame follows the bookmark-end in child order, so it sits outside the bookmark's physical range even though a draw:frame is not "content" for the paragraph-edge test -- the trailing half's extent stops before the lifted block.
+    // The frame follows the bookmark-end in child order, so it sits outside the bookmark's physical range even though a draw:frame is not "content" for the paragraph-edge test — the trailing half's extent stops before the lifted block.
     const pkg = odtPackage([
       el("text:p", {}, [
         el("text:bookmark-start", { "text:name": "before-frame" }),
@@ -931,7 +931,7 @@ describe("readOdtContent: anchored draw:frames in text flow", () => {
   });
 
   it("reads an embedded spreadsheet (a Calc OLE object) as a ContentEmbeddedObjectBlock carrying the live sheet, not the frame's ObjectReplacements preview", () => {
-    // Insert > Object > OLE Object > Spreadsheet in Writer: the frame carries BOTH a draw:object pointing at the sub-document directory and the usual ObjectReplacements preview draw:image beside it (typed/draw/embedded.ts's own confirmed real-output note), so the object must be checked first -- the block below is the sub-sheet read by ods's own reader, the odt->ods dispatch edge whose absence used to degrade this frame to its preview image.
+    // Insert > Object > OLE Object > Spreadsheet in Writer: the frame carries BOTH a draw:object pointing at the sub-document directory and the usual ObjectReplacements preview draw:image beside it (typed/draw/embedded.ts's own confirmed real-output note), so the object must be checked first — the block below is the sub-sheet read by ods's own reader, the odt->ods dispatch edge whose absence used to degrade this frame to its preview image.
     const pkg = odtPackage([
       el("text:p", {}, [
         txt("Quarterly figures "),
@@ -1090,7 +1090,7 @@ describe("readOdtContent: office:forms in an ordinary text document", () => {
           el("form:listbox", { "form:name": "tier" }, [
             el("form:option", { "form:label": "Bronze", "form:value": "1" }),
             el("form:option", { "form:label": "Silver", "form:value": "2" }),
-            // No form:label at all -- falls back to form:value, matching ooxml.js's own displayText-then-value convention for the identical docx w:listItem concept.
+            // No form:label at all — falls back to form:value, matching ooxml.js's own displayText-then-value convention for the identical docx w:listItem concept.
             el("form:option", { "form:value": "3" }),
           ]),
           el("form:listbox", { "form:name": "empty" }),
@@ -1297,7 +1297,7 @@ describe("readOdtContent: field master declarations as a definitions table", () 
       noteBodyNumId("note:ftn2"),
       bodyListNumId,
     ];
-    // numId is an identity (list.ts's own header invariant: different text:list elements get different numIds), so all three must be pairwise distinct -- two notes' bodies are different lists exactly as a note body and the main body are.
+    // numId is an identity (list.ts's own header invariant: different text:list elements get different numIds), so all three must be pairwise distinct — two notes' bodies are different lists exactly as a note body and the main body are.
     expect(new Set(numIds).size).toBe(3);
   });
 });

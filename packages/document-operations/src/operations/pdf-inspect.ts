@@ -11,7 +11,7 @@ import {
 } from "../io/document-input";
 import { defineOperationWithoutOutputSchema } from "../operation";
 
-// Ported from document-cli's src/commands/pdf-inspect.ts -- counts each LayoutItem's own `kind` across a page's items, for the summary mode's per-page histogram.
+// Ported from document-cli's src/commands/pdf-inspect.ts — counts each LayoutItem's own `kind` across a page's items, for the summary mode's per-page histogram.
 function buildItemKindHistogram(
   items: readonly LayoutItem[],
 ): Map<LayoutItem["kind"], number> {
@@ -22,7 +22,7 @@ function buildItemKindHistogram(
   return histogram;
 }
 
-// Ported from document-cli's src/commands/pdf-inspect.ts -- counts each embedded image asset's own `format` across the whole LayoutDocument.images record, for the summary mode's imagesByFormat count.
+// Ported from document-cli's src/commands/pdf-inspect.ts — counts each embedded image asset's own `format` across the whole LayoutDocument.images record, for the summary mode's imagesByFormat count.
 function countImagesByFormat(
   images: Readonly<Record<string, LayoutImageAsset>>,
 ): Map<LayoutImageAsset["format"], number> {
@@ -54,7 +54,7 @@ interface PdfInspectSummary {
   readonly imagesByFormat: Record<string, number>;
 }
 
-// No outputSchema, matching the original MCP tool registration -- the return type is a union of the full LayoutDocument (returned as-is, no $schema tagging: that family moved from document-schema.js to pdf-codec in the schema-4 major and pdf-codec publishes no .schema.json URI to stamp) and the summary shape above, and neither is independently mirrored as a Zod schema anywhere else in the family.
+// No outputSchema, matching the original MCP tool registration — the return type is a union of the full LayoutDocument (returned as-is, no $schema tagging: that family moved from document-schema.js to pdf-codec in the schema-4 major and pdf-codec publishes no .schema.json URI to stamp) and the summary shape above, and neither is independently mirrored as a Zod schema anywhere else in the family.
 export const pdfInspectOperation = defineOperationWithoutOutputSchema<
   typeof PdfInspectInputSchema,
   LayoutDocument | PdfInspectSummary

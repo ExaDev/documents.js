@@ -1,7 +1,7 @@
 import { useInput } from "ink";
 import { useState } from "react";
 
-// A page jump moves a fixed number of rows rather than one viewport, because this hook knows the item count but not how many rows the calling screen actually renders -- that is ListView's business, and threading it back here would couple the two for no behavioural gain.
+// A page jump moves a fixed number of rows rather than one viewport, because this hook knows the item count but not how many rows the calling screen actually renders — that is ListView's business, and threading it back here would couple the two for no behavioural gain.
 const PAGE_JUMP_ROWS = 10;
 
 export interface NavigationInputOptions {

@@ -60,7 +60,7 @@ describe("writeExObjListContainer", () => {
     if (embedAtom === undefined) {
       throw new Error("expected an ExOleEmbedAtom");
     }
-    // colorFollow (4 bytes) then the fCantLockServer/fNoSizeToServer/fIsTable/unused flags word -- every byte of the whole 8-byte atom must be zero.
+    // colorFollow (4 bytes) then the fCantLockServer/fNoSizeToServer/fIsTable/unused flags word — every byte of the whole 8-byte atom must be zero.
     expect(Array.from(embedAtom.data)).toEqual(new Array(8).fill(0));
   });
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readPropertySetStream } from "../oleps/read";
 import { propertySetStream } from "./oleps";
 
-// Direct coverage for propertySetStream (src/test-support/oleps.ts) itself, beyond what the reader's own test suite exercises in passing: its FMTID/CLSID encoding, its VT_I4 and VT_FILETIME field builders (both under-exercised elsewhere -- every other reader test either corrupts them afterward or never checks their decoded value at all), and its own Characters-field padding.
+// Direct coverage for propertySetStream (src/test-support/oleps.ts) itself, beyond what the reader's own test suite exercises in passing: its FMTID/CLSID encoding, its VT_I4 and VT_FILETIME field builders (both under-exercised elsewhere — every other reader test either corrupts them afterward or never checks their decoded value at all), and its own Characters-field padding.
 
 describe("propertySetStream", () => {
   it("round-trips a FMTID with a distinct byte in every position", () => {

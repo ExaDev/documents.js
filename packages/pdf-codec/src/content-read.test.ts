@@ -97,7 +97,7 @@ describe("readContentStream: operations", () => {
     });
   });
 
-  it("does not treat true/false/null as operators -- they accumulate as operands", () => {
+  it("does not treat true/false/null as operators — they accumulate as operands", () => {
     const { sink } = collectDiagnostics();
     const [token] = readContentStream(textBytes("true BDC"), sink);
     if (token?.kind !== "operation") {

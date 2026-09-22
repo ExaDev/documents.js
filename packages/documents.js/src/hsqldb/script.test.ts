@@ -98,7 +98,7 @@ describe("parseHsqldbScript: a realistic two-table script", () => {
   });
 
   it("ignores every SET/CREATE USER/ALTER USER/CREATE SCHEMA/ALTER TABLE/GRANT statement without error", () => {
-    // Implicit in the successful parse above -- this test exists to name the expectation explicitly.
+    // Implicit in the successful parse above — this test exists to name the expectation explicitly.
     expect(tables).toHaveLength(2);
   });
 });

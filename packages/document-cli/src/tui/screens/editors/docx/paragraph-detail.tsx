@@ -26,10 +26,10 @@ import {
 } from "../../shared/paragraph-family.js";
 import { parseNumberField } from "../../shared/text.js";
 
-// A run's own current sizePt has no sensible zero-ish fallback the way a blank colour prompt does (an empty hex input just means "no colour") -- a font size prompt that fails to parse falls back to the run's OWN current size (or, for a run with none set yet, this codebase's own standard body size) rather than silently writing 0pt.
+// A run's own current sizePt has no sensible zero-ish fallback the way a blank colour prompt does (an empty hex input just means "no colour") — a font size prompt that fails to parse falls back to the run's OWN current size (or, for a run with none set yet, this codebase's own standard body size) rather than silently writing 0pt.
 const DEFAULT_RUN_SIZE_PT = 12;
 
-// The image-insertion wizard's own field list -- unlike odg/page-detail.tsx's identically-shaped image fields, there is no x/y position to collect: DocxParagraph.insertImageAfter/OdtParagraph.insertImageAfter always append an inline image run at the end of the paragraph's own flow, not a page-absolutely-positioned frame.
+// The image-insertion wizard's own field list — unlike odg/page-detail.tsx's identically-shaped image fields, there is no x/y position to collect: DocxParagraph.insertImageAfter/OdtParagraph.insertImageAfter always append an inline image run at the end of the paragraph's own flow, not a page-absolutely-positioned frame.
 const IMAGE_FIELDS: readonly FieldSpec[] = [
   { key: "path", label: "Image file path (.png/.jpg/.jpeg)", defaultValue: "" },
   { key: "widthPt", label: "Width (pt)", defaultValue: "100" },
@@ -60,7 +60,7 @@ async function applyInsertImage(
     dispatch({
       type: "SET_STATUS",
       severity: "warning",
-      text: `${path} is not a .png or .jpg/.jpeg file -- image not inserted`,
+      text: `${path} is not a .png or .jpg/.jpeg file — image not inserted`,
     });
     return;
   }
@@ -95,10 +95,10 @@ export interface ParagraphRunsViewProps {
   readonly selectedRunIndex: number | undefined;
 }
 
-// Shared between this screen (full editing, a real cursor) and table-cell-detail.tsx (read-only display of a cell's own paragraphs, no cursor at all -- documents.js gives a table cell no per-run styling actions, see that screen's own comment) so the same real-styling render logic is never duplicated. `runs` can now be MarkdownRun[] as well as DocxRun[]/OdtRun[] (paragraph-family.tsx's own widened `ParagraphFamilyLiveRun`) -- `supportsRunStyleExtras` narrows each run before reading `.underline`/`.color`, since MarkdownRun has neither field at all; a markdown run renders with bold/italic only.
+// Shared between this screen (full editing, a real cursor) and table-cell-detail.tsx (read-only display of a cell's own paragraphs, no cursor at all — documents.js gives a table cell no per-run styling actions, see that screen's own comment) so the same real-styling render logic is never duplicated. `runs` can now be MarkdownRun[] as well as DocxRun[]/OdtRun[] (paragraph-family.tsx's own widened `ParagraphFamilyLiveRun`) — `supportsRunStyleExtras` narrows each run before reading `.underline`/`.color`, since MarkdownRun has neither field at all; a markdown run renders with bold/italic only.
 export function ParagraphRunsView(props: ParagraphRunsViewProps): ReactElement {
   if (props.runs.length === 0) {
-    return <Text dimColor>(no runs -- press 'a' to append one)</Text>;
+    return <Text dimColor>(no runs — press 'a' to append one)</Text>;
   }
   return (
     <Box>
@@ -151,7 +151,7 @@ export function ParagraphDetailScreen(): ReactElement {
   const selectedRun = runs[clampedRunIndex];
   const blockIndex = screen.kind === "paragraphDetail" ? screen.blockIndex : -1;
 
-  // A paragraph's runs are shown inline on one line and moved through with left/right, not up/down through a vertical list, so `useNavigationInput` (and this screen family's own `usePersistedSelection` wrapper around it, built for exactly that vertical case) does not fit here -- the cursor is plain local `useState` instead, and this effect is the direct equivalent of what that wrapper does: recording the cursor into `state.selection` under the same key `selectionKeyFor` would produce for this screen instance.
+  // A paragraph's runs are shown inline on one line and moved through with left/right, not up/down through a vertical list, so `useNavigationInput` (and this screen family's own `usePersistedSelection` wrapper around it, built for exactly that vertical case) does not fit here — the cursor is plain local `useState` instead, and this effect is the direct equivalent of what that wrapper does: recording the cursor into `state.selection` under the same key `selectionKeyFor` would produce for this screen instance.
   useEffect(() => {
     if (screen.kind !== "paragraphDetail") {
       return;
@@ -207,12 +207,12 @@ export function ParagraphDetailScreen(): ReactElement {
         });
         return;
       }
-      // Uppercase, matching this codebase's own "uppercase variant when the lowercase letter is already taken" convention (see paragraph-family.tsx's own 'T' table wizard beside 'a' append) -- 'i' already toggles italic on this screen. docx/odt only: MarkdownParagraph has no insertImageAfter at all (the reducer's own INSERT_PARAGRAPH_IMAGE case is narrowed to styledWordprocessingDocument for exactly this reason), so the key does nothing for a markdown document rather than opening a wizard whose submission would only produce a warning.
+      // Uppercase, matching this codebase's own "uppercase variant when the lowercase letter is already taken" convention (see paragraph-family.tsx's own 'T' table wizard beside 'a' append) — 'i' already toggles italic on this screen. docx/odt only: MarkdownParagraph has no insertImageAfter at all (the reducer's own INSERT_PARAGRAPH_IMAGE case is narrowed to styledWordprocessingDocument for exactly this reason), so the key does nothing for a markdown document rather than opening a wizard whose submission would only produce a warning.
       if (input === "I" && doc?.format !== "markdown") {
         setImageWizardOpen(true);
         return;
       }
-      // docx-only: appendOfficeMath is paragraph-scoped, but odt has no paragraph-scoped formula insertion at all (OdtBody.appendFormula is body-scoped -- see paragraph-family.tsx's own 'm' handler for that path).
+      // docx-only: appendOfficeMath is paragraph-scoped, but odt has no paragraph-scoped formula insertion at all (OdtBody.appendFormula is body-scoped — see paragraph-family.tsx's own 'm' handler for that path).
       if (input === "m" && doc?.format === "docx") {
         setFormulaPickerOpen(true);
         return;
@@ -236,7 +236,7 @@ export function ParagraphDetailScreen(): ReactElement {
         });
         return;
       }
-      // The four keys below all read/write a field MarkdownRun has no getter or setter for at all (underline, colour, font family, font size) -- disabled outright for a markdown document rather than opening a prompt that could only ever end in a wrongDocument warning from the reducer.
+      // The four keys below all read/write a field MarkdownRun has no getter or setter for at all (underline, colour, font family, font size) — disabled outright for a markdown document rather than opening a prompt that could only ever end in a wrongDocument warning from the reducer.
       if (!supportsRunStyleExtras(selectedRun)) {
         return;
       }
@@ -381,7 +381,7 @@ export function ParagraphDetailScreen(): ReactElement {
             placeholder="e.g. 12"
             onChange={setFontSizeInput}
             onSubmit={(value) => {
-              // This field only ever opens via the 's' handler, itself gated behind supportsRunStyleExtras(selectedRun) -- but that guard lives in a separate closure (the useInput callback), so TypeScript has no way to carry the narrowing through to this one; re-checking it here is what lets `selectedRun.sizePt` read without a cast.
+              // This field only ever opens via the 's' handler, itself gated behind supportsRunStyleExtras(selectedRun) — but that guard lives in a separate closure (the useInput callback), so TypeScript has no way to carry the narrowing through to this one; re-checking it here is what lets `selectedRun.sizePt` read without a cast.
               const currentSizePt =
                 selectedRun !== undefined && supportsRunStyleExtras(selectedRun)
                   ? (selectedRun.sizePt ?? DEFAULT_RUN_SIZE_PT)

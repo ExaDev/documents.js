@@ -39,7 +39,7 @@ function directChild(parent: XmlElement, tag: string): XmlElement | undefined {
   return undefined;
 }
 
-// presentation:notes' own frame geometry below (x=20pt, y=400pt, width=300pt, height=100pt) is not an arbitrary UI guess: it is the exact geometry odf.js's own typed/odp/read.test.ts fixture uses for its speaker-notes frame, whose top-of-file comment states the whole fixture was "assembled from XML shapes verified against genuine LibreOffice 26.2 output" -- mirroring how pptx/slide.ts's own buildMinimalNotesSlide cites a real Keynote-exported reference file for its own notes-placeholder geometry.
+// presentation:notes' own frame geometry below (x=20pt, y=400pt, width=300pt, height=100pt) is not an arbitrary UI guess: it is the exact geometry odf.js's own typed/odp/read.test.ts fixture uses for its speaker-notes frame, whose top-of-file comment states the whole fixture was "assembled from XML shapes verified against genuine LibreOffice 26.2 output" — mirroring how pptx/slide.ts's own buildMinimalNotesSlide cites a real Keynote-exported reference file for its own notes-placeholder geometry.
 const NOTES_FRAME_X_PT = 20;
 const NOTES_FRAME_Y_PT = 400;
 const NOTES_FRAME_WIDTH_PT = 300;
@@ -67,13 +67,13 @@ export interface SlideContext {
   readonly pkg: Package;
 }
 
-// The pair a table shape produces from OdpSlide.addTable: the frame itself (for frame/rotationDeg, exactly like any other OdpShape) and a live view over its table:table content (for cell population, exactly like a document-level OdtTable) -- two separate live views over the same draw:frame's own children, since OdpShape's own paragraphs()/text assume draw:text-box content a table shape doesn't have.
+// The pair a table shape produces from OdpSlide.addTable: the frame itself (for frame/rotationDeg, exactly like any other OdpShape) and a live view over its table:table content (for cell population, exactly like a document-level OdtTable) — two separate live views over the same draw:frame's own children, since OdpShape's own paragraphs()/text assume draw:text-box content a table shape doesn't have.
 export interface OdpTableShape {
   readonly shape: OdpShape;
   readonly table: OdtTable;
 }
 
-// A live view over a draw:page element's own shape list -- the odp equivalent of pptx/slide.ts's own PptxSlide. Unlike pptx's p:sldId/p:sldIdLst indirection, a draw:page's position among office:presentation's own children IS slide order (see odf.js's own typed/odp/read.ts top-of-file note), so this needs no id allocation of its own the way pptx/editor.ts's PptxEditor does.
+// A live view over a draw:page element's own shape list — the odp equivalent of pptx/slide.ts's own PptxSlide. Unlike pptx's p:sldId/p:sldIdLst indirection, a draw:page's position among office:presentation's own children IS slide order (see odf.js's own typed/odp/read.ts top-of-file note), so this needs no id allocation of its own the way pptx/editor.ts's PptxEditor does.
 export class OdpSlide {
   private readonly container: XmlNode[];
   private readonly node: XmlElement;
@@ -95,7 +95,7 @@ export class OdpSlide {
     return this.node;
   }
 
-  // Excludes a draw:frame whose direct content is a table:table -- that frame belongs to tables() below (a table shape has no draw:text-box wrapper at all, see addTable's own note, so an OdpShape over it would be functionally dead: .paragraphs()/.text both look for a draw:text-box child that isn't there and silently return []/''). Before this exclusion, a table frame was double-exposed: once here as a dead OdpShape, and once for real via tables().
+  // Excludes a draw:frame whose direct content is a table:table — that frame belongs to tables() below (a table shape has no draw:text-box wrapper at all, see addTable's own note, so an OdpShape over it would be functionally dead: .paragraphs()/.text both look for a draw:text-box child that isn't there and silently return []/''). Before this exclusion, a table frame was double-exposed: once here as a dead OdpShape, and once for real via tables().
   shapes(): OdpShape[] {
     const node = this.live();
     const out: OdpShape[] = [];
@@ -130,7 +130,7 @@ export class OdpSlide {
     return new OdpShape(node.children, frameElement, this.context.pkg);
   }
 
-  // A real embedded ODF formula sub-document, positioned like any other slide shape (src/edit/odp/formula.ts's own buildFormulaFrame -- svg:x/svg:y, not odt's text-flow "as-char" anchoring). The odp counterpart to OdtBody.appendFormula (src/edit/odt/editor.ts), and what closes the write-side gap src/edit/odp/content.ts's own appendShape previously had: a formula-kind embedded object dropped silently rather than being written.
+  // A real embedded ODF formula sub-document, positioned like any other slide shape (src/edit/odp/formula.ts's own buildFormulaFrame — svg:x/svg:y, not odt's text-flow "as-char" anchoring). The odp counterpart to OdtBody.appendFormula (src/edit/odt/editor.ts), and what closes the write-side gap src/edit/odp/content.ts's own appendShape previously had: a formula-kind embedded object dropped silently rather than being written.
   addFormula(frame: Box, formula: ContentFormula): OdpShape {
     const node = this.live();
     const frameElement = insertFormulaFrameMedia(
@@ -142,7 +142,7 @@ export class OdpSlide {
     return new OdpShape(node.children, frameElement, this.context.pkg);
   }
 
-  // A table:table lives DIRECTLY inside its own draw:frame, no draw:text-box wrapper (see shape.ts's own buildTableFrame) -- so it gets its own OdtTable view (reused wholesale, see src/edit/odt/table.ts) rather than OdpShape's paragraphs()/text, which assume text-box content.
+  // A table:table lives DIRECTLY inside its own draw:frame, no draw:text-box wrapper (see shape.ts's own buildTableFrame) — so it gets its own OdtTable view (reused wholesale, see src/edit/odt/table.ts) rather than OdpShape's paragraphs()/text, which assume text-box content.
   addTable(init: SlideTableInit): OdpTableShape {
     const node = this.live();
     const tableElement = buildTable(this.context.pkg, init.table);
@@ -158,7 +158,7 @@ export class OdpSlide {
     };
   }
 
-  // Live handles on every table shape already on this slide, in document order -- the read-side inverse of addTable, and the table-shaped counterpart to shapes() above (which deliberately excludes these same frames, see its own note). Constructs the identical OdpTableShape pair addTable returns, over the EXISTING draw:frame/table:table pair, mirroring OdgPage.vectors()'s own "enumerate every existing element, wrap it in the same live class add* already returns" convention.
+  // Live handles on every table shape already on this slide, in document order — the read-side inverse of addTable, and the table-shaped counterpart to shapes() above (which deliberately excludes these same frames, see its own note). Constructs the identical OdpTableShape pair addTable returns, over the EXISTING draw:frame/table:table pair, mirroring OdgPage.vectors()'s own "enumerate every existing element, wrap it in the same live class add* already returns" convention.
   tables(): OdpTableShape[] {
     const node = this.live();
     const out: OdpTableShape[] = [];
@@ -178,12 +178,12 @@ export class OdpSlide {
     return out;
   }
 
-  // A vector primitive (rect/ellipse/line/path) appended alongside this slide's shapes, in the SAME draw:page children list -- document order is paint order here exactly as it is for an odg page (see OdgPage's own note on why no draw:z-index is ever written). This reuses src/edit/odg/vector.ts's builders WHOLESALE, mirroring how OdpShape/OdtParagraph are themselves reused across formats elsewhere in this package: draw:rect/draw:ellipse/draw:line/draw:path carry byte-for-byte the same attribute vocabulary on a presentation's draw:page as on a drawing's, and odf.js's own readDrawPageContent reads both through one function. A slide is positioned against its page, so nothing here is text-flow anchored.
+  // A vector primitive (rect/ellipse/line/path) appended alongside this slide's shapes, in the SAME draw:page children list — document order is paint order here exactly as it is for an odg page (see OdgPage's own note on why no draw:z-index is ever written). This reuses src/edit/odg/vector.ts's builders WHOLESALE, mirroring how OdpShape/OdtParagraph are themselves reused across formats elsewhere in this package: draw:rect/draw:ellipse/draw:line/draw:path carry byte-for-byte the same attribute vocabulary on a presentation's draw:page as on a drawing's, and odf.js's own readDrawPageContent reads both through one function. A slide is positioned against its page, so nothing here is text-flow anchored.
   addVector(vector: ContentVector): OdgVector {
     return appendVectorTo(this.live().children, this.context.pkg, vector);
   }
 
-  // presentation:notes is a direct child of draw:page, typically wrapping a single draw:frame > draw:text-box with one text:p per line -- mirroring odf.js's own readSlideNotes (typed/odp/read.ts), which is not exported, so this is a small, deliberate reimplementation of the identical deep text:p search + decodeOdfText + join('\n') logic on the write side's own read-back path.
+  // presentation:notes is a direct child of draw:page, typically wrapping a single draw:frame > draw:text-box with one text:p per line — mirroring odf.js's own readSlideNotes (typed/odp/read.ts), which is not exported, so this is a small, deliberate reimplementation of the identical deep text:p search + decodeOdfText + join('\n') logic on the write side's own read-back path.
   get notes(): string {
     const notesElement = directChild(this.live(), "presentation:notes");
     if (notesElement === undefined) {

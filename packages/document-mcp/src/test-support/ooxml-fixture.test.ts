@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { el, txt, xmlDeclaration } from "./ooxml-fixture";
 
-// Pins every literal these builders produce against hand-written expected objects (never by calling the builders themselves to construct the expectation) -- every fixture across src/test-support/ that builds real XML via el/txt/xmlDeclaration depends on these three functions producing exactly the right shape, so a mutation here would otherwise only ever be caught (if at all) indirectly through some other fixture's own consumer test.
+// Pins every literal these builders produce against hand-written expected objects (never by calling the builders themselves to construct the expectation) — every fixture across src/test-support/ that builds real XML via el/txt/xmlDeclaration depends on these three functions producing exactly the right shape, so a mutation here would otherwise only ever be caught (if at all) indirectly through some other fixture's own consumer test.
 describe("xmlDeclaration", () => {
   it("declares version 1.0, UTF-8 encoding, standalone yes", () => {
     expect(xmlDeclaration()).toEqual({

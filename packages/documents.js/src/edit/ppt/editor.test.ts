@@ -97,7 +97,7 @@ describe("PptEditor slides and shapes", () => {
     expect(reread.slides()[0]!.size).toEqual({ widthPt: 720, heightPt: 540 });
     expect(reread.slides()[1]!.size).toEqual({ widthPt: 720, heightPt: 540 });
 
-    // [MS-PPT]'s DocumentAtom states exactly one slide size for the whole presentation, so a second slide naming a different size is a genuinely unwritable shape -- named by the writer rather than approximated.
+    // [MS-PPT]'s DocumentAtom states exactly one slide size for the whole presentation, so a second slide naming a different size is a genuinely unwritable shape — named by the writer rather than approximated.
     editor.addSlide(SLIDE_SIZE_WIDESCREEN);
     expect(() => editor.toBytes()).toThrow(/both appear/);
   });

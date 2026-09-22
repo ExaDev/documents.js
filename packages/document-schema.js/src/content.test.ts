@@ -96,7 +96,7 @@ const table: ContentBlock = {
   columnWidthsPt: [150, 150],
 };
 
-// Deliberately deep nesting: a table whose cell contains a table whose cell contains a table -- the highest-risk case for the hand-written recursive isContentBlock guard. Typed as ContentTable (not the broader ContentBlock union) at each level so the nested `.rows`/`.cells` access below needs no narrowing or assertion.
+// Deliberately deep nesting: a table whose cell contains a table whose cell contains a table — the highest-risk case for the hand-written recursive isContentBlock guard. Typed as ContentTable (not the broader ContentBlock union) at each level so the nested `.rows`/`.cells` access below needs no narrowing or assertion.
 const level3Table: ContentTable = {
   kind: "table",
   rows: [{ cells: [{ blocks: [paragraph] }] }],
@@ -129,7 +129,7 @@ describe("isContentBlock", () => {
 
   it("accepts a table nested three levels deep inside table cells, and the guard genuinely walks every level", () => {
     expect(isContentBlock(level1Table)).toBe(true);
-    // Confirm the full depth is really there and each level individually validates -- not just the outermost shell.
+    // Confirm the full depth is really there and each level individually validates — not just the outermost shell.
     const level2 = level1Table.rows[0]?.cells[0]?.blocks[0];
     if (level2?.kind !== "table") {
       throw new Error("expected level2 to be a table");
@@ -142,7 +142,7 @@ describe("isContentBlock", () => {
     expect(isContentBlock(level3)).toBe(true);
   });
 
-  it("accepts every IMAGE_FORMATS member -- the guard and the schema enum read one shared tuple and cannot diverge", () => {
+  it("accepts every IMAGE_FORMATS member — the guard and the schema enum read one shared tuple and cannot diverge", () => {
     // gif/svg were guard-rejected while the enum admitted them (ExaDev/documents.js#1197); the shared IMAGE_FORMATS tuple is what prevents that drift from coming back, and this pins the guard's side of it.
     for (const format of IMAGE_FORMATS) {
       expect(
@@ -361,7 +361,7 @@ function spreadsheetDocument(): ContentDocument {
         columns: [
           { index: 0, widthPt: 120 },
           { index: 1, widthPt: 80, hidden: false },
-          { index: 2, hidden: true }, // an entry carrying no declared width at all -- "use the application default", not a zero-width column
+          { index: 2, hidden: true }, // an entry carrying no declared width at all — "use the application default", not a zero-width column
         ],
         rows: [
           { index: 0, heightPt: 15 },
@@ -572,7 +572,7 @@ describe("ContentDocument formula variant", () => {
   });
 });
 
-// The two-layer design (src/math.ts's own top comment): the same Pythagoras formula as above, carrying its verbatim LaTeX alongside an equivalent semantic tree, neither derived from the other at rest. An empty mathml array is the LaTeX-authored case -- a formula whose source offered no MathML tree keeps the required field while all its meaning lives in the two layers.
+// The two-layer design (src/math.ts's own top comment): the same Pythagoras formula as above, carrying its verbatim LaTeX alongside an equivalent semantic tree, neither derived from the other at rest. An empty mathml array is the LaTeX-authored case — a formula whose source offered no MathML tree keeps the required field while all its meaning lives in the two layers.
 function layeredFormulaDocument(): ContentDocument {
   return {
     kind: "formula",
@@ -707,7 +707,7 @@ describe("the document-level symbol table", () => {
   });
 });
 
-// The formula ContentDocument kind slots straight into the pre-existing ContentEmbeddedObjectKind 'formula' mechanism -- an embedded equation now carries genuine MathML instead of a wordprocessing document standing in for one.
+// The formula ContentDocument kind slots straight into the pre-existing ContentEmbeddedObjectKind 'formula' mechanism — an embedded equation now carries genuine MathML instead of a wordprocessing document standing in for one.
 describe("an embedded formula object carrying a real formula document", () => {
   it("validates as a ContentBlock and inside a whole document", () => {
     const embedded: ContentBlock = {
@@ -1015,7 +1015,7 @@ describe("source (the quarantined residue channel)", () => {
     expect(parsed.source).toEqual(docxResidue);
   });
 
-  it("keeps the construct boundary markers bare -- a smuggled source is not part of either marker's shape", () => {
+  it("keeps the construct boundary markers bare — a smuggled source is not part of either marker's shape", () => {
     // The marker schemas are plain z.objects like every content schema (accept-and-ignore unknown keys), so a source placed on a marker parses to a value WITHOUT it: the marker's own shape is { kind, descriptor } and nothing else, pinned here so the flat form never grows a second residue position beside the descriptor's own.
     const smuggled = ContentConstructStartSchema.parse({
       kind: "constructStart",
@@ -1355,7 +1355,7 @@ describe("ContentImageBlock floatPosition", () => {
     };
   }
 
-  it("accepts an offset-based position on both axes -- the shape ODF's draw:frame always takes, and docx's wp:anchor takes when wp:posOffset is used", () => {
+  it("accepts an offset-based position on both axes — the shape ODF's draw:frame always takes, and docx's wp:anchor takes when wp:posOffset is used", () => {
     const result = ContentImageBlockSchema.parse(
       image({
         horizontal: { relativeTo: "page", offsetPt: 36 },
@@ -1368,7 +1368,7 @@ describe("ContentImageBlock floatPosition", () => {
     });
   });
 
-  it("accepts an align-based position on both axes -- the shape docx's wp:anchor takes when wp:align is used instead of wp:posOffset", () => {
+  it("accepts an align-based position on both axes — the shape docx's wp:anchor takes when wp:align is used instead of wp:posOffset", () => {
     const result = ContentImageBlockSchema.parse(
       image({
         horizontal: { relativeTo: "margin", align: "right" },
@@ -1381,7 +1381,7 @@ describe("ContentImageBlock floatPosition", () => {
     });
   });
 
-  it("accepts one axis offset-based and the other align-based -- docx's own wp:positionH/wp:positionV choose independently per axis", () => {
+  it("accepts one axis offset-based and the other align-based — docx's own wp:positionH/wp:positionV choose independently per axis", () => {
     expect(
       ContentImageBlockSchema.safeParse(
         image({
@@ -1392,7 +1392,7 @@ describe("ContentImageBlock floatPosition", () => {
     ).toBe(true);
   });
 
-  it("refuses an axis carrying both offsetPt and align at once -- a state neither docx's wp:positionH/wp:positionV nor ODF's draw:frame can actually produce", () => {
+  it("refuses an axis carrying both offsetPt and align at once — a state neither docx's wp:positionH/wp:positionV nor ODF's draw:frame can actually produce", () => {
     expect(
       ContentImageBlockSchema.safeParse(
         image({
@@ -1425,7 +1425,7 @@ describe("ContentImageBlock floatPosition", () => {
     ).toBe(false);
   });
 
-  it("is absent by default -- an inline image has no anchored position of its own to record", () => {
+  it("is absent by default — an inline image has no anchored position of its own to record", () => {
     expect(
       ContentImageBlockSchema.parse(image()).floatPosition,
     ).toBeUndefined();
@@ -1895,7 +1895,7 @@ describe("frames (the FusedNode pattern)", () => {
     expect(cell.frames).toEqual([frame]);
   });
 
-  it("accepts a node with multiple frames -- one node appearing at more than one rendered position", () => {
+  it("accepts a node with multiple frames — one node appearing at more than one rendered position", () => {
     const frames = [
       { pageIndex: 0, xPt: 72, yPt: 60, widthPt: 468, heightPt: 24 },
       { pageIndex: 1, xPt: 72, yPt: 720, widthPt: 200, heightPt: 12 },
@@ -1938,7 +1938,7 @@ describe("frames (the FusedNode pattern)", () => {
 });
 
 describe("ContentSheetCell comment", () => {
-  it("accepts a legacy-style note -- text alone, or with author and createdAt, no replies", () => {
+  it("accepts a legacy-style note — text alone, or with author and createdAt, no replies", () => {
     const bare = ContentSheetCellSchema.parse({
       row: 0,
       column: 0,
@@ -2206,7 +2206,7 @@ describe("ContentEmbeddedObjectSchema deep recursion", () => {
     ).toBe(true);
   });
 
-  // 'chart' is the one kind whose payload is not a whole document of the same name -- a chart has no ContentDocument variant -- so its document is whatever data projection the producing codec could express and its chart-specific serialisation rides the residue channel. The schema's own job here is only to admit the member; what a chart's document holds is the producing codec's verdict, pinned in that codec's own suite rather than here.
+  // 'chart' is the one kind whose payload is not a whole document of the same name — a chart has no ContentDocument variant — so its document is whatever data projection the producing codec could express and its chart-specific serialisation rides the residue channel. The schema's own job here is only to admit the member; what a chart's document holds is the producing codec's verdict, pinned in that codec's own suite rather than here.
   it("accepts objectKind 'chart', the one member with no same-named ContentDocument variant", () => {
     const chartEmbeddedObject: ContentEmbeddedObject = {
       objectKind: "chart",
@@ -2291,7 +2291,7 @@ describe("ContentEmbeddedObjectSchema deep recursion", () => {
                                     type: "element",
                                     tag: "math",
                                     attributes: [],
-                                    // malformed: an element's own attributes must each be a {name, value} string pair -- must still fail even though every ancestor around it is well-formed.
+                                    // malformed: an element's own attributes must each be a {name, value} string pair — must still fail even though every ancestor around it is well-formed.
                                     children: [
                                       {
                                         type: "element",
@@ -2322,7 +2322,7 @@ describe("ContentEmbeddedObjectSchema deep recursion", () => {
   });
 });
 
-// -- Construct boundary markers (the flat form's encoding of a fidelity construct) --
+// — Construct boundary markers (the flat form's encoding of a fidelity construct) --
 //
 // Every construct region below is spelled as a real one from the codec inventories the descriptor vocabulary was built from, so these read as the shapes a codec will actually emit rather than as synthetic bracket exercises.
 
@@ -2332,7 +2332,7 @@ function constructStart(descriptor: ConstructDescriptor): ContentBlock {
 
 const constructEnd: ContentBlock = { kind: "constructEnd" };
 
-// A tracked insertion inside a docx content control, with a footnote anchor beside it -- one region nested inside another, which is the case a pairing key would have existed to handle and bracket matching handles for free.
+// A tracked insertion inside a docx content control, with a footnote anchor beside it — one region nested inside another, which is the case a pairing key would have existed to handle and bracket matching handles for free.
 const nestedConstructBlocks: ContentBlock[] = [
   constructStart({
     kind: "contentControl",
@@ -2467,8 +2467,8 @@ describe("construct boundary markers", () => {
     expect(ContentBlockSchema.safeParse(cellTable).success).toBe(true);
   });
 
-  // Pins a deliberate schema-level gap: an unmatched constructEnd is malformed input by the bracket-matching contract above, but ContentDocumentSchema carries no refinement that rejects it. findConstructMarkerImbalance (tested below) is the one place balance is actually checked -- decompose calls it and throws on what this schema accepts. A Zod-only refinement here would validate against a rule the published content-document.schema.json fragment cannot express (JSON Schema has no way to state "these array members pair up"), so adding one would silently diverge from that published face -- the exact guard-versus-published-face misalignment the TreeBlockLeaf JSON Schema fragment exists to avoid on the tree side. This test exists so a future change reintroducing balance as a Zod refinement fails it rather than sliding in unnoticed.
-  it("parses a section whose blocks carry an unmatched constructEnd -- balance belongs to findConstructMarkerImbalance, not the schema", () => {
+  // Pins a deliberate schema-level gap: an unmatched constructEnd is malformed input by the bracket-matching contract above, but ContentDocumentSchema carries no refinement that rejects it. findConstructMarkerImbalance (tested below) is the one place balance is actually checked — decompose calls it and throws on what this schema accepts. A Zod-only refinement here would validate against a rule the published content-document.schema.json fragment cannot express (JSON Schema has no way to state "these array members pair up"), so adding one would silently diverge from that published face — the exact guard-versus-published-face misalignment the TreeBlockLeaf JSON Schema fragment exists to avoid on the tree side. This test exists so a future change reintroducing balance as a Zod refinement fails it rather than sliding in unnoticed.
+  it("parses a section whose blocks carry an unmatched constructEnd — balance belongs to findConstructMarkerImbalance, not the schema", () => {
     const blocks: ContentBlock[] = [
       {
         kind: "paragraph",
@@ -2552,9 +2552,9 @@ describe("findConstructMarkerImbalance", () => {
   });
 });
 
-// -- Run-level construct extents (the flat form's encoding of a construct whose extent is a sub-sequence of one paragraph's runs) --
+// — Run-level construct extents (the flat form's encoding of a construct whose extent is a sub-sequence of one paragraph's runs) --
 
-// A mid-paragraph bookmark over the middle two runs of four, a point anchor between runs, and a field over the paragraph's tail -- the three shapes the run-level mechanism exists for, each spelled as the descriptor-plus-half-open-run-range entry ContentParagraph.constructs carries.
+// A mid-paragraph bookmark over the middle two runs of four, a point anchor between runs, and a field over the paragraph's tail — the three shapes the run-level mechanism exists for, each spelled as the descriptor-plus-half-open-run-range entry ContentParagraph.constructs carries.
 const runExtentParagraph: ContentBlock = {
   kind: "paragraph",
   runs: [
@@ -2616,7 +2616,7 @@ describe("run-level construct extents", () => {
     }
   });
 
-  it("lets two extents cross freely -- ranges, not brackets, have no nesting constraint", () => {
+  it("lets two extents cross freely — ranges, not brackets, have no nesting constraint", () => {
     const crossing: ContentBlock = {
       kind: "paragraph",
       runs: [{ text: "a" }, { text: "b" }, { text: "c" }, { text: "d" }],
@@ -2684,8 +2684,8 @@ describe("run-level construct extents", () => {
     ).toBe(false);
   });
 
-  // The run-level twin of the marker-imbalance gap test above: an inverted or out-of-range run range is malformed by the extent contract, but ContentParagraphSchema carries no refinement that rejects it -- a Zod refinement would validate against a rule the published content-document.schema.json fragment cannot express (the range bound is the paragraph's own runs.length, not a fact any single object states), so it would silently diverge from that published face. findRunConstructFault (tested below) is the one place range validity is checked; this test exists so a future change reintroducing it as a Zod refinement fails rather than sliding in unnoticed.
-  it("parses an inverted and an out-of-range extent -- range validity belongs to findRunConstructFault, not the schema", () => {
+  // The run-level twin of the marker-imbalance gap test above: an inverted or out-of-range run range is malformed by the extent contract, but ContentParagraphSchema carries no refinement that rejects it — a Zod refinement would validate against a rule the published content-document.schema.json fragment cannot express (the range bound is the paragraph's own runs.length, not a fact any single object states), so it would silently diverge from that published face. findRunConstructFault (tested below) is the one place range validity is checked; this test exists so a future change reintroducing it as a Zod refinement fails rather than sliding in unnoticed.
+  it("parses an inverted and an out-of-range extent — range validity belongs to findRunConstructFault, not the schema", () => {
     const inverted: ContentBlock = {
       kind: "paragraph",
       runs: [{ text: "x" }],

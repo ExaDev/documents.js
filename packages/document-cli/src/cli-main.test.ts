@@ -7,7 +7,7 @@ import {
 import * as programModule from "./program";
 import { main } from "./cli-main";
 
-// runTui itself (a real Ink render against a real terminal) is exercised by src/tui/*.test.tsx -- this file's own subject is cli-main.ts's dispatch logic around it: which of the three paths (bare invocation, an explicit 'tui' token, or an ordinary registered command) main() takes, how each computes the TUI's own startPath, TTY-gating, and how launchTui's own success/failure maps to an exit code. runTui is mocked throughout so no real Ink instance is ever rendered here.
+// runTui itself (a real Ink render against a real terminal) is exercised by src/tui/*.test.tsx — this file's own subject is cli-main.ts's dispatch logic around it: which of the three paths (bare invocation, an explicit 'tui' token, or an ordinary registered command) main() takes, how each computes the TUI's own startPath, TTY-gating, and how launchTui's own success/failure maps to an exit code. runTui is mocked throughout so no real Ink instance is ever rendered here.
 const runTuiMock =
   vi.fn<(options: { readonly startPath?: string }) => Promise<void>>();
 vi.mock("./tui/index.js", () => ({
@@ -128,7 +128,7 @@ describe("main", () => {
 
   it("registers a 'tui [file]' subcommand on the assembled program that also launches the TUI", async () => {
     process.argv = ["node", "document-cli", "tui-registration-probe"];
-    // dispatchToken is neither undefined nor "tui", so main() takes the else branch that registers 'tui [file]' on a fresh createProgram() result before parsing -- calling createProgram() directly afterwards, as this test does below, would build a SEPARATE program without that registration. Spy on it instead so this test observes the exact program instance main() itself builds and registers against.
+    // dispatchToken is neither undefined nor "tui", so main() takes the else branch that registers 'tui [file]' on a fresh createProgram() result before parsing — calling createProgram() directly afterwards, as this test does below, would build a SEPARATE program without that registration. Spy on it instead so this test observes the exact program instance main() itself builds and registers against.
     const createProgramSpy = vi.spyOn(programModule, "createProgram");
     await main();
     const registeredProgram = createProgramSpy.mock.results[0]?.value as

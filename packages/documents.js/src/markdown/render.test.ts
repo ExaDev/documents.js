@@ -172,7 +172,7 @@ describe("MarkdownRenderDiagnosticCodes", () => {
 });
 
 describe("renderContentDocumentToMarkdown", () => {
-  it("delegates a wordprocessing document straight to buildMarkdownText, byte-identically, and reports no degrade diagnostics -- there is nothing to degrade on that path", () => {
+  it("delegates a wordprocessing document straight to buildMarkdownText, byte-identically, and reports no degrade diagnostics — there is nothing to degrade on that path", () => {
     const content = readMarkdownContent(richMarkdownText());
     const { diagnostics, onDiagnostic } = collect();
     const text = renderContentDocumentToMarkdown(content, { onDiagnostic });
@@ -357,7 +357,7 @@ describe("renderContentDocumentToMarkdown", () => {
     ]);
   });
 
-  it("makes no diagnostic callback at all when the caller supplies no onDiagnostic -- the default sink is a genuine no-op, not a throw", () => {
+  it("makes no diagnostic callback at all when the caller supplies no onDiagnostic — the default sink is a genuine no-op, not a throw", () => {
     const text = renderContentDocumentToMarkdown(
       presentationDoc([
         slide([paragraph([{ text: "Solo" }])], "notes dropped silently here"),

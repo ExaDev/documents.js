@@ -40,7 +40,7 @@ export interface Jp2Container {
   readonly hasBoxes: boolean;
   readonly imageHeader?: Jp2ImageHeader;
   readonly colourSpace?: Jp2ColourSpace;
-  // Set when the colour specification box carried a restricted ICC profile rather than an enumerated space. The profile bytes are kept but never interpreted -- this codec does no colour management.
+  // Set when the colour specification box carried a restricted ICC profile rather than an enumerated space. The profile bytes are kept but never interpreted — this codec does no colour management.
   readonly iccProfile?: Uint8Array<ArrayBuffer>;
   // I.5.3.6: channel definitions, present when a component is an alpha channel rather than a colour one.
   readonly channelDefinitions: readonly Jp2ChannelDefinition[];
@@ -188,7 +188,7 @@ function readJp2HeaderBox(
   let offset = start;
   for (;;) {
     const box = readBox(data, offset, end);
-    // No separate "did this box actually advance" check is needed: readBox only ever returns a box whose own header fit before `end`, and it throws rather than returning one whose declared length undercuts that header -- so a returned box's nextBoxStart is always past the offset it started from.
+    // No separate "did this box actually advance" check is needed: readBox only ever returns a box whose own header fit before `end`, and it throws rather than returning one whose declared length undercuts that header — so a returned box's nextBoxStart is always past the offset it started from.
     if (box === undefined) {
       return;
     }
@@ -229,7 +229,7 @@ function readColourSpecification(
   const method = data[start] ?? 0;
   if (method === 1) {
     if (end - start >= 7) {
-      // I.5.3.3 Table I.10: the enumerated colour spaces this codec recognises by number. Anything else is reported by its raw value rather than guessed at. Built inside this function rather than as a module-level constant so a mutation to one of its entries is attributed, by Stryker's per-test coverage analysis, to the tests that actually call this function -- a module-level `const` here would run once at import time as a static mutant, which Stryker tests against a single arbitrary covering test rather than the full set that genuinely exercises this map.
+      // I.5.3.3 Table I.10: the enumerated colour spaces this codec recognises by number. Anything else is reported by its raw value rather than guessed at. Built inside this function rather than as a module-level constant so a mutation to one of its entries is attributed, by Stryker's per-test coverage analysis, to the tests that actually call this function — a module-level `const` here would run once at import time as a static mutant, which Stryker tests against a single arbitrary covering test rather than the full set that genuinely exercises this map.
       const enumeratedColourSpaces = new Map<number, Jp2ColourSpace>([
         [12, "cmyk"],
         [14, "cielab"],
@@ -278,7 +278,7 @@ export function parseJp2Container(data: Uint8Array<ArrayBuffer>): Jp2Container {
     ) {
       codestream = data.subarray(box.payloadStart, box.payloadEnd);
     }
-    // ftyp, bpcc, res, xml, uuid, and every other box carry nothing this codec acts on -- bpcc specifically because the codestream's own SIZ marker carries per-component depths authoritatively.
+    // ftyp, bpcc, res, xml, uuid, and every other box carry nothing this codec acts on — bpcc specifically because the codestream's own SIZ marker carries per-component depths authoritatively.
     offset = box.nextBoxStart;
   }
 

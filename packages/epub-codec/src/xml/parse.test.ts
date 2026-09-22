@@ -103,7 +103,7 @@ describe("buildXml", () => {
   });
 });
 
-// The functions below validate the shape of fast-xml-parser's own `any`-typed output -- no syntactically valid XML string can drive parseXml itself into most of these branches, since the shape they check is the library's own internal invariant, not something malformed markup can violate. Exercised directly with adversarial `unknown` values instead, exactly like node.ts's own isXmlNode.
+// The functions below validate the shape of fast-xml-parser's own `any`-typed output — no syntactically valid XML string can drive parseXml itself into most of these branches, since the shape they check is the library's own internal invariant, not something malformed markup can violate. Exercised directly with adversarial `unknown` values instead, exactly like node.ts's own isXmlNode.
 describe("parseNodes", () => {
   it("rejects a value that is not an array", () => {
     expect(() => parseNodes("not an array")).toThrow(

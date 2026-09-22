@@ -189,7 +189,7 @@ Reading a JPEG 2000 image directly, either as pixels or as metadata alone:
 ```ts
 import { decodeJpeg2000, readJpeg2000Metadata } from "pdf-codec";
 
-// Works on any conforming codestream -- including one whose pixels this decoder refuses, which is what `decodable`/`undecodableReason` are for.
+// Works on any conforming codestream — including one whose pixels this decoder refuses, which is what `decodable`/`undecodableReason` are for.
 const metadata = readJpeg2000Metadata(jp2OrCodestreamBytes);
 console.log(
   metadata.width,

@@ -6,7 +6,7 @@
 
 ## Why
 
-<!-- The problem, not the patch. Link the issue if there is one -- use `Fixes #N` so the issue closes and the Development panel links up. -->
+<!-- The problem, not the patch. Link the issue if there is one — use `Fixes #N` so the issue closes and the Development panel links up. -->
 
 ## Notes for review
 

@@ -91,7 +91,7 @@ describe("buildDocxPackage", () => {
     ]);
     const editor = new DocxEditor(buildDocxPackage(content));
     const [paragraph] = editor.paragraphs();
-    // runs() matches every w:r regardless of content, so the tab's own w:r (holding a bare w:tab, no w:t) still appears -- as an empty-text run between the two real ones.
+    // runs() matches every w:r regardless of content, so the tab's own w:r (holding a bare w:tab, no w:t) still appears — as an empty-text run between the two real ones.
     expect(paragraph!.runs().map((r) => r.text)).toEqual(["Left", "", "Right"]);
     expect(paragraph!.text).toBe("LeftRight"); // textContent has no WordprocessingML-specific knowledge of w:tab, so it contributes no characters
   });
@@ -819,7 +819,7 @@ describe("buildDocxPackage", () => {
     if (marker?.kind !== "constructStart") {
       throw new Error("expected the first block to be the construct marker");
     }
-    // An author/date-free insertion reads back with exactly the fields the source stated -- no invented author, no minted date.
+    // An author/date-free insertion reads back with exactly the fields the source stated — no invented author, no minted date.
     expect(marker.descriptor).toEqual({
       kind: "provenance",
       change: "insertion",
@@ -832,7 +832,7 @@ describe("buildDocxPackage", () => {
     const insElements = descendants(documentRoot, "w:ins");
     expect(insElements).toHaveLength(1);
     expect(textContent(insElements[0]!)).toContain("newly added");
-    // An insertion's runs stay plain w:t -- only deletions and move-froms re-spell.
+    // An insertion's runs stay plain w:t — only deletions and move-froms re-spell.
     expect(descendants(insElements[0]!, "w:t")).toHaveLength(1);
     expect(descendants(insElements[0]!, "w:delText")).toHaveLength(0);
   });
@@ -861,7 +861,7 @@ describe("buildDocxPackage", () => {
     for (const tag of ["w:ins", "w:del", "w:moveFrom", "w:moveTo"]) {
       expect(descendants(documentRoot, tag)).toHaveLength(0);
     }
-    // The paragraph itself still writes -- dropping the pair is not dropping the content it bracketed.
+    // The paragraph itself still writes — dropping the pair is not dropping the content it bracketed.
     expect(
       descendants(documentRoot, "w:t").some(
         (t) => textContent(t) === "reformatted",
@@ -982,7 +982,7 @@ describe("buildDocxPackage", () => {
     if (documentRoot === undefined) {
       throw new Error("expected a word/document.xml root element");
     }
-    // The model stores the pre-encoded attribute (this package's processEntities:false convention -- el() never encodes), so the name arrives as data with its markup neutralised, and exactly one bookmarkStart exists: the name injected no extra element.
+    // The model stores the pre-encoded attribute (this package's processEntities:false convention — el() never encodes), so the name arrives as data with its markup neutralised, and exactly one bookmarkStart exists: the name injected no extra element.
     const starts = descendants(documentRoot, "w:bookmarkStart");
     expect(starts).toHaveLength(1);
     const stored = starts[0]!.attributes.find(

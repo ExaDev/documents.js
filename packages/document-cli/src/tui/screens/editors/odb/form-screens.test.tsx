@@ -5,7 +5,7 @@ import { loadFormAndReportOdbForms } from "../../../../test-support/odb-fixture.
 import { settle, waitForFrame } from "../../../test-support.js";
 import { OdbHarness } from "./test-support.js";
 
-// Driven by the real `.odb` fixture (see test-support/odb-fixture.ts for its provenance) rather than a hand-built OdbForm: these screens render whatever `readOdbForms` produces, so asserting against genuine LibreOffice output is what proves the rendering matches the reader's actual shape -- most of all the sub-form, which sits on a different command from its parent.
+// Driven by the real `.odb` fixture (see test-support/odb-fixture.ts for its provenance) rather than a hand-built OdbForm: these screens render whatever `readOdbForms` produces, so asserting against genuine LibreOffice output is what proves the rendering matches the reader's actual shape — most of all the sub-form, which sits on a different command from its parent.
 const FORMS = loadFormAndReportOdbForms();
 
 const SAMPLE_TABLES: readonly HsqldbTable[] = [
@@ -33,7 +33,7 @@ describe("OdbFormListScreen and OdbFormDetailScreen", () => {
       candidate.includes("Forms (1 of 1)"),
     );
     expect(frame).toContain(
-      "SalesForm [forms/Obj11] -- 1 form, 6 controls (5 bound)",
+      "SalesForm [forms/Obj11] — 1 form, 6 controls (5 bound)",
     );
   });
 

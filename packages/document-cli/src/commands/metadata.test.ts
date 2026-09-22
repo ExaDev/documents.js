@@ -21,7 +21,7 @@ import {
   METADATA_FIXTURE,
 } from "../test-support/metadata-fixture";
 
-// Drives the real assembled commander program against real fixtures across several formats -- proving the `metadata` command dispatches to the right reader per source format (docx via ooxml.js's decodePackage, odt via odf.js's, pdf directly via readPdf) rather than exercising formatMetadataLines in isolation, which src/runtime/metadata-format.test.ts already covers on its own.
+// Drives the real assembled commander program against real fixtures across several formats — proving the `metadata` command dispatches to the right reader per source format (docx via ooxml.js's decodePackage, odt via odf.js's, pdf directly via readPdf) rather than exercising formatMetadataLines in isolation, which src/runtime/metadata-format.test.ts already covers on its own.
 
 let savedExitCode: typeof process.exitCode;
 let workspace: string;
@@ -156,7 +156,7 @@ describe("metadata", () => {
     expect(stdout).not.toContain("author:");
     expect(stdout).not.toContain("subject:");
     expect(stdout).not.toContain("keywords:");
-    // A fresh createDocx() document always carries real timestamps -- this is not the "no metadata at all" empty-array case, which src/runtime/metadata-format.test.ts covers directly.
+    // A fresh createDocx() document always carries real timestamps — this is not the "no metadata at all" empty-array case, which src/runtime/metadata-format.test.ts covers directly.
     expect(stdout).toContain("createdIso:");
   });
 

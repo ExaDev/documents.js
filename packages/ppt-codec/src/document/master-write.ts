@@ -36,7 +36,7 @@ import {
 
 // The one main master slide this writer produces, and the SlideAtom every slide needs in order to name it.
 //
-// WHY A WRITER OF PLAIN TEXT-BOX SLIDES WRITES A MASTER AT ALL. Speaker notes are the reason. [MS-PPT] 3.5.3 states the notes-to-slide association as the NotesAtom's own slideIdRef, but a real consumer follows the opposite link -- the notesIdRef field of the slide's own SlideAtom (confirmed directly: a file carrying only the spec's stated link has its notes silently dropped by LibreOffice, and the same file with notesIdRef additionally set has them imported onto the right slides). A SlideContainer's SlideAtom is therefore mandatory for notes to reach any consumer, and [MS-PPT] 2.5.2 makes masterIdRef "MUST NOT be 0x00000000 if the record that contains this SlideAtom record is a SlideContainer" -- so the master is a prerequisite the notes linkage drags in, not a separate feature bolted on beside it. Without it a slide has no conformant SlideAtom to carry notesIdRef in, and a consumer reading the file finds no slides at all.
+// WHY A WRITER OF PLAIN TEXT-BOX SLIDES WRITES A MASTER AT ALL. Speaker notes are the reason. [MS-PPT] 3.5.3 states the notes-to-slide association as the NotesAtom's own slideIdRef, but a real consumer follows the opposite link — the notesIdRef field of the slide's own SlideAtom (confirmed directly: a file carrying only the spec's stated link has its notes silently dropped by LibreOffice, and the same file with notesIdRef additionally set has them imported onto the right slides). A SlideContainer's SlideAtom is therefore mandatory for notes to reach any consumer, and [MS-PPT] 2.5.2 makes masterIdRef "MUST NOT be 0x00000000 if the record that contains this SlideAtom record is a SlideContainer" — so the master is a prerequisite the notes linkage drags in, not a separate feature bolted on beside it. Without it a slide has no conformant SlideAtom to carry notesIdRef in, and a consumer reading the file finds no slides at all.
 //
 // [MS-PPT] 2.5.3 MainMasterContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/e2f5fbf3-d790-487e-b96b-5ccdee0f0aa8 [MS-PPT] 2.5.2 SlideAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/57e11e6c-e550-4c43-80b6-72731eee8abd
 
@@ -63,7 +63,7 @@ const SLIDE_FOLLOWS_MASTER = 0b111;
 // The master's own identifier. [MS-PPT] 2.2.13 MasterId requires a main master's identifier to be at least 0x80000000, which is also what keeps it out of the SlideId range slides are numbered from.
 export const MASTER_SLIDE_ID = 0x80000000;
 
-// The master placeholder rectangles, as fractions of the slide. A master's placeholders are prompts rather than content -- nothing is drawn for one on a slide that instantiates no placeholder of that type, which every slide this writer produces is (SL_Blank) -- so these proportions decide nothing a reader or a renderer of this writer's own output can observe. They exist because a placeholder shape without an anchor has no rectangle at all, and are the conventional thirds a real master divides its page into: a title band across the top, the body beneath it, and the date/footer/slide-number row along the bottom.
+// The master placeholder rectangles, as fractions of the slide. A master's placeholders are prompts rather than content — nothing is drawn for one on a slide that instantiates no placeholder of that type, which every slide this writer produces is (SL_Blank) — so these proportions decide nothing a reader or a renderer of this writer's own output can observe. They exist because a placeholder shape without an anchor has no rectangle at all, and are the conventional thirds a real master divides its page into: a title band across the top, the body beneath it, and the date/footer/slide-number row along the bottom.
 const TITLE_TOP = 0.06;
 const TITLE_HEIGHT = 0.16;
 const BODY_TOP = 0.26;
@@ -78,7 +78,7 @@ interface MasterPlaceholder {
   readonly frame: ContentShape["frame"];
 }
 
-// Each of the five placeholders SL_TitleBody's own MasterVariant rule requires, paired directly with its own rectangle rather than built as two separately-indexed arrays (a placementId list and a frame list) that would have to be kept in step by position -- pairing them at the point each is defined removes the possibility of the two ever disagreeing on length or order, which a later index-based lookup could otherwise get wrong with nothing to catch it.
+// Each of the five placeholders SL_TitleBody's own MasterVariant rule requires, paired directly with its own rectangle rather than built as two separately-indexed arrays (a placementId list and a frame list) that would have to be kept in step by position — pairing them at the point each is defined removes the possibility of the two ever disagreeing on length or order, which a later index-based lookup could otherwise get wrong with nothing to catch it.
 function masterPlaceholders(size: PageSize): readonly MasterPlaceholder[] {
   const { widthPt: w, heightPt: h } = size;
   const margin = w * SIDE_MARGIN;
@@ -164,7 +164,7 @@ export function writeSlideAtomForSlide(
 ): Uint8Array<ArrayBuffer> {
   return writeSlideAtom({
     geom: SL_BLANK,
-    // No placeholder shapes of its own -- an empty list here writes the same all-zero 8-byte field a list of [PT_NONE] would (writeSlideAtom's own Uint8Array field already defaults every unstated byte to 0x00, PT_NONE's own value), so PT_NONE is never actually stated.
+    // No placeholder shapes of its own — an empty list here writes the same all-zero 8-byte field a list of [PT_NONE] would (writeSlideAtom's own Uint8Array field already defaults every unstated byte to 0x00, PT_NONE's own value), so PT_NONE is never actually stated.
     placeholderTypes: [],
     masterIdRef: MASTER_SLIDE_ID,
     notesIdRef,
@@ -172,7 +172,7 @@ export function writeSlideAtomForSlide(
   });
 }
 
-// [MS-PPT] 2.9.31 TextMasterStyleAtom: rh.recInstance is the TextTypeEnum member the formatting applies to, and cLevels "MUST be less than or equal to 0x0005" with each level present if and only if cLevels exceeds its index -- so cLevels 0x0000 is a complete record stating no level of its own, which is exactly this master's position: it overrides nothing, and every level falls through to the DocumentTextInfoContainer's own styles as 2.9.31 specifies. 2.5.3 requires at least a title (0x000) and a body (0x001) item, plus a notes (0x002) item for the master the first MasterPersistAtom names -- which this master always is, being the only one.
+// [MS-PPT] 2.9.31 TextMasterStyleAtom: rh.recInstance is the TextTypeEnum member the formatting applies to, and cLevels "MUST be less than or equal to 0x0005" with each level present if and only if cLevels exceeds its index — so cLevels 0x0000 is a complete record stating no level of its own, which is exactly this master's position: it overrides nothing, and every level falls through to the DocumentTextInfoContainer's own styles as 2.9.31 specifies. 2.5.3 requires at least a title (0x000) and a body (0x001) item, plus a notes (0x002) item for the master the first MasterPersistAtom names — which this master always is, being the only one.
 function writeTextMasterStyleAtom(textType: number): Uint8Array<ArrayBuffer> {
   return writeAtom(RT_TextMasterStyleAtom, u16le(0), {
     recInstance: textType,
@@ -205,7 +205,7 @@ export function writeMainMaster(
       writeSlideAtom({
         geom: SL_TITLE_BODY,
         placeholderTypes: masterPlaceholderList.map((p) => p.placementId),
-        // [MS-PPT] 2.5.2: both MUST be 0x00000000 when the SlideAtom's container is a MainMasterContainer -- a master follows no master, and has no notes slide.
+        // [MS-PPT] 2.5.2: both MUST be 0x00000000 when the SlideAtom's container is a MainMasterContainer — a master follows no master, and has no notes slide.
         masterIdRef: 0,
         notesIdRef: 0,
         slideFlags: 0,

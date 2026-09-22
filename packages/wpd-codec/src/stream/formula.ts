@@ -1,17 +1,17 @@
 import { int16At, sliceAt, uint16At } from "../bytes/view";
 import { decodeWordString } from "./characters";
 
-// -- Table formulas, per WPFF Table Formula Functions --
+// — Table formulas, per WPFF Table Formula Functions --
 //
-// "Table formula codes and their operation are shown below. These codes are used by New Cell Formula (function 0xD0 subfunction 0x81)." The tokenised formula this module decodes is `stream/table.ts`'s own CELL_FORMULA_SUBFUNCTION payload -- already isolated from its own six-byte length framing by readEmbeddedSubfunctions, so what reaches readTableFormula here is exactly the SDK's own "<tokenized formula> x length of formula" region and nothing else.
+// "Table formula codes and their operation are shown below. These codes are used by New Cell Formula (function 0xD0 subfunction 0x81)." The tokenised formula this module decodes is `stream/table.ts`'s own CELL_FORMULA_SUBFUNCTION payload — already isolated from its own six-byte length framing by readEmbeddedSubfunctions, so what reaches readTableFormula here is exactly the SDK's own "<tokenized formula> x length of formula" region and nothing else.
 //
-// A WORD ABOUT WHY THIS IS A LINEAR WALK, NOT AN RPN STACK MACHINE: the code table includes "," comma (22), "(" (23), and ")" (24) as formula codes in their own right, which a genuine postfix/RPN encoding would never need -- precedence and grouping are exactly what parenthesised infix notation states explicitly and RPN encodes structurally, through operand order alone. Their presence means WordPerfect's own tokenised formula is a straight linearisation of the formula AS TYPED, one token per operator, operand, paren, or comma, in source order -- so decoding it is a left-to-right substitution (each code's own text, concatenated) rather than a stack evaluation. That is also why this reader never needs an arity table for any operator or function: arity only matters to a stack machine building a tree, and nothing here builds one.
+// A WORD ABOUT WHY THIS IS A LINEAR WALK, NOT AN RPN STACK MACHINE: the code table includes "," comma (22), "(" (23), and ")" (24) as formula codes in their own right, which a genuine postfix/RPN encoding would never need — precedence and grouping are exactly what parenthesised infix notation states explicitly and RPN encodes structurally, through operand order alone. Their presence means WordPerfect's own tokenised formula is a straight linearisation of the formula AS TYPED, one token per operator, operand, paren, or comma, in source order — so decoding it is a left-to-right substitution (each code's own text, concatenated) rather than a stack evaluation. That is also why this reader never needs an arity table for any operator or function: arity only matters to a stack machine building a tree, and nothing here builds one.
 //
-// THE HONEST-OR-NOTHING CONTRACT: every code this module does not have a confirmed, unambiguous textual spelling for -- the SDK's own "* (assumed)" hedge on code 45, the "+" shortcut (14) whose direction-flag enumeration the mirrored SDK pages never state, the two temp-function codes (33, 34) whose own shape this reader cannot confirm without a real file carrying one -- aborts the WHOLE formula rather than emitting a partially-decoded or guessed string. A formula this reader cannot state with confidence is exactly as informative reported through the diagnostic sink as read.ts already reports every other unresolved construct; a formula silently wrong in one token is worse than one visibly absent.
+// THE HONEST-OR-NOTHING CONTRACT: every code this module does not have a confirmed, unambiguous textual spelling for — the SDK's own "* (assumed)" hedge on code 45, the "+" shortcut (14) whose direction-flag enumeration the mirrored SDK pages never state, the two temp-function codes (33, 34) whose own shape this reader cannot confirm without a real file carrying one — aborts the WHOLE formula rather than emitting a partially-decoded or guessed string. A formula this reader cannot state with confidence is exactly as informative reported through the diagnostic sink as read.ts already reports every other unresolved construct; a formula silently wrong in one token is worse than one visibly absent.
 //
 // https://github.com/OneWingedShark/WordPerfect/blob/master/doc/SDK_Help/FileFormats/WPFF_TableFormulas.htm
 
-// Function Number Values for Code 12 ("group 1 functions"), the SDK's own table transcribed in full -- data, not interpretation, the same status this package's character-set and JUSTIFICATION tables already have.
+// Function Number Values for Code 12 ("group 1 functions"), the SDK's own table transcribed in full — data, not interpretation, the same status this package's character-set and JUSTIFICATION tables already have.
 const GROUP1_FUNCTIONS: ReadonlyMap<number, string> = new Map([
   [1, "MINUS"],
   [2, "ABS"],
@@ -158,7 +158,7 @@ const SYMBOL_CODES: ReadonlyMap<number, string> = new Map([
   [40, ">"],
 ]);
 
-// Column letters follow the same base-26 convention every spreadsheet-style cell reference uses (A, B, ..., Z, AA, ...) -- a reasonable, defensible choice for rendering WordPerfect's own (row, column) pair as text, not a value the mirrored SDK pages state outright. Absolute references are marked with a leading "$" on the affected component, the same convention.
+// Column letters follow the same base-26 convention every spreadsheet-style cell reference uses (A, B, ..., Z, AA, ...) — a reasonable, defensible choice for rendering WordPerfect's own (row, column) pair as text, not a value the mirrored SDK pages state outright. Absolute references are marked with a leading "$" on the affected component, the same convention.
 function columnLetters(column: number): string {
   let value = column;
   let letters = "";
@@ -209,7 +209,7 @@ function readLengthPrefixedWordString(
   return text;
 }
 
-// Code 30's own byte string: identical length convention, one byte per character instead of two. Its only caller (the floating point constant below) discards the decoded text and checks only whether this consumed the spelling successfully -- the double it already read is the value it reports -- so this validates and advances the cursor without building a string nothing reads. Throws (via sliceAt) rather than returning a sentinel when the length prefix or the spelling itself does not fit; the caller wraps the whole token in a try/catch.
+// Code 30's own byte string: identical length convention, one byte per character instead of two. Its only caller (the floating point constant below) discards the decoded text and checks only whether this consumed the spelling successfully — the double it already read is the value it reports — so this validates and advances the cursor without building a string nothing reads. Throws (via sliceAt) rather than returning a sentinel when the length prefix or the spelling itself does not fit; the caller wraps the whole token in a try/catch.
 function skipLengthPrefixedByteString(cursor: FormulaCursor): void {
   const length = uint16At(sliceAt(cursor.bytes, cursor.offset, 2), 0);
   cursor.offset += 2;
@@ -295,7 +295,7 @@ function readToken(cursor: FormulaCursor): string | undefined {
         : cellReferenceText(cell.row, cell.column, false, false);
     }
     case 28: {
-      // range reference (documented "not used"): two plain cell references joined by ":". readCellNumber's own insufficient-bytes check returns before advancing cursor.offset, so always attempting the second read even when the first failed is safe -- it reads from the identical position and fails identically.
+      // range reference (documented "not used"): two plain cell references joined by ":". readCellNumber's own insufficient-bytes check returns before advancing cursor.offset, so always attempting the second read even when the first failed is safe — it reads from the identical position and fails identically.
       const start = readCellNumber(cursor);
       const end = readCellNumber(cursor);
       if (start === undefined || end === undefined) {
@@ -354,9 +354,9 @@ function readToken(cursor: FormulaCursor): string | undefined {
       return "";
     default: {
       if (code >= 48 && code <= 63) {
-        // range reference, absolute-flag bits per the SDK's own NOTE: bit0/1 on the bottom-right cell, bit2/3 on the top-left cell. Codes in this range share a fixed high nibble, so their own low 4 bits (code & 0x0f) are exactly code - 48 -- a mask on the bits this flags value is ever actually read through, not an offsetting subtraction.
+        // range reference, absolute-flag bits per the SDK's own NOTE: bit0/1 on the bottom-right cell, bit2/3 on the top-left cell. Codes in this range share a fixed high nibble, so their own low 4 bits (code & 0x0f) are exactly code - 48 — a mask on the bits this flags value is ever actually read through, not an offsetting subtraction.
         const flags = code & 0x0f;
-        // readCellNumber's own insufficient-bytes check returns before advancing cursor.offset, so always attempting the second read even when the first failed is safe -- it reads from the identical position and fails identically.
+        // readCellNumber's own insufficient-bytes check returns before advancing cursor.offset, so always attempting the second read even when the first failed is safe — it reads from the identical position and fails identically.
         const start = readCellNumber(cursor);
         const end = readCellNumber(cursor);
         if (start === undefined || end === undefined) {
@@ -379,7 +379,7 @@ function readToken(cursor: FormulaCursor): string | undefined {
           : `${startText}:${endText}`;
       }
       if (code >= 64 && code <= 67) {
-        // cell reference, absolute-flag bits per the same NOTE: bit0 column, bit1 row. Codes in this range share a fixed high bit pattern, so their own low 2 bits (code & 0x03) are exactly code - 64 -- a mask on the bits this flags value is ever actually read through, not an offsetting subtraction.
+        // cell reference, absolute-flag bits per the same NOTE: bit0 column, bit1 row. Codes in this range share a fixed high bit pattern, so their own low 2 bits (code & 0x03) are exactly code - 64 — a mask on the bits this flags value is ever actually read through, not an offsetting subtraction.
         const flags = code & 0x03;
         const cell = readCellNumber(cursor);
         return cell === undefined
@@ -397,7 +397,7 @@ function readToken(cursor: FormulaCursor): string | undefined {
   }
 }
 
-// Decodes a New Cell Formula embedded subfunction's own tokenised formula (stream/table.ts's CELL_FORMULA_SUBFUNCTION payload) into the formula's own linear text, exactly as WordPerfect's own token stream states it -- concatenated left to right, since the stream already carries its own parentheses and commas rather than needing a tree rebuilt from postfix order. Returns undefined the moment any token cannot be stated with confidence, aborting the whole formula rather than returning a partially decoded or guessed string.
+// Decodes a New Cell Formula embedded subfunction's own tokenised formula (stream/table.ts's CELL_FORMULA_SUBFUNCTION payload) into the formula's own linear text, exactly as WordPerfect's own token stream states it — concatenated left to right, since the stream already carries its own parentheses and commas rather than needing a tree rebuilt from postfix order. Returns undefined the moment any token cannot be stated with confidence, aborting the whole formula rather than returning a partially decoded or guessed string.
 export function readTableFormula(bytes: Uint8Array): string | undefined {
   const cursor: FormulaCursor = { bytes, offset: 0 };
   let text = "";

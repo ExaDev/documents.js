@@ -23,9 +23,9 @@ function diagnostic(overrides: Partial<Diagnostic> = {}): Diagnostic {
   return { severity: "info", code: "x", message: "a message", ...overrides };
 }
 
-// jsdom renders every element at zero size (it has no layout engine), so Spoiler's own measured-height-vs-maxHeight comparison can never observe a real overflow and its "Show N more" control never appears regardless of item count -- the wrapper element Mantine's Box always renders for a `<Spoiler>`, present whether or not the control itself is showing, is the only DOM signal jsdom can give for "this content was wrapped in a Spoiler", so it is what these tests check for instead.
+// jsdom renders every element at zero size (it has no layout engine), so Spoiler's own measured-height-vs-maxHeight comparison can never observe a real overflow and its "Show N more" control never appears regardless of item count — the wrapper element Mantine's Box always renders for a `<Spoiler>`, present whether or not the control itself is showing, is the only DOM signal jsdom can give for "this content was wrapped in a Spoiler", so it is what these tests check for instead.
 const SPOILER_WRAPPER_CLASS = "mantine-Spoiler-root";
-// MantineProvider injects its own <style> elements into the mount container regardless of what its children render, so an empty DiagnosticsPanel (which returns null) still leaves non-empty innerHTML -- the panel's own root Stack is the actual signal that it rendered anything at all.
+// MantineProvider injects its own <style> elements into the mount container regardless of what its children render, so an empty DiagnosticsPanel (which returns null) still leaves non-empty innerHTML — the panel's own root Stack is the actual signal that it rendered anything at all.
 const PANEL_ROOT_CLASS = "mantine-Stack-root";
 
 describe("DiagnosticsPanel", () => {

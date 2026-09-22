@@ -13,7 +13,7 @@ function textItems(items: readonly LayoutItem[]): LayoutText[] {
   return items.filter((item): item is LayoutText => item.kind === "text");
 }
 
-// The page-boundaries cluster (#759): the crop box is the visible region (ISO 32000-1 14.11.2), so it -- not the media box -- is the page geometry a consumer sees, content wholly outside it is not visible at all, and the boxes beyond the visible one (the media box a distinct crop hides, plus /BleedBox /TrimBox /ArtBox) are quarantined as a residue row rather than silently dropped.
+// The page-boundaries cluster (#759): the crop box is the visible region (ISO 32000-1 14.11.2), so it — not the media box — is the page geometry a consumer sees, content wholly outside it is not visible at all, and the boxes beyond the visible one (the media box a distinct crop hides, plus /BleedBox /TrimBox /ArtBox) are quarantined as a residue row rather than silently dropped.
 
 describe("readPdf: crop box as the visible region", () => {
   it("reports the crop box as the page geometry, positions relative to its origin", () => {
@@ -33,7 +33,7 @@ describe("readPdf: crop box as the visible region", () => {
   it("keeps partially-visible content with its original, unclipped geometry", () => {
     const page = readPdf(cropBoxPdf()).pages[0]!;
     const straddle = page.items.find((item) => item.kind === "rect");
-    // The rect spans x 190..210 against the boundary at 200; a viewer clips the drawing, but the item layer keeps the source geometry -- clipping would invent data the format never stated.
+    // The rect spans x 190..210 against the boundary at 200; a viewer clips the drawing, but the item layer keeps the source geometry — clipping would invent data the format never stated.
     expect(straddle).toMatchObject({
       xPt: 90,
       yPt: 20,
@@ -97,7 +97,7 @@ describe("readPdf: page-boundary residue", () => {
 
   it("records nothing when the declared boxes carry no fact beyond the visible one", () => {
     const bytes = equalCropBoxPdf();
-    // An equal CropBox and no CropBox at all are indistinguishable through readPdf's own output (both leave the visible region at the MediaBox and generate no residue row), so this checks the fixture's own raw bytes genuinely declare one rather than merely omitting it -- the fixture's whole point is the equal-box case, not the no-box one.
+    // An equal CropBox and no CropBox at all are indistinguishable through readPdf's own output (both leave the visible region at the MediaBox and generate no residue row), so this checks the fixture's own raw bytes genuinely declare one rather than merely omitting it — the fixture's whole point is the equal-box case, not the no-box one.
     expect(new TextDecoder().decode(bytes)).toContain("/CropBox [0 0 200 100]");
     const doc = readPdf(bytes);
     expect(doc.pages[0]).toMatchObject({ widthPt: 200, heightPt: 100 });

@@ -13,7 +13,7 @@ import {
 import type { RichPresentationOpenDocument } from "./slide-family.js";
 import { truncatePreview } from "./text.js";
 
-// A slide table's own cell TEXT has no live-view getter at all on the pptx side (PptxTableCell exposes only colSpan/rowSpan/horizontalMerge/verticalMerge/setParagraphs -- see documents.js's own edit/pptx/table.ts doc comment: a merge is pure attribute-flipping on cells that already exist, never element removal/retagging), so display goes through the content pivot instead -- the same "a live accessor is display-unsafe, read through readXContent for display, mutate through the live editor for writes" convention screens/editors/ods/shared.ts's `resolveSheet` already established for OdsSheet.cell(). odp reuses OdtTable internally (see documents.js's own README: "OdpSlide.addTable ... reuses OdtTable/buildTable WHOLESALE for it"), which DOES carry a real `.text` getter per cell, but reading through the content pivot here anyway keeps this one function correct for both formats uniformly rather than special-casing odp.
+// A slide table's own cell TEXT has no live-view getter at all on the pptx side (PptxTableCell exposes only colSpan/rowSpan/horizontalMerge/verticalMerge/setParagraphs — see documents.js's own edit/pptx/table.ts doc comment: a merge is pure attribute-flipping on cells that already exist, never element removal/retagging), so display goes through the content pivot instead — the same "a live accessor is display-unsafe, read through readXContent for display, mutate through the live editor for writes" convention screens/editors/ods/shared.ts's `resolveSheet` already established for OdsSheet.cell(). odp reuses OdtTable internally (see documents.js's own README: "OdpSlide.addTable ... reuses OdtTable/buildTable WHOLESALE for it"), which DOES carry a real `.text` getter per cell, but reading through the content pivot here anyway keeps this one function correct for both formats uniformly rather than special-casing odp.
 export function resolveSlideTable(
   doc: RichPresentationOpenDocument,
   slideIndex: number,
@@ -40,7 +40,7 @@ function readSlideTables(
   if (slide === undefined) {
     return [];
   }
-  // A table graphicFrame/draw:frame reads back as an ordinary ContentShape whose own blocks[0] is the ContentTable (see slide-detail.test.tsx's own DocumentProbe, which relies on this exact shape) -- there is no separate top-level "tables" array in ContentSlide, so every shape's blocks are searched for one.
+  // A table graphicFrame/draw:frame reads back as an ordinary ContentShape whose own blocks[0] is the ContentTable (see slide-detail.test.tsx's own DocumentProbe, which relies on this exact shape) — there is no separate top-level "tables" array in ContentSlide, so every shape's blocks are searched for one.
   return slide.shapes.flatMap((shape) =>
     shape.blocks.filter(
       (block): block is ContentTable => block.kind === "table",
@@ -48,7 +48,7 @@ function readSlideTables(
   );
 }
 
-// Concatenates a cell's own paragraph blocks' run text, newline-joined between paragraphs -- the ContentTableCell-shaped equivalent of DocxTableCell.text/OdtTableCell.text (both `paragraphs().map((p) => p.text).join('\n')`), since ContentTableCell itself carries only `blocks`, never a flattened `.text` of its own.
+// Concatenates a cell's own paragraph blocks' run text, newline-joined between paragraphs — the ContentTableCell-shaped equivalent of DocxTableCell.text/OdtTableCell.text (both `paragraphs().map((p) => p.text).join('\n')`), since ContentTableCell itself carries only `blocks`, never a flattened `.text` of its own.
 export function slideTableCellText(cell: ContentTableCell): string {
   return cell.blocks
     .filter(

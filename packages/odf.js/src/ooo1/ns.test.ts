@@ -20,7 +20,7 @@ describe("OOO1_NAMESPACES", () => {
     // The same "do not pattern-match the prefix onto the URI" trap ODF has: draw: is ".../drawing", number: is ".../datastyle".
     expect(OOO1_NAMESPACES.draw).toBe("http://openoffice.org/2000/drawing");
     expect(OOO1_NAMESPACES.number).toBe("http://openoffice.org/2000/datastyle");
-    // config: and manifest: are the two that moved to the 2001 path; presentation: did NOT, despite OpenOffice.org's own retained DTD (xmloff/dtd/nmspace.mod) declaring it as 2001/presentation -- a real .sxi's own meta.xml declares 2000/presentation, and 2001/presentation appears nowhere in LibreOffice's namespace table.
+    // config: and manifest: are the two that moved to the 2001 path; presentation: did NOT, despite OpenOffice.org's own retained DTD (xmloff/dtd/nmspace.mod) declaring it as 2001/presentation — a real .sxi's own meta.xml declares 2000/presentation, and 2001/presentation appears nowhere in LibreOffice's namespace table.
     expect(OOO1_NAMESPACES.presentation).toBe(
       "http://openoffice.org/2000/presentation",
     );
@@ -148,7 +148,7 @@ describe("isOoo1Package", () => {
   });
 
   it("does not treat an ordinary attribute whose value happens to equal an OOo1 URI as a namespace declaration", () => {
-    // office:version here is neither "xmlns" nor "xmlns:"-prefixed -- only its VALUE coincides with a real OOo1 namespace URI, which must not be enough on its own.
+    // office:version here is neither "xmlns" nor "xmlns:"-prefixed — only its VALUE coincides with a real OOo1 namespace URI, which must not be enough on its own.
     const pkg = packageOf({
       "content.xml": `<office:document-content office:version="http://openoffice.org/2000/office"><office:body/></office:document-content>`,
     });

@@ -6,7 +6,7 @@ import {
   RT_TextHeaderAtom,
 } from "../record/types";
 
-// The two spellings of a text body and the character conventions inside it. A text body is one shape's entire text -- every paragraph of it -- stored either as UTF-16 (TextCharsAtom) or, when every character fits in a byte, as that byte alone (TextBytesAtom); which spelling a producer chose carries no meaning beyond size. [MS-PPT] 2.9.1 TextHeaderAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/08d31a66-0750-4009-b416-49f2871cd178 [MS-PPT] TextCharsAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/a3c5c8d5-e530-4167-a242-7743bc99aeac [MS-PPT] TextBytesAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/80aae34b-2699-43fa-9e6a-c560ae790cd7
+// The two spellings of a text body and the character conventions inside it. A text body is one shape's entire text — every paragraph of it — stored either as UTF-16 (TextCharsAtom) or, when every character fits in a byte, as that byte alone (TextBytesAtom); which spelling a producer chose carries no meaning beyond size. [MS-PPT] 2.9.1 TextHeaderAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/08d31a66-0750-4009-b416-49f2871cd178 [MS-PPT] TextCharsAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/a3c5c8d5-e530-4167-a242-7743bc99aeac [MS-PPT] TextBytesAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/80aae34b-2699-43fa-9e6a-c560ae790cd7
 
 // TextTypeEnum ([MS-PPT] 2.13.33), which says what a text body is for. Read to tell a slide's title apart from its body text; there is deliberately no 0x00000003. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/50118cd3-48c2-4329-9a40-6a0281e960b6
 export const TEXT_TYPE_TITLE = 0x00000000;
@@ -21,7 +21,7 @@ export const TEXT_TYPE_QUARTER_BODY = 0x00000008;
 // The character that separates one paragraph from the next inside a stored text body. Confirmed by [MS-PPT]'s own Outline Text example, whose textBytes is "a sunny day\rthe blue sky\rsome green grass" with the note that "each line break in the text, shown as '\r', is displayed as a separate outline item". https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/0d75c317-91f7-4795-8e69-41dde73f9690
 export const PARAGRAPH_SEPARATOR = "\r";
 
-// A soft line break: a break within one paragraph rather than between two. The spec's own Outline Text page lists '\v' among the escapes it uses when rendering non-printable text content, but publishes no table stating which codepoint means what, so treating U+000B this way is an inference from that listing and from what real producers emit -- not a rule quoted from the specification. It is deliberately not treated as a paragraph separator: doing so would split one paragraph's formatting runs across two paragraphs, which is the visible failure.
+// A soft line break: a break within one paragraph rather than between two. The spec's own Outline Text page lists '\v' among the escapes it uses when rendering non-printable text content, but publishes no table stating which codepoint means what, so treating U+000B this way is an inference from that listing and from what real producers emit — not a rule quoted from the specification. It is deliberately not treated as a paragraph separator: doing so would split one paragraph's formatting runs across two paragraphs, which is the visible failure.
 export const LINE_BREAK = "\u000B";
 
 export function readTextHeaderAtom(record: PptRecord): number {
@@ -61,7 +61,7 @@ function decodeTextChars(bytes: Uint8Array<ArrayBuffer>): string {
   return text;
 }
 
-// The text body carried by one sequence of sibling records -- an OfficeArtClientTextbox's children, or the run of records following a SlidePersistAtom. Undefined rather than "" when neither atom is present: a shape with no text records at all is a different thing from one whose text is empty, and only the caller knows which of the two to represent.
+// The text body carried by one sequence of sibling records — an OfficeArtClientTextbox's children, or the run of records following a SlidePersistAtom. Undefined rather than "" when neither atom is present: a shape with no text records at all is a different thing from one whose text is empty, and only the caller knows which of the two to represent.
 export function readTextBody(
   records: readonly PptRecord[],
 ): string | undefined {
@@ -76,7 +76,7 @@ export function readTextBody(
   return undefined;
 }
 
-// The character count every StyleTextPropAtom run count is measured against. It is one more than the stored text's length, because the text body's final paragraph mark is counted by the formatting runs but never written into the atom -- stated directly in the spec's Character Formatting example, whose 0x15-byte textBytes has "a text body length of 22 because of the terminating line break character", matched by TextCFRun counts summing to 22. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/d88c020e-6702-4be6-9f54-220106a971d6
+// The character count every StyleTextPropAtom run count is measured against. It is one more than the stored text's length, because the text body's final paragraph mark is counted by the formatting runs but never written into the atom — stated directly in the spec's Character Formatting example, whose 0x15-byte textBytes has "a text body length of 22 because of the terminating line break character", matched by TextCFRun counts summing to 22. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/d88c020e-6702-4be6-9f54-220106a971d6
 export function characterCountOf(text: string): number {
   return text.length + 1;
 }

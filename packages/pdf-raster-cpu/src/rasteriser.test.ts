@@ -22,9 +22,9 @@ import {
 } from "./rasteriser";
 import type { CpuRasteriserOptions, RasterCpuDiagnostic } from "./rasteriser";
 
-// The backend's own contract, pinned on pixels: every test here renders through renderPdfPage with createCpuRasteriser (the composition a real consumer uses) and asserts on the PNG's decoded pixels, which decodePng reconstructs exactly from either of encodePng's output representations -- so the assertions are about raster output, never about one encoder spelling. pdf-codec's own raster suite already pins the op stream's geometry; what these tests add is that this backend turns those ops into the right pixels, deterministically, with the right refusals.
+// The backend's own contract, pinned on pixels: every test here renders through renderPdfPage with createCpuRasteriser (the composition a real consumer uses) and asserts on the PNG's decoded pixels, which decodePng reconstructs exactly from either of encodePng's output representations — so the assertions are about raster output, never about one encoder spelling. pdf-codec's own raster suite already pins the op stream's geometry; what these tests add is that this backend turns those ops into the right pixels, deterministically, with the right refusals.
 //
-// The small fixtures are built by literal byte concatenation on the same independence principle pdf-codec's own suites state (a fixture built by the package under test would let a writer bug hide from the renderer test); the one deliberate exception is the embedded-font text fixture, which IS built by writePdf -- there, the port's own geometry is already pinned by pdf-codec's suite against inline fixtures, and what needs proving here is that real embedded outlines reach real pixels, which the writer's mainstream-shaped output (Type0 + Identity-H + CIDFontType2 + FontFile2) exercises better than any hand-built equivalent.
+// The small fixtures are built by literal byte concatenation on the same independence principle pdf-codec's own suites state (a fixture built by the package under test would let a writer bug hide from the renderer test); the one deliberate exception is the embedded-font text fixture, which IS built by writePdf — there, the port's own geometry is already pinned by pdf-codec's suite against inline fixtures, and what needs proving here is that real embedded outlines reach real pixels, which the writer's mainstream-shaped output (Type0 + Identity-H + CIDFontType2 + FontFile2) exercises better than any hand-built equivalent.
 
 // --- Fixtures: the same minimal classic-xref shape pdf-codec's own raster suite builds, over byte-codec's ByteWriter. ---
 
@@ -255,7 +255,7 @@ describe("fillRect pixels", () => {
   });
 
   it("blends a fractional edge at the exact analytic fraction", () => {
-    // A rect starting at x 10.5: column 10 is covered from 10.5, an exact 0.5 overlap, so a 50%-grey red fill lands at exactly the half-blend of (128, 0, 0) over white. The far edge sits at 40.5, the same fractional shape one column further along; column 41 -- one past it -- must stay pure white, not just the near-side column 9.
+    // A rect starting at x 10.5: column 10 is covered from 10.5, an exact 0.5 overlap, so a 50%-grey red fill lands at exactly the half-blend of (128, 0, 0) over white. The far edge sits at 40.5, the same fractional shape one column further along; column 41 — one past it — must stay pure white, not just the near-side column 9.
     const image = renderPixels(onePagePdf("0.5 0 0 rg 10.5 20 30 40 re f"));
     expect(pixelAt(image, 10, 60)).toEqual([192, 128, 128]);
     expect(pixelAt(image, 40, 60)).toEqual([192, 128, 128]);
@@ -265,7 +265,7 @@ describe("fillRect pixels", () => {
   });
 
   it("blends a fractional top and bottom edge symmetrically, with nothing painted one row past either", () => {
-    // Page y 20.5..50.5 (height 30) maps to device y 49.5..79.5 (the y flip): row 49 gets the far (bottom, in page terms) fractional 0.5 overlap, row 79 gets the near (top) fractional 0.5 overlap, and rows 48 and 80 -- one past each edge -- must stay pure white.
+    // Page y 20.5..50.5 (height 30) maps to device y 49.5..79.5 (the y flip): row 49 gets the far (bottom, in page terms) fractional 0.5 overlap, row 79 gets the near (top) fractional 0.5 overlap, and rows 48 and 80 — one past each edge — must stay pure white.
     const image = renderPixels(onePagePdf("0 0.5 0 rg 10 20.5 30 30 re f"));
     expect(pixelAt(image, 20, 49)).toEqual([128, 192, 128]);
     expect(pixelAt(image, 20, 79)).toEqual([128, 192, 128]);
@@ -454,7 +454,7 @@ describe("stroke pixels", () => {
   });
 
   it("clamps a zero-width stroke to one device pixel", () => {
-    // "the thinnest possible width" (ISO 32000-1 8.4.3.2): a 1px band centred on device row 89.5 covers rows 89 and 90 at half coverage each -- 128 grey on both, white beyond.
+    // "the thinnest possible width" (ISO 32000-1 8.4.3.2): a 1px band centred on device row 89.5 covers rows 89 and 90 at half coverage each — 128 grey on both, white beyond.
     const image = renderPixels(onePagePdf("0 0 0 RG 0 w 10 10 m 90 10 l S"));
     expect(pixelAt(image, 50, 89)).toEqual([128, 128, 128]);
     expect(pixelAt(image, 50, 90)).toEqual([128, 128, 128]);
@@ -650,7 +650,7 @@ describe("text pixels through embedded outlines", () => {
     expect(image.height).toBe(30);
     const ink = regionAll(image, 0, 0, 30, 30).filter(([r]) => r < 128);
     expect(ink.length).toBeGreaterThan(10);
-    // The clip band sits between device rows 25..55 globally, so every ink pixel's own rows here come from that band -- and the band's first rows (above cap height inside the clip) stay white.
+    // The clip band sits between device rows 25..55 globally, so every ink pixel's own rows here come from that band — and the band's first rows (above cap height inside the clip) stay white.
     expect(regionAll(image, 0, 0, 30, 6)).toEqual(Array(30 * 6).fill(WHITE));
   });
 });
@@ -713,7 +713,7 @@ describe("CpuRasteriser: draw ops driven directly", () => {
   });
 
   it("blends the mask's own last marked pixel, not just every pixel before it", () => {
-    // A triangle covering the whole 3x3 canvas: the mask's own markedRange().last is the bottom-right pixel's index (8), and blendMask must walk up to and including it -- stopping one short would leave that one corner pixel white while every other pixel the shape covers turns black.
+    // A triangle covering the whole 3x3 canvas: the mask's own markedRange().last is the bottom-right pixel's index (8), and blendMask must walk up to and including it — stopping one short would leave that one corner pixel white while every other pixel the shape covers turns black.
     const rasteriser = new CpuRasteriser();
     rasteriser.beginPage(pageGeometry(3, 3));
     rasteriser.draw({
@@ -737,7 +737,7 @@ describe("CpuRasteriser: draw ops driven directly", () => {
   });
 
   it("does not let two degenerate two-point subpaths perturb a real polygon's own fill", () => {
-    // A real triangle alongside two unrelated two-point segments: CoverageMask's own bounding-box computation already excludes any subpath under three points from the SCAN RANGE regardless of what reaches it, so a single stray segment's forward/reverse crossings alone can land only on the identical x (the markSpan zero-width guard already absorbs that case) -- it takes a SECOND, differently-placed degenerate segment for their respective stray crossings to pair up into a genuine, non-cancelling span. Pinning that pathOp's own `.filter(points => points.length >= 3)` keeps that pairing from ever reaching CoverageMask at all: pixel (1, 2) sits on the triangle's own interior and must stay solid black, not fade toward white.
+    // A real triangle alongside two unrelated two-point segments: CoverageMask's own bounding-box computation already excludes any subpath under three points from the SCAN RANGE regardless of what reaches it, so a single stray segment's forward/reverse crossings alone can land only on the identical x (the markSpan zero-width guard already absorbs that case) — it takes a SECOND, differently-placed degenerate segment for their respective stray crossings to pair up into a genuine, non-cancelling span. Pinning that pathOp's own `.filter(points => points.length >= 3)` keeps that pairing from ever reaching CoverageMask at all: pixel (1, 2) sits on the triangle's own interior and must stay solid black, not fade toward white.
     const triangle: RasterSubpath = {
       startXPx: 0,
       startYPx: 0,
@@ -771,7 +771,7 @@ describe("CpuRasteriser: draw ops driven directly", () => {
   });
 
   it("does not let a stroke's blend see a fill's own leftover mask coverage from an earlier draw", () => {
-    // Two disjoint path draws on one page, in order: a full fill of the top-left region, then a stroke of the bottom-right region. If the stroke branch's own mask.reset() were skipped, blendMask -- which paints every mask cell with a nonzero count, wherever it came from -- would repaint the fill's already-covered pixels in the stroke's own colour, since CoverageMask carries state across draw calls on the same page.
+    // Two disjoint path draws on one page, in order: a full fill of the top-left region, then a stroke of the bottom-right region. If the stroke branch's own mask.reset() were skipped, blendMask — which paints every mask cell with a nonzero count, wherever it came from — would repaint the fill's already-covered pixels in the stroke's own colour, since CoverageMask carries state across draw calls on the same page.
     const fillRegion: RasterSubpath = {
       startXPx: 0,
       startYPx: 0,
@@ -806,7 +806,7 @@ describe("CpuRasteriser: draw ops driven directly", () => {
   });
 
   it("does not let a fill's blend see a stroke's own leftover mask coverage from an earlier draw", () => {
-    // The mirror image of the previous test: stroke first, then a disjoint fill -- pinning the fill branch's own mask.reset(), not the stroke branch's.
+    // The mirror image of the previous test: stroke first, then a disjoint fill — pinning the fill branch's own mask.reset(), not the stroke branch's.
     const rasteriser = new CpuRasteriser();
     rasteriser.beginPage(pageGeometry(20, 20));
     rasteriser.draw({
@@ -841,7 +841,7 @@ describe("CpuRasteriser: draw ops driven directly", () => {
   });
 
   it("does not let an image's blend see an earlier draw's own leftover mask coverage at the same location", () => {
-    // imageOp reads only the mask cells inside its own quad's bounding box, so a leftover fill elsewhere on the page is never even looked at -- what actually exercises this reset() is a fill and an image placement that OVERLAP: without the reset, the image's own fillPolygons call adds its quad's coverage on top of the fill's already-full 16, pushing the affected cells to 32 (an alpha of 2 instead of 1) and visibly overshooting the blend.
+    // imageOp reads only the mask cells inside its own quad's bounding box, so a leftover fill elsewhere on the page is never even looked at — what actually exercises this reset() is a fill and an image placement that OVERLAP: without the reset, the image's own fillPolygons call adds its quad's coverage on top of the fill's already-full 16, pushing the affected cells to 32 (an alpha of 2 instead of 1) and visibly overshooting the blend.
     const rasteriser = new CpuRasteriser();
     rasteriser.beginPage(pageGeometry(10, 10));
     rasteriser.draw({
@@ -916,7 +916,7 @@ describe("CpuRasteriser: draw ops driven directly", () => {
   });
 
   it("caches a decoded image by content within a page, and forgets it once the next page begins", () => {
-    // decodePng is pure, so no rendered pixel can ever tell a cache hit from a fresh decode -- decodedImageForTesting inspects the cache directly instead, the same way stroke.test.ts/coverage.test.ts reach past this package's own narrow public surface for their own arithmetic.
+    // decodePng is pure, so no rendered pixel can ever tell a cache hit from a fresh decode — decodedImageForTesting inspects the cache directly instead, the same way stroke.test.ts/coverage.test.ts reach past this package's own narrow public surface for their own arithmetic.
     const solidGreen: RawImage = {
       width: 1,
       height: 1,
@@ -976,7 +976,7 @@ describe("CpuRasteriser: draw ops driven directly", () => {
 
 describe("colourBytes", () => {
   it("scales each unit-float channel up to its own byte, not down by the same factor", () => {
-    // g: 0.2 rather than 0 -- a zero channel can't distinguish multiplying by 255 from dividing by it (both give 0), so every channel here is a genuine, distinguishing fraction.
+    // g: 0.2 rather than 0 — a zero channel can't distinguish multiplying by 255 from dividing by it (both give 0), so every channel here is a genuine, distinguishing fraction.
     expect(colourBytes({ r: 0.5, g: 0.2, b: 1 })).toEqual({
       r: 128,
       g: 51,
@@ -1053,7 +1053,7 @@ describe("sampleBilinear", () => {
   });
 
   it("interpolates between a texel and its own immediate neighbour, not one two columns and rows over", () => {
-    // A 3x3 source sampled at a point whose x0/y0 land on 0, strictly short of the last valid index (2): x1/y1 must clamp to 1 (x0 + 1), not fall back to width - 1 (== 2, the last column) the way they would if x0's own clamp-to-edge logic were applied here by mistake -- distinct from the two-texel rgbaSource above, where a boundary sample makes x0 and x1 (and therefore fx's own contribution) coincide and mask exactly this kind of bug.
+    // A 3x3 source sampled at a point whose x0/y0 land on 0, strictly short of the last valid index (2): x1/y1 must clamp to 1 (x0 + 1), not fall back to width - 1 (== 2, the last column) the way they would if x0's own clamp-to-edge logic were applied here by mistake — distinct from the two-texel rgbaSource above, where a boundary sample makes x0 and x1 (and therefore fx's own contribution) coincide and mask exactly this kind of bug.
     const distinctColours: RawImage = {
       width: 3,
       height: 3,
@@ -1072,7 +1072,7 @@ describe("sampleBilinear", () => {
   });
 
   it("weights by the fractional distance past x0/y0 themselves, not their sum", () => {
-    // x0 and y0 are both 1 here (nonzero), so fx = sx - x0 and a wrong sx + x0 give genuinely different weights -- the earlier interior-point test above has x0 == y0 == 0, where a sign error in that subtraction is invisible (sx - 0 and sx + 0 are identical). The alpha plane's own top-left corner of the interpolation, alphaAt(x0, y0) == 96, is likewise nonzero here, unlike that same earlier test's alphaAt(0, 0) == 0 -- so this is also what actually distinguishes alphaTop's own + from a wrong -.
+    // x0 and y0 are both 1 here (nonzero), so fx = sx - x0 and a wrong sx + x0 give genuinely different weights — the earlier interior-point test above has x0 == y0 == 0, where a sign error in that subtraction is invisible (sx - 0 and sx + 0 are identical). The alpha plane's own top-left corner of the interpolation, alphaAt(x0, y0) == 96, is likewise nonzero here, unlike that same earlier test's alphaAt(0, 0) == 0 — so this is also what actually distinguishes alphaTop's own + from a wrong -.
     const distinctColours: RawImage = {
       width: 3,
       height: 3,

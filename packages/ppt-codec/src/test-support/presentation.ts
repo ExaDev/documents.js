@@ -69,7 +69,7 @@ import {
 } from "../text/atoms";
 import { CF_BOLD, CF_COLOR, STYLE_BOLD } from "../text/style";
 
-// A whole synthetic presentation: the two [MS-PPT] streams of a one-slide document carrying a title placeholder (whose text lives in the document's slide list, reached by an OutlineTextRefAtom), a plain text box (whose text lives on the shape), and -- when asked for -- a notes slide of its own in a separate persist object reached through the document's notes list. Assembled from the same record builders the per-record suites use, so the end-to-end test exercises the real offset arithmetic -- the persist directory, the edit chain, and every cross-stream reference -- rather than a stubbed one.
+// A whole synthetic presentation: the two [MS-PPT] streams of a one-slide document carrying a title placeholder (whose text lives in the document's slide list, reached by an OutlineTextRefAtom), a plain text box (whose text lives on the shape), and — when asked for — a notes slide of its own in a separate persist object reached through the document's notes list. Assembled from the same record builders the per-record suites use, so the end-to-end test exercises the real offset arithmetic — the persist directory, the edit chain, and every cross-stream reference — rather than a stubbed one.
 
 // [MS-PPT] 2.4.2 DocumentAtom's 40-byte body: slideSize and notesSize as PointStructs, serverZoom as a RatioStruct, two persist references, firstSlideNumber, slideSizeType, four bool1 bytes.
 function documentAtom(
@@ -128,7 +128,7 @@ function fsp(spid: number, flags: number): Uint8Array<ArrayBuffer> {
   });
 }
 
-// [MS-PPT] 2.5.2's 0x18-byte SlideAtom, recVer 0x2 -- geom and placeholderTypes are irrelevant to this reader (shapes come from the drawing tree, not this array) and are left zero; only masterIdRef/notesIdRef, the two fields readSlideAtom actually surfaces, carry real values.
+// [MS-PPT] 2.5.2's 0x18-byte SlideAtom, recVer 0x2 — geom and placeholderTypes are irrelevant to this reader (shapes come from the drawing tree, not this array) and are left zero; only masterIdRef/notesIdRef, the two fields readSlideAtom actually surfaces, carry real values.
 function slideAtom(
   masterIdRef: number,
   notesIdRef: number,
@@ -147,7 +147,7 @@ function slideAtom(
   );
 }
 
-// [MS-PPT] 2.9.51 SlideSchemeColorSchemeAtom: 8 ColorStruct entries (red, green, blue, unused), independently fixed here rather than reused from color-scheme-write.ts's own DEFAULT_SCHEME_COLORS -- a read-path fixture should not depend on what the write path happens to choose.
+// [MS-PPT] 2.9.51 SlideSchemeColorSchemeAtom: 8 ColorStruct entries (red, green, blue, unused), independently fixed here rather than reused from color-scheme-write.ts's own DEFAULT_SCHEME_COLORS — a read-path fixture should not depend on what the write path happens to choose.
 function slideSchemeColorSchemeAtom(
   colors: readonly (readonly [number, number, number])[],
 ): Uint8Array<ArrayBuffer> {
@@ -162,12 +162,12 @@ function slideSchemeColorSchemeAtom(
   );
 }
 
-// A recInstance 0x006 RT_ColorSchemeAtom ahead of the real one in the master -- the "extra colour scheme" spelling a real producer opens its main master with (LibreOffice 26.2.5.2 writes a run of these, confirmed by inspecting its raw bytes), placed in this fixture so the master's scheme lookup is exercised against a sibling sharing its record type rather than only against an empty container.
+// A recInstance 0x006 RT_ColorSchemeAtom ahead of the real one in the master — the "extra colour scheme" spelling a real producer opens its main master with (LibreOffice 26.2.5.2 writes a run of these, confirmed by inspecting its raw bytes), placed in this fixture so the master's scheme lookup is exercised against a sibling sharing its record type rather than only against an empty container.
 function extraColorSchemeAtom(): Uint8Array<ArrayBuffer> {
   return atom(RT_ColorSchemeAtom, new Uint8Array(32), { recInstance: 0x006 });
 }
 
-// A TextMasterStyleAtom for TITLE stating one real level (level 0): bold, and a colour-scheme reference to Accent 1 (slot 0x05) rather than a literal RGB value -- built directly from the mask-bit layout text/style.ts's own readTextPFException/readTextCFException expect (the same low-level construction style.test.ts's own fixtures already use), independently of those readers, so this fixture proves the wiring rather than merely reflecting it. Used only when a test asks for it (masterTitleBold): every other master-related test keeps the empty-levels master every other test already relies on.
+// A TextMasterStyleAtom for TITLE stating one real level (level 0): bold, and a colour-scheme reference to Accent 1 (slot 0x05) rather than a literal RGB value — built directly from the mask-bit layout text/style.ts's own readTextPFException/readTextCFException expect (the same low-level construction style.test.ts's own fixtures already use), independently of those readers, so this fixture proves the wiring rather than merely reflecting it. Used only when a test asks for it (masterTitleBold): every other master-related test keeps the empty-levels master every other test already relies on.
 function titleMasterStyleAtomWithBoldAccent1(): Uint8Array<ArrayBuffer> {
   const pfLevel = u32le(0); // masks: no paragraph-level fields stated
   const cfMasks = CF_BOLD | CF_COLOR;
@@ -211,25 +211,25 @@ export interface SyntheticPresentationOptions {
   readonly password?: string;
   // Speaker notes for the one slide. Absent means the document carries no notes list and no NotesContainer at all, which is how a real presentation with no notes is stored.
   readonly notesText?: string;
-  // When set, the master's own TITLE TextMasterStyleAtom states one real level (bold, Accent 1 scheme colour) instead of the usual empty one -- an end-to-end proof that a title run stating neither directly resolves both through document/master.ts's own cascade and through the slide's colour scheme, rather than only through the pure-function unit tests document/master.test.ts/document/color-scheme.test.ts already cover in isolation.
+  // When set, the master's own TITLE TextMasterStyleAtom states one real level (bold, Accent 1 scheme colour) instead of the usual empty one — an end-to-end proof that a title run stating neither directly resolves both through document/master.ts's own cascade and through the slide's colour scheme, rather than only through the pure-function unit tests document/master.test.ts/document/color-scheme.test.ts already cover in isolation.
   readonly masterTitleBold?: boolean;
-  // Adds a picture shape to the slide, backed by a real blip store in the document's DrawingGroupContainer: the honest end-to-end spelling of a picture -- a shape whose property table states pib 1, the one-based index into the store the fixture embeds the image bytes in. When `pictureInPicturesStream` is set the FBSE instead points at a separate Pictures stream the fixture emits, which is the delay-stream spelling a real producer with more pictures than it wants inline uses.
+  // Adds a picture shape to the slide, backed by a real blip store in the document's DrawingGroupContainer: the honest end-to-end spelling of a picture — a shape whose property table states pib 1, the one-based index into the store the fixture embeds the image bytes in. When `pictureInPicturesStream` is set the FBSE instead points at a separate Pictures stream the fixture emits, which is the delay-stream spelling a real producer with more pictures than it wants inline uses.
   readonly picture?: {
     readonly format: "png" | "jpeg";
     readonly bytes: Uint8Array<ArrayBuffer>;
   };
   readonly pictureInPicturesStream?: boolean;
-  // Adds a native table group to the slide: an OfficeArtSpgrContainer whose group shape states tableProperties with fIsTable in its tertiary property table and tableRowProperties as a complex IMsoArray of row minimum heights, with one plain text-box shape per cell -- the spelling [MS-ODRAW] 2.3.4.36/2.3.4.37 give a table and the one a real PowerPoint-authored file carries (LibreOffice exports ODP tables to .ppt as OLE objects instead, confirmed by inspecting its own output, so this fixture is the honest native spelling a reader of real files needs).
+  // Adds a native table group to the slide: an OfficeArtSpgrContainer whose group shape states tableProperties with fIsTable in its tertiary property table and tableRowProperties as a complex IMsoArray of row minimum heights, with one plain text-box shape per cell — the spelling [MS-ODRAW] 2.3.4.36/2.3.4.37 give a table and the one a real PowerPoint-authored file carries (LibreOffice exports ODP tables to .ppt as OLE objects instead, confirmed by inspecting its own output, so this fixture is the honest native spelling a reader of real files needs).
   readonly table?: {
     readonly rows: readonly (readonly string[])[];
     // Written onto the table group's own primary property table as the rotation property, so a fixture can state the whole-table rotation a real file carries.
     readonly rotationDeg?: number;
-    // Emits the cell shapes in reverse document order (last row/column first) instead of top-to-bottom, left-to-right -- the only way to prove the grid is derived by sorting each cell's own anchor rather than merely reflecting whatever order the cells already arrived in.
+    // Emits the cell shapes in reverse document order (last row/column first) instead of top-to-bottom, left-to-right — the only way to prove the grid is derived by sorting each cell's own anchor rather than merely reflecting whatever order the cells already arrived in.
     readonly reverseCellOrder?: boolean;
-    // Adds two zero-area "gridline" shapes among the cells -- one zero-width, one zero-height -- the real spelling a genuine PowerPoint-authored table carries alongside its actual cells (see tableBlockFor's own top comment), which the reader must filter out rather than treat as cells of the grid.
+    // Adds two zero-area "gridline" shapes among the cells — one zero-width, one zero-height — the real spelling a genuine PowerPoint-authored table carries alongside its actual cells (see tableBlockFor's own top comment), which the reader must filter out rather than treat as cells of the grid.
     readonly includeGridlineShapes?: boolean;
   };
-  // Every field below deliberately breaks one structural invariant read.ts enforces, for the malformed-input tests that prove each check actually fires rather than merely existing. None of these combine meaningfully with each other or with `password`/`encrypted` -- each is exercised in isolation.
+  // Every field below deliberately breaks one structural invariant read.ts enforces, for the malformed-input tests that prove each check actually fires rather than merely existing. None of these combine meaningfully with each other or with `password`/`encrypted` — each is exercised in isolation.
 
   // Writes the document persist object as RT_Notes rather than RT_Document, so readPptStreams' own record-type check on the resolved persist object has something genuinely wrong to reject.
   readonly documentRecordTypeMismatch?: boolean;
@@ -251,13 +251,13 @@ export interface SyntheticPresentationOptions {
   readonly titleOutlineRefOutOfRange?: boolean;
   // Omits the ordinary text box's own TextHeaderAtom, which [MS-PPT] 2.9.1 requires to precede its TextCharsAtom/TextBytesAtom.
   readonly bodyTextboxMissingHeader?: boolean;
-  // Adds a second text to the slide list entry (after the title's) and points the title's own OutlineTextRefAtom at it (index 1) instead of the first (index 0) -- the one scenario that can tell a little-endian index read apart from a big-endian one, since index 0 reads identically either way.
+  // Adds a second text to the slide list entry (after the title's) and points the title's own OutlineTextRefAtom at it (index 1) instead of the first (index 0) — the one scenario that can tell a little-endian index read apart from a big-endian one, since index 0 reads identically either way.
   readonly secondSlideListText?: string;
-  // Leaves the named persist object out of the persist directory entirely, while every list/atom that references its persist ID stays exactly as it would for a valid file -- the one way to reach resolvePersistObject's own missing-persist-object branch for that object's caller, rather than merely computing its own description string on every successful resolution the way an ordinary fixture always does. "notes" requires `notesText` to also be set.
+  // Leaves the named persist object out of the persist directory entirely, while every list/atom that references its persist ID stays exactly as it would for a valid file — the one way to reach resolvePersistObject's own missing-persist-object branch for that object's caller, rather than merely computing its own description string on every successful resolution the way an ordinary fixture always does. "notes" requires `notesText` to also be set.
   readonly omitPersistObject?: "document" | "master" | "slide" | "notes";
 }
 
-// [MS-OFFCRYPTO] 2.3.5.1's own RC4 CryptoAPI EncryptionInfo/EncryptionHeader/EncryptionVerifier layout, built independently of encryption.ts's own reader (readDocumentEncryptionAtom) rather than by calling it in reverse -- the two are cross-checked against each other only by the read.test.ts round trip that decrypts what this function encrypts, not by sharing this byte-layout logic. keySizeBits is fixed at 128 here: this package's own decryptor supports any RC4 key size the header states, so a fixture testing the 40-bit special case belongs in encryption.test.ts, which exercises deriveRc4CryptoApiBlockKey directly rather than through a whole synthetic presentation.
+// [MS-OFFCRYPTO] 2.3.5.1's own RC4 CryptoAPI EncryptionInfo/EncryptionHeader/EncryptionVerifier layout, built independently of encryption.ts's own reader (readDocumentEncryptionAtom) rather than by calling it in reverse — the two are cross-checked against each other only by the read.test.ts round trip that decrypts what this function encrypts, not by sharing this byte-layout logic. keySizeBits is fixed at 128 here: this package's own decryptor supports any RC4 key size the header states, so a fixture testing the 40-bit special case belongs in encryption.test.ts, which exercises deriveRc4CryptoApiBlockKey directly rather than through a whole synthetic presentation.
 const CRYPTOAPI_KEY_SIZE_BITS = 128;
 
 function encryptionAtomBytes(
@@ -270,7 +270,7 @@ function encryptionAtomBytes(
     0,
     CRYPTOAPI_KEY_SIZE_BITS,
   );
-  // An arbitrary 16-byte "random" verifier -- [MS-OFFCRYPTO] 2.3.4.9 never constrains its value, only that SHA-1 of it must match what decrypting encryptedVerifierHash recovers. Fixed as a literal rather than derived from a formula: no computation makes an arbitrary value more "correct", and a literal removes the arithmetic as a thing to get wrong.
+  // An arbitrary 16-byte "random" verifier — [MS-OFFCRYPTO] 2.3.4.9 never constrains its value, only that SHA-1 of it must match what decrypting encryptedVerifierHash recovers. Fixed as a literal rather than derived from a formula: no computation makes an arbitrary value more "correct", and a literal removes the arithmetic as a thing to get wrong.
   const verifier = new Uint8Array([
     3, 10, 17, 24, 31, 38, 45, 52, 59, 66, 73, 80, 87, 94, 101, 108,
   ]);
@@ -290,7 +290,7 @@ function encryptionAtomBytes(
     u32le(CRYPTOAPI_KEY_SIZE_BITS),
     u32le(0x01), // providerType: PROV_RSA_FULL, unread by this package's own reader
     u32le(0), // reserved1
-    u32le(0), // reserved2 -- no CSPName follows, so the header ends here
+    u32le(0), // reserved2 — no CSPName follows, so the header ends here
   );
   const verifierFields = concatBytes(
     u32le(16), // saltSize
@@ -336,13 +336,13 @@ function embeddedFbse(options: {
     concatBytes(
       u8(blipType),
       u8(blipType),
-      new Uint8Array(16), // rgbUid -- a zero digest; this fixture never verifies one
+      new Uint8Array(16), // rgbUid — a zero digest; this fixture never verifies one
       u16le(0xff), // tag
       u32le(embedded.length), // size
       u32le(1), // cRef
-      u32le(0), // foDelay -- embedded
+      u32le(0), // foDelay — embedded
       u8(0),
-      u8(0), // cbName -- no nameData
+      u8(0), // cbName — no nameData
       u8(0),
       u8(0),
       embedded,
@@ -364,7 +364,7 @@ function delayFbse(options: {
       u8(blipType),
       new Uint8Array(16),
       u16le(0xff),
-      u32le(0), // size -- unknown to this fixture, and unread on the delay path
+      u32le(0), // size — unknown to this fixture, and unread on the delay path
       u32le(1),
       u32le(options.foDelay),
       u8(0),
@@ -391,7 +391,7 @@ function drawingGroupContainer(
       u32le(6), // cspidCur
     ),
   );
-  // This function's only caller (below) never passes an empty array -- a picture is always exactly one FBSE -- so an empty-store guard here would be dead code with no test that could ever reach its branch; a genuinely empty OfficeArtBStoreContainer (recInstance 0) is itself spec-conformant should a future caller ever pass one.
+  // This function's only caller (below) never passes an empty array — a picture is always exactly one FBSE — so an empty-store guard here would be dead code with no test that could ever reach its branch; a genuinely empty OfficeArtBStoreContainer (recInstance 0) is itself spec-conformant should a future caller ever pass one.
   return container(RT_DrawingGroup, [
     container(OfficeArtDggContainer, [
       fdggBlock,
@@ -420,13 +420,13 @@ function pictureShape(
   ]);
 }
 
-// The table's own rectangle and per-row height, in master units -- fixed here so every table fixture's geometry is derivable by hand. TABLE_ROW_HEIGHT is exported for the byte-level fidelity tests, which decode the fixture's own tableRowProperties IMsoArray and need the same value to compare against.
+// The table's own rectangle and per-row height, in master units — fixed here so every table fixture's geometry is derivable by hand. TABLE_ROW_HEIGHT is exported for the byte-level fidelity tests, which decode the fixture's own tableRowProperties IMsoArray and need the same value to compare against.
 const TABLE_TOP = 2000;
 const TABLE_LEFT = 1440;
 const TABLE_RIGHT = 4896;
 export const TABLE_ROW_HEIGHT = 480;
 
-// PowerPoint's own default light scheme -- an arbitrary but fixed and realistic 8-entry colour scheme, independently chosen from color-scheme-write.ts's own defaults (see slideSchemeColorSchemeAtom's own comment). Module scope and exported, like TABLE_ROW_HEIGHT above, because the byte-level fidelity tests parse the master's own SlideSchemeColorSchemeAtom bytes directly and need the same values to compare against -- read.ts itself only ever resolves one slot of this scheme (whichever a run's own ColorIndexStruct names), so nothing but a direct byte comparison exercises the other seven.
+// PowerPoint's own default light scheme — an arbitrary but fixed and realistic 8-entry colour scheme, independently chosen from color-scheme-write.ts's own defaults (see slideSchemeColorSchemeAtom's own comment). Module scope and exported, like TABLE_ROW_HEIGHT above, because the byte-level fidelity tests parse the master's own SlideSchemeColorSchemeAtom bytes directly and need the same values to compare against — read.ts itself only ever resolves one slot of this scheme (whichever a run's own ColorIndexStruct names), so nothing but a direct byte comparison exercises the other seven.
 export const MASTER_COLOR_SCHEME: readonly (readonly [
   number,
   number,
@@ -442,7 +442,7 @@ export const MASTER_COLOR_SCHEME: readonly (readonly [
   [0x4b, 0x8c, 0x1a], // Accent 3
 ];
 
-// A native table group: the group shape opens with the FSPGR child coordinate system ([MS-ODRAW] 2.2.14 puts shapeGroup first), carries fGroup, states tableProperties fIsTable and tableRowProperties as a complex IMsoArray of row minimum heights in the tertiary property table where a real producer puts them, and anchors the whole table with a client anchor; then one plain text-box shape per cell, each carrying its own client anchor -- the grid itself lives nowhere but in those anchors.
+// A native table group: the group shape opens with the FSPGR child coordinate system ([MS-ODRAW] 2.2.14 puts shapeGroup first), carries fGroup, states tableProperties fIsTable and tableRowProperties as a complex IMsoArray of row minimum heights in the tertiary property table where a real producer puts them, and anchors the whole table with a client anchor; then one plain text-box shape per cell, each carrying its own client anchor — the grid itself lives nowhere but in those anchors.
 function tableShape(
   spid: number,
   table: {
@@ -511,7 +511,7 @@ function tableShape(
       ]);
     }),
   );
-  // Two degenerate shapes sharing the group's own coordinate system -- one zero-width (left equals right), one zero-height (top equals bottom) -- placed well clear of every real cell's own anchor, spelling the gridline shapes a genuine PowerPoint-authored table carries alongside its actual cells.
+  // Two degenerate shapes sharing the group's own coordinate system — one zero-width (left equals right), one zero-height (top equals bottom) — placed well clear of every real cell's own anchor, spelling the gridline shapes a genuine PowerPoint-authored table carries alongside its actual cells.
   const gridlineShapes = table.includeGridlineShapes
     ? [
         container(OfficeArtSpContainer, [
@@ -568,7 +568,7 @@ export function syntheticPresentation(
   const MASTER_PERSIST_ID = 2;
   const SLIDE_PERSIST_ID = 3;
   const NOTES_PERSIST_ID = 4;
-  // Minted after whatever objects precede it, so an OLE storage persist object and an encryption session can coexist in one fixture. [MS-PPT] 2.2.13: a MasterId MUST be at or above 0x80000000, which is also what keeps it out of the SlideId range -- matching master-write.ts's own MASTER_SLIDE_ID.
+  // Minted after whatever objects precede it, so an OLE storage persist object and an encryption session can coexist in one fixture. [MS-PPT] 2.2.13: a MasterId MUST be at or above 0x80000000, which is also what keeps it out of the SlideId range — matching master-write.ts's own MASTER_SLIDE_ID.
   const MASTER_ID = 0x80000000;
   const SLIDE_ID = 256;
   const NOTES_ID = 512;
@@ -621,7 +621,7 @@ export function syntheticPresentation(
     ),
   );
   if (notesText !== undefined) {
-    // [MS-PPT] 2.4.14.6: the notes list holds NotesPersistAtom records alone, distinguished from the slide and master lists by rh.recInstance. [MS-PPT] 2.4.14.7's own field order puts a reserved word where a SlidePersistAtom states cTexts, and the notes identifier -- not a slide identifier -- at offset 12.
+    // [MS-PPT] 2.4.14.6: the notes list holds NotesPersistAtom records alone, distinguished from the slide and master lists by rh.recInstance. [MS-PPT] 2.4.14.7's own field order puts a reserved word where a SlidePersistAtom states cTexts, and the notes identifier — not a slide identifier — at offset 12.
     documentChildren.push(
       container(
         RT_SlideListWithText,
@@ -703,7 +703,7 @@ export function syntheticPresentation(
     ],
   );
 
-  // [MS-PPT] 2.5.6 NotesContainer: a NotesAtom naming the presentation slide these notes belong to, then a DrawingContainer holding the notes text on a plain text box's own client textbox -- the spelling a real producer writes (verified against LibreOffice's own `--convert-to ppt` output), rather than a placeholder reached through the notes list, which [MS-PPT] 2.4.14.6 gives no texts to reach into.
+  // [MS-PPT] 2.5.6 NotesContainer: a NotesAtom naming the presentation slide these notes belong to, then a DrawingContainer holding the notes text on a plain text box's own client textbox — the spelling a real producer writes (verified against LibreOffice's own `--convert-to ppt` output), rather than a placeholder reached through the notes list, which [MS-PPT] 2.4.14.6 gives no texts to reach into.
   const notesContainer =
     notesText === undefined
       ? undefined
@@ -731,7 +731,7 @@ export function syntheticPresentation(
           ]),
         ]);
 
-  // [MS-PPT] 2.5.3 MainMasterContainer: this master's own SlideAtom (masterIdRef/notesIdRef both 0, since a master follows no master and has no notes of its own), one TextMasterStyleAtom per placeholder type it carries -- each stating no levels of its own (cLevels 0x0000), matching this package's own writer (master-write.ts) exactly, so a fixture whose runs never state formatting either resolves to the identical "everything absent" every existing test already asserts -- a run of extra colour schemes ahead of the real one (a real producer's own spelling), and this master's own colour scheme.
+  // [MS-PPT] 2.5.3 MainMasterContainer: this master's own SlideAtom (masterIdRef/notesIdRef both 0, since a master follows no master and has no notes of its own), one TextMasterStyleAtom per placeholder type it carries — each stating no levels of its own (cLevels 0x0000), matching this package's own writer (master-write.ts) exactly, so a fixture whose runs never state formatting either resolves to the identical "everything absent" every existing test already asserts — a run of extra colour schemes ahead of the real one (a real producer's own spelling), and this master's own colour scheme.
   const masterContainer = container(
     masterRecordTypeMismatch ? RT_Slide : RT_MainMaster,
     [
@@ -777,7 +777,7 @@ export function syntheticPresentation(
   // Minted after whatever objects precede it, so an OLE storage persist object and an encryption session can coexist in one fixture.
   const ENCRYPTION_PERSIST_ID = persistObjects.length + 1;
   if (password !== undefined) {
-    // Every existing persist object gets RC4-encrypted in place, keyed by its own persist ID -- the DocumentEncryptionAtom itself never does, since a decryptor has to read it before it knows any key at all.
+    // Every existing persist object gets RC4-encrypted in place, keyed by its own persist ID — the DocumentEncryptionAtom itself never does, since a decryptor has to read it before it knows any key at all.
     for (const object of persistObjects) {
       const key = deriveRc4CryptoApiBlockKey(
         password,
@@ -792,7 +792,7 @@ export function syntheticPresentation(
       bytes: atom(
         RT_CryptSession10Container,
         encryptionAtomBytes(password, ENCRYPTION_SALT),
-        // [MS-PPT] real producers (confirmed against Apache POI's own DocumentEncryptionAtom.writeOut) stamp recVer 0xF on this atom despite its data being fields, not child records -- harmless to this package's own reader, which never calls childRecords on it.
+        // [MS-PPT] real producers (confirmed against Apache POI's own DocumentEncryptionAtom.writeOut) stamp recVer 0xF on this atom despite its data being fields, not child records — harmless to this package's own reader, which never calls childRecords on it.
         { recVer: 0xf },
       ),
     });
@@ -826,7 +826,7 @@ export function syntheticPresentation(
       u32le(persistObjects.length + 1),
       u16le(0),
       u16le(0),
-      // [MS-PPT] 2.3.3: this trailing field only exists at all when the record's own recLen says so (0x20 bytes rather than 0x1c) -- there is no separate flag bit, so its presence here is exactly what marks the document as carrying a real encryption session for buildPersistDirectory's own reader to find.
+      // [MS-PPT] 2.3.3: this trailing field only exists at all when the record's own recLen says so (0x20 bytes rather than 0x1c) — there is no separate flag bit, so its presence here is exactly what marks the document as carrying a real encryption session for buildPersistDirectory's own reader to find.
       ...(password === undefined ? [] : [u32le(ENCRYPTION_PERSIST_ID)]),
     ),
   );

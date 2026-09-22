@@ -19,7 +19,7 @@ import {
   parseStrokeField,
 } from "../../shared/vector-fields.js";
 
-// All re-exported here so every existing local import of `parseNumberField`/`requireFieldValue`/`parseColorField`/`parseStrokeField`/`defaultTriangleSubpaths` from './shared.js' keeps working unmodified -- the implementations themselves now live in screens/shared, since paragraph-detail.tsx/paragraph-family.tsx and (for the vector helpers) pptx/odp's own slide-detail.tsx need the identical parse/lookup and none of them is an odg-specific concept.
+// All re-exported here so every existing local import of `parseNumberField`/`requireFieldValue`/`parseColorField`/`parseStrokeField`/`defaultTriangleSubpaths` from './shared.js' keeps working unmodified — the implementations themselves now live in screens/shared, since paragraph-detail.tsx/paragraph-family.tsx and (for the vector helpers) pptx/odp's own slide-detail.tsx need the identical parse/lookup and none of them is an odg-specific concept.
 export { parseNumberField };
 export { requireFieldValue } from "../../shared/field-wizard.js";
 export { defaultTriangleSubpaths, parseColorField, parseStrokeField };
@@ -30,7 +30,7 @@ export function requireOdgDocument(state: AppState): OdgOpenDocument {
   const doc = state.openDocument;
   if (doc?.format !== "odg") {
     throw new Error(
-      `An odg screen rendered with the open document being ${doc === undefined ? "no document" : `a '${doc.format}' document`} -- pageList/pageDetail/shapeOrVectorDetail only ever get pushed from odg-routed navigation (rootScreenForFormat maps 'odg' to 'pageList', and every deeper push originates from that screen or its own descendants), so this indicates a routing bug elsewhere, not a state this screen should render around.`,
+      `An odg screen rendered with the open document being ${doc === undefined ? "no document" : `a '${doc.format}' document`} — pageList/pageDetail/shapeOrVectorDetail only ever get pushed from odg-routed navigation (rootScreenForFormat maps 'odg' to 'pageList', and every deeper push originates from that screen or its own descendants), so this indicates a routing bug elsewhere, not a state this screen should render around.`,
     );
   }
   return doc;
@@ -42,7 +42,7 @@ export function requirePageDetailScreen(
   const screen = currentScreen(state);
   if (screen.kind !== "pageDetail") {
     throw new Error(
-      `OdgPageDetailScreen rendered while the top of the stack is '${screen.kind}', not 'pageDetail' -- app.tsx's ScreenBody switch only mounts this component for that screen kind, so this cannot happen without a routing bug.`,
+      `OdgPageDetailScreen rendered while the top of the stack is '${screen.kind}', not 'pageDetail' — app.tsx's ScreenBody switch only mounts this component for that screen kind, so this cannot happen without a routing bug.`,
     );
   }
   return screen;
@@ -54,7 +54,7 @@ export function requireShapeOrVectorDetailScreen(
   const screen = currentScreen(state);
   if (screen.kind !== "shapeOrVectorDetail") {
     throw new Error(
-      `OdgShapeOrVectorDetailScreen rendered while the top of the stack is '${screen.kind}', not 'shapeOrVectorDetail' -- app.tsx's ScreenBody switch only mounts this component for that screen kind, so this cannot happen without a routing bug.`,
+      `OdgShapeOrVectorDetailScreen rendered while the top of the stack is '${screen.kind}', not 'shapeOrVectorDetail' — app.tsx's ScreenBody switch only mounts this component for that screen kind, so this cannot happen without a routing bug.`,
     );
   }
   return screen;
@@ -63,7 +63,7 @@ export function requireShapeOrVectorDetailScreen(
 export interface PageVectorItem {
   readonly kind: "vector";
   readonly vector: ContentVector;
-  // Defined only when this page's live `OdgPage.vectors()` and the read-only `readOdgContent(...).vectors` agree exactly -- same length, same `kind` at every index (see `vectorsParityMatch` below). `undefined` means the parity check failed for this page, and every vector item on it (not just the mismatching one) is shown read-only, since there is no way to tell which live vector, if any, a given read-only row actually corresponds to once the two arrays have drifted apart.
+  // Defined only when this page's live `OdgPage.vectors()` and the read-only `readOdgContent(...).vectors` agree exactly — same length, same `kind` at every index (see `vectorsParityMatch` below). `undefined` means the parity check failed for this page, and every vector item on it (not just the mismatching one) is shown read-only, since there is no way to tell which live vector, if any, a given read-only row actually corresponds to once the two arrays have drifted apart.
   readonly liveVector: OdgVector | undefined;
 }
 
@@ -75,7 +75,7 @@ export interface PageShapeItem {
 
 export type PageItem = PageVectorItem | PageShapeItem;
 
-// documents.js's `OdgPage.vectors()` IS a real, live accessor onto every rect/ellipse/line/path vector on the page (added after this screen was first written, when the only handle on an existing vector was the reference `addRect`/`addEllipse`/`addLine`/`addPath` returned at creation time). What still makes a naive index-zip against it unsafe is that its own writer-side element recognition (`wrapVectorElement`, documents.js's `src/edit/odg/vector.ts`) is NARROWER than odf.js's own reader (`readOdgContent`, via `typed/draw/shapes.ts`): the reader additionally salvages `draw:circle`/`draw:polygon`/`draw:polyline`/a recognised `draw:custom-shape` preset into the same `ContentVector` 'ellipse'/'path' kinds, while `OdgPage.vectors()` silently skips those elements outright. A page containing one of those wider element kinds alongside an ordinary rect/ellipse/line/path therefore has `page.vectors()` return FEWER entries than `readOdgContent(...).vectors`, with everything after the skipped element shifted one position out of alignment -- pairing the wrong live handle to the wrong displayed row is a real, silent-corruption risk, not a theoretical one. `vectorsParityMatch` below guards against exactly that: `liveVector` is only ever populated when the two arrays agree in length AND kind at every index for the WHOLE page.
+// documents.js's `OdgPage.vectors()` IS a real, live accessor onto every rect/ellipse/line/path vector on the page (added after this screen was first written, when the only handle on an existing vector was the reference `addRect`/`addEllipse`/`addLine`/`addPath` returned at creation time). What still makes a naive index-zip against it unsafe is that its own writer-side element recognition (`wrapVectorElement`, documents.js's `src/edit/odg/vector.ts`) is NARROWER than odf.js's own reader (`readOdgContent`, via `typed/draw/shapes.ts`): the reader additionally salvages `draw:circle`/`draw:polygon`/`draw:polyline`/a recognised `draw:custom-shape` preset into the same `ContentVector` 'ellipse'/'path' kinds, while `OdgPage.vectors()` silently skips those elements outright. A page containing one of those wider element kinds alongside an ordinary rect/ellipse/line/path therefore has `page.vectors()` return FEWER entries than `readOdgContent(...).vectors`, with everything after the skipped element shifted one position out of alignment — pairing the wrong live handle to the wrong displayed row is a real, silent-corruption risk, not a theoretical one. `vectorsParityMatch` below guards against exactly that: `liveVector` is only ever populated when the two arrays agree in length AND kind at every index for the WHOLE page.
 export function vectorsParityMatch(
   liveVectors: readonly { readonly kind: ContentVector["kind"] }[],
   contentVectors: readonly { readonly kind: ContentVector["kind"] }[],
@@ -100,13 +100,13 @@ export function buildPageItems(
   const content = readOdgContent(doc.editor.toPackage());
   if (content.kind !== "drawing") {
     throw new Error(
-      `readOdgContent(doc.editor.toPackage()) returned a '${content.kind}' ContentDocument for an odg-format open document -- an odg package should always read back as the 'drawing' variant, so this indicates a real inconsistency in documents.js's own reader, not a state this screen should paper over.`,
+      `readOdgContent(doc.editor.toPackage()) returned a '${content.kind}' ContentDocument for an odg-format open document — an odg package should always read back as the 'drawing' variant, so this indicates a real inconsistency in documents.js's own reader, not a state this screen should paper over.`,
     );
   }
   const contentPage = content.pages[pageIndex];
   if (contentPage === undefined) {
     throw new Error(
-      `readOdgContent found no page at index ${pageIndex}, but doc.editor.pages() has a page there -- the two read the same live package, so they should always agree on page count.`,
+      `readOdgContent found no page at index ${pageIndex}, but doc.editor.pages() has a page there — the two read the same live package, so they should always agree on page count.`,
     );
   }
   const liveVectors = page.vectors();
@@ -121,7 +121,7 @@ export function buildPageItems(
   const shapeItems: readonly PageItem[] = page
     .shapes()
     .map((shape, index): PageItem => {
-      // `contentPage.shapes` and `page.shapes()` both walk the same `draw:page`'s `draw:frame` children in document order, so index-aligning them is a reasonable, bounded assumption for this display-only classification -- a mismatch would only mislabel a row's Text/Image badge, never break navigation or editing (both of which address by the live `shape` reference or `containerIndex`/`shapeIndex`, not this index).
+      // `contentPage.shapes` and `page.shapes()` both walk the same `draw:page`'s `draw:frame` children in document order, so index-aligning them is a reasonable, bounded assumption for this display-only classification — a mismatch would only mislabel a row's Text/Image badge, never break navigation or editing (both of which address by the live `shape` reference or `containerIndex`/`shapeIndex`, not this index).
       const contentShape = contentPage.shapes[index];
       const shapeKind: "text" | "image" =
         contentShape?.blocks.some((block) => block.kind === "image") === true

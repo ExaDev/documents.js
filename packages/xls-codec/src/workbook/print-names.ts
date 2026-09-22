@@ -9,18 +9,18 @@ import { RECORD_LBL } from "../biff/record-types";
 import { writeRecord } from "../biff/record-writer";
 import type { RecordGroup } from "../biff/substreams";
 
-// A sheet's print RANGE and its repeated header rows/columns are not in the worksheet substream at all. BIFF8 keeps them in the globals substream, as ordinary defined names ([MS-XLS] 2.4.150's Lbl record) that happen to carry a built-in name index rather than a user-typed name: Print_Area (index 0x06) for the range that prints, Print_Titles (index 0x07) for the bands repeated on every page. Both are LOCAL names -- scoped to one sheet through Lbl's own itab, a one-based index into the BoundSheet8 collection -- which is what lets a workbook carry a different print area per sheet.
+// A sheet's print RANGE and its repeated header rows/columns are not in the worksheet substream at all. BIFF8 keeps them in the globals substream, as ordinary defined names ([MS-XLS] 2.4.150's Lbl record) that happen to carry a built-in name index rather than a user-typed name: Print_Area (index 0x06) for the range that prints, Print_Titles (index 0x07) for the bands repeated on every page. Both are LOCAL names — scoped to one sheet through Lbl's own itab, a one-based index into the BoundSheet8 collection — which is what lets a workbook carry a different print area per sheet.
 //
 // This module is both directions of exactly those two names, and nothing else: no other defined name is read (a user-defined name has nowhere to land in document-schema.js's spreadsheet model) or written. It sits in workbook/ rather than biff/ because a print name is a workbook-level fact keyed by sheet, which is what globals.ts reads and globals-writer.ts writes.
 //
-// The value of each name is a NameParsedFormula ([MS-XLS] 2.5.198.64) -- the same compiled Ptg token stream a cell formula uses. biff/ptg.ts is deliberately not reused for it: that module rebuilds INFIX TEXT for display, and what is wanted here is the range's own four coordinates, which a re-parse of the text it produced would have to recover all over again. The token vocabulary a print name actually uses is also much narrower than a formula's, and includes two tokens ptg.ts explicitly does not resolve (the union operator joining a Print_Titles pair, and the mem token wrapping it).
+// The value of each name is a NameParsedFormula ([MS-XLS] 2.5.198.64) — the same compiled Ptg token stream a cell formula uses. biff/ptg.ts is deliberately not reused for it: that module rebuilds INFIX TEXT for display, and what is wanted here is the range's own four coordinates, which a re-parse of the text it produced would have to recover all over again. The token vocabulary a print name actually uses is also much narrower than a formula's, and includes two tokens ptg.ts explicitly does not resolve (the union operator joining a Print_Titles pair, and the mem token wrapping it).
 
 /** The built-in name index a Print_Area Lbl carries in place of a name ([MS-XLS] 2.4.150's own built-in name table). */
 const BUILTIN_NAME_PRINT_AREA = 0x06;
 /** The same table's Print_Titles entry. */
 const BUILTIN_NAME_PRINT_TITLES = 0x07;
 
-/** Lbl.grbit's fBuiltin bit -- field F of [MS-XLS] 2.4.150 (fHidden, fFunc, fOB, fProc, fCalcExp, fBuiltin, fGrp (6 bits), reserved1, fPublished, fWorkbookParam, reserved2). */
+/** Lbl.grbit's fBuiltin bit — field F of [MS-XLS] 2.4.150 (fHidden, fFunc, fOB, fProc, fCalcExp, fBuiltin, fGrp (6 bits), reserved1, fPublished, fWorkbookParam, reserved2). */
 const LBL_FLAG_BUILTIN = 0x0020;
 
 /** The Ptg opcodes a print name's own token stream is built from ([MS-XLS] 2.5.198.25's enumeration). Each reference-class token shares its layout with its value- and array-class spellings, exactly as biff/ptg.ts documents, so all three are accepted. */
@@ -62,7 +62,7 @@ interface RawArea {
 }
 
 /**
- * Reads every Lbl record in a globals substream into per-sheet print names, keyed by ZERO-based sheet index -- Lbl's own itab is one-based, and a sheet index everywhere else in this package is not.
+ * Reads every Lbl record in a globals substream into per-sheet print names, keyed by ZERO-based sheet index — Lbl's own itab is one-based, and a sheet index everywhere else in this package is not.
  *
  * A name this reader does not act on leaves nothing behind rather than failing the workbook: a user-defined name (fBuiltin clear), a built-in name other than the two below, a workbook-scoped one (itab 0, which no real producer uses for a print area since a print area belongs to a sheet), and a name whose token stream holds a construct outside the narrow vocabulary parsePrintAreas resolves are all simply not carried. The sheet then reads with no printRange or repeat bands, which is the same answer a sheet that genuinely declares none gives.
  */
@@ -104,7 +104,7 @@ interface ParsedLbl {
 /**
  * Lbl ([MS-XLS] 2.4.150): a two-byte grbit, chKey, cch, cce, a two-byte reserved3, itab, four reserved bytes, the Name as an XLUnicodeStringNoCch, then cce bytes of rgce.
  *
- * A built-in name's Name field is that string holding exactly one character whose code unit IS the built-in index ([MS-XLS] 2.4.150: "Each built-in name has a zero-based index value associated with it. A built-in name or its index value MUST be used for this field."), so cch is 1 and the character is read rather than the spelled-out name. A built-in name spelled out in full instead is not resolved -- no producer writes one, and inventing a name-string table to match against would be guessing at which spelling and which locale.
+ * A built-in name's Name field is that string holding exactly one character whose code unit IS the built-in index ([MS-XLS] 2.4.150: "Each built-in name has a zero-based index value associated with it. A built-in name or its index value MUST be used for this field."), so cch is 1 and the character is read rather than the spelled-out name. A built-in name spelled out in full instead is not resolved — no producer writes one, and inventing a name-string table to match against would be guessing at which spelling and which locale.
  */
 function readLbl(record: RecordGroup): ParsedLbl | undefined {
   const cursor = new BlockCursor(record.blocks);
@@ -143,9 +143,9 @@ function readLbl(record: RecordGroup): ParsedLbl | undefined {
 /**
  * Walks a print name's own rgce into the areas it names, or returns undefined for a token stream outside this vocabulary.
  *
- * The whole vocabulary is: a 3D area or single-cell reference (the areas themselves), the union operator joining two of them in a Print_Titles that repeats both a row band and a column band, a mem token wrapping that union (a real producer emits one -- LibreOffice writes PtgMemFunc, Excel may write PtgMemArea -- to say the enclosed reference expression is a single reference result), and PtgParen, a pure display token restating parentheses. Nothing else appears in a print name a spreadsheet application produced, and anything else aborts rather than being partially resolved: half a print range is a wrong print range, not a smaller one.
+ * The whole vocabulary is: a 3D area or single-cell reference (the areas themselves), the union operator joining two of them in a Print_Titles that repeats both a row band and a column band, a mem token wrapping that union (a real producer emits one — LibreOffice writes PtgMemFunc, Excel may write PtgMemArea — to say the enclosed reference expression is a single reference result), and PtgParen, a pure display token restating parentheses. Nothing else appears in a print name a spreadsheet application produced, and anything else aborts rather than being partially resolved: half a print range is a wrong print range, not a smaller one.
  *
- * A mem token's own cce covers exactly the sub-expression that follows it, which is the rest of this stream in every real case, so it is read past rather than used to bound a nested parse -- the tokens after it are walked by this same loop either way.
+ * A mem token's own cce covers exactly the sub-expression that follows it, which is the rest of this stream in every real case, so it is read past rather than used to bound a nested parse — the tokens after it are walked by this same loop either way.
  */
 function parsePrintAreas(rgce: Uint8Array<ArrayBuffer>): RawArea[] | undefined {
   const cursor = new BlockCursor([rgce]);
@@ -195,7 +195,7 @@ function parsePrintAreas(rgce: Uint8Array<ArrayBuffer>): RawArea[] | undefined {
   return areas;
 }
 
-/** RgceArea ([MS-XLS] 2.5.198.105), as PtgArea3d carries it: both row bounds, then both ColRelU column fields, whose low 14 bits hold the column index and whose top two bits say whether each coordinate is relative. A print name's coordinates are always absolute in practice, and are read as plain indices either way -- ContentSheetPrintRange has no relative/absolute distinction to carry one into. */
+/** RgceArea ([MS-XLS] 2.5.198.105), as PtgArea3d carries it: both row bounds, then both ColRelU column fields, whose low 14 bits hold the column index and whose top two bits say whether each coordinate is relative. A print name's coordinates are always absolute in practice, and are read as plain indices either way — ContentSheetPrintRange has no relative/absolute distinction to carry one into. */
 function readArea(cursor: BlockCursor): RawArea {
   const rowFirst = cursor.u16();
   const rowLast = cursor.u16();
@@ -204,7 +204,7 @@ function readArea(cursor: BlockCursor): RawArea {
   return { rowFirst, rowLast, columnFirst, columnLast };
 }
 
-/** A Print_Area name's own range. A name declaring several disjoint areas -- legal in BIFF8, and what Excel writes for a multi-area print selection -- yields only the first: ContentSheetPrintSettings.printRange models one rectangle, and merging several into their bounding box would claim cells print that do not. */
+/** A Print_Area name's own range. A name declaring several disjoint areas — legal in BIFF8, and what Excel writes for a multi-area print selection — yields only the first: ContentSheetPrintSettings.printRange models one rectangle, and merging several into their bounding box would claim cells print that do not. */
 function printRangeOf(
   areas: readonly RawArea[],
 ): ContentSheetPrintRange | undefined {
@@ -222,7 +222,7 @@ function printRangeOf(
 /**
  * A Print_Titles name's own repeated bands, classified by shape.
  *
- * BIFF8 has no field saying which axis a title band repeats along: a repeated row band is written as an area spanning every column of the sheet ($1:$2, columns 0-255), and a repeated column band as one spanning every row ($A:$A, rows 0-65535). The shape IS the discriminant, and an area that spans both axes at once names the whole sheet, which is neither -- so it is left unclassified rather than being assigned to whichever branch happened to be tested first.
+ * BIFF8 has no field saying which axis a title band repeats along: a repeated row band is written as an area spanning every column of the sheet ($1:$2, columns 0-255), and a repeated column band as one spanning every row ($A:$A, rows 0-65535). The shape IS the discriminant, and an area that spans both axes at once names the whole sheet, which is neither — so it is left unclassified rather than being assigned to whichever branch happened to be tested first.
  */
 function repeatBandsOf(areas: readonly RawArea[]): {
   repeatRows?: ContentSheetRepeatRange;
@@ -251,16 +251,16 @@ function repeatBandsOf(areas: readonly RawArea[]): {
 export interface PrintNamePlanEntry {
   /** Zero-based; written out as Lbl's own one-based itab. */
   readonly sheetIndex: number;
-  /** The ixti a PtgArea3d in this name's token stream refers to -- an index into the ExternSheet record's own XTI array, which globals-writer.ts writes one entry of per sheet. */
+  /** The ixti a PtgArea3d in this name's token stream refers to — an index into the ExternSheet record's own XTI array, which globals-writer.ts writes one entry of per sheet. */
   readonly ixti: number;
   readonly builtinName: number;
   readonly areas: readonly RawArea[];
 }
 
 /**
- * Clamps a coordinate into BIFF8's own row/column ceiling. `ContentSheetPrintRange`/`ContentSheetRepeatRange` bound neither a start nor an end coordinate from above, and `writeArea3d` below writes each one into a 16-bit field regardless (`RecordBuilder.u16` masks with `0xffff`), so an out-of-grid coordinate would otherwise silently wrap to a plausible-looking in-grid one -- a print range asked for through row 70000 landing at row 4464, with nothing downstream to notice.
+ * Clamps a coordinate into BIFF8's own row/column ceiling. `ContentSheetPrintRange`/`ContentSheetRepeatRange` bound neither a start nor an end coordinate from above, and `writeArea3d` below writes each one into a 16-bit field regardless (`RecordBuilder.u16` masks with `0xffff`), so an out-of-grid coordinate would otherwise silently wrap to a plausible-looking in-grid one — a print range asked for through row 70000 landing at row 4464, with nothing downstream to notice.
  *
- * Clamped rather than dropped or refused: a print range or a repeated header band is a rectangle whose intent survives shrinking to the grid's own edge -- "print through the bottom of the sheet" is genuinely what an end coordinate past the last row means once the grid is smaller than the caller assumed -- unlike a single-position page break (see sheet-writer.ts's own inGridBreaks, which drops rather than clamps for exactly that distinction).
+ * Clamped rather than dropped or refused: a print range or a repeated header band is a rectangle whose intent survives shrinking to the grid's own edge — "print through the bottom of the sheet" is genuinely what an end coordinate past the last row means once the grid is smaller than the caller assumed — unlike a single-position page break (see sheet-writer.ts's own inGridBreaks, which drops rather than clamps for exactly that distinction).
  */
 function clampToGrid(index: number, maxIndex: number): number {
   return Math.min(index, maxIndex);
@@ -298,7 +298,7 @@ export function printNameEntriesFor(
       ],
     });
   }
-  // Written in the order the read side classifies them by shape rather than by position, so the two need not agree on an ordering -- but a column band first is what a real LibreOffice-written Print_Titles carries, and matching it keeps the bytes comparable against one.
+  // Written in the order the read side classifies them by shape rather than by position, so the two need not agree on an ordering — but a column band first is what a real LibreOffice-written Print_Titles carries, and matching it keeps the bytes comparable against one.
   const titleAreas: RawArea[] = [];
   if (settings.repeatColumns !== undefined) {
     titleAreas.push({
@@ -327,7 +327,7 @@ export function printNameEntriesFor(
   return entries;
 }
 
-/** PtgArea3d ([MS-XLS] 2.5.198.28), reference class: the opcode, the ixti, then an RgceArea. Every coordinate is written absolute (both ColRelU relative bits clear), which is what a print name means -- a print area does not move relative to anything. */
+/** PtgArea3d ([MS-XLS] 2.5.198.28), reference class: the opcode, the ixti, then an RgceArea. Every coordinate is written absolute (both ColRelU relative bits clear), which is what a print name means — a print area does not move relative to anything. */
 function writeArea3d(ixti: number, area: RawArea): Uint8Array<ArrayBuffer> {
   return new RecordBuilder()
     .u8(PTG_AREA3D_REF)
@@ -342,7 +342,7 @@ function writeArea3d(ixti: number, area: RawArea): Uint8Array<ArrayBuffer> {
 /**
  * One Lbl record ([MS-XLS] 2.4.150) for a built-in print name, the write-side mirror of readLbl above.
  *
- * A single area is written as a bare PtgArea3d. Two are written as [MS-XLS] 2.5.198.71's own mem-area-expression shape -- PtgMemFunc carrying the byte count of what follows, then the two areas and the PtgUnion joining them -- which is what says the pair is one reference result rather than two loose operands, and is byte-for-byte the structure a real LibreOffice-written Print_Titles carries for the same pair.
+ * A single area is written as a bare PtgArea3d. Two are written as [MS-XLS] 2.5.198.71's own mem-area-expression shape — PtgMemFunc carrying the byte count of what follows, then the two areas and the PtgUnion joining them — which is what says the pair is one reference result rather than two loose operands, and is byte-for-byte the structure a real LibreOffice-written Print_Titles carries for the same pair.
  */
 function writePrintNameRecord(
   entry: PrintNamePlanEntry,

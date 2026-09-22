@@ -548,7 +548,7 @@ function setBitRun(
   }
 }
 
-// Both row decoders above only stop once a0 has reached `columns`, and every mode that can take it there (vertical, horizontal, and the 1D run loop) records a changing element at the clamped position -- so a row's own last transition is always `columns` itself, and there is never a trailing run left to paint past the final one.
+// Both row decoders above only stop once a0 has reached `columns`, and every mode that can take it there (vertical, horizontal, and the 1D run loop) records a changing element at the clamped position — so a row's own last transition is always `columns` itself, and there is never a trailing run left to paint past the final one.
 function renderRow(
   transitions: readonly number[],
   columns: number,
@@ -586,7 +586,7 @@ export interface CcittFaxOptions {
 }
 
 export interface CcittFaxImage {
-  // Packed 1 bit per pixel, MSB first, each row padded out to a whole number of bytes -- the same layout a PDF image with /BitsPerComponent 1 expects.
+  // Packed 1 bit per pixel, MSB first, each row padded out to a whole number of bytes — the same layout a PDF image with /BitsPerComponent 1 expects.
   readonly bytes: Uint8Array<ArrayBuffer>;
   readonly columns: number;
   readonly rows: number;

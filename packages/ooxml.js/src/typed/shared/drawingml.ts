@@ -6,7 +6,7 @@ import { applyColorTransforms } from "./color";
 import { emuToPt } from "./units";
 import { attr, childrenWithTag, elementsWithTag } from "../util";
 
-// Shared DrawingML (the `a:` namespace) primitives -- xfrm geometry, colour/theme resolution -- used by both the pptx shape tree (src/typed/pptx/*) and docx (src/typed/docx/*, for theme font/colour resolution in the style cascade). Nothing here knows about WordprocessingML or PresentationML structure specifically. Ported from documents.js's src/ooxml/drawingml.ts.
+// Shared DrawingML (the `a:` namespace) primitives — xfrm geometry, colour/theme resolution — used by both the pptx shape tree (src/typed/pptx/*) and docx (src/typed/docx/*, for theme font/colour resolution in the style cascade). Nothing here knows about WordprocessingML or PresentationML structure specifically. Ported from documents.js's src/ooxml/drawingml.ts.
 
 export interface DrawingXfrm {
   readonly xPt: number;
@@ -22,7 +22,7 @@ export interface DrawingXfrm {
 // a:xfrm/@rot is in 60,000ths of a degree (ECMA-376 Part 1, 20.1.7.6 CT_Transform2D).
 const ROTATION_UNITS_PER_DEGREE = 60_000;
 
-// Reads an a:xfrm element's position, size, rotation, and flip flags. Returns undefined if `xfrm` is absent or missing its required a:off/a:ext children -- callers (a placeholder-inheritance cascade, chiefly) are expected to fall back to an inherited xfrm in that case, not to substitute a default geometry themselves.
+// Reads an a:xfrm element's position, size, rotation, and flip flags. Returns undefined if `xfrm` is absent or missing its required a:off/a:ext children — callers (a placeholder-inheritance cascade, chiefly) are expected to fall back to an inherited xfrm in that case, not to substitute a default geometry themselves.
 export function readXfrm(
   xfrm: XmlElement | undefined,
 ): DrawingXfrm | undefined {
@@ -81,7 +81,7 @@ function readThemeSlotColor(colorEl: XmlElement): Color | undefined {
     return val === undefined ? undefined : rgbHexToColor(val);
   }
   if (colorEl.tag === "a:sysClr") {
-    // lastClr is the cached, actual RGB value a producer resolved the system colour keyword to at save time -- almost always present, and the only reliable source, since resolving 'windowText'/'window' to a real colour otherwise requires OS theme context this reader doesn't have. Falls back to the two conventional PowerPoint values for these keywords specifically, not an arbitrary guess.
+    // lastClr is the cached, actual RGB value a producer resolved the system colour keyword to at save time — almost always present, and the only reliable source, since resolving 'windowText'/'window' to a real colour otherwise requires OS theme context this reader doesn't have. Falls back to the two conventional PowerPoint values for these keywords specifically, not an arbitrary guess.
     const lastClr = attr(colorEl, "lastClr");
     if (lastClr !== undefined) {
       return rgbHexToColor(lastClr);
@@ -127,7 +127,7 @@ function readSchemeFont(
   return latin === undefined ? undefined : attr(latin, "typeface");
 }
 
-// Word/PowerPoint's own long-standing built-in default theme font, used only when a theme part is missing or its font scheme is malformed -- not a stylistic choice, a documented fallback of last resort.
+// Word/PowerPoint's own long-standing built-in default theme font, used only when a theme part is missing or its font scheme is malformed — not a stylistic choice, a documented fallback of last resort.
 const DEFAULT_THEME_FONT = "Calibri";
 
 export interface DrawingTheme {
@@ -142,7 +142,7 @@ export const EMPTY_THEME: DrawingTheme = {
   minorFont: DEFAULT_THEME_FONT,
 };
 
-// Reads a:clrScheme and a:fontScheme from a theme part's root element (a:theme), wherever they sit under a:themeElements -- searched by descendant tag rather than a fixed child path, since that's the only detail of a:themeElements' own structure this reader actually needs.
+// Reads a:clrScheme and a:fontScheme from a theme part's root element (a:theme), wherever they sit under a:themeElements — searched by descendant tag rather than a fixed child path, since that's the only detail of a:themeElements' own structure this reader actually needs.
 export function readTheme(themeRoot: XmlElement): DrawingTheme {
   const clrSchemeEl = elementsWithTag([themeRoot], "a:clrScheme")[0];
   const colorScheme =
@@ -187,7 +187,7 @@ export function readColorMap(
   return map;
 }
 
-// a:schemeClr/@val is either one of the twelve raw theme slot names (dk1/lt1/dk2/lt2/accent1-6/hlink/folHlink, used directly) or one of the four "logical" names (bg1/tx1/bg2/tx2) that only resolve to a slot via the master's own p:clrMap -- clrMap's keys are exactly those four (plus the eight who map to themselves), so a plain lookup with the original value as fallback handles both cases in one line.
+// a:schemeClr/@val is either one of the twelve raw theme slot names (dk1/lt1/dk2/lt2/accent1-6/hlink/folHlink, used directly) or one of the four "logical" names (bg1/tx1/bg2/tx2) that only resolve to a slot via the master's own p:clrMap — clrMap's keys are exactly those four (plus the eight who map to themselves), so a plain lookup with the original value as fallback handles both cases in one line.
 export function resolveSchemeColorSlot(
   schemeVal: string,
   colorMap: ReadonlyMap<string, string>,
@@ -263,7 +263,7 @@ export function readSolidFillColor(
   return srgbClr === undefined ? undefined : readSrgbColor(srgbClr);
 }
 
-// A group shape's own a:xfrm carries two rectangles: off/ext (the group's position/size in its PARENT's coordinate space) and chOff/chExt (the coordinate space its own children's off/ext values are expressed in, often a completely different scale/origin), plus the group's own rotation and flip flags -- all four of which a nested child must be composed through correctly. The off/ext/chOff/chExt half of this is verified against Apache POI's DrawGroupShape (translate to interior-relative coordinates, scale by exterior/interior size ratio, translate to the exterior position); the rot/flipH/flipV half follows the same "flip about centre, then rotate about that same centre, then translate to off" model an ordinary (non-group) shape's own a:xfrm/@rot/@flipH/@flipV already uses -- see composeGroupTransform and applyGroupTransform below for the derivation and the reflection/rotation identities it rests on.
+// A group shape's own a:xfrm carries two rectangles: off/ext (the group's position/size in its PARENT's coordinate space) and chOff/chExt (the coordinate space its own children's off/ext values are expressed in, often a completely different scale/origin), plus the group's own rotation and flip flags — all four of which a nested child must be composed through correctly. The off/ext/chOff/chExt half of this is verified against Apache POI's DrawGroupShape (translate to interior-relative coordinates, scale by exterior/interior size ratio, translate to the exterior position); the rot/flipH/flipV half follows the same "flip about centre, then rotate about that same centre, then translate to off" model an ordinary (non-group) shape's own a:xfrm/@rot/@flipH/@flipV already uses — see composeGroupTransform and applyGroupTransform below for the derivation and the reflection/rotation identities it rests on.
 export interface GroupOwnXfrm {
   readonly offXPt: number;
   readonly offYPt: number;
@@ -279,7 +279,7 @@ export interface GroupOwnXfrm {
   readonly flipV: boolean;
 }
 
-// Reads a group shape's a:xfrm: its own off/ext/rot/flipH/flipV plus its chOff/chExt, all converted to points/degrees. Undefined if `xfrm` lacks a chOff/chExt pair -- a regular (non-group) shape's a:xfrm never has one, so this doubles as "is this actually a group transform".
+// Reads a group shape's a:xfrm: its own off/ext/rot/flipH/flipV plus its chOff/chExt, all converted to points/degrees. Undefined if `xfrm` lacks a chOff/chExt pair — a regular (non-group) shape's a:xfrm never has one, so this doubles as "is this actually a group transform".
 export function readGroupXfrm(
   xfrm: XmlElement | undefined,
 ): GroupOwnXfrm | undefined {
@@ -319,7 +319,7 @@ export function readGroupXfrm(
   };
 }
 
-// The fully composed transform needed to place a shape or nested group sitting directly in THIS group's own child (chOff/chExt) coordinate space into whatever coordinate space `offXPt`/`offYPt`/`extWidthPt`/`extHeightPt` are themselves already expressed in (the slide's space, once composed all the way up). `compositeRotationDeg`/`compositeMirrored` fold this group's own a:xfrm/@rot/@flipH/@flipV together with everything contributed by this group's own ancestor groups -- see composeGroupTransform's doc comment.
+// The fully composed transform needed to place a shape or nested group sitting directly in THIS group's own child (chOff/chExt) coordinate space into whatever coordinate space `offXPt`/`offYPt`/`extWidthPt`/`extHeightPt` are themselves already expressed in (the slide's space, once composed all the way up). `compositeRotationDeg`/`compositeMirrored` fold this group's own a:xfrm/@rot/@flipH/@flipV together with everything contributed by this group's own ancestor groups — see composeGroupTransform's doc comment.
 export interface GroupChildTransform {
   readonly offXPt: number;
   readonly offYPt: number;
@@ -344,9 +344,9 @@ function canonicalizeGroupRotation(
   flipH: boolean,
   flipV: boolean,
 ): { readonly angleDeg: number; readonly mirrored: boolean } {
-  // flipH && flipV and flipV-only are merged into one branch: both add the identical 180deg shift, and (once flipH && flipV has NOT already been excluded... which it hasn't been here, since this check comes first) mirrored is exactly !flipH either way -- true (flipV-only, flipH false) or false (flipH && flipV both true) -- rather than the same "+ 180" arithmetic appearing twice for Stryker to find two provably-identical mutation opportunities in.
+  // flipH && flipV and flipV-only are merged into one branch: both add the identical 180deg shift, and (once flipH && flipV has NOT already been excluded... which it hasn't been here, since this check comes first) mirrored is exactly !flipH either way — true (flipV-only, flipH false) or false (flipH && flipV both true) — rather than the same "+ 180" arithmetic appearing twice for Stryker to find two provably-identical mutation opportunities in.
   //
-  // "+ 180" here is a genuinely irreducible equivalent mutation opportunity, not merely an untested one: every caller of this function eventually normalises the returned angleDeg modulo 360 (directly, via normalizeDeg in composeGroupTransform's own top-level branch, or as an operand composeAngleDeg feeds through normalizeDeg when composing with a parent), and (x + 180) mod 360 === (x - 180) mod 360 for every x, since the two differ by exactly 360. No test built on this function's own observable contract (an angle consumed only through that eventual mod-360 normalisation) can ever tell "+ 180" and "- 180" apart here -- the difference genuinely does not exist for any input, not just the ones a test happens to try.
+  // "+ 180" here is a genuinely irreducible equivalent mutation opportunity, not merely an untested one: every caller of this function eventually normalises the returned angleDeg modulo 360 (directly, via normalizeDeg in composeGroupTransform's own top-level branch, or as an operand composeAngleDeg feeds through normalizeDeg when composing with a parent), and (x + 180) mod 360 === (x - 180) mod 360 for every x, since the two differ by exactly 360. No test built on this function's own observable contract (an angle consumed only through that eventual mod-360 normalisation) can ever tell "+ 180" and "- 180" apart here — the difference genuinely does not exist for any input, not just the ones a test happens to try.
   if (flipV) {
     return { angleDeg: rotationDeg + 180, mirrored: !flipH };
   }
@@ -356,7 +356,7 @@ function canonicalizeGroupRotation(
   return { angleDeg: rotationDeg, mirrored: false };
 }
 
-// Composes an OUTER linear map A = R(outer.angleDeg) . (Fh if outer.mirrored) with an INNER linear map B = R(inner.angleDeg) . (Fh if inner.mirrored) that is applied FIRST, giving C = A . B, decomposed back into the same (angleDeg, mirrored) representation. Derived from the reflection/rotation commutation identity Fh . R(theta) = R(-theta) . Fh (verified by direct 2x2 matrix multiplication: both sides equal [[-cos(theta), sin(theta)], [sin(theta), cos(theta)]]): outer not mirrored -> C = R(outerAngle).R(innerAngle).F_inner = R(outerAngle+innerAngle).F_inner; outer mirrored -> C = R(outerAngle).Fh.R(innerAngle).F_inner = R(outerAngle).R(-innerAngle).Fh.F_inner [since Fh.R(innerAngle) = R(-innerAngle).Fh] = R(outerAngle-innerAngle).(Fh.F_inner), so a mirrored outer flips whether the result is mirrored (Fh.Fh=I cancels; Fh.I stays mirrored) AND subtracts the inner angle instead of adding it -- this is the concrete "an ancestor group's flip negates the sense of a descendant's own rotation" rule.
+// Composes an OUTER linear map A = R(outer.angleDeg) . (Fh if outer.mirrored) with an INNER linear map B = R(inner.angleDeg) . (Fh if inner.mirrored) that is applied FIRST, giving C = A . B, decomposed back into the same (angleDeg, mirrored) representation. Derived from the reflection/rotation commutation identity Fh . R(theta) = R(-theta) . Fh (verified by direct 2x2 matrix multiplication: both sides equal [[-cos(theta), sin(theta)], [sin(theta), cos(theta)]]): outer not mirrored -> C = R(outerAngle).R(innerAngle).F_inner = R(outerAngle+innerAngle).F_inner; outer mirrored -> C = R(outerAngle).Fh.R(innerAngle).F_inner = R(outerAngle).R(-innerAngle).Fh.F_inner [since Fh.R(innerAngle) = R(-innerAngle).Fh] = R(outerAngle-innerAngle).(Fh.F_inner), so a mirrored outer flips whether the result is mirrored (Fh.Fh=I cancels; Fh.I stays mirrored) AND subtracts the inner angle instead of adding it — this is the concrete "an ancestor group's flip negates the sense of a descendant's own rotation" rule.
 // The angle half of composeRotation below, split out because composeShapeRotationDeg needs exactly this computation without ever needing a real `inner.mirrored` to pass in: the angle here depends only on whether the OUTER map is mirrored (added when it isn't, subtracted when it is), never on the inner map's own mirrored flag, which composeRotation folds into its OWN returned `mirrored` field instead.
 function composeAngleDeg(
   outerMirrored: boolean,
@@ -370,7 +370,7 @@ function composeAngleDeg(
   );
 }
 
-// Composes an OUTER linear map A = R(outer.angleDeg) . (Fh if outer.mirrored) with an INNER linear map B = R(inner.angleDeg) . (Fh if inner.mirrored) that is applied FIRST, giving C = A . B, decomposed back into the same (angleDeg, mirrored) representation. Derived from the reflection/rotation commutation identity Fh . R(theta) = R(-theta) . Fh (verified by direct 2x2 matrix multiplication: both sides equal [[-cos(theta), sin(theta)], [sin(theta), cos(theta)]]): outer not mirrored -> C = R(outerAngle).R(innerAngle).F_inner = R(outerAngle+innerAngle).F_inner; outer mirrored -> C = R(outerAngle).Fh.R(innerAngle).F_inner = R(outerAngle).R(-innerAngle).Fh.F_inner [since Fh.R(innerAngle) = R(-innerAngle).Fh] = R(outerAngle-innerAngle).(Fh.F_inner), so a mirrored outer flips whether the result is mirrored (Fh.Fh=I cancels; Fh.I stays mirrored) AND subtracts the inner angle instead of adding it -- this is the concrete "an ancestor group's flip negates the sense of a descendant's own rotation" rule.
+// Composes an OUTER linear map A = R(outer.angleDeg) . (Fh if outer.mirrored) with an INNER linear map B = R(inner.angleDeg) . (Fh if inner.mirrored) that is applied FIRST, giving C = A . B, decomposed back into the same (angleDeg, mirrored) representation. Derived from the reflection/rotation commutation identity Fh . R(theta) = R(-theta) . Fh (verified by direct 2x2 matrix multiplication: both sides equal [[-cos(theta), sin(theta)], [sin(theta), cos(theta)]]): outer not mirrored -> C = R(outerAngle).R(innerAngle).F_inner = R(outerAngle+innerAngle).F_inner; outer mirrored -> C = R(outerAngle).Fh.R(innerAngle).F_inner = R(outerAngle).R(-innerAngle).Fh.F_inner [since Fh.R(innerAngle) = R(-innerAngle).Fh] = R(outerAngle-innerAngle).(Fh.F_inner), so a mirrored outer flips whether the result is mirrored (Fh.Fh=I cancels; Fh.I stays mirrored) AND subtracts the inner angle instead of adding it — this is the concrete "an ancestor group's flip negates the sense of a descendant's own rotation" rule.
 function composeRotation(
   outer: { readonly angleDeg: number; readonly mirrored: boolean },
   inner: { readonly angleDeg: number; readonly mirrored: boolean },
@@ -381,7 +381,7 @@ function composeRotation(
   };
 }
 
-// Folds a nested group's own raw xfrm (`own`) into whatever composite transform its enclosing group already carries (`parent`, undefined at the top of the shape tree, in which case `own`'s off/ext are already expressed in slide space and its own rotation/flip is the entire composite). `own`'s off/ext live in `parent`'s own child coordinate space, so they are mapped through `applyGroupTransform` exactly like an ordinary child would be -- position AND rotation/mirror both compose, since `own` is the INNER map (applied first, being the group closer to the eventual shape) and `parent`'s already-composed compositeRotationDeg/compositeMirrored is the OUTER map (composeRotation's own `outer` parameter).
+// Folds a nested group's own raw xfrm (`own`) into whatever composite transform its enclosing group already carries (`parent`, undefined at the top of the shape tree, in which case `own`'s off/ext are already expressed in slide space and its own rotation/flip is the entire composite). `own`'s off/ext live in `parent`'s own child coordinate space, so they are mapped through `applyGroupTransform` exactly like an ordinary child would be — position AND rotation/mirror both compose, since `own` is the INNER map (applied first, being the group closer to the eventual shape) and `parent`'s already-composed compositeRotationDeg/compositeMirrored is the OUTER map (composeRotation's own `outer` parameter).
 export function composeGroupTransform(
   own: GroupOwnXfrm | undefined,
   parent: GroupChildTransform | undefined,
@@ -435,7 +435,7 @@ export function composeGroupTransform(
   };
 }
 
-// Maps a child's local (chOff/chExt-relative) frame into the group's parent coordinate space -- position AND, when the group carries a non-zero composite rotation or mirror (this group's own a:xfrm/@rot/@flipH/@flipV composed with its own ancestors, see composeGroupTransform), rotates/mirrors the mapped box's CENTRE about the group's own centre. Width/height are only ever scaled, never rotated: exactly like ContentShape.frame/rotationDeg elsewhere in this codebase, the returned Box is the shape's own UNROTATED extents, with orientation carried separately by whichever caller combines this group's own composite with the shape's local rotation (composeShapeRotationDeg, in src/typed/pptx/read.ts).
+// Maps a child's local (chOff/chExt-relative) frame into the group's parent coordinate space — position AND, when the group carries a non-zero composite rotation or mirror (this group's own a:xfrm/@rot/@flipH/@flipV composed with its own ancestors, see composeGroupTransform), rotates/mirrors the mapped box's CENTRE about the group's own centre. Width/height are only ever scaled, never rotated: exactly like ContentShape.frame/rotationDeg elsewhere in this codebase, the returned Box is the shape's own UNROTATED extents, with orientation carried separately by whichever caller combines this group's own composite with the shape's local rotation (composeShapeRotationDeg, in src/typed/pptx/read.ts).
 export function applyGroupTransform(
   group: GroupChildTransform,
   childFrame: Box,
@@ -452,7 +452,7 @@ export function applyGroupTransform(
     group.offXPt + (childFrame.xPt - group.childOffXPt) * scaleX;
   const canonicalY =
     group.offYPt + (childFrame.yPt - group.childOffYPt) * scaleY;
-  // No "rotation === 0 && !mirrored" shortcut is needed: with no rotation and no mirror, dx is left unmirrored and cos/sin below are Math.cos(0) === 1 / Math.sin(0) === 0 exactly (not merely close -- multiplying and dividing by 0 introduces no floating-point error), so rotatedX/rotatedY reduce to dx/dy exactly, and the final xPt/yPt collapse algebraically back to canonicalX/canonicalY -- the general path already computes the identity case bit-for-bit; the shortcut only ever skipped work that was going to produce the same answer.
+  // No "rotation === 0 && !mirrored" shortcut is needed: with no rotation and no mirror, dx is left unmirrored and cos/sin below are Math.cos(0) === 1 / Math.sin(0) === 0 exactly (not merely close — multiplying and dividing by 0 introduces no floating-point error), so rotatedX/rotatedY reduce to dx/dy exactly, and the final xPt/yPt collapse algebraically back to canonicalX/canonicalY — the general path already computes the identity case bit-for-bit; the shortcut only ever skipped work that was going to produce the same answer.
   const groupCenterX = group.offXPt + group.extWidthPt / 2;
   const groupCenterY = group.offYPt + group.extHeightPt / 2;
   const boxCenterX = canonicalX + widthPt / 2;
@@ -475,7 +475,7 @@ export function applyGroupTransform(
   };
 }
 
-// Resolves a shape or graphic frame's own final rotation (clockwise degrees) given its own local a:xfrm/@rot and the (possibly undefined) composite transform of whichever group encloses it. The shape's own rotation is the INNER map (applied first, with no mirror of its own to compose -- a shape's own flipH/flipV isn't folded into ContentShape's rotationDeg output either, a separate, pre-existing simplification this function doesn't change); the enclosing group's composite is the OUTER map.
+// Resolves a shape or graphic frame's own final rotation (clockwise degrees) given its own local a:xfrm/@rot and the (possibly undefined) composite transform of whichever group encloses it. The shape's own rotation is the INNER map (applied first, with no mirror of its own to compose — a shape's own flipH/flipV isn't folded into ContentShape's rotationDeg output either, a separate, pre-existing simplification this function doesn't change); the enclosing group's composite is the OUTER map.
 export function composeShapeRotationDeg(
   parentTransform: GroupChildTransform | undefined,
   ownRotationDeg: number,

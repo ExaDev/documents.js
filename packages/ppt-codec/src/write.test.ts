@@ -41,7 +41,7 @@ import { readCurrentUserAtom } from "./stream/current-user";
 import { buildPersistDirectory } from "./stream/persist";
 import { writePpt, writePptContent, writePptStreams } from "./write";
 
-// The primary verification method this package's own README already establishes for its record fixtures: write real records, then read them back through the package's own existing reader, and assert the recovered content equals what was written. A round trip through readPptContent proves the writer's bytes are genuinely conformant [MS-PPT] -- not merely internally self-consistent -- because the reader was built and tested entirely independently of the writer, against the specification alone.
+// The primary verification method this package's own README already establishes for its record fixtures: write real records, then read them back through the package's own existing reader, and assert the recovered content equals what was written. A round trip through readPptContent proves the writer's bytes are genuinely conformant [MS-PPT] — not merely internally self-consistent — because the reader was built and tested entirely independently of the writer, against the specification alone.
 
 function slide(overrides: Partial<ContentSlide> = {}): ContentSlide {
   return {
@@ -52,7 +52,7 @@ function slide(overrides: Partial<ContentSlide> = {}): ContentSlide {
   };
 }
 
-// One plain single-run paragraph block -- the spelling every hand-built fixture in this file repeats.
+// One plain single-run paragraph block — the spelling every hand-built fixture in this file repeats.
 function paragraph(text: string): ContentBlock {
   return { kind: "paragraph", runs: [{ text }] };
 }
@@ -647,7 +647,7 @@ describe("writePptContent / readPptContent round trip", () => {
       "slide 1: a 'pageBreak' block is dropped; this writer produces no [MS-PPT] spelling for it",
     );
 
-    // The default -- and 'drop' stated explicitly -- both keep reporting through the sink alone, exactly as the test above already pins.
+    // The default — and 'drop' stated explicitly — both keep reporting through the sink alone, exactly as the test above already pins.
     expect(() => writePptContent(document)).not.toThrow();
     expect(() =>
       writePptContent(document, { onUnwritableBlock: "drop" }),
@@ -774,7 +774,7 @@ describe("writePptContent / readPptContent round trip", () => {
           }),
         ],
       };
-      // Two entries, not three: base64-comparing the round-tripped images alone (below) can't distinguish a shared store entry from three separate ones carrying byte-identical content, since either way every shape reads back the same bytes -- only the store's own entry count actually proves the duplicate PNG was deduplicated rather than re-added.
+      // Two entries, not three: base64-comparing the round-tripped images alone (below) can't distinguish a shared store entry from three separate ones carrying byte-identical content, since either way every shape reads back the same bytes — only the store's own entry count actually proves the duplicate PNG was deduplicated rather than re-added.
       const { powerPointDocumentStream } = writePptStreams(document);
       const documentRecord = readRecordSequence(
         powerPointDocumentStream,
@@ -808,7 +808,7 @@ describe("writePptContent / readPptContent round trip", () => {
       expect(secondSlideImages).toHaveLength(2);
       expect(secondSlideImages?.[0]?.base64).toBe(bytesToBase64(PNG));
       expect(secondSlideImages?.[1]?.base64).toBe(bytesToBase64(OTHER_PNG));
-      // The identical PNG on slide 1 reads back there too -- a shared store entry, not a copy per slide.
+      // The identical PNG on slide 1 reads back there too — a shared store entry, not a copy per slide.
       const firstSlideImage = slides[0]?.shapes[0]?.blocks.find(
         (block): block is ContentImageBlock => block.kind === "image",
       );
@@ -927,7 +927,7 @@ describe("writePptContent / readPptContent round trip", () => {
   });
 
   describe("the document-wide drawing group", () => {
-    // The OfficeArtFDGG's own four count fields ([MS-ODRAW] 2.2.47): spidMax, cidcl, cspSaved, cdgSaved, in order -- read straight out of the written stream so the counts are checked against the bytes, not against the writer's own bookkeeping.
+    // The OfficeArtFDGG's own four count fields ([MS-ODRAW] 2.2.47): spidMax, cidcl, cspSaved, cdgSaved, in order — read straight out of the written stream so the counts are checked against the bytes, not against the writer's own bookkeeping.
     function fdggFields(
       streamBytes: Uint8Array<ArrayBuffer>,
     ): [number, number, number, number] {
@@ -1060,7 +1060,7 @@ describe("writePptContent / readPptContent round trip", () => {
           }),
         ],
       });
-      // The master's six shapes, then the slide drawing's six -- its patriarch, the table's group shape and its four cells: twelve shape containers across two drawings, spidMax 6 from the master's placeholders.
+      // The master's six shapes, then the slide drawing's six — its patriarch, the table's group shape and its four cells: twelve shape containers across two drawings, spidMax 6 from the master's placeholders.
       expect(fdggFields(powerPointDocumentStream)).toEqual([6, 2, 12, 2]);
     });
   });
@@ -1433,7 +1433,7 @@ describe("speaker notes", () => {
       metadata: {},
       slides: [slide(), slide()],
     });
-    // A fabricated empty NotesContainer would be a real notes slide that happens to say nothing -- a different fact from the absent notes slide the input actually describes, and one no round trip could tell apart from it.
+    // A fabricated empty NotesContainer would be a real notes slide that happens to say nothing — a different fact from the absent notes slide the input actually describes, and one no round trip could tell apart from it.
     expect(recordTypesIn(powerPointDocumentStream)).not.toContain(RT_Notes);
   });
 
@@ -1530,7 +1530,7 @@ describe("speaker notes", () => {
   });
 
   it("compacts notesId assignment by counting only the earlier slides that actually carry notes", () => {
-    // slide 2 (index 2, no notes) must not count towards the base a later notes-carrying slide's own id is offset from -- and the two notes-carrying slides before it (0 and 1) must both count, not merely whichever of "has notes" or "has no notes" a flipped comparison would count instead.
+    // slide 2 (index 2, no notes) must not count towards the base a later notes-carrying slide's own id is offset from — and the two notes-carrying slides before it (0 and 1) must both count, not merely whichever of "has notes" or "has no notes" a flipped comparison would count instead.
     const { powerPointDocumentStream } = writePptStreams({
       metadata: {},
       slides: [
@@ -1574,7 +1574,7 @@ describe("speaker notes", () => {
   });
 
   it("mints every slide id well clear of the 0x80000000 MasterId range readNotesBySlideId relies on staying unreachable", () => {
-    // read.ts's own readNotesBySlideId keys a notes container by slideIdRef, and [MS-PPT] 2.2.13 reserves 0x80000000 and above for MasterId -- a real producer's own notes-master entry can state a slideIdRef up in that range (LibreOffice writes 0x80000001) rather than the spec-mandated 0x00000000. That lookup only stays unambiguous because this writer's own slide ids (FIRST_SLIDE_ID + index, see write.ts's own note beside that constant) never reach anywhere near it. Pinned here rather than only in a comment, so a future change to the minting base or increment fails a test instead of silently drifting toward the reserved range.
+    // read.ts's own readNotesBySlideId keys a notes container by slideIdRef, and [MS-PPT] 2.2.13 reserves 0x80000000 and above for MasterId — a real producer's own notes-master entry can state a slideIdRef up in that range (LibreOffice writes 0x80000001) rather than the spec-mandated 0x00000000. That lookup only stays unambiguous because this writer's own slide ids (FIRST_SLIDE_ID + index, see write.ts's own note beside that constant) never reach anywhere near it. Pinned here rather than only in a comment, so a future change to the minting base or increment fails a test instead of silently drifting toward the reserved range.
     const { powerPointDocumentStream } = writePptStreams({
       metadata: {},
       slides: Array.from({ length: 5 }, () => slide()),
@@ -1610,7 +1610,7 @@ describe("speaker notes", () => {
       ),
       "SlideSchemeColorSchemeAtom",
     );
-    // [MS-PPT] 2.9.51: rh.recInstance MUST be 0x001, and rh.recLen MUST be 0x00000020 -- eight four-byte ColorStructs.
+    // [MS-PPT] 2.9.51: rh.recInstance MUST be 0x001, and rh.recLen MUST be 0x00000020 — eight four-byte ColorStructs.
     expect(scheme.header.recInstance).toBe(0x001);
     expect(scheme.data.length).toBe(0x20);
   });
@@ -1784,7 +1784,7 @@ describe("OLE embedded objects", () => {
         frame: { xPt: 72, yPt: 72, widthPt: 200, heightPt: 150 },
       },
     ]);
-    // Excel.Sheet.8 is ExOleObjSubTypeEnum's own ProgID for the spreadsheet kind ([MS-PPT] 2.10.14) -- confirming the writer actually stated it, not merely that the decode port ignored whatever arrived.
+    // Excel.Sheet.8 is ExOleObjSubTypeEnum's own ProgID for the spreadsheet kind ([MS-PPT] 2.10.14) — confirming the writer actually stated it, not merely that the decode port ignored whatever arrived.
     let seenProgId: string | undefined;
     readPptContent(bytes, undefined, {
       decodeEmbeddedObject: (_bytes, progId) => {
@@ -1896,7 +1896,7 @@ describe("OLE embedded objects", () => {
     const [first, second] = read.slides[0]?.shapes ?? [];
     expect(first?.blocks[0]).toMatchObject({ document: embeddedSpreadsheet });
     expect(second?.blocks[0]).toMatchObject({ document: secondDocument });
-    // exObjId is otherwise write-only from this round trip's own point of view -- both the write and the matching read side use whatever value was minted internally, so a wrong-but-still-unique id (e.g. -1/0 instead of 1/2) would round-trip identically above. Reading the two ExOleObjAtom entries back directly is the only way to prove the actual minted values are 1 and 2.
+    // exObjId is otherwise write-only from this round trip's own point of view — both the write and the matching read side use whatever value was minted internally, so a wrong-but-still-unique id (e.g. -1/0 instead of 1/2) would round-trip identically above. Reading the two ExOleObjAtom entries back directly is the only way to prove the actual minted values are 1 and 2.
     const documentRecord = topLevelRecords(powerPointDocumentStream)[0];
     if (documentRecord === undefined) {
       throw new Error("expected the DocumentContainer first");
@@ -1906,7 +1906,7 @@ describe("OLE embedded objects", () => {
   });
 
   it("offsets an OLE embed's own persist id past every notes persist object, not merely past every slide", () => {
-    // Two of three slides carry notes, and the embed sits on the third: FIRST_SLIDE_PERSIST_ID + slides.length + notesCount is the only sum landing exactly past every already-used slide (3-5) and notes (6-7) persist id at 8. A wrong sign, a bare notesIdRefs.length (3, one too many), or an inverted notes-having/notes-less count (1, one too few) would each land somewhere a plain collision check might miss -- reading the embed's own persistIdRef back directly is what actually pins the value.
+    // Two of three slides carry notes, and the embed sits on the third: FIRST_SLIDE_PERSIST_ID + slides.length + notesCount is the only sum landing exactly past every already-used slide (3-5) and notes (6-7) persist id at 8. A wrong sign, a bare notesIdRefs.length (3, one too many), or an inverted notes-having/notes-less count (1, one too few) would each land somewhere a plain collision check might miss — reading the embed's own persistIdRef back directly is what actually pins the value.
     const content: ContentDocument = {
       kind: "presentation",
       metadata: {},

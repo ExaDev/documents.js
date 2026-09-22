@@ -11,7 +11,7 @@ import { XlsCell } from "./cell";
 const BIFF8_MAX_ROWS = 65536;
 const BIFF8_MAX_COLUMNS = 256;
 
-// A live view over one ContentSheet object inside the editor's own sheets array. The surface mirrors OdsSheet's (name, printSettings, per-axis sizing/hidden, cell addressing) with two model-driven differences: the cells array is the schema's own sparse by-position array (a cell at (500, 50) costs one entry, not a materialised grid), and printSettings is a plain required field rather than a style-minting setter (there is no style chain under a ContentDocument -- xls-codec's writer consumes ContentSheetPrintSettings directly).
+// A live view over one ContentSheet object inside the editor's own sheets array. The surface mirrors OdsSheet's (name, printSettings, per-axis sizing/hidden, cell addressing) with two model-driven differences: the cells array is the schema's own sparse by-position array (a cell at (500, 50) costs one entry, not a materialised grid), and printSettings is a plain required field rather than a style-minting setter (there is no style chain under a ContentDocument — xls-codec's writer consumes ContentSheetPrintSettings directly).
 export class XlsSheet {
   private readonly container: ContentSheet[];
   private readonly node: ContentSheet;
@@ -47,7 +47,7 @@ export class XlsSheet {
     this.live().printSettings = value;
   }
 
-  // The sheet's sparse cells, re-read on every call (the live-view contract -- a caller holding an earlier array sees later edits only through a fresh call).
+  // The sheet's sparse cells, re-read on every call (the live-view contract — a caller holding an earlier array sees later edits only through a fresh call).
   cells(): XlsCell[] {
     return this.live().cells.map(
       (cell) => new XlsCell(this.live().cells, cell),
@@ -63,7 +63,7 @@ export class XlsSheet {
     return this.live().rows;
   }
 
-  // Finds the cell at (row, column), creating an empty one when none exists yet -- the find-or-create counterpart of OdsSheet.cell's materialise-on-demand, but one array entry rather than a split repeated run. Coordinates are 0-based.
+  // Finds the cell at (row, column), creating an empty one when none exists yet — the find-or-create counterpart of OdsSheet.cell's materialise-on-demand, but one array entry rather than a split repeated run. Coordinates are 0-based.
   cell(row: number, column: number): XlsCell {
     if (row < 0 || row >= BIFF8_MAX_ROWS) {
       throw new Error(
@@ -129,7 +129,7 @@ export class XlsSheet {
   }
 
   remove(): void {
-    // A workbook with no sheet at all has nothing for BoundSheet8 to name -- refuse here rather than at write time, mirroring DocSection.remove's own last-one guard.
+    // A workbook with no sheet at all has nothing for BoundSheet8 to name — refuse here rather than at write time, mirroring DocSection.remove's own last-one guard.
     if (this.container.length === 1) {
       throw new Error(
         "an xls workbook must carry at least one sheet; the last one cannot be removed",

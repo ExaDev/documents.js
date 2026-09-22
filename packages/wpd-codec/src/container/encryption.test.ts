@@ -140,7 +140,7 @@ describe("passwordByteAt", () => {
 describe("decryptWpdDocument", () => {
   // decryptWpdDocument's own doc comment says it is "called only for ... a non-empty password", but it is a plain exported function with its own contract, tested directly here rather than only through the container-level guarantee that happens to hold today.
   //
-  // The header's own encryption word is deliberately 0 here (never a real encrypted document's actual value, but this function never inspects that invariant itself): an empty password's checksum is always 0 too, so any non-zero encryption word would already fail the checksum comparison the normal flow performs anyway, masking whether the dedicated empty-password guard ran at all. Only encryption === 0 lets the guard's absence actually be observed -- without it, the empty password would fall through to applyWpdStandardEncryption and throw a WpdFormatError there instead, not a WpdWrongPasswordError.
+  // The header's own encryption word is deliberately 0 here (never a real encrypted document's actual value, but this function never inspects that invariant itself): an empty password's checksum is always 0 too, so any non-zero encryption word would already fail the checksum comparison the normal flow performs anyway, masking whether the dedicated empty-password guard ran at all. Only encryption === 0 lets the guard's absence actually be observed — without it, the empty password would fall through to applyWpdStandardEncryption and throw a WpdFormatError there instead, not a WpdWrongPasswordError.
   it("treats an empty password as a wrong password rather than an empty-cipher-key error", () => {
     const bytes = buildWpdFile([0]);
     const header: WpdFileHeader = {
@@ -181,7 +181,7 @@ describe("reading an encrypted document", () => {
     );
   });
 
-  // readWpd threads its own password option through to the same openWpdDocument call readWpdContent uses -- proven separately, since readWpd builds its own tree-form read from scratch rather than delegating to readWpdContent.
+  // readWpd threads its own password option through to the same openWpdDocument call readWpdContent uses — proven separately, since readWpd builds its own tree-form read from scratch rather than delegating to readWpdContent.
   it("reads the tree form of the same encrypted document with the password", () => {
     const tree = readWpd(encrypted, { password: "sECret" });
     expect(tree.kind).toBe("wordprocessing");

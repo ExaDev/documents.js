@@ -14,7 +14,7 @@ import tseslint from "typescript-eslint";
  *
  * A static array would not work here: the real per-package variation is structural, not cosmetic. Which TSConfig programs a package runs, whether it is Worker-isomorphic, and what its barrel policy is are all genuinely different between packages, and each one has to reach the parser or rule wiring. Those are the parameters below.
  *
- * What is NOT parameterised is the rule set itself. Before this file existed the thirteen package configs had drifted into three incompatible tiers -- four packages ran no type-aware linting at all, two hand-inlined their own approximation of it, and seven used the shared preset -- so a rule added "everywhere" reached seven packages and a Worker-isomorphism guard could be silently absent from a package that needed it. Every package now gets the same rules; only the wiring differs.
+ * What is NOT parameterised is the rule set itself. Before this file existed the thirteen package configs had drifted into three incompatible tiers — four packages ran no type-aware linting at all, two hand-inlined their own approximation of it, and seven used the shared preset — so a rule added "everywhere" reached seven packages and a Worker-isomorphism guard could be silently absent from a package that needed it. Every package now gets the same rules; only the wiring differs.
  */
 
 /**
@@ -22,7 +22,7 @@ import tseslint from "typescript-eslint";
  *
  * The ban list this replaces was eighteen names written out by hand, which left most of Node's surface unguarded: a bare `import dns from 'dns'` in a Worker-isomorphic package passed the guard, as did `cluster`, `tls`, `vm`, `v8`, `repl`, and the rest. Deriving the list from `builtinModules` closes that gap permanently and keeps it closed as Node adds modules.
  *
- * `_`-prefixed entries are deprecated internals nobody imports deliberately, and `node:`-prefixed entries are covered by the separate `node:*` group pattern below -- some of them (`node:test`) exist only in prefixed form and have no bare spelling to ban. Subpaths collapse to their base (`fs/promises` to `fs`) because the pattern below matches subpaths through its own suffix group.
+ * `_`-prefixed entries are deprecated internals nobody imports deliberately, and `node:`-prefixed entries are covered by the separate `node:*` group pattern below — some of them (`node:test`) exist only in prefixed form and have no bare spelling to ban. Subpaths collapse to their base (`fs/promises` to `fs`) because the pattern below matches subpaths through its own suffix group.
  */
 const nodeBuiltinBaseModules: readonly string[] = [
   ...new Set(
@@ -37,7 +37,7 @@ const nodeBuiltinBaseModules: readonly string[] = [
 /**
  * Matches a bare Node builtin specifier and any subpath of one.
  *
- * `regex`, not `group`. `no-restricted-imports` matches `group` entries through the `ignore` package, i.e. gitignore semantics over path segments, so a `group: ['util']` entry also matches this workspace's own relative `./util/base64` and `../util` imports -- a false positive several packages hit and worked around inconsistently, some by switching to a regex and some by leaving the bug in place. The regex is tested against the raw specifier, which keeps its `./` prefix, so `^util$` matches `import 'util'` and never `import './util/base64'`.
+ * `regex`, not `group`. `no-restricted-imports` matches `group` entries through the `ignore` package, i.e. gitignore semantics over path segments, so a `group: ['util']` entry also matches this workspace's own relative `./util/base64` and `../util` imports — a false positive several packages hit and worked around inconsistently, some by switching to a regex and some by leaving the bug in place. The regex is tested against the raw specifier, which keeps its `./` prefix, so `^util$` matches `import 'util'` and never `import './util/base64'`.
  */
 const bareNodeBuiltinPattern = `^(${nodeBuiltinBaseModules.join("|")})(/.*)?$`;
 
@@ -49,14 +49,14 @@ const isomorphicBufferMessage =
   "Buffer is Node-only; this Worker-isomorphic library uses Uint8Array.";
 
 /**
- * Linting for the data and prose files that sit beside the code -- JSON, Markdown, and YAML -- defined once and used by both the workspace root's config and every package's.
+ * Linting for the data and prose files that sit beside the code — JSON, Markdown, and YAML — defined once and used by both the workspace root's config and every package's.
  *
  * Defined here rather than only at the root, because a root config cannot reach these files usefully. `eslint .` from the workspace root has to walk the whole tree to find them, and the tree contains a 400 MB turbo cache, every package's node_modules, and this workspace's binary document fixtures; several of these plugins also ship with no `files` restriction at all, which makes every path a lint target. The result exhausted a 4 GB heap rather than finishing. Running the identical rules from inside each package instead keeps every run scoped to one small directory, and turbo runs the thirteen concurrently.
  *
- * One definition, thirteen call sites -- which is the property that matters. It is not thirteen copies of a decision.
+ * One definition, thirteen call sites — which is the property that matters. It is not thirteen copies of a decision.
  */
 /**
- * `@eslint/json`'s own language option, which ESLint's core `LanguageOptions` type does not model -- it declares no index signature, so writing the key inline is an excess property. Held in a bag typed for what it is (a language's own options, whose shape belongs to the plugin) rather than asserted past the core type.
+ * `@eslint/json`'s own language option, which ESLint's core `LanguageOptions` type does not model — it declares no index signature, so writing the key inline is an excess property. Held in a bag typed for what it is (a language's own options, whose shape belongs to the plugin) rather than asserted past the core type.
  */
 const jsoncLanguageOptions: Record<string, unknown> = {
   allowTrailingCommas: true,
@@ -73,7 +73,7 @@ export const dataFileLintConfig: ReturnType<typeof tseslint.config> =
       extends: [json.configs.recommended],
     },
 
-    // JSONC, for the three families that genuinely carry comments -- established by grep, not assumed. turbo.json documents its own pipeline inline; every tsconfig*.json carries explanatory comments (TypeScript has always permitted them); wrangler.jsonc says so in its extension. Parsed as plain JSON, every one of those comments is a syntax error.
+    // JSONC, for the three families that genuinely carry comments — established by grep, not assumed. turbo.json documents its own pipeline inline; every tsconfig*.json carries explanatory comments (TypeScript has always permitted them); wrangler.jsonc says so in its extension. Parsed as plain JSON, every one of those comments is a syntax error.
     {
       files: ["**/*.jsonc", "**/tsconfig*.json", "**/turbo.json"],
       plugins: { json },
@@ -83,7 +83,7 @@ export const dataFileLintConfig: ReturnType<typeof tseslint.config> =
       extends: [json.configs.recommended],
     },
 
-    // Markdown. The recommended set is structural -- no empty links, no duplicate H1, no reversed link syntax -- rather than stylistic, so it does not argue with how the prose is written.
+    // Markdown. The recommended set is structural — no empty links, no duplicate H1, no reversed link syntax — rather than stylistic, so it does not argue with how the prose is written.
     ...markdown.configs.recommended,
     {
       // Off: this workspace's prose uses square brackets for things that are not reference links, and the rule cannot tell the difference. A GFM task list is written `- [ ] item`, and the READMEs cite specifications by bracketed short name (`[MS-CFB]`, `[MS-OLEDS]`). Both are correct as written; every report from this rule here was one of the two.
@@ -91,7 +91,7 @@ export const dataFileLintConfig: ReturnType<typeof tseslint.config> =
       rules: { "markdown/no-missing-label-refs": "off" },
     },
     {
-      // Off: `no-reversed-media-syntax` hangs indefinitely (a ReDoS, not merely a slow pass) against real prose in this workspace's own READMEs -- reproduced directly against @eslint/markdown 8.0.3, the latest published version at the time of writing, with no fixed release available to upgrade to. Isolating every markdown/* rule to run alone against the same file narrowed the hang to this one rule specifically; every other rule in the recommended set completes instantly against identical content. This workspace's own prose convention (one continuous line per paragraph or table cell, however long, rather than hard-wrapped -- see the repo's "never hard wrap" convention) is exactly the shape of input that triggers it, so the rule is a live landmine for any README here, not merely the one that first surfaced it. Re-enable once a released fix exists upstream.
+      // Off: `no-reversed-media-syntax` hangs indefinitely (a ReDoS, not merely a slow pass) against real prose in this workspace's own READMEs — reproduced directly against @eslint/markdown 8.0.3, the latest published version at the time of writing, with no fixed release available to upgrade to. Isolating every markdown/* rule to run alone against the same file narrowed the hang to this one rule specifically; every other rule in the recommended set completes instantly against identical content. This workspace's own prose convention (one continuous line per paragraph or table cell, however long, rather than hard-wrapped — see the repo's "never hard wrap" convention) is exactly the shape of input that triggers it, so the rule is a live landmine for any README here, not merely the one that first surfaced it. Re-enable once a released fix exists upstream.
       files: ["**/*.md"],
       rules: { "markdown/no-reversed-media-syntax": "off" },
     },
@@ -102,14 +102,14 @@ export const dataFileLintConfig: ReturnType<typeof tseslint.config> =
       files: ["**/*.{yml,yaml}"],
     })),
     {
-      // A GitHub workflow trigger with no filters is a bare key -- `pull_request:` means "every pull request", `workflow_dispatch:` means "manually runnable". The value is genuinely absent, which is what the schema expects, so this rule reports correct YAML as a defect. Scoped to .github/ rather than off outright, since an accidentally empty value elsewhere usually is a mistake.
+      // A GitHub workflow trigger with no filters is a bare key — `pull_request:` means "every pull request", `workflow_dispatch:` means "manually runnable". The value is genuinely absent, which is what the schema expects, so this rule reports correct YAML as a defect. Scoped to .github/ rather than off outright, since an accidentally empty value elsewhere usually is a mistake.
       files: [".github/**/*.{yml,yaml}"],
       rules: { "yml/no-empty-mapping-value": "off" },
     },
 
     // Flags a dependency a native API or a lighter package now covers.
     //
-    // The plugin and the one rule are registered directly rather than by spreading the shipped `flat/recommended`. That preset sets no `files`, so it would apply to every path in the package, and its `configs` is typed as possibly-undefined -- naming the rule states exactly what is switched on and needs no narrowing of a third-party shape.
+    // The plugin and the one rule are registered directly rather than by spreading the shipped `flat/recommended`. That preset sets no `files`, so it would apply to every path in the package, and its `configs` is typed as possibly-undefined — naming the rule states exactly what is switched on and needs no narrowing of a third-party shape.
     {
       files: ["**/package.json"],
       plugins: { depend },
@@ -120,13 +120,13 @@ export const dataFileLintConfig: ReturnType<typeof tseslint.config> =
     },
   );
 
-/** Build output, dependencies, coverage reports, and the smoke suite -- which imports from `../dist`, a build artefact deliberately outside every package's TSConfig program because it tests built output rather than source. */
+/** Build output, dependencies, coverage reports, and the smoke suite — which imports from `../dist`, a build artefact deliberately outside every package's TSConfig program because it tests built output rather than source. */
 const alwaysIgnored: readonly string[] = [
   "dist",
   "coverage",
   "node_modules",
   "test",
-  // Stryker's own output: a mutation HTML report, and (for a package with `incremental: true` in its stryker.config.ts) an incremental result cache that can run to several megabytes of generated JSON -- large enough on its own to slow a lint pass, and its escaped byte content has produced real lone-surrogate reports from json/no-unsafe-values with nothing for a contributor to fix. `.stryker-tmp` is Stryker's own sandbox working directory (tempDirName in stryker.shared.ts), left behind by an interrupted run rather than cleaned up.
+  // Stryker's own output: a mutation HTML report, and (for a package with `incremental: true` in its stryker.config.ts) an incremental result cache that can run to several megabytes of generated JSON — large enough on its own to slow a lint pass, and its escaped byte content has produced real lone-surrogate reports from json/no-unsafe-values with nothing for a contributor to fix. `.stryker-tmp` is Stryker's own sandbox working directory (tempDirName in stryker.shared.ts), left behind by an interrupted run rather than cleaned up.
   "reports",
   ".stryker-tmp",
   // AGENTS.md and CLAUDE.md are symlinks to README.md in every package, so linting all three lints one file three times.
@@ -164,7 +164,7 @@ export interface PackageLintOptions {
    */
   readonly projects?: readonly string[];
 
-  /** Appended to the always-ignored set above, for paths only this package has -- a `scripts/` directory that imports from `../dist`, a generated router tree, a test-report directory. */
+  /** Appended to the always-ignored set above, for paths only this package has — a `scripts/` directory that imports from `../dist`, a generated router tree, a test-report directory. */
   readonly additionalIgnores?: readonly string[];
 
   /**
@@ -174,34 +174,34 @@ export interface PackageLintOptions {
    */
   readonly isomorphic?: boolean;
 
-  /** Defaults to `single` -- every published package here exposes exactly one barrel at `src/index.ts`, named in its `exports` map. */
+  /** Defaults to `single` — every published package here exposes exactly one barrel at `src/index.ts`, named in its `exports` map. */
   readonly barrelPolicy?: BarrelPolicy;
 
   /**
    * Whether to put Node's globals in scope for every linted file. Defaults to true.
    *
-   * True suits every library package here, including the Worker-isomorphic ones: what enforces their portability is the import ban and the web-only TSConfig program, not the absence of ambient global types. The web UI passes false and scopes browser, worker, and Node globals to the layers that actually have them -- handing that app Node globals everywhere would let a `process.env` read in browser code lint clean.
+   * True suits every library package here, including the Worker-isomorphic ones: what enforces their portability is the import ban and the web-only TSConfig program, not the absence of ambient global types. The web UI passes false and scopes browser, worker, and Node globals to the layers that actually have them — handing that app Node globals everywhere would let a `process.env` read in browser code lint clean.
    */
   readonly nodeGlobals?: boolean;
 
   /**
    * Extra `no-restricted-imports` patterns, merged into the same rule the isomorphism guard writes.
    *
-   * They have to be merged rather than declared in the calling package, because flat config REPLACES a same-key rule instead of merging it: a package that declared its own `no-restricted-imports` over the same files would silently drop the Node-builtin ban and keep passing. markdown-codec is the case this exists for -- it bans every third-party markdown library over exactly the files the isomorphism guard covers.
+   * They have to be merged rather than declared in the calling package, because flat config REPLACES a same-key rule instead of merging it: a package that declared its own `no-restricted-imports` over the same files would silently drop the Node-builtin ban and keep passing. markdown-codec is the case this exists for — it bans every third-party markdown library over exactly the files the isomorphism guard covers.
    */
   readonly additionalRestrictedImportPatterns?: readonly RestrictedImportPattern[];
 
   /**
    * Runtime `src/` paths that are exempt from the isomorphism guard, on top of the test files and test-support it always exempts.
    *
-   * For an executed entry point rather than an importable one: `documents.js`'s `src/bin.ts` is a launcher that spawns `npx`/`pnpm`/`yarn`/`bunx`, so it is Node-only by definition. It is never imported into the isomorphic surface, so exempting it leaves that surface pure -- and the package's own `tsconfig.node.json` already routes it to the Node program, so the two agree.
+   * For an executed entry point rather than an importable one: `documents.js`'s `src/bin.ts` is a launcher that spawns `npx`/`pnpm`/`yarn`/`bunx`, so it is Node-only by definition. It is never imported into the isomorphic surface, so exempting it leaves that surface pure — and the package's own `tsconfig.node.json` already routes it to the Node program, so the two agree.
    */
   readonly isomorphicExemptions?: readonly string[];
 
   /**
    * Whether `no-non-null-assertion` is enforced. Defaults to `'error'`.
    *
-   * `strictTypeChecked` turns this on, and it is the single largest source of violations in this workspace by an order of magnitude -- 2,395 sites, of which `documents.js` and `pdf-codec` hold 91% between them. Clearing one is not mechanical: a `!` marks a place where the code asserts a value is present, and removing it honestly means deciding what the absence means and handling it at the right boundary, not substituting a sentinel.
+   * `strictTypeChecked` turns this on, and it is the single largest source of violations in this workspace by an order of magnitude — 2,395 sites, of which `documents.js` and `pdf-codec` hold 91% between them. Clearing one is not mechanical: a `!` marks a place where the code asserts a value is present, and removing it honestly means deciding what the absence means and handling it at the right boundary, not substituting a sentinel.
    *
    * So a package carrying more than can be worked through carefully sets `'off'` here, in its own config where the debt is visible rather than buried in this file, and is tracked for burn-down. Every other package enforces it.
    */
@@ -210,23 +210,23 @@ export interface PackageLintOptions {
   /**
    * Whether `exadev/prefer-readonly-array-param` and `exadev/prefer-readonly-object-param` are enforced. Defaults to `'error'`.
    *
-   * Both rules mark every array/tuple or "flat" object parameter readonly unconditionally, by design (their own doc comments state this explicitly), with no check for whether the function body goes on to mutate that parameter in place -- a `.push`/`.pop`/`.splice` on an array parameter, or a property assignment on an object parameter, both compile cleanly today and both stop compiling the moment the parameter's own type gains a `readonly`. That is deliberate upstream: the rules exist to turn a silent in-place mutation of a caller's data into a visible, forced compile error at the one spot the mutation happens, not to detect and skip it.
+   * Both rules mark every array/tuple or "flat" object parameter readonly unconditionally, by design (their own doc comments state this explicitly), with no check for whether the function body goes on to mutate that parameter in place — a `.push`/`.pop`/`.splice` on an array parameter, or a property assignment on an object parameter, both compile cleanly today and both stop compiling the moment the parameter's own type gains a `readonly`. That is deliberate upstream: the rules exist to turn a silent in-place mutation of a caller's data into a visible, forced compile error at the one spot the mutation happens, not to detect and skip it.
    *
-   * That trade only pays off where the flagged parameter is genuinely foreign to the function -- data a caller handed in that the function has no business mutating. It actively breaks a different, equally common shape this workspace's own binary/format-codec packages lean on constantly: a local accumulator (a bounds tracker, a glyph/operand stack, a byte cursor) built and owned entirely by the function that receives it, where in-place mutation via a parameter *is* the algorithm, not a bug the type system should be catching. Running the rules' own autofix against this workspace surfaced the difference empirically rather than theoretically: 443 real compile errors across 18 of this workspace's 22 published packages (`TS2540`/`TS2542`/`TS2551`/`TS2339` from array/object mutation methods and property assignments no longer existing on the now-readonly type, `TS4104`/`TS2345`/`TS2322` from the resulting readonly value then failing to satisfy a mutable field or parameter elsewhere) -- not a handful of stray exceptions, but the majority shape of how this workspace's lower-level packages are actually written.
+   * That trade only pays off where the flagged parameter is genuinely foreign to the function — data a caller handed in that the function has no business mutating. It actively breaks a different, equally common shape this workspace's own binary/format-codec packages lean on constantly: a local accumulator (a bounds tracker, a glyph/operand stack, a byte cursor) built and owned entirely by the function that receives it, where in-place mutation via a parameter *is* the algorithm, not a bug the type system should be catching. Running the rules' own autofix against this workspace surfaced the difference empirically rather than theoretically: 443 real compile errors across 18 of this workspace's 22 published packages (`TS2540`/`TS2542`/`TS2551`/`TS2339` from array/object mutation methods and property assignments no longer existing on the now-readonly type, `TS4104`/`TS2345`/`TS2322` from the resulting readonly value then failing to satisfy a mutable field or parameter elsewhere) — not a handful of stray exceptions, but the majority shape of how this workspace's lower-level packages are actually written.
    *
-   * Telling the two shapes apart correctly, parameter by parameter, is a real design review across roughly eighteen packages -- deciding for each flagged site whether the array/object is foreign data to leave exactly as-is, or owned local state to thread through as a small wrapper object instead (object parameters are outside both rules' own scope, by their own design comments, which is what makes that the correct shape for owned mutable state rather than a workaround) -- not something a bump's own autofix pass can safely decide by itself. So a package carrying this debt sets `'off'` here, in its own config where it is visible, and is tracked for burn-down (ExaDev/documents.js#1275); every package clean of it enforces both rules.
+   * Telling the two shapes apart correctly, parameter by parameter, is a real design review across roughly eighteen packages — deciding for each flagged site whether the array/object is foreign data to leave exactly as-is, or owned local state to thread through as a small wrapper object instead (object parameters are outside both rules' own scope, by their own design comments, which is what makes that the correct shape for owned mutable state rather than a workaround) — not something a bump's own autofix pass can safely decide by itself. So a package carrying this debt sets `'off'` here, in its own config where it is visible, and is tracked for burn-down (ExaDev/documents.js#1275); every package clean of it enforces both rules.
    */
   readonly preferReadonlyParams?: "error" | "off";
 
   /**
-   * Whether `@typescript-eslint/no-magic-numbers` is enforced. Defaults to `'off'` -- the one rule in this file whose default itself is `'off'` rather than `'error'`, because unlike every other deviation here it is not a per-package debt but a workspace-wide one: measured directly against a current build, 30,748 sites across 864 files in every one of this workspace's 22 published packages, from the two smallest (document-operations: 8, excel-number-format: 69) to the largest (documents.js: 4,247, pdf-codec: 6,040). The rule's own configuration (`ignore: [-1, 0, 1, 2]`, `ignoreArrayIndexes`, `ignoreEnums`, `ignoreReadonlyClassProperties`, `ignoreDefaultValues`) already exempts every case that can be exempted mechanically; every one of the 30,748 remaining sites is a literal that needs an actual name someone chose because they understood what it means -- a format code, a byte offset, a sector size, a boundary value in a test fixture -- which is exactly why it cannot be satisfied by an automated pass the way the two rules above sometimes can be. A plain top-level `const NAME = value` fully satisfies the rule (confirmed directly: only a literal used inline, e.g. inside an array literal or a call argument, is ever flagged), so the fix is mechanical *type*-wise but not mechanical *content*-wise -- there is no way to give 30,748 numbers correct names without reading what each one means.
+   * Whether `@typescript-eslint/no-magic-numbers` is enforced. Defaults to `'off'` — the one rule in this file whose default itself is `'off'` rather than `'error'`, because unlike every other deviation here it is not a per-package debt but a workspace-wide one: measured directly against a current build, 30,748 sites across 864 files in every one of this workspace's 22 published packages, from the two smallest (document-operations: 8, excel-number-format: 69) to the largest (documents.js: 4,247, pdf-codec: 6,040). The rule's own configuration (`ignore: [-1, 0, 1, 2]`, `ignoreArrayIndexes`, `ignoreEnums`, `ignoreReadonlyClassProperties`, `ignoreDefaultValues`) already exempts every case that can be exempted mechanically; every one of the 30,748 remaining sites is a literal that needs an actual name someone chose because they understood what it means — a format code, a byte offset, a sector size, a boundary value in a test fixture — which is exactly why it cannot be satisfied by an automated pass the way the two rules above sometimes can be. A plain top-level `const NAME = value` fully satisfies the rule (confirmed directly: only a literal used inline, e.g. inside an array literal or a call argument, is ever flagged), so the fix is mechanical *type*-wise but not mechanical *content*-wise — there is no way to give 30,748 numbers correct names without reading what each one means.
    *
    * Enable it per-package once that package's own literals have real names (ExaDev/documents.js#1275 tracks the burn-down, alongside the two rules above).
    */
   readonly magicNumbers?: "error" | "off";
 
   /**
-   * Whether ESLint core's `max-lines` (800, real lines of code, blank lines and comments both excluded from the count) is enforced. Defaults to `'off'`, for the same reason `magicNumbers` above defaults off rather than per-package: measured directly, 93 files across every packaged codec and the conversion engine itself exceed it today, from a handful of files in the smaller packages up to several files over 2,000 real lines each. Splitting a file properly -- extracting the genuinely separate concerns a file this size usually holds, rather than cutting it at an arbitrary line count -- is a real per-file design decision (which exports move where, which tests follow which module, whether a extracted piece needs its own barrel entry), not something an automated pass can decide safely at this scale either.
+   * Whether ESLint core's `max-lines` (800, real lines of code, blank lines and comments both excluded from the count) is enforced. Defaults to `'off'`, for the same reason `magicNumbers` above defaults off rather than per-package: measured directly, 93 files across every packaged codec and the conversion engine itself exceed it today, from a handful of files in the smaller packages up to several files over 2,000 real lines each. Splitting a file properly — extracting the genuinely separate concerns a file this size usually holds, rather than cutting it at an arbitrary line count — is a real per-file design decision (which exports move where, which tests follow which module, whether a extracted piece needs its own barrel entry), not something an automated pass can decide safely at this scale either.
    *
    * Enable it per-package once that package's own oversized files are actually split (ExaDev/documents.js#1275 tracks the burn-down, alongside the two rules above).
    */
@@ -235,9 +235,9 @@ export interface PackageLintOptions {
   /**
    * Rule names to disable outright for this package, defaulting to none.
    *
-   * Exists for one reason: \@exadev/eslint-config was bumped straight from 2.1.2 to 2.12.1 (ExaDev/documents.js#1275), a roughly ten-minor-version gap this workspace had never linted against incrementally, and it enabled well over a dozen rules across that gap this workspace has real, pre-existing violations of -- 781 sites across every one of the 22 published packages at the time of the bump, measured directly: `@typescript-eslint/strict-void-return` (239), `method-signature-style` (133), `consistent-return` (119), `no-use-before-define` (60), `promise-function-async` (55), `no-shadow` (45), `tsdoc/syntax` (39), `strict-boolean-expressions` (38), `switch-exhaustiveness-check` (31), `consistent-type-exports` (5), `prefer-readonly` (4), `exadev/no-object-assign` (3), `exadev/no-mutable-union-array-param` (3), `require-array-sort-compare` (3), `jsdoc/escape-inline-tags` (2), `jsdoc/no-multi-asterisks` (1), `exadev/prefer-numeric-sort-compare` (1). None of these is the kind of debt `nonNullAssertion`/`preferReadonlyParams`/`magicNumbers`/`maxLines` above are: each is its own rule, with its own real fix at each site, and grouping them behind named booleans the way those four get would mean growing this interface by a dozen-plus fields for a one-time migration rather than a standing per-package axis of variation. A plain rule-name list says the same thing without that growth, and is exactly as visible: every package that needs one lists its own rule names here, in its own config, same as every other exception in this file.
+   * Exists for one reason: \@exadev/eslint-config was bumped straight from 2.1.2 to 2.12.1 (ExaDev/documents.js#1275), a roughly ten-minor-version gap this workspace had never linted against incrementally, and it enabled well over a dozen rules across that gap this workspace has real, pre-existing violations of — 781 sites across every one of the 22 published packages at the time of the bump, measured directly: `@typescript-eslint/strict-void-return` (239), `method-signature-style` (133), `consistent-return` (119), `no-use-before-define` (60), `promise-function-async` (55), `no-shadow` (45), `tsdoc/syntax` (39), `strict-boolean-expressions` (38), `switch-exhaustiveness-check` (31), `consistent-type-exports` (5), `prefer-readonly` (4), `exadev/no-object-assign` (3), `exadev/no-mutable-union-array-param` (3), `require-array-sort-compare` (3), `jsdoc/escape-inline-tags` (2), `jsdoc/no-multi-asterisks` (1), `exadev/prefer-numeric-sort-compare` (1). None of these is the kind of debt `nonNullAssertion`/`preferReadonlyParams`/`magicNumbers`/`maxLines` above are: each is its own rule, with its own real fix at each site, and grouping them behind named booleans the way those four get would mean growing this interface by a dozen-plus fields for a one-time migration rather than a standing per-package axis of variation. A plain rule-name list says the same thing without that growth, and is exactly as visible: every package that needs one lists its own rule names here, in its own config, same as every other exception in this file.
    *
-   * Not a general-purpose escape hatch -- add a name here only as part of documenting a specific measured violation count from this migration (ExaDev/documents.js#1275), the same evidentiary bar every other exception in this file meets, never to silence an ordinary new finding.
+   * Not a general-purpose escape hatch — add a name here only as part of documenting a specific measured violation count from this migration (ExaDev/documents.js#1275), the same evidentiary bar every other exception in this file meets, never to silence an ordinary new finding.
    */
   readonly newRuleDebt?: readonly string[];
 }
@@ -288,7 +288,7 @@ export function packageLintConfig(
   return tseslint.config(
     { ignores: [...alwaysIgnored, ...additionalIgnores] },
     {
-      // Every TypeScript rule below is scoped to TypeScript files. Without this the parser project and the JS/TS rule sets apply to the JSON, Markdown, and YAML files too -- the TS parser cannot read them, and a core rule like no-irregular-whitespace crashes outright on a JSON AST rather than reporting anything.
+      // Every TypeScript rule below is scoped to TypeScript files. Without this the parser project and the JS/TS rule sets apply to the JSON, Markdown, and YAML files too — the TS parser cannot read them, and a core rule like no-irregular-whitespace crashes outright on a JSON AST rather than reporting anything.
       files: typeScriptFiles,
       languageOptions: {
         parserOptions: { project: [...projects], tsconfigRootDir },
@@ -296,9 +296,9 @@ export function packageLintConfig(
       },
       extends: [
         js.configs.recommended,
-        // Bundles typescript-eslint's recommendedTypeChecked and stylisticTypeChecked (recommendedTypeChecked already subsumes plain recommended outright), the exadev/* rules, linterOptions.noInlineConfig, consistent-type-assertions banning every type assertion, and ban-ts-comment banning @ts-expect-error alongside the preset's @ts-ignore/@ts-nocheck bans -- the last two relaxed automatically in test files. See @exadev/eslint-config's own README for the full set.
+        // Bundles typescript-eslint's recommendedTypeChecked and stylisticTypeChecked (recommendedTypeChecked already subsumes plain recommended outright), the exadev/* rules, linterOptions.noInlineConfig, consistent-type-assertions banning every type assertion, and ban-ts-comment banning @ts-expect-error alongside the preset's @ts-ignore/@ts-nocheck bans — the last two relaxed automatically in test files. See @exadev/eslint-config's own README for the full set.
         ...exadevRecommendedTypeChecked,
-        // The strict tier on top of the preset's recommended one. What it actually adds here, measured across all thirteen packages against a current build: 3,298 violations, of which no-non-null-assertion is 2,395 and restrict-template-expressions 689 -- leaving 214 genuine findings the two deviations below do not touch. Those 214 are real (confusing void expressions, conditions that are always truthy, deprecated API use, misused spreads) and are fixed rather than configured away.
+        // The strict tier on top of the preset's recommended one. What it actually adds here, measured across all thirteen packages against a current build: 3,298 violations, of which no-non-null-assertion is 2,395 and restrict-template-expressions 689 — leaving 214 genuine findings the two deviations below do not touch. Those 214 are real (confusing void expressions, conditions that are always truthy, deprecated API use, misused spreads) and are fixed rather than configured away.
         ...tseslint.configs.strictTypeChecked,
       ],
       rules: {
@@ -306,7 +306,7 @@ export function packageLintConfig(
           "error",
           { fixStyle: "inline-type-imports" },
         ],
-        // Deviation from strictTypeChecked, which sets every allow* to false. `allowNumber: true` accounts for all 689 reports the strict tier adds for this rule, and every one is a number interpolated into a message or an identifier -- page counts, byte offsets, sector indices, error strings naming a size. A number has one unambiguous string form, so interpolating it loses nothing and demanding an explicit String() around each would be noise.
+        // Deviation from strictTypeChecked, which sets every allow* to false. `allowNumber: true` accounts for all 689 reports the strict tier adds for this rule, and every one is a number interpolated into a message or an identifier — page counts, byte offsets, sector indices, error strings naming a size. A number has one unambiguous string form, so interpolating it loses nothing and demanding an explicit String() around each would be noise.
         //
         // `allowAny` deliberately stays false, which is the half of this rule that catches real defects: interpolating an `any` is how "[object Object]" and "undefined" reach a user-visible message.
         "@typescript-eslint/restrict-template-expressions": [
@@ -319,23 +319,23 @@ export function packageLintConfig(
         "@typescript-eslint/no-magic-numbers": magicNumbers,
         "max-lines": maxLines,
         ...Object.fromEntries(newRuleDebt.map((rule) => [rule, "off"])),
-        // Deviation from strictTypeChecked, which reports every string spread. Spreading a string is how you iterate it by code point -- `[...text]` splits on code points where `text.split('')` splits on UTF-16 code units and so tears every astral character in half. This workspace parses real-world documents full of them (emoji, CJK extensions, mathematical alphanumerics), and the sites reporting here are named `codePoints` precisely because that is what they are computing.
+        // Deviation from strictTypeChecked, which reports every string spread. Spreading a string is how you iterate it by code point — `[...text]` splits on code points where `text.split('')` splits on UTF-16 code units and so tears every astral character in half. This workspace parses real-world documents full of them (emoji, CJK extensions, mathematical alphanumerics), and the sites reporting here are named `codePoints` precisely because that is what they are computing.
         //
-        // Only `string` is allowed. Every other case the rule catches -- spreading a Map, a class instance, a Promise, an array into an object -- stays an error, and those are the ones that are actually bugs.
+        // Only `string` is allowed. Every other case the rule catches — spreading a Map, a class instance, a Promise, an array into an object — stays an error, and those are the ones that are actually bugs.
         "@typescript-eslint/no-misused-spread": [
           "error",
           { allow: ["string"] },
         ],
         // `only-allowed-literals` rather than strictTypeChecked's own `never`. The rule's default rejects `while (true)`, which this workspace uses for exactly the loops it is meant for: a Dijkstra main loop over a priority queue and two predecessor-chain walks, each terminating on an internal `break` whose condition cannot be lifted into the header without duplicating it. Rewriting them as `while (queue.length > 0)` would either change the semantics or need a second copy of the exit test.
         //
-        // Only literal `true` is exempted, so a condition that is constant because of a genuine type mistake -- an always-truthy object, a comparison the types already decide -- still reports.
+        // Only literal `true` is exempted, so a condition that is constant because of a genuine type mistake — an always-truthy object, a comparison the types already decide — still reports.
         "@typescript-eslint/no-unnecessary-condition": [
           "error",
           { allowConstantLoopConditions: "only-allowed-literals" },
         ],
         // Off. Every pair it reports is a live-view editor property where the getter returns `T | undefined` (the underlying XML attribute may be absent) and the setter takes `T` (you can only assign a real value). TypeScript has supported divergent accessor types since 4.3 precisely for this, and the asymmetry is the honest description of the API.
         //
-        // Making them agree would mean widening each setter to `T | undefined` and giving it a documented "clear the property" behaviour -- a genuine improvement, since there is currently no way to unset a font family or colour, but a feature addition to a published editor surface with its own tests to write. Worth doing on its own; not something to smuggle into a tooling change.
+        // Making them agree would mean widening each setter to `T | undefined` and giving it a documented "clear the property" behaviour — a genuine improvement, since there is currently no way to unset a font family or colour, but a feature addition to a published editor surface with its own tests to write. Worth doing on its own; not something to smuggle into a tooling change.
         "@typescript-eslint/related-getter-setter-pairs": "off",
         "exadev/barrel-policy":
           barrelPolicy === "off" ? "off" : ["error", { mode: barrelPolicy }],
@@ -351,7 +351,7 @@ export function packageLintConfig(
     {
       // A no-op arrow standing in for a callback prop a given test case never exercises is the ordinary way to write that, and flagging each one only pushes authors to pad it with a meaningless body. Scoped to tests: production code has no legitimate empty function body.
       //
-      // The CLI and the MCP server each carried this already, scoped to `**/*.test.ts` -- a glob that silently misses `.test.tsx`, so twelve such stand-ins in one Ink component test were reported as errors while the identical pattern in a `.ts` test was not. Stated once here, over both extensions.
+      // The CLI and the MCP server each carried this already, scoped to `**/*.test.ts` — a glob that silently misses `.test.tsx`, so twelve such stand-ins in one Ink component test were reported as errors while the identical pattern in a `.ts` test was not. Stated once here, over both extensions.
       files: ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"],
       rules: {
         "@typescript-eslint/no-empty-function": [
@@ -379,7 +379,7 @@ export function packageLintConfig(
           files: ["src/**/*.ts"],
           ignores: [...runtimeSrcExemptions],
           rules: {
-            // Each restriction is a separate option element after the severity, not wrapped in an inner array -- see the rule's own arrayOfGlobals schema. Only Buffer is banned; a typeof-process check stays legitimate, since the import ban above covers the real Node surface.
+            // Each restriction is a separate option element after the severity, not wrapped in an inner array — see the rule's own arrayOfGlobals schema. Only Buffer is banned; a typeof-process check stays legitimate, since the import ban above covers the real Node surface.
             "no-restricted-globals": [
               "error",
               { name: "Buffer", message: isomorphicBufferMessage },

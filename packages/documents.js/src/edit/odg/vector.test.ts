@@ -156,7 +156,7 @@ describe("OdgPathVector (draw:path)", () => {
     expect(vector.frame).toEqual(frame);
     expect(vector.fill).toEqual(RED);
     expect(vector.stroke).toEqual({ color: BLACK, widthPt: 1 });
-    // subpaths is re-derived from the actual written svg:viewBox/svg:d every call, through odf.js's own real parser -- this IS the round-trip proof, not merely echoing back a cached JS value.
+    // subpaths is re-derived from the actual written svg:viewBox/svg:d every call, through odf.js's own real parser — this IS the round-trip proof, not merely echoing back a cached JS value.
     expect(vector.subpaths).toEqual(CURVE_SUBPATHS);
   });
 
@@ -216,7 +216,7 @@ describe("vector rotation", () => {
     expect(vector.rotationDeg).toBeUndefined();
 
     vector.rotationDeg = 30;
-    // Read back through resolveOdfShapeGeometry (what OdgBoxVector.frame/rotationDeg both consult, and what odf.js's own readDrawRectVector uses), not through the raw attributes -- a rotated element carries draw:transform and no svg:x/svg:y at all.
+    // Read back through resolveOdfShapeGeometry (what OdgBoxVector.frame/rotationDeg both consult, and what odf.js's own readDrawRectVector uses), not through the raw attributes — a rotated element carries draw:transform and no svg:x/svg:y at all.
     expect(vector.rotationDeg).toBeCloseTo(30, 6);
     expect(vector.frame?.xPt).toBeCloseTo(frame.xPt, 6);
     expect(vector.frame?.yPt).toBeCloseTo(frame.yPt, 6);
@@ -281,7 +281,7 @@ describe("vector rotation", () => {
 
     vector.rotationDeg = 15;
     expect(vector.rotationDeg).toBeCloseTo(15, 6);
-    // subpaths re-derive from svg:viewBox + svg:d scaled against the resolved frame -- rotation lives on the frame, not in svg:d, so the local points are unchanged.
+    // subpaths re-derive from svg:viewBox + svg:d scaled against the resolved frame — rotation lives on the frame, not in svg:d, so the local points are unchanged.
     const [subpath] = vector.subpaths;
     expect(subpath?.start).toEqual({ xPt: 0, yPt: 0 });
     expect(subpath?.segments).toHaveLength(2);

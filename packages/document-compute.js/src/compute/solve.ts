@@ -8,7 +8,7 @@ import { evaluate } from "./evaluate";
 import { quantity } from "./quantity";
 import { NonConvergentSolveError, UnsupportedExpressionError } from "./errors";
 
-// Numeric solve-for over the same evaluator (ExaDev/documents.js#573's "root-finding over our own evaluator"): given every binding except one unknown symbol, and a target value the expression should equal, find the unknown's magnitude that makes it so. Deliberately root-finding, not rearrangement -- no algebra happens here, the expression is evaluated at trial points and driven toward targetValue by bisection or Newton's method. Symbolic rearrangement (isolating the unknown algebraically) is out of scope for this pass; see this package's README.
+// Numeric solve-for over the same evaluator (ExaDev/documents.js#573's "root-finding over our own evaluator"): given every binding except one unknown symbol, and a target value the expression should equal, find the unknown's magnitude that makes it so. Deliberately root-finding, not rearrangement — no algebra happens here, the expression is evaluated at trial points and driven toward targetValue by bisection or Newton's method. Symbolic rearrangement (isolating the unknown algebraically) is out of scope for this pass; see this package's README.
 export type SolveMethod = "bisection" | "newton";
 
 export interface SolveForOptions {
@@ -18,11 +18,11 @@ export interface SolveForOptions {
   tolerance?: number;
   /** Iteration budget before giving up with NonConvergentSolveError. Default 100. */
   maxIterations?: number;
-  /** Required for 'bisection': an [low, high] bracket whose residuals at the endpoints have opposite signs (the intermediate value theorem is bisection's entire correctness argument -- there is no bracket to fall back on if this does not hold, so a bad bracket throws rather than guessing one). */
+  /** Required for 'bisection': an [low, high] bracket whose residuals at the endpoints have opposite signs (the intermediate value theorem is bisection's entire correctness argument — there is no bracket to fall back on if this does not hold, so a bad bracket throws rather than guessing one). */
   bracket?: [number, number];
   /** Required for 'newton': the starting point the iteration refines from. */
   initialGuess?: number;
-  /** The dimension the unknown symbol is bound under at each trial point. Default {} (dimensionless) -- set this when the unknown is not dimensionless, e.g. { length: 1 } to solve for a length in SI-coherent metres. */
+  /** The dimension the unknown symbol is bound under at each trial point. Default {} (dimensionless) — set this when the unknown is not dimensionless, e.g. { length: 1 } to solve for a length in SI-coherent metres. */
   unknownDimension?: DimensionVector;
   /** Step size h for Newton's central-difference derivative estimate (see newton() below). Default 1e-6. */
   derivativeStep?: number;
@@ -112,7 +112,7 @@ function bisection(
     throw new NonConvergentSolveError(
       "bisection",
       0,
-      `residual at the bracket endpoints does not change sign (f(${low})=${fLow}, f(${high})=${fHigh0}) -- bisection needs a bracket straddling the root`,
+      `residual at the bracket endpoints does not change sign (f(${low})=${fLow}, f(${high})=${fHigh0}) — bisection needs a bracket straddling the root`,
     );
   }
 
@@ -122,7 +122,7 @@ function bisection(
     if (Math.abs(fMid) < tolerance) {
       return mid;
     }
-    // Which half of the bracket still straddles the root: the half whose two residuals disagree in sign. Compared as Math.sign values rather than as a pair of `> 0` booleans, because the boolean spelling has to decide which side an exact zero belongs to -- and both answers are defensible, so `> 0` and `>= 0` are two equally correct spellings of the same intent that only ever disagree on a residual the `Math.abs(fMid) < tolerance` return above has already claimed. Math.sign keeps zero as its own third value instead, which drops it out of the half being kept (a residual of exactly zero IS the root, so shrinking the bracket down onto it from the other side is the correct move) with no boundary comparison to spell either way.
+    // Which half of the bracket still straddles the root: the half whose two residuals disagree in sign. Compared as Math.sign values rather than as a pair of `> 0` booleans, because the boolean spelling has to decide which side an exact zero belongs to — and both answers are defensible, so `> 0` and `>= 0` are two equally correct spellings of the same intent that only ever disagree on a residual the `Math.abs(fMid) < tolerance` return above has already claimed. Math.sign keeps zero as its own third value instead, which drops it out of the half being kept (a residual of exactly zero IS the root, so shrinking the bracket down onto it from the other side is the correct move) with no boundary comparison to spell either way.
     if (Math.sign(fMid) === Math.sign(fLow)) {
       low = mid;
       fLow = fMid;
@@ -156,7 +156,7 @@ function newton(
     if (Math.abs(fx) < tolerance) {
       return x;
     }
-    // No symbolic derivative is available (out of scope for this pass -- see the README), so the derivative is estimated numerically. Central difference (f(x+h) - f(x-h)) / (2h) rather than a one-sided forward/backward difference because its truncation error is O(h^2) instead of O(h), which matters here since h is a fixed step rather than adaptively shrunk.
+    // No symbolic derivative is available (out of scope for this pass — see the README), so the derivative is estimated numerically. Central difference (f(x+h) - f(x-h)) / (2h) rather than a one-sided forward/backward difference because its truncation error is O(h^2) instead of O(h), which matters here since h is a fixed step rather than adaptively shrunk.
     const derivative = (f(x + h) - f(x - h)) / (2 * h);
     if (!Number.isFinite(derivative) || Math.abs(derivative) < 1e-14) {
       throw new NonConvergentSolveError(
@@ -165,7 +165,7 @@ function newton(
         `the numeric derivative vanished or diverged near x=${x}`,
       );
     }
-    // The step itself needs no separate non-finite guard: the check above is the one that catches divergence, and it catches it on the very next pass rather than this one. A non-finite x makes f(x) non-finite, which makes the central difference above non-finite (or NaN), which fails `Number.isFinite(derivative)` and throws -- so an iterate that runs away still terminates as a NonConvergentSolveError naming the point it ran away from, one iteration later, instead of silently spinning out the iteration budget. Guarding `x` here as well would only restate that, for an input the smooth grammar this package evaluates cannot actually produce.
+    // The step itself needs no separate non-finite guard: the check above is the one that catches divergence, and it catches it on the very next pass rather than this one. A non-finite x makes f(x) non-finite, which makes the central difference above non-finite (or NaN), which fails `Number.isFinite(derivative)` and throws — so an iterate that runs away still terminates as a NonConvergentSolveError naming the point it ran away from, one iteration later, instead of silently spinning out the iteration budget. Guarding `x` here as well would only restate that, for an input the smooth grammar this package evaluates cannot actually produce.
     x = x - fx / derivative;
   }
   throw new NonConvergentSolveError(

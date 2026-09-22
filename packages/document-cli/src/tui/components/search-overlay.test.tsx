@@ -71,7 +71,7 @@ describe("SearchOverlay", () => {
     await waitForFrame(lastFrame, (candidate) =>
       candidate.includes('query:"bud"'),
     );
-    // The overlay's own '/ ...' prompt line renders from its own local `query` state, entirely independent of the debug 'query:' line above (which reads dispatched state instead) -- so it would stay blank if the local setQuery call were ever dropped, even though the dispatched state (and the debug line) still updated. Isolate that line specifically, not just the frame as a whole, so this assertion cannot pass on the debug line's own text alone.
+    // The overlay's own '/ ...' prompt line renders from its own local `query` state, entirely independent of the debug 'query:' line above (which reads dispatched state instead) — so it would stay blank if the local setQuery call were ever dropped, even though the dispatched state (and the debug line) still updated. Isolate that line specifically, not just the frame as a whole, so this assertion cannot pass on the debug line's own text alone.
     const promptLine = lastFrame()
       ?.split("\n")
       .find((line) => line.includes("/"));

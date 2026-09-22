@@ -8,7 +8,7 @@ import {
   txt,
 } from "odf.js";
 
-// Never imported by src/index.ts and never reaches dist/. Mirrors src/test-support/odp.ts's own reasoning: hand-authored ODF XML assembled via odf.js's own el/txt fragment builders and serialized via odf.js's own encodePackage, never via this package's own createEmptyOdgPackage (src/edit/odg/scaffold.ts) or createOdg, so a bug in that scaffold/editor cannot hide behind a fixture built with the same code -- this stays true even now that src/edit/odg/ has a full live-view editor (OdgEditor/OdgPage/OdgBoxVector/OdgLineVector/OdgPathVector), the same reason src/test-support/odp.ts and src/test-support/pptx.ts hand-build their own XML too despite openOdp/openPptx/createOdp/createPptx existing. The curved path's own svg:d/svg:viewBox ("M0 4000h3000c1000 0 1000-4000-1000-4000z" / "0 0 3657 4000") is not a guess -- it is odf.js's own typed/shared/path.ts ground-truth-verified real LibreOffice 26.2 output (see that file's own top-of-file note), reused here verbatim so this fixture exercises writePath against a genuine curve shape, not an invented one.
+// Never imported by src/index.ts and never reaches dist/. Mirrors src/test-support/odp.ts's own reasoning: hand-authored ODF XML assembled via odf.js's own el/txt fragment builders and serialized via odf.js's own encodePackage, never via this package's own createEmptyOdgPackage (src/edit/odg/scaffold.ts) or createOdg, so a bug in that scaffold/editor cannot hide behind a fixture built with the same code — this stays true even now that src/edit/odg/ has a full live-view editor (OdgEditor/OdgPage/OdgBoxVector/OdgLineVector/OdgPathVector), the same reason src/test-support/odp.ts and src/test-support/pptx.ts hand-build their own XML too despite openOdp/openPptx/createOdp/createPptx existing. The curved path's own svg:d/svg:viewBox ("M0 4000h3000c1000 0 1000-4000-1000-4000z" / "0 0 3657 4000") is not a guess — it is odf.js's own typed/shared/path.ts ground-truth-verified real LibreOffice 26.2 output (see that file's own top-of-file note), reused here verbatim so this fixture exercises writePath against a genuine curve shape, not an invented one.
 
 function enc(s: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(s);
@@ -47,7 +47,7 @@ function graphicStyle(
   ]);
 }
 
-// Page 1: two overlapping rectangles (BACK painted first, FRONT painted second -- document order is z-order, matching odf.js's own established real-LibreOffice-output convention, see typed/draw/shapes.ts's own paintOrderKey note), an ellipse, a stroked line, the ground-truth-verified curved path, and a text frame overlapping the curve -- exercising every LayoutItem kind convertDrawingToLayout emits (rect/ellipse/line/path via vectors, text via a ContentShape) on one page, plus the vectors-paint-before-shapes convention.
+// Page 1: two overlapping rectangles (BACK painted first, FRONT painted second — document order is z-order, matching odf.js's own established real-LibreOffice-output convention, see typed/draw/shapes.ts's own paintOrderKey note), an ellipse, a stroked line, the ground-truth-verified curved path, and a text frame overlapping the curve — exercising every LayoutItem kind convertDrawingToLayout emits (rect/ellipse/line/path via vectors, text via a ContentShape) on one page, plus the vectors-paint-before-shapes convention.
 function buildFixturePackage(): Package {
   const rectBack = el(
     "draw:rect",
@@ -200,7 +200,7 @@ function buildFixturePackage(): Package {
   };
 }
 
-// A minimal but structurally authentic odg package (mimetype part first and stored, a real office:document-content with two overlapping rects, an ellipse, a line, a genuinely curved path, and a text frame) -- enough to round-trip through decodePackage and readOdgContent without needing a real LibreOffice-exported binary.
+// A minimal but structurally authentic odg package (mimetype part first and stored, a real office:document-content with two overlapping rects, an ellipse, a line, a genuinely curved path, and a text frame) — enough to round-trip through decodePackage and readOdgContent without needing a real LibreOffice-exported binary.
 export function minimalOdgBytes(): Uint8Array<ArrayBuffer> {
   return encodePackage(buildFixturePackage());
 }

@@ -36,14 +36,14 @@ import {
 } from "./defined-names";
 import { writePrintNameRecords, type PrintNamePlanEntry } from "./print-names";
 
-// The workbook globals substream ([MS-XLS] 2.1.7.20.3), write side: everything belonging to the workbook rather than to one sheet -- the font, format, and cell-style/cell-format XF tables every cell's own formatting resolves through, the shared string table, and the BoundSheet8 entry naming each sheet's own substream. Grouped and ordered to satisfy [MS-XLS] 2.1.7.20.3's own FORMATTING production (Font*, Format*, XFS, STYLES) ahead of the BoundSheet8 entries and the closing EOF -- see this package's README for exactly which globals-substream records this writer emits and which it deliberately omits (Window1, CodePage, the interface/calc-state record family, and so on: real content, not UI or interoperability bookkeeping).
+// The workbook globals substream ([MS-XLS] 2.1.7.20.3), write side: everything belonging to the workbook rather than to one sheet — the font, format, and cell-style/cell-format XF tables every cell's own formatting resolves through, the shared string table, and the BoundSheet8 entry naming each sheet's own substream. Grouped and ordered to satisfy [MS-XLS] 2.1.7.20.3's own FORMATTING production (Font*, Format*, XFS, STYLES) ahead of the BoundSheet8 entries and the closing EOF — see this package's README for exactly which globals-substream records this writer emits and which it deliberately omits (Window1, CodePage, the interface/calc-state record family, and so on: real content, not UI or interoperability bookkeeping).
 //
-// The font table always opens with the Normal font (biff/font.ts's NORMAL_FONT_FIELDS) at index 0, and grows one entry per distinct cell font the workbook's cells actually state -- the write-side mirror of the reader's own diff against entry 0, so a cell carrying no font of its own references index 0 exactly as a read-back cell with no font field does.
+// The font table always opens with the Normal font (biff/font.ts's NORMAL_FONT_FIELDS) at index 0, and grows one entry per distinct cell font the workbook's cells actually state — the write-side mirror of the reader's own diff against entry 0, so a cell carrying no font of its own references index 0 exactly as a read-back cell with no font field does.
 
 const GENERAL_FORMAT_ID = 0;
 const NORMAL_FONT_INDEX = 0;
 
-/** [MS-XLS] "BuiltInStyle" istyBuiltIn values (ECMA-376 Part 1 18.8.7's cellStyle builtinId table): 0 Normal, 1 RowLevel, 2 ColLevel -- the only three this writer emits, since it never groups rows/columns into an outline. */
+/** [MS-XLS] "BuiltInStyle" istyBuiltIn values (ECMA-376 Part 1 18.8.7's cellStyle builtinId table): 0 Normal, 1 RowLevel, 2 ColLevel — the only three this writer emits, since it never groups rows/columns into an outline. */
 const BUILTIN_STYLE_NORMAL = 0x00;
 const BUILTIN_STYLE_ROW_LEVEL = 0x01;
 const BUILTIN_STYLE_COL_LEVEL = 0x02;
@@ -70,10 +70,10 @@ const BUILTIN_STYLES: readonly BuiltinStyle[] = [
   })),
 ];
 
-/** [MS-XLS] 2.1.7.20.3's own XFS production requires at least sixteen XF records before any cell can reference one: BUILTIN_STYLES.length built-in cell styles, then at least one cell XF -- the "General, no declared format" one every workbook needs unconditionally, written immediately after them. Derived from BUILTIN_STYLES's own length rather than restated as a literal, so the two can never drift apart. */
+/** [MS-XLS] 2.1.7.20.3's own XFS production requires at least sixteen XF records before any cell can reference one: BUILTIN_STYLES.length built-in cell styles, then at least one cell XF — the "General, no declared format" one every workbook needs unconditionally, written immediately after them. Derived from BUILTIN_STYLES's own length rather than restated as a literal, so the two can never drift apart. */
 export const GENERAL_CELL_XF_INDEX = BUILTIN_STYLES.length;
 
-/** One cell XF beyond the implicit General one at GENERAL_CELL_XF_INDEX: the number-format identifier it displays through, the font-table index its cell's own font resolves to (0, the Normal font, for a cell stating none), the cell's own horizontal/vertical alignment (general/bottom, this writer's own defaults, when omitted), and -- when the cell it serves carries a background or borders -- the fill/border fields its CellXF payload packs. Undefined decoration writes the same undecorated defaults this writer always wrote before decoration existed. */
+/** One cell XF beyond the implicit General one at GENERAL_CELL_XF_INDEX: the number-format identifier it displays through, the font-table index its cell's own font resolves to (0, the Normal font, for a cell stating none), the cell's own horizontal/vertical alignment (general/bottom, this writer's own defaults, when omitted), and — when the cell it serves carries a background or borders — the fill/border fields its CellXF payload packs. Undefined decoration writes the same undecorated defaults this writer always wrote before decoration existed. */
 export interface CellXfPlanEntry {
   readonly formatId: number;
   readonly fontIndex: number;
@@ -84,36 +84,36 @@ export interface CellXfPlanEntry {
 
 export interface WorkbookGlobalsPlan {
   readonly sheetNames: readonly string[];
-  /** The workbook's font table, in the order its Font records are written: entry 0 is always the Normal font (a cell stating no font of its own references it), and every later entry is one distinct cell font the workbook's cells actually state -- write.ts's own font-interning pass assigns those. */
+  /** The workbook's font table, in the order its Font records are written: entry 0 is always the Normal font (a cell stating no font of its own references it), and every later entry is one distinct cell font the workbook's cells actually state — write.ts's own font-interning pass assigns those. */
   readonly fonts: readonly XfFontFields[];
-  /** Custom number-format codes needing their own Format record, each with the identifier already assigned to it (always >= 164, [MS-XLS] 2.4.126's own custom-identifier floor). A code equal to one of the built-in table's own strings needs no Format record here -- number-format.ts's BUILTIN_NUMBER_FORMATS already covers ids 0-49 for both this package's reader and any other. */
+  /** Custom number-format codes needing their own Format record, each with the identifier already assigned to it (always >= 164, [MS-XLS] 2.4.126's own custom-identifier floor). A code equal to one of the built-in table's own strings needs no Format record here — number-format.ts's BUILTIN_NUMBER_FORMATS already covers ids 0-49 for both this package's reader and any other. */
   readonly customFormats: readonly {
     readonly id: number;
     readonly code: string;
   }[];
   /** Every cell XF beyond the implicit General one at GENERAL_CELL_XF_INDEX, in the order their XF records are written: index GENERAL_CELL_XF_INDEX + 1 + i is entry cellXfEntries[i]. write.ts's own cell-format interning pass assigns one entry to every distinct (number format, decoration) combination the workbook's cells actually use. */
   readonly cellXfEntries: readonly CellXfPlanEntry[];
-  /** The shared string table, in SST order -- a LabelSst cell's own isst indexes into this array. */
+  /** The shared string table, in SST order — a LabelSst cell's own isst indexes into this array. */
   readonly sharedStrings: readonly string[];
   /** SST's own cstTotal: the total number of string-cell references across the whole workbook, not just the unique count. Not read by this package's own reader (which discards the field), but a real conformant value rather than a placeholder. */
   readonly sharedStringTotalCount: number;
-  /** The workbook's own custom colour table (56 entries, icv 8 first), when write.ts's own palette-interning pass decided the workbook needs one -- undefined when every decoration colour the workbook's cells use already matches the fixed default table, in which case no Palette record is written at all and those colours resolve through the default table instead ([MS-XLS] "Icv"'s own documented fallback). */
+  /** The workbook's own custom colour table (56 entries, icv 8 first), when write.ts's own palette-interning pass decided the workbook needs one — undefined when every decoration colour the workbook's cells use already matches the fixed default table, in which case no Palette record is written at all and those colours resolve through the default table instead ([MS-XLS] "Icv"'s own documented fallback). */
   readonly paletteColors?: readonly Color[];
-  /** The built-in Print_Area/Print_Titles defined names the workbook's sheets declare, one Lbl record each. Empty when no sheet declares a print range or a repeated header band -- see the SupBook/ExternSheet note below for what that and `definedNames` both empty means. */
+  /** The built-in Print_Area/Print_Titles defined names the workbook's sheets declare, one Lbl record each. Empty when no sheet declares a print range or a repeated header band — see the SupBook/ExternSheet note below for what that and `definedNames` both empty means. */
   readonly printNames: readonly PrintNamePlanEntry[];
   /** The document-level defined names the workbook declares, one Lbl record each, from workbook/defined-names.ts's own compile of the document's names array. */
   readonly definedNames: readonly DefinedNamePlanEntry[];
-  /** The workbook-wide Escher drawing group ([MS-ODRAW] OfficeArtDggContainer, drawing/escher-writer.ts's own writeDrawingGroupBytes) -- the FDGGBlock plus the Blip Store every sheet's picture shapes share -- or undefined when no sheet in the workbook carries an image or embedded object, in which case no MsoDrawingGroup record is written at all. */
+  /** The workbook-wide Escher drawing group ([MS-ODRAW] OfficeArtDggContainer, drawing/escher-writer.ts's own writeDrawingGroupBytes) — the FDGGBlock plus the Blip Store every sheet's picture shapes share — or undefined when no sheet in the workbook carries an image or embedded object, in which case no MsoDrawingGroup record is written at all. */
   readonly drawingGroupBytes?: Uint8Array<ArrayBuffer>;
 }
 
 export interface WorkbookGlobalsBuild {
   readonly bytes: Uint8Array<ArrayBuffer>;
-  /** Byte offset, within `bytes`, of each sheet's own BoundSheet8.lbPlyPos field ([MS-XLS] 2.4.28) -- a 4-byte little-endian integer the caller patches once every sheet substream's own length in the final workbook stream is known. In `plan.sheetNames` order. */
+  /** Byte offset, within `bytes`, of each sheet's own BoundSheet8.lbPlyPos field ([MS-XLS] 2.4.28) — a 4-byte little-endian integer the caller patches once every sheet substream's own length in the final workbook stream is known. In `plan.sheetNames` order. */
   readonly lbPlyPosOffsets: readonly number[];
 }
 
-/** BoundSheet8 ([MS-XLS] 2.4.28) with lbPlyPos left at 0: a placeholder the caller patches in place, since the real value -- the byte offset of this sheet's own BOF within the finished workbook stream -- is only known once every substream's length has been measured. */
+/** BoundSheet8 ([MS-XLS] 2.4.28) with lbPlyPos left at 0: a placeholder the caller patches in place, since the real value — the byte offset of this sheet's own BOF within the finished workbook stream — is only known once every substream's length has been measured. */
 function writeBoundSheet8Placeholder(name: string): Uint8Array<ArrayBuffer> {
   const hidden = 0x00; // visible: ContentSheet carries no hidden field for this writer to honour
   const sheetType = 0x00; // worksheet
@@ -126,10 +126,10 @@ function writeBoundSheet8Placeholder(name: string): Uint8Array<ArrayBuffer> {
   return writeRecord(RECORD_BOUNDSHEET8, data);
 }
 
-/** [MS-XLS] 2.4.271's own cch table: the value a self-referencing SupBook -- this workbook itself, rather than another workbook, a DDE/OLE data source, or an add-in -- carries in place of a virtual path. The one kind of supporting link this package writes, and the one kind workbook/globals.ts's own reader resolves a 3D reference through. */
+/** [MS-XLS] 2.4.271's own cch table: the value a self-referencing SupBook — this workbook itself, rather than another workbook, a DDE/OLE data source, or an add-in — carries in place of a virtual path. The one kind of supporting link this package writes, and the one kind workbook/globals.ts's own reader resolves a 3D reference through. */
 const SUPBOOK_SELF_REFERENCING_CCH = 0x0401;
 
-/** SupBook ([MS-XLS] 2.4.271), self-referencing: a two-byte sheet count then that cch sentinel, and nothing else -- the virtPath/rgst payload a real external link would carry has no meaning for a link that names this same workbook. */
+/** SupBook ([MS-XLS] 2.4.271), self-referencing: a two-byte sheet count then that cch sentinel, and nothing else — the virtPath/rgst payload a real external link would carry has no meaning for a link that names this same workbook. */
 function writeSupBookRecord(sheetCount: number): Uint8Array<ArrayBuffer> {
   return writeRecord(
     RECORD_SUPBOOK,
@@ -141,7 +141,7 @@ function writeSupBookRecord(sheetCount: number): Uint8Array<ArrayBuffer> {
 }
 
 /**
- * ExternSheet ([MS-XLS] 2.4.106): a two-byte cXTI then that many XTI structures ([MS-XLS] 2.5.344), each an iSupBook and a signed itabFirst/itabLast sheet-scope pair -- the write-side mirror of workbook/globals.ts's own readSheetRanges.
+ * ExternSheet ([MS-XLS] 2.4.106): a two-byte cXTI then that many XTI structures ([MS-XLS] 2.5.344), each an iSupBook and a signed itabFirst/itabLast sheet-scope pair — the write-side mirror of workbook/globals.ts's own readSheetRanges.
  *
  * One XTI per sheet, each scoped to that one sheet and pointing at the single self-referencing SupBook above, so a print name's own PtgArea3d can name its sheet by using that sheet's index as its ixti. The 3D reference machinery exists here purely because [MS-XLS] gives a defined name no other way to say which sheet its range is on.
  */
@@ -153,7 +153,7 @@ function writeExternSheetRecord(sheetCount: number): Uint8Array<ArrayBuffer> {
   return writeRecord(RECORD_EXTERNSHEET, builder.build());
 }
 
-/** SST ([MS-XLS] 2.4.265): a total reference count, a unique-string count, then that many XLUnicodeRichExtendedStrings, packed with no offsets -- the write-side mirror of workbook/globals.ts's own readSharedStrings. */
+/** SST ([MS-XLS] 2.4.265): a total reference count, a unique-string count, then that many XLUnicodeRichExtendedStrings, packed with no offsets — the write-side mirror of workbook/globals.ts's own readSharedStrings. */
 function writeSstRecord(
   strings: readonly string[],
   totalCount: number,
@@ -221,12 +221,12 @@ export function buildWorkbookGlobals(
     );
   });
 
-  // [MS-XLS] 2.1.7.20.3's own FORMATTING production places Palette immediately after STYLES (Font* Format* XFS STYLES [TABLESTYLES] [Palette] [ClrtClient]) -- written only when write.ts's own palette-interning pass decided the workbook genuinely needs a custom colour table.
+  // [MS-XLS] 2.1.7.20.3's own FORMATTING production places Palette immediately after STYLES (Font* Format* XFS STYLES [TABLESTYLES] [Palette] [ClrtClient]) — written only when write.ts's own palette-interning pass decided the workbook genuinely needs a custom colour table.
   if (plan.paletteColors !== undefined) {
     push(writePaletteRecord(plan.paletteColors));
   }
 
-  // [MS-XLS] 2.1.7.20.3's own WORKBOOKCONTENT production orders BUNDLESHEET (the BoundSheet8 entries) ahead of SHAREDSTRINGS (the SST); this writer follows that order even though its own reader -- and Excel's -- accepts either.
+  // [MS-XLS] 2.1.7.20.3's own WORKBOOKCONTENT production orders BUNDLESHEET (the BoundSheet8 entries) ahead of SHAREDSTRINGS (the SST); this writer follows that order even though its own reader — and Excel's — accepts either.
   const lbPlyPosOffsets: number[] = [];
   for (const name of plan.sheetNames) {
     const recordStart = offset;
@@ -235,7 +235,7 @@ export function buildWorkbookGlobals(
     push(writeBoundSheet8Placeholder(name));
   }
 
-  // [MS-XLS] 2.1.7.20.3's own WORKBOOKCONTENT production places `*SUPBOOK *LBL` between the BoundSheet8 entries and SHAREDSTRINGS, with `SUPBOOK = SupBook [*ExternName *(XCT *CRN)] [ExternSheet] *Continue` -- so the supporting link and its ExternSheet come first, then the defined names whose 3D references resolve through it. Written only when there is a defined name of either kind to write (a print name or a document-level one): a workbook with none needs no supporting link for anything to reference, and stays as minimal as it always was.
+  // [MS-XLS] 2.1.7.20.3's own WORKBOOKCONTENT production places `*SUPBOOK *LBL` between the BoundSheet8 entries and SHAREDSTRINGS, with `SUPBOOK = SupBook [*ExternName *(XCT *CRN)] [ExternSheet] *Continue` — so the supporting link and its ExternSheet come first, then the defined names whose 3D references resolve through it. Written only when there is a defined name of either kind to write (a print name or a document-level one): a workbook with none needs no supporting link for anything to reference, and stays as minimal as it always was.
   if (plan.printNames.length > 0 || plan.definedNames.length > 0) {
     push(writeSupBookRecord(plan.sheetNames.length));
     push(writeExternSheetRecord(plan.sheetNames.length));
@@ -247,7 +247,7 @@ export function buildWorkbookGlobals(
     }
   }
 
-  // [MS-XLS] 2.1.7.20.3's own WORKBOOKCONTENT production places *MSODRAWINGGROUP after the BoundSheet8/SupBook/Lbl group and before SHAREDSTRINGS -- written only when some sheet in the workbook carries an image or embedded object, chained across as many Continue records as the Blip Store needs (writeRecordChain, since a real Blip Store routinely exceeds one record's 8224-byte ceiling once a workbook holds more than a picture or two).
+  // [MS-XLS] 2.1.7.20.3's own WORKBOOKCONTENT production places *MSODRAWINGGROUP after the BoundSheet8/SupBook/Lbl group and before SHAREDSTRINGS — written only when some sheet in the workbook carries an image or embedded object, chained across as many Continue records as the Blip Store needs (writeRecordChain, since a real Blip Store routinely exceeds one record's 8224-byte ceiling once a workbook holds more than a picture or two).
   if (plan.drawingGroupBytes !== undefined) {
     for (const record of writeRecordChain(
       RECORD_MSODRAWINGGROUP,

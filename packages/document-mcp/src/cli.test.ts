@@ -4,7 +4,7 @@ import { main, parsePort, readFlag } from "./cli";
 
 vi.mock("@modelcontextprotocol/server/stdio", () => ({ serveStdio: vi.fn() }));
 
-// The --transport http path is exercised against a real, closeable net.Server this file can assert against and tear down. The --transport stdio path (main()'s own default) has `@modelcontextprotocol/server/stdio`'s own serveStdio mocked at the top of this file instead of calling through for real: the real implementation wires MCP's stdio transport directly onto this process's own stdin/stdout and keeps the process alive on open handles, which src/tools/*.test.ts already exercises end to end via an in-memory transport and test/smoke.test.mjs exercises via a real stdio subprocess -- mocking it here only proves main() reaches and calls it with the right factory, not that the real transport works.
+// The --transport http path is exercised against a real, closeable net.Server this file can assert against and tear down. The --transport stdio path (main()'s own default) has `@modelcontextprotocol/server/stdio`'s own serveStdio mocked at the top of this file instead of calling through for real: the real implementation wires MCP's stdio transport directly onto this process's own stdin/stdout and keeps the process alive on open handles, which src/tools/*.test.ts already exercises end to end via an in-memory transport and test/smoke.test.mjs exercises via a real stdio subprocess — mocking it here only proves main() reaches and calls it with the right factory, not that the real transport works.
 describe("main", () => {
   const originalArgv = process.argv;
   let server: Server | undefined;
@@ -66,7 +66,7 @@ describe("main", () => {
     const port = Number(/:(\d+)\/mcp$/.exec(message)?.[1]);
     expect(port).toBeGreaterThan(0);
 
-    // No Accept header / body is a deliberately malformed MCP request -- this only confirms something is actually listening and routes /mcp through the MCP SDK's own handler (a non-2xx JSON-RPC-shaped response), not a full protocol round trip, which src/tools/*.test.ts and test/smoke.test.mjs already cover via a real client.
+    // No Accept header / body is a deliberately malformed MCP request — this only confirms something is actually listening and routes /mcp through the MCP SDK's own handler (a non-2xx JSON-RPC-shaped response), not a full protocol round trip, which src/tools/*.test.ts and test/smoke.test.mjs already cover via a real client.
     const response = await fetch(`http://127.0.0.1:${String(port)}/mcp`);
     expect(response.status).not.toBe(404);
   });
@@ -189,7 +189,7 @@ describe("parsePort", () => {
     );
   });
 
-  // Number.parseInt("NaN", 10) is itself NaN, and String(NaN) === "NaN" -- the one input where the raw string and the stringified parsed-back number agree despite not being a valid port at all, so this pins the isInteger check rather than only the round-trip string comparison the other cases above already exercise.
+  // Number.parseInt("NaN", 10) is itself NaN, and String(NaN) === "NaN" — the one input where the raw string and the stringified parsed-back number agree despite not being a valid port at all, so this pins the isInteger check rather than only the round-trip string comparison the other cases above already exercise.
   it("rejects the literal string NaN, which round-trips through String() identically to what it parsed to", () => {
     expect(() => parsePort("NaN")).toThrow(/--port must be an integer/);
   });

@@ -12,7 +12,7 @@ const OPERATIONS_BY_NAME: ReadonlyMap<string, DocumentOperation> = new Map(
   DOCUMENT_OPERATIONS.map((operation) => [operation.name, operation]),
 );
 
-// A caller-facing error mapping for one operation's own typed error -- the REST counterpart to document-mcp's own registerOperation `mapError` hooks (packages/document-mcp/src/register-operation.ts). Returns undefined to fall through to the default 400 { error: message } body.
+// A caller-facing error mapping for one operation's own typed error — the REST counterpart to document-mcp's own registerOperation `mapError` hooks (packages/document-mcp/src/register-operation.ts). Returns undefined to fall through to the default 400 { error: message } body.
 interface RestErrorMapping {
   readonly status: number;
   readonly body: Record<string, unknown>;
@@ -73,7 +73,7 @@ function sendJson(
   res.end(text);
 }
 
-// A signal that aborts if the client disconnects before the operation finishes -- node:http's ServerResponse carries no AbortSignal of its own, only a 'close' event, so this bridges the two the same way Node's own fetch-adjacent APIs (e.g. Request.signal in undici) are built internally. Deliberately keyed off the *response*, not the request: an IncomingMessage's own 'close' fires as soon as its body has been fully read, which happens well before a handler like this one is done with it, regardless of whether the client is still connected -- it is not a genuine "client went away" signal once the body is no longer being streamed. A ServerResponse's 'close' fires only when the underlying connection is torn down before res.end() completes it, which is exactly the condition this function exists to detect.
+// A signal that aborts if the client disconnects before the operation finishes — node:http's ServerResponse carries no AbortSignal of its own, only a 'close' event, so this bridges the two the same way Node's own fetch-adjacent APIs (e.g. Request.signal in undici) are built internally. Deliberately keyed off the *response*, not the request: an IncomingMessage's own 'close' fires as soon as its body has been fully read, which happens well before a handler like this one is done with it, regardless of whether the client is still connected — it is not a genuine "client went away" signal once the body is no longer being streamed. A ServerResponse's 'close' fires only when the underlying connection is torn down before res.end() completes it, which is exactly the condition this function exists to detect.
 function abortSignalFor(res: ServerResponse): AbortSignal {
   const controller = new AbortController();
   res.once("close", () => {
@@ -134,7 +134,7 @@ function listOperations(): Record<string, unknown> {
 }
 
 /**
- * Builds a REST API server exposing every document-operations DocumentOperation as `POST /<name>`: the JSON request body is validated against the operation's own inputSchema, `run()` is called with the parsed input, and the result is returned as `{ result }`. `GET /` lists every available operation (name/title/description) for discovery. Never started -- `src/bin.ts` binds it to a port; a test binds it to an ephemeral one.
+ * Builds a REST API server exposing every document-operations DocumentOperation as `POST /<name>`: the JSON request body is validated against the operation's own inputSchema, `run()` is called with the parsed input, and the result is returned as `{ result }`. `GET /` lists every available operation (name/title/description) for discovery. Never started — `src/bin.ts` binds it to a port; a test binds it to an ephemeral one.
  */
 export function createRestServer(): Server {
   return createHttpServer((req, res) => {
@@ -150,7 +150,7 @@ export function createRestServer(): Server {
         return;
       }
 
-      // WHATWG URL.pathname always begins with "/" for an http(s) URL, so slicing off exactly one leading character reaches the same result a `replace(/^\//, "")` would -- without a regex whose anchor a mutation test can never observe changing anything, since the first "/" is always at index 0.
+      // WHATWG URL.pathname always begins with "/" for an http(s) URL, so slicing off exactly one leading character reaches the same result a `replace(/^\//, "")` would — without a regex whose anchor a mutation test can never observe changing anything, since the first "/" is always at index 0.
       const name = url.pathname.slice(1);
       const operation = OPERATIONS_BY_NAME.get(name);
       if (operation === undefined) {

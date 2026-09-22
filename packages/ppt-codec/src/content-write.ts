@@ -19,7 +19,7 @@ import {
 import { LINE_BREAK, PARAGRAPH_SEPARATOR } from "./text/atoms";
 import { pointsToMasterUnits } from "./units";
 
-// The write-side mirror of content.ts: given a shape's ContentBlock list, produces the flat character-counted text body and the StyleTextProps runs [MS-PPT]'s StyleTextPropAtom carries alongside it -- the inverse of content.ts's buildParagraphs, which turns that same pairing back into ContentParagraph[]. Only 'paragraph' blocks contribute text; every other ContentBlock kind (image, table, embeddedObject, pageBreak, the two construct markers) is silently excluded from the written text body, the same documented-gap convention the reader's own README already uses for constructs it does not surface -- ppt-codec's writer covers text-box slides, not the full ContentBlock vocabulary.
+// The write-side mirror of content.ts: given a shape's ContentBlock list, produces the flat character-counted text body and the StyleTextProps runs [MS-PPT]'s StyleTextPropAtom carries alongside it — the inverse of content.ts's buildParagraphs, which turns that same pairing back into ContentParagraph[]. Only 'paragraph' blocks contribute text; every other ContentBlock kind (image, table, embeddedObject, pageBreak, the two construct markers) is silently excluded from the written text body, the same documented-gap convention the reader's own README already uses for constructs it does not surface — ppt-codec's writer covers text-box slides, not the full ContentBlock vocabulary.
 
 const BYTE_MAX = 255;
 
@@ -40,14 +40,14 @@ function mapAlignmentToPpt(
   }
 }
 
-/** document-schema.js's lineSpacing is always a positive multiple of single line height (the schema's own z.number().positive()), so this always writes ParaSpacing's percentage form -- there is no master-units case to choose between, unlike the read side's two-way branch. */
+/** document-schema.js's lineSpacing is always a positive multiple of single line height (the schema's own z.number().positive()), so this always writes ParaSpacing's percentage form — there is no master-units case to choose between, unlike the read side's two-way branch. */
 function lineSpacingToParaSpacing(
   multiple: number | undefined,
 ): number | undefined {
   return multiple === undefined ? undefined : Math.round(multiple * 100);
 }
 
-/** document-schema.js's spacingBeforePt/spacingAfterPt are always plain points, so this always writes ParaSpacing's negative (absolute master-units) form -- the percentage-of-line-height form has no point value to derive it from. */
+/** document-schema.js's spacingBeforePt/spacingAfterPt are always plain points, so this always writes ParaSpacing's negative (absolute master-units) form — the percentage-of-line-height form has no point value to derive it from. */
 function pointsToParaSpacing(pt: number | undefined): number | undefined {
   return pt === undefined ? undefined : -pointsToMasterUnits(pt);
 }
@@ -67,7 +67,7 @@ function mapColorToPpt(color: Color | undefined): RunColor | undefined {
   };
 }
 
-// A run's own text, with the schema's soft-line-break spelling ('\n') converted back to the stored codepoint (text/atoms.ts's LINE_BREAK, U+000B) -- the exact inverse of splitParagraphs' `.split(LINE_BREAK).join("\n")`.
+// A run's own text, with the schema's soft-line-break spelling ('\n') converted back to the stored codepoint (text/atoms.ts's LINE_BREAK, U+000B) — the exact inverse of splitParagraphs' `.split(LINE_BREAK).join("\n")`.
 function storedRunText(text: string): string {
   return text.split("\n").join(LINE_BREAK);
 }
@@ -105,7 +105,7 @@ export interface TextBody {
   readonly style: StyleTextProps;
 }
 
-// Builds one shape's whole text body and its StyleTextPropAtom runs from its ContentBlock list. Each paragraph's own PFRun/CFRun coverage is (paragraph text length) + 1: the extra character accounts for the paragraph's own trailing '\r' separator (every paragraph but the last) or the implicit final terminator characterCountOf's own comment describes ([MS-PPT]'s worked example: "a text body length of 22 because of the terminating line break character") -- attached to the last character run of each paragraph (or a zero-content synthetic run, for a paragraph with none), so the sum of every paragraph's contribution is exactly characterCountOf(text) with no separate accounting pass needed.
+// Builds one shape's whole text body and its StyleTextPropAtom runs from its ContentBlock list. Each paragraph's own PFRun/CFRun coverage is (paragraph text length) + 1: the extra character accounts for the paragraph's own trailing '\r' separator (every paragraph but the last) or the implicit final terminator characterCountOf's own comment describes ([MS-PPT]'s worked example: "a text body length of 22 because of the terminating line break character") — attached to the last character run of each paragraph (or a zero-content synthetic run, for a paragraph with none), so the sum of every paragraph's contribution is exactly characterCountOf(text) with no separate accounting pass needed.
 export function buildTextBody(
   blocks: readonly ContentBlock[],
   fontIndexOf: (family: string) => number,
@@ -161,7 +161,7 @@ export function buildTextBody(
   return { text, style: { paragraphRuns, characterRuns } };
 }
 
-// Every distinct fontFamily a block's runs name, in first-seen order -- the order buildTextBody's fontIndexOf callback (built once per document, over every slide's every shape) must resolve against, matching the order the document's own FontCollectionContainer is written in. Descends into a table block's own cells too: a table shape's own top-level blocks list carries one "table" block, never the paragraphs nested inside its rows/cells, and writeTableGroup calls the identical buildTextBody/fontIndexOf path on each cell's own blocks that every other shape's text goes through.
+// Every distinct fontFamily a block's runs name, in first-seen order — the order buildTextBody's fontIndexOf callback (built once per document, over every slide's every shape) must resolve against, matching the order the document's own FontCollectionContainer is written in. Descends into a table block's own cells too: a table shape's own top-level blocks list carries one "table" block, never the paragraphs nested inside its rows/cells, and writeTableGroup calls the identical buildTextBody/fontIndexOf path on each cell's own blocks that every other shape's text goes through.
 export function collectFontFamilies(
   blocksList: readonly (readonly ContentBlock[])[],
 ): string[] {

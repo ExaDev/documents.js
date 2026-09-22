@@ -80,7 +80,7 @@ describe("parsePlc", () => {
     expect(() => parsePlc(bytes, 8, "PlcPcd")).toThrow(/ascending/);
   });
 
-  it("accepts two adjacent equal keys -- ascending order permits a non-decreasing run, not only a strictly increasing one", () => {
+  it("accepts two adjacent equal keys — ascending order permits a non-decreasing run, not only a strictly increasing one", () => {
     const bytes = plcBytes(
       [5, 5, 10],
       [new Array<number>(8).fill(0), new Array<number>(8).fill(0)],
@@ -162,7 +162,7 @@ describe("findLargestAtMost", () => {
   });
 
   it("throws naming the actual absent index and array length when a key the search visits is missing", () => {
-    // No real Plc/ChpxFkp/PapxFkp caller ever hands findLargestAtMost a sparse array (every key comes from a dense, fully-populated push loop), so this deliberately holed array -- built with a genuine gap at index 1 rather than a dense array a `delete` would punch a hole into -- is the only way to exercise the guard at all.
+    // No real Plc/ChpxFkp/PapxFkp caller ever hands findLargestAtMost a sparse array (every key comes from a dense, fully-populated push loop), so this deliberately holed array — built with a genuine gap at index 1 rather than a dense array a `delete` would punch a hole into — is the only way to exercise the guard at all.
     const sparseKeys: number[] = [];
     sparseKeys[0] = 0;
     sparseKeys[2] = 20;

@@ -118,7 +118,7 @@ describe("buildOdsPackage", () => {
     });
     expect(byPosition.get("1,1")?.formula).toBe("of:=1+1");
     expect(byPosition.get("2,0")?.colSpan).toBe(2);
-    // The merge's covered position never appears in cells[] at all -- matching readOdsContent's own "nothing to emit for a covered cell" convention.
+    // The merge's covered position never appears in cells[] at all — matching readOdsContent's own "nothing to emit for a covered cell" convention.
     expect(byPosition.has("2,1")).toBe(false);
 
     const secondSheet = document.sheets[1]!;

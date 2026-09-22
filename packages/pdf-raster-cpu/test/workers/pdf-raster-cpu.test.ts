@@ -3,7 +3,7 @@ import { ByteWriter, decodePng } from "byte-codec";
 import { renderPdfPage } from "pdf-codec/raster";
 import { createCpuRasteriser } from "../../src";
 
-// Proves pdf-raster-cpu executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs: the rasteriser itself, byte-codec's PNG encode/decode behind it, and pdf-codec's page walk through the pdf-codec/raster entry all run end to end and produce the same pinned pixels the node suite asserts -- so "runs identically under Node and workerd" is a checked fact rather than an assertion in a README. The fixture is built inline (workerd exposes no node:fs) by literal byte concatenation, the same construction the node suite explains. Byte-level determinism is additionally pinned inside the isolate: two renders of the same bytes produce identical PNGs, the property OCR-style consumers pipeline against.
+// Proves pdf-raster-cpu executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs: the rasteriser itself, byte-codec's PNG encode/decode behind it, and pdf-codec's page walk through the pdf-codec/raster entry all run end to end and produce the same pinned pixels the node suite asserts — so "runs identically under Node and workerd" is a checked fact rather than an assertion in a README. The fixture is built inline (workerd exposes no node:fs) by literal byte concatenation, the same construction the node suite explains. Byte-level determinism is additionally pinned inside the isolate: two renders of the same bytes produce identical PNGs, the property OCR-style consumers pipeline against.
 
 class SmallFixture {
   private readonly writer = new ByteWriter();

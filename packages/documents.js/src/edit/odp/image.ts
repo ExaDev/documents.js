@@ -6,7 +6,7 @@ import { buildImageFrame } from "./shape";
 export interface ImageInit {
   readonly format: "png" | "jpeg" | "svg" | "gif";
   readonly bytes: Uint8Array<ArrayBuffer>;
-  // Mirrors pptx/image.ts's own ImageInit.altText for API-shape parity across the two sibling editors -- written as the draw:frame's own svg:title child (see shape.ts's own buildImageFrame), the exact element odf.js's readDrawImageBlock (typed/draw/shapes.ts) already reads back into ContentImageBlock.altText.
+  // Mirrors pptx/image.ts's own ImageInit.altText for API-shape parity across the two sibling editors — written as the draw:frame's own svg:title child (see shape.ts's own buildImageFrame), the exact element odf.js's readDrawImageBlock (typed/draw/shapes.ts) already reads back into ContentImageBlock.altText.
   readonly altText?: string;
 }
 

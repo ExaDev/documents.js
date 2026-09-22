@@ -4,7 +4,7 @@ import type { LayoutPath } from "./layout";
 import type { ContentWriteContext } from "./content-write";
 import { writeContentStream } from "./content-write";
 
-// writePath's own dedicated test file, not folded into content-write.test.ts's shared describe blocks -- flagged as the single most error-prone piece of the odg slice (a hand-computed cubic-Bezier content stream is easy to get subtly wrong in a way byte-length or "contains" assertions wouldn't catch), so every case here asserts the FULL, EXACT emitted operator string against a hand-computed expected value, not just a shape/length check.
+// writePath's own dedicated test file, not folded into content-write.test.ts's shared describe blocks — flagged as the single most error-prone piece of the odg slice (a hand-computed cubic-Bezier content stream is easy to get subtly wrong in a way byte-length or "contains" assertions wouldn't catch), so every case here asserts the FULL, EXACT emitted operator string against a hand-computed expected value, not just a shape/length check.
 
 const RED = { r: 1, g: 0, b: 0 };
 const BLUE = { r: 0, g: 0, b: 1 };
@@ -40,8 +40,8 @@ function decode(bytes: Uint8Array): string {
   return new TextDecoder().decode(bytes);
 }
 
-describe("writeContentStream: path -- triangle (closed, line segments only)", () => {
-  // A triangle: (0,0) -> (10,0) -> (5,8), then the third side back to (0,0) drawn by 'h' (closed: true) -- exactly how a real reader represents a closed straight-line polygon (see odf.js's typed/shared/path.ts: rawSubpathFromPoints emits one 'line' segment per point after the first, then leaves closing to the subpath's own closed flag), not a redundant explicit segment back to the start point.
+describe("writeContentStream: path — triangle (closed, line segments only)", () => {
+  // A triangle: (0,0) -> (10,0) -> (5,8), then the third side back to (0,0) drawn by 'h' (closed: true) — exactly how a real reader represents a closed straight-line polygon (see odf.js's typed/shared/path.ts: rawSubpathFromPoints emits one 'line' segment per point after the first, then leaves closing to the subpath's own closed flag), not a redundant explicit segment back to the start point.
   const item: LayoutPath = {
     kind: "path",
     fill: RED,
@@ -58,7 +58,7 @@ describe("writeContentStream: path -- triangle (closed, line segments only)", ()
     ],
   };
 
-  it("emits rg, m, two l, h, f -- fill-only, nonzero (default) fill rule", () => {
+  it("emits rg, m, two l, h, f — fill-only, nonzero (default) fill rule", () => {
     const text = decode(writeContentStream([item], fakeContext()).bytes);
     expect(text).toBe("1 0 0 rg\n0 0 m\n10 0 l\n5 8 l\nh\nf\n");
   });
@@ -70,8 +70,8 @@ describe("writeContentStream: path -- triangle (closed, line segments only)", ()
   });
 });
 
-describe("writeContentStream: path -- open cubic segment (stroke only)", () => {
-  // A single open cubic: moveto (0,0), curveto control1=(0,10) control2=(10,10) endpoint=(10,0) -- an S-curve-ish arc with genuinely distinct, hand-picked control points (not a degenerate straight line or a symmetric shape that would mask a swapped-argument bug).
+describe("writeContentStream: path — open cubic segment (stroke only)", () => {
+  // A single open cubic: moveto (0,0), curveto control1=(0,10) control2=(10,10) endpoint=(10,0) — an S-curve-ish arc with genuinely distinct, hand-picked control points (not a degenerate straight line or a symmetric shape that would mask a swapped-argument bug).
   const item: LayoutPath = {
     kind: "path",
     stroke: { color: BLUE, widthPt: 2 },
@@ -95,13 +95,13 @@ describe("writeContentStream: path -- open cubic segment (stroke only)", () => {
     ],
   };
 
-  it("emits RG, w, m, c (both control points then the endpoint, in that order), S -- no h, since the subpath is open", () => {
+  it("emits RG, w, m, c (both control points then the endpoint, in that order), S — no h, since the subpath is open", () => {
     const text = decode(writeContentStream([item], fakeContext()).bytes);
     expect(text).toBe("0 0 1 RG\n2 w\n0 0 m\n0 10 10 10 10 0 c\nS\n");
   });
 });
 
-describe("writeContentStream: path -- fill and stroke together", () => {
+describe("writeContentStream: path — fill and stroke together", () => {
   const item: LayoutPath = {
     kind: "path",
     fill: RED,
@@ -119,7 +119,7 @@ describe("writeContentStream: path -- fill and stroke together", () => {
     ],
   };
 
-  it("emits rg, RG, w, path data, h, B -- nonzero fill rule", () => {
+  it("emits rg, RG, w, path data, h, B — nonzero fill rule", () => {
     const text = decode(writeContentStream([item], fakeContext()).bytes);
     expect(text).toBe("1 0 0 rg\n0 0 0 RG\n1 w\n0 0 m\n4 0 l\n4 4 l\nh\nB\n");
   });
@@ -131,8 +131,8 @@ describe("writeContentStream: path -- fill and stroke together", () => {
   });
 });
 
-describe("writeContentStream: path -- multiple subpaths", () => {
-  // Two closed square subpaths sharing one fill/evenodd rule -- the standard "hole punched through a fill" construction (an outer square, an inner square wound the same way, evenodd paints only the region covered an odd number of times, i.e. the ring between them). Verifies both subpaths' full m/l.../h sequences are emitted back to back, with exactly one trailing paint operator for the whole path item, not one per subpath.
+describe("writeContentStream: path — multiple subpaths", () => {
+  // Two closed square subpaths sharing one fill/evenodd rule — the standard "hole punched through a fill" construction (an outer square, an inner square wound the same way, evenodd paints only the region covered an odd number of times, i.e. the ring between them). Verifies both subpaths' full m/l.../h sequences are emitted back to back, with exactly one trailing paint operator for the whole path item, not one per subpath.
   const item: LayoutPath = {
     kind: "path",
     fill: BLACK,
@@ -169,7 +169,7 @@ describe("writeContentStream: path -- multiple subpaths", () => {
   });
 });
 
-describe("writeContentStream: path -- neither fill nor stroke", () => {
+describe("writeContentStream: path — neither fill nor stroke", () => {
   it("skips a path with neither fill nor stroke entirely, since it paints nothing, matching writeRect/writeEllipse", () => {
     const item: LayoutPath = {
       kind: "path",
@@ -187,8 +187,8 @@ describe("writeContentStream: path -- neither fill nor stroke", () => {
   });
 });
 
-// The style field (document-schema.js 2.1) only reaches ink through the stroke, so every case below sets one. As everywhere else in this file, each expectation is the FULL emitted operator string: the dash array, its phase, the line cap, and -- for double -- the exact coordinates of BOTH offset copies.
-describe("writeContentStream: path -- dashed and dotted stroke style", () => {
+// The style field (document-schema.js 2.1) only reaches ink through the stroke, so every case below sets one. As everywhere else in this file, each expectation is the FULL emitted operator string: the dash array, its phase, the line cap, and — for double — the exact coordinates of BOTH offset copies.
+describe("writeContentStream: path — dashed and dotted stroke style", () => {
   // An open two-segment polyline at 2pt wide, so the derived lengths are clean multiples: 3x the stroke width is 6pt on and 6pt off, 2x is a 4pt dot gap.
   const polyline: LayoutPath = {
     kind: "path",
@@ -234,7 +234,7 @@ describe("writeContentStream: path -- dashed and dotted stroke style", () => {
     );
   });
 
-  // A fill has no on/off lengths to alternate, so there is nothing for a dash array to do to it -- emitting one would only leak a pattern into the rest of the stream for no visible effect here.
+  // A fill has no on/off lengths to alternate, so there is nothing for a dash array to do to it — emitting one would only leak a pattern into the rest of the stream for no visible effect here.
   it("emits no dash operators at all for a fill-only path, whatever its style says", () => {
     const fillOnly: LayoutPath = {
       kind: "path",
@@ -257,7 +257,7 @@ describe("writeContentStream: path -- dashed and dotted stroke style", () => {
   });
 });
 
-describe("writeContentStream: path -- double stroke style", () => {
+describe("writeContentStream: path — double stroke style", () => {
   // 3pt splits into three 1pt bands (ink, gap, ink), so each rule is 1pt wide and offset 1pt either side.
   const STROKE_3PT = { color: BLACK, widthPt: 3 };
 
@@ -303,7 +303,7 @@ describe("writeContentStream: path -- double stroke style", () => {
     );
   });
 
-  // A closed subpath's implicit closing edge (drawn by 'h') is real ink, so its normal has to reach the two vertices it joins. If it did not, the start and end corners of this square would offset along one edge's normal instead of the bisector, and the inner rule would not close up as a square. Every corner here is a right angle, so every vertex moves 0.7071 on each axis -- inwards for the counter-clockwise winding, giving a smaller square inside a larger one.
+  // A closed subpath's implicit closing edge (drawn by 'h') is real ink, so its normal has to reach the two vertices it joins. If it did not, the start and end corners of this square would offset along one edge's normal instead of the bisector, and the inner rule would not close up as a square. Every corner here is a right angle, so every vertex moves 0.7071 on each axis — inwards for the counter-clockwise winding, giving a smaller square inside a larger one.
   it("folds a closed subpath's implicit closing edge into the start vertex's own bisector", () => {
     const square: LayoutPath = {
       kind: "path",
@@ -330,7 +330,7 @@ describe("writeContentStream: path -- double stroke style", () => {
     );
   });
 
-  // A cubic's control points have no vertex of their own to bisect at, so they ride their segment's own chord normal -- here the chord (0,0)->(10,0), whose normal is straight up, so both control points move by the full 1pt offset on y.
+  // A cubic's control points have no vertex of their own to bisect at, so they ride their segment's own chord normal — here the chord (0,0)->(10,0), whose normal is straight up, so both control points move by the full 1pt offset on y.
   it("offsets a cubic's control points along its own chord normal", () => {
     const curve: LayoutPath = {
       kind: "path",
@@ -417,7 +417,7 @@ describe("writeContentStream: path -- double stroke style", () => {
     ).toBe(true);
   });
 
-  // The middle vertex of an open path that goes out and immediately reverses along the same line has two adjacent chords pointing in exactly opposite directions -- their normals cancel to the zero vector, which averageNormal reports as "no bisector" (undefined) rather than dividing by zero. That vertex is left un-offset at both ends' original coordinates while the two open ends still move along their own single chord's normal.
+  // The middle vertex of an open path that goes out and immediately reverses along the same line has two adjacent chords pointing in exactly opposite directions — their normals cancel to the zero vector, which averageNormal reports as "no bisector" (undefined) rather than dividing by zero. That vertex is left un-offset at both ends' original coordinates while the two open ends still move along their own single chord's normal.
   it("leaves a 180-degree reversal's shared vertex un-offset instead of dividing by a zero-length bisector", () => {
     const reversal: LayoutPath = {
       kind: "path",
@@ -441,7 +441,7 @@ describe("writeContentStream: path -- double stroke style", () => {
     );
   });
 
-  // Nothing in the double path leaves a dash pattern or cap set, so a later item in the same stream sees the untouched graphics-state defaults -- verified by the absence of any 'd' or 'J' operator rather than by an explicit reset, since none was ever needed.
+  // Nothing in the double path leaves a dash pattern or cap set, so a later item in the same stream sees the untouched graphics-state defaults — verified by the absence of any 'd' or 'J' operator rather than by an explicit reset, since none was ever needed.
   it("emits no dash or cap operators at all, so there is nothing to reset", () => {
     const item: LayoutPath = {
       kind: "path",

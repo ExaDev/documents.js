@@ -14,7 +14,7 @@ import { parseXml } from "../xml/parse";
 import { readOpfMetadata } from "./metadata";
 import type { OpfManifestItem, OpfPackage, OpfSpineItemRef } from "./types";
 
-// The OPF package document, EPUB 3.3 section 5.4 (structurally unchanged from OPF 2.0 for the <metadata>/<manifest>/<spine> triple this package reads): the manifest lists every part the package carries, the spine states the linear reading order over a subset of it by idref. Both directions of this codec go through this one parse -- src/read.ts resolves manifest hrefs and walks the spine in order; src/write.ts's own OPF emission (src/opf/write.ts) is this module's structural inverse.
+// The OPF package document, EPUB 3.3 section 5.4 (structurally unchanged from OPF 2.0 for the <metadata>/<manifest>/<spine> triple this package reads): the manifest lists every part the package carries, the spine states the linear reading order over a subset of it by idref. Both directions of this codec go through this one parse — src/read.ts resolves manifest hrefs and walks the spine in order; src/write.ts's own OPF emission (src/opf/write.ts) is this module's structural inverse.
 export function parseOpf(
   opfXml: string,
   sink: EpubDiagnosticSink = NOOP_EPUB_DIAGNOSTIC_SINK,

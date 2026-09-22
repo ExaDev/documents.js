@@ -147,7 +147,7 @@ describe("decodeOdfText", () => {
     expect(decodeOdfText(nodes)).toBe("abc");
   });
 
-  // The concrete, undeniable proof this module exists to guard against: decodeOdfText must recover the FULL original string, while a naive plain-text-node-only concatenation -- exactly what ooxml.js's own textContent() does -- silently produces a shorter, corrupted result by dropping every text:s/text:tab/text:line-break element entirely. Both a correctness assertion and a length assertion, so the corruption is undeniable, not just implicit.
+  // The concrete, undeniable proof this module exists to guard against: decodeOdfText must recover the FULL original string, while a naive plain-text-node-only concatenation — exactly what ooxml.js's own textContent() does — silently produces a shorter, corrupted result by dropping every text:s/text:tab/text:line-break element entirely. Both a correctness assertion and a length assertion, so the corruption is undeniable, not just implicit.
   it("regression: recovers the full string, unlike a naive text-node-only concatenation which silently corrupts it", () => {
     const original = "a  b\tc";
     const nodes = encodeOdfText(original);

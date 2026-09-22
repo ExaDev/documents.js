@@ -9,7 +9,7 @@ import { parsePackage } from "../../package-io/read";
 import { readOdbInventory, resolveOdbComponent } from "./read";
 import type { OdbInventory } from "./read";
 
-// This suite reads TWO real, unmodified LibreOffice 26.2-generated .odb fixtures for its genuine-producer-shape assertions, mirroring readOdtContent's and readOdm's own established convention: src/typed/odb/fixtures/embedded-firebird.odb (an embedded-Firebird database document with two live SQL tables and one real query, and deliberately no forms or reports), and src/typed/odb/fixtures/form-and-report.odb (the same engine, plus a real bound form and a real Report Builder report -- see read.ts's own top-of-file note for how it was generated and for the two findings about real form/report registration it produced). A handful of synthetic, hand-built packages (via el/txt) cover shapes neither real fixture exercises -- an external connection, the two defensive db:database-description variants (never empirically observed), and the db:component-collection grouping and malformed-component paths.
+// This suite reads TWO real, unmodified LibreOffice 26.2-generated .odb fixtures for its genuine-producer-shape assertions, mirroring readOdtContent's and readOdm's own established convention: src/typed/odb/fixtures/embedded-firebird.odb (an embedded-Firebird database document with two live SQL tables and one real query, and deliberately no forms or reports), and src/typed/odb/fixtures/form-and-report.odb (the same engine, plus a real bound form and a real Report Builder report — see read.ts's own top-of-file note for how it was generated and for the two findings about real form/report registration it produced). A handful of synthetic, hand-built packages (via el/txt) cover shapes neither real fixture exercises — an external connection, the two defensive db:database-description variants (never empirically observed), and the db:component-collection grouping and malformed-component paths.
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 
@@ -58,14 +58,14 @@ describe("readOdbInventory: embedded-firebird.odb (real LibreOffice output)", ()
     inventory = readOdbInventory(loadFixture("embedded-firebird.odb"));
   });
 
-  it('reads the real embedded connection info -- an "sdbc:embedded:" href classifies as embedded', () => {
+  it('reads the real embedded connection info — an "sdbc:embedded:" href classifies as embedded', () => {
     expect(inventory.connection).toEqual({
       type: "embedded",
       url: "sdbc:embedded:firebird",
     });
   });
 
-  it("never populates driverClass -- ODF has no driver-class-equivalent attribute anywhere in its db: schema", () => {
+  it("never populates driverClass — ODF has no driver-class-equivalent attribute anywhere in its db: schema", () => {
     expect("driverClass" in (inventory.connection ?? {})).toBe(false);
   });
 
@@ -75,11 +75,11 @@ describe("readOdbInventory: embedded-firebird.odb (real LibreOffice output)", ()
     ]);
   });
 
-  it("reads an honestly empty tables array -- the two real tables (Customers, Orders) exist only inside the live Firebird engine, invisible to the ODF package itself", () => {
+  it("reads an honestly empty tables array — the two real tables (Customers, Orders) exist only inside the live Firebird engine, invisible to the ODF package itself", () => {
     expect(inventory.tables).toEqual([]);
   });
 
-  it("reads empty forms/reports -- none were created in this fixture", () => {
+  it("reads empty forms/reports — none were created in this fixture", () => {
     expect(inventory.forms).toEqual([]);
     expect(inventory.reports).toEqual([]);
   });
@@ -92,7 +92,7 @@ describe("readOdbInventory: form-and-report.odb (real LibreOffice output)", () =
     inventory = readOdbInventory(loadFixture("form-and-report.odb"));
   });
 
-  it("reads the form's real user-visible name alongside its opaque persistent storage path -- the two genuinely differ in real output", () => {
+  it("reads the form's real user-visible name alongside its opaque persistent storage path — the two genuinely differ in real output", () => {
     expect(inventory.forms).toEqual([
       { name: "SalesForm", href: "forms/Obj11", asTemplate: false },
     ]);
@@ -114,7 +114,7 @@ describe("readOdbInventory: form-and-report.odb (real LibreOffice output)", () =
     ]);
   });
 
-  it("still reads an honestly empty tables array -- the real SALES table lives only inside the Firebird engine", () => {
+  it("still reads an honestly empty tables array — the real SALES table lives only inside the Firebird engine", () => {
     expect(inventory.tables).toEqual([]);
   });
 });
@@ -151,7 +151,7 @@ describe("resolveOdbComponent", () => {
       },
     };
     expect(() => resolveOdbComponent(emptyPkg, "form", "Anything")).toThrow(
-      /no form named "Anything" -- available: \(none\)/,
+      /no form named "Anything" — available: \(none\)/,
     );
   });
 
@@ -174,7 +174,7 @@ describe("resolveOdbComponent", () => {
       },
     };
     expect(() => resolveOdbComponent(twoFormsPkg, "form", "Nope")).toThrow(
-      'no form named "Nope" -- available: First, Second',
+      'no form named "Nope" — available: First, Second',
     );
   });
 });
@@ -282,7 +282,7 @@ describe("readOdbInventory: table names from db:schema-definition", () => {
           ]),
           el("db:schema-definition", {}, [
             el("db:table-definitions", {}, [
-              // "Orders" is the same table db:table-representations already named above -- it must appear once in the result, proving the reader actually deduplicates across the two sources rather than merely happening not to repeat within one of them.
+              // "Orders" is the same table db:table-representations already named above — it must appear once in the result, proving the reader actually deduplicates across the two sources rather than merely happening not to repeat within one of them.
               el("db:table-definition", { "db:name": "Orders" }),
               el("db:table-definition", { "db:name": "Invoices" }),
             ]),
@@ -421,7 +421,7 @@ describe("readOdbInventory: external datasource", () => {
     expect(inventory.reports).toEqual([]);
   });
 
-  it("never surfaces db:login credentials -- OdbInventory has no field for them", () => {
+  it("never surfaces db:login credentials — OdbInventory has no field for them", () => {
     const pkg: Package = {
       parts: {
         "content.xml": databaseContentPart([
@@ -445,7 +445,7 @@ describe("readOdbInventory: external datasource", () => {
   });
 });
 
-describe("readOdbInventory: db:database-description variants (RNG-derived, never empirically observed -- see read.ts's own top-of-file note)", () => {
+describe("readOdbInventory: db:database-description variants (RNG-derived, never empirically observed — see read.ts's own top-of-file note)", () => {
   it("formats a db:server-database (hostname+port) into a descriptive url", () => {
     const pkg: Package = {
       parts: {
@@ -515,7 +515,7 @@ describe("readOdbInventory: db:database-description variants (RNG-derived, never
         "META-INF/manifest.xml": manifestPart(BASE_MANIFEST_ENTRIES),
       },
     };
-    // toStrictEqual, not toEqual: readConnectionInfo's own ternary either omits `url` entirely or sets it to a real string -- it never sets the key to a literal `undefined`. toEqual treats an `undefined`-valued property as equivalent to an absent one, so it cannot tell those two shapes apart; toStrictEqual can, and is what actually proves the key is genuinely missing.
+    // toStrictEqual, not toEqual: readConnectionInfo's own ternary either omits `url` entirely or sets it to a real string — it never sets the key to a literal `undefined`. toEqual treats an `undefined`-valued property as equivalent to an absent one, so it cannot tell those two shapes apart; toStrictEqual can, and is what actually proves the key is genuinely missing.
     expect(readOdbInventory(pkg).connection).toStrictEqual({
       type: "external",
     });
@@ -727,7 +727,7 @@ describe("readOdbInventory: scope boundaries and error paths", () => {
     expect(() => readOdbInventory(pkg)).toThrow(/content\.xml/);
   });
 
-  it("throws when content.xml has no office:body/office:database element -- e.g. an odt-shaped content.xml", () => {
+  it("throws when content.xml has no office:body/office:database element — e.g. an odt-shaped content.xml", () => {
     const pkg: Package = {
       parts: {
         "content.xml": {

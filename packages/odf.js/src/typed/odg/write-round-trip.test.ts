@@ -14,7 +14,7 @@ import { readManifest } from "../../manifest";
 import { readOdg, readOdgContent } from "./read";
 import { normaliseOdgContent, writeOdg, writeOdgContent } from "./write";
 
-// The write side's correctness suite: what writeOdgContent produces reads back as the document it was given. The sibling suite (write.test.ts) pins the XML shapes; this one states the law and every deviation from it by name -- the drawing mirror of typed/odp/write-round-trip.test.ts.
+// The write side's correctness suite: what writeOdgContent produces reads back as the document it was given. The sibling suite (write.test.ts) pins the XML shapes; this one states the law and every deviation from it by name — the drawing mirror of typed/odp/write-round-trip.test.ts.
 //
 // THE LAW: normaliseOdgContent(readOdgContent(writeOdgContent(document))) equals normaliseOdgContent(document), for every document the writer accepts. The normalisation is applied to BOTH sides, so it is a genuine equivalence rather than a licence to discard whatever the writer happened to lose.
 //
@@ -36,7 +36,7 @@ function contentOf(pkg: Package): DrawingDocument {
   return { kind: "drawing", metadata, pages };
 }
 
-// One full pass through the writer and back: the document the caller handed in, written to a real package, encoded to real bytes, decoded again, and read -- the bytes leg deliberately in the loop, matching every other writer's own round-trip suite here.
+// One full pass through the writer and back: the document the caller handed in, written to a real package, encoded to real bytes, decoded again, and read — the bytes leg deliberately in the loop, matching every other writer's own round-trip suite here.
 function roundTrip(document: ContentDocument): DrawingDocument {
   return contentOf(decodePackage(encodePackage(writeOdgContent(document))));
 }
@@ -485,7 +485,7 @@ describe("writeOdgContent: refusals", () => {
   });
 });
 
-// ContentDrawPage keeps shapes and vectors in two arrays with no field connecting them, but readDrawPageContent stamps both from ONE monotonic counter and sorts each array by the result -- so a page's true relative paint order is recoverable across the two, and this writer has to preserve it. See normaliseOdgContent's own note for the emit order this arithmetic is the counterpart of.
+// ContentDrawPage keeps shapes and vectors in two arrays with no field connecting them, but readDrawPageContent stamps both from ONE monotonic counter and sorts each array by the result — so a page's true relative paint order is recoverable across the two, and this writer has to preserve it. See normaliseOdgContent's own note for the emit order this arithmetic is the counterpart of.
 describe("writeOdgContent: paint order across both arrays", () => {
   it("round-trips explicit paint orders that interleave shapes and vectors", () => {
     const document = documentOf([
@@ -599,7 +599,7 @@ describe("writeOdgContent: paint order across both arrays", () => {
   });
 });
 
-// A rotated vector's own frame/rotationDeg is an exact algebraic inverse, verified with a numeric tolerance rather than the blanket expectRoundTrip helper -- see this file's own top-of-file note.
+// A rotated vector's own frame/rotationDeg is an exact algebraic inverse, verified with a numeric tolerance rather than the blanket expectRoundTrip helper — see this file's own top-of-file note.
 // ExaDev/documents.js#969 closing the shape-text arm: a run-level construct extent inside a drawing shape's own text writes through the identical construct machinery, and the round-trip law holds exactly as it already did for odp shape text.
 describe("writeOdg: fidelity constructs in shape text (#969)", () => {
   it("round-trips a field extent inside a shape's own text", () => {
@@ -670,13 +670,13 @@ describe("writeOdgContent: rotated vector geometry, within floating-point tolera
   });
 });
 
-// The regression sweep for the one class of length a plain number-to-string spells in EXPONENT notation, which the ODF `length` datatype has no form for (typed/shared/units.ts's LENGTH_PATTERN and formatOdfLength note). The failure it pins is silent and total rather than approximate: parseOdfTransform drops a translate() whose components don't parse, so a rotated vector lands at its own pivot; parseBox returns undefined for an unrotated one whose svg:x/svg:y don't parse, so readDrawRectVector returns undefined and the vector VANISHES from the page entirely. The same sweep the odp writer's own suite runs, over vectors rather than frames -- the values that reach that magnitude are ordinary, since frameGeometryAttrs's translate() components are trig-derived and a frame centred at or near the page origin cancels to 1e-15-ish rounding dust at most angles.
+// The regression sweep for the one class of length a plain number-to-string spells in EXPONENT notation, which the ODF `length` datatype has no form for (typed/shared/units.ts's LENGTH_PATTERN and formatOdfLength note). The failure it pins is silent and total rather than approximate: parseOdfTransform drops a translate() whose components don't parse, so a rotated vector lands at its own pivot; parseBox returns undefined for an unrotated one whose svg:x/svg:y don't parse, so readDrawRectVector returns undefined and the vector VANISHES from the page entirely. The same sweep the odp writer's own suite runs, over vectors rather than frames — the values that reach that magnitude are ordinary, since frameGeometryAttrs's translate() components are trig-derived and a frame centred at or near the page origin cancels to 1e-15-ish rounding dust at most angles.
 describe("writeOdgContent: rotated vector geometry near the page origin", () => {
   const ANGLES_DEG = [
     -270, -180, -135, -90, -45, -30, -1, 0.0001, 1, 30, 45, 90, 135, 180, 270,
   ];
   const FRAMES = [
-    { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 }, // centre at (50,50) -- the classic cancelling case at 90/180/270.
+    { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 }, // centre at (50,50) — the classic cancelling case at 90/180/270.
     { xPt: 0, yPt: 0, widthPt: 1, heightPt: 1 },
     { xPt: -50, yPt: -50, widthPt: 100, heightPt: 100 }, // centre exactly ON the origin.
     { xPt: -0.5, yPt: -0.5, widthPt: 1, heightPt: 1 },
@@ -727,7 +727,7 @@ describe("writeOdgContent: rotated vector geometry near the page origin", () => 
     ).toEqual(frame);
   });
 
-  // A path's own subpath coordinates go through the same formatOdfNumber spelling as its svg:viewBox, so a curve whose control points reach that magnitude survives too -- svg:viewBox has no exponent form at all, and an unparseable one drops the whole element.
+  // A path's own subpath coordinates go through the same formatOdfNumber spelling as its svg:viewBox, so a curve whose control points reach that magnitude survives too — svg:viewBox has no exponent form at all, and an unparseable one drops the whole element.
   it("keeps a path whose own coordinates are small enough to reach exponent notation", () => {
     const document = documentOf([
       page([

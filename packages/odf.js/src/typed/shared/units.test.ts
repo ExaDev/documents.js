@@ -7,13 +7,13 @@ import {
   expandExponential,
 } from "./units";
 
-// The cm-based fixtures below ("real LibreOffice output") are copied verbatim from a real style:paragraph-properties element produced by `soffice --headless --convert-to odt` (LibreOffice 26.2.5.2), the same fixture referenced by src/styles/properties.test.ts -- see that file's own top-of-file note.
+// The cm-based fixtures below ("real LibreOffice output") are copied verbatim from a real style:paragraph-properties element produced by `soffice --headless --convert-to odt` (LibreOffice 26.2.5.2), the same fixture referenced by src/styles/properties.test.ts — see that file's own top-of-file note.
 
 describe("parseOdfLength", () => {
   it("parses every ODF length unit into points", () => {
     expect(parseOdfLength("12pt")).toBe(12);
     expect(parseOdfLength("1in")).toBe(72);
-    expect(parseOdfLength("1pc")).toBe(12); // pica -- the unit most likely to be misremembered; 1pc = 12pt, not 6pt or 10pt.
+    expect(parseOdfLength("1pc")).toBe(12); // pica — the unit most likely to be misremembered; 1pc = 12pt, not 6pt or 10pt.
     expect(parseOdfLength("2pc")).toBe(24);
     expect(parseOdfLength("100px")).toBe(75); // CSS reference pixel: 96px = 1in = 72pt.
     expect(parseOdfLength("96px")).toBe(72);
@@ -155,7 +155,7 @@ describe("formatOdfLength", () => {
   });
 });
 
-// The ODF `length` datatype has no exponent form (see units.ts's own LENGTH_PATTERN and the OASIS grammar it encodes), but JavaScript's own Number-to-string switches into one below 1e-6 and at/above 1e21. A length that came out as "-7.1e-15pt" was therefore spec-invalid ODF that this package's own reader silently rejected -- parseOdfTransform drops a translate() whose components don't parse, and parseBox returns undefined for an unrotated frame's own svg:x/svg:y, taking the whole shape with it. See typed/odp/write-round-trip.test.ts's own near-origin rotation sweep for the end-to-end statement of that failure.
+// The ODF `length` datatype has no exponent form (see units.ts's own LENGTH_PATTERN and the OASIS grammar it encodes), but JavaScript's own Number-to-string switches into one below 1e-6 and at/above 1e21. A length that came out as "-7.1e-15pt" was therefore spec-invalid ODF that this package's own reader silently rejected — parseOdfTransform drops a translate() whose components don't parse, and parseBox returns undefined for an unrotated frame's own svg:x/svg:y, taking the whole shape with it. See typed/odp/write-round-trip.test.ts's own near-origin rotation sweep for the end-to-end statement of that failure.
 describe("formatOdfLength: fixed-point decimal only, never exponent notation", () => {
   const EXPONENT_MAGNITUDES = [
     1e-7, 5.5e-8, 1e-15, -7.1e-15, 1.05e-20, 5e-324, 1e21, -1.2345e22, 1e300,

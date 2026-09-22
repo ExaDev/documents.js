@@ -17,11 +17,11 @@ import { readManifest } from "../../manifest";
 import { readOdp, readOdpContent } from "./read";
 import { normaliseOdpContent, writeOdp, writeOdpContent } from "./write";
 
-// The write side's correctness suite: what writeOdpContent produces reads back as the document it was given. The sibling suite (write.test.ts) pins the XML shapes; this one states the law and every deviation from it by name -- the presentation mirror of typed/odt/write-round-trip.test.ts (that file's own top-of-file note states the law in full).
+// The write side's correctness suite: what writeOdpContent produces reads back as the document it was given. The sibling suite (write.test.ts) pins the XML shapes; this one states the law and every deviation from it by name — the presentation mirror of typed/odt/write-round-trip.test.ts (that file's own top-of-file note states the law in full).
 //
 // THE LAW: normaliseOdpContent(readOdpContent(writeOdpContent(document))) equals normaliseOdpContent(document), for every document the writer accepts. The normalisation is applied to BOTH sides, so it is a genuine equivalence rather than a licence to discard whatever the writer happened to lose.
 //
-// THE ONE DELIBERATE EXCEPTION: a ROTATED shape's own frame/rotationDeg is compared with an explicit numeric tolerance, not the blanket structural-equality helper every other case uses -- typed/draw/write-shapes.ts's own frameGeometryAttrs is an exact algebraic inverse of the reader's resolveOdfShapeGeometry, but two independent trig evaluations on either side of a real write-then-read round trip are not guaranteed bit-identical (see that module's own top-of-file note and typed/odp/write.ts's own canonicalShape note).
+// THE ONE DELIBERATE EXCEPTION: a ROTATED shape's own frame/rotationDeg is compared with an explicit numeric tolerance, not the blanket structural-equality helper every other case uses — typed/draw/write-shapes.ts's own frameGeometryAttrs is an exact algebraic inverse of the reader's resolveOdfShapeGeometry, but two independent trig evaluations on either side of a real write-then-read round trip are not guaranteed bit-identical (see that module's own top-of-file note and typed/odp/write.ts's own canonicalShape note).
 
 type PresentationDocument = Extract<ContentDocument, { kind: "presentation" }>;
 
@@ -34,7 +34,7 @@ function contentOf(pkg: Package): PresentationDocument {
   return { kind: "presentation", metadata, slides };
 }
 
-// One full pass through the writer and back: the document the caller handed in, written to a real package, encoded to real bytes, decoded again, and read -- the bytes leg deliberately in the loop, matching typed/odt/write-round-trip.test.ts's own roundTrip.
+// One full pass through the writer and back: the document the caller handed in, written to a real package, encoded to real bytes, decoded again, and read — the bytes leg deliberately in the loop, matching typed/odt/write-round-trip.test.ts's own roundTrip.
 function roundTrip(document: ContentDocument): PresentationDocument {
   return contentOf(decodePackage(encodePackage(writeOdpContent(document))));
 }
@@ -398,7 +398,7 @@ describe("writeOdpContent: the round-trip law", () => {
   });
 });
 
-// ExaDev/documents.js#969 closing the shape-text arm: a run-level construct extent inside a shape's own text writes through the identical construct machinery a body paragraph uses (the definitions/changeIds context writeOdp threads), and reads back through the same shared paragraph reader -- so the round-trip law holds for shape text exactly as it already did for odt body text.
+// ExaDev/documents.js#969 closing the shape-text arm: a run-level construct extent inside a shape's own text writes through the identical construct machinery a body paragraph uses (the definitions/changeIds context writeOdp threads), and reads back through the same shared paragraph reader — so the round-trip law holds for shape text exactly as it already did for odt body text.
 describe("writeOdp: fidelity constructs in shape text (#969)", () => {
   it("round-trips a field extent inside a shape's own text", () => {
     const document = documentOf([
@@ -517,7 +517,7 @@ describe("writeOdpContent: refusals", () => {
   });
 });
 
-// A rotated shape's own frame/rotationDeg is an exact algebraic inverse (typed/draw/write-shapes.ts's own frameGeometryAttrs), verified with a numeric tolerance rather than the blanket expectRoundTrip helper above -- see this file's own top-of-file note.
+// A rotated shape's own frame/rotationDeg is an exact algebraic inverse (typed/draw/write-shapes.ts's own frameGeometryAttrs), verified with a numeric tolerance rather than the blanket expectRoundTrip helper above — see this file's own top-of-file note.
 describe("writeOdpContent: rotated shape geometry, within floating-point tolerance", () => {
   it.each([30, 90, 180, -45, 12.5])(
     "round-trips a %i-degree rotation",
@@ -555,7 +555,7 @@ describe("writeOdpContent: rotated geometry near the page origin", () => {
     -270, -180, -135, -90, -45, -30, -1, 0.0001, 1, 30, 45, 90, 135, 180, 270,
   ];
   const FRAMES = [
-    { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 }, // centre at (50,50) -- the classic cancelling case at 90/180/270.
+    { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 }, // centre at (50,50) — the classic cancelling case at 90/180/270.
     { xPt: 0, yPt: 0, widthPt: 1, heightPt: 1 },
     { xPt: -50, yPt: -50, widthPt: 100, heightPt: 100 }, // centre exactly ON the origin.
     { xPt: -0.5, yPt: -0.5, widthPt: 1, heightPt: 1 },
@@ -707,7 +707,7 @@ describe("writeOdpContent: shape paint order", () => {
       widthPt: 200,
       heightPt: 100,
     });
-    // The sub-document's own content survives (its own write-read canonicalisation is the ods suite's law, not this suite's -- matching the odt embedded test's own assertion scope).
+    // The sub-document's own content survives (its own write-read canonicalisation is the ods suite's law, not this suite's — matching the odt embedded test's own assertion scope).
     if (embedded.document.kind !== "spreadsheet") {
       throw new Error("expected the embedded spreadsheet document back");
     }

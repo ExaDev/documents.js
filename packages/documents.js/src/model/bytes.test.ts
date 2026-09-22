@@ -24,7 +24,7 @@ const zipBytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]);
 const pdfBytes = new TextEncoder().encode("%PDF-1.7\n%\xe2\xe3\xcf\xd3\n");
 const garbage = new Uint8Array([1, 2, 3, 4]);
 
-// Minimal, but genuinely spec-conformant, ODF packages: a "mimetype" entry, stored uncompressed, as the first zip entry -- the exact layout OdtBytesSchema/etc. check, generated the same way odf.js's own package writer does rather than hand-built byte-for-byte.
+// Minimal, but genuinely spec-conformant, ODF packages: a "mimetype" entry, stored uncompressed, as the first zip entry — the exact layout OdtBytesSchema/etc. check, generated the same way odf.js's own package writer does rather than hand-built byte-for-byte.
 function odfBytes(mediaType: string): Uint8Array {
   const encoder = new TextEncoder();
   return zipPackage([
@@ -38,7 +38,7 @@ const odsBytes = odfBytes(ODF_MEDIA_TYPES.ods);
 const odpBytes = odfBytes(ODF_MEDIA_TYPES.odp);
 const odgBytes = odfBytes(ODF_MEDIA_TYPES.odg);
 
-// Real [MS-CFB] compound files, built through each legacy codec's own writer rather than hand-assembled -- the same fixture-independence convention src/convert/convert.test.ts already follows for doc/xls/ppt.
+// Real [MS-CFB] compound files, built through each legacy codec's own writer rather than hand-assembled — the same fixture-independence convention src/convert/convert.test.ts already follows for doc/xls/ppt.
 const docBytes = writeDocContent({
   kind: "wordprocessing",
   metadata: {},
@@ -178,7 +178,7 @@ describe("bytes", () => {
     expect(OdsBytesSchema.safeParse(zipBytes).success).toBe(false);
     expect(OdpBytesSchema.safeParse(zipBytes).success).toBe(false);
     expect(OdgBytesSchema.safeParse(zipBytes).success).toBe(false);
-    // DocxBytesSchema/PptxBytesSchema only check the generic ZIP signature, so -- unlike the ODF schemas above -- they cannot distinguish an ODF package from an OOXML one; this is exactly the validation gap the code comment in bytes.ts calls out.
+    // DocxBytesSchema/PptxBytesSchema only check the generic ZIP signature, so — unlike the ODF schemas above — they cannot distinguish an ODF package from an OOXML one; this is exactly the validation gap the code comment in bytes.ts calls out.
     expect(DocxBytesSchema.safeParse(odtBytes).success).toBe(true);
     expect(PptxBytesSchema.safeParse(odpBytes).success).toBe(true);
   });

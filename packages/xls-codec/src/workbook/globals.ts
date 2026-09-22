@@ -33,7 +33,7 @@ import {
 import { BUILTIN_NUMBER_FORMATS } from "excel-number-format";
 import { readPrintNames, type SheetPrintNames } from "./print-names";
 
-// The workbook globals substream ([MS-XLS] 2.1.7.20.3): everything that belongs to the workbook rather than to one sheet -- which sheets exist and in what order, the shared string table every string cell indexes into, the number-format and cell-format tables every numeric cell's meaning depends on, and which date epoch the whole file counts serials from. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/ca4c1748-8729-4a93-abb9-4602b3a01fb1
+// The workbook globals substream ([MS-XLS] 2.1.7.20.3): everything that belongs to the workbook rather than to one sheet — which sheets exist and in what order, the shared string table every string cell indexes into, the number-format and cell-format tables every numeric cell's meaning depends on, and which date epoch the whole file counts serials from. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/ca4c1748-8729-4a93-abb9-4602b3a01fb1
 //
 // Read before any sheet, because a worksheet substream is close to meaningless on its own: a LabelSst cell carries only an index into the SST, and an RK cell carries only a number whose kind lives in the Format record its XF points at.
 
@@ -41,7 +41,7 @@ import { readPrintNames, type SheetPrintNames } from "./print-names";
 export interface SheetEntry {
   /** The sheet's name, from stName. */
   readonly name: string;
-  /** True for both the Hidden and Very Hidden states -- the schema's own ContentSheet has no place for either, so the distinction is not carried further. */
+  /** True for both the Hidden and Very Hidden states — the schema's own ContentSheet has no place for either, so the distinction is not carried further. */
   readonly hidden: boolean;
   /** The dt field: 0x00 worksheet or dialog sheet, 0x01 macro sheet, 0x02 chart sheet, 0x06 VBA module. */
   readonly sheetType: number;
@@ -59,20 +59,20 @@ export interface CellFormat {
   readonly isStyle: boolean;
   /** The trailing payload's own leading word, resolved into document-schema.js's Alignment/verticalAlignment members directly (undefined already means what an absent ContentSheetCell.alignment/verticalAlignment means, so content.ts consumes this without a further resolution step). */
   readonly alignment: XfAlignmentFields;
-  /** The trailing payload's own fill pattern/colour and per-side border fields, raw -- resolved into document-schema.js's Color/ContentCellBorders by content.ts, through this same globals object's own `palette`. */
+  /** The trailing payload's own fill pattern/colour and per-side border fields, raw — resolved into document-schema.js's Color/ContentCellBorders by content.ts, through this same globals object's own `palette`. */
   readonly decoration: XfDecorationFields;
 }
 
 /** Everything the globals substream contributes to reading the sheets that follow it. */
 export interface WorkbookGlobals {
-  /** The sheets, in BoundSheet8 order -- which is the workbook's own tab order, and not necessarily the order the substreams appear in the stream. */
+  /** The sheets, in BoundSheet8 order — which is the workbook's own tab order, and not necessarily the order the substreams appear in the stream. */
   readonly sheets: readonly SheetEntry[];
   /** The shared string table, indexed by a LabelSst record's isst. */
   readonly sharedStrings: readonly string[];
   /** The XF table, indexed by a cell's own ixfe. */
   readonly cellFormats: readonly CellFormat[];
   /**
-   * The font table, indexed by an XF record's own ifnt ([MS-XLS] 2.4.122). Entry 0 is the Normal style's font -- the workbook's own default, which content.ts diffs each cell's font against to decide which of its properties the cell genuinely states (a cell has no way to say "no font", only an index into this table, so entry 0 is what "the format's default" concretely means here).
+   * The font table, indexed by an XF record's own ifnt ([MS-XLS] 2.4.122). Entry 0 is the Normal style's font — the workbook's own default, which content.ts diffs each cell's font against to decide which of its properties the cell genuinely states (a cell has no way to say "no font", only an index into this table, so entry 0 is what "the format's default" concretely means here).
    */
   readonly fonts: readonly XfFontFields[];
   /** Number-format codes by identifier: the file's own Format records laid over the built-in table. */
@@ -80,19 +80,19 @@ export interface WorkbookGlobals {
   /** Whether serials count from the 1904 epoch rather than the 1900 one ([MS-XLS] 2.4.77). */
   readonly date1904: boolean;
   /**
-   * A PtgRef3d/PtgArea3d's own ixti, resolved to the sheet scope it names -- one entry per XTI in the EXTERNSHEET record's rgXTI array, in that array's own order (an ixti is an index into it).
+   * A PtgRef3d/PtgArea3d's own ixti, resolved to the sheet scope it names — one entry per XTI in the EXTERNSHEET record's rgXTI array, in that array's own order (an ixti is an index into it).
    *
-   * A plain SheetRange when the XTI's own SupBook is this same, self-referencing workbook and both itabFirst/itabLast name a real sheet. An ExternalSheetLabel -- a fully-formatted label text, diagnostic placeholder included -- for everything else this reader cannot turn into direct BoundSheet8 indices: a genuinely external workbook (resolved as far as its own virtPath and rgst allow, see readSupBook/fileNameFromVirtPath), a DDE/OLE/add-in/same-sheet/unused supporting link (no sheet name to resolve at all), or a sheet index [MS-XLS] 2.5.344 itself marks unresolvable (`-1`, "sheet could not be found") or workbook-level (`-2`). Only an ixti past the end of EXTERNSHEET's own array is genuinely undefined -- every other case now carries SOME label text, so a 3D reference into it no longer drops the whole formula the way an unresolvable one used to.
+   * A plain SheetRange when the XTI's own SupBook is this same, self-referencing workbook and both itabFirst/itabLast name a real sheet. An ExternalSheetLabel — a fully-formatted label text, diagnostic placeholder included — for everything else this reader cannot turn into direct BoundSheet8 indices: a genuinely external workbook (resolved as far as its own virtPath and rgst allow, see readSupBook/fileNameFromVirtPath), a DDE/OLE/add-in/same-sheet/unused supporting link (no sheet name to resolve at all), or a sheet index [MS-XLS] 2.5.344 itself marks unresolvable (`-1`, "sheet could not be found") or workbook-level (`-2`). Only an ixti past the end of EXTERNSHEET's own array is genuinely undefined — every other case now carries SOME label text, so a 3D reference into it no longer drops the whole formula the way an unresolvable one used to.
    */
   readonly sheetRanges: readonly (
     SheetRange | ExternalSheetLabel | undefined
   )[];
   /**
-   * The workbook's own custom colour table, from a Palette record ([MS-XLS] 2.4.188) -- 56 entries, index 0 being icv 8. Undefined when the file carries no Palette record at all, which is common: a real file relying purely on the fixed default 8-colour-plus-56-entry table (this package's own `resolveIcvColor` falls back to that same default table, matching [MS-XLS] "Icv"'s own documented fallback) never needs one.
+   * The workbook's own custom colour table, from a Palette record ([MS-XLS] 2.4.188) — 56 entries, index 0 being icv 8. Undefined when the file carries no Palette record at all, which is common: a real file relying purely on the fixed default 8-colour-plus-56-entry table (this package's own `resolveIcvColor` falls back to that same default table, matching [MS-XLS] "Icv"'s own documented fallback) never needs one.
    */
   readonly palette: readonly Color[] | undefined;
   /**
-   * The print range and repeated header bands each sheet's own built-in Print_Area/Print_Titles defined names declare, keyed by zero-based sheet index -- see workbook/print-names.ts for why a sheet's print settings are split between here and its own substream.
+   * The print range and repeated header bands each sheet's own built-in Print_Area/Print_Titles defined names declare, keyed by zero-based sheet index — see workbook/print-names.ts for why a sheet's print settings are split between here and its own substream.
    *
    * A sheet with no entry declares neither, which is the common case: a workbook nobody has set a print area on carries no Lbl record at all.
    */
@@ -156,7 +156,7 @@ export function readWorkbookGlobals(
         palette = readPalette(record);
         break;
       default:
-      // Every other record in the globals substream -- the window settings, the theme, the drawing group -- carries nothing this reader acts on yet. No break: this is the switch's own last case, so control already leaves it here regardless.
+      // Every other record in the globals substream — the window settings, the theme, the drawing group — carries nothing this reader acts on yet. No break: this is the switch's own last case, so control already leaves it here regardless.
     }
   }
 
@@ -183,7 +183,7 @@ export function readWorkbookGlobals(
   };
 }
 
-/** [MS-XLS] 2.4.271's own cch table: a SupBook whose cch is exactly this value is a self-referencing supporting link -- this workbook itself -- rather than another workbook, a DDE/OLE data source, or an add-in. */
+/** [MS-XLS] 2.4.271's own cch table: a SupBook whose cch is exactly this value is a self-referencing supporting link — this workbook itself — rather than another workbook, a DDE/OLE data source, or an add-in. */
 const SUPBOOK_SELF_REFERENCING_CCH = 0x0401;
 /** The cch table's other named sentinel: an add-in-referencing supporting link, whose ExternName records name add-in functions this reader has no workbook or sheet to resolve a name from. */
 const SUPBOOK_ADDIN_CCH = 0x3a01;
@@ -194,13 +194,13 @@ const SUPBOOK_SAME_SHEET_CHAR = "\u0000";
 const SUPBOOK_UNUSED_CHAR = " ";
 
 /**
- * One SupBook record's own resolution, keyed by kind ([MS-XLS] 2.4.271's cch/virtPath table) -- see readSupBook. "self" needs no further data, since the workbook's own BoundSheet8 list already resolves it elsewhere. "external-workbook" carries what this reader could recover from virtPath and rgst. "unresolvable" carries a short, fixed diagnostic for every other kind (add-in, DDE/OLE data source, same-sheet, unused, a virtPath shape fileNameFromVirtPath's own deliberately partial VirtualPath decoding does not attempt, or a record too malformed for readSupBookSafely to finish reading at all).
+ * One SupBook record's own resolution, keyed by kind ([MS-XLS] 2.4.271's cch/virtPath table) — see readSupBook. "self" needs no further data, since the workbook's own BoundSheet8 list already resolves it elsewhere. "external-workbook" carries what this reader could recover from virtPath and rgst. "unresolvable" carries a short, fixed diagnostic for every other kind (add-in, DDE/OLE data source, same-sheet, unused, a virtPath shape fileNameFromVirtPath's own deliberately partial VirtualPath decoding does not attempt, or a record too malformed for readSupBookSafely to finish reading at all).
  */
 export type SupBookInfo =
   | { readonly kind: "self" }
   | {
       readonly kind: "external-workbook";
-      /** The workbook's own display name, isolated from virtPath by fileNameFromVirtPath -- undefined when virtPath uses a form that function does not decode (an absolute drive volume, a UNC share, a transfer-protocol URL), in which case the sheet name(s) below are still fully resolvable and are shown against a placeholder workbook label rather than being discarded. */
+      /** The workbook's own display name, isolated from virtPath by fileNameFromVirtPath — undefined when virtPath uses a form that function does not decode (an absolute drive volume, a UNC share, a transfer-protocol URL), in which case the sheet name(s) below are still fully resolvable and are shown against a placeholder workbook label rather than being discarded. */
       readonly fileName: string | undefined;
       /** rgst, in the same zero-based order an XTI's own itabFirst/itabLast index into it ([MS-XLS] 5adbad90: "this value specifies the zero-based index of an XLUnicodeString in the rgst field"). */
       readonly sheetNames: readonly string[];
@@ -208,7 +208,7 @@ export type SupBookInfo =
   | { readonly kind: "unresolvable"; readonly diagnostic: string };
 
 /**
- * SupBook ([MS-XLS] 2.4.271): a two-byte ctab, a two-byte cch, then -- for every kind but self-referencing and add-in-referencing -- a virtPath (an XLUnicodeStringNoCch, cch characters long) and, for an external-workbook or unused link specifically, ctab sheet names (XLUnicodeString) in rgst.
+ * SupBook ([MS-XLS] 2.4.271): a two-byte ctab, a two-byte cch, then — for every kind but self-referencing and add-in-referencing — a virtPath (an XLUnicodeStringNoCch, cch characters long) and, for an external-workbook or unused link specifically, ctab sheet names (XLUnicodeString) in rgst.
  */
 export function readSupBook(record: RecordGroup): SupBookInfo {
   const cursor = new BlockCursor(record.blocks);
@@ -249,7 +249,7 @@ export function readSupBook(record: RecordGroup): SupBookInfo {
 }
 
 /**
- * readSupBook, degrading a malformed record (an rgst shorter than its own declared ctab, most concretely) to an unresolvable diagnostic rather than letting a BiffFormatError propagate out of this one SupBook and abort the whole globals read -- and with it, the whole workbook. This is entirely new territory added alongside external-3D-reference resolution: before it, this reader never walked a SupBook's own virtPath/rgst at all, so a malformed one had nothing here to trip over. The per-record boundary keeps the damage to the XTI entries that resolve through this one SupBook, which already carry their own `unresolvable` label path for every other kind this reader cannot fully resolve.
+ * readSupBook, degrading a malformed record (an rgst shorter than its own declared ctab, most concretely) to an unresolvable diagnostic rather than letting a BiffFormatError propagate out of this one SupBook and abort the whole globals read — and with it, the whole workbook. This is entirely new territory added alongside external-3D-reference resolution: before it, this reader never walked a SupBook's own virtPath/rgst at all, so a malformed one had nothing here to trip over. The per-record boundary keeps the damage to the XTI entries that resolve through this one SupBook, which already carry their own `unresolvable` label path for every other kind this reader cannot fully resolve.
  */
 function readSupBookSafely(record: RecordGroup): SupBookInfo {
   try {
@@ -262,17 +262,17 @@ function readSupBookSafely(record: RecordGroup): SupBookInfo {
   }
 }
 
-/** [MS-XLS] 480c3d2a's own VirtualPath grammar directory separator (U+0003) -- never a printable character a real file or sheet name may contain, so splitting on it to find the trailing segment is unambiguous. */
+/** [MS-XLS] 480c3d2a's own VirtualPath grammar directory separator (U+0003) — never a printable character a real file or sheet name may contain, so splitting on it to find the trailing segment is unambiguous. */
 const VIRTPATH_DIRECTORY_SEPARATOR = "\u0003";
 
-/** [MS-XLS] 480c3d2a's own two-character virt-path markers this reader still resolves a trailing file name through: rel-volume, startup, alt-startup, and library -- each %x0001 followed by one of these bytes, then file-path itself. Distinct from simple-file-path, whose own leading %x0001 (when present at all) stands ALONE, with no second marker byte, directly followed by file-path -- so any OTHER second character belongs to that file-path, not to a marker this function should also consume. */
+/** [MS-XLS] 480c3d2a's own two-character virt-path markers this reader still resolves a trailing file name through: rel-volume, startup, alt-startup, and library — each %x0001 followed by one of these bytes, then file-path itself. Distinct from simple-file-path, whose own leading %x0001 (when present at all) stands ALONE, with no second marker byte, directly followed by file-path — so any OTHER second character belongs to that file-path, not to a marker this function should also consume. */
 const VIRTPATH_REL_VOLUME_MARKER = 0x02;
 const VIRTPATH_STARTUP_MARKER = 0x06;
 const VIRTPATH_ALT_STARTUP_MARKER = 0x07;
 const VIRTPATH_LIBRARY_MARKER = 0x08;
 
 /**
- * Isolates a plain trailing file name from a SupBook's own virtPath, when it uses one of the VirtualPath grammar's simpler forms: simple-file-path (no marker at all, or its own optional lone %x0001 with no second marker byte), or a genuine two-character marker saying the path is relative to the referencing workbook's own drive, the startup directory, the alternate startup directory, or the library directory (rel-volume/startup/alt-startup/library -- [MS-XLS] 480c3d2a's own virt-path alternatives). An absolute drive volume, a UNC share, or a transfer-protocol URL needs more of the grammar than a trailing path segment to reproduce faithfully, so those return undefined rather than a guess -- readSupBook's own caller then shows the sheet name(s) (still fully resolvable from rgst) against a placeholder workbook label instead of discarding them. file-path's own bracketed form (`"[" relative-path "]" sheet-name`, naming a sheet directly in the path rather than through SupBook's separate rgst array) is outside what this reader reconstructs too, and is declined the same way rather than folded into the file name and doubled up with the caller's own `[bookLabel]` bracketing.
+ * Isolates a plain trailing file name from a SupBook's own virtPath, when it uses one of the VirtualPath grammar's simpler forms: simple-file-path (no marker at all, or its own optional lone %x0001 with no second marker byte), or a genuine two-character marker saying the path is relative to the referencing workbook's own drive, the startup directory, the alternate startup directory, or the library directory (rel-volume/startup/alt-startup/library — [MS-XLS] 480c3d2a's own virt-path alternatives). An absolute drive volume, a UNC share, or a transfer-protocol URL needs more of the grammar than a trailing path segment to reproduce faithfully, so those return undefined rather than a guess — readSupBook's own caller then shows the sheet name(s) (still fully resolvable from rgst) against a placeholder workbook label instead of discarding them. file-path's own bracketed form (`"[" relative-path "]" sheet-name`, naming a sheet directly in the path rather than through SupBook's separate rgst array) is outside what this reader reconstructs too, and is declined the same way rather than folded into the file name and doubled up with the caller's own `[bookLabel]` bracketing.
  */
 export function fileNameFromVirtPath(virtPath: string): string | undefined {
   let path = virtPath;
@@ -290,7 +290,7 @@ export function fileNameFromVirtPath(virtPath: string): string | undefined {
         path = path.slice(2);
         break;
       default:
-        // simple-file-path: the lone %x0001 marker stands alone -- whatever follows (including this "marker" character, undefined when virtPath is the single byte on its own) is already the start of file-path itself, not a second marker byte to also discard.
+        // simple-file-path: the lone %x0001 marker stands alone — whatever follows (including this "marker" character, undefined when virtPath is the single byte on its own) is already the start of file-path itself, not a second marker byte to also discard.
         path = path.slice(1);
         break;
     }
@@ -301,19 +301,19 @@ export function fileNameFromVirtPath(virtPath: string): string | undefined {
   if (last === undefined || last.length === 0) {
     return undefined;
   }
-  // [MS-XLS]'s own VirtualPath grammar does not actually forbid a bracket in an ordinary file-path segment -- `[`/`]` are legal path characters there, and a real Windows file named e.g. "My[Draft].xlsx" is grammatically valid. Whether the WHOLE path is genuinely the grammar's bracketed alternative (`"[" relative-path "]" sheet-name`) turns only on whether ITS OWN leading character (after the marker byte handled above) is a literal `[` -- that alternative's `relative-path` can itself span several directories (`relative-path = directory *(0x03 directory)`), so a workbook `Book.xlsx` sitting in subdirectory `sub` and referencing `Sheet1` genuinely encodes as `[sub` + a directory separator + `Book.xlsx]Sheet1`, with its closing `]` landing NON-LEADING in the final segment ("Book.xlsx]Sheet1") once split on the separator below -- not only a bracket leading the very first segment is a real instance of this form. This function does not check the whole path's own leading character, only the marker byte, so it cannot tell that apart from an entirely ordinary two-directory path whose own final directory happens to be a legally bracket-named file (`sub`, a separator, then the plain file name `[Book.xlsx]Sheet1`) -- grammatically production 1 the whole way through, never the bracketed form at all, since ITS OWN leading character is `s`, not `[`. Both leave a bracket somewhere in the final segment with no way to tell, from that segment alone, which one produced it; and even where this reader could rule the bracketed form out for certain, returning the segment as a plain file name would still double up with resolveXti's own `[${fileName}]` bracketing into a mangled label. Declining whenever the final segment carries a bracket ANYWHERE settles both at once: it trades a known, accepted false negative (a legitimately bracket-named external workbook resolves to no name at all) for never emitting a corrupted one. Checked on the EXTRACTED FINAL SEGMENT rather than on the whole path's own leading character for the same reason: an unbalanced bracket with no separator at all (`abc[def`) leaves the WHOLE path's own leading character untouched too (`a`, not `[`), and would otherwise return a segment carrying a raw bracket as if it were a plain file name, with the caller's own `diagnostic` flag left FALSE for it since this function has already reported success by returning a defined string.
+  // [MS-XLS]'s own VirtualPath grammar does not actually forbid a bracket in an ordinary file-path segment — `[`/`]` are legal path characters there, and a real Windows file named e.g. "My[Draft].xlsx" is grammatically valid. Whether the WHOLE path is genuinely the grammar's bracketed alternative (`"[" relative-path "]" sheet-name`) turns only on whether ITS OWN leading character (after the marker byte handled above) is a literal `[` — that alternative's `relative-path` can itself span several directories (`relative-path = directory *(0x03 directory)`), so a workbook `Book.xlsx` sitting in subdirectory `sub` and referencing `Sheet1` genuinely encodes as `[sub` + a directory separator + `Book.xlsx]Sheet1`, with its closing `]` landing NON-LEADING in the final segment ("Book.xlsx]Sheet1") once split on the separator below — not only a bracket leading the very first segment is a real instance of this form. This function does not check the whole path's own leading character, only the marker byte, so it cannot tell that apart from an entirely ordinary two-directory path whose own final directory happens to be a legally bracket-named file (`sub`, a separator, then the plain file name `[Book.xlsx]Sheet1`) — grammatically production 1 the whole way through, never the bracketed form at all, since ITS OWN leading character is `s`, not `[`. Both leave a bracket somewhere in the final segment with no way to tell, from that segment alone, which one produced it; and even where this reader could rule the bracketed form out for certain, returning the segment as a plain file name would still double up with resolveXti's own `[${fileName}]` bracketing into a mangled label. Declining whenever the final segment carries a bracket ANYWHERE settles both at once: it trades a known, accepted false negative (a legitimately bracket-named external workbook resolves to no name at all) for never emitting a corrupted one. Checked on the EXTRACTED FINAL SEGMENT rather than on the whole path's own leading character for the same reason: an unbalanced bracket with no separator at all (`abc[def`) leaves the WHOLE path's own leading character untouched too (`a`, not `[`), and would otherwise return a segment carrying a raw bracket as if it were a plain file name, with the caller's own `diagnostic` flag left FALSE for it since this function has already reported success by returning a defined string.
   return last.includes("[") || last.includes("]") ? undefined : last;
 }
 
-/** A bracketed diagnostic placeholder for a sheet label this reader could not fully resolve -- deliberately distinct from Excel's own bare `#REF!` error literal (which is valid, retypeable formula syntax on its own): this always carries a parenthesised reason, and resolveSheetLabel's own quoting (biff/ptg.ts) wraps the whole thing in single quotes regardless, since neither the reason text nor the surrounding punctuation matches a bare sheet-name pattern. */
+/** A bracketed diagnostic placeholder for a sheet label this reader could not fully resolve — deliberately distinct from Excel's own bare `#REF!` error literal (which is valid, retypeable formula syntax on its own): this always carries a parenthesised reason, and resolveSheetLabel's own quoting (biff/ptg.ts) wraps the whole thing in single quotes regardless, since neither the reason text nor the surrounding punctuation matches a bare sheet-name pattern. */
 function diagnosticLabel(reason: string): string {
   return `#REF!(${reason})`;
 }
 
 /**
- * One XTI's own scope resolved against its SupBook -- a plain SheetRange when the SupBook is this same, self-referencing workbook and both sheet indices are real ([MS-XLS] 2.5.344's own `-1` "could not be found" and `-2` "workbook-level" sentinels aside), otherwise an ExternalSheetLabel carrying whatever this reader could recover (an external workbook's own file name and sheet name(s), when the SupBook resolves that far) or a diagnostic placeholder, for a supporting-link kind or a sheet index this reader does not resolve a name from at all.
+ * One XTI's own scope resolved against its SupBook — a plain SheetRange when the SupBook is this same, self-referencing workbook and both sheet indices are real ([MS-XLS] 2.5.344's own `-1` "could not be found" and `-2` "workbook-level" sentinels aside), otherwise an ExternalSheetLabel carrying whatever this reader could recover (an external workbook's own file name and sheet name(s), when the SupBook resolves that far) or a diagnostic placeholder, for a supporting-link kind or a sheet index this reader does not resolve a name from at all.
  *
- * The SupBook's own kind is checked before the `-2` sentinel, not after: [MS-XLS] 2.5.344's itabFirst/itabLast table produces `-2` for a same-sheet, add-in, DDE, and OLE supporting link alike (none of them names a sheet at all), so treating every `-2` as a generic "workbook-level reference" before asking what kind of SupBook it belongs to would overwrite each of those already-specific `unresolvable` diagnostics with a less useful, wrong one. `-2` only means "workbook-level" for the two kinds that otherwise resolve a real sheet scope -- self and external-workbook -- so the sentinel is scoped to those.
+ * The SupBook's own kind is checked before the `-2` sentinel, not after: [MS-XLS] 2.5.344's itabFirst/itabLast table produces `-2` for a same-sheet, add-in, DDE, and OLE supporting link alike (none of them names a sheet at all), so treating every `-2` as a generic "workbook-level reference" before asking what kind of SupBook it belongs to would overwrite each of those already-specific `unresolvable` diagnostics with a less useful, wrong one. `-2` only means "workbook-level" for the two kinds that otherwise resolve a real sheet scope — self and external-workbook — so the sentinel is scoped to those.
  */
 export function resolveXti(
   supBook: SupBookInfo | undefined,
@@ -340,7 +340,7 @@ export function resolveXti(
       ? { firstSheetIndex: itabFirst, lastSheetIndex: itabLast }
       : { label: diagnosticLabel("sheet not found"), diagnostic: true };
   }
-  // No itabFirst/itabLast >= 0 guard: a plain array index that is negative (the only other sentinel this can be here, having already ruled out -2 above) resolves to undefined on its own in JS, exactly like a genuinely out-of-range positive index does -- there is no negative-index behaviour on a real array for a guard to be protecting against.
+  // No itabFirst/itabLast >= 0 guard: a plain array index that is negative (the only other sentinel this can be here, having already ruled out -2 above) resolves to undefined on its own in JS, exactly like a genuinely out-of-range positive index does — there is no negative-index behaviour on a real array for a guard to be protecting against.
   const first = supBook.sheetNames[itabFirst];
   const last = supBook.sheetNames[itabLast];
   if (first === undefined || last === undefined) {
@@ -351,7 +351,7 @@ export function resolveXti(
     };
   }
   if (supBook.fileName === undefined) {
-    // The sheet name(s) are real, recovered data, but the workbook's own name is not -- "EXTERNAL" is this reader's own placeholder rather than anything the file actually said, so the label as a whole is still not safe to treat as real formula text.
+    // The sheet name(s) are real, recovered data, but the workbook's own name is not — "EXTERNAL" is this reader's own placeholder rather than anything the file actually said, so the label as a whole is still not safe to treat as real formula text.
     return {
       label: `[EXTERNAL]${first === last ? first : `${first}:${last}`}`,
       diagnostic: true,
@@ -363,7 +363,7 @@ export function resolveXti(
   };
 }
 
-/** ExternSheet ([MS-XLS] 2.4.106): a two-byte cXTI then that many XTI structures ([MS-XLS] 2.5.344) -- a two-byte iSupBook and two signed 16-bit sheet-scope bounds each. iSupBook indexes the SupBook collection positionally, in the order those records appeared. */
+/** ExternSheet ([MS-XLS] 2.4.106): a two-byte cXTI then that many XTI structures ([MS-XLS] 2.5.344) — a two-byte iSupBook and two signed 16-bit sheet-scope bounds each. iSupBook indexes the SupBook collection positionally, in the order those records appeared. */
 function readSheetRanges(
   record: RecordGroup,
   supBooks: readonly SupBookInfo[],
@@ -394,7 +394,7 @@ function readBoundSheet(record: RecordGroup): SheetEntry {
   };
 }
 
-/** SST ([MS-XLS] 2.4.265): a total reference count, a unique-string count, then that many XLUnicodeRichExtendedStrings -- packed, with no offsets, so a single mis-sized string desynchronises every string after it. This is why the string reader consumes each one's trailing formatting-run and phonetic payloads exactly rather than ignoring them. */
+/** SST ([MS-XLS] 2.4.265): a total reference count, a unique-string count, then that many XLUnicodeRichExtendedStrings — packed, with no offsets, so a single mis-sized string desynchronises every string after it. This is why the string reader consumes each one's trailing formatting-run and phonetic payloads exactly rather than ignoring them. */
 function readSharedStrings(record: RecordGroup): readonly string[] {
   const cursor = new BlockCursor(record.blocks);
   cursor.i32();
@@ -424,7 +424,7 @@ function readFormat(record: RecordGroup): { id: number; code: string } {
   return { id, code: readXLUnicodeString(cursor) };
 }
 
-/** XF ([MS-XLS] 2.4.353): a font index, a number-format identifier, a flags field whose fStyle bit says whether the trailing payload is a CellXF or a StyleXF, then that 14-byte trailing payload itself -- the leading alignment word xf-colors.ts's unpackXfAlignment resolves into this format's own `alignment`, then the border word, fill-pattern word, and fill-colour word its unpackXfDecoration resolves into this format's own `decoration`. CellXF and StyleXF share the identical alignment/border/fill bit layout ([MS-XLS] 2.4.353's own field table), so this reads both shapes uniformly regardless of isStyle -- a cell only ever references a CellXF entry by its own ixfe (workbook/sheet.ts's cell reading), so a StyleXF's alignment/decoration are parsed but never consulted downstream. */
+/** XF ([MS-XLS] 2.4.353): a font index, a number-format identifier, a flags field whose fStyle bit says whether the trailing payload is a CellXF or a StyleXF, then that 14-byte trailing payload itself — the leading alignment word xf-colors.ts's unpackXfAlignment resolves into this format's own `alignment`, then the border word, fill-pattern word, and fill-colour word its unpackXfDecoration resolves into this format's own `decoration`. CellXF and StyleXF share the identical alignment/border/fill bit layout ([MS-XLS] 2.4.353's own field table), so this reads both shapes uniformly regardless of isStyle — a cell only ever references a CellXF entry by its own ixfe (workbook/sheet.ts's cell reading), so a StyleXF's alignment/decoration are parsed but never consulted downstream. */
 function readCellFormat(record: RecordGroup): CellFormat {
   const cursor = new BlockCursor(record.blocks);
   const fontIndex = cursor.u16();
@@ -444,7 +444,7 @@ function readCellFormat(record: RecordGroup): CellFormat {
 }
 
 /**
- * Palette ([MS-XLS] 2.4.188): ccv, a signed colour count the spec states "MUST be 56", then that many LongRGB entries -- the write-side mirror is xf-writer.ts's own writePaletteRecord.
+ * Palette ([MS-XLS] 2.4.188): ccv, a signed colour count the spec states "MUST be 56", then that many LongRGB entries — the write-side mirror is xf-writer.ts's own writePaletteRecord.
  *
  * A ccv that is not 56 is refused rather than honoured. This reader resolves every icv 8-63 positionally through this table, so a short (or zero, or negative) one does not degrade gracefully: every colour past its end silently becomes unresolvable, and a workbook's fills and borders all vanish at once with nothing to say why. A file declaring a count its own spec forbids is malformed, and saying so is the only honest answer.
  */
@@ -471,7 +471,7 @@ function readDate1904(record: RecordGroup): boolean {
 /**
  * The number-format code a cell's own XF index resolves to, or undefined when it resolves to none.
  *
- * Undefined is a real answer rather than a failure: [MS-XLS] permits an XF to name a reserved identifier that no built-in code covers, and ContentSheetCell's own numberFormatCode is documented as absent for a cell with no producer-declared format -- never a fabricated empty string or a silently substituted General.
+ * Undefined is a real answer rather than a failure: [MS-XLS] permits an XF to name a reserved identifier that no built-in code covers, and ContentSheetCell's own numberFormatCode is documented as absent for a cell with no producer-declared format — never a fabricated empty string or a silently substituted General.
  */
 export function formatCodeOf(
   globals: WorkbookGlobals,

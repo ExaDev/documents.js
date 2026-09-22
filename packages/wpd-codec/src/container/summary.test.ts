@@ -71,7 +71,7 @@ describe("readDocumentSummary", () => {
     expect(metadata.subject).toBe("Revenue");
   });
 
-  // "26 | Keywords | Single line" -- one line, with no separator vocabulary of its own, so the comma every interface showing this field uses is the reading.
+  // "26 | Keywords | Single line" — one line, with no separator vocabulary of its own, so the comma every interface showing this field uses is the reading.
   it("splits the single-line Keywords field into keywords", () => {
     const metadata = readDocumentSummary(
       new Uint8Array(group(26, SINGLE_LINE, wordString("revenue, q3, draft"))),
@@ -159,7 +159,7 @@ describe("readDocumentSummary", () => {
     expect(metadata.createdIso).toBeUndefined();
   });
 
-  // A date field whose every genuinely-read byte (year, month, day, hour, minute, second) is present, but whose three trailing, entirely-unread bytes (day of week, time zone, unused) fall past the packet's own end -- the length guard must still refuse it defensively, even though every byte the function actually consumes is there.
+  // A date field whose every genuinely-read byte (year, month, day, hour, minute, second) is present, but whose three trailing, entirely-unread bytes (day of week, time zone, unused) fall past the packet's own end — the length guard must still refuse it defensively, even though every byte the function actually consumes is there.
   it("refuses a date field cut off exactly after its last read byte, with none of the trailing unread padding present", () => {
     const dataOffset = 8; // 6-byte group header + 2-byte empty name
     const bytes = new Uint8Array([
@@ -178,7 +178,7 @@ describe("readDocumentSummary", () => {
     expect(readDocumentSummary(bytes).createdIso).toBeUndefined();
   });
 
-  // A summary carrying a field this package has no LayoutMetadata home for -- "1 | Abstract | Multi-line" -- is stepped over by its own size, leaving the fields after it readable.
+  // A summary carrying a field this package has no LayoutMetadata home for — "1 | Abstract | Multi-line" — is stepped over by its own size, leaving the fields after it readable.
   it("steps over a field it has no home for and keeps reading", () => {
     const metadata = readDocumentSummary(
       new Uint8Array([
@@ -217,7 +217,7 @@ describe("readDocumentSummary", () => {
     ).toEqual({});
   });
 
-  // A group's stated size lying far beyond the packet must refuse the group outright -- not fall through and let the reader trust whatever real bytes happen to sit within the packet's own true bounds as if they belonged to this group's data.
+  // A group's stated size lying far beyond the packet must refuse the group outright — not fall through and let the reader trust whatever real bytes happen to sit within the packet's own true bounds as if they belonged to this group's data.
   it("never lets a corrupted, oversized group borrow real bytes from beyond its own claimed extent", () => {
     const tail = [...word(0), ...wordString("HELLO")]; // empty name, then real word data
     const bytes = new Uint8Array([
@@ -229,7 +229,7 @@ describe("readDocumentSummary", () => {
     expect(readDocumentSummary(bytes)).toEqual({});
   });
 
-  // A group's stated size smaller than its own six-byte header is nonsensical and must stop the walk outright -- not advance the cursor by that bogus size and let the next iteration reinterpret real trailing bytes as a phantom group header.
+  // A group's stated size smaller than its own six-byte header is nonsensical and must stop the walk outright — not advance the cursor by that bogus size and let the next iteration reinterpret real trailing bytes as a phantom group header.
   it("never lets a group smaller than its own header desynchronise the cursor onto later bytes", () => {
     const bytes = new Uint8Array([
       ...word(2), // size = 2, smaller than the six-byte header that already follows
@@ -242,7 +242,7 @@ describe("readDocumentSummary", () => {
     expect(readDocumentSummary(bytes)).toEqual({});
   });
 
-  // A group whose stated size is exactly the six-byte header (no room for any data) must still let the walk continue onto the next, genuinely well-formed group -- it is empty, not corrupt.
+  // A group whose stated size is exactly the six-byte header (no room for any data) must still let the walk continue onto the next, genuinely well-formed group — it is empty, not corrupt.
   it("passes over a header-only group and still reads the group that follows it", () => {
     const bytes = new Uint8Array([
       ...word(6), // an empty group: size exactly matches the six-byte header, [size] [tag] [type]
@@ -282,7 +282,7 @@ describe("readDocumentSummary", () => {
     expect("keywords" in metadata).toBe(false);
   });
 
-  // A date-typed field carrying neither the creation nor the revision tag (an adversarial or simply unknown tag reusing the DATE type bit) must not be reported as either -- there is no third date slot in LayoutMetadata to fall back onto.
+  // A date-typed field carrying neither the creation nor the revision tag (an adversarial or simply unknown tag reusing the DATE type bit) must not be reported as either — there is no third date slot in LayoutMetadata to fall back onto.
   it("reports neither created nor modified for a date-typed field under an unrecognised tag", () => {
     const metadata = readDocumentSummary(
       new Uint8Array(

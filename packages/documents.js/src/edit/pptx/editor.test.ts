@@ -130,7 +130,7 @@ describe("PptxSlide.notes", () => {
     expect(decodePackage(editor.toBytes())).toEqual(editor.toPackage());
   });
 
-  // Every one of these was confirmed as a real defect by opening a generated file in actual Keynote, not by this package's own (namespace-agnostic, schema-non-validating) reader, which tolerated all of them. The p:clrMapOvr omission specifically was found by diffing against a real Keynote-exported reference pptx with speaker notes, after the namespace/spTree/notesMaster-chain fixes alone still left the file rejected -- p:clrMapOvr is a required CT_NotesSlide element (a direct sibling of p:cSld, mirroring CT_SlideLayout's own p:clrMapOvr), not an optional nicety.
+  // Every one of these was confirmed as a real defect by opening a generated file in actual Keynote, not by this package's own (namespace-agnostic, schema-non-validating) reader, which tolerated all of them. The p:clrMapOvr omission specifically was found by diffing against a real Keynote-exported reference pptx with speaker notes, after the namespace/spTree/notesMaster-chain fixes alone still left the file rejected — p:clrMapOvr is a required CT_NotesSlide element (a direct sibling of p:cSld, mirroring CT_SlideLayout's own p:clrMapOvr), not an optional nicety.
   it("declares xmlns:p/xmlns:a on the notes root, includes the mandatory p:nvGrpSpPr/p:grpSpPr pair, and includes p:clrMapOvr", () => {
     const editor = createPptx();
     const slide = editor.addSlide();
@@ -213,7 +213,7 @@ describe("live-view fidelity for pptx", () => {
   });
 });
 
-// ExaDev/documents.js#933: an already-open live editor previously exposed no metadata setter at all. `editor.metadata = {...}` patches the live package's own docProps/core.xml directly, in place -- never a rebuild through setDocumentMetadata's own pptx REBUILD_FORMATS path, which would discard every other pending edit made through the same editor instance.
+// ExaDev/documents.js#933: an already-open live editor previously exposed no metadata setter at all. `editor.metadata = {...}` patches the live package's own docProps/core.xml directly, in place — never a rebuild through setDocumentMetadata's own pptx REBUILD_FORMATS path, which would discard every other pending edit made through the same editor instance.
 describe("PptxEditor.metadata", () => {
   it("reads an empty object from a package carrying no docProps/core.xml at all", () => {
     const editor = openPptx(minimalPptxBytes());

@@ -2,7 +2,7 @@ import type { Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_PORT, main } from "./cli";
 
-// Reads back the TCP port a listening server actually bound, failing loudly if it somehow bound a pipe/Unix socket instead -- every test below only ever binds a numeric port, so this can never legitimately see anything else.
+// Reads back the TCP port a listening server actually bound, failing loudly if it somehow bound a pipe/Unix socket instead — every test below only ever binds a numeric port, so this can never legitimately see anything else.
 function boundPort(server: Server): number {
   const address = server.address();
   if (address === null || typeof address === "string") {
@@ -56,7 +56,7 @@ describe("main", () => {
   it("accepts --port=<value> form", async () => {
     process.argv = ["node", "bin.js", "--port=0"];
     server = await main();
-    // An OS-assigned ephemeral port is never the fixed default -- this fails if the "--port=" flag form is silently ignored and the server falls back to DEFAULT_PORT instead of actually parsing "0".
+    // An OS-assigned ephemeral port is never the fixed default — this fails if the "--port=" flag form is silently ignored and the server falls back to DEFAULT_PORT instead of actually parsing "0".
     expect(boundPort(server)).not.toBe(DEFAULT_PORT);
   });
 
@@ -98,7 +98,7 @@ describe("main", () => {
   });
 
   it("ignores argv[0]/argv[1], the node binary and script path, rather than treating them as flags", async () => {
-    // Standing in for the real ["node", "/path/to/bin.js", ...userArgs] shape: exactly two elements here, so `.slice(2)` leaves no arguments at all -- if it silently stopped slicing, these two entries would be searched for flags in their own right.
+    // Standing in for the real ["node", "/path/to/bin.js", ...userArgs] shape: exactly two elements here, so `.slice(2)` leaves no arguments at all — if it silently stopped slicing, these two entries would be searched for flags in their own right.
     process.argv = ["--port", "9999"];
     server = await main();
     expect(boundPort(server)).toBe(DEFAULT_PORT);

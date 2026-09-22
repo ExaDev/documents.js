@@ -5,11 +5,11 @@ import {
   WpdUnsupportedVersionError,
 } from "../errors";
 
-// -- The WordPerfect file header, per WPFF Document Structure, "File Header Format" --
+// — The WordPerfect file header, per WPFF Document Structure, "File Header Format" --
 //
 // The standard header is sixteen bytes and the extended header that follows it is 496, so the prefix's fixed part is 512 (0x200) bytes in total and the index area starts immediately after it. The SDK's own prose describes the whole 512 as "the file header" in one sentence and as "the 16-byte file header" in several others; the field table settles it, and the generic-header example proves it: its [pointer to index area] holds 0x0200, which is where a 16-byte header plus a 496-byte extended header ends.
 //
-// Only two fields of the extended header are documented -- a reserved long whose value is 5, and the {file size} long -- and the remaining 488 bytes are "Used by WordPerfect and is not documented", so this reader takes the file size and ignores the rest.
+// Only two fields of the extended header are documented — a reserved long whose value is 5, and the {file size} long — and the remaining 488 bytes are "Used by WordPerfect and is not documented", so this reader takes the file size and ignores the rest.
 
 // -1,"WPC". "Always the first four bytes of a WP document file." Source: WPFF Document Structure, "File ID Field".
 export const WPD_FILE_ID: readonly number[] = [0xff, 0x57, 0x50, 0x43];
@@ -36,13 +36,13 @@ export interface WpdFileHeader {
   readonly productType: number;
   readonly fileType: number;
   readonly majorVersion: number;
-  // 1 for a WP 6.x file and for a non-compound WP 8.0 file, 2 for a compound one. Carried because it is the coarsest generation signal the fixed header offers, not because this reader branches on it -- the SDK's own answer to telling WP8-through-X6 files apart is the Prefix Time Stamp packet, not this byte.
+  // 1 for a WP 6.x file and for a non-compound WP 8.0 file, 2 for a compound one. Carried because it is the coarsest generation signal the fixed header offers, not because this reader branches on it — the SDK's own answer to telling WP8-through-X6 files apart is the Prefix Time Stamp packet, not this byte.
   readonly minorVersion: number;
   // "This is the offset from the beginning of the file to the index header."
   readonly indexAreaOffset: number;
   // "This 32-bit integer field contains the total length of the WordPerfect file." Not the buffer's length: a file inside an OLE compound wrapper, or one padded at EOF, legitimately differs, and the SDK warns that a third-party writer forgetting to update this field is a common real-world defect. This reader therefore records it and bounds nothing on it.
   readonly fileSize: number;
-  // The header's encryption word verbatim: 0 for an unencrypted document, and for an encrypted one the 16-bit checksum of the standard mode's password (see src/container/encryption.ts for the cipher and the word's two readings -- standard password checksum, or a value an enhanced-mode file carries instead).
+  // The header's encryption word verbatim: 0 for an unencrypted document, and for an encrypted one the 16-bit checksum of the standard mode's password (see src/container/encryption.ts for the cipher and the word's two readings — standard password checksum, or a value an enhanced-mode file carries instead).
   readonly encryption: number;
 }
 
@@ -73,12 +73,12 @@ export function readFileHeader(
   const encryption = uint16At(bytes, 12);
   const indexAreaOffset = uint16At(bytes, 14);
 
-  // Checked before the version gate: an encrypted file's version bytes are inside the header and therefore still readable, but reporting "unsupported version" for a file that is merely encrypted would name the wrong problem. With a password supplied, the encrypted file stays readable -- the password's verification and the decryption itself happen in the container layer (openWpdDocument), which owns the byte buffer -- so this throws only when there is no password to try. An empty-string password is no password, exactly as every other codec here treats one.
+  // Checked before the version gate: an encrypted file's version bytes are inside the header and therefore still readable, but reporting "unsupported version" for a file that is merely encrypted would name the wrong problem. With a password supplied, the encrypted file stays readable — the password's verification and the decryption itself happen in the container layer (openWpdDocument), which owns the byte buffer — so this throws only when there is no password to try. An empty-string password is no password, exactly as every other codec here treats one.
   const suppliedPassword =
     options.password === "" ? undefined : options.password;
   if (encryption !== 0 && suppliedPassword === undefined) {
     throw new WpdEncryptedDocumentError(
-      `This document is encrypted (encryption word ${encryption}); nothing beyond the file header is intelligible without the password. Pass { password } to read it -- the standard ("original") encryption mode is supported, and a non-matching password throws WpdWrongPasswordError.`,
+      `This document is encrypted (encryption word ${encryption}); nothing beyond the file header is intelligible without the password. Pass { password } to read it — the standard ("original") encryption mode is supported, and a non-matching password throws WpdWrongPasswordError.`,
     );
   }
 

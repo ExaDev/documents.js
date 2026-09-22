@@ -1,10 +1,10 @@
-// GFM's "autolinks (extension)" -- bare `www.`-prefixed, `http(s)://`-prefixed, `mailto:`/`xmpp:`-prefixed, and bare-email links written WITHOUT the surrounding `<`/`>` CommonMark autolinks require.
+// GFM's "autolinks (extension)" — bare `www.`-prefixed, `http(s)://`-prefixed, `mailto:`/`xmpp:`-prefixed, and bare-email links written WITHOUT the surrounding `<`/`>` CommonMark autolinks require.
 //
-// Structured as a post-pass over already-parsed text nodes rather than as a branch in the inline phase's own dispatch loop, matching cmark-gfm's own extension architecture: an extended autolink has no distinguishing opening character to dispatch on (it starts with an ordinary letter), and its extent depends on trailing-punctuation trimming that can only be decided once the whole run of text is in hand. Running it after the fact also gives the "no autolinks inside a link" rule for free -- the walk simply does not descend into link, image, codeSpan, autolink, or rawHtml nodes.
+// Structured as a post-pass over already-parsed text nodes rather than as a branch in the inline phase's own dispatch loop, matching cmark-gfm's own extension architecture: an extended autolink has no distinguishing opening character to dispatch on (it starts with an ordinary letter), and its extent depends on trailing-punctuation trimming that can only be decided once the whole run of text is in hand. Running it after the fact also gives the "no autolinks inside a link" rule for free — the walk simply does not descend into link, image, codeSpan, autolink, or rawHtml nodes.
 //
 // An extended autolink becomes a LINK node with an explicit text child, not a MarkdownAutolinkNode. That is deliberate and follows cmark-gfm's own choice: a `www.example.com` autolink's displayed text and its resolved destination genuinely differ (`http://` is prepended to the destination only), and MarkdownAutolinkNode carries a single `destination` field precisely because a CommonMark `<...>` autolink's text and destination are by definition the same string. Forcing the extension through that node type would need a second field on it that no CommonMark autolink ever uses.
 //
-// Off by default is NOT the choice here: this package targets CommonMark *and* GFM, so InlineParseOptions.gfmAutolinks defaults to true. The CommonMark conformance suite (src/conformance.test.ts) disables it explicitly, because a bare `http://foo.bar` in paragraph text is plain text under CommonMark and a link under GFM -- a genuine specification fork, not a bug in either mode.
+// Off by default is NOT the choice here: this package targets CommonMark *and* GFM, so InlineParseOptions.gfmAutolinks defaults to true. The CommonMark conformance suite (src/conformance.test.ts) disables it explicitly, because a bare `http://foo.bar` in paragraph text is plain text under CommonMark and a link under GFM — a genuine specification fork, not a bug in either mode.
 
 import { InlineNode, createTextNode } from "./node";
 
@@ -166,7 +166,7 @@ function scanEmailDomain(text: string, start: number): string {
   return text.slice(start, end);
 }
 
-// A bare email address. Anchored on the `@` rather than scanned forward from a start boundary, because the local part is only recognisable in retrospect -- there is no prefix to dispatch on.
+// A bare email address. Anchored on the `@` rather than scanned forward from a start boundary, because the local part is only recognisable in retrospect — there is no prefix to dispatch on.
 function matchEmailAt(
   text: string,
   atIndex: number,
@@ -184,7 +184,7 @@ function matchEmailAt(
   if (local.startsWith(".") || local.endsWith(".")) {
     return undefined;
   }
-  // An email's own domain is scanned against its own character set rather than through the shared trailing-punctuation trimming, because the two disagree on `_`: that trimming strips a trailing underscore (GFM lists `_` as trailing punctuation for a url autolink), whereas GFM says of an email address that "the last character must not be one of `-` or `_`" -- which invalidates the whole address rather than shortening it. Only a trailing `.` is dropped, per "only `.` may occur at the end of the email address, in which case it will not be considered part of the address".
+  // An email's own domain is scanned against its own character set rather than through the shared trailing-punctuation trimming, because the two disagree on `_`: that trimming strips a trailing underscore (GFM lists `_` as trailing punctuation for a url autolink), whereas GFM says of an email address that "the last character must not be one of `-` or `_`" — which invalidates the whole address rather than shortening it. Only a trailing `.` is dropped, per "only `.` may occur at the end of the email address, in which case it will not be considered part of the address".
   //
   // Of that pair only the trailing `-` needs a check here: a domain ending in `_` has that underscore in its own last segment, which isValidDomain already rejects for every domain, email or not.
   const domain = scanEmailDomain(text, atIndex + 1).replace(/\.+$/, "");

@@ -171,7 +171,7 @@ describe("setGraphicFill / setGraphicStroke", () => {
     });
   });
 
-  it("never mutates or removes a pre-existing automatic style entry -- only ever appends a new one", () => {
+  it("never mutates or removes a pre-existing automatic style entry — only ever appends a new one", () => {
     const pkg = createEmptyOdgPackage();
     const name = buildGraphicStyle(pkg, { fill: RED });
     const element = el("draw:rect", { "draw:style-name": name });

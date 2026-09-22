@@ -10,11 +10,11 @@ export default packageLintConfig({
     "@typescript-eslint/no-shadow",
     "@typescript-eslint/no-use-before-define",
   ],
-  // Off: with noUncheckedIndexedAccess on, every indexed read is typed as possibly-undefined, so this rule fires on array and byte-buffer indexing whose bound the surrounding code has already established -- a loop condition, a prior length check, or a fixture the test itself just built. None of the sites here is a value that can actually be absent. Tracked for a per-package decision on whether any of them is genuine; see the burn-down epic.
+  // Off: with noUncheckedIndexedAccess on, every indexed read is typed as possibly-undefined, so this rule fires on array and byte-buffer indexing whose bound the surrounding code has already established — a loop condition, a prior length check, or a fixture the test itself just built. None of the sites here is a value that can actually be absent. Tracked for a per-package decision on whether any of them is genuine; see the burn-down epic.
   nonNullAssertion: "off",
   isomorphic: true,
   // scripts/ holds a standalone build step importing from ../dist, the same reason test/ is ignored.
   additionalIgnores: ["scripts"],
-  // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why -- this package's own decompose/flatten tree builders genuinely mutate several array/object parameters in place (a stack push/pop, a scope's children array). Tracked for burn-down.
+  // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why — this package's own decompose/flatten tree builders genuinely mutate several array/object parameters in place (a stack push/pop, a scope's children array). Tracked for burn-down.
   preferReadonlyParams: "off",
 });

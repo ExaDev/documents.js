@@ -11,7 +11,7 @@ import {
 import { settle, waitForFrame } from "../../../test-support.js";
 import { OdsSpreadsheetGridScreen } from "./spreadsheet-grid.js";
 
-// Creates a fresh ods workbook, seeds a cell at row 2/column 2 (C3) directly through the live `OdsSheet.cell()` setter -- test setup, not the behaviour under test, exactly like reducer.test.ts's own direct-editor assertions -- so the grid has a real 3x3 extent to navigate across rather than the 1x1 a brand-new sheet starts with, then pushes the spreadsheetGrid screen. Exposes the current screen stack's top and cell A1's own live value as probes.
+// Creates a fresh ods workbook, seeds a cell at row 2/column 2 (C3) directly through the live `OdsSheet.cell()` setter — test setup, not the behaviour under test, exactly like reducer.test.ts's own direct-editor assertions — so the grid has a real 3x3 extent to navigate across rather than the 1x1 a brand-new sheet starts with, then pushes the spreadsheetGrid screen. Exposes the current screen stack's top and cell A1's own live value as probes.
 function GridHarness(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();
@@ -39,7 +39,7 @@ function GridHarness(): ReactElement {
     return <Text>loading</Text>;
   }
 
-  // A1's own colSpan/rowSpan after a merge, read fresh through readOdsContent on every render -- the same "display-unsafe live accessor, read through the content pivot" convention this screen's own resolveSheet already follows (see shared.ts), used here purely as a test probe.
+  // A1's own colSpan/rowSpan after a merge, read fresh through readOdsContent on every render — the same "display-unsafe live accessor, read through the content pivot" convention this screen's own resolveSheet already follows (see shared.ts), used here purely as a test probe.
   const content = readOdsContent(doc.editor.toPackage());
   const anchor =
     content.kind === "spreadsheet"
@@ -80,7 +80,7 @@ describe("OdsSpreadsheetGridScreen", () => {
     expect(frame).toContain("top:spreadsheetGrid");
     await settle();
 
-    // The generic ListView convention treats 'l' as "open/select the highlighted item" -- this screen deliberately overrides it to mean "move right".
+    // The generic ListView convention treats 'l' as "open/select the highlighted item" — this screen deliberately overrides it to mean "move right".
     stdin.write("l");
     frame = await waitForFrame(lastFrame, (candidate) =>
       candidate.includes("B1"),
@@ -93,7 +93,7 @@ describe("OdsSpreadsheetGridScreen", () => {
     await waitForFrame(lastFrame, (candidate) => candidate.includes("B2"));
     await settle();
 
-    // The generic convention treats 'h' as "go back" (popping the screen). It must not here -- the screen stays on top and the cursor simply moves left.
+    // The generic convention treats 'h' as "go back" (popping the screen). It must not here — the screen stays on top and the cursor simply moves left.
     stdin.write("h");
     frame = await waitForFrame(lastFrame, (candidate) =>
       candidate.includes("A2"),
@@ -119,7 +119,7 @@ describe("OdsSpreadsheetGridScreen", () => {
       candidate.includes("Enter to commit"),
     );
     expect(seededFrame).toContain("[N]");
-    // OdsCellEditor's own TextField has just mounted for the first time -- see test-support.ts, and settle() again between its own writes for the same reason.
+    // OdsCellEditor's own TextField has just mounted for the first time — see test-support.ts, and settle() again between its own writes for the same reason.
     await settle();
 
     stdin.write("2");
@@ -194,7 +194,7 @@ describe("OdsSpreadsheetGridScreen", () => {
       candidate.includes("to anchor a merge"),
     );
     expect(frame).toContain("anchorSpan:1x1");
-    // Esc cancelled the pending merge only -- the screen itself is still on top, not popped.
+    // Esc cancelled the pending merge only — the screen itself is still on top, not popped.
     expect(frame).toContain("top:spreadsheetGrid");
   });
 

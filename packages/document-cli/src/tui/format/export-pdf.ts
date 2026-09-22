@@ -30,7 +30,7 @@ export interface ExportToPdfOptions {
   readonly fontFiles?: readonly string[];
 }
 
-// documents.js's `WinAnsiSubstitution` fields are `from`/`to` -- the character that could not be represented in a standard-14 font, and the one written in its place. Exported so render-odb-report.ts's own odbReportToPdf call can build the identical DocumentToPdfOptions shape from its own RenderOdbReportOptions -- a structurally compatible superset of ExportToPdfOptions (same signal/onDiagnostic/fontFiles fields, plus reportName), so no adapter is needed at that call site.
+// documents.js's `WinAnsiSubstitution` fields are `from`/`to` — the character that could not be represented in a standard-14 font, and the one written in its place. Exported so render-odb-report.ts's own odbReportToPdf call can build the identical DocumentToPdfOptions shape from its own RenderOdbReportOptions — a structurally compatible superset of ExportToPdfOptions (same signal/onDiagnostic/fontFiles fields, plus reportName), so no adapter is needed at that call site.
 export function toPdfOptions(
   options: ExportToPdfOptions,
   fonts: readonly ProvidedFont[],
@@ -38,7 +38,7 @@ export function toPdfOptions(
   return {
     signal: options.signal,
     fonts,
-    // A whole face falling back, rather than a single character: reported into the same diagnostics stream, since that is the channel the export screens already surface (and auto-open the panel for). Distinct from onSubstitution below, which is one character at a time -- a run drawn in a real embedded face never reaches WinAnsi encoding at all.
+    // A whole face falling back, rather than a single character: reported into the same diagnostics stream, since that is the channel the export screens already surface (and auto-open the panel for). Distinct from onSubstitution below, which is one character at a time — a run drawn in a real embedded face never reaches WinAnsi encoding at all.
     onFontSubstitution: (substitution) => {
       const requested = `${substitution.requestedFamily}${substitution.requestedBold ? " bold" : ""}${substitution.requestedItalic ? " italic" : ""}`;
       options.onDiagnostic({
@@ -61,10 +61,10 @@ export async function exportToPdf(
   destinationPath: string,
   options: ExportToPdfOptions,
 ): Promise<void> {
-  // `odb` has no export-to-PDF path because it is read-only with no `ContentDocument` to convert; `pdf` has no export-to-PDF path for a different reason -- it is genuinely editable now (see PdfOpenDocument's own doc comment), but there is no docxToPdf-equivalent "convert a PDF to a PDF" conversion function, and there does not need to be one. Saving an edited PDF in place is `saveDocumentTo`'s job, not this one.
+  // `odb` has no export-to-PDF path because it is read-only with no `ContentDocument` to convert; `pdf` has no export-to-PDF path for a different reason — it is genuinely editable now (see PdfOpenDocument's own doc comment), but there is no docxToPdf-equivalent "convert a PDF to a PDF" conversion function, and there does not need to be one. Saving an edited PDF in place is `saveDocumentTo`'s job, not this one.
   if (openDocument.format === "odb" || openDocument.format === "pdf") {
     throw new Error(
-      `A ${openDocument.format} document has no export-to-PDF path -- ${openDocument.format === "pdf" ? "save it directly instead" : "it is a read-only source with nothing to convert"}`,
+      `A ${openDocument.format} document has no export-to-PDF path — ${openDocument.format === "pdf" ? "save it directly instead" : "it is a read-only source with nothing to convert"}`,
     );
   }
   // Loaded before anything is converted or written, so a bad font path fails with nothing half-written at the destination.
@@ -72,7 +72,7 @@ export async function exportToPdf(
     signal: options.signal,
   });
   const pdfOptions = toPdfOptions(options, fonts);
-  // markdownToPdf runs on whatever MarkdownEditor.toMarkdownText() produces right now (re-serialised fresh, matching saveDocumentTo's own convention), not on `originalText` -- an export reflects in-progress edits exactly like every other format's own `editor.toBytes()` does below.
+  // markdownToPdf runs on whatever MarkdownEditor.toMarkdownText() produces right now (re-serialised fresh, matching saveDocumentTo's own convention), not on `originalText` — an export reflects in-progress edits exactly like every other format's own `editor.toBytes()` does below.
   if (openDocument.format === "markdown") {
     const pdfBytes = markdownToPdf(
       encodeMarkdownText(openDocument.editor.toMarkdownText()),
@@ -81,7 +81,7 @@ export async function exportToPdf(
     await writeFile(destinationPath, pdfBytes);
     return;
   }
-  // xlsx has no editor to read current bytes from (see state/types.ts's own XlsxOpenDocument doc comment) -- the original bytes captured at open time are re-converted here, with this call's own real fonts/diagnostics options, rather than reusing the fixed preview conversion `openDocumentAtPath` computed to build the read-only viewer. csv, svg, rtf, and wpd are the identical no-editor story (their own OpenDocument doc comments), each re-converted through its own to-Pdf function the same way.
+  // xlsx has no editor to read current bytes from (see state/types.ts's own XlsxOpenDocument doc comment) — the original bytes captured at open time are re-converted here, with this call's own real fonts/diagnostics options, rather than reusing the fixed preview conversion `openDocumentAtPath` computed to build the read-only viewer. csv, svg, rtf, and wpd are the identical no-editor story (their own OpenDocument doc comments), each re-converted through its own to-Pdf function the same way.
   if (openDocument.format === "xlsx") {
     const pdfBytes = xlsxToPdf(openDocument.bytes, pdfOptions);
     await writeFile(destinationPath, pdfBytes);
@@ -102,7 +102,7 @@ export async function exportToPdf(
     await writeFile(destinationPath, pdfBytes);
     return;
   }
-  // wpd has no rtfToPdf-equivalent named function (see WpdOpenDocument's own doc comment on why) -- convertDocument("wpd", "pdf", ...) reaches the identical composition-engine edge convertDocument's own named forwarders are thin wrappers over.
+  // wpd has no rtfToPdf-equivalent named function (see WpdOpenDocument's own doc comment on why) — convertDocument("wpd", "pdf", ...) reaches the identical composition-engine edge convertDocument's own named forwarders are thin wrappers over.
   if (openDocument.format === "wpd") {
     const pdfBytes = convertDocument(
       "wpd",
@@ -113,7 +113,7 @@ export async function exportToPdf(
     await writeFile(destinationPath, pdfBytes);
     return;
   }
-  // doc, xls, and ppt each carry a live-view editor now, so their export converts the editor's CURRENT bytes -- toBytes() re-serialises the edited ContentDocument -- rather than a fixed copy captured at open time, with this call's own real fonts/diagnostics options.
+  // doc, xls, and ppt each carry a live-view editor now, so their export converts the editor's CURRENT bytes — toBytes() re-serialises the edited ContentDocument — rather than a fixed copy captured at open time, with this call's own real fonts/diagnostics options.
   if (openDocument.format === "doc") {
     const pdfBytes = docToPdf(openDocument.editor.toBytes(), pdfOptions);
     await writeFile(destinationPath, pdfBytes);

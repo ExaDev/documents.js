@@ -2,7 +2,7 @@ import { BiffFormatError } from "../biff/records";
 
 // MS-ODRAW (Escher): the binary drawing format BIFF8 embeds via its own MsoDrawing/MsoDrawingGroup records ([MS-XLS] 2.4.180/2.4.179-adjacent), read directly against [MS-ODRAW]'s own record framing rather than from memory or another implementation's header file. Every structural claim below cites the specific [MS-ODRAW] page it comes from.
 //
-// [MS-ODRAW] 2.2.1 OfficeArtRecordHeader (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/5dc1b9ed-818c-436f-8a4f-905a7ebb1ba9): an 8-byte header shared by every record -- a little-endian WORD whose low nibble is `recVer` and whose remaining 12 bits are `recInstance`, then a little-endian `recType` WORD, then a little-endian `recLen` DWORD counting the bytes that follow the header (for a container, the total size of every nested record INCLUDING their own headers, not a separate wrapper size on top of them). `recVer === 0xF` is what marks a CONTAINER, whose own body is itself a sequence of child records read the same way; any other `recVer` marks an ATOM, whose body is `recLen` bytes of opaque record-specific data this module does not interpret further -- see drawing/shapes.ts and drawing/blips.ts for the atoms this package actually reads.
+// [MS-ODRAW] 2.2.1 OfficeArtRecordHeader (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/5dc1b9ed-818c-436f-8a4f-905a7ebb1ba9): an 8-byte header shared by every record — a little-endian WORD whose low nibble is `recVer` and whose remaining 12 bits are `recInstance`, then a little-endian `recType` WORD, then a little-endian `recLen` DWORD counting the bytes that follow the header (for a container, the total size of every nested record INCLUDING their own headers, not a separate wrapper size on top of them). `recVer === 0xF` is what marks a CONTAINER, whose own body is itself a sequence of child records read the same way; any other `recVer` marks an ATOM, whose body is `recLen` bytes of opaque record-specific data this module does not interpret further — see drawing/shapes.ts and drawing/blips.ts for the atoms this package actually reads.
 
 const HEADER_SIZE = 8;
 const CONTAINER_REC_VER = 0xf;
@@ -28,7 +28,7 @@ export type EscherRecord = EscherAtom | EscherContainer;
 /**
  * Reads every top-level Escher record in `bytes`, recursing into containers.
  *
- * `bytes` is the whole concatenated Escher stream one worksheet's MsoDrawing records (or the workbook globals substream's MsoDrawingGroup records) build up in stream order -- BIFF8 splits one logical Escher byte sequence across as many of those BIFF records as it needs, and [MS-XLS] states plainly that their own data simply concatenates; nothing about the record framing itself lives at that BIFF layer, so by the time this function runs the split is already invisible.
+ * `bytes` is the whole concatenated Escher stream one worksheet's MsoDrawing records (or the workbook globals substream's MsoDrawingGroup records) build up in stream order — BIFF8 splits one logical Escher byte sequence across as many of those BIFF records as it needs, and [MS-XLS] states plainly that their own data simply concatenates; nothing about the record framing itself lives at that BIFF layer, so by the time this function runs the split is already invisible.
  */
 export function readEscherRecords(
   bytes: Uint8Array<ArrayBuffer>,
@@ -103,7 +103,7 @@ function readChildren(
   return children;
 }
 
-/** The first direct child of `container` with the given `recType`, container or atom alike -- undefined when none matches. */
+/** The first direct child of `container` with the given `recType`, container or atom alike — undefined when none matches. */
 export function firstChild(
   container: EscherContainer,
   recType: number,
@@ -119,7 +119,7 @@ export function childrenOfType(
   return container.children.filter((child) => child.recType === recType);
 }
 
-/** Recursively finds the first descendant record (depth-first, this container's own children before their children) with the given `recType` -- for a record known to appear exactly once at an unspecified depth (the Blip Store, the drawing group's own Dgg), as opposed to childrenOfType's direct-children-only contract. */
+/** Recursively finds the first descendant record (depth-first, this container's own children before their children) with the given `recType` — for a record known to appear exactly once at an unspecified depth (the Blip Store, the drawing group's own Dgg), as opposed to childrenOfType's direct-children-only contract. */
 export function findDescendant(
   container: EscherContainer,
   recType: number,

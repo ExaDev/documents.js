@@ -4,9 +4,9 @@ import { describe, expect, it } from "vitest";
 import type { MathMlElement, MathMlNode } from "../mathml/nodes";
 import { buildOfficeMath, buildOfficeMathParagraph } from "./write";
 
-// MathML -> OMML structural translation. Every assertion below is about the ACTUAL OMML element tree written (m:f/m:rad/m:sSub/m:m/...), not about a rendered result -- this module produces markup a real docx-math-aware consumer renders, so the markup itself is the thing under test.
+// MathML -> OMML structural translation. Every assertion below is about the ACTUAL OMML element tree written (m:f/m:rad/m:sSub/m:m/...), not about a rendered result — this module produces markup a real docx-math-aware consumer renders, so the markup itself is the thing under test.
 
-// Hand-built MathML nodes, the same "structurally compatible mirror" shape odf.js's own readOdfFormulaMathMl produces (see src/mathml/nodes.ts's own module comment) -- no XML parsing needed to construct an input tree.
+// Hand-built MathML nodes, the same "structurally compatible mirror" shape odf.js's own readOdfFormulaMathMl produces (see src/mathml/nodes.ts's own module comment) — no XML parsing needed to construct an input tree.
 function mel(
   tag: string,
   attrs: Record<string, string> = {},
@@ -32,7 +32,7 @@ function token(
   return mel(tag, attrs, [mtxt(text)]);
 }
 
-// The m:oMath element a formula translates to, failing loudly rather than returning undefined -- every fixture in this file is expected to produce real content.
+// The m:oMath element a formula translates to, failing loudly rather than returning undefined — every fixture in this file is expected to produce real content.
 function oMath(mathml: readonly MathMlNode[]): XmlElement {
   const { element } = buildOfficeMath(mathml);
   if (element === undefined) {
@@ -51,7 +51,7 @@ function firstByTag(root: XmlElement, tag: string): XmlElement {
   return found;
 }
 
-// Every direct child element tag of `element`, in document order -- OMML's content models are ordered sequences (CT_F is num then den, CT_Rad is radPr/deg/e, CT_SSubSup is e/sub/sup), so the ORDER is part of what makes the output valid, not just the membership.
+// Every direct child element tag of `element`, in document order — OMML's content models are ordered sequences (CT_F is num then den, CT_Rad is radPr/deg/e, CT_SSubSup is e/sub/sup), so the ORDER is part of what makes the output valid, not just the membership.
 function childTags(element: XmlElement): string[] {
   return element.children.flatMap((child) =>
     child.type === "element" ? [child.tag] : [],

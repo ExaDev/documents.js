@@ -1,11 +1,11 @@
 import { MarkdownDiagnosticCodes } from "markdown-codec";
-// TASK_CHECKBOX_UNCHECKED/CHECKED are not re-exported from markdown-codec's own top-level entry point (only QUOTE_STYLE_ID/CODE_BLOCK_STYLE_ID/etc are) -- reached via that package's own "./*" deep-import wildcard instead, the identical mechanism this package's own README documents for its own src/ modules.
+// TASK_CHECKBOX_UNCHECKED/CHECKED are not re-exported from markdown-codec's own top-level entry point (only QUOTE_STYLE_ID/CODE_BLOCK_STYLE_ID/etc are) — reached via that package's own "./*" deep-import wildcard instead, the identical mechanism this package's own README documents for its own src/ modules.
 import { TASK_CHECKBOX_UNCHECKED } from "markdown-codec/shared/style-constants";
 import { describe, expect, it } from "vitest";
 import { openMarkdown } from "./editor";
 
 describe("MarkdownList.appendItem", () => {
-  // A task-list checkbox is not a per-item flag on ContentListMembership -- markdown-codec's own dist/lower/lower.js only ever produces one by prepending a literal "TASK_CHECKBOX_UNCHECKED "/"TASK_CHECKBOX_CHECKED " glyph to the item's own first run text when lowering real "- [ ] "/"- [x] " markdown, and its own dist/emit/emit.js checkboxPrefixFor sniffs that identical glyph back out on write. Building a real task item through this editor therefore means constructing that same glyph-prefixed text directly, exactly as a caller reading a real task list from markdown-codec would see it arrive.
+  // A task-list checkbox is not a per-item flag on ContentListMembership — markdown-codec's own dist/lower/lower.js only ever produces one by prepending a literal "TASK_CHECKBOX_UNCHECKED "/"TASK_CHECKBOX_CHECKED " glyph to the item's own first run text when lowering real "- [ ] "/"- [x] " markdown, and its own dist/emit/emit.js checkboxPrefixFor sniffs that identical glyph back out on write. Building a real task item through this editor therefore means constructing that same glyph-prefixed text directly, exactly as a caller reading a real task list from markdown-codec would see it arrive.
   it('startList({type: "ordered", task: true}) then appendItem twice produces real markdown task-list output', () => {
     const editor = openMarkdown("");
     const list = editor.body.startList({ type: "ordered", task: true });

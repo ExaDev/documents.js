@@ -6,7 +6,7 @@ import {
 } from "documents.js";
 import { z } from "zod";
 
-// Ported from document-cli's src/format.ts (`EXTENSION_TO_FORMAT`/`inferFormatFromExtension`) so both entry points classify a path identically. 'md' and 'markdown' both read as the 'markdown' DocumentFormat, and every ODF/OOXML template and macro-enabled variant reads as its base format -- the many-to-one entries in this table. A template (.ott/.ots/.otp/.otg/.otf) is the same package as its non-template sibling with only the mimetype's "-template" suffix differing, and a macro-enabled OOXML file (.docm/.xlsm/.pptm) is the same package with a vbaProject part this library reads past (macros are never executed or re-emitted); both read through the base codec unchanged.
+// Ported from document-cli's src/format.ts (`EXTENSION_TO_FORMAT`/`inferFormatFromExtension`) so both entry points classify a path identically. 'md' and 'markdown' both read as the 'markdown' DocumentFormat, and every ODF/OOXML template and macro-enabled variant reads as its base format — the many-to-one entries in this table. A template (.ott/.ots/.otp/.otg/.otf) is the same package as its non-template sibling with only the mimetype's "-template" suffix differing, and a macro-enabled OOXML file (.docm/.xlsm/.pptm) is the same package with a vbaProject part this library reads past (macros are never executed or re-emitted); both read through the base codec unchanged.
 const EXTENSION_TO_FORMAT: Readonly<Record<string, DocumentFormat>> = {
   docx: "docx",
   dotx: "docx",
@@ -40,7 +40,7 @@ const EXTENSION_TO_FORMAT: Readonly<Record<string, DocumentFormat>> = {
   pdf: "pdf",
 };
 
-// Reads the extension after the last '.' in the final path segment (so 'a.b/c.docx' -> 'docx', '.gitignore' -> undefined -- a leading dot with no further '.' is not an extension). Returns undefined for no recognised extension, an unrecognised one, or a path with none at all -- callers decide how to react to an unresolved format, this function only classifies.
+// Reads the extension after the last '.' in the final path segment (so 'a.b/c.docx' -> 'docx', '.gitignore' -> undefined — a leading dot with no further '.' is not an extension). Returns undefined for no recognised extension, an unrecognised one, or a path with none at all — callers decide how to react to an unresolved format, this function only classifies.
 export function inferFormatFromExtension(
   path: string,
 ): DocumentFormat | undefined {
@@ -67,7 +67,7 @@ export const DocumentInputSchema = z.union([
   z.object({
     bytesBase64: z.string().describe("Base64-encoded document bytes."),
     format: DocumentFormatSchema.describe(
-      "The document format of bytesBase64 -- required, since inline bytes carry no filename to infer it from.",
+      "The document format of bytesBase64 — required, since inline bytes carry no filename to infer it from.",
     ),
   }),
 ]);

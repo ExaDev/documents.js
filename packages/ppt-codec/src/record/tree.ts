@@ -12,7 +12,7 @@ export interface PptRecord {
   readonly header: RecordHeader;
   // Offset of this record's header within `stream`.
   readonly offset: number;
-  // Offset of this record's data within `stream` -- always `offset + RECORD_HEADER_SIZE`, kept explicit so a caller reading fields never has to re-derive it.
+  // Offset of this record's data within `stream` — always `offset + RECORD_HEADER_SIZE`, kept explicit so a caller reading fields never has to re-derive it.
   readonly dataOffset: number;
   // This record's data alone: a view over `stream`, not a copy.
   readonly data: Uint8Array<ArrayBuffer>;
@@ -68,7 +68,7 @@ export function readRecordSequence(
   return records;
 }
 
-// A container's children. An atom has none by definition -- its data is fields, not records -- so this returns nothing for one rather than trying to parse field bytes as a record sequence.
+// A container's children. An atom has none by definition — its data is fields, not records — so this returns nothing for one rather than trying to parse field bytes as a record sequence.
 export function childRecords(record: PptRecord): PptRecord[] {
   if (!isContainerRecord(record.header)) {
     return [];
@@ -94,7 +94,7 @@ export function findChildren(
   return records.filter((record) => record.header.recType === recType);
 }
 
-// Every record of a type anywhere beneath `root`, in document order. Used where the spec's own child ordering is looser than a fixed field list -- the OfficeArt shape tree, whose group containers nest to arbitrary depth.
+// Every record of a type anywhere beneath `root`, in document order. Used where the spec's own child ordering is looser than a fixed field list — the OfficeArt shape tree, whose group containers nest to arbitrary depth.
 export function findDescendants(root: PptRecord, recType: number): PptRecord[] {
   const found: PptRecord[] = [];
   for (const child of childRecords(root)) {

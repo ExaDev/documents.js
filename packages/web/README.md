@@ -30,13 +30,13 @@ pnpm test:e2e        # playwright test, against the real app served by `pnpm dev
 
 To run a single unit test file, pass its path: `pnpm exec vitest run --project unit src/shared/transferables.test.ts`.
 
-`test:e2e`'s specs live in `e2e/` and drive a real Chromium instance against the Vite dev server (`playwright.config.ts`'s own `webServer`), covering the routed navigation and the drag-and-drop conversion flow that unit tests can't reach -- the native file-picker path and the browser's own drag events. It runs in CI (`test-e2e` in `ci.yml`) but is not yet a required check.
+`test:e2e`'s specs live in `e2e/` and drive a real Chromium instance against the Vite dev server (`playwright.config.ts`'s own `webServer`), covering the routed navigation and the drag-and-drop conversion flow that unit tests can't reach — the native file-picker path and the browser's own drag events. It runs in CI (`test-e2e` in `ci.yml`) but is not yet a required check.
 
 ## Architecture
 
 The app is split into a main-thread UI and a Web Worker that holds the only code allowed to touch real document bytes:
 
-- **`src/workers/documents.worker.ts`** runs `src/rpc/router.ts`, an [oRPC](https://orpc.unnoq.com/) router that is the sole caller of `documents.js`'s conversion, metadata, and font functions, and the only place a sibling codec package is imported directly -- currently `markdown-codec` alone, though the import boundary below covers `odf.js`, `ooxml.js`, and `pdf-codec` too, so any of them may only ever be reached from here.
+- **`src/workers/documents.worker.ts`** runs `src/rpc/router.ts`, an [oRPC](https://orpc.unnoq.com/) router that is the sole caller of `documents.js`'s conversion, metadata, and font functions, and the only place a sibling codec package is imported directly — currently `markdown-codec` alone, though the import boundary below covers `odf.js`, `ooxml.js`, and `pdf-codec` too, so any of them may only ever be reached from here.
 - **`src/rpc/client.ts`** is how everything on the main thread reaches the worker — UI code, routes, hooks, and features never import `documents.js` or its sibling packages directly (see Conventions below).
 - **`src/routes/`** are TanStack Router file-based routes (`src/routeTree.gen.ts` is generated, not hand-edited).
 - **`src/ports/` + `src/adapters/`** hold a small ports-and-adapters boundary for browser capabilities that need a fallback: `FileAccessPort` has a `nativeFileAccess` implementation (File System Access API) and a `fallbackFileAccess` implementation for browsers without it, selected by `createFileAccess.ts`.

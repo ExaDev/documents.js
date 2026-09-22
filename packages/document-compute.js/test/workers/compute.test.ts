@@ -10,7 +10,7 @@ import {
   solveFor,
 } from '../../src';
 
-// Proves document-compute.js's surface executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. Every path here -- unit-aware evaluate() over num/qty/sym/app nodes, interval arithmetic reusing the same evaluator, and solveFor's bisection/Newton root-finding -- is deliberately Node-free (unit-conversion exactness comes from plain BigInt arithmetic in rational.ts, never node:crypto or any other Node-only primitive); if any touched code path in this module graph or its document-schema.js dependency (zod included) reached for a Node-only API, the workerd isolate would throw rather than these passing. This is the runtime complement to the static ESLint Worker-isomorphism guard.
+// Proves document-compute.js's surface executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. Every path here — unit-aware evaluate() over num/qty/sym/app nodes, interval arithmetic reusing the same evaluator, and solveFor's bisection/Newton root-finding — is deliberately Node-free (unit-conversion exactness comes from plain BigInt arithmetic in rational.ts, never node:crypto or any other Node-only primitive); if any touched code path in this module graph or its document-schema.js dependency (zod included) reached for a Node-only API, the workerd isolate would throw rather than these passing. This is the runtime complement to the static ESLint Worker-isomorphism guard.
 describe('document-compute.js under the Cloudflare Workers runtime', () => {
   const context: SymbolTable = {
     symbols: [],

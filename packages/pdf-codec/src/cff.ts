@@ -1,12 +1,12 @@
 import { hasBytes, u8, u16, u24, u32 } from "./sfnt";
 
-// The two container structures every CFF (Compact Font Format 1.0) font is built out of -- the INDEX (spec section 5) and the DICT (section 4) -- and nothing else. Both readers here are format plumbing shared by the two CFF consumers in this package: cff-probe.ts (is this font CID-keyed?) and cff-bounds.ts (what does this glyph's charstring actually draw?). Neither structure is specific to either question, and a second hand-rolled copy of the INDEX offset arithmetic or the DICT operand encoding is exactly the kind of drift that produces a reader which is subtly right about one font and wrong about the next.
+// The two container structures every CFF (Compact Font Format 1.0) font is built out of — the INDEX (spec section 5) and the DICT (section 4) — and nothing else. Both readers here are format plumbing shared by the two CFF consumers in this package: cff-probe.ts (is this font CID-keyed?) and cff-bounds.ts (what does this glyph's charstring actually draw?). Neither structure is specific to either question, and a second hand-rolled copy of the INDEX offset arithmetic or the DICT operand encoding is exactly the kind of drift that produces a reader which is subtly right about one font and wrong about the next.
 //
-// Input everywhere in this module is a BARE CFF program, i.e. the contents of an sfnt 'CFF ' table or of a PDF /FontFile3 stream -- not an 'OTTO' sfnt container. sfnt.ts already slices a table out of a container.
+// Input everywhere in this module is a BARE CFF program, i.e. the contents of an sfnt 'CFF ' table or of a PDF /FontFile3 stream — not an 'OTTO' sfnt container. sfnt.ts already slices a table out of a container.
 
 export interface CffIndex {
   readonly count: number;
-  readonly endOffset: number; // the absolute offset of the first byte past this INDEX -- how a caller walks from one INDEX to the next, since a CFF's Name/Top DICT/String/Global Subr INDEXes are stored back to back with no offsets pointing at them
+  readonly endOffset: number; // the absolute offset of the first byte past this INDEX — how a caller walks from one INDEX to the next, since a CFF's Name/Top DICT/String/Global Subr INDEXes are stored back to back with no offsets pointing at them
   entry(index: number): Uint8Array<ArrayBuffer> | undefined;
 }
 
@@ -15,7 +15,7 @@ export type CffDict = ReadonlyMap<number, readonly number[]>;
 
 export const CFF_ESCAPED_OPERATOR_BASE = 1200;
 
-// The Top DICT operators this package reads (spec Table 9 and Table 10). Everything else in a Top DICT -- the encoding, the font matrix, the copyright strings, the CID-keyed FDArray/FDSelect pair -- is skipped by the readers built on this module rather than modelled here.
+// The Top DICT operators this package reads (spec Table 9 and Table 10). Everything else in a Top DICT — the encoding, the font matrix, the copyright strings, the CID-keyed FDArray/FDSelect pair — is skipped by the readers built on this module rather than modelled here.
 export const CFF_DICT_OP_CHARSET = 15;
 export const CFF_DICT_OP_ENCODING = 16;
 export const CFF_DICT_OP_CHARSTRINGS = 17;
@@ -74,7 +74,7 @@ function readOffsetAt(
   return u32(bytes, offset);
 }
 
-// A CFF INDEX: a count, an offset size, count+1 offsets of that size, then the data those offsets carve up. The offsets are 1-based relative to the byte immediately BEFORE the data block, which is why `dataOrigin` below is one short of where the data actually starts -- a genuine off-by-one in the format itself rather than in this reader. Returns `undefined` for anything that is not a well-formed INDEX at `offset`.
+// A CFF INDEX: a count, an offset size, count+1 offsets of that size, then the data those offsets carve up. The offsets are 1-based relative to the byte immediately BEFORE the data block, which is why `dataOrigin` below is one short of where the data actually starts — a genuine off-by-one in the format itself rather than in this reader. Returns `undefined` for anything that is not a well-formed INDEX at `offset`.
 export function readCffIndex(
   bytes: Uint8Array<ArrayBuffer>,
   offset: number,
@@ -84,7 +84,7 @@ export function readCffIndex(
   }
   const count = u16(bytes, offset);
   if (count === 0) {
-    // An empty INDEX is just its own two count bytes -- no offset size and no offset array follow (spec section 5).
+    // An empty INDEX is just its own two count bytes — no offset size and no offset array follow (spec section 5).
     return {
       count: 0,
       endOffset: offset + INDEX_COUNT_SIZE,
@@ -142,7 +142,7 @@ interface RealOperand {
 
 // Decodes a real-number operand starting at `start` (the first byte after the 30 marker): one packed nibble pair per byte, ending at the first 0xf nibble in either position.
 //
-// A nibble stream that terminates cleanly but does not spell a finite number (say "0E-1-", which the byte pair 0x0c 0x1e produces) yields NaN rather than failing the whole DICT. Where the stream ENDS is unambiguous either way -- that is what the terminator nibble is for -- so one unreadable operand value costs a caller nothing unless it actually reads that operand, and every caller in this package validates the operands it uses. Refusing the DICT outright would instead throw away the operators around it, which is how a font with one odd real number in a string-valued entry would end up unembeddable for no reason.
+// A nibble stream that terminates cleanly but does not spell a finite number (say "0E-1-", which the byte pair 0x0c 0x1e produces) yields NaN rather than failing the whole DICT. Where the stream ENDS is unambiguous either way — that is what the terminator nibble is for — so one unreadable operand value costs a caller nothing unless it actually reads that operand, and every caller in this package validates the operands it uses. Refusing the DICT outright would instead throw away the operators around it, which is how a font with one odd real number in a string-valued entry would end up unembeddable for no reason.
 function readRealOperand(
   data: Uint8Array<ArrayBuffer>,
   start: number,

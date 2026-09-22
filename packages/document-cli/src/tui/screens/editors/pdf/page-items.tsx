@@ -33,7 +33,7 @@ function truncate(text: string, maxChars: number): string {
   return text.length > maxChars ? `${text.slice(0, maxChars)}…` : text;
 }
 
-// `LayoutPath` has no widthPt/heightPt of its own -- unlike image/rect/ellipse, its geometry lives entirely in its subpaths' points -- so its "dimensions" preview is the tight bounding box of every point the path actually visits, cubic control points included (a cubic curve is guaranteed to lie within their convex hull, so this never clips the curve; it can only ever be as large as or larger than a tighter, curve-aware bound).
+// `LayoutPath` has no widthPt/heightPt of its own — unlike image/rect/ellipse, its geometry lives entirely in its subpaths' points — so its "dimensions" preview is the tight bounding box of every point the path actually visits, cubic control points included (a cubic curve is guaranteed to lie within their convex hull, so this never clips the curve; it can only ever be as large as or larger than a tighter, curve-aware bound).
 function pathDimensions(item: Extract<LayoutItem, { kind: "path" }>): string {
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
@@ -193,7 +193,7 @@ function readFrame(values: Readonly<Record<string, string>>): {
   };
 }
 
-// The one async branch (reading an image file off disk) is why this whole function is async -- every other kind dispatches synchronously and resolves immediately, matching odg/page-detail.tsx's own AddItemFlow shape.
+// The one async branch (reading an image file off disk) is why this whole function is async — every other kind dispatches synchronously and resolves immediately, matching odg/page-detail.tsx's own AddItemFlow shape.
 async function applyAddKind(
   kind: AddKind,
   pageIndex: number,
@@ -296,7 +296,7 @@ async function applyAddKind(
         dispatch({
           type: "SET_STATUS",
           severity: "warning",
-          text: `${path} is not a .png or .jpg/.jpeg file -- image not added`,
+          text: `${path} is not a .png or .jpg/.jpeg file — image not added`,
         });
         return;
       }
@@ -353,7 +353,7 @@ function AddItemFlow(props: {
   if (kind === undefined) {
     return (
       <Box flexDirection="column" borderStyle="round" paddingX={1}>
-        <Text bold>Add item -- choose a kind</Text>
+        <Text bold>Add item — choose a kind</Text>
         {/* A 7-item fixed list inside a 2-row border, so it needs 2 more reserved rows than list-view.tsx's own default (title + status line + blank + slack) already assumes. */}
         <ListView
           items={ADD_KIND_OPTIONS}
@@ -383,7 +383,7 @@ function AddItemFlow(props: {
   );
 }
 
-// A scrollable dump of one page's own positioned items, in the exact paint order `readPdf` recovered them -- text shows a truncated preview of its own string, a link shows its target URI, and every other kind (image/rect/ellipse/line/path) shows a short size summary since none of them carry meaningful inline text. For a genuine `'pdf'`-format document (not an xlsx preview -- see shared.ts's own isEditablePdfDocument), `a` opens the add-item flow and `d` deletes the currently selected item.
+// A scrollable dump of one page's own positioned items, in the exact paint order `readPdf` recovered them — text shows a truncated preview of its own string, a link shows its target URI, and every other kind (image/rect/ellipse/line/path) shows a short size summary since none of them carry meaningful inline text. For a genuine `'pdf'`-format document (not an xlsx preview — see shared.ts's own isEditablePdfDocument), `a` opens the add-item flow and `d` deletes the currently selected item.
 export function PdfPageItemsScreen(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();
@@ -445,7 +445,7 @@ export function PdfPageItemsScreen(): ReactElement {
       : undefined,
   });
 
-  // A second, independent listener alongside useNavigationInput's own -- Ink supports several simultaneous active `useInput` hooks, and `useNavigationInput` has no delete-key concept of its own (see keybindings/use-navigation-input.ts). Only wired up for a genuine editable pdf document; an xlsx preview has no REMOVE_PDF_ITEM to dispatch against in the first place.
+  // A second, independent listener alongside useNavigationInput's own — Ink supports several simultaneous active `useInput` hooks, and `useNavigationInput` has no delete-key concept of its own (see keybindings/use-navigation-input.ts). Only wired up for a genuine editable pdf document; an xlsx preview has no REMOVE_PDF_ITEM to dispatch against in the first place.
   useInput(
     (input) => {
       if (input !== "d") {
@@ -491,13 +491,13 @@ export function PdfPageItemsScreen(): ReactElement {
         emptyMessage={
           query === ""
             ? editable
-              ? "This page has no items -- press 'a' to add one"
+              ? "This page has no items — press 'a' to add one"
               : "This page has no items."
             : `No items match "${state.searchQuery}".`
         }
         renderItem={({ item, itemIndex }, isSelected) => (
           <Text color={selectedColor(isSelected)} inverse={isSelected}>
-            {itemIndex + 1}. {item.kind} -- {previewFor(item)}
+            {itemIndex + 1}. {item.kind} — {previewFor(item)}
           </Text>
         )}
       />

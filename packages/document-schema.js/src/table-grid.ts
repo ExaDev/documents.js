@@ -1,6 +1,6 @@
 // The one shared definition of a ContentTable's grid: which grid position each entry of a row's `cells` array occupies, and how a merged region's covered positions are expressed. ContentTableCell (src/content.ts) states the rule itself normatively; this module is the code every producer and consumer runs so that no reader or writer re-derives it, the same "one canonical, format-agnostic model-level module" role src/a1.ts plays for A1 references. Row and column indices throughout are 0-based, matching ContentTableRow's own array order.
 //
-// THE RULE, restated here because the algorithms below only make sense against it: a row's `cells` array is DENSE. It holds exactly one entry per grid column, so `row.cells[n]` is the cell at grid column n and `columnWidthsPt[n]` is that column's width -- array index IS grid column, with no accumulation of preceding spans needed to recover it. A merged region is one anchor entry carrying `colSpan`/`rowSpan` at its top-left position, plus one entry per remaining position the region covers. A covered entry is a real cell: it holds no blocks of its own (its content belongs to the anchor) but may carry the covered position's own background, borders, and residue, which is how a format that models covered cells explicitly (ODF's `table:covered-table-cell`, a pptx `a:tc` with `hMerge`/`vMerge`) round-trips their properties at all.
+// THE RULE, restated here because the algorithms below only make sense against it: a row's `cells` array is DENSE. It holds exactly one entry per grid column, so `row.cells[n]` is the cell at grid column n and `columnWidthsPt[n]` is that column's width — array index IS grid column, with no accumulation of preceding spans needed to recover it. A merged region is one anchor entry carrying `colSpan`/`rowSpan` at its top-left position, plus one entry per remaining position the region covers. A covered entry is a real cell: it holds no blocks of its own (its content belongs to the anchor) but may carry the covered position's own background, borders, and residue, which is how a format that models covered cells explicitly (ODF's `table:covered-table-cell`, a pptx `a:tc` with `hMerge`/`vMerge`) round-trips their properties at all.
 //
 // A covered position is not marked by a field of its own: whether a position is covered follows entirely from the anchors' spans, which walkTableGrid derives. Adding a flag would be a second source of truth for a fact the spans already determine completely, and one that can contradict them.
 
@@ -60,7 +60,7 @@ interface AnchorFootprint {
   readonly columnEnd: number;
 }
 
-// The anchors seen so far, queried before the current position is itself classified -- which is what makes "is this position covered" answerable without excluding the position from its own footprint: an anchor only ever covers positions at or after its own, so a position asking the question is never yet in the list when it asks. No `anchor.row <= rowIndex` term appears, deliberately: every anchor in the list is at or before the asking row already, so `rowIndex < anchor.rowEnd` alone decides the vertical extent.
+// The anchors seen so far, queried before the current position is itself classified — which is what makes "is this position covered" answerable without excluding the position from its own footprint: an anchor only ever covers positions at or after its own, so a position asking the question is never yet in the list when it asks. No `anchor.row <= rowIndex` term appears, deliberately: every anchor in the list is at or before the asking row already, so `rowIndex < anchor.rowEnd` alone decides the vertical extent.
 function coveringAnchor(
   anchors: readonly AnchorFootprint[],
   rowIndex: number,
@@ -380,7 +380,7 @@ function positionAnchorRows(
 }
 
 /**
- * Build dense rows from anchor cells alone, placing each at the first grid column no earlier cell already reaches -- the placement HTML's own table model needs, where a `rowspan` in one row silently consumes a column in the rows below it and nothing marks the consumed position.
+ * Build dense rows from anchor cells alone, placing each at the first grid column no earlier cell already reaches — the placement HTML's own table model needs, where a `rowspan` in one row silently consumes a column in the rows below it and nothing marks the consumed position.
  *
  * `columnCount` is the grid width the source declared, where it declares one at all; pass 0 when it does not and the width follows from the placement.
  */

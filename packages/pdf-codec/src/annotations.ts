@@ -9,7 +9,7 @@ import { serializeObjectToText } from "./serialize";
 import { applyMatrix } from "./matrix";
 import type { Matrix } from "./matrix";
 
-// Annotation reading (#721 phase 4): the /Annots walk for everything that is neither a link item (read.ts's own walk), a /FileAttachment (the attachments table owns its filespec), nor a /Widget (the AcroForm field tree owns it). The semantic set is the sticky note, FreeText, and the /QuadPoints markup family; every other kind degrades to its rect plus the raw annotation dictionary in the quarantined residue channel -- the verdict row's own split. Popup annotations are dropped outright as derivable (a popup's rect is the parent plus a fixed offset, and its contents ARE the parent's).
+// Annotation reading (#721 phase 4): the /Annots walk for everything that is neither a link item (read.ts's own walk), a /FileAttachment (the attachments table owns its filespec), nor a /Widget (the AcroForm field tree owns it). The semantic set is the sticky note, FreeText, and the /QuadPoints markup family; every other kind degrades to its rect plus the raw annotation dictionary in the quarantined residue channel — the verdict row's own split. Popup annotations are dropped outright as derivable (a popup's rect is the parent plus a fixed offset, and its contents ARE the parent's).
 
 export function readPageAnnotations(
   page: PdfDict,
@@ -17,7 +17,7 @@ export function readPageAnnotations(
   resolver: PdfObjectResolver,
   sink: PdfDiagnosticSink,
 ): LayoutAnnotation[] {
-  // Both sets are scoped to this function, its only reader, rather than declared at module level: a module-level initializer runs exactly once per process, which puts every one of its literal entries permanently beyond the reach of Stryker's per-test mutation switch (see the memory note on this in the project's own notes) -- scoping them here re-evaluates them fresh on every call, where each entry is reachable again.
+  // Both sets are scoped to this function, its only reader, rather than declared at module level: a module-level initializer runs exactly once per process, which puts every one of its literal entries permanently beyond the reach of Stryker's per-test mutation switch (see the memory note on this in the project's own notes) — scoping them here re-evaluates them fresh on every call, where each entry is reachable again.
   const semanticSubtypes = new Set([
     "Text",
     "FreeText",
@@ -47,7 +47,7 @@ export function readPageAnnotations(
     if (subtype === undefined || ownedElsewhereSubtypes.has(subtype)) {
       continue;
     }
-    // This package's own hidden presenter-notes annotation is a round-trip mechanism, not document content -- readPageNotes consumes it, and it must not also surface as a sticky note.
+    // This package's own hidden presenter-notes annotation is a round-trip mechanism, not document content — readPageNotes consumes it, and it must not also surface as a sticky note.
     if (
       subtype === "Text" &&
       annotString(annot, "T") === NOTES_ANNOTATION_AUTHOR

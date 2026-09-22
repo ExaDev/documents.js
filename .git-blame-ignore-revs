@@ -6,9 +6,9 @@
 #
 # GitHub's blame view reads it automatically, with no configuration.
 #
-# Only whole-tree reformats belong here -- a commit that changed behaviour must stay blameable even if it also reformatted.
+# Only whole-tree reformats belong here — a commit that changed behaviour must stay blameable even if it also reformatted.
 #
-# A SHA recorded here goes stale whenever the commit it names is rewritten, which includes rebase-merging the pull request that introduced it onto main -- not just a local rebase before merging. Record the SHA the commit has once it is on main, and verify with `git merge-base --is-ancestor <sha> HEAD`. Matching by subject line is not a check: a stale entry still has a real commit somewhere in the reflog to find, so grepping the log finds a plausible hash while blame silently ignores nothing.
+# A SHA recorded here goes stale whenever the commit it names is rewritten, which includes rebase-merging the pull request that introduced it onto main — not just a local rebase before merging. Record the SHA the commit has once it is on main, and verify with `git merge-base --is-ancestor <sha> HEAD`. Matching by subject line is not a check: a stale entry still has a real commit somewhere in the reflog to find, so grepping the log finds a plausible hash while blame silently ignores nothing.
 
 # style: format the workspace with prettier
 c12e74028aaf5f62cad1c64a414d091c7ecc83db

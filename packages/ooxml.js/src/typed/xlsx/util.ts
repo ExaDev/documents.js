@@ -4,12 +4,12 @@ import { POINTS_PER_INCH } from "../shared/units";
 
 // Small SpreadsheetML-specific helpers shared by typed/xlsx/content.ts (read) and typed/xlsx/build.ts (write) that don't fit a1.ts (cell references) or units.ts (column-width/row-height geometry): xsd:boolean attribute values, ST_PositiveUniversalMeasure length strings, and the ST_PaperSize enumeration.
 
-// ECMA-376 attributes typed xsd:boolean accept both "0"/"1" and "false"/"true" -- real producers use both forms (LibreOffice writes "true"/"false"; Excel itself more often writes "1", or omits the attribute entirely for false). An absent attribute is false, matching xsd:boolean's own default-false convention for every boolean this package reads.
+// ECMA-376 attributes typed xsd:boolean accept both "0"/"1" and "false"/"true" — real producers use both forms (LibreOffice writes "true"/"false"; Excel itself more often writes "1", or omits the attribute entirely for false). An absent attribute is false, matching xsd:boolean's own default-false convention for every boolean this package reads.
 export function readXmlBool(value: string | undefined): boolean {
   return value === "1" || value === "true";
 }
 
-// This package's own writer always emits the "true"/"false" spelling (not "1"/"0") -- an arbitrary but consistent choice between the two spec-legal forms, matching what LibreOffice itself writes (see this package's own kitchen-sink fixture) rather than what Excel writes, so a produced file's own boolean attributes are maximally readable by a human inspecting the XML.
+// This package's own writer always emits the "true"/"false" spelling (not "1"/"0") — an arbitrary but consistent choice between the two spec-legal forms, matching what LibreOffice itself writes (see this package's own kitchen-sink fixture) rather than what Excel writes, so a produced file's own boolean attributes are maximally readable by a human inspecting the XML.
 export function writeXmlBool(value: boolean): string {
   return value ? "true" : "false";
 }
@@ -22,7 +22,7 @@ export function parseUniversalMeasureToPt(value: string): number | undefined {
   if (match === null) {
     return undefined;
   }
-  // Neither capture group is optional in UNIVERSAL_MEASURE_RE itself (neither has a trailing `?`), so a successful match always populates both -- TypeScript's own RegExpExecArray typing just can't express that a specific pattern's groups are mandatory, which is what the non-null assertions below state instead of a runtime check nothing real can ever fail.
+  // Neither capture group is optional in UNIVERSAL_MEASURE_RE itself (neither has a trailing `?`), so a successful match always populates both — TypeScript's own RegExpExecArray typing just can't express that a specific pattern's groups are mandatory, which is what the non-null assertions below state instead of a runtime check nothing real can ever fail.
   const amountRaw = match[1]!;
   const unit = match[2]!;
   const amount = Number(amountRaw);
@@ -49,7 +49,7 @@ export function ptToUniversalMeasure(pt: number): string {
   return `${cm.toFixed(2)}cm`;
 }
 
-// ECMA-376 Part 1 SS18.17.2.34 (ST_PaperSize): only the two paper sizes this package's own content model already names as constants (PAGE_SIZE_LETTER, PAGE_SIZE_A4) are mapped -- 1 = Letter (8.5in x 11in), 9 = A4 (210mm x 297mm). Confirmed against both the ClosedXML wiki's own "Paper Size Lookup Table" and PhpSpreadsheet's PageSetup documentation, which enumerate the full ST_PaperSize code list identically. Any other code (Legal, A3, Tabloid, ...) is a genuine, documented scope narrowing -- this reader falls back to explicit paperWidth/paperHeight (see parseUniversalMeasureToPt above) or, failing that, PAGE_SIZE_LETTER, rather than growing a full paper-size table this package's own model has no constants for.
+// ECMA-376 Part 1 SS18.17.2.34 (ST_PaperSize): only the two paper sizes this package's own content model already names as constants (PAGE_SIZE_LETTER, PAGE_SIZE_A4) are mapped — 1 = Letter (8.5in x 11in), 9 = A4 (210mm x 297mm). Confirmed against both the ClosedXML wiki's own "Paper Size Lookup Table" and PhpSpreadsheet's PageSetup documentation, which enumerate the full ST_PaperSize code list identically. Any other code (Legal, A3, Tabloid, ...) is a genuine, documented scope narrowing — this reader falls back to explicit paperWidth/paperHeight (see parseUniversalMeasureToPt above) or, failing that, PAGE_SIZE_LETTER, rather than growing a full paper-size table this package's own model has no constants for.
 const PAPER_SIZE_BY_CODE: Readonly<Record<string, PageSize>> = {
   "1": PAGE_SIZE_LETTER,
   "9": PAGE_SIZE_A4,

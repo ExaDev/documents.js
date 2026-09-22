@@ -20,7 +20,7 @@ const source = {
   format: "docx" as const,
 };
 
-// A minimal, hand-authored .odb declaring two saved queries and nothing else -- resolveSavedQuerySql's own "not found" message throws before ever reading table data, so no table/report/manifest is needed here at all. Exists to prove the "Available: ..." suffix genuinely joins every declared query name with ", " rather than concatenating them bare, which a single-query fixture (this file's own `source` above) cannot distinguish.
+// A minimal, hand-authored .odb declaring two saved queries and nothing else — resolveSavedQuerySql's own "not found" message throws before ever reading table data, so no table/report/manifest is needed here at all. Exists to prove the "Available: ..." suffix genuinely joins every declared query name with ", " rather than concatenating them bare, which a single-query fixture (this file's own `source` above) cannot distinguish.
 function twoSavedQueriesOdbBytes(): Uint8Array<ArrayBuffer> {
   return encodePackage({
     parts: {
@@ -123,7 +123,7 @@ describe("odbQueryOperation", () => {
       format: "docx" as const,
     };
 
-    // Anchored top to bottom, not a substring match: the message this test guards against is a mutant that always computes the "Available: ..." suffix (dropping the available.length === 0 check, or replacing its own "" branch with non-empty text) while an empty query list still joins to "" -- a plain substring check on the sentence's own leading clause would pass either way, since that clause is an unchanged prefix of the corrupted message too.
+    // Anchored top to bottom, not a substring match: the message this test guards against is a mutant that always computes the "Available: ..." suffix (dropping the available.length === 0 check, or replacing its own "" branch with non-empty text) while an empty query list still joins to "" — a plain substring check on the sentence's own leading clause would pass either way, since that clause is an unchanged prefix of the corrupted message too.
     await expect(
       odbQueryOperation.run({ source: noQuerySource, query: "AnyName" }),
     ).rejects.toThrow(/^This \.odb declares no saved query named "AnyName"\.$/);

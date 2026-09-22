@@ -168,7 +168,7 @@ describe("walkArchive cumulative-size guard", () => {
   });
 
   it("counts decompressed bytes cumulatively across nesting levels, not per archive", () => {
-    // Each level alone stays under the budget; only their sum crosses it -- this is the property byte-codec's per-stream cap cannot express.
+    // Each level alone stays under the budget; only their sum crosses it — this is the property byte-codec's per-stream cap cannot express.
     const inner = zipSync({
       "big-inner.txt": enc.encode("x".repeat(600 * 1024)),
     });

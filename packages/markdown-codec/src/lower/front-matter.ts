@@ -1,6 +1,6 @@
-// Leading YAML front matter -> a flat-scalar-only subset of document-schema.js's LayoutMetadata, stripped before block parsing (ReadMarkdownOptions.frontMatter's own comment) -- a line of exactly '---', a run of lines, a closing line of exactly '---' or '...'. This is NOT a real YAML or TOML parser: it recognises exactly one shape, `key: value` lines (plus one array special case for `keywords`), and maps every LayoutMetadata field that a front-matter line can meaningfully carry (STRING_FIELD_SETTERS, plus `keywords` and `direction`, below) onto LayoutMetadata's own fields. `producer` is never set here -- that field is PDF-writer-only per document-schema.js's own LayoutMetadata schema comment, and front matter has no equivalent concept to map from regardless. Every OTHER key is reported through the sink (MarkdownDiagnosticCodes.FRONT_MATTER_KEY_UNMAPPED) and dropped; a line that is not `key: value` at all (a nested mapping, a block list, a multi-line scalar) is silently skipped rather than partially interpreted, since genuinely parsing those shapes is exactly the "real YAML/TOML parser" this module deliberately is not.
+// Leading YAML front matter -> a flat-scalar-only subset of document-schema.js's LayoutMetadata, stripped before block parsing (ReadMarkdownOptions.frontMatter's own comment) — a line of exactly '---', a run of lines, a closing line of exactly '---' or '...'. This is NOT a real YAML or TOML parser: it recognises exactly one shape, `key: value` lines (plus one array special case for `keywords`), and maps every LayoutMetadata field that a front-matter line can meaningfully carry (STRING_FIELD_SETTERS, plus `keywords` and `direction`, below) onto LayoutMetadata's own fields. `producer` is never set here — that field is PDF-writer-only per document-schema.js's own LayoutMetadata schema comment, and front matter has no equivalent concept to map from regardless. Every OTHER key is reported through the sink (MarkdownDiagnosticCodes.FRONT_MATTER_KEY_UNMAPPED) and dropped; a line that is not `key: value` at all (a nested mapping, a block list, a multi-line scalar) is silently skipped rather than partially interpreted, since genuinely parsing those shapes is exactly the "real YAML/TOML parser" this module deliberately is not.
 //
-// Extending this to a genuine YAML/TOML engine was weighed against extending the flat-scalar recogniser and rejected: LayoutMetadata itself (document-schema.js's own schema) is a flat bag of scalars plus one array (`keywords`) and one two-member enum (`direction`) -- nothing in it needs a real parser's block-mapping, anchor, or multi-document support, and this package's own README states its whole bet as "hand-write the format instead of wrapping a third-party library" (enforced elsewhere by eslint `no-restricted-imports` against markdown-parsing libraries specifically). Pulling in a YAML dependency to parse a shape this module can already fully enumerate would trade a zero-dependency, exhaustively-testable recogniser for a general-purpose parser this package would still only ever feed flat `key: value` lines.
+// Extending this to a genuine YAML/TOML engine was weighed against extending the flat-scalar recogniser and rejected: LayoutMetadata itself (document-schema.js's own schema) is a flat bag of scalars plus one array (`keywords`) and one two-member enum (`direction`) — nothing in it needs a real parser's block-mapping, anchor, or multi-document support, and this package's own README states its whole bet as "hand-write the format instead of wrapping a third-party library" (enforced elsewhere by eslint `no-restricted-imports` against markdown-parsing libraries specifically). Pulling in a YAML dependency to parse a shape this module can already fully enumerate would trade a zero-dependency, exhaustively-testable recogniser for a general-purpose parser this package would still only ever feed flat `key: value` lines.
 
 import type { LayoutMetadata, TextDirection } from "document-schema.js";
 import type { MarkdownDiagnosticSink } from "../diagnostics/diagnostics";
@@ -18,7 +18,7 @@ type MutableLayoutMetadata = {
   -readonly [K in keyof LayoutMetadata]?: LayoutMetadata[K];
 };
 
-// Every front-matter key this module recognises, as a setter closed over its own LayoutMetadata field -- a function per key rather than a plain string-keyed lookup table, so assigning the parsed scalar into `metadata` never needs an index-signature cast (each closure already knows its own field's real type). Covers the complete set of STRING-VALUED LayoutMetadata fields (document-schema.js) minus `producer` (PDF-writer-only, no front-matter equivalent); `keywords` (array) and `direction` (two-member enum) are handled separately below, since neither is a bare scalar assignment. `date`/`modified`/`lastPrinted` keep the shorter, front-matter-conventional spellings src/emit/front-matter.ts already used for `date` <-> createdIso; the rest use the LayoutMetadata field name verbatim since there is no shorter convention to prefer.
+// Every front-matter key this module recognises, as a setter closed over its own LayoutMetadata field — a function per key rather than a plain string-keyed lookup table, so assigning the parsed scalar into `metadata` never needs an index-signature cast (each closure already knows its own field's real type). Covers the complete set of STRING-VALUED LayoutMetadata fields (document-schema.js) minus `producer` (PDF-writer-only, no front-matter equivalent); `keywords` (array) and `direction` (two-member enum) are handled separately below, since neither is a bare scalar assignment. `date`/`modified`/`lastPrinted` keep the shorter, front-matter-conventional spellings src/emit/front-matter.ts already used for `date` <-> createdIso; the rest use the LayoutMetadata field name verbatim since there is no shorter convention to prefer.
 const STRING_FIELD_SETTERS: Record<
   string,
   (metadata: MutableLayoutMetadata, value: string) => void
@@ -77,7 +77,7 @@ function isTextDirection(value: string): value is TextDirection {
 export interface FrontMatterResult {
   readonly metadata: LayoutMetadata;
   readonly rest: string;
-  // The original front-matter block verbatim, delimiters included, present exactly when one was found and extracted -- what a same-format writer re-emits as-is (the restorable tier) so original spellings a flat-scalar metadata mapping cannot hold (unmapped keys, quote styles, ordering) survive the round trip.
+  // The original front-matter block verbatim, delimiters included, present exactly when one was found and extracted — what a same-format writer re-emits as-is (the restorable tier) so original spellings a flat-scalar metadata mapping cannot hold (unmapped keys, quote styles, ordering) survive the round trip.
   readonly source: string | undefined;
 }
 
@@ -90,7 +90,7 @@ function parseScalar(raw: string): string {
   return isDoubleQuoted || isSingleQuoted ? trimmed.slice(1, -1) : trimmed;
 }
 
-// `keywords: [a, b, c]` (YAML flow-sequence syntax, still a single "flat" line) or a bare comma-separated fallback -- both are scalars-in-one-line, matching this module's own "flat-scalar-only" scope; a YAML block sequence (`keywords:` followed by indented `- a` lines) is a multi-line shape this module does not parse at all.
+// `keywords: [a, b, c]` (YAML flow-sequence syntax, still a single "flat" line) or a bare comma-separated fallback — both are scalars-in-one-line, matching this module's own "flat-scalar-only" scope; a YAML block sequence (`keywords:` followed by indented `- a` lines) is a multi-line shape this module does not parse at all.
 function parseKeywordList(raw: string): readonly string[] {
   const trimmed = raw.trim();
   const inner =
@@ -138,7 +138,7 @@ export function extractFrontMatter(
       continue;
     }
     if (key === "direction") {
-      // An unrecognised value is not "direction has no LayoutMetadata equivalent" (it does); it is a value TextDirectionSchema's own two-member enum cannot hold, so it is silently skipped rather than reported through FRONT_MATTER_KEY_UNMAPPED (which names the key, not the value, as the reason nothing was mapped) -- matching this module's own stated policy on shapes it recognises but cannot interpret.
+      // An unrecognised value is not "direction has no LayoutMetadata equivalent" (it does); it is a value TextDirectionSchema's own two-member enum cannot hold, so it is silently skipped rather than reported through FRONT_MATTER_KEY_UNMAPPED (which names the key, not the value, as the reason nothing was mapped) — matching this module's own stated policy on shapes it recognises but cannot interpret.
       const scalar = parseScalar(value);
       if (isTextDirection(scalar)) {
         metadata.direction = scalar;

@@ -34,7 +34,7 @@ import { parseXml } from "./xml/parse";
 import { packageFromEntries } from "./package-io/read";
 import { serializePackage } from "./package-io/write";
 
-// The public write entry points: writeEpubContent (the primary API -- a flat ContentDocument in, a minimal valid EPUB 3 out) and writeEpub (flattenTree composed on top, for a caller holding a DocumentTree instead -- matching markdown-codec's own dual-level API and readEpub's own tree/flat pairing in src/read.ts). Only EPUB 3 is ever written (ExaDev/documents.js#801's own explicit scope: EPUB 2 is read-only), and only a 'wordprocessing' document -- EPUB has no presentation/spreadsheet/drawing/formula analogue.
+// The public write entry points: writeEpubContent (the primary API — a flat ContentDocument in, a minimal valid EPUB 3 out) and writeEpub (flattenTree composed on top, for a caller holding a DocumentTree instead — matching markdown-codec's own dual-level API and readEpub's own tree/flat pairing in src/read.ts). Only EPUB 3 is ever written (ExaDev/documents.js#801's own explicit scope: EPUB 2 is read-only), and only a 'wordprocessing' document — EPUB has no presentation/spreadsheet/drawing/formula analogue.
 
 export interface WriteEpubOptions {
   readonly sink?: EpubDiagnosticSink;
@@ -54,7 +54,7 @@ function sectionXhtmlPath(index: number): string {
   return `${OPF_DIR}/${sectionFileName(index)}`;
 }
 
-// The whole-document footnote/bookmark name -> owning section index, built once before any section is written: writeXhtmlBody itself only ever sees ONE section's own flat blocks, so it has no way to tell a same-section footnote/link reference from a cross-document one (ExaDev/documents.js#963) without this. A flat ContentDocument's sections carry their own constructStart/constructEnd markers as literal, unnested entries of section.blocks (never inside a further block list), so one flat scan per section is enough -- no recursion.
+// The whole-document footnote/bookmark name -> owning section index, built once before any section is written: writeXhtmlBody itself only ever sees ONE section's own flat blocks, so it has no way to tell a same-section footnote/link reference from a cross-document one (ExaDev/documents.js#963) without this. A flat ContentDocument's sections carry their own constructStart/constructEnd markers as literal, unnested entries of section.blocks (never inside a further block list), so one flat scan per section is enough — no recursion.
 function buildAnchorSectionIndex(
   sections: readonly ContentSection[],
 ): Map<string, number> {
@@ -72,7 +72,7 @@ function buildAnchorSectionIndex(
   return index;
 }
 
-// The XhtmlWriteContext.resolveAnchorHref this section (ownIndex) should use: a same-section href when the name's own constructStart lives in this section (or, matching this package's original pre-#963 behaviour, when no section carries a matching constructStart at all -- a hand-built ContentDocument whose footnote/link extent names nothing), a cross-section href pointing at the OTHER section's own written file otherwise.
+// The XhtmlWriteContext.resolveAnchorHref this section (ownIndex) should use: a same-section href when the name's own constructStart lives in this section (or, matching this package's original pre-#963 behaviour, when no section carries a matching constructStart at all — a hand-built ContentDocument whose footnote/link extent names nothing), a cross-section href pointing at the OTHER section's own written file otherwise.
 function resolveAnchorHrefFor(
   ownIndex: number,
   anchorSectionIndex: ReadonlyMap<string, number>,
@@ -156,7 +156,7 @@ export function writeEpubContent(
 
   const anchorSectionIndex = buildAnchorSectionIndex(document.sections);
 
-  // Carries the source ContentSection alongside its own written body/residue, not just the index: sectionXhtml is built in the same order and from the same array as document.sections, so a later re-lookup by index (document.sections[index]) would always be defined by construction anyway -- storing the reference directly here says so, rather than leaving a caller to re-derive (or defensively re-check) a fact already known at this point.
+  // Carries the source ContentSection alongside its own written body/residue, not just the index: sectionXhtml is built in the same order and from the same array as document.sections, so a later re-lookup by index (document.sections[index]) would always be defined by construction anyway — storing the reference directly here says so, rather than leaving a caller to re-derive (or defensively re-check) a fact already known at this point.
   const sectionXhtml: {
     section: ContentSection;
     body: XmlElement;
@@ -171,7 +171,7 @@ export function writeEpubContent(
         sourceHref,
         resolveAnchorHref: resolveAnchorHrefFor(index, anchorSectionIndex),
       });
-      // A same-format (EPUB-to-EPUB) restorable-fidelity re-emission of this package's own CSS residue (src/xhtml/read.ts's own STYLE_RESIDUE quarantine): the raw <link rel="stylesheet">/<style> elements this section's own source XHTML carried, re-parsed and spliced back into the written <head> verbatim, never interpreted -- matching this whole family's residue-channel contract (document-schema.js's own "a same-format writer may re-emit its own residue verbatim").
+      // A same-format (EPUB-to-EPUB) restorable-fidelity re-emission of this package's own CSS residue (src/xhtml/read.ts's own STYLE_RESIDUE quarantine): the raw <link rel="stylesheet">/<style> elements this section's own source XHTML carried, re-parsed and spliced back into the written <head> verbatim, never interpreted — matching this whole family's residue-channel contract (document-schema.js's own "a same-format writer may re-emit its own residue verbatim").
       const residueXml =
         section.source?.format === "epub" ? section.source.xml : undefined;
       sectionXhtml.push({ section, body, residueXml });
@@ -223,7 +223,7 @@ export function writeEpubContent(
     identifier: `urn:uuid:${crypto.randomUUID()}`,
   });
 
-  // Plain [path, bytes] pairs, not ZipEntry: this array's only consumer is the entryBytes loop directly below, which reads nothing but .bytes -- packageFromEntries/serializePackage (ExaDev/documents.js#963's own Package model) own the actual OCF mimetype-first/stored-uncompressed byte layout now (see serializePackage's own hoist), so a per-entry "stored" flag has no reader left on this path.
+  // Plain [path, bytes] pairs, not ZipEntry: this array's only consumer is the entryBytes loop directly below, which reads nothing but .bytes — packageFromEntries/serializePackage (ExaDev/documents.js#963's own Package model) own the actual OCF mimetype-first/stored-uncompressed byte layout now (see serializePackage's own hoist), so a per-entry "stored" flag has no reader left on this path.
   const entries: [string, Uint8Array<ArrayBuffer>][] = [
     [OCF_MIMETYPE_PATH, new TextEncoder().encode(EPUB_MIME_TYPE)],
     [OCF_CONTAINER_PATH, new TextEncoder().encode(writeContainerXml(OPF_PATH))],
@@ -239,7 +239,7 @@ export function writeEpubContent(
     entries.push([`${OPF_DIR}/${image.href}`, image.bytes]);
   }
 
-  // The lossless byte-level Package model (ExaDev/documents.js#963) is this function's own last step, not a separate entry point a caller must reach for themselves: writeEpubContent stays this package's one-shot ContentDocument-in/bytes-out convenience, but internally it now crosses the identical encodePackage boundary a caller reaching for decodePackage/encodePackage directly would. packageFromEntries classifies each entry exactly as parsePackage's own read-side classification would (an XML entry parsed into nodes, a binary entry kept as base64), which serializePackage then re-derives back to these same bytes -- a real round trip through the Package model, not a bypass of it, even though this writer (matching ooxml.js's own buildDocxPackageFromContent precedent: "each writer builds a fresh package rather than touching the decoded one") always builds a brand-new package rather than reusing one read.ts might have decoded.
+  // The lossless byte-level Package model (ExaDev/documents.js#963) is this function's own last step, not a separate entry point a caller must reach for themselves: writeEpubContent stays this package's one-shot ContentDocument-in/bytes-out convenience, but internally it now crosses the identical encodePackage boundary a caller reaching for decodePackage/encodePackage directly would. packageFromEntries classifies each entry exactly as parsePackage's own read-side classification would (an XML entry parsed into nodes, a binary entry kept as base64), which serializePackage then re-derives back to these same bytes — a real round trip through the Package model, not a bypass of it, even though this writer (matching ooxml.js's own buildDocxPackageFromContent precedent: "each writer builds a fresh package rather than touching the decoded one") always builds a brand-new package rather than reusing one read.ts might have decoded.
   const entryBytes: Record<string, Uint8Array<ArrayBuffer>> = {};
   for (const [path, bytes] of entries) {
     entryBytes[path] = bytes;

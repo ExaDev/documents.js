@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { MCP_HTTP_PATH, routeHttpRequest } from "./serve-http";
 
-// Exercises routeHttpRequest's own routing decision directly, with plain objects standing in for a real IncomingMessage/ServerResponse -- see the function's own comment for why its parameter types accept these. main()'s own end-to-end HTTP tests in src/cli.test.ts already prove the real socket wiring; this covers the routing branches those tests don't reach (the malformed-no-url guard) or don't assert precisely (the exact 404 status/headers/body).
+// Exercises routeHttpRequest's own routing decision directly, with plain objects standing in for a real IncomingMessage/ServerResponse — see the function's own comment for why its parameter types accept these. main()'s own end-to-end HTTP tests in src/cli.test.ts already prove the real socket wiring; this covers the routing branches those tests don't reach (the malformed-no-url guard) or don't assert precisely (the exact 404 status/headers/body).
 function fakeResponse() {
   const end = vi.fn();
   const writeHead = vi.fn(() => ({ end }));

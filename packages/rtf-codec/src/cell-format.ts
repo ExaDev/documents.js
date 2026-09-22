@@ -1,6 +1,6 @@
 // The <celldef> production's own cell formatting: borders, shading, and the two merge families (RTF 1.9.1, "Table Definitions").
 //
-// A <celldef> is the run of control words sitting before each \cellxN rather than a group of its own -- "there is no RTF table group; instead, tables are specified as paragraph properties" -- so the reader accumulates one of these as it walks and closes it at each \cellxN, and the writer emits one before each \cellxN it writes.
+// A <celldef> is the run of control words sitting before each \cellxN rather than a group of its own — "there is no RTF table group; instead, tables are specified as paragraph properties" — so the reader accumulates one of these as it walks and closes it at each \cellxN, and the writer emits one before each \cellxN it writes.
 //
 //   <celldef>  (\clmgf? & \clmrg? & \clvmgf? & \clvmrg? ... & <celltop>? & <cellleft>? & <cellbot>? & <cellright>? & <cellshad>? ...) \cellxN
 //   <celltop>  \clbrdrt <brdr>
@@ -19,7 +19,7 @@ import type {
 import { unrecognizedFillKind } from "document-schema.js";
 import { twipsToPoints, pointsToTwips } from "./units";
 
-// Every percentN member ContentCellPatternTypeSchema defines, ascending -- the discrete steps RTF's own continuous \clshdngN percentage (0-10000, i.e. 0-100% in hundredths) snaps onto, since the schema states a two-colour pattern fill only as one of these named densities, never an arbitrary float. A real producer overwhelmingly writes one of these exact values already (5/10/25/50/75/... are the common Word UI presets), so the snap is exact for the common case and a defensible nearest-match for the rare exact value this vocabulary has no member for.
+// Every percentN member ContentCellPatternTypeSchema defines, ascending — the discrete steps RTF's own continuous \clshdngN percentage (0-10000, i.e. 0-100% in hundredths) snaps onto, since the schema states a two-colour pattern fill only as one of these named densities, never an arbitrary float. A real producer overwhelmingly writes one of these exact values already (5/10/25/50/75/... are the common Word UI presets), so the snap is exact for the common case and a defensible nearest-match for the rare exact value this vocabulary has no member for.
 const PERCENT_STEPS: readonly [number, ContentCellPatternType][] = [
   [5, "percent5"],
   [10, "percent10"],
@@ -63,7 +63,7 @@ export const CELL_BORDER_SIDES: ReadonlyMap<string, CellBorderSide> = new Map([
   ["clbrdrr", "right"],
 ]);
 
-// The inverse of CELL_BORDER_SIDES, keyed by side rather than by control word -- a total mapping over CellBorderSide's own four members, so borderControlWords below can look a side's word up directly rather than searching CELL_BORDER_SIDES for the entry whose value matches, which would need a defensive "not found" branch for a side that can structurally never fail to resolve.
+// The inverse of CELL_BORDER_SIDES, keyed by side rather than by control word — a total mapping over CellBorderSide's own four members, so borderControlWords below can look a side's word up directly rather than searching CELL_BORDER_SIDES for the entry whose value matches, which would need a defensive "not found" branch for a side that can structurally never fail to resolve.
 const CELL_BORDER_SIDE_WORDS: Readonly<Record<CellBorderSide, string>> = {
   top: "clbrdrt",
   left: "clbrdrl",
@@ -104,14 +104,14 @@ const BORDER_STYLES: ReadonlyMap<string, ContentStrokeStyle> = new Map([
   ["brdrwavy", "solid"],
 ]);
 
-// "\brdrnone No border", "\brdrnil No border specified", "\brdrtbl Table cell has no borders". All three state an absent border, which ContentCellBorders spells as an absent side rather than a zero-width one -- a border of width zero is not a border, and ContentBorderSchema requires a positive width anyway.
+// "\brdrnone No border", "\brdrnil No border specified", "\brdrtbl Table cell has no borders". All three state an absent border, which ContentCellBorders spells as an absent side rather than a zero-width one — a border of width zero is not a border, and ContentBorderSchema requires a positive width anyway.
 const NO_BORDER_KEYWORDS: ReadonlySet<string> = new Set([
   "brdrnone",
   "brdrnil",
   "brdrtbl",
 ]);
 
-// "\brdrwN -- N is the width in twips of the pen used to draw the paragraph border line." Word's own default when a style keyword appears with no width beside it.
+// "\brdrwN — N is the width in twips of the pen used to draw the paragraph border line." Word's own default when a style keyword appears with no width beside it.
 const DEFAULT_BORDER_WIDTH_TWIPS = 15;
 
 export interface PendingBorder {
@@ -126,11 +126,11 @@ export interface PendingCell {
   borders: Partial<Record<CellBorderSide, PendingBorder>>;
   // Which side the <brdr> control words currently being read describe, if any.
   side: CellBorderSide | undefined;
-  // \clcbpatN -- "N is the background color of the background pattern", an index into the colour table.
+  // \clcbpatN — "N is the background color of the background pattern", an index into the colour table.
   backgroundIndex: number | undefined;
-  // \clcfpatN -- the pattern's own foreground colour index, the other half of the two-colour pattern \clshdngN's percentage blends against.
+  // \clcfpatN — the pattern's own foreground colour index, the other half of the two-colour pattern \clshdngN's percentage blends against.
   foregroundIndex: number | undefined;
-  // \clshdngN -- the shading percentage, in hundredths of a percent (0-10000 per the control word's own definition), 0-100 once divided down. Undefined (not stated at all) means 0, matching the same "clcbpat alone is a flat background colour" shape every RTF cell without genuine two-colour shading already writes.
+  // \clshdngN — the shading percentage, in hundredths of a percent (0-10000 per the control word's own definition), 0-100 once divided down. Undefined (not stated at all) means 0, matching the same "clcbpat alone is a flat background colour" shape every RTF cell without genuine two-colour shading already writes.
   shadingPercent: number | undefined;
   // "\clvmgf The first cell in a range of table cells to be vertically merged" / "\clvmrg Contents of the table cell are vertically merged with those of the preceding cell."
   verticalMergeFirst: boolean;
@@ -138,7 +138,7 @@ export interface PendingCell {
   // The horizontal twins of the pair above.
   horizontalMergeFirst: boolean;
   horizontalMergeContinuation: boolean;
-  // The <cellalign> member: which of \clvertalc ("Text is centered vertically in cell") / \clvertalb ("Text is bottom-aligned in cell") the definition states. \clvertalt ("Text is top-aligned in cell (the default)") deliberately leaves this undefined rather than storing a "top" -- ContentTableCell.verticalAlign's own absence already means the format's default (top), so the default's explicit spelling carries no information the field's absence doesn't, exactly the way the reader treats \sbkpage against ContentSection.breakType.
+  // The <cellalign> member: which of \clvertalc ("Text is centered vertically in cell") / \clvertalb ("Text is bottom-aligned in cell") the definition states. \clvertalt ("Text is top-aligned in cell (the default)") deliberately leaves this undefined rather than storing a "top" — ContentTableCell.verticalAlign's own absence already means the format's default (top), so the default's explicit spelling carries no information the field's absence doesn't, exactly the way the reader treats \sbkpage against ContentSection.breakType.
   verticalAlign: "center" | "bottom" | undefined;
 }
 
@@ -194,10 +194,10 @@ export function applyCellDefinitionControlWord(
       cell.foregroundIndex = param;
       return true;
     case "clshdng":
-      // "N is defined in hundredths of a percent, from 0 to 10000" -- divided down to the same 0-100 scale nearestPercentType and resolveCellFill both work in.
+      // "N is defined in hundredths of a percent, from 0 to 10000" — divided down to the same 0-100 scale nearestPercentType and resolveCellFill both work in.
       cell.shadingPercent = param === undefined ? undefined : param / 100;
       return true;
-    // The <cellalign> member of the <celldef> (RTF 1.9.1, "Table Definitions"): "\clvertalc Text is centered vertically in cell" / "\clvertalb Text is bottom-aligned in cell". \clvertalt ("Text is top-aligned in cell (the default)") is handled by leaving the field undefined -- see PendingCell.verticalAlign's own comment for why the default's explicit spelling collapses into the absence that already means it.
+    // The <cellalign> member of the <celldef> (RTF 1.9.1, "Table Definitions"): "\clvertalc Text is centered vertically in cell" / "\clvertalb Text is bottom-aligned in cell". \clvertalt ("Text is top-aligned in cell (the default)") is handled by leaving the field undefined — see PendingCell.verticalAlign's own comment for why the default's explicit spelling collapses into the absence that already means it.
     case "clvertalc":
       cell.verticalAlign = "center";
       return true;
@@ -233,7 +233,7 @@ export function applyCellDefinitionControlWord(
   return name.startsWith("brdr") || name.startsWith("brsp");
 }
 
-// The ContentBorder one pending side describes, or undefined when the side states no border at all. A side named by \clbrdrt with no <brdrk> after it is still a border -- Word writes that shape -- so an absent style takes the 'solid' the schema's own default names.
+// The ContentBorder one pending side describes, or undefined when the side states no border at all. A side named by \clbrdrt with no <brdrk> after it is still a border — Word writes that shape — so an absent style takes the 'solid' the schema's own default names.
 export function resolveBorder(
   pending: PendingBorder,
   colorAt: (index: number) => Color | undefined,
@@ -251,14 +251,14 @@ export function resolveBorder(
     pending.colorIndex === undefined ? undefined : colorAt(pending.colorIndex);
   const style = pending.style;
   return {
-    // ContentBorderSchema requires a colour, and RTF's own index 0 is the "auto" colour with no RGB of its own -- which every consumer renders as black, so that is what an unstated border colour becomes here rather than the border being dropped for want of one.
+    // ContentBorderSchema requires a colour, and RTF's own index 0 is the "auto" colour with no RGB of its own — which every consumer renders as black, so that is what an unstated border colour becomes here rather than the border being dropped for want of one.
     color: color ?? { r: 0, g: 0, b: 0 },
     widthPt,
     ...(style === undefined || style === "solid" ? {} : { style }),
   };
 }
 
-// The cell's own background fill, resolved from \clcbpatN/\clcfpatN/\clshdngN together (ExaDev/documents.js#1024): \clshdngN's own percentage states how much of the pattern's foreground (\clcfpatN) shows over its background (\clcbpatN) -- the identical weighted-blend convention LibreOffice's own RTF import filter uses ("nColor*nShading/100 + nFillColor*(100-nShading)/100"), confirmed against that real, independent implementation rather than assumed. A shading of 0 (or, as every RTF cell without \clshdngN at all writes it, simply absent) is the pre-existing "flat background colour" shape -- \clcbpatN alone, no pattern -- and a shading of 100 is the mirror case, a flat fill of the foreground colour instead; only a shading strictly between the two is a genuine two-colour pattern, snapped to the nearest percentN member via nearestPercentType. Returns undefined when the cell states no background at all (\clcbpatN absent), matching resolveBorder's own "nothing stated, nothing returned" convention.
+// The cell's own background fill, resolved from \clcbpatN/\clcfpatN/\clshdngN together (ExaDev/documents.js#1024): \clshdngN's own percentage states how much of the pattern's foreground (\clcfpatN) shows over its background (\clcbpatN) — the identical weighted-blend convention LibreOffice's own RTF import filter uses ("nColor*nShading/100 + nFillColor*(100-nShading)/100"), confirmed against that real, independent implementation rather than assumed. A shading of 0 (or, as every RTF cell without \clshdngN at all writes it, simply absent) is the pre-existing "flat background colour" shape — \clcbpatN alone, no pattern — and a shading of 100 is the mirror case, a flat fill of the foreground colour instead; only a shading strictly between the two is a genuine two-colour pattern, snapped to the nearest percentN member via nearestPercentType. Returns undefined when the cell states no background at all (\clcbpatN absent), matching resolveBorder's own "nothing stated, nothing returned" convention.
 export function resolveCellFill(
   pending: PendingCell,
   colorAt: (index: number) => Color | undefined,
@@ -320,7 +320,7 @@ const PERCENT_TYPE_TO_VALUE: ReadonlyMap<ContentCellPatternType, number> =
     PERCENT_STEPS.map(([percent, patternType]) => [patternType, percent]),
   );
 
-// The inverse of resolveCellFill: a ContentCellFill's own \clcbpatN/\clcfpatN/\clshdngN text. A 'solid' fill writes \clcbpatN alone -- the identical shape every RTF cell with a flat background colour and no genuine shading already writes, so this does not regress the pre-#1024 output for the overwhelmingly common case. A 'pattern' fill writes all three: \clcbpatN for backgroundColor, \clcfpatN for foregroundColor, and \clshdngN for the percentage PERCENT_TYPE_TO_VALUE names for that patternType, scaled back up to hundredths of a percent. RTF's own shading model is a flat two-colour percentage blend with no named stripe/cross/grid concept at all -- unlike ST_Shd/ST_PatternType, which this same pattern-fill vocabulary also serves and which DO have real tokens for those -- so a patternType outside the percentN family throws rather than silently collapsing to one colour the way this writer did before #1024, the identical "throw for a construct this format's own vocabulary cannot state" contract buildCellShading (ooxml.js's docx side) already keeps for the mirror case (a SpreadsheetML-only pattern name ST_Shd has no member for). colorIndexOf resolves each half's own colour to its table index; a fill whose colour resolves to no index at all (the colour table has no room, or the caller's own colorIndexOf declines it) writes no control word for that half, exactly as the pre-existing \clcbpat writer already did.
+// The inverse of resolveCellFill: a ContentCellFill's own \clcbpatN/\clcfpatN/\clshdngN text. A 'solid' fill writes \clcbpatN alone — the identical shape every RTF cell with a flat background colour and no genuine shading already writes, so this does not regress the pre-#1024 output for the overwhelmingly common case. A 'pattern' fill writes all three: \clcbpatN for backgroundColor, \clcfpatN for foregroundColor, and \clshdngN for the percentage PERCENT_TYPE_TO_VALUE names for that patternType, scaled back up to hundredths of a percent. RTF's own shading model is a flat two-colour percentage blend with no named stripe/cross/grid concept at all — unlike ST_Shd/ST_PatternType, which this same pattern-fill vocabulary also serves and which DO have real tokens for those — so a patternType outside the percentN family throws rather than silently collapsing to one colour the way this writer did before #1024, the identical "throw for a construct this format's own vocabulary cannot state" contract buildCellShading (ooxml.js's docx side) already keeps for the mirror case (a SpreadsheetML-only pattern name ST_Shd has no member for). colorIndexOf resolves each half's own colour to its table index; a fill whose colour resolves to no index at all (the colour table has no room, or the caller's own colorIndexOf declines it) writes no control word for that half, exactly as the pre-existing \clcbpat writer already did.
 export function cellFillControlWords(
   fill: ContentCellFill,
   colorIndexOf: (color: Color) => number | undefined,

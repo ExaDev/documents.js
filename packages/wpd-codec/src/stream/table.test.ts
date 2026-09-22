@@ -46,7 +46,7 @@ describe("readTableColumnWidthPt", () => {
 
   it("declines a Table Column function shorter than its own field list", () => {
     const nonDeletable = new Uint8Array(8);
-    // A genuine, non-zero width at the field's own offset -- so a version that skipped the length guard would compute a real answer instead of merely also landing on undefined via the width-is-zero fallback.
+    // A genuine, non-zero width at the field's own offset — so a version that skipped the length guard would compute a real answer instead of merely also landing on undefined via the width-is-zero fallback.
     nonDeletable.set(word(2400), 1);
     expect(readTableColumnWidthPt(nonDeletable)).toBeUndefined();
   });
@@ -93,7 +93,7 @@ describe("readEmbeddedSubfunctions", () => {
     ]);
   });
 
-  // "New Cell Formula Embedded Subfunction ... <129 (0x81)> [size = variable] [length of formula] <tokenized formula> [length] <129 (0x81)>" -- the only member whose length is stated in the record rather than in the SDK's own size column.
+  // "New Cell Formula Embedded Subfunction ... <129 (0x81)> [size = variable] [length of formula] <tokenized formula> [length] <129 (0x81)>" — the only member whose length is stated in the record rather than in the SDK's own size column.
   it("steps over the variable-length cell formula by its own length word", () => {
     const { subfunctions, truncated } = readEmbeddedSubfunctions(
       eolNonDeletable({
@@ -116,7 +116,7 @@ describe("readEmbeddedSubfunctions", () => {
     ]);
   });
 
-  // "Don't End a Paragraph Style for this Hard Return ... <141 (0x8D)> (size = 1)" -- one byte, no payload, and no closing gate, unlike every other member.
+  // "Don't End a Paragraph Style for this Hard Return ... <141 (0x8D)> (size = 1)" — one byte, no payload, and no closing gate, unlike every other member.
   it("reads the one gateless subfunction as a single byte", () => {
     const { subfunctions, truncated } = readEmbeddedSubfunctions(
       eolNonDeletable({
@@ -174,7 +174,7 @@ describe("readEmbeddedSubfunctions", () => {
     });
   });
 
-  // A function exactly two bytes long (just enough to hold the deletable-size word, with no non-deletable region at all) whose deletable size is itself non-zero -- the one case that tells "the function is too short to even hold the size word" apart from "the size word is present but genuinely overruns", since a deletable size of 0 at this same length answers the same (non-truncated, empty) result either way.
+  // A function exactly two bytes long (just enough to hold the deletable-size word, with no non-deletable region at all) whose deletable size is itself non-zero — the one case that tells "the function is too short to even hold the size word" apart from "the size word is present but genuinely overruns", since a deletable size of 0 at this same length answers the same (non-truncated, empty) result either way.
   it("reports truncation for a two-byte function whose own non-zero deletable size overruns it", () => {
     expect(readEmbeddedSubfunctions(new Uint8Array([5, 0]))).toEqual({
       subfunctions: [],
@@ -182,7 +182,7 @@ describe("readEmbeddedSubfunctions", () => {
     });
   });
 
-  // A non-zero deletable size that lands cursor exactly on the buffer's own end -- the one boundary where "past the end" and "exactly at the end" agree or disagree, and where an empty, non-deletable region genuinely follows (rather than the coincidental all-zero case a deletable size of 0 would also produce).
+  // A non-zero deletable size that lands cursor exactly on the buffer's own end — the one boundary where "past the end" and "exactly at the end" agree or disagree, and where an empty, non-deletable region genuinely follows (rather than the coincidental all-zero case a deletable size of 0 would also produce).
   it("answers an empty, non-truncated result when the deletable data exactly fills the rest of the function", () => {
     expect(
       readEmbeddedSubfunctions(new Uint8Array([...word(3), 0xaa, 0xbb, 0xcc])),
@@ -277,7 +277,7 @@ describe("readCellSpanning", () => {
     });
   });
 
-  // "bit 7 is set if spanned from left" / "bit 7 is set if spanned from above" -- the high bit marks a cell COVERED by a neighbour's merge rather than the cell doing the merging.
+  // "bit 7 is set if spanned from left" / "bit 7 is set if spanned from above" — the high bit marks a cell COVERED by a neighbour's merge rather than the cell doing the merging.
   it("marks a cell covered from the left", () => {
     expect(
       readCellSpanning(new Uint8Array([0x81, 0x01]))?.coveredFromLeft,
@@ -292,7 +292,7 @@ describe("readCellSpanning", () => {
 });
 
 describe("nearestPercentType", () => {
-  // readCellFill's own shade byte always comes from a Uint8Array read (0-255), so this is unreachable from every real caller -- proven directly here rather than left as a promise no real caller could ever keep.
+  // readCellFill's own shade byte always comes from a Uint8Array read (0-255), so this is unreachable from every real caller — proven directly here rather than left as a promise no real caller could ever keep.
   it("throws for a shade outside the 0-255 range a fill's own shading byte can ever hold", () => {
     expect(() => nearestPercentType(256)).toThrow(
       "Shade byte 256 is outside the 0-255 range a fill's own shading byte can ever hold.",
@@ -301,7 +301,7 @@ describe("nearestPercentType", () => {
 });
 
 describe("readCellFill", () => {
-  // "<foreground color (RGBS)> x 4, <background color (RGBS)> x 4" -- red, green, blue, and a shading percentage per colour, "where 255 is 100%".
+  // "<foreground color (RGBS)> x 4, <background color (RGBS)> x 4" — red, green, blue, and a shading percentage per colour, "where 255 is 100%".
   it("reads a fully-shaded fill as a flat 'solid' background colour", () => {
     expect(
       readCellFill(new Uint8Array([0, 0, 0, 255, 255, 0, 0, 255])),

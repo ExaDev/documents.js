@@ -9,7 +9,7 @@ export default packageLintConfig({
     "@typescript-eslint/strict-void-return",
   ],
   isomorphic: true,
-  // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why -- this package's own WordPerfect prefix/function-code parser genuinely mutates a handful of array/object parameters in place. Tracked for burn-down.
+  // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why — this package's own WordPerfect prefix/function-code parser genuinely mutates a handful of array/object parameters in place. Tracked for burn-down.
   preferReadonlyParams: "off",
   // Passed to the shared config rather than declared here, because flat config replaces a same-key rule instead of merging it: a second no-restricted-imports over runtime src would silently drop the Worker-isomorphism Node-builtin ban while still reporting these.
   //
@@ -18,7 +18,7 @@ export default packageLintConfig({
     {
       group: ["libwpd*", "libwpd*/**", "node-libwpd*", "wpd2*"],
       message:
-        "Hand-write the WordPerfect parser against Corel's published File Format SDK instead of binding libwpd -- see README Architecture.",
+        "Hand-write the WordPerfect parser against Corel's published File Format SDK instead of binding libwpd — see README Architecture.",
     },
   ],
 });

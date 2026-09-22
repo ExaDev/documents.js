@@ -1,11 +1,11 @@
-// A hand-built minimal [MS-CFB] compound-file writer for the reader's tests (ooxml.js's embedded-payload fixtures mirror this layout in their own test-support): given slash-separated stream paths and their bytes, it emits a genuine compound file -- version 3 (512-byte sectors) by default, version 4 (4096-byte sectors, the 512-byte header zero-padded out to the full sector-sized header region) via the majorVersion option -- always with the 4096-byte mini-stream cutoff and 64-byte mini sectors both versions mandate, whose header, DIFAT, FAT, directory, and mini-FAT the reader under test must parse to get the streams back.
+// A hand-built minimal [MS-CFB] compound-file writer for the reader's tests (ooxml.js's embedded-payload fixtures mirror this layout in their own test-support): given slash-separated stream paths and their bytes, it emits a genuine compound file — version 3 (512-byte sectors) by default, version 4 (4096-byte sectors, the 512-byte header zero-padded out to the full sector-sized header region) via the majorVersion option — always with the 4096-byte mini-stream cutoff and 64-byte mini sectors both versions mandate, whose header, DIFAT, FAT, directory, and mini-FAT the reader under test must parse to get the streams back.
 //
 // Construction, in the order the bytes are laid out:
 //
 // 1. Storage tree: each entry's path splits on '/'; intermediate segments become storage entries (directory object type 1), the last segment the stream entry (type 2). Entry IDs are assigned root-first then depth-first in the given order; the root storage entry (type 5, name "Root Entry") is always ID 0, as [MS-CFB] 2.6.1 requires of the first directory entry.
 // 2. Sector layout, in order: FAT sectors, then directory sectors (4 entries per 512-byte sector), then the FAT-resident streams' data sectors, then the mini stream's sectors, then the mini-FAT sector(s). The FAT-sector count reaches a fixed point against the total sector count, because each FAT sector maps 128 sectors including itself.
 // 3. Streams shorter than the cutoff live in the mini stream: every small stream is zero-padded to a whole number of 64-byte mini sectors, and the small streams concatenate into one byte string stored as the root entry's own stream (its starting sector and size), carved up by the mini-FAT's chains. Streams at or above the cutoff occupy whole FAT-chained sectors of their own.
-// 4. The directory tree links a storage's children as a right-sibling chain (the storage's child points at the first, each child's right sibling at the next). [MS-CFB] recommends producers order and balance the sibling tree by name; that is a recommendation about tree shape, not a reader requirement, and this writer deliberately skips it -- the reader under test traverses left/right/child structurally, exactly as real-world readers must for the unbalanced trees real producers emit.
+// 4. The directory tree links a storage's children as a right-sibling chain (the storage's child points at the first, each child's right sibling at the next). [MS-CFB] recommends producers order and balance the sibling tree by name; that is a recommendation about tree shape, not a reader requirement, and this writer deliberately skips it — the reader under test traverses left/right/child structurally, exactly as real-world readers must for the unbalanced trees real producers emit.
 // 5. FAT marking: FAT sectors are FATSECT (0xFFFFFFFD); the directory, mini-stream, and mini-FAT sectors and every big stream's sectors chain with ENDOFCHAIN (0xFFFFFFFE) terminators; unused entries are FREESECT (0xFFFFFFFF). The DIFAT lives entirely in the header's 109-entry array (no DIFAT sectors), so FirstDIFATSectorLocation is ENDOFCHAIN.
 //
 // Test-support only: excluded from the published dist per the family convention, and names are limited to ASCII of at most 31 characters (the directory entry's 64-byte UTF-16 name field including its null terminator).
@@ -87,13 +87,13 @@ function writeDirectoryEntry(
   // The name field's bytes past the name stay zero: that zero pair IS the terminating null EntryNameLength counts.
   put16(entry, 0x40, encoded.length * 2 + 2);
   entry.setUint8(0x42, objectType);
-  entry.setUint8(0x43, 1); // colour flag: black -- meaningless to a structural reader
+  entry.setUint8(0x43, 1); // colour flag: black — meaningless to a structural reader
   put32(entry, 0x44, NOSTREAM);
   put32(entry, 0x48, rightId);
   put32(entry, 0x4c, childId);
   put32(entry, 0x74, startSector);
   put32(entry, 0x78, size);
-  // No write of the high 32 bits at 0x7c: every size this test-support builder ever writes (a real stream's own byte length, or the mini stream's total) fits comfortably under 2^32, so that word is always 0 -- already true from entry's own allocation, and this builder's own streams never need anything else.
+  // No write of the high 32 bits at 0x7c: every size this test-support builder ever writes (a real stream's own byte length, or the mini stream's total) fits comfortably under 2^32, so that word is always 0 — already true from entry's own allocation, and this builder's own streams never need anything else.
 }
 
 function padToMultiple(
@@ -110,7 +110,7 @@ export function compoundFile(
   entries: readonly CompoundFileEntrySpec[],
   options: CompoundFileOptions = {},
 ): Uint8Array<ArrayBuffer> {
-  // Sector geometry is the version's own: 512-byte sectors for version 3, 4096 for version 4 -- whose 512-byte header the file zero-pads out to the full first sector ([MS-CFB] 2.2), so sector N always starts at (N + 1) * sectorSize, never 512 + N * sectorSize.
+  // Sector geometry is the version's own: 512-byte sectors for version 3, 4096 for version 4 — whose 512-byte header the file zero-pads out to the full first sector ([MS-CFB] 2.2), so sector N always starts at (N + 1) * sectorSize, never 512 + N * sectorSize.
   const majorVersion = options.majorVersion ?? 3;
   const sectorSize = majorVersion === 4 ? 4096 : 512;
   const sectorShift = majorVersion === 4 ? 12 : 9;
@@ -122,7 +122,7 @@ export function compoundFile(
   for (const entry of entries) {
     const segments = entry.path.split("/");
     const leaf = segments.pop();
-    // !leaf alone (not leaf === undefined || leaf.length === 0) covers exactly the same two cases: String.prototype.split always returns at least one element, so .pop() on it is genuinely never undefined here -- only ever a string, possibly empty -- and a falsy check catches both undefined and "" identically to spelling them out, while also narrowing leaf to string below.
+    // !leaf alone (not leaf === undefined || leaf.length === 0) covers exactly the same two cases: String.prototype.split always returns at least one element, so .pop() on it is genuinely never undefined here — only ever a string, possibly empty — and a falsy check catches both undefined and "" identically to spelling them out, while also narrowing leaf to string below.
     if (!leaf || segments.some((segment) => segment.length === 0)) {
       throw new Error(
         `compoundFile entry paths must be slash-separated with no empty segments (got ${JSON.stringify(entry.path)})`,
@@ -158,7 +158,7 @@ export function compoundFile(
       childId: NOSTREAM,
     };
     records.push(created);
-    // Sibling chains, linked directly off this recursive call's own return values rather than a later Map lookup: node.children.map(record) always returns one real DirectoryRecord per child (record() never returns anything else), so iterating it directly never meets its own out-of-range undefined -- only childRecords[i + 1], at the true last sibling, ever is, and that is the genuine "no next sibling" case NOSTREAM already means. created's own child link is set the same way, directly from childRecords[0], rather than left for a later pass to re-derive by looking node.children[0] up in a separate node -> record map that could only ever find what this same call already has in hand.
+    // Sibling chains, linked directly off this recursive call's own return values rather than a later Map lookup: node.children.map(record) always returns one real DirectoryRecord per child (record() never returns anything else), so iterating it directly never meets its own out-of-range undefined — only childRecords[i + 1], at the true last sibling, ever is, and that is the genuine "no next sibling" case NOSTREAM already means. created's own child link is set the same way, directly from childRecords[0], rather than left for a later pass to re-derive by looking node.children[0] up in a separate node -> record map that could only ever find what this same call already has in hand.
     const childRecords = node.children.map(record);
     childRecords.forEach((childRecord, i) => {
       childRecord.rightId = childRecords[i + 1]?.id ?? NOSTREAM;
@@ -307,7 +307,7 @@ export function compoundFile(
   // The header: little-endian, the version's own sector shifts, DIFAT in the header array only. The directory-sector count is 0 for version 3 (the spec fixes it there) and the real count for version 4; the reader deliberately does not cross-check either way, but the writer stays spec-conformant.
   const file = new Uint8Array(sectorSize + totalSectors * sectorSize);
   const view = new DataView(file.buffer);
-  // A loop bound one iteration too long would write byte 8 -- the header CLSID field's own first byte, always zero and never otherwise written -- which is already zero from the allocation, an equivalent mutant no test could observe. Walking magic.map/forEach directly removes the comparison bound entirely rather than leaving it to be silently absorbed.
+  // A loop bound one iteration too long would write byte 8 — the header CLSID field's own first byte, always zero and never otherwise written — which is already zero from the allocation, an equivalent mutant no test could observe. Walking magic.map/forEach directly removes the comparison bound entirely rather than leaving it to be silently absorbed.
   const magic = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
   magic.forEach((byte, i) => {
     file[i] = byte;
@@ -324,9 +324,9 @@ export function compoundFile(
   put32(view, 0x3c, miniSectorCount === 0 ? ENDOFCHAIN : miniFatStart);
   put32(view, 0x40, miniFatSectorCount);
   put32(view, 0x44, ENDOFCHAIN); // first DIFAT sector: none, the DIFAT fits the header array
-  // NumberOfDIFATSectors (0x48) stays zero: this generator never spills the DIFAT into its own sectors, and the byte is already zero from the allocation. The header's own 109-entry DIFAT array, over a literal-length array rather than a `for` loop's own comparison bound: a bound one iteration too long would write the byte range the first FAT sector's own data occupies, immediately overwritten by the real copySector call below regardless -- an equivalent mutant no test could observe.
+  // NumberOfDIFATSectors (0x48) stays zero: this generator never spills the DIFAT into its own sectors, and the byte is already zero from the allocation. The header's own 109-entry DIFAT array, over a literal-length array rather than a `for` loop's own comparison bound: a bound one iteration too long would write the byte range the first FAT sector's own data occupies, immediately overwritten by the real copySector call below regardless — an equivalent mutant no test could observe.
   //
-  // No i < fatSectors.length guard, either: fatSectors[i] is already undefined for every i at or past its own length, and `?? FREESECT` already turns that into the same FREESECT padding the guard's own false branch spelled out -- a second, redundant way of saying the identical thing.
+  // No i < fatSectors.length guard, either: fatSectors[i] is already undefined for every i at or past its own length, and `?? FREESECT` already turns that into the same FREESECT padding the guard's own false branch spelled out — a second, redundant way of saying the identical thing.
   for (const i of Array.from({ length: 109 }, (_unused, index) => index)) {
     put32(view, 0x4c + i * 4, fatSectors[i] ?? FREESECT);
   }
@@ -334,11 +334,11 @@ export function compoundFile(
   const copySector = (sector: number, bytes: Uint8Array): void => {
     file.set(bytes, sectorSize + sector * sectorSize);
   };
-  // fatSectors is the identity array [0, 1, ..., fatSectorCount - 1] (built that way above), so its own element at index i is always i itself -- iterating it directly, rather than re-deriving each element from its own index with a fallback for the array's provably unreachable out-of-range case.
+  // fatSectors is the identity array [0, 1, ..., fatSectorCount - 1] (built that way above), so its own element at index i is always i itself — iterating it directly, rather than re-deriving each element from its own index with a fallback for the array's provably unreachable out-of-range case.
   fatSectors.forEach((sector, i) => {
     copySector(sector, new Uint8Array(fat.buffer, i * sectorSize, sectorSize));
   });
-  // Walks Array.from's own bounded index list rather than a hand-written comparison: directory is allocated at exactly directorySectorCount * sectorSize bytes, so an off-by-one here would subarray a range starting at the array's own length -- already empty, and Uint8Array.prototype.set with an empty source is already a no-op regardless of the target offset (see the mini-stream copy's own comment below for the identical reasoning), so there is nothing here for the extra iteration to actually change.
+  // Walks Array.from's own bounded index list rather than a hand-written comparison: directory is allocated at exactly directorySectorCount * sectorSize bytes, so an off-by-one here would subarray a range starting at the array's own length — already empty, and Uint8Array.prototype.set with an empty source is already a no-op regardless of the target offset (see the mini-stream copy's own comment below for the identical reasoning), so there is nothing here for the extra iteration to actually change.
   for (const i of Array.from(
     { length: directorySectorCount },
     (_unused, n) => n,

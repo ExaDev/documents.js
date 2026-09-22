@@ -180,7 +180,7 @@ describe("rule (a): adoption on construction", () => {
     expect(second.names()).toContain(mintedName);
     expect(second.intern(CENTER_PARAGRAPH)).toBe(mintedName);
 
-    // And a third cycle, for good measure -- this has to keep working, not just work once.
+    // And a third cycle, for good measure — this has to keep working, not just work once.
     const third = StyleRegistry.forPart(pkg, "content.xml");
     expect(third.intern(CENTER_PARAGRAPH)).toBe(mintedName);
     expect(automaticStylesOf(pkg, "content.xml").children).toHaveLength(1);
@@ -306,7 +306,7 @@ describe("rule (a): adoption on construction", () => {
 
 describe("rule (b): unknown attributes opt a style out of reuse, not out of existence", () => {
   it("reserves the name of an adopted style with an unmodelled attribute, but mints a genuinely different name for a matching intern() request", () => {
-    // fo:margin-right is real, valid ODF -- and entirely unmodelled by properties.ts.
+    // fo:margin-right is real, valid ODF — and entirely unmodelled by properties.ts.
     const unmodelled = el(
       "style:style",
       { "style:name": "P1", "style:family": "paragraph" },
@@ -324,7 +324,7 @@ describe("rule (b): unknown attributes opt a style out of reuse, not out of exis
 
     expect(registry.names()).toContain("P1");
 
-    // A request whose properties match everything parseable on P1 (alignment: center) must NOT reuse P1's name -- P1's fingerprint was never registered, precisely because of the unmodelled fo:margin-right.
+    // A request whose properties match everything parseable on P1 (alignment: center) must NOT reuse P1's name — P1's fingerprint was never registered, precisely because of the unmodelled fo:margin-right.
     const mintedName = registry.intern(CENTER_PARAGRAPH);
     expect(mintedName).not.toBe("P1");
     expect(mintedName).toBe("P2"); // "P1" is reserved, so minting skips straight to "P2".
@@ -520,7 +520,7 @@ describe("rule (d): name minting is collision-checked across all four containers
       "style:name": "P1",
       "style:family": "paragraph",
     });
-    const pageLayout = el("style:page-layout", { "style:name": "Mpm1" }); // a real element, but not style:style -- must not crash the scan
+    const pageLayout = el("style:page-layout", { "style:name": "Mpm1" }); // a real element, but not style:style — must not crash the scan
     const nameless = el("style:style", { "style:family": "paragraph" });
     const pkg = contentPackage([
       el("office:styles", {}, [txt("\n"), pageLayout, nameless, namedStyle]),
@@ -547,7 +547,7 @@ describe("rule (d): name minting is collision-checked across all four containers
       el("office:automatic-styles"),
     ]);
     const registry = StyleRegistry.forPart(pkg, "content.xml");
-    // "P1" was never actually reserved -- a name/family check without the tag check would wrongly reserve it, forcing this mint to skip to "P2".
+    // "P1" was never actually reserved — a name/family check without the tag check would wrongly reserve it, forcing this mint to skip to "P2".
     expect(registry.intern(CENTER_PARAGRAPH)).toBe("P1");
   });
 });
@@ -788,7 +788,7 @@ describe("gc()", () => {
   });
 });
 
-// The seam a writer reaches the table and graphic families through: property elements this module's own StyleProperties vocabulary has no field for, supplied already built. It exists so the table-family styles ODF requires (a column width, a row height, a cell fill and borders) are minted by THIS registry rather than by a second, parallel name-minting mechanism beside it -- widening StyleProperties instead would change what the reader treats as unmodelled, which is load-bearing for the adoption rules above and for the residue channel.
+// The seam a writer reaches the table and graphic families through: property elements this module's own StyleProperties vocabulary has no field for, supplied already built. It exists so the table-family styles ODF requires (a column width, a row height, a cell fill and borders) are minted by THIS registry rather than by a second, parallel name-minting mechanism beside it — widening StyleProperties instead would change what the reader treats as unmodelled, which is load-bearing for the adoption rules above and for the residue channel.
 describe("caller-supplied property elements", () => {
   const columnProperties = el("style:table-column-properties", {
     "style:column-width": "60pt",

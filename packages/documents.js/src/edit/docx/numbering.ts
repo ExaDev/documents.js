@@ -21,7 +21,7 @@ export function declaration(): XmlNode {
 }
 
 export interface NumberingEntry {
-  // The source membership's numId, or undefined for the shared no-numId group (see content.ts's collectListNumIds comment). Carried for diagnosis only -- the XML below writes remappedNumId/abstractNumId, never this.
+  // The source membership's numId, or undefined for the shared no-numId group (see content.ts's collectListNumIds comment). Carried for diagnosis only — the XML below writes remappedNumId/abstractNumId, never this.
   readonly sourceNumId: string | undefined;
   readonly remappedNumId: string;
   readonly abstractNumId: string;

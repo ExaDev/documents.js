@@ -18,7 +18,7 @@ function paragraphWithText(text: string) {
   return el("w:p", {}, [el("w:r", {}, [el("w:t", {}, [txt(text)])])]);
 }
 
-// Pins the exact XML each of the five extra-part builders produces, called directly with no editor/package/encode-decode round trip involved -- otherwise nothing ever asserts on this fixture's own structure beyond whatever documents.js's readDocxExtras happens to surface, which never touches internal plumbing like a comment/footnote's own w:id or a numbering level's w:ilvl/w:abstractNumId.
+// Pins the exact XML each of the five extra-part builders produces, called directly with no editor/package/encode-decode round trip involved — otherwise nothing ever asserts on this fixture's own structure beyond whatever documents.js's readDocxExtras happens to surface, which never touches internal plumbing like a comment/footnote's own w:id or a numbering level's w:ilvl/w:abstractNumId.
 describe("buildCommentsPart", () => {
   it("declares one authored and one unauthored comment", () => {
     expect(buildCommentsPart()).toEqual({

@@ -2,7 +2,7 @@ import { Box, Text, useInput } from "ink";
 import type { ReactElement } from "react";
 import { useAppDispatch, useAppState } from "../state/context.js";
 
-// Extracted so its own undefined/ReactElement branching is directly assertable on the return value -- ink renders an empty <Text>{undefined}</Text> identically to omitting the node outright (an empty child contributes no visible row), so a rendered-frame assertion alone can never distinguish "correctly omitted" from "always rendered, just empty this time".
+// Extracted so its own undefined/ReactElement branching is directly assertable on the return value — ink renders an empty <Text>{undefined}</Text> identically to omitting the node outright (an empty child contributes no visible row), so a rendered-frame assertion alone can never distinguish "correctly omitted" from "always rendered, just empty this time".
 export function detailNode(
   detail: string | undefined,
 ): ReactElement | undefined {

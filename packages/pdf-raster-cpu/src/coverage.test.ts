@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CoverageMask } from "./coverage";
 
-// Direct unit tests for the scanline coverage accumulator, distinct from rasteriser.test.ts's pixel-level PDF-driven assertions: these pin edge cases in the winding walk and its clamps that a real page's content streams rarely happen to construct -- an exactly scanline-aligned vertex, a degenerate sub-path mixed with real geometry, and a shape that overflows the canvas edge.
+// Direct unit tests for the scanline coverage accumulator, distinct from rasteriser.test.ts's pixel-level PDF-driven assertions: these pin edge cases in the winding walk and its clamps that a real page's content streams rarely happen to construct — an exactly scanline-aligned vertex, a degenerate sub-path mixed with real geometry, and a shape that overflows the canvas edge.
 
 describe("CoverageMask", () => {
   it("clears every subsample count on reset", () => {
@@ -26,7 +26,7 @@ describe("CoverageMask", () => {
   });
 
   it("paints nothing when every polygon is degenerate (fewer than three points)", () => {
-    // Neither of these "polygons" bounds any area, so filtering them out of the bounding-box computation leaves minY/maxY at their initial +/-Infinity, and the mask stays untouched -- without the filter, the degenerate points would set a real (if tiny) scan range, and the two-point segments' own forward and reverse traversals do not always cancel perfectly under floating point, leaving stray subsample marks.
+    // Neither of these "polygons" bounds any area, so filtering them out of the bounding-box computation leaves minY/maxY at their initial +/-Infinity, and the mask stays untouched — without the filter, the degenerate points would set a real (if tiny) scan range, and the two-point segments' own forward and reverse traversals do not always cancel perfectly under floating point, leaving stray subsample marks.
     const mask = new CoverageMask(7, 6);
     mask.fillPolygons(
       [
@@ -47,7 +47,7 @@ describe("CoverageMask", () => {
   });
 
   it("does not paint a pixel a degenerate segment's own forward and reverse crossing coincide on exactly", () => {
-    // The two-point segment (3, 3.5)-(4, 2.5), alongside a real triangle, crosses one particular scanline (row 10, y = 2.625) at the identical x in both traversal directions -- its own edge and that edge walked backwards. The resulting span-close call has an equal start and end, which must be treated as covering nothing: relaxing that guard degenerate-marks pixel (3, 2), index 13 in this 5-wide mask, with a stray sliver of coverage the real geometry does not produce.
+    // The two-point segment (3, 3.5)-(4, 2.5), alongside a real triangle, crosses one particular scanline (row 10, y = 2.625) at the identical x in both traversal directions — its own edge and that edge walked backwards. The resulting span-close call has an equal start and end, which must be treated as covering nothing: relaxing that guard degenerate-marks pixel (3, 2), index 13 in this 5-wide mask, with a stray sliver of coverage the real geometry does not produce.
     const mask = new CoverageMask(5, 5);
     mask.fillPolygons(
       [
@@ -84,7 +84,7 @@ describe("CoverageMask", () => {
   });
 
   it("does not bleed coverage into the next row down when a span overruns the canvas's right edge", () => {
-    // The rectangle's right edge sits at device x 20, far past this 4-pixel-wide mask: the span-marking column clamp must stop at the mask's own last column rather than a column or two past it, because in the flat row-major counts array a column just past the last one on a non-final row is not out of bounds -- it is column 0 of the very next row. Widening that clamp leaks partial coverage into (0, 2) and (0, 3), directly below the rect's own rows 1-2.
+    // The rectangle's right edge sits at device x 20, far past this 4-pixel-wide mask: the span-marking column clamp must stop at the mask's own last column rather than a column or two past it, because in the flat row-major counts array a column just past the last one on a non-final row is not out of bounds — it is column 0 of the very next row. Widening that clamp leaks partial coverage into (0, 2) and (0, 3), directly below the rect's own rows 1-2.
     const mask = new CoverageMask(4, 4);
     mask.fillPolygons(
       [

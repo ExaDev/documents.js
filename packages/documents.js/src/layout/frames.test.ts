@@ -242,7 +242,7 @@ describe("engine frames: wordprocessing (engine.ts)", () => {
     });
     if (theParagraph.kind !== "paragraph")
       throw new Error("expected a paragraph");
-    expect(theParagraph.frames).toHaveLength(1); // the marker -- the one item derived from the paragraph itself rather than from any run
+    expect(theParagraph.frames).toHaveLength(1); // the marker — the one item derived from the paragraph itself rather than from any run
     expect(theParagraph.frames?.[0]?.pageIndex).toBe(0);
   });
 

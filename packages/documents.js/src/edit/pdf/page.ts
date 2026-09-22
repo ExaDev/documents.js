@@ -28,7 +28,7 @@ import {
 } from "./item";
 import { spliceOut } from "./util";
 
-// A page's own initial size/notes, used by both PdfEditor.createPdf's own default page and appendPage/insertPageAt below -- widthPt/heightPt default to US Letter (matching pdf-codec's own readPdf fallback for a page with no resolvable /MediaBox at all) when omitted, rather than throwing or defaulting to zero.
+// A page's own initial size/notes, used by both PdfEditor.createPdf's own default page and appendPage/insertPageAt below — widthPt/heightPt default to US Letter (matching pdf-codec's own readPdf fallback for a page with no resolvable /MediaBox at all) when omitted, rather than throwing or defaulting to zero.
 export interface PageInit {
   readonly widthPt?: number;
   readonly heightPt?: number;
@@ -50,7 +50,7 @@ export function buildPage(init: PageInit = {}): LayoutPage {
   return { widthPt, heightPt, items: [], notes: init.notes };
 }
 
-// A live view over one page of a LayoutDocument -- the PDF-editor equivalent of src/edit/odg/page.ts's own OdgPage, adapted to a plain positioned-item model rather than an XmlElement tree: `container` is the editor's own `LayoutPage[]` array, `node` is this page's own object inside it, and `images` is the whole document's shared image-asset registry (LayoutDocument.images), threaded through so any image item this page creates/reads registers into the same document-wide table every other page shares.
+// A live view over one page of a LayoutDocument — the PDF-editor equivalent of src/edit/odg/page.ts's own OdgPage, adapted to a plain positioned-item model rather than an XmlElement tree: `container` is the editor's own `LayoutPage[]` array, `node` is this page's own object inside it, and `images` is the whole document's shared image-asset registry (LayoutDocument.images), threaded through so any image item this page creates/reads registers into the same document-wide table every other page shares.
 export class PdfPage {
   private readonly container: LayoutPage[];
   private readonly node: LayoutPage;
@@ -111,7 +111,7 @@ export class PdfPage {
     node.notes = value;
   }
 
-  // Every item on this page, in paint order (LayoutPage.items' own array order) -- a fresh PdfItem wrapper every call, never cached, exactly like DocxParagraph.runs()/OdgPage.vectors(): each wrapper holds a live reference into the actual array element, so mutating through one and re-reading through a freshly obtained wrapper from a later call observes the same change.
+  // Every item on this page, in paint order (LayoutPage.items' own array order) — a fresh PdfItem wrapper every call, never cached, exactly like DocxParagraph.runs()/OdgPage.vectors(): each wrapper holds a live reference into the actual array element, so mutating through one and re-reading through a freshly obtained wrapper from a later call observes the same change.
   items(): PdfItem[] {
     const node = this.live();
     return node.items.map((item) => wrapItem(node.items, item, this.images));
@@ -159,7 +159,7 @@ export class PdfPage {
     );
   }
 
-  // Clamps to the current item count on both ends -- a negative index inserts at the start, an index at or past the current length appends at the end, exactly like DocxBody.insertParagraphAt's own out-of-range handling (src/edit/docx/editor.ts). `index` is an absolute position in paint order across every kind (there is no per-kind sub-sequence the way docx's own paragraph/table indices are, since a page's own items are already one single ordered array, not several element tags mixed into one parent).
+  // Clamps to the current item count on both ends — a negative index inserts at the start, an index at or past the current length appends at the end, exactly like DocxBody.insertParagraphAt's own out-of-range handling (src/edit/docx/editor.ts). `index` is an absolute position in paint order across every kind (there is no per-kind sub-sequence the way docx's own paragraph/table indices are, since a page's own items are already one single ordered array, not several element tags mixed into one parent).
   private clampIndex(index: number): number {
     return Math.min(Math.max(index, 0), this.live().items.length);
   }

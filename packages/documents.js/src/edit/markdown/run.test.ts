@@ -18,7 +18,7 @@ describe("MarkdownRun text", () => {
 });
 
 describe("MarkdownRun bold/italic/strike", () => {
-  // markdown-codec's own default emphasisMarker is "_", but its dist/emit/inline.js pickEmphasisMarker treats "_" as an intraword risk whenever the body starts or ends with a word character (CommonMark disallows intraword "_" emphasis) -- ordinary word text like "bold"/"italic" therefore always falls back to the "*" alternate regardless of the configured default, which is what these two assertions pin down.
+  // markdown-codec's own default emphasisMarker is "_", but its dist/emit/inline.js pickEmphasisMarker treats "_" as an intraword risk whenever the body starts or ends with a word character (CommonMark disallows intraword "_" emphasis) — ordinary word text like "bold"/"italic" therefore always falls back to the "*" alternate regardless of the configured default, which is what these two assertions pin down.
   it("render the exact expected markdown syntax on toMarkdownText()", () => {
     const editor = openMarkdown("");
     const paragraph = editor.body.appendParagraph();
@@ -107,7 +107,7 @@ describe("MarkdownRun.remove", () => {
 });
 
 describe("MarkdownRun has no underline/color/sizePt/fontFamily property", () => {
-  it("is a compile-time-only guarantee -- see the @ts-expect-error lines below", () => {
+  it("is a compile-time-only guarantee — see the @ts-expect-error lines below", () => {
     const run = freshRun();
     // @ts-expect-error underline has no markdown-codec counterpart: CommonMark/GFM has no underline syntax, and ContentRun itself carries no underline field at all.
     run.underline = true;
@@ -115,7 +115,7 @@ describe("MarkdownRun has no underline/color/sizePt/fontFamily property", () => 
     run.color = { r: 1, g: 0, b: 0 };
     // @ts-expect-error sizePt is never read by markdown-codec's own dist/emit/inline.js either.
     run.sizePt = 14;
-    // @ts-expect-error fontFamily has no free-form setter here -- only the boolean `code` view over MONOSPACE_FONT_FAMILY is exposed.
+    // @ts-expect-error fontFamily has no free-form setter here — only the boolean `code` view over MONOSPACE_FONT_FAMILY is exposed.
     run.fontFamily = "Arial";
   });
 });

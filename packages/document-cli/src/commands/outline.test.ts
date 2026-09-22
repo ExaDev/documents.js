@@ -90,7 +90,7 @@ beforeEach(() => {
 
 afterEach(() => {
   process.exitCode = savedExitCode;
-  // Every real runOutline() call registers its own SIGINT listener via createRuntimeSignal and never removes it -- harmless for a real one-shot CLI process, but this file alone now drives enough real invocations in one vitest worker to cross Node's default MaxListeners (10) and print a warning straight to the captured stderr some of the tests above assert is empty.
+  // Every real runOutline() call registers its own SIGINT listener via createRuntimeSignal and never removes it — harmless for a real one-shot CLI process, but this file alone now drives enough real invocations in one vitest worker to cross Node's default MaxListeners (10) and print a warning straight to the captured stderr some of the tests above assert is empty.
   process.removeAllListeners("SIGINT");
 });
 
@@ -112,7 +112,7 @@ describe("outline", () => {
     );
   });
 
-  // ExaDev/documents.js#961: a headingLevel paragraph written by this ecosystem's own docx writer -- DocxParagraph's headingLevel setter, which buildDocxPackage delegates to -- carries w:outlineLvl, so a docx built through this ecosystem's own editor, not just one authored by Word, nests headings exactly as document-outline.js's buildOutline expects.
+  // ExaDev/documents.js#961: a headingLevel paragraph written by this ecosystem's own docx writer — DocxParagraph's headingLevel setter, which buildDocxPackage delegates to — carries w:outlineLvl, so a docx built through this ecosystem's own editor, not just one authored by Word, nests headings exactly as document-outline.js's buildOutline expects.
   it("nests headings by level in a docx built through this ecosystem's own editor (not authored by Word)", async () => {
     const docxPath = join(workspace, "own-headings.docx");
     const editor = createDocx();
@@ -168,11 +168,11 @@ describe("outline", () => {
     const { exitCode, stdout } = await runCli(["outline", sheetPath]);
 
     expect(exitCode).toBe(EXIT_SUCCESS);
-    // Cells are addressable data, not outline content -- a sheet's group carries its images and embedded objects, so a cell-only sheet renders as a bare label with nothing under it.
+    // Cells are addressable data, not outline content — a sheet's group carries its images and embedded objects, so a cell-only sheet renders as a bare label with nothing under it.
     expect(stdout).toBe("Q1\nQ2\n");
   });
 
-  // odg used to outline via a bridge to a presentation-variant sibling (odp), which meant every drawing page came back labelled "Slide N" -- a label borrowed from the bridge's own variant, not odg's. readNativeDocumentTree reads odg's own native 'drawing' ContentDocument directly with no bridging at all, so a drawing page is labelled "Page N", document-outline.js's own drawing convention -- the honest label for the source's real kind, and (incidentally) still no --page selection needed for a multi-page document, since no svg-only page-selection constraint is anywhere in this path.
+  // odg used to outline via a bridge to a presentation-variant sibling (odp), which meant every drawing page came back labelled "Slide N" — a label borrowed from the bridge's own variant, not odg's. readNativeDocumentTree reads odg's own native 'drawing' ContentDocument directly with no bridging at all, so a drawing page is labelled "Page N", document-outline.js's own drawing convention — the honest label for the source's real kind, and (incidentally) still no --page selection needed for a multi-page document, since no svg-only page-selection constraint is anywhere in this path.
   it("outlines a multi-page odg as one group per page, with no --page selection needed", async () => {
     const drawingPath = join(workspace, "slides.odg");
     const editor = createOdg();
@@ -194,7 +194,7 @@ describe("outline", () => {
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(EXIT_SUCCESS);
-    // "Page N", document-outline.js's own drawing-variant convention -- odg's own native kind, read with no bridging at all.
+    // "Page N", document-outline.js's own drawing-variant convention — odg's own native kind, read with no bridging at all.
     expect(stdout).toBe(
       "Page 1\n  First page text\nPage 2\n  Second page text\nPage 3\n  Third page text\n",
     );
@@ -211,7 +211,7 @@ describe("outline", () => {
     const { exitCode, stdout } = await runCli(["outline", pdfPath]);
 
     expect(exitCode).toBe(EXIT_SUCCESS);
-    // A PDF carries no heading signal, so the reconstruction yields plain paragraph leaves at the root rather than any grouping -- the honest outline of a format with no structure of its own.
+    // A PDF carries no heading signal, so the reconstruction yields plain paragraph leaves at the root rather than any grouping — the honest outline of a format with no structure of its own.
     expect(stdout).toBe(`${paragraphText}\n`);
   });
 
@@ -309,7 +309,7 @@ describe("outline", () => {
       (candidate) => candidate.name() === "outline",
     );
     expect(command?.description()).toBe(
-      "print a document's outline -- headings, list items, and slide/sheet/page groups as indented text (docx, pptx, xlsx, odt, odp, ods, odg, svg, odf, csv, markdown, rtf, wpd, doc, xls, ppt, epub, pdf)",
+      "print a document's outline — headings, list items, and slide/sheet/page groups as indented text (docx, pptx, xlsx, odt, odp, ods, odg, svg, odf, csv, markdown, rtf, wpd, doc, xls, ppt, epub, pdf)",
     );
     const descriptionOf = (long: string): string | undefined =>
       command?.options.find((option) => option.long === long)?.description;
@@ -339,7 +339,7 @@ describe("outline", () => {
 
     expect(stderr).toBe("");
     expect(exitCode).toBe(EXIT_SUCCESS);
-    // Not '\n' -- joining zero lines and then appending a trailing newline unconditionally would still write one blank line for a document with nothing to outline at all.
+    // Not '\n' — joining zero lines and then appending a trailing newline unconditionally would still write one blank line for a document with nothing to outline at all.
     expect(stdout).toBe("");
   });
 

@@ -8,7 +8,7 @@ import { base64ToBytes } from "byte-codec";
 
 // The real, vendored text fonts as raw sfnt bytes, for tests that parse genuine font tables rather than a synthetic fixture. These are the exact bytes of assets/fonts/{carlito,caladea}/*.ttf: scripts/generate-text-font-assets.mjs DEFLATE-compresses and base64-encodes each vendored file into src/assets/, and inflating one here reverses that transform byte for byte (proved independently by src/assets/text-font-assets.test.ts). Going through the embedded asset rather than reading assets/ from disk keeps the suite filesystem-free, matching the convention test-support/ccitt-fax.ts states for its own fixtures.
 //
-// Each face is inflated at most once per process: a Carlito face is ~600 KB inflated, and several test files parse the same one. Keyed by the face's own deflated-base64 constant rather than a separate name string -- that constant is already a unique per-face identifier, so a second string whose only job was cache-key uniqueness would just be one more thing to keep in sync with no observable behaviour of its own.
+// Each face is inflated at most once per process: a Carlito face is ~600 KB inflated, and several test files parse the same one. Keyed by the face's own deflated-base64 constant rather than a separate name string — that constant is already a unique per-face identifier, so a second string whose only job was cache-key uniqueness would just be one more thing to keep in sync with no observable behaviour of its own.
 const cache = new Map<string, Uint8Array<ArrayBuffer>>();
 
 function loadFace(deflatedBase64: string): Uint8Array<ArrayBuffer> {

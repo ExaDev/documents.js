@@ -19,7 +19,7 @@ import { compoundFile } from '../../src/test-support/cfb';
 
 const encode = (s: string): Uint8Array<ArrayBuffer> => new TextEncoder().encode(s);
 
-// Proves archive-codec's surface executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. Every path here -- ZIP container read/write, magic-byte detection, recursive walking with depth/size guards -- is deliberately Node-free (fflate is pure JS and the byte readers are plain integer folds); if any touched node:fs/Buffer/process the workerd isolate would throw rather than these passing. This is the runtime complement to attw's static module-resolution check.
+// Proves archive-codec's surface executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. Every path here — ZIP container read/write, magic-byte detection, recursive walking with depth/size guards — is deliberately Node-free (fflate is pure JS and the byte readers are plain integer folds); if any touched node:fs/Buffer/process the workerd isolate would throw rather than these passing. This is the runtime complement to attw's static module-resolution check.
 describe('archive-codec under the Cloudflare Workers runtime', () => {
   it('round-trips a ZIP container (no Node Buffer, no fs)', () => {
     const enc = new TextEncoder();
@@ -63,7 +63,7 @@ describe('archive-codec under the Cloudflare Workers runtime', () => {
   });
 
   it('reads a compound file and its OLE Package stream inside the isolate', () => {
-    // The CFB path (magic detection, header/FAT/mini-FAT/directory parsing, Package-stream unwrapping) is pure integer-and-DataView work over the bytes -- the whole reason it belongs in this Worker-isomorphic package -- and this proves it executes under workerd with the test-support builder (itself TextEncoder-only) on the path. The Package stream is assembled here with its fixed field run: header word, label, source path, 8 opaque bytes, temp path, size, file bytes.
+    // The CFB path (magic detection, header/FAT/mini-FAT/directory parsing, Package-stream unwrapping) is pure integer-and-DataView work over the bytes — the whole reason it belongs in this Worker-isomorphic package — and this proves it executes under workerd with the test-support builder (itself TextEncoder-only) on the path. The Package stream is assembled here with its fixed field run: header word, label, source path, 8 opaque bytes, temp path, size, file bytes.
     const enc = new TextEncoder();
     const fileBytes = zipPackage([['xl/workbook.xml', { bytes: enc.encode('<workbook/>') }]]);
     const label = 'Book1.xlsx';
@@ -86,7 +86,7 @@ describe('archive-codec under the Cloudflare Workers runtime', () => {
   });
 
   it('writes a compound file and reads it back inside the isolate', () => {
-    // The writer is the same kind of pure integer-and-DataView work over one allocation the reader is -- one Uint8Array, one DataView, no Buffer and no fs -- so it belongs to this package's Worker-isomorphic half too. Both allocation paths run here: 'Current User' is under the 4096-byte cutoff so it lands in the mini stream, 'PowerPoint Document' above it so it takes FAT-chained sectors, and a nested storage covers the directory tree's second level.
+    // The writer is the same kind of pure integer-and-DataView work over one allocation the reader is — one Uint8Array, one DataView, no Buffer and no fs — so it belongs to this package's Worker-isomorphic half too. Both allocation paths run here: 'Current User' is under the 4096-byte cutoff so it lands in the mini stream, 'PowerPoint Document' above it so it takes FAT-chained sectors, and a nested storage covers the directory tree's second level.
     const currentUser = encode('a small stream, mini-FAT resident');
     const document = new Uint8Array(9000).fill(0x50);
     const built = writeCompoundFile([
@@ -114,7 +114,7 @@ describe('archive-codec under the Cloudflare Workers runtime', () => {
   });
 
   it('writes and reads back a SummaryInformation property set inside the isolate', () => {
-    // The [MS-OLEPS] path leans on TextDecoder('windows-1252'), TextDecoder('utf-16le'), and BigInt FILETIME arithmetic -- none of them Node-only, but genuinely worth proving under workerd rather than assumed, the same way the CFB and OLE Package paths above are.
+    // The [MS-OLEPS] path leans on TextDecoder('windows-1252'), TextDecoder('utf-16le'), and BigInt FILETIME arithmetic — none of them Node-only, but genuinely worth proving under workerd rather than assumed, the same way the CFB and OLE Package paths above are.
     const metadata = {
       title: 'Workers isolate title',
       author: 'archive-codec',

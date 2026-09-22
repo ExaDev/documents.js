@@ -1,14 +1,14 @@
 // The inline phase: one block's raw inline content string -> src/ast's MarkdownInlineNode[]. A single left-to-right scan that dispatches on the current character, with two stacks (delimiters for emphasis/strong/strikethrough, brackets for links/images) resolved after the fact, exactly as CommonMark 0.31.2's own "Phase 2: inline structure" describes.
 //
 // Precedence, highest first, matching the spec's own "Precedence" section and the order of the dispatch below:
-//   1. code spans -- a run of N backticks opens, and only a run of exactly N backticks closes; nothing inside is interpreted
-//   2. backslash escapes and character references -- both consume their own source outright before any other construct sees it
-//   3. autolinks and raw HTML tags -- both anchored on `<`, tried in that order
-//   4. links and images -- resolved by the bracket stack, which binds MORE tightly than emphasis (`*[foo*](url)` is a link)
-//   5. emphasis, strong emphasis, and strikethrough -- one shared delimiter stack, resolved by src/inline/delimiter.ts
+//   1. code spans — a run of N backticks opens, and only a run of exactly N backticks closes; nothing inside is interpreted
+//   2. backslash escapes and character references — both consume their own source outright before any other construct sees it
+//   3. autolinks and raw HTML tags — both anchored on `<`, tried in that order
+//   4. links and images — resolved by the bracket stack, which binds MORE tightly than emphasis (`*[foo*](url)` is a link)
+//   5. emphasis, strong emphasis, and strikethrough — one shared delimiter stack, resolved by src/inline/delimiter.ts
 //   6. hard and soft line breaks
 //
-// The link-reference-definition table is an INPUT, never built here. Definitions are document-global and forward-visible -- `[foo]` in the first paragraph resolves against a `[foo]: /url` on the document's last line -- so the whole document's definitions must already be known before any block's inlines are parsed. The block phase owns that scan and hands the finished table down; discovering definitions per-block during inline parsing would silently fail every forward reference.
+// The link-reference-definition table is an INPUT, never built here. Definitions are document-global and forward-visible — `[foo]` in the first paragraph resolves against a `[foo]: /url` on the document's last line — so the whole document's definitions must already be known before any block's inlines are parsed. The block phase owns that scan and hands the finished table down; discovering definitions per-block during inline parsing would silently fail every forward reference.
 
 import type {
   MarkdownImageNode,
@@ -35,7 +35,7 @@ import { matchMathInlineSpan } from "./math";
 import { InlineNode, createTextNode } from "./node";
 
 export interface InlineParseOptions {
-  // GFM's extended (bracket-less) autolinks -- `www.example.com`, a bare `https://...`, a bare email address. Enabled by default because this package targets CommonMark *and* GFM; pure-CommonMark callers (and this package's own CommonMark conformance suite) switch it off, since a bare URL in paragraph text is plain text under CommonMark alone.
+  // GFM's extended (bracket-less) autolinks — `www.example.com`, a bare `https://...`, a bare email address. Enabled by default because this package targets CommonMark *and* GFM; pure-CommonMark callers (and this package's own CommonMark conformance suite) switch it off, since a bare URL in paragraph text is plain text under CommonMark alone.
   readonly gfmAutolinks?: boolean;
   // GFM's `~`/`~~` strikethrough. Enabled by default for the same reason; with it off, every `~` is ordinary text, which is CommonMark's own reading.
   readonly gfmStrikethrough?: boolean;
@@ -58,15 +58,15 @@ const HARD_BREAK_SPACE_COUNT = 2;
 const EMPTY_LABEL_LENGTH = 2;
 
 interface Bracket {
-  // The `[` or `![` text node this bracket opened with -- unlinked when the bracket resolves into a real link/image, left as literal text when it does not.
+  // The `[` or `![` text node this bracket opened with — unlinked when the bracket resolves into a real link/image, left as literal text when it does not.
   readonly node: InlineNode;
   readonly previous: Bracket | undefined;
-  // The delimiter stack's own top at the moment this bracket was pushed, used as the floor for the emphasis pass that runs when the bracket closes -- so emphasis inside a link resolves without ever pairing across the link's boundary.
+  // The delimiter stack's own top at the moment this bracket was pushed, used as the floor for the emphasis pass that runs when the bracket closes — so emphasis inside a link resolves without ever pairing across the link's boundary.
   readonly previousDelimiter: Delimiter | undefined;
   // Source position of the `[` (for `![`, of the `[`, not of the `!`).
   readonly index: number;
   readonly image: boolean;
-  // Cleared on every earlier link opener once a link successfully closes -- CommonMark's "no links inside links" rule. An image opener is left alone, since images may nest inside links and vice versa.
+  // Cleared on every earlier link opener once a link successfully closes — CommonMark's "no links inside links" rule. An image opener is left alone, since images may nest inside links and vice versa.
   active: boolean;
   // Set when a later bracket is pushed while this one is still open. A shortcut reference (`[foo]` with no second label) is impossible once the link text itself contained a bracket, so this short-circuits a lookup that could never match.
   bracketAfter: boolean;
@@ -203,7 +203,7 @@ class InlineParser {
 
   // spec 0.31.2, "Backslash escapes": a backslash before any ASCII punctuation character escapes it; a backslash before a line ending is a hard break; a backslash before anything else is a literal backslash.
   //
-  // \( is checked FIRST, ahead of the general escape rule (ExaDev/markdown-codec#53) -- \(...\) inline math (src/inline/math.ts's matchMathInlineSpan) is otherwise indistinguishable from an escaped '(' followed, eventually, by an escaped ')', which is exactly the bug this recognition fixes (the delimiters were being silently eaten as ordinary backslash escapes). An unmatched \( (no closing \) anywhere in the block) falls through unchanged to today's escape behaviour, so a genuinely escaped lone '(' is unaffected.
+  // \( is checked FIRST, ahead of the general escape rule (ExaDev/markdown-codec#53) — \(...\) inline math (src/inline/math.ts's matchMathInlineSpan) is otherwise indistinguishable from an escaped '(' followed, eventually, by an escaped ')', which is exactly the bug this recognition fixes (the delimiters were being silently eaten as ordinary backslash escapes). An unmatched \( (no closing \) anywhere in the block) falls through unchanged to today's escape behaviour, so a genuinely escaped lone '(' is unaffected.
   private parseBackslash(): void {
     const backslashIndex = this.pos;
     this.pos += 1;
@@ -304,7 +304,7 @@ class InlineParser {
     this.pos += 1;
   }
 
-  // The absolute URI between the angle brackets, or undefined when this is not a URI autolink. The "no ASCII control character or space" half of the spec's own definition is checked after matching rather than inside the pattern -- see containsAsciiControlOrSpace (src/inline/chars.ts) for why.
+  // The absolute URI between the angle brackets, or undefined when this is not a URI autolink. The "no ASCII control character or space" half of the spec's own definition is checked after matching rather than inside the pattern — see containsAsciiControlOrSpace (src/inline/chars.ts) for why.
   private matchUriAutolink(): string | undefined {
     URI_AUTOLINK_PATTERN.lastIndex = this.pos;
     const match = URI_AUTOLINK_PATTERN.exec(this.text);
@@ -372,9 +372,9 @@ class InlineParser {
     };
   }
 
-  // A `[` opens a link/image bracket -- unless it opens a footnote reference instead. That check runs FIRST and consumes the whole `[^label]` outright rather than pushing a bracket, for the same reason a code span binds tighter than everything after it: a reference is a single indivisible token, and letting the `[` reach the bracket stack would leave the label's own `^` and text as ordinary inline content that emphasis resolution could reach into.
+  // A `[` opens a link/image bracket — unless it opens a footnote reference instead. That check runs FIRST and consumes the whole `[^label]` outright rather than pushing a bracket, for the same reason a code span binds tighter than everything after it: a reference is a single indivisible token, and letting the `[` reach the bracket stack would leave the label's own `^` and text as ordinary inline content that emphasis resolution could reach into.
   //
-  // A label with no matching DEFINITION in this document is deliberately not a reference at all -- GitHub's own reading, and the one that keeps ordinary bracketed prose ("[^2 is the exponent]" -- well, that one has whitespace, but "[^see]" in a document with no `[^see]:` line does not) from silently becoming a note pointing at nothing. This is exactly how a shortcut link reference already behaves one function down: no definition, no link.
+  // A label with no matching DEFINITION in this document is deliberately not a reference at all — GitHub's own reading, and the one that keeps ordinary bracketed prose ("[^2 is the exponent]" — well, that one has whitespace, but "[^see]" in a document with no `[^see]:` line does not) from silently becoming a note pointing at nothing. This is exactly how a shortcut link reference already behaves one function down: no definition, no link.
   private parseOpenBracket(): void {
     const start = this.pos;
     const footnote = this.matchFootnoteReference();
@@ -545,7 +545,7 @@ function mergeAdjacentText(node: InlineNode): void {
   }
 }
 
-// An image's description is FLATTENED to plain text rather than kept as inline children, per CommonMark's own rule that it becomes the `alt` attribute (MarkdownImageNode.alt, src/ast). cmark's own plain-text rendering is restated here exactly: text, code-span, and raw-HTML literals contribute verbatim, a character reference contributes its decoded value, an autolink contributes its destination, and both break kinds contribute a single space (NOT a newline -- an alt attribute is one line).
+// An image's description is FLATTENED to plain text rather than kept as inline children, per CommonMark's own rule that it becomes the `alt` attribute (MarkdownImageNode.alt, src/ast). cmark's own plain-text rendering is restated here exactly: text, code-span, and raw-HTML literals contribute verbatim, a character reference contributes its decoded value, an autolink contributes its destination, and both break kinds contribute a single space (NOT a newline — an alt attribute is one line).
 function flattenToPlainText(node: InlineNode): string {
   switch (node.kind) {
     case "text":
@@ -559,7 +559,7 @@ function flattenToPlainText(node: InlineNode): string {
     case "hardBreak":
       return " ";
     case "footnoteReference":
-      // An alt attribute is plain text, so a reference inside an image description contributes its own source spelling -- the same thing every consumer that does not resolve footnotes shows for it.
+      // An alt attribute is plain text, so a reference inside an image description contributes its own source spelling — the same thing every consumer that does not resolve footnotes shows for it.
       return `[^${node.label}]`;
     default: {
       let result = "";
@@ -662,7 +662,7 @@ function toAstNode(node: InlineNode): MarkdownInlineNode | undefined {
   }
 }
 
-// Parses one block's raw inline content. `references` is the document-global link-reference-definition table the block phase built, and `footnotes` the document-global set of footnote labels it collected alongside -- see this module's own top-of-file note on why neither can be discovered here. Both are forward-visible for the identical reason: a `[^1]` in the first paragraph resolves against a `[^1]:` definition on the last line.
+// Parses one block's raw inline content. `references` is the document-global link-reference-definition table the block phase built, and `footnotes` the document-global set of footnote labels it collected alongside — see this module's own top-of-file note on why neither can be discovered here. Both are forward-visible for the identical reason: a `[^1]` in the first paragraph resolves against a `[^1]:` definition on the last line.
 export function parseInlines(
   content: string,
   references: LinkReferenceMap,

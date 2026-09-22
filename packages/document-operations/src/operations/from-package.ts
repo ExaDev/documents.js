@@ -17,7 +17,7 @@ import { defineOperation } from "../operation";
 
 // The read side of the DocumentTree round trip documents.js's own onDocument callback (and document-cli's --dump-package flag) produce: reads a DocumentTree previously serialised to JSON and rebuilds real document bytes from it. Ported from document-cli's own src/commands/from-package.ts.
 
-// `source` here is a DocumentTree JSON file, not a document -- resolveDocumentInput's own format inference (io/document-input.ts) has no '.json' entry and would throw for the ordinary 'path' shape a caller most naturally reaches for (e.g. a file written by a --dump-package-equivalent step). This reads the hybrid DocumentInput's raw bytes directly instead, so no document format is ever inferred from -- the 'bytesBase64' shape's own `format` field stays part of the schema only so `source` keeps the identical hybrid shape every other operation's document input accepts, and goes unused here.
+// `source` here is a DocumentTree JSON file, not a document — resolveDocumentInput's own format inference (io/document-input.ts) has no '.json' entry and would throw for the ordinary 'path' shape a caller most naturally reaches for (e.g. a file written by a --dump-package-equivalent step). This reads the hybrid DocumentInput's raw bytes directly instead, so no document format is ever inferred from — the 'bytesBase64' shape's own `format` field stays part of the schema only so `source` keeps the identical hybrid shape every other operation's document input accepts, and goes unused here.
 async function readSourceBytes(
   source: DocumentInput,
 ): Promise<Uint8Array<ArrayBuffer>> {
@@ -30,7 +30,7 @@ async function readSourceBytes(
 
 const FromPackageInputSchema = z.object({
   source: DocumentInputSchema.describe(
-    "The DocumentTree JSON to read. 'path' points at a JSON file on disk -- its extension is never used to infer a document format, since the file holds a DocumentTree, not a document. 'bytesBase64' carries the JSON inline; its 'format' field is required by the shared hybrid input shape but unused by this operation.",
+    "The DocumentTree JSON to read. 'path' points at a JSON file on disk — its extension is never used to infer a document format, since the file holds a DocumentTree, not a document. 'bytesBase64' carries the JSON inline; its 'format' field is required by the shared hybrid input shape but unused by this operation.",
   ),
   targetFormat: DocumentFormatSchema.describe(
     "The document format to build from the DocumentTree.",
@@ -53,7 +53,7 @@ export const fromPackageOperation = defineOperation({
   name: "from_package",
   title: "Build document from package",
   description:
-    "Rebuilds real document bytes in a target format from a DocumentTree previously serialised to JSON (e.g. by a caller's own --dump-package-equivalent step) -- the read side of the DocumentTree round trip a conversion's onDocument callback produces.",
+    "Rebuilds real document bytes in a target format from a DocumentTree previously serialised to JSON (e.g. by a caller's own --dump-package-equivalent step) — the read side of the DocumentTree round trip a conversion's onDocument callback produces.",
   inputSchema: FromPackageInputSchema,
   outputSchema: ResolvedDocumentOutputSchema,
   async run({ source, targetFormat, output }) {
@@ -70,19 +70,19 @@ export const fromPackageOperation = defineOperation({
       );
     }
 
-    // The pre-tree shapes (document-schema.js 3.x and earlier), a layout-document dump (moved to pdf-codec in the schema-4 major), and the document-package-stemmed rename tombstone (ExaDev/documents.js#661) each throw their own named error, whose message already says exactly what changed and the remedy -- surfaced verbatim by letting them propagate rather than paraphrasing them here. Only UnrecognizedDocumentSchemaError (a value with no recognisable $schema at all) and z.ZodError (a value that declares a real $schema but fails validation against it) get a friendlier, task-specific message.
+    // The pre-tree shapes (document-schema.js 3.x and earlier), a layout-document dump (moved to pdf-codec in the schema-4 major), and the document-package-stemmed rename tombstone (ExaDev/documents.js#661) each throw their own named error, whose message already says exactly what changed and the remedy — surfaced verbatim by letting them propagate rather than paraphrasing them here. Only UnrecognizedDocumentSchemaError (a value with no recognisable $schema at all) and z.ZodError (a value that declares a real $schema but fails validation against it) get a friendlier, task-specific message.
     let result: ReturnType<typeof documentFromJson>;
     try {
       result = documentFromJson(parsed);
     } catch (error) {
       if (error instanceof UnrecognizedDocumentSchemaError) {
         throw new Error(
-          "'source' has no recognised $schema -- only a file carrying a real DocumentTree (e.g. written by a caller's own --dump-package-equivalent step) can be read back by this operation",
+          "'source' has no recognised $schema — only a file carrying a real DocumentTree (e.g. written by a caller's own --dump-package-equivalent step) can be read back by this operation",
           { cause: error },
         );
       }
       if (error instanceof z.ZodError) {
-        // documentFromJson only ever reaches *Schema.parse() (the sole source of a ZodError here) after it has already resolved parsed's own $schema to a real DocumentSchemaKind via this identical function -- so documentSchemaKindOf(parsed) cannot itself be undefined at this point, and a "document schema" placeholder for a case that cannot occur would only mask a real regression in that guarantee rather than surface one.
+        // documentFromJson only ever reaches *Schema.parse() (the sole source of a ZodError here) after it has already resolved parsed's own $schema to a real DocumentSchemaKind via this identical function — so documentSchemaKindOf(parsed) cannot itself be undefined at this point, and a "document schema" placeholder for a case that cannot occur would only mask a real regression in that guarantee rather than surface one.
         throw new Error(
           `'source' failed ${documentSchemaKindOf(parsed)} validation: ${error.message}`,
           { cause: error },
@@ -93,7 +93,7 @@ export const fromPackageOperation = defineOperation({
 
     if (result.kind !== "DocumentTree") {
       throw new Error(
-        `'source' is a ${result.kind}, not a DocumentTree -- only a file carrying a real DocumentTree (e.g. written by a caller's own --dump-package-equivalent step) can be read back by this operation`,
+        `'source' is a ${result.kind}, not a DocumentTree — only a file carrying a real DocumentTree (e.g. written by a caller's own --dump-package-equivalent step) can be read back by this operation`,
       );
     }
 

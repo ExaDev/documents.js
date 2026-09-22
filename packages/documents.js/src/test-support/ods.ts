@@ -8,7 +8,7 @@ import {
   txt,
 } from "odf.js";
 
-// Never imported by src/index.ts and never reaches dist/. Predates edit/ods/* (this package's own live-view ods editor, added later -- see createOds/OdsEditor there): this fixture is still hand-authored ODF XML assembled directly via odf.js's own el/txt fragment builders and serialized via odf.js's own encodePackage, kept exactly as-is rather than rebuilt through the editor, since its whole point is an INDEPENDENT construction path for readOdsContent's own tests -- building the fixture through the very editor that createOds/OdsSheet/OdsCell also drive would make a read-side regression and a write-side regression capable of silently cancelling each other out. Shape choices exercise the same real-shape ground truth odf.js's own src/typed/ods/read.test.ts fixture already verified against genuine LibreOffice 26.2 output: explicit column widths, a hidden column, mixed office:value-type cells (string/float/boolean), a merged cell, and print settings (page size, gridlines/headers, page order) resolved through table:table -> style:style[family="table"] -> style:master-page-name -> style:master-page -> style:page-layout.
+// Never imported by src/index.ts and never reaches dist/. Predates edit/ods/* (this package's own live-view ods editor, added later — see createOds/OdsEditor there): this fixture is still hand-authored ODF XML assembled directly via odf.js's own el/txt fragment builders and serialized via odf.js's own encodePackage, kept exactly as-is rather than rebuilt through the editor, since its whole point is an INDEPENDENT construction path for readOdsContent's own tests — building the fixture through the very editor that createOds/OdsSheet/OdsCell also drive would make a read-side regression and a write-side regression capable of silently cancelling each other out. Shape choices exercise the same real-shape ground truth odf.js's own src/typed/ods/read.test.ts fixture already verified against genuine LibreOffice 26.2 output: explicit column widths, a hidden column, mixed office:value-type cells (string/float/boolean), a merged cell, and print settings (page size, gridlines/headers, page order) resolved through table:table -> style:style[family="table"] -> style:master-page-name -> style:master-page -> style:page-layout.
 
 function enc(s: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(s);
@@ -104,7 +104,7 @@ function buildFixturePackage(): Package {
               }),
             ],
           ),
-          // table:table's own print-settings master page is a DIRECT attribute of its style:style[family="table"] element -- confirmed by odf.js's own readOdsContent (readPrintSettings calls attrValue(tableStyleElement, 'style:master-page-name') on the style element itself, never a nested style:table-properties child), unlike odp's own draw:master-page-name which sits directly on draw:page instead.
+          // table:table's own print-settings master page is a DIRECT attribute of its style:style[family="table"] element — confirmed by odf.js's own readOdsContent (readPrintSettings calls attrValue(tableStyleElement, 'style:master-page-name') on the style element itself, never a nested style:table-properties child), unlike odp's own draw:master-page-name which sits directly on draw:page instead.
           el("style:style", {
             "style:name": "DataTable",
             "style:family": "table",
@@ -138,7 +138,7 @@ function buildFixturePackage(): Package {
   };
 }
 
-// A minimal but structurally authentic ods package (mimetype part first and stored, a real office:document-content with a hidden column, mixed value-type cells, a merged cell, and print settings resolved from a real master-page/page-layout chain) -- enough to round-trip through decodePackage and readOdsContent without needing a real LibreOffice-exported binary.
+// A minimal but structurally authentic ods package (mimetype part first and stored, a real office:document-content with a hidden column, mixed value-type cells, a merged cell, and print settings resolved from a real master-page/page-layout chain) — enough to round-trip through decodePackage and readOdsContent without needing a real LibreOffice-exported binary.
 export function minimalOdsBytes(): Uint8Array<ArrayBuffer> {
   return encodePackage(buildFixturePackage());
 }
@@ -147,7 +147,7 @@ export function minimalOdsPackage(): Package {
   return decodePackage(minimalOdsBytes());
 }
 
-// A second, purpose-built fixture for pdfToOds's own round-trip test (src/convert/convert.test.ts): three real, fully visible columns (unlike minimalOdsBytes's own hidden column B, whose zero rendered width collapses two of its own gridline boundaries onto the same x position) and three rows, with gridlines AND headers explicitly enabled via style:print="grid headers" -- so odsToPdf actually draws the LayoutLine lattice reconstructSpreadsheet's own gridline-detection path (src/layout/reconstruct.ts) needs something real to find, rather than falling through to its text-clustering path. Every row carries an explicit style:row-height, unlike minimalOdsBytes's own rows: odf.js's own readRowLayout (typed/ods/read.ts) resolves a row with no table:style-name to heightPt 0 (a genuinely measured "no explicit height was ever set" reading, not a fallback guess), and src/layout/sheets.ts's own resolveAxis then uses that literal 0 rather than substituting DEFAULT_ROW_HEIGHT_PT -- an explicit ContentSheetRow entry always wins over the fallback, by design, the same way an explicitly hidden row does. A real LibreOffice-authored spreadsheet always writes an explicit row-height style, so this fixture does too.
+// A second, purpose-built fixture for pdfToOds's own round-trip test (src/convert/convert.test.ts): three real, fully visible columns (unlike minimalOdsBytes's own hidden column B, whose zero rendered width collapses two of its own gridline boundaries onto the same x position) and three rows, with gridlines AND headers explicitly enabled via style:print="grid headers" — so odsToPdf actually draws the LayoutLine lattice reconstructSpreadsheet's own gridline-detection path (src/layout/reconstruct.ts) needs something real to find, rather than falling through to its text-clustering path. Every row carries an explicit style:row-height, unlike minimalOdsBytes's own rows: odf.js's own readRowLayout (typed/ods/read.ts) resolves a row with no table:style-name to heightPt 0 (a genuinely measured "no explicit height was ever set" reading, not a fallback guess), and src/layout/sheets.ts's own resolveAxis then uses that literal 0 rather than substituting DEFAULT_ROW_HEIGHT_PT — an explicit ContentSheetRow entry always wins over the fallback, by design, the same way an explicitly hidden row does. A real LibreOffice-authored spreadsheet always writes an explicit row-height style, so this fixture does too.
 function buildGridFixturePackage(): Package {
   function columnStyle(name: string): XmlElement {
     return el(
@@ -263,7 +263,7 @@ export function gridOdsBytes(): Uint8Array<ArrayBuffer> {
   return encodePackage(buildGridFixturePackage());
 }
 
-// A third fixture, purpose-built for the ods<->xlsx cross-format bridge's own round-trip tests (src/convert/bridges.test.ts): three explicitly-widthed columns (3cm/4cm/2cm) and every office:value-type ODS distinguishes on one row each -- string, float, boolean, percentage, currency, date, time -- plus a formula cell (table:formula carried verbatim, never evaluated by either side of the bridge) and a genuine 2-column merge. This is deliberately the richest of the three ods.ts fixtures: xlsx write support (ooxml.js's buildXlsxPackageFromContent) is new to the ecosystem, so the bridge's own tests need real, independently-authored ground truth to check against, not a fixture built through the very editor (createOds) the bridge composes with on its own write-back hop.
+// A third fixture, purpose-built for the ods<->xlsx cross-format bridge's own round-trip tests (src/convert/bridges.test.ts): three explicitly-widthed columns (3cm/4cm/2cm) and every office:value-type ODS distinguishes on one row each — string, float, boolean, percentage, currency, date, time — plus a formula cell (table:formula carried verbatim, never evaluated by either side of the bridge) and a genuine 2-column merge. This is deliberately the richest of the three ods.ts fixtures: xlsx write support (ooxml.js's buildXlsxPackageFromContent) is new to the ecosystem, so the bridge's own tests need real, independently-authored ground truth to check against, not a fixture built through the very editor (createOds) the bridge composes with on its own write-back hop.
 function buildRichFixturePackage(): Package {
   const columns = [
     el("table:table-column", { "table:style-name": "RichColA" }),
@@ -441,9 +441,9 @@ export function richOdsBytes(): Uint8Array<ArrayBuffer> {
   return encodePackage(buildRichFixturePackage());
 }
 
-// A fourth fixture, purpose-built for the per-cell decoration wiring (ContentSheetCell's background/borders/alignment/verticalAlignment, all four added to document-schema.js's ContentSheetCellSchema and all four genuinely populated by odf.js's own readOdsContent -- see typed/shared/table.ts's readCellStyleDecoration). Deliberately hand-authored ODF XML rather than built through createOds/OdsCell, for the same independent-construction reason this module's other fixtures are: OdsCell has no decoration setter at all today, so the editor could not express this fixture even if it were the right tool.
+// A fourth fixture, purpose-built for the per-cell decoration wiring (ContentSheetCell's background/borders/alignment/verticalAlignment, all four added to document-schema.js's ContentSheetCellSchema and all four genuinely populated by odf.js's own readOdsContent — see typed/shared/table.ts's readCellStyleDecoration). Deliberately hand-authored ODF XML rather than built through createOds/OdsCell, for the same independent-construction reason this module's other fixtures are: OdsCell has no decoration setter at all today, so the editor could not express this fixture even if it were the right tool.
 //
-// One sheet, "Decorated", one row of two cells: A1 carries a yellow fo:background-color, a full fo:border shorthand, an explicit fo:text-align="right" and style:vertical-align="top"; B1 carries only a red fo:border-bottom, with no background, no alignment, and no vertical alignment of its own -- so a single fixture exercises both the "declares everything" and the "declares exactly one edge and nothing else" branches of the layout wiring at once.
+// One sheet, "Decorated", one row of two cells: A1 carries a yellow fo:background-color, a full fo:border shorthand, an explicit fo:text-align="right" and style:vertical-align="top"; B1 carries only a red fo:border-bottom, with no background, no alignment, and no vertical alignment of its own — so a single fixture exercises both the "declares everything" and the "declares exactly one edge and nothing else" branches of the layout wiring at once.
 function buildDecoratedFixturePackage(): Package {
   const cellA = el(
     "table:table-cell",

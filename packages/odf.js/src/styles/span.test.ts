@@ -96,7 +96,7 @@ describe("ensureSpan: plain text wrapping", () => {
   });
 
   it("treats an unrecognised element (e.g. a bookmark) as zero-width too, contributing nothing to the character count", () => {
-    // "ab" (0-1) + a zero-width bookmark + "cd" (2-3) + "ef" (4-5) -- wrapping [0,4) must capture exactly "ab"+bookmark+"cd" and stop before "ef", proving the bookmark consumed none of the 4 requested positions.
+    // "ab" (0-1) + a zero-width bookmark + "cd" (2-3) + "ef" (4-5) — wrapping [0,4) must capture exactly "ab"+bookmark+"cd" and stop before "ef", proving the bookmark consumed none of the 4 requested positions.
     const paragraph = paragraphOf(
       txt("ab"),
       el("text:bookmark", { "text:name": "mark" }),
@@ -132,7 +132,7 @@ describe("ensureSpan: plain text wrapping", () => {
 
 describe("ensureSpan: text:s straddling a split boundary", () => {
   it("splits a text:s that straddles the START boundary into two runs whose counts sum to the original, never merging or corrupting them", () => {
-    // "abc" (0-2) + text:s count=5 (3-7) + "xyz" (8-10) -- mirrors the task's own example: a text:c="5" run split at position 5 becomes count=2 and count=3.
+    // "abc" (0-2) + text:s count=5 (3-7) + "xyz" (8-10) — mirrors the task's own example: a text:c="5" run split at position 5 becomes count=2 and count=3.
     const paragraph = paragraphOf(
       txt("abc"),
       el("text:s", { "text:c": "5" }),
@@ -238,7 +238,7 @@ describe("ensureSpan: text:s straddling a split boundary", () => {
 });
 
 describe("splitNode: unreachable fractional-offset branch", () => {
-  it("throws for text:tab (and, symmetrically, text:line-break) given an offset that isn't exactly 0 or its own length -- a shape ensureSpan's own integer-offset validation prevents any real caller from ever producing, exercised here by calling the split primitive directly", () => {
+  it("throws for text:tab (and, symmetrically, text:line-break) given an offset that isn't exactly 0 or its own length — a shape ensureSpan's own integer-offset validation prevents any real caller from ever producing, exercised here by calling the split primitive directly", () => {
     expect(() => splitNode(el("text:tab"), 0.5)).toThrow(
       /cannot split "text:tab" at a fractional offset/,
     );
@@ -285,12 +285,12 @@ describe("ensureSpan: splitting a pre-existing text:span", () => {
     expect(styleName(leftHalf)).toBe("T1");
     expect(textOf(leftHalf.children[0]!)).toBe("CD");
 
-    // [4,10) covers the split-off right half of the original span ("EFGH") AND the trailing "IJ" text node together -- since that's more than one node, ensureSpan wraps them in a brand new outer span rather than reusing/renaming the split-off span in place.
+    // [4,10) covers the split-off right half of the original span ("EFGH") AND the trailing "IJ" text node together — since that's more than one node, ensureSpan wraps them in a brand new outer span rather than reusing/renaming the split-off span in place.
     expect(newSpan).not.toBe(existingSpan);
     expect(styleName(newSpan)).toBe("T2");
     expect(paragraph.children).toHaveLength(3);
     expect(paragraph.children[2]).toBe(newSpan);
-    // newSpan must wrap BOTH of the two nodes that made up "middle" (the split-off EFGH span, still styled T1, and the IJ text node) -- not merely reuse/rename the first of those two nodes in place and silently drop the second, which is exactly what a broken "is there exactly one middle node" check would do.
+    // newSpan must wrap BOTH of the two nodes that made up "middle" (the split-off EFGH span, still styled T1, and the IJ text node) — not merely reuse/rename the first of those two nodes in place and silently drop the second, which is exactly what a broken "is there exactly one middle node" check would do.
     expect(newSpan.children).toHaveLength(2);
     const innerSpan = newSpan.children[0]!;
     if (innerSpan.type !== "element") throw new Error("expected an element");
@@ -305,7 +305,7 @@ describe("ensureSpan: splitting a pre-existing text:span", () => {
     ]);
     const paragraph = paragraphOf(txt("AB"), existingSpan, txt("IJ")); // AB=0-1, CDEFGH=2-7, IJ=8-9
 
-    // [4,8) is exactly the second half of a split at offset 4: "EF" no -- splitting CDEFGH (2-7) at position 4 gives "CD" (2-3) and "EFGH" (4-7); [4,8) matches "EFGH" exactly.
+    // [4,8) is exactly the second half of a split at offset 4: "EF" no — splitting CDEFGH (2-7) at position 4 gives "CD" (2-3) and "EFGH" (4-7); [4,8) matches "EFGH" exactly.
     const reused = ensureSpan(paragraph, 4, 8, "T2");
 
     const leftHalf = paragraph.children[1]!;

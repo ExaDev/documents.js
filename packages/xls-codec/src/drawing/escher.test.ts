@@ -87,7 +87,7 @@ describe("readEscherRecords", () => {
   });
 
   it("throws when a child record's declared length overruns its own container, naming the child's own offset", () => {
-    // A container's own recLen (the header's last 4 bytes) forced too small for the child atom that follows -- an inconsistent length a real writer would never produce, exercising the same defensive check readRecords already has for BIFF framing.
+    // A container's own recLen (the header's last 4 bytes) forced too small for the child atom that follows — an inconsistent length a real writer would never produce, exercising the same defensive check readRecords already has for BIFF framing.
     const malformed = new Uint8Array(
       escherContainer(0xf002, 0, [escherAtom(0xf00a, 0, [1, 2, 3])]),
     );
@@ -179,7 +179,7 @@ describe("childrenOfType / findDescendant", () => {
   });
 
   it("keeps searching a later sibling once an earlier sibling's own subtree comes back empty, rather than stopping at the first container checked", () => {
-    // The recursive call's own result must genuinely gate whether the loop returns early -- with that gate always taken, the first child container's own (empty) search result would be returned immediately, never reaching the second child container that actually holds the target.
+    // The recursive call's own result must genuinely gate whether the loop returns early — with that gate always taken, the first child container's own (empty) search result would be returned immediately, never reaching the second child container that actually holds the target.
     const bytes = new Uint8Array(
       escherContainer(0xf000, 0, [
         escherContainer(0xf001, 0, [escherAtom(0xf099, 0, [9])]),

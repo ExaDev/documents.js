@@ -201,7 +201,7 @@ describe("writeContentStream: text", () => {
   });
 });
 
-// The embedded-face branch of writeText. Every assertion here is against a fake measurer whose own answers are deliberately WRONG for this face (a 0.92 horizontal scale, a 0.1em underline offset) -- so a test passing proves the branch read the resolved face's own metrics rather than the measurer's, which is the whole point of resolving them off ResolvedFontResource instead.
+// The embedded-face branch of writeText. Every assertion here is against a fake measurer whose own answers are deliberately WRONG for this face (a 0.92 horizontal scale, a 0.1em underline offset) — so a test passing proves the branch read the resolved face's own metrics rather than the measurer's, which is the whole point of resolving them off ResolvedFontResource instead.
 describe("writeContentStream: text in an embedded face", () => {
   function embeddedFace(): EmbeddedFace {
     const sfnt = parseSfnt(carlitoRegularBytes());
@@ -251,7 +251,7 @@ describe("writeContentStream: text in an embedded face", () => {
       `BT\n/E1 12 Tf\n100 Tz\n0 0 0 rg\n1 0 0 1 10 20 Tm\n<${hex}> Tj\nET\n`,
     );
     expect(hex).toHaveLength("Hi".length * 4); // two bytes per character, unlike a WinAnsi string's one
-    // Carlito kerns nothing between 'H' and 'i', so this stays one unsplit string shown with Tj -- byte for byte what this module emitted before pair kerning existed.
+    // Carlito kerns nothing between 'H' and 'i', so this stays one unsplit string shown with Tj — byte for byte what this module emitted before pair kerning existed.
     expect(decode(bytes)).not.toContain("TJ");
     expect(substitutions).toHaveLength(0);
     expect(missingGlyphs).toHaveLength(0);
@@ -296,7 +296,7 @@ describe("writeContentStream: text in an embedded face", () => {
     const text = decode(
       writeContentStream([item], embeddedContext(face)).bytes,
     );
-    // The same width1000 the TJ array above actually advances by (3086.9140625 at size 1000), not the 3333.49609375 its glyphs' bare advances sum to -- an underline drawn to the unkerned sum would overhang the text it underlines by nearly three points at this size.
+    // The same width1000 the TJ array above actually advances by (3086.9140625 at size 1000), not the 3333.49609375 its glyphs' bare advances sum to — an underline drawn to the unkerned sum would overhang the text it underlines by nearly three points at this size.
     expect(text).toContain(
       ` ${formatNumber((encodeForShowEmbedded("AVATAR", face).width1000 / 1000) * 12)} `,
     );
@@ -324,7 +324,7 @@ describe("writeContentStream: text in an embedded face", () => {
   });
 
   it("draws the underline from the face's own post metrics, not the measurer's", () => {
-    // Carlito Regular's raw 'post': underlinePosition -103, underlineThickness 194 design units on a 2048-unit em -- so at size 10, -0.502929... and 0.947265... points.
+    // Carlito Regular's raw 'post': underlinePosition -103, underlineThickness 194 design units on a 2048-unit em — so at size 10, -0.502929... and 0.947265... points.
     const item: LayoutText = {
       kind: "text",
       text: "A",
@@ -456,7 +456,7 @@ describe("writeContentStream: line", () => {
 });
 
 // Every expectation below asserts the FULL emitted operator string, not a substring or a byte count: the whole point of the style field is the exact dash array, phase, and cap the graphics state ends up carrying, and a "contains [6 6]" assertion would pass just as happily on a stream that also left the pattern set for every later item on the page.
-describe("writeContentStream: line -- stroke style", () => {
+describe("writeContentStream: line — stroke style", () => {
   // A 90pt horizontal rule at 2pt wide, so every derived length below is a clean multiple: dashes at 3x the stroke width are 6pt on, 6pt off; a dotted gap at 2x is 4pt.
   const rule: LayoutLine = {
     kind: "line",
@@ -499,7 +499,7 @@ describe("writeContentStream: line -- stroke style", () => {
     );
   });
 
-  // 3pt splits into three 1pt bands -- ink, gap, ink -- so each rule is 1pt wide and sits 1pt either side of y=10, putting the pair's outer edges exactly where the single 3pt stroke's own edges would have been.
+  // 3pt splits into three 1pt bands — ink, gap, ink — so each rule is 1pt wide and sits 1pt either side of y=10, putting the pair's outer edges exactly where the single 3pt stroke's own edges would have been.
   it("draws double as two real 1pt strokes offset perpendicular by 1pt either side of a 3pt line", () => {
     const doubled: LayoutLine = { ...rule, widthPt: 3, style: "double" };
     const text = decode(writeContentStream([doubled], fakeContext()).bytes);
@@ -596,7 +596,7 @@ describe("writeContentStream: ellipse", () => {
     expect(text.trim().endsWith("f")).toBe(true);
   });
 
-  // The four arcs already return exactly to the starting point, so this `h` draws no additional ink -- but it does mark the subpath explicitly closed, which readPdf's own general path tracking (interpret.ts) needs to see in order to recover a filled ellipse as a closed (and therefore fillable, per real ODF/SVG consumers) subpath rather than an open one -- see this function's own top-of-file note.
+  // The four arcs already return exactly to the starting point, so this `h` draws no additional ink — but it does mark the subpath explicitly closed, which readPdf's own general path tracking (interpret.ts) needs to see in order to recover a filled ellipse as a closed (and therefore fillable, per real ODF/SVG consumers) subpath rather than an open one — see this function's own top-of-file note.
   it("emits an explicit h (closepath) before the paint operator, even though the curves already return to their own start point", () => {
     const item: LayoutEllipse = {
       kind: "ellipse",
@@ -672,7 +672,7 @@ describe("writeContentStream: image", () => {
 });
 
 describe("writeContentStream: link", () => {
-  it("contributes no content-stream bytes -- link annotations belong in /Annots, built by write.ts", () => {
+  it("contributes no content-stream bytes — link annotations belong in /Annots, built by write.ts", () => {
     const item: LayoutLink = {
       kind: "link",
       uri: "https://example.com",

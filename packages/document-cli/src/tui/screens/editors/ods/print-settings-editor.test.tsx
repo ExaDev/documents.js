@@ -77,7 +77,7 @@ describe("OdsPrintSettingsEditorScreen", () => {
     );
     await settle();
 
-    // Down six times from the first row (pageWidthPt) reaches the Gridlines row (index 6 in FIELD_ROWS) -- settle() between each write for the same reason test-support.ts documents.
+    // Down six times from the first row (pageWidthPt) reaches the Gridlines row (index 6 in FIELD_ROWS) — settle() between each write for the same reason test-support.ts documents.
     for (let index = 0; index < 6; index += 1) {
       stdin.write("j");
       await settle();

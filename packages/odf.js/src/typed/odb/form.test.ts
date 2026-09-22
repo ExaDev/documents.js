@@ -7,7 +7,7 @@ import { el, txt } from "../../xml/fragment";
 import { parsePackage } from "../../package-io/read";
 import { readOdbForm } from "./form";
 
-// Every assertion below is against src/typed/odb/fixtures/form-and-report.odb, a real, unmodified LibreOffice 26.2-generated .odb (see typed/odb/read.ts's own top-of-file note for how it was generated and cross-verified) -- the whole point of this reader is that its shape is grounded in genuine producer output rather than in the ODF form: schema read cold. A small number of synthetic, hand-built packages at the end cover error paths no real file produces.
+// Every assertion below is against src/typed/odb/fixtures/form-and-report.odb, a real, unmodified LibreOffice 26.2-generated .odb (see typed/odb/read.ts's own top-of-file note for how it was generated and cross-verified) — the whole point of this reader is that its shape is grounded in genuine producer output rather than in the ODF form: schema read cold. A small number of synthetic, hand-built packages at the end cover error paths no real file produces.
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 
@@ -109,12 +109,12 @@ describe("readOdbForm: form-and-report.odb (real LibreOffice output)", () => {
     ]);
   });
 
-  it("proves the sub-form genuinely binds differently from its parent -- a QUERY nested inside a TABLE-bound form", () => {
+  it("proves the sub-form genuinely binds differently from its parent — a QUERY nested inside a TABLE-bound form", () => {
     expect(form.forms[0]?.commandType).toBe("table");
     expect(form.forms[0]?.subForms[0]?.commandType).toBe("query");
   });
 
-  it("never surfaces form:properties -- a producer-specific UNO property bag, not form structure", () => {
+  it("never surfaces form:properties — a producer-specific UNO property bag, not form structure", () => {
     const tags = form.forms[0]?.controls.map((control) => control.tag) ?? [];
     expect(tags).not.toContain("form:properties");
   });

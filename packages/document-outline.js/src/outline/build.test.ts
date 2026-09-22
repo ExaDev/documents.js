@@ -30,7 +30,7 @@ import {
   wordprocessingPackage,
 } from "../test-support/fixtures";
 
-// Every per-kind fixture is asserted valid against the canonical schema before its outline is checked, so these tests exercise the builder against real DocumentTree shapes -- the actual field requirements of document-schema.js 4.0.0 -- not approximations that merely happen to type-check.
+// Every per-kind fixture is asserted valid against the canonical schema before its outline is checked, so these tests exercise the builder against real DocumentTree shapes — the actual field requirements of document-schema.js 4.0.0 — not approximations that merely happen to type-check.
 function expectSchemaValid(pkg: DocumentTree): void {
   const result = DocumentTreeSchema.safeParse(pkg);
   expect(
@@ -273,7 +273,7 @@ describe("wordprocessing outlines", () => {
   });
 
   it("pops only the deepest of three open list groups, keeping the shallower two open", () => {
-    // The list-stack mirror of the heading test above: a three-deep open list stack ([A, B, D]) at the moment sibling 'E' arrives is what distinguishes popping from the stack's ACTUAL top from popping based on some other, shallower element -- a check that (wrongly) reads the stack's second element (B, level 1) would see 1 >= 2 as false and never pop D, nesting 'E' as D's own child instead of D's sibling under B.
+    // The list-stack mirror of the heading test above: a three-deep open list stack ([A, B, D]) at the moment sibling 'E' arrives is what distinguishes popping from the stack's ACTUAL top from popping based on some other, shallower element — a check that (wrongly) reads the stack's second element (B, level 1) would see 1 >= 2 as false and never pop D, nesting 'E' as D's own child instead of D's sibling under B.
     const pkg = wordprocessingPackage([
       sectionGroup([
         listGroup("A", 0, [
@@ -301,7 +301,7 @@ describe("wordprocessing outlines", () => {
   });
 
   it("attaches a construct group's own content, and a plain leaf, to the innermost of three open list groups", () => {
-    // A three-deep open list stack ([A, B, C]) is what distinguishes reading the stack's actual last (current, innermost) element from reading some other, shallower element -- both the construct group's flattened content and the following page break must land under C, the innermost item, not under B.
+    // A three-deep open list stack ([A, B, C]) is what distinguishes reading the stack's actual last (current, innermost) element from reading some other, shallower element — both the construct group's flattened content and the following page break must land under C, the innermost item, not under B.
     const pkg = wordprocessingPackage([
       sectionGroup([
         listGroup("A", 0, [
@@ -337,7 +337,7 @@ describe("wordprocessing outlines", () => {
   });
 
   it("concatenates a heading anchor's multiple runs with no separator for the group's label", () => {
-    // The fixtures' own paragraph() builder always produces a single-run anchor, which cannot distinguish paragraphText's own no-separator join from a separator-inserting one -- this anchor is built directly to carry more than one run.
+    // The fixtures' own paragraph() builder always produces a single-run anchor, which cannot distinguish paragraphText's own no-separator join from a separator-inserting one — this anchor is built directly to carry more than one run.
     const multiRunHeading: HeadingGroupNode = {
       node: {
         kind: "paragraph",
@@ -369,7 +369,7 @@ describe("wordprocessing outlines", () => {
       sectionGroup([secondSectionBody]),
     ]);
     expectSchemaValid(pkg);
-    // The heading stack persists across the section boundary -- the TOC projection's deliberate cross-container lossiness (and exactly why the lossless grouping lives in documents.js, not here).
+    // The heading stack persists across the section boundary — the TOC projection's deliberate cross-container lossiness (and exactly why the lossless grouping lives in documents.js, not here).
     expect(buildOutline(pkg)).toEqual([
       {
         text: "Chapter",
@@ -387,7 +387,7 @@ describe("wordprocessing outlines", () => {
       sectionGroup([headingGroup("Subsection", 3, [])]),
     ]);
     expectSchemaValid(pkg);
-    // The deepest open group at the end of section one is the scope the next section's headings nest into -- stack semantics applied to anchors in pre-order, exactly as they were on flat content before the tree form existed.
+    // The deepest open group at the end of section one is the scope the next section's headings nest into — stack semantics applied to anchors in pre-order, exactly as they were on flat content before the tree form existed.
     expect(buildOutline(pkg)).toEqual([
       {
         text: "Chapter",
@@ -426,7 +426,7 @@ describe("wordprocessing outlines", () => {
       ]),
     ]);
     expectSchemaValid(pkg);
-    // 'Inner' is level 1, same as 'Outer', but it nests as Outer's child (not a sibling that would pop Outer closed) because the construct's fresh scope never sees Outer's open heading stack at all -- and 'tail' lands back at Outer's own scope, proving the construct's internal stack never leaked out either.
+    // 'Inner' is level 1, same as 'Outer', but it nests as Outer's child (not a sibling that would pop Outer closed) because the construct's fresh scope never sees Outer's open heading stack at all — and 'tail' lands back at Outer's own scope, proving the construct's internal stack never leaked out either.
     expect(buildOutline(pkg)).toEqual([
       {
         text: "Outer",
@@ -506,7 +506,7 @@ describe("presentation outlines", () => {
     ]);
   });
   it("attaches a shape construct group's own content to the innermost of three open list groups", () => {
-    // The shape-flow mirror of wordprocessing's own equivalent test above: a three-deep open list stack ([A, B, C]) is what distinguishes the stack's actual last (innermost) element from some other, shallower one -- the construct group's flattened content must land under C, not under B.
+    // The shape-flow mirror of wordprocessing's own equivalent test above: a three-deep open list stack ([A, B, C]) is what distinguishes the stack's actual last (innermost) element from some other, shallower one — the construct group's flattened content must land under C, not under B.
     const pkg = presentationPackage([
       slideGroup([
         shapeGroup([
@@ -611,7 +611,7 @@ describe("drawing outlines", () => {
   });
 
   it("flattens a shape construct group with no leaf of its own, unlike a list group anchor", () => {
-    // A construct's node is a ConstructDescriptor, not content -- it contributes nothing to the flat leaf sequence, only its children do.
+    // A construct's node is a ConstructDescriptor, not content — it contributes nothing to the flat leaf sequence, only its children do.
     const inside = paragraph("inside");
     const pkg = drawingPackage([
       drawPageGroup([shapeGroup([shapeConstructGroup([inside])])]),

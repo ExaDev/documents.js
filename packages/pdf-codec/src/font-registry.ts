@@ -1,12 +1,12 @@
-// A swappable font-resolution port sitting in front of resolveStandardFont (fonts.ts): where that function always maps a requested family straight onto one of the 14 standard PDF faces, a FontRegistry tries progressively more specific, real embeddable faces first, and only falls through to the standard-14 mapping -- today's behavior -- when nothing more specific is available. This is a strictly additive capability: with no registry supplied at all, every caller that already calls resolveStandardFont directly keeps doing exactly that, byte for byte; a FontRegistry only changes anything for a caller that explicitly constructs one and threads it through its own write path.
+// A swappable font-resolution port sitting in front of resolveStandardFont (fonts.ts): where that function always maps a requested family straight onto one of the 14 standard PDF faces, a FontRegistry tries progressively more specific, real embeddable faces first, and only falls through to the standard-14 mapping — today's behavior — when nothing more specific is available. This is a strictly additive capability: with no registry supplied at all, every caller that already calls resolveStandardFont directly keeps doing exactly that, byte for byte; a FontRegistry only changes anything for a caller that explicitly constructs one and threads it through its own write path.
 //
 // Resolution order, most specific first:
-//   1. an exact-face match (same normalized family, same bold, same italic) in `sourceFonts` -- fonts genuinely embedded in or extracted from the document being converted;
-//   2. an exact-face match in caller-supplied `fonts` -- fonts a caller hands in explicitly (e.g. a house font pack);
-//   3. a family match (same normalized family, but the exact bold/italic combination requested is missing) in `sourceFonts` then `fonts` -- substitutes that family's own regular face, since some real face in the right family beats falling all the way through to a standard-14 substitute, and reports the substitution via `onSubstitution`;
-//   4. an exact match in the vendored substitute table (font-substitutes.ts) -- embeds the matching Carlito/Caladea face and reports the substitution;
-//   5. resolveStandardFont(family, bold, italic) -- unconditional, and never skipped: every LayoutFont this registry is ever asked to resolve gets *some* ResolvedFace back, even when nothing above matched anything.
-// ProvidedFont/FontRegistryOptions are owned by document-schema.js (the neutral shared-schema package); imported here for the resolution logic below. FontSubstitution is document-schema.js-owned too and is not otherwise used in this module -- all three are consumed directly from document-schema.js by other callers. The FontRegistry interface and its PDF-specific ResolvedFace return type stay defined below.
+//   1. an exact-face match (same normalized family, same bold, same italic) in `sourceFonts` — fonts genuinely embedded in or extracted from the document being converted;
+//   2. an exact-face match in caller-supplied `fonts` — fonts a caller hands in explicitly (e.g. a house font pack);
+//   3. a family match (same normalized family, but the exact bold/italic combination requested is missing) in `sourceFonts` then `fonts` — substitutes that family's own regular face, since some real face in the right family beats falling all the way through to a standard-14 substitute, and reports the substitution via `onSubstitution`;
+//   4. an exact match in the vendored substitute table (font-substitutes.ts) — embeds the matching Carlito/Caladea face and reports the substitution;
+//   5. resolveStandardFont(family, bold, italic) — unconditional, and never skipped: every LayoutFont this registry is ever asked to resolve gets *some* ResolvedFace back, even when nothing above matched anything.
+// ProvidedFont/FontRegistryOptions are owned by document-schema.js (the neutral shared-schema package); imported here for the resolution logic below. FontSubstitution is document-schema.js-owned too and is not otherwise used in this module — all three are consumed directly from document-schema.js by other callers. The FontRegistry interface and its PDF-specific ResolvedFace return type stay defined below.
 import type {
   LayoutFont,
   ProvidedFont,
@@ -31,7 +31,7 @@ import type { SfntFont } from "./sfnt";
 import { parseSfnt } from "./sfnt";
 import { base64ToBytes } from "byte-codec";
 
-// What FontRegistry.resolve settled on for one LayoutFont: either a real embeddable face (steps 1-4 above), or the standard-14 fallback (step 5) -- the same ResolvedFont shape resolveStandardFont already returns, carried through unchanged so a caller who only wants the standard-14 case can narrow on `kind` and read it exactly as before.
+// What FontRegistry.resolve settled on for one LayoutFont: either a real embeddable face (steps 1-4 above), or the standard-14 fallback (step 5) — the same ResolvedFont shape resolveStandardFont already returns, carried through unchanged so a caller who only wants the standard-14 case can narrow on `kind` and read it exactly as before.
 export type ResolvedFace =
   | { readonly kind: "embedded"; readonly face: EmbeddedFace }
   | {
@@ -48,7 +48,7 @@ function faceCacheKey(family: string, bold: boolean, italic: boolean): string {
   return `${normalizeFamilyName(family)}|${bold ? 1 : 0}|${italic ? 1 : 0}`;
 }
 
-// Reads `bytes` as an sfnt and loads it into an EmbeddedFace, or `undefined` for bytes that aren't a usable font at all (not a readable sfnt, or missing a table loadEmbeddedFace requires) -- the same "degrade around this font, don't abort" contract loadEmbeddedFace itself already documents. A caller with unusable bytes at a given step is treated exactly as if that step had found nothing, falling through to the next one.
+// Reads `bytes` as an sfnt and loads it into an EmbeddedFace, or `undefined` for bytes that aren't a usable font at all (not a readable sfnt, or missing a table loadEmbeddedFace requires) — the same "degrade around this font, don't abort" contract loadEmbeddedFace itself already documents. A caller with unusable bytes at a given step is treated exactly as if that step had found nothing, falling through to the next one.
 function embedFace(bytes: Uint8Array<ArrayBuffer>): EmbeddedFace | undefined {
   const sfnt: SfntFont | undefined = parseSfnt(bytes);
   if (sfnt === undefined) {
@@ -72,7 +72,7 @@ function findExactFace(
   );
 }
 
-// The face step 3 substitutes for a family match with no exact bold/italic hit: that family's own genuinely unstyled (regular) face when one is present, otherwise -- a family only supplied in, say, bold -- whichever face of that family was supplied, since some real face in the right family is still a closer substitute than falling through to a standard-14 face in a wholly different family.
+// The face step 3 substitutes for a family match with no exact bold/italic hit: that family's own genuinely unstyled (regular) face when one is present, otherwise — a family only supplied in, say, bold — whichever face of that family was supplied, since some real face in the right family is still a closer substitute than falling through to a standard-14 face in a wholly different family.
 function findFamilyRegular(
   list: readonly ProvidedFont[],
   family: string,
@@ -90,7 +90,7 @@ function findFamilyRegular(
   );
 }
 
-// One process-wide cache of the inflated (real, uncompressed) sfnt bytes for each of the eight vendored Carlito/Caladea faces -- mirrors test-support/fonts.ts's own caching rationale (a Carlito face is several hundred KB inflated, and every FontRegistry instance in a process reusing the vendored table would otherwise re-inflate it from scratch on every resolve call).
+// One process-wide cache of the inflated (real, uncompressed) sfnt bytes for each of the eight vendored Carlito/Caladea faces — mirrors test-support/fonts.ts's own caching rationale (a Carlito face is several hundred KB inflated, and every FontRegistry instance in a process reusing the vendored table would otherwise re-inflate it from scratch on every resolve call).
 const vendoredFaceBytesCache = new Map<string, Uint8Array<ArrayBuffer>>();
 
 interface VendoredFaceSet {
@@ -116,7 +116,7 @@ const VENDORED_FACE_BASE64: Readonly<Record<VendoredFamily, VendoredFaceSet>> =
     },
   };
 
-// Inflates (and caches) the raw sfnt bytes for one vendored family/bold/italic combination. The vendored assets are DEFLATE-compressed (fflate's raw deflateSync, RFC 1951 -- see src/assets/carlito-regular.ts's own header comment) rather than zlib-framed, so this is fflate's inflateSync, not src/bytes/flate.ts's zlib-aware inflate().
+// Inflates (and caches) the raw sfnt bytes for one vendored family/bold/italic combination. The vendored assets are DEFLATE-compressed (fflate's raw deflateSync, RFC 1951 — see src/assets/carlito-regular.ts's own header comment) rather than zlib-framed, so this is fflate's inflateSync, not src/bytes/flate.ts's zlib-aware inflate().
 function loadVendoredFaceBytes(
   family: VendoredFamily,
   bold: boolean,
@@ -137,14 +137,14 @@ function loadVendoredFaceBytes(
   }
   const deflatedBase64 = VENDORED_FACE_BASE64[family][faceKey];
   const inflated = inflateSync(base64ToBytes(deflatedBase64));
-  // Copying into a fresh Uint8Array gives the ArrayBuffer-backed type parseSfnt (and every other sfnt reader in this package) requires -- fflate's own return type is ArrayBufferLike-backed, which is not guaranteed to be a real ArrayBuffer.
+  // Copying into a fresh Uint8Array gives the ArrayBuffer-backed type parseSfnt (and every other sfnt reader in this package) requires — fflate's own return type is ArrayBufferLike-backed, which is not guaranteed to be a real ArrayBuffer.
   const bytes = new Uint8Array(inflated.length);
   bytes.set(inflated);
   vendoredFaceBytesCache.set(cacheKey, bytes);
   return bytes;
 }
 
-// Builds a FontRegistry. With no options at all, `resolve` is equivalent to calling resolveStandardFont(family, bold, italic) directly for every LayoutFont -- steps 1-4 all have nothing to match against (no sourceFonts, no fonts, and step 4 still runs against the vendored table by default, matching real families like Calibri/Cambria exactly as documented; pass `substitutes: 'none'` to disable even that and fall straight through to step 5 for every family).
+// Builds a FontRegistry. With no options at all, `resolve` is equivalent to calling resolveStandardFont(family, bold, italic) directly for every LayoutFont — steps 1-4 all have nothing to match against (no sourceFonts, no fonts, and step 4 still runs against the vendored table by default, matching real families like Calibri/Cambria exactly as documented; pass `substitutes: 'none'` to disable even that and fall straight through to step 5 for every family).
 export function createFontRegistry(
   options: FontRegistryOptions = {},
 ): FontRegistry {
@@ -177,7 +177,7 @@ export function createFontRegistry(
       }
     }
 
-    // Step 3: a family match with the exact bold/italic combination missing -- sourceFonts first, then fonts, matching the same source-before-caller precedence steps 1/2 already established.
+    // Step 3: a family match with the exact bold/italic combination missing — sourceFonts first, then fonts, matching the same source-before-caller precedence steps 1/2 already established.
     const sourceFamilyRegular = findFamilyRegular(sourceFonts, family);
     const callerFamilyRegular =
       sourceFamilyRegular === undefined
@@ -218,7 +218,7 @@ export function createFontRegistry(
       }
     }
 
-    // Step 5: the unconditional standard-14 fallback -- today's behavior, unchanged.
+    // Step 5: the unconditional standard-14 fallback — today's behavior, unchanged.
     const standard = resolveStandardFont(family, bold, italic);
     return {
       kind: "standard",
@@ -243,7 +243,7 @@ export function createFontRegistry(
   };
 }
 
-// The single resolution step every caller that OPTIONALLY accepts a FontRegistry shares (measure.ts's createFontMeasurer and write.ts's writePdf, which must agree exactly on which face a given LayoutFont resolves to or a line's measured width and its drawn glyphs come from two different fonts). With a registry, its own five-step order above; with none, resolveStandardFont directly -- deliberately NOT a default registry, since createFontRegistry() with no options still consults the vendored substitute table, so defaulting one in would silently start embedding Carlito for every Calibri run in a document whose caller supplied no font configuration at all.
+// The single resolution step every caller that OPTIONALLY accepts a FontRegistry shares (measure.ts's createFontMeasurer and write.ts's writePdf, which must agree exactly on which face a given LayoutFont resolves to or a line's measured width and its drawn glyphs come from two different fonts). With a registry, its own five-step order above; with none, resolveStandardFont directly — deliberately NOT a default registry, since createFontRegistry() with no options still consults the vendored substitute table, so defaulting one in would silently start embedding Carlito for every Calibri run in a document whose caller supplied no font configuration at all.
 export function resolveFaceWithRegistry(
   registry: FontRegistry | undefined,
   font: LayoutFont,

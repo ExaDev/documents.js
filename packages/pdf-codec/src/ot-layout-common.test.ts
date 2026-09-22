@@ -115,7 +115,7 @@ describe("parseClassDef format 1", () => {
   });
 
   it("puts every glyph outside the run in class 0", () => {
-    // Class 0 is the spec's own catch-all, so an unlisted glyph is genuinely in a class rather than absent -- which is why this returns a number rather than undefined.
+    // Class 0 is the spec's own catch-all, so an unlisted glyph is genuinely in a class rather than absent — which is why this returns a number rather than undefined.
     const classDef = parseClassDef(bytesOf([1, 10, 2, 3, 4]), 0);
     expect(classDef!(9)).toBe(0);
     expect(classDef!(12)).toBe(0);

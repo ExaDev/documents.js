@@ -116,9 +116,9 @@ describe("createStandardFontMeasurer", () => {
   });
 });
 
-// The vertical-metric policy is the single least-specified part of embedding a real face: an sfnt declares three competing ascent/descent/line-gap sets and no specification settles which a line-layout consumer should use, so the choice is a named, overridable option rather than a baked-in guess. These tests pin what each policy actually reads, against design-unit values read straight out of the real vendored .ttf files with a bare DataView (not through this package's own parsers) -- the same external-cross-check convention embedded-font.test.ts states.
+// The vertical-metric policy is the single least-specified part of embedding a real face: an sfnt declares three competing ascent/descent/line-gap sets and no specification settles which a line-layout consumer should use, so the choice is a named, overridable option rather than a baked-in guess. These tests pin what each policy actually reads, against design-unit values read straight out of the real vendored .ttf files with a bare DataView (not through this package's own parsers) — the same external-cross-check convention embedded-font.test.ts states.
 //
-// The two vendored families discriminate different policies, which is why both appear here rather than one standing in for the other: Carlito  (2048 upem) -- hhea 1950/-550/0, OS/2 typo 1536/-512/452, OS/2 win 1950/550. The typo set has the same TOTAL (2500 design units) as hhea but a materially different ascent/descent split, so it discriminates ascenderAtSize/descenderAtSize while leaving lineHeightAtSize identical. Caladea (1000 upem) -- hhea 900/-250/0, OS/2 typo 900/-250/0, OS/2 win 1050/250. Here typo matches hhea exactly and the win set is the outlier, so it discriminates lineHeightAtSize.
+// The two vendored families discriminate different policies, which is why both appear here rather than one standing in for the other: Carlito  (2048 upem) — hhea 1950/-550/0, OS/2 typo 1536/-512/452, OS/2 win 1950/550. The typo set has the same TOTAL (2500 design units) as hhea but a materially different ascent/descent split, so it discriminates ascenderAtSize/descenderAtSize while leaving lineHeightAtSize identical. Caladea (1000 upem) — hhea 900/-250/0, OS/2 typo 900/-250/0, OS/2 win 1050/250. Here typo matches hhea exactly and the win set is the outlier, so it discriminates lineHeightAtSize.
 const CARLITO_UNITS_PER_EM = 2048;
 const CALADEA_UNITS_PER_EM = 1000;
 const HOUSE_SANS = {
@@ -285,7 +285,7 @@ function withoutOs2Table(
   }
   if (recordIndex < 0) {
     throw new Error(
-      "the vendored font has no OS/2 table to remove -- this helper is testing nothing",
+      "the vendored font has no OS/2 table to remove — this helper is testing nothing",
     );
   }
   const stripped = new Uint8Array(bytes.length);

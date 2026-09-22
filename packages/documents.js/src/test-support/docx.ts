@@ -1,7 +1,7 @@
 import type { Package } from "ooxml.js";
 import { decodePackage, zipPackage } from "ooxml.js";
 
-// Never imported by src/index.ts and never reaches dist/ -- this module exists purely to give tests a realistic, hand-authored docx fixture without committing a binary Office file. Built from XML string constants and zipped via ooxml.js's own zipPackage/decodePackage -- never via this package's own createEmptyDocxPackage (src/edit/docx/scaffold.ts), so a bug in that scaffold cannot hide behind a fixture built with the same code.
+// Never imported by src/index.ts and never reaches dist/ — this module exists purely to give tests a realistic, hand-authored docx fixture without committing a binary Office file. Built from XML string constants and zipped via ooxml.js's own zipPackage/decodePackage — never via this package's own createEmptyDocxPackage (src/edit/docx/scaffold.ts), so a bug in that scaffold cannot hide behind a fixture built with the same code.
 
 function enc(s: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(s);
@@ -44,7 +44,7 @@ function docxParts(
   };
 }
 
-// A minimal but structurally authentic docx package: one paragraph, one 2x1 table, and a styles part with a docDefaults -> Normal -> Heading1 basedOn chain (enough to exercise the style cascade). Its docDefaults ask for Calibri, which is what Word writes and therefore what most fixtures want -- but note that Calibri is one of the two families pdf-codec's font registry has a vendored metric-compatible substitute for, so converting this fixture to PDF genuinely embeds a Carlito face rather than falling back to a standard-14 one. Use standardFontDocxBytes below wherever a test needs the standard-14 path instead.
+// A minimal but structurally authentic docx package: one paragraph, one 2x1 table, and a styles part with a docDefaults -> Normal -> Heading1 basedOn chain (enough to exercise the style cascade). Its docDefaults ask for Calibri, which is what Word writes and therefore what most fixtures want — but note that Calibri is one of the two families pdf-codec's font registry has a vendored metric-compatible substitute for, so converting this fixture to PDF genuinely embeds a Carlito face rather than falling back to a standard-14 one. Use standardFontDocxBytes below wherever a test needs the standard-14 path instead.
 export function minimalDocxPackage(): Package {
   return decodePackage(zipPackage(docxParts()));
 }
@@ -58,7 +58,7 @@ export function standardFontDocxBytes(): Uint8Array<ArrayBuffer> {
   return zipPackage(docxParts(stylesXml("Arial")));
 }
 
-// A second, structurally authentic docx package exercising every part readDocx (ooxml.js) reads that readDocxContent (./read.ts, this package) does not carry through ContentDocument at all -- comments, footnotes (including the separator/continuationSeparator pair readDocx's own readFootnotes filters out), headers/footers, and a numbering (abstractNum/num) definition -- for readDocxExtras' (./extras.ts) own round-trip test. Full content-type overrides and relationships are included for realism even though readDocx itself locates comments/footnotes/numbering by fixed part path and headers/footers by path prefix, needing no relationship at all.
+// A second, structurally authentic docx package exercising every part readDocx (ooxml.js) reads that readDocxContent (./read.ts, this package) does not carry through ContentDocument at all — comments, footnotes (including the separator/continuationSeparator pair readDocx's own readFootnotes filters out), headers/footers, and a numbering (abstractNum/num) definition — for readDocxExtras' (./extras.ts) own round-trip test. Full content-type overrides and relationships are included for realism even though readDocx itself locates comments/footnotes/numbering by fixed part path and headers/footers by path prefix, needing no relationship at all.
 const EXTRAS_CONTENT_TYPES_XML = enc(
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/comments.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"/><Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>',
 );
@@ -121,7 +121,7 @@ export function docxWithExtrasPackage(): Package {
   );
 }
 
-// A one-row, two-column table whose SECOND cell's paragraph carries nothing but an inline m:oMath equation -- the case spliceDocxEmbeddedObjects used to skip entirely (collectBodyParagraphs deliberately excluded w:tbl, so a cell's equation had no paragraph-ordinal correspondence and no top-level position to splice into). The first cell is ordinary text, so a correct recovery leaves it untouched and recovers only the second cell's equation.
+// A one-row, two-column table whose SECOND cell's paragraph carries nothing but an inline m:oMath equation — the case spliceDocxEmbeddedObjects used to skip entirely (collectBodyParagraphs deliberately excluded w:tbl, so a cell's equation had no paragraph-ordinal correspondence and no top-level position to splice into). The first cell is ordinary text, so a correct recovery leaves it untouched and recovers only the second cell's equation.
 const TABLE_CELL_EQUATION_DOCUMENT_XML = enc(
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><w:body><w:tbl><w:tblGrid><w:gridCol w:w="4500"/><w:gridCol w:w="4500"/></w:tblGrid><w:tr><w:tc><w:p><w:r><w:t>plain cell</w:t></w:r></w:p></w:tc><w:tc><w:p><m:oMath><m:r><m:t>x</m:t></m:r></m:oMath></w:p></w:tc></w:tr></w:tbl><w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>',
 );
@@ -151,7 +151,7 @@ const RENAMED_CONTENT_TYPES_XML = enc(
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>',
 );
 
-// The same document minimalDocxBytes produces -- one paragraph and a 2x1 table -- with the body at word/document2.xml instead, for a test that has to open real bytes rather than a decoded Package (openDocx). Identical content on purpose: a test can then assert the editor behaves the same as it does on the conventionally named fixture, rather than only that it doesn't throw.
+// The same document minimalDocxBytes produces — one paragraph and a 2x1 table — with the body at word/document2.xml instead, for a test that has to open real bytes rather than a decoded Package (openDocx). Identical content on purpose: a test can then assert the editor behaves the same as it does on the conventionally named fixture, rather than only that it doesn't throw.
 export function renamedMainPartDocxBytes(): Uint8Array<ArrayBuffer> {
   return zipPackage({
     "[Content_Types].xml": RENAMED_CONTENT_TYPES_XML,
@@ -174,7 +174,7 @@ export function renamedMainPartDocxPackage(): Package {
   );
 }
 
-// A one-paragraph body carrying nothing but a w:object -- the real-world spelling a classic OLE compound-file embedding takes (o:OLEObject/@r:id names the embeddings part relationship, w:dxaOrig/w:dyaOrig its own twips size), mirroring ooxml.js's own oleObjectFixturePackage (typed/docx/read.test.ts) but with no VML preview picture -- documents.js's own splice pass (ExaDev/documents.js#921) recovers a legacy-native payload from the r:id/relationship/part chain alone, so the preview a real producer would also ship adds nothing this fixture needs to exercise.
+// A one-paragraph body carrying nothing but a w:object — the real-world spelling a classic OLE compound-file embedding takes (o:OLEObject/@r:id names the embeddings part relationship, w:dxaOrig/w:dyaOrig its own twips size), mirroring ooxml.js's own oleObjectFixturePackage (typed/docx/read.test.ts) but with no VML preview picture — documents.js's own splice pass (ExaDev/documents.js#921) recovers a legacy-native payload from the r:id/relationship/part chain alone, so the preview a real producer would also ship adds nothing this fixture needs to exercise.
 const LEGACY_OLE_CONTENT_TYPES_XML = enc(
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="bin" ContentType="application/vnd.openxmlformats-officedocument.oleObject"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>',
 );

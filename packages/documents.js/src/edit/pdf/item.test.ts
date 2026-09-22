@@ -309,7 +309,7 @@ describe("PdfImageItem", () => {
     expect(image.widthPt).toBe(30);
     expect(image.heightPt).toBe(30);
     expect(editor.toLayoutDocument().images[image.imageId]).toBeDefined();
-    // The old entry is still present in the registry (dedup is content-shared, so pruning it here could be unsafe) -- see registerImageBytes' own doc comment.
+    // The old entry is still present in the registry (dedup is content-shared, so pruning it here could be unsafe) — see registerImageBytes' own doc comment.
     expect(editor.toLayoutDocument().images[originalImageId]).toBeDefined();
   });
 

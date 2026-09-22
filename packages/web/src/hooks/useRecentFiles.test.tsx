@@ -50,7 +50,7 @@ afterEach(async () => {
 
 describe("useRecentFiles", () => {
   it("returns entries ordered by lastOpenedAt, most recent first", async () => {
-    // Inserted in the OPPOSITE order from lastOpenedAt (newest row added first) -- natural table/insertion order would read back [newest, oldest] unsorted, then .reverse() would wrongly flip it to [oldest, newest]. Only a genuine orderBy("lastOpenedAt") produces the correct [newest, oldest] here.
+    // Inserted in the OPPOSITE order from lastOpenedAt (newest row added first) — natural table/insertion order would read back [newest, oldest] unsorted, then .reverse() would wrongly flip it to [oldest, newest]. Only a genuine orderBy("lastOpenedAt") produces the correct [newest, oldest] here.
     await db.recentFiles.bulkAdd([
       { format: "docx", name: "newest", sizeBytes: 1, lastOpenedAt: 2 },
       { format: "docx", name: "oldest", sizeBytes: 1, lastOpenedAt: 1 },
@@ -95,7 +95,7 @@ describe("recordRecentFile", () => {
   });
 
   it("evicts the single stalest entry once the table exceeds its 20-entry limit", async () => {
-    // Inserted in the OPPOSITE order from lastOpenedAt (file-19's own lastOpenedAt is the smallest, despite being added last) -- natural insertion order would evict whichever row happens to sort first by id, not by lastOpenedAt. Only a genuine orderBy("lastOpenedAt") picks file-19 as the actual stalest row.
+    // Inserted in the OPPOSITE order from lastOpenedAt (file-19's own lastOpenedAt is the smallest, despite being added last) — natural insertion order would evict whichever row happens to sort first by id, not by lastOpenedAt. Only a genuine orderBy("lastOpenedAt") picks file-19 as the actual stalest row.
     await db.recentFiles.bulkAdd(
       Array.from({ length: 20 }, (_, i) => ({
         format: "docx" as const,
@@ -129,7 +129,7 @@ describe("recordRecentFile", () => {
     expect(names).toContain("file-0");
   });
 
-  // A stale count of 0 (or negative, below the limit) skips the eviction query entirely, rather than running it anyway against a limit Dexie is guaranteed to resolve as "nothing to delete" -- IndexedDB's own getAll count is spec'd [EnforceRange] unsigned long, so a genuinely negative limit throws in a real browser rather than gracefully returning zero rows the way this suite's fake-indexeddb backend happens to for the specific query shape Dexie takes below the fast-path threshold. Asserting on bulkDelete's own call count (never on the resulting row count, which converges to the same "nothing changed" outcome via either path) is what actually distinguishes "skipped" from "ran and found nothing to do".
+  // A stale count of 0 (or negative, below the limit) skips the eviction query entirely, rather than running it anyway against a limit Dexie is guaranteed to resolve as "nothing to delete" — IndexedDB's own getAll count is spec'd [EnforceRange] unsigned long, so a genuinely negative limit throws in a real browser rather than gracefully returning zero rows the way this suite's fake-indexeddb backend happens to for the specific query shape Dexie takes below the fast-path threshold. Asserting on bulkDelete's own call count (never on the resulting row count, which converges to the same "nothing changed" outcome via either path) is what actually distinguishes "skipped" from "ran and found nothing to do".
   it("never queries for stale rows to delete while at or under the limit", async () => {
     const bulkDeleteSpy = vi.spyOn(db.recentFiles, "bulkDelete");
     for (let i = 0; i < 20; i++) {

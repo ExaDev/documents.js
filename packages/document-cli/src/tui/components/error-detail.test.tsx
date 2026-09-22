@@ -10,7 +10,7 @@ import {
 import { settle, waitForFrame } from "../test-support.js";
 import { detailNode, ErrorDetail } from "./error-detail.js";
 
-// Seeds a real errorDetail through OPEN_FILE_ERROR -- the same action a genuinely failed :open/export dispatches -- exactly once, guarded by a ref.
+// Seeds a real errorDetail through OPEN_FILE_ERROR — the same action a genuinely failed :open/export dispatches — exactly once, guarded by a ref.
 function Harness(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();

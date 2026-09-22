@@ -31,7 +31,7 @@ function write(formula: PositionedFormula): string {
   );
 }
 
-// Two arbitrary glyph IDs standing in for a real construction's own parts -- what this module does with a placement is independent of which glyph it names, and the real, font-derived IDs are asserted where they are actually produced (math-stretch.test.ts, and documents.js's own layout tests).
+// Two arbitrary glyph IDs standing in for a real construction's own parts — what this module does with a placement is independent of which glyph it names, and the real, font-derived IDs are asserted where they are actually produced (math-stretch.test.ts, and documents.js's own layout tests).
 const LOWER_HOOK = 4862;
 const UPPER_HOOK = 4860;
 
@@ -251,7 +251,7 @@ describe("collectUsedGlyphs", () => {
   });
 
   it("keeps the first code point a glyph resolved to, never overwriting it with a later one", () => {
-    // A synthetic font, not the real STIX Two Math one: the real font's cmap is injective (its own module comment states this explicitly, and it holds for every code point actually probed), so no pair of distinct real code points ever reaches this guard with an already-resolved glyph. A font is built here that deliberately violates that invariant, to prove the guard itself -- first write wins -- rather than relying on real font data that can never exercise it.
+    // A synthetic font, not the real STIX Two Math one: the real font's cmap is injective (its own module comment states this explicitly, and it holds for every code point actually probed), so no pair of distinct real code points ever reaches this guard with an already-resolved glyph. A font is built here that deliberately violates that invariant, to prove the guard itself — first write wins — rather than relying on real font data that can never exercise it.
     const COLLIDING_GLYPH = 999;
     const realFont = loadMathFont().font; // for the members this test never exercises, so nothing here needs its own hand-stubbed values
     const collidingFont: MathFont = {
@@ -285,14 +285,14 @@ describe("collectUsedGlyphs", () => {
 });
 
 const RED = { r: 0.25, g: 0.5, b: 0.75 };
-// No cmap entry in STIX Two Math (a Supplementary Private Use Area-B code point, never assigned by any font's own cmap) -- standing in for "this character has no glyph", the branch encodeGlyphRunToCids skips over rather than crashing on.
+// No cmap entry in STIX Two Math (a Supplementary Private Use Area-B code point, never assigned by any font's own cmap) — standing in for "this character has no glyph", the branch encodeGlyphRunToCids skips over rather than crashing on.
 const UNMAPPED_CODE_POINT = 0x10fffd;
 
 describe("writeFormulaContentStream, an ordinary glyph run", () => {
   it("shows the run's own CIDs at its own computed size, color, and position", () => {
     const font = loadMathFont().font;
     const aId = font.glyphId(0x41)!;
-    // The integral sign, not a second Latin letter: its glyph ID (0x6a2) has a non-zero HIGH byte, which a plain ASCII pair (every Latin glyph ID here sits under 256) would never exercise -- proving encodeGlyphRunToCids packs (gid >> 8) at the right byte offset for the second CID, not just the first.
+    // The integral sign, not a second Latin letter: its glyph ID (0x6a2) has a non-zero HIGH byte, which a plain ASCII pair (every Latin glyph ID here sits under 256) would never exercise — proving encodeGlyphRunToCids packs (gid >> 8) at the right byte offset for the second CID, not just the first.
     const bId = font.glyphId(0x222b)!;
     expect(aId).toBeDefined();
     expect(bId).toBeDefined();

@@ -80,8 +80,8 @@ describe("readOdfMetadata", () => {
     expect(readOdfMetadata(pkg)).toEqual({});
   });
 
-  it("returns an empty object for a well-formed but entirely empty office:meta -- an empty office:meta is valid ODF, not an error", () => {
-    // toStrictEqual, not toEqual: toEqual ignores explicit undefined-valued properties, so it can't tell a genuinely absent key apart from one of the six field guards below wrongly firing and setting metadata.<field> = undefined -- toStrictEqual treats that as a real, distinguishable difference from {}.
+  it("returns an empty object for a well-formed but entirely empty office:meta — an empty office:meta is valid ODF, not an error", () => {
+    // toStrictEqual, not toEqual: toEqual ignores explicit undefined-valued properties, so it can't tell a genuinely absent key apart from one of the six field guards below wrongly firing and setting metadata.<field> = undefined — toStrictEqual treats that as a real, distinguishable difference from {}.
     expect(readOdfMetadata(metaPackage([]))).toStrictEqual({});
   });
 
@@ -94,7 +94,7 @@ describe("readOdfMetadata", () => {
     expect(readOdfMetadata(pkg).title).toBe("Modern business letter serif");
   });
 
-  it('reads meta:initial-creator as author -- NOT dc:creator, which ODF uses for "last modified by"', () => {
+  it('reads meta:initial-creator as author — NOT dc:creator, which ODF uses for "last modified by"', () => {
     const pkg = metaPackage([
       el("meta:initial-creator", {}, [txt("Alexander Wilms")]),
       el("dc:creator", {}, [txt("Someone Else Entirely")]),
@@ -107,7 +107,7 @@ describe("readOdfMetadata", () => {
     expect(readOdfMetadata(pkg).subject).toBe("Quarterly roadmap");
   });
 
-  it("does not read dc:description into subject -- Comments and Subject are distinct ODF fields", () => {
+  it("does not read dc:description into subject — Comments and Subject are distinct ODF fields", () => {
     const pkg = metaPackage([
       el("dc:description", {}, [txt("This is a comment, not the subject")]),
     ]);
@@ -123,7 +123,7 @@ describe("readOdfMetadata", () => {
     expect(readOdfMetadata(pkg).keywords).toEqual(["alpha", "beta", "gamma"]);
   });
 
-  it("reads meta:generator as creator -- the originating application, not a person, matching ooxml.js's own DocumentMetadata.creator convention", () => {
+  it("reads meta:generator as creator — the originating application, not a person, matching ooxml.js's own DocumentMetadata.creator convention", () => {
     const pkg = metaPackage([
       el("meta:generator", {}, [
         txt(
@@ -145,7 +145,7 @@ describe("readOdfMetadata", () => {
     );
   });
 
-  it('reads dc:date as modifiedIso -- ODF\'s own "last modified" timestamp, distinct from meta:creation-date', () => {
+  it('reads dc:date as modifiedIso — ODF\'s own "last modified" timestamp, distinct from meta:creation-date', () => {
     const pkg = metaPackage([
       el("dc:date", {}, [txt("2014-12-28T11:58:55.267000000")]),
     ]);
@@ -154,7 +154,7 @@ describe("readOdfMetadata", () => {
     );
   });
 
-  it("never sets producer -- a PDF-only concept with no ODF equivalent, matching ooxml.js's own docx/pptx readers", () => {
+  it("never sets producer — a PDF-only concept with no ODF equivalent, matching ooxml.js's own docx/pptx readers", () => {
     const pkg = metaPackage([el("dc:title", {}, [txt("Anything")])]);
     expect(readOdfMetadata(pkg).producer).toBeUndefined();
     expect("producer" in readOdfMetadata(pkg)).toBe(false);
@@ -288,7 +288,7 @@ describe("buildOdfMetaNodes / writeOdfMetadata", () => {
 
 describe("ensureNamespaceDeclared", () => {
   it("does nothing for a tag with no colon at all", () => {
-    // A colonless tag has no prefix to declare a namespace for at all -- this deliberately picks a tag ("dcX") whose LAST character, if the leading-colon guard were skipped, would slice down to the real prefix "dc" and wrongly declare xmlns:dc; the correct behaviour is to return before ever reaching that slice.
+    // A colonless tag has no prefix to declare a namespace for at all — this deliberately picks a tag ("dcX") whose LAST character, if the leading-colon guard were skipped, would slice down to the real prefix "dc" and wrongly declare xmlns:dc; the correct behaviour is to return before ever reaching that slice.
     const root = el("office:document-meta");
     ensureNamespaceDeclared(root, "dcX");
     expect(root.attributes).toEqual([]);
@@ -370,7 +370,7 @@ describe("patchOdfMetadata", () => {
     expect(readOdfMetadata(pkg).subject).toBe("New subject");
   });
 
-  it("leaves every element the patch does not name completely untouched -- meta:generator, meta:creation-date, dc:date, and an unrecognised producer field alike", () => {
+  it("leaves every element the patch does not name completely untouched — meta:generator, meta:creation-date, dc:date, and an unrecognised producer field alike", () => {
     const pkg = metaPackage([
       el("meta:generator", {}, [txt("Some Producer 1.0")]),
       el("meta:creation-date", {}, [txt("2020-01-01T00:00:00")]),

@@ -1,6 +1,6 @@
-// A minimal sfnt (TrueType/OpenType container) table-directory reader: enough to locate and slice out individual tables by tag ('CFF ', 'cmap', 'hmtx', 'hhea', 'head', 'maxp', 'glyf', 'loca', 'name', 'post', 'OS/2', 'MATH', ...) from a font's raw bytes. This module knows nothing about any specific table's own internal layout -- cmap-table.ts/hmtx-table.ts/font-tables.ts/glyf.ts/math-table.ts each parse their own table's bytes once sfnt.ts has handed them the right slice. Both sfnt flavours are read: a CFF-flavoured 'OTTO' OpenType font (what this package's own embedded math font is -- see math-font.ts) and a glyf-flavoured TrueType font (what the embedded text fonts are, and what a source-embedded font extracted from an arbitrary input document usually is); the table-directory format itself (ISO/IEC 14496-22, "OpenType font format" clause 4) is identical for both.
+// A minimal sfnt (TrueType/OpenType container) table-directory reader: enough to locate and slice out individual tables by tag ('CFF ', 'cmap', 'hmtx', 'hhea', 'head', 'maxp', 'glyf', 'loca', 'name', 'post', 'OS/2', 'MATH', ...) from a font's raw bytes. This module knows nothing about any specific table's own internal layout — cmap-table.ts/hmtx-table.ts/font-tables.ts/glyf.ts/math-table.ts each parse their own table's bytes once sfnt.ts has handed them the right slice. Both sfnt flavours are read: a CFF-flavoured 'OTTO' OpenType font (what this package's own embedded math font is — see math-font.ts) and a glyf-flavoured TrueType font (what the embedded text fonts are, and what a source-embedded font extracted from an arbitrary input document usually is); the table-directory format itself (ISO/IEC 14496-22, "OpenType font format" clause 4) is identical for both.
 //
-// Every read here is bounds-checked against the byte range it is given, because this module's input is no longer only the one trusted, vendored math font it was originally written for: a font embedded in a source document is untrusted input, and a font whose table directory claims more tables than the file holds -- or whose table records point past its end -- must degrade rather than read whatever memory happens to follow. `parseSfnt` returns `undefined` for a font whose container is not readable at all (the "throw" tier of this package's own three-tier read-failure policy applied at a boundary where the caller is expected to give up on the font, not on the document), skips an individual table record that points outside the file (the "degrade" tier -- a truncated optional table must not cost the caller every other table), and the primitive readers below throw on an out-of-range offset, since reaching one means a table parser skipped its own length check rather than that the font was merely unusual.
+// Every read here is bounds-checked against the byte range it is given, because this module's input is no longer only the one trusted, vendored math font it was originally written for: a font embedded in a source document is untrusted input, and a font whose table directory claims more tables than the file holds — or whose table records point past its end — must degrade rather than read whatever memory happens to follow. `parseSfnt` returns `undefined` for a font whose container is not readable at all (the "throw" tier of this package's own three-tier read-failure policy applied at a boundary where the caller is expected to give up on the font, not on the document), skips an individual table record that points outside the file (the "degrade" tier — a truncated optional table must not cost the caller every other table), and the primitive readers below throw on an out-of-range offset, since reaching one means a table parser skipped its own length check rather than that the font was merely unusual.
 
 export interface SfntTable {
   readonly offset: number;
@@ -16,7 +16,7 @@ const TABLE_DIRECTORY_HEADER_SIZE = 12;
 const TABLE_RECORD_SIZE = 16;
 const TABLE_TAG_SIZE = 4;
 
-// The four sfnt version tags a single-font file can legitimately carry (ISO/IEC 14496-22 clause 4.1): 0x00010000 TrueType outlines, 'OTTO' CFF outlines, 'true'/'typ1' the two legacy Apple variants. 'ttcf' (TrueType Collection) is deliberately absent -- a collection's own header wraps several table directories at offsets this reader never looks for, so treating its first four bytes as a directory would read nonsense rather than fail.
+// The four sfnt version tags a single-font file can legitimately carry (ISO/IEC 14496-22 clause 4.1): 0x00010000 TrueType outlines, 'OTTO' CFF outlines, 'true'/'typ1' the two legacy Apple variants. 'ttcf' (TrueType Collection) is deliberately absent — a collection's own header wraps several table directories at offsets this reader never looks for, so treating its first four bytes as a directory would read nonsense rather than fail.
 const SFNT_VERSION_TRUETYPE = 0x00010000;
 const SFNT_VERSION_CFF = 0x4f54544f; // 'OTTO'
 const SFNT_VERSION_APPLE_TRUE = 0x74727565; // 'true'
@@ -28,7 +28,7 @@ const SFNT_VERSIONS: ReadonlySet<number> = new Set([
   SFNT_VERSION_APPLE_TYP1,
 ]);
 
-// Whether `length` bytes starting at `offset` lie wholly inside `bytes` -- the pre-check every table parser in this package calls before reading a fixed-size record, so a malformed font degrades to `undefined` at the parser's own boundary instead of throwing out of a primitive reader.
+// Whether `length` bytes starting at `offset` lie wholly inside `bytes` — the pre-check every table parser in this package calls before reading a fixed-size record, so a malformed font degrades to `undefined` at the parser's own boundary instead of throwing out of a primitive reader.
 export function hasBytes(
   bytes: Uint8Array<ArrayBuffer>,
   offset: number,
@@ -135,7 +135,7 @@ export function sfntTableBytes(
     : font.bytes.subarray(table.offset, table.offset + table.length);
 }
 
-// Big-endian primitive readers shared by every sfnt table parser in this package -- sfnt tables are exclusively big-endian (ISO/IEC 14496-22 clause 4), unlike this package's own PDF byte format, which is why these live here rather than being reused from src/bytes/ (that module's own ByteReader has no fixed-width integer readers at all -- see its own module comment on why: the PDF lexer tokenizes ASCII syntax, it never needs to read a binary uint16). Each throws rather than returning a sentinel for an out-of-range offset: a caller reaching one has skipped its own `hasBytes` length check, which is a defect in that parser, not a property of the font.
+// Big-endian primitive readers shared by every sfnt table parser in this package — sfnt tables are exclusively big-endian (ISO/IEC 14496-22 clause 4), unlike this package's own PDF byte format, which is why these live here rather than being reused from src/bytes/ (that module's own ByteReader has no fixed-width integer readers at all — see its own module comment on why: the PDF lexer tokenizes ASCII syntax, it never needs to read a binary uint16). Each throws rather than returning a sentinel for an out-of-range offset: a caller reaching one has skipped its own `hasBytes` length check, which is a defect in that parser, not a property of the font.
 export function u8(bytes: Uint8Array<ArrayBuffer>, offset: number): number {
   requireBytes(bytes, offset, 1);
   return bytes[offset]!;
@@ -151,7 +151,7 @@ export function i16(bytes: Uint8Array<ArrayBuffer>, offset: number): number {
   return value >= 0x8000 ? value - 0x10000 : value;
 }
 
-// A 3-byte big-endian unsigned integer -- the sfnt/CFF primitive an INDEX with offSize 3 uses for its own offset array (CFF 1.0 spec section 5), the one width between uint16 and uint32 the container format actually mixes in.
+// A 3-byte big-endian unsigned integer — the sfnt/CFF primitive an INDEX with offSize 3 uses for its own offset array (CFF 1.0 spec section 5), the one width between uint16 and uint32 the container format actually mixes in.
 export function u24(bytes: Uint8Array<ArrayBuffer>, offset: number): number {
   requireBytes(bytes, offset, 3);
   return (

@@ -13,7 +13,7 @@ function xlsxTestBytes(): Uint8Array<ArrayBuffer> {
   return odsToXlsx(editor.toBytes());
 }
 
-// A distinct page size, not cell text, is this file's own signal for telling two workbooks' conversions apart: OdsSheet.cell() materialises a real but zero-width table:table-column with no styling (a genuine, already-documented documents.js limitation -- see this repo's own CLAUDE.md gotcha on OdsSheet/OdsEditor having no column-width setter), so a cell's own text never actually reaches a rendered PDF page to search for. Page size, set via the real OdsSheet.printSettings getter/setter, survives the odsToXlsx bridge and xlsxToPdf conversion untouched, and is exactly the kind of per-workbook fact that would go stale if exportToPdf ever read a cached `doc.layout` instead of re-converting `doc.bytes`.
+// A distinct page size, not cell text, is this file's own signal for telling two workbooks' conversions apart: OdsSheet.cell() materialises a real but zero-width table:table-column with no styling (a genuine, already-documented documents.js limitation — see this repo's own CLAUDE.md gotcha on OdsSheet/OdsEditor having no column-width setter), so a cell's own text never actually reaches a rendered PDF page to search for. Page size, set via the real OdsSheet.printSettings getter/setter, survives the odsToXlsx bridge and xlsxToPdf conversion untouched, and is exactly the kind of per-workbook fact that would go stale if exportToPdf ever read a cached `doc.layout` instead of re-converting `doc.bytes`.
 function xlsxTestBytesWithPageSize(
   widthPt: number,
   heightPt: number,
@@ -69,7 +69,7 @@ describe("exportToPdf for an open xlsx document", () => {
   });
 
   it("re-derives the PDF from `doc.bytes` rather than reusing `doc.layout` computed at open time", async () => {
-    // `doc.layout` here is deliberately built from a 400x500pt workbook while `doc.bytes` carries an 800x900pt one -- a state real open-document.ts never produces, but exactly the shape that isolates which field exportToPdf actually reads. If it ever regressed to `writePdf(doc.layout)` (or otherwise ignored `doc.bytes`), the exported PDF's page would come back 400x500pt, not 800x900pt.
+    // `doc.layout` here is deliberately built from a 400x500pt workbook while `doc.bytes` carries an 800x900pt one — a state real open-document.ts never produces, but exactly the shape that isolates which field exportToPdf actually reads. If it ever regressed to `writePdf(doc.layout)` (or otherwise ignored `doc.bytes`), the exported PDF's page would come back 400x500pt, not 800x900pt.
     const smallBytes = xlsxTestBytesWithPageSize(400, 500);
     const largeBytes = xlsxTestBytesWithPageSize(800, 900);
 

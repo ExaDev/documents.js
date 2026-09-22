@@ -72,7 +72,7 @@ describe("audit report guards", () => {
 
 describe("isAuditServiceError", () => {
   it("accepts npm's own real error envelope, reproduced against a live timeout", () => {
-    // registry.npmjs.org/-/npm/v1/security/advisories/bulk's own shape when it times out -- captured verbatim from a real `pnpm audit --json` run against this workspace during an outage, not invented.
+    // registry.npmjs.org/-/npm/v1/security/advisories/bulk's own shape when it times out — captured verbatim from a real `pnpm audit --json` run against this workspace during an outage, not invented.
     expect(
       isAuditServiceError({
         error: {
@@ -136,7 +136,7 @@ describe("override bookkeeping", () => {
     expect(next.toString()).toMatch(ENTRY_COMMENT);
   });
 
-  // Pins the yaml behaviour the design above depends on, so an upgrade that changed it would fail here rather than quietly start deleting per-entry rationale. Replacing the whole node -- which is what the implementation this was ported from did -- keeps the comment attached to the `overrides` key (it belongs to the key, not the value) and destroys every comment attached to an entry inside the map, because those entries' nodes are rebuilt from plain JS.
+  // Pins the yaml behaviour the design above depends on, so an upgrade that changed it would fail here rather than quietly start deleting per-entry rationale. Replacing the whole node — which is what the implementation this was ported from did — keeps the comment attached to the `overrides` key (it belongs to the key, not the value) and destroys every comment attached to an entry inside the map, because those entries' nodes are rebuilt from plain JS.
   it("would lose the entry comment, but not the key comment, if the whole node were replaced", () => {
     const replaced = parseDocument(WORKSPACE);
     replaced.set("overrides", {
@@ -324,15 +324,15 @@ packages:
     const resolved = resolvedVersionsFromLockfileText(LOCKFILE);
     const inert = inertOverrideKeys(
       {
-        // no resolved undici is <6.27.0, so the selector can never rewrite anything -- inert
+        // no resolved undici is <6.27.0, so the selector can never rewrite anything — inert
         "undici@<6.27.0": ">=6.27.0",
-        // 6.28.0 sits below this selector and 7.29.0 above it (the range excludes 7.29.0), so nothing matches -- inert
+        // 6.28.0 sits below this selector and 7.29.0 above it (the range excludes 7.29.0), so nothing matches — inert
         "undici@>=7.0.0 <7.29.0": ">=7.29.0",
         // a selector that DOES match 7.29.0 would be load-bearing; this one does not
         "undici@>=8.0.0": ">=8.1.0",
-        // package absent from the lockfile -- kept (nothing proves it will not return)
+        // package absent from the lockfile — kept (nothing proves it will not return)
         "ghost@<2.0.0": ">=2.0.0",
-        // bare selector-less key -- never provably inert, kept
+        // bare selector-less key — never provably inert, kept
         "fast-uri": "^3.1.5",
       },
       resolved,

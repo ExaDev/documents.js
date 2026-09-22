@@ -94,7 +94,7 @@ describe("ListEditorScreen", () => {
     expect(frame).not.toContain("item content is not readable");
   });
 
-  // ink-testing-library's Stdout mock renders with no TTY, so a selected row's own inverse/colour styling never reaches `lastFrame()` as a visible difference -- the cursor's real position is asserted behaviourally instead, via which item Enter opens at each position, exactly what the reducer/UI actually need the cursor for.
+  // ink-testing-library's Stdout mock renders with no TTY, so a selected row's own inverse/colour styling never reaches `lastFrame()` as a visible difference — the cursor's real position is asserted behaviourally instead, via which item Enter opens at each position, exactly what the reducer/UI actually need the cursor for.
   it("moves the selection cursor down and up through the items with j/k", async () => {
     const { lastFrame, stdin } = renderListEditor(buildThreeItemListBytes());
     await waitForText(lastFrame, "first item");
@@ -123,7 +123,7 @@ describe("ListEditorScreen", () => {
     const editing = await waitForText(lastFrame, "List 0, item 2");
     expect(editing).toContain("second item");
 
-    // RunTextEditor's own TextField seeds `value` with the item's current text and positions the cursor at its end -- typed characters append.
+    // RunTextEditor's own TextField seeds `value` with the item's current text and positions the cursor at its end — typed characters append.
     stdin.write(", EDITED");
     await waitForText(lastFrame, "second item, EDITED");
     await sendKey(stdin, ENTER_KEY);

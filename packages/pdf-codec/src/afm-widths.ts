@@ -25,12 +25,12 @@ export interface FontMetrics {
   readonly underlinePosition: number;
   readonly underlineThickness: number;
   // The font's natural single-line-spacing multiplier, derived from the real TrueType hhea metrics of the font each standard-14 face stands in for (Arial/Times New Roman: (ascender + |descender|
-  // + lineGap) / unitsPerEm = 1.150; Courier New: 1.133) -- NOT the AFM's own ascender/descender
+  // + lineGap) / unitsPerEm = 1.150; Courier New: 1.133) — NOT the AFM's own ascender/descender
   // difference alone, which is measurably tighter than any real renderer's line height and would under-count pages.
   readonly lineHeightEm: number;
   // Present only for the four Courier faces: every glyph advances by exactly 600/1000 em.
   readonly fixedWidth?: number;
-  // Adobe Glyph name -> advance width in 1000-unit em space. Transcribed programmatically from the Adobe Core-14 AFM files (via the Hopding/standard-fonts mirror -- the same data pdf-lib itself ships), not typed by hand: each STARTING_WIDTHS constant below is diffable line-by-line against the source AFM's own "C ; WX ; N ;" records.
+  // Adobe Glyph name -> advance width in 1000-unit em space. Transcribed programmatically from the Adobe Core-14 AFM files (via the Hopding/standard-fonts mirror — the same data pdf-lib itself ships), not typed by hand: each STARTING_WIDTHS constant below is diffable line-by-line against the source AFM's own "C ; WX ; N ;" records.
   readonly widths: ReadonlyMap<string, number>;
 }
 
@@ -236,7 +236,7 @@ export const STANDARD_METRICS: Readonly<Record<StandardFontName, FontMetrics>> =
     },
   };
 
-// The advance width (1000-unit em space) of a single character code under a standard-14 face. Throws for a code with no WinAnsi glyph mapping or a glyph the face's own AFM doesn't define -- callers are expected to have already run text through sanitizeToWinAnsi (src/pdf/winansi.ts) before measuring, so an unmappable code here is a caller invariant violation, not a case to paper over with a silent fallback.
+// The advance width (1000-unit em space) of a single character code under a standard-14 face. Throws for a code with no WinAnsi glyph mapping or a glyph the face's own AFM doesn't define — callers are expected to have already run text through sanitizeToWinAnsi (src/pdf/winansi.ts) before measuring, so an unmappable code here is a caller invariant violation, not a case to paper over with a silent fallback.
 export function widthOfCode(font: StandardFontName, code: number): number {
   const metrics = STANDARD_METRICS[font];
   if (metrics.fixedWidth !== undefined) {

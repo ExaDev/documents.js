@@ -3,7 +3,7 @@ import type { ContentDocument, ContentShape } from "document-schema.js";
 import { readPptContent } from "./read";
 import { writePptContent } from "./write";
 
-// ExaDev/documents.js#1188: this package is the one place ppt-codec's own injected OLE-embedding ports (serialiseEmbeddedObject on write, decodeEmbeddedObject on read) get wired to real codecs -- doc-codec/xls-codec directly, and this module's own writePptContent/readPptContent recursively for a nested presentation. A genuine round trip through both wrappers, not a unit test of either port in isolation, is what actually proves the wiring: ppt-codec alone has no reader/writer for the nested document's own format, so only this package's composition can recover one.
+// ExaDev/documents.js#1188: this package is the one place ppt-codec's own injected OLE-embedding ports (serialiseEmbeddedObject on write, decodeEmbeddedObject on read) get wired to real codecs — doc-codec/xls-codec directly, and this module's own writePptContent/readPptContent recursively for a nested presentation. A genuine round trip through both wrappers, not a unit test of either port in isolation, is what actually proves the wiring: ppt-codec alone has no reader/writer for the nested document's own format, so only this package's composition can recover one.
 
 function embeddedSpreadsheet(): ContentDocument {
   return {

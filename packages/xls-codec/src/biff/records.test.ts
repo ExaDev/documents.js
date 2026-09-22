@@ -13,7 +13,7 @@ import {
   recoverFromFormatError,
 } from "./records";
 
-// Byte sequences here are hand-built from [MS-XLS] 2.1.4's own three-component framing -- a two-byte little-endian record type, a two-byte little-endian record size, then exactly that many bytes of record data (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/170e90ce-87d7-4758-9331-dcf14cd72388) -- rather than captured from a real file, so a test failure points at this package's reading of the spec rather than at some producer's quirk.
+// Byte sequences here are hand-built from [MS-XLS] 2.1.4's own three-component framing — a two-byte little-endian record type, a two-byte little-endian record size, then exactly that many bytes of record data (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/170e90ce-87d7-4758-9331-dcf14cd72388) — rather than captured from a real file, so a test failure points at this package's reading of the spec rather than at some producer's quirk.
 
 function record(type: number, data: readonly number[]): number[] {
   return [

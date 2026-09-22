@@ -21,12 +21,12 @@ import {
 } from "../io/document-output";
 import { defineOperationWithoutOutputSchema } from "../operation";
 
-// None of the six operations below has an original outputSchema to reuse: a thrown HsqldbSqlUnsupportedError/HsqldbSqlParseError/HsqldbSqlEvaluationError (odb_query), OdbNoEmbeddedDataSourceError/OdbUnsupportedFormatError/OdbTableNotFoundError/OdbTableNotSpecifiedError (documents.js's own odb reader/exporters), or a decodeOdbPackage failure on malformed bytes propagates as-is -- there is nothing here to catch or reshape, matching the original MCP tools' own identical no-try/catch convention.
+// None of the six operations below has an original outputSchema to reuse: a thrown HsqldbSqlUnsupportedError/HsqldbSqlParseError/HsqldbSqlEvaluationError (odb_query), OdbNoEmbeddedDataSourceError/OdbUnsupportedFormatError/OdbTableNotFoundError/OdbTableNotSpecifiedError (documents.js's own odb reader/exporters), or a decodeOdbPackage failure on malformed bytes propagates as-is — there is nothing here to catch or reshape, matching the original MCP tools' own identical no-try/catch convention.
 
 const ODB_SOURCE_DESCRIPTION =
-  ".odb database to read. 'path' points at the .odb file on disk -- its extension is never used to infer a document format, since documents.js deliberately excludes 'odb' from DocumentFormat (an embedded database front end has no single natural target format -- tables, saved queries, and reports are three unrelated output shapes -- see that package's own README). 'bytesBase64' carries the .odb bytes inline; its 'format' field is required by the shared hybrid input shape but unused by every odb operation.";
+  ".odb database to read. 'path' points at the .odb file on disk — its extension is never used to infer a document format, since documents.js deliberately excludes 'odb' from DocumentFormat (an embedded database front end has no single natural target format — tables, saved queries, and reports are three unrelated output shapes — see that package's own README). 'bytesBase64' carries the .odb bytes inline; its 'format' field is required by the shared hybrid input shape but unused by every odb operation.";
 
-// `source` here is a .odb database, not a document with a DocumentFormat -- resolveDocumentInput's own format inference (io/document-input.ts) has no '.odb' entry and would throw for the ordinary 'path' shape a caller most naturally reaches for. This reads the hybrid DocumentInput's raw bytes directly instead (mirroring from-package.ts's own readSourceBytes, and odb-render-report.ts's own identically-named function, for the identical problem), so no document format is ever inferred from.
+// `source` here is a .odb database, not a document with a DocumentFormat — resolveDocumentInput's own format inference (io/document-input.ts) has no '.odb' entry and would throw for the ordinary 'path' shape a caller most naturally reaches for. This reads the hybrid DocumentInput's raw bytes directly instead (mirroring from-package.ts's own readSourceBytes, and odb-render-report.ts's own identically-named function, for the identical problem), so no document format is ever inferred from.
 export async function resolveOdbBytes(
   source: DocumentInput,
 ): Promise<Uint8Array<ArrayBuffer>> {
@@ -37,12 +37,12 @@ export async function resolveOdbBytes(
   return base64ToBytes(source.bytesBase64);
 }
 
-/** Resolves an .odb DocumentInput straight through to a decoded Package (via documents.js's own decodeOdbPackage) -- the shape every read (as opposed to export) odb operation needs. */
+/** Resolves an .odb DocumentInput straight through to a decoded Package (via documents.js's own decodeOdbPackage) — the shape every read (as opposed to export) odb operation needs. */
 async function resolveOdbPackage(source: DocumentInput): Promise<Package> {
   return decodeOdbPackage(await resolveOdbBytes(source));
 }
 
-/** Resolves a saved query's own SQL text by name against the .odb's own db:queries (read via readOdbInventory) -- odb_query's own equivalent of document-cli's resolveQuerySql, for the case where the caller named a saved query rather than supplying SQL directly. Throws, naming every available query, when the name doesn't resolve. */
+/** Resolves a saved query's own SQL text by name against the .odb's own db:queries (read via readOdbInventory) — odb_query's own equivalent of document-cli's resolveQuerySql, for the case where the caller named a saved query rather than supplying SQL directly. Throws, naming every available query, when the name doesn't resolve. */
 function resolveSavedQuerySql(pkg: Package, name: string): string {
   const inventory = readOdbInventory(pkg);
   const saved = inventory.queries.find((candidate) => candidate.name === name);
@@ -89,7 +89,7 @@ export const odbTablesOperation = defineOperationWithoutOutputSchema<
   name: "odb_tables",
   title: "List .odb tables",
   description:
-    "Lists every table an embedded .odb database declares -- column names, types, and row data -- across every storage tier documents.js supports (HSQLDB TEXT/CACHED/BINARY script formats, Firebird gbak backups).",
+    "Lists every table an embedded .odb database declares — column names, types, and row data — across every storage tier documents.js supports (HSQLDB TEXT/CACHED/BINARY script formats, Firebird gbak backups).",
   inputSchema: OdbSourceInputSchema,
   async run({ source }) {
     return readOdbTables(await resolveOdbPackage(source));
@@ -147,7 +147,7 @@ export const odbQueryOperation = defineOperationWithoutOutputSchema<
   name: "odb_query",
   title: "Query an .odb database",
   description:
-    "Runs a bounded SELECT (with optional JOINs of any kind, table aliases, a derived table in FROM, and IN/EXISTS subqueries) over an embedded .odb database's own extracted tables, given directly as SQL or by naming one of the database's saved queries. No database engine is involved -- the query runs in memory over the same tables odb_tables would return, against a closed grammar (SELECT/FROM/JOIN [INNER|LEFT [OUTER]|RIGHT [OUTER]|FULL [OUTER]|CROSS|NATURAL] ... [ON|USING]/WHERE/GROUP BY/ORDER BY, with an optional [AS] alias on any table, WHERE and ON also accepting [NOT] IN (SELECT ...) and [NOT] EXISTS (SELECT ...) -- no column aliases); an unsupported construct is reported as an error naming it, never silently ignored.",
+    "Runs a bounded SELECT (with optional JOINs of any kind, table aliases, a derived table in FROM, and IN/EXISTS subqueries) over an embedded .odb database's own extracted tables, given directly as SQL or by naming one of the database's saved queries. No database engine is involved — the query runs in memory over the same tables odb_tables would return, against a closed grammar (SELECT/FROM/JOIN [INNER|LEFT [OUTER]|RIGHT [OUTER]|FULL [OUTER]|CROSS|NATURAL] ... [ON|USING]/WHERE/GROUP BY/ORDER BY, with an optional [AS] alias on any table, WHERE and ON also accepting [NOT] IN (SELECT ...) and [NOT] EXISTS (SELECT ...) — no column aliases); an unsupported construct is reported as an error naming it, never silently ignored.",
   inputSchema: OdbQueryInputSchema,
   async run({ source, sql, query }) {
     const spec = classifyQueryInput(sql, query);
@@ -163,7 +163,7 @@ const OdbToCsvInputSchema = z.object({
   table: z
     .string()
     .describe(
-      "The table to export -- required when the .odb declares more than one table.",
+      "The table to export — required when the .odb declares more than one table.",
     )
     .optional(),
   output: DocumentOutputSchema.optional().describe(

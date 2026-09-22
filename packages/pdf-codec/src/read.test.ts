@@ -99,7 +99,7 @@ describe("readPdf: basic structure", () => {
     expect(item).toMatchObject({ color: { r: 0, g: 0, b: 0 } });
   });
 
-  // ExaDev/documents.js#851: a later BT/ET block that relies on an earlier block's Tf (rather than repeating it) used to be silently dropped entirely -- readPdf's own output carried only the first line, not just a garbled or empty second one. Live-verified against the real NGED EE SPEC 123 PDF that surfaced this (novus-power/hive#1397): before this fix, page 4 of that document produced 11 items (6 with real text); after it, 105, matching its own content stream's real BT/ET block count one-for-one.
+  // ExaDev/documents.js#851: a later BT/ET block that relies on an earlier block's Tf (rather than repeating it) used to be silently dropped entirely — readPdf's own output carried only the first line, not just a garbled or empty second one. Live-verified against the real NGED EE SPEC 123 PDF that surfaced this (novus-power/hive#1397): before this fix, page 4 of that document produced 11 items (6 with real text); after it, 105, matching its own content stream's real BT/ET block count one-for-one.
   it("extracts text from a later BT/ET block that has no Tf of its own, relying on an earlier block's font", () => {
     const doc = readPdf(bTetTextStatePersistencePdf());
     expect(textLayoutItems(doc.pages[0]!.items)).toMatchObject([
@@ -128,7 +128,7 @@ describe("readPdf: cross-reference variants", () => {
   });
 });
 
-// Every fixture below is a real PDF encrypted by qpdf, not by this package -- see src/test-support/encrypted-pdfs.ts. Each is an encrypted copy of the same one-page document, so one shared assertion covers every cipher: the page's content *stream* has to decrypt (the text) and so do the /Info *strings* (title and author), which under /V 4 and /V 5 travel through separately-named crypt filters and would not both come back if only one path were right.
+// Every fixture below is a real PDF encrypted by qpdf, not by this package — see src/test-support/encrypted-pdfs.ts. Each is an encrypted copy of the same one-page document, so one shared assertion covers every cipher: the page's content *stream* has to decrypt (the text) and so do the /Info *strings* (title and author), which under /V 4 and /V 5 travel through separately-named crypt filters and would not both come back if only one path were right.
 describe("readPdf: PDFs that open without a password", () => {
   const fixtures: readonly (readonly [
     string,
@@ -145,7 +145,7 @@ describe("readPdf: PDFs that open without a password", () => {
     ],
   ];
 
-  // AES-256's key derivation runs the SHA-256/384/512 hardened hash of ISO 32000-2 Algorithm 2.B, which is CPU-bound -- applied to every fixture in this loop for a consistent shape across the table, not just the AES-256 entries. No per-test timeout override here: vitest.config.ts's UNIT_TEST_TIMEOUT_MS already covers the whole unit project, including this file under Stryker's instrumented dry run, with a documented derivation.
+  // AES-256's key derivation runs the SHA-256/384/512 hardened hash of ISO 32000-2 Algorithm 2.B, which is CPU-bound — applied to every fixture in this loop for a consistent shape across the table, not just the AES-256 entries. No per-test timeout override here: vitest.config.ts's UNIT_TEST_TIMEOUT_MS already covers the whole unit project, including this file under Stryker's instrumented dry run, with a documented derivation.
   for (const [label, fixture] of fixtures) {
     it(`decrypts and reads a permissions-only PDF encrypted with ${label}`, () => {
       const doc = readPdf(fixture());
@@ -318,7 +318,7 @@ describe("readPdf: page notes", () => {
   it("does not mistake a third-party tool's own hidden sticky note for pptx speaker notes", () => {
     const doc = readPdf(pdfWithForeignHiddenAnnotationPdf());
     expect(doc.pages[0]!.notes).toBeUndefined();
-    // Proves the annotation itself was genuinely read and excluded on its /T marker -- not that it (or its /Annots entry) never reached the reader at all, which would leave notes undefined for an unrelated reason.
+    // Proves the annotation itself was genuinely read and excluded on its /T marker — not that it (or its /Annots entry) never reached the reader at all, which would leave notes undefined for an unrelated reason.
     const sticky = doc.pages[0]!.annotations?.find((a) => a.subtype === "Text");
     expect(sticky?.contents).toBe(
       "A real reviewer note, not pptx speaker notes",

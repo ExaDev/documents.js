@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// The colour type shared by every content/layout schema. Ported from ooxml.js's typed/shared/color.ts and documents.js's src/model/color.ts (identical shape in both, modulo naming) -- this is the canonical home now; both packages import it from here instead of maintaining their own copy. DrawingML's colour-transform maths (ColorTransform/applyColorTransforms -- shade/tint/lumMod/lumOff) is deliberately NOT here: that's OOXML cascade-resolution logic used only inside ooxml.js's own readDocx/readPptx, not a content-model shape.
+// The colour type shared by every content/layout schema. Ported from ooxml.js's typed/shared/color.ts and documents.js's src/model/color.ts (identical shape in both, modulo naming) — this is the canonical home now; both packages import it from here instead of maintaining their own copy. DrawingML's colour-transform maths (ColorTransform/applyColorTransforms — shade/tint/lumMod/lumOff) is deliberately NOT here: that's OOXML cascade-resolution logic used only inside ooxml.js's own readDocx/readPptx, not a content-model shape.
 
 // sRGB components in 0..1.
 export const ColorSchema = z.object({
@@ -15,7 +15,7 @@ export const COLOR_BLACK: Color = { r: 0, g: 0, b: 0 };
 const HEX_DIGITS_PATTERN = /^[0-9a-fA-F]{6}$/;
 const HEX_BYTE_MAX = 255;
 
-// Parses a 6-digit hex colour (OOXML's w:color/@w:val, a:srgbClr/@val; ODF's fo:color), with or without a leading '#', into a Color. Throws on malformed input rather than substituting a default -- callers are expected to have already validated the attribute is present. Strips a leading '#' by its own literal position rather than a regex capture group, so there is no capture-group result to separately check for absence -- `digits` is validated as a plain string, never indexed out of a match array.
+// Parses a 6-digit hex colour (OOXML's w:color/@w:val, a:srgbClr/@val; ODF's fo:color), with or without a leading '#', into a Color. Throws on malformed input rather than substituting a default — callers are expected to have already validated the attribute is present. Strips a leading '#' by its own literal position rather than a regex capture group, so there is no capture-group result to separately check for absence — `digits` is validated as a plain string, never indexed out of a match array.
 export function rgbHexToColor(hex: string): Color {
   const digits = hex.startsWith("#") ? hex.slice(1) : hex;
   if (!HEX_DIGITS_PATTERN.test(digits)) {

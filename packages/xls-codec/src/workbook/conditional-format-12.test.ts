@@ -73,7 +73,7 @@ function cfColorAuto(): number[] {
   return [...u32(0x00000000), ...u32(0), ...f64(0)];
 }
 
-/** CFGradient ([MS-XLS] 2.4's own colour-scale rgbCT shape). Each stop pairs a cfvo (rgInterp, plus its own 8-byte numDomain fraction) with a colour (rgCurve, its own 8-byte numGrange fraction then a CFColor) -- the two arrays are positional and written here fully separately, matching the record's own non-interleaved layout. */
+/** CFGradient ([MS-XLS] 2.4's own colour-scale rgbCT shape). Each stop pairs a cfvo (rgInterp, plus its own 8-byte numDomain fraction) with a colour (rgCurve, its own 8-byte numGrange fraction then a CFColor) — the two arrays are positional and written here fully separately, matching the record's own non-interleaved layout. */
 function cfGradient(
   stops: readonly { cfvo: number[]; color: number[] }[],
 ): number[] {
@@ -157,11 +157,11 @@ function cf12Bytes(
     icfTemplate?: number;
     templateParams?: readonly number[];
     dxf?: readonly number[];
-    /** rgce1's own bytes ([MS-XLS] 2.4.43's own CFParsedFormulaNoCCE) -- meaningful only for ct 0x01/0x02, empty (cce1 0) for every other ct this file already exercises. */
+    /** rgce1's own bytes ([MS-XLS] 2.4.43's own CFParsedFormulaNoCCE) — meaningful only for ct 0x01/0x02, empty (cce1 0) for every other ct this file already exercises. */
     formula1?: readonly number[];
-    /** rgce2's own bytes -- meaningful only for ct 0x01 with cp 0x01/0x02, empty for every other ct. Filler content this reader never reads (skipped by its own declared cce2), so its only purpose here is proving the skip advances the cursor by exactly that many bytes rather than by none at all. */
+    /** rgce2's own bytes — meaningful only for ct 0x01 with cp 0x01/0x02, empty for every other ct. Filler content this reader never reads (skipped by its own declared cce2), so its only purpose here is proving the skip advances the cursor by exactly that many bytes rather than by none at all. */
     rgce2?: readonly number[];
-    /** fmlaActive's own rgce bytes (the colour scale/data bar/icon set "activity condition" formula) -- filler this reader always skips over regardless of ct, for the identical reason rgce2 above is. */
+    /** fmlaActive's own rgce bytes (the colour scale/data bar/icon set "activity condition" formula) — filler this reader always skips over regardless of ct, for the identical reason rgce2 above is. */
     fmlaActiveRgce?: readonly number[];
   } = {},
 ): number[] {
@@ -195,12 +195,12 @@ function cf12Bytes(
   ];
 }
 
-/** A minimal CFFilter ([MS-XLS] 2.4): cbFilter(2) then that many bytes -- content is irrelevant for every ct 0x05 rule this reader promotes, since CFExFilterParams/CFExAveragesTemplateParams already duplicate whatever it would carry; only its own declared length matters, to prove the reader skips exactly that far. */
+/** A minimal CFFilter ([MS-XLS] 2.4): cbFilter(2) then that many bytes — content is irrelevant for every ct 0x05 rule this reader promotes, since CFExFilterParams/CFExAveragesTemplateParams already duplicate whatever it would carry; only its own declared length matters, to prove the reader skips exactly that far. */
 function cfFilterBytes(body: readonly number[] = [0, 0, 0, 0]): number[] {
   return [...u16(body.length), ...body];
 }
 
-/** CFExFilterParams ([MS-XLS] 2.4): a flags byte (fTop/fPercent/reserved) then iParam(2) then 13 reserved bytes -- top10's own rgbTemplateParms shape. */
+/** CFExFilterParams ([MS-XLS] 2.4): a flags byte (fTop/fPercent/reserved) then iParam(2) then 13 reserved bytes — top10's own rgbTemplateParms shape. */
 function cfExFilterParams(options: {
   top?: boolean;
   percent?: boolean;
@@ -212,7 +212,7 @@ function cfExFilterParams(options: {
   return [flags, ...u16(options.iParam), ...new Array<number>(13).fill(0)];
 }
 
-/** CFExAveragesTemplateParams ([MS-XLS] 2.4): iParam(2, a standard-deviation count) then 14 reserved bytes -- the aboveAverage family's own rgbTemplateParms shape. */
+/** CFExAveragesTemplateParams ([MS-XLS] 2.4): iParam(2, a standard-deviation count) then 14 reserved bytes — the aboveAverage family's own rgbTemplateParms shape. */
 function cfExAveragesTemplateParams(stdDev: number): number[] {
   return [...u16(stdDev), ...new Array<number>(14).fill(0)];
 }
@@ -225,17 +225,17 @@ function cf12Record(
   return record(RECORD_CF12, cf12Bytes(ct, rgbCT, options));
 }
 
-/** PtgStr ([MS-XLS] 2.5.198.something, opcode 0x17): a ShortXLUnicodeString operand -- the literal search text a containsText-family formula always carries somewhere in its own token stream, wrapped in whatever function shape the sub-type needs (see readCfTextFilterRule's own comment in conditional-format-12.ts). */
+/** PtgStr ([MS-XLS] 2.5.198.something, opcode 0x17): a ShortXLUnicodeString operand — the literal search text a containsText-family formula always carries somewhere in its own token stream, wrapped in whatever function shape the sub-type needs (see readCfTextFilterRule's own comment in conditional-format-12.ts). */
 function ptgStr(text: string): number[] {
   return [0x17, ...shortXlUnicodeString(text)];
 }
 
-/** A fully-relative PtgRef (value class, [MS-XLS] 2.5.198.61): opcode 0x44, then row and a relative ColRelU column field -- what a bare `A1` reference compiles to. */
+/** A fully-relative PtgRef (value class, [MS-XLS] 2.5.198.61): opcode 0x44, then row and a relative ColRelU column field — what a bare `A1` reference compiles to. */
 function ptgRef(row: number, column: number): number[] {
   return [0x44, ...u16(row), ...u16(0xc000 | column)];
 }
 
-/** CFExTextTemplateParams ([MS-XLS] 2.4): ctp(2) then 14 reserved bytes -- the containsText family's own rgbTemplateParms shape, naming which of the four text sub-types a rule is. */
+/** CFExTextTemplateParams ([MS-XLS] 2.4): ctp(2) then 14 reserved bytes — the containsText family's own rgbTemplateParms shape, naming which of the four text sub-types a rule is. */
 function cfExTextTemplateParams(ctp: number): number[] {
   return [...u16(ctp), ...new Array<number>(14).fill(0)];
 }
@@ -243,7 +243,7 @@ function cfExTextTemplateParams(ctp: number): number[] {
 const DXFFNTD_LENGTH = 122;
 const DXFFNTD_ICV_FORE_OFFSET = 80;
 
-/** A minimal DXFN ([MS-XLS] 2.4.97) naming only a font colour: the 6-byte flags header (ibitAtrFnt only) then a 122-byte DXFFntD with icvFore set at its own documented offset -- everything conditional-format.test.ts's own sibling dxf() helper already builds for base CF's identical DXFN, written independently here since DXFN12 wraps this exact same payload behind its own cbDxf prefix rather than sharing test fixture code across files. */
+/** A minimal DXFN ([MS-XLS] 2.4.97) naming only a font colour: the 6-byte flags header (ibitAtrFnt only) then a 122-byte DXFFntD with icvFore set at its own documented offset — everything conditional-format.test.ts's own sibling dxf() helper already builds for base CF's identical DXFN, written independently here since DXFN12 wraps this exact same payload behind its own cbDxf prefix rather than sharing test fixture code across files. */
 function dxfFontColor(icvFore: number): number[] {
   const block = new Array<number>(DXFFNTD_LENGTH).fill(0);
   const buffer = new ArrayBuffer(4);
@@ -371,13 +371,13 @@ describe("readCondFmt12Group", () => {
     expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toStrictEqual([]);
   });
 
-  // Every well-formed fixture above states matching, in-range cInterpCurve/cGradientCurve counts (2 or 3, always equal), so none of them can tell this guard's own <2/>3/mismatch checks apart from a bypass that would let the read continue -- each of the three cases below supplies exactly as many stop bytes as a bypassed read would consume, so a wrongly-skipped guard produces a genuine, differently-shaped colour scale rather than the same "record not promoted" outcome the guard's own correct refusal already gives.
+  // Every well-formed fixture above states matching, in-range cInterpCurve/cGradientCurve counts (2 or 3, always equal), so none of them can tell this guard's own <2/>3/mismatch checks apart from a bypass that would let the read continue — each of the three cases below supplies exactly as many stop bytes as a bypassed read would consume, so a wrongly-skipped guard produces a genuine, differently-shaped colour scale rather than the same "record not promoted" outcome the guard's own correct refusal already gives.
   it("degrades a colour scale whose own cInterpCurve and cGradientCurve counts disagree, even where both individually parse", () => {
     const rgbCT = [
       ...u16(0), // unused
       0x00, // reserved1
       2, // cInterpCurve
-      3, // cGradientCurve -- disagrees with cInterpCurve above
+      3, // cGradientCurve — disagrees with cInterpCurve above
       0x03, // fClamp + fBackground
       ...[cfvo(0x02), cfvo(0x03)].flatMap((v) => [...v, ...f64(0)]), // 2 rgInterp entries
       ...[cfColorIcv(1), cfColorIcv(2), cfColorIcv(3)].flatMap((c) => [
@@ -530,7 +530,7 @@ describe("readCondFmt12Group", () => {
     const cases: [number, string][] = [
       [0x00, "3Arrows"],
       [0x03, "3TrafficLights1"],
-      // 0x04/0x05 deliberately diverge from the raw spec page's own prose ordering -- see this table's own top comment in conditional-format-12.ts. Cross-checked against Apache POI's IconSet enum and LibreOffice's ScIconSetType enum, which independently agree with each other on this exact pairing.
+      // 0x04/0x05 deliberately diverge from the raw spec page's own prose ordering — see this table's own top comment in conditional-format-12.ts. Cross-checked against Apache POI's IconSet enum and LibreOffice's ScIconSetType enum, which independently agree with each other on this exact pairing.
       [0x04, "3TrafficLights2"],
       [0x05, "3Signs"],
       [0x07, "3Symbols2"],
@@ -614,7 +614,7 @@ describe("readCondFmt12Group", () => {
     const groups = groupsFrom(
       condFmt12Record(1, ONE_RANGE),
       cf12Record(0x05, cfFilterBytes(), {
-        icfTemplate: 0x001b, // duplicateValues -- needs no template data of its own
+        icfTemplate: 0x001b, // duplicateValues — needs no template data of its own
         rgce2: [0xaa, 0xbb, 0xcc, 0xdd, 0xee], // filler this reader never reads, only skips past
         priority: 7,
         stopIfTrue: true,
@@ -758,7 +758,7 @@ describe("readCondFmt12Group", () => {
 
     const result = readCondFmt12Group(groups, 0, NO_SHEETS);
 
-    // groupRecords has already joined the CF12 base record and its ContinueFrt12 into one logical record by this point, so recordsConsumed still counts 2 -- the CondFmt12 plus that one (now complete) CF12, the same as an unsplit CF12 would.
+    // groupRecords has already joined the CF12 base record and its ContinueFrt12 into one logical record by this point, so recordsConsumed still counts 2 — the CondFmt12 plus that one (now complete) CF12, the same as an unsplit CF12 would.
     expect(result.recordsConsumed).toBe(2);
     expect(result.formats).toStrictEqual([
       {
@@ -910,7 +910,7 @@ describe("readCondFmt12Group", () => {
     }
   });
 
-  it("does not promote a containsText rule (icfTemplate 0x0008) carried as a ct 0x05 filter -- containsText is never expressed this way in a genuine file, since neither CFExTextTemplateParams nor CFFilter has anywhere to carry the search text; see readCf12Group's own ct 0x02 handling below for the real containsText path", () => {
+  it("does not promote a containsText rule (icfTemplate 0x0008) carried as a ct 0x05 filter — containsText is never expressed this way in a genuine file, since neither CFExTextTemplateParams nor CFFilter has anywhere to carry the search text; see readCf12Group's own ct 0x02 handling below for the real containsText path", () => {
     const groups = groupsFrom(
       condFmt12Record(1, ONE_RANGE),
       cf12Record(0x05, cfFilterBytes(), { icfTemplate: 0x0008 }),
@@ -931,11 +931,11 @@ describe("readCondFmt12Group", () => {
     expect(readCondFmt12Group(groups, 0, NO_SHEETS).formats).toStrictEqual([]);
   });
 
-  it("reads a filter rule's own DXFN12 style -- unlike colour scale/data bar/icon set, [MS-XLS] does not force ct 0x05's own cbDxf to zero", () => {
+  it("reads a filter rule's own DXFN12 style — unlike colour scale/data bar/icon set, [MS-XLS] does not force ct 0x05's own cbDxf to zero", () => {
     const groups = groupsFrom(
       condFmt12Record(1, ONE_RANGE),
       cf12Record(0x05, cfFilterBytes(), {
-        icfTemplate: 0x001b, // duplicateValues -- needs no CFExTemplateParams data of its own, isolating the style extraction under test
+        icfTemplate: 0x001b, // duplicateValues — needs no CFExTemplateParams data of its own, isolating the style extraction under test
         dxf: dxfFontColor(2), // icv 2, Red
       }),
     );
@@ -961,7 +961,7 @@ describe("readCondFmt12Group", () => {
   });
 
   it("reads a ct 0x05 rule with a substantial trailing CFFilter body, and still finds the record that follows it", () => {
-    // Each CF12 record is parsed from its own fresh cursor over its own record.blocks, so this can't actually distinguish a cbFilter-driven skip from no skip at all -- the next record's own position comes from the caller's record-index loop, not from where this cursor ends up. It still earns its place as a realistic, non-trivial CFFilter body fixture; see the dedicated test below for what actually depends on the skip happening.
+    // Each CF12 record is parsed from its own fresh cursor over its own record.blocks, so this can't actually distinguish a cbFilter-driven skip from no skip at all — the next record's own position comes from the caller's record-index loop, not from where this cursor ends up. It still earns its place as a realistic, non-trivial CFFilter body fixture; see the dedicated test below for what actually depends on the skip happening.
     const groups = groupsFrom(
       condFmt12Record(2, ONE_RANGE),
       cf12Record(0x05, cfFilterBytes([1, 2, 3, 4, 5, 6, 7, 8]), {
@@ -980,7 +980,7 @@ describe("readCondFmt12Group", () => {
   });
 
   it("degrades a ct 0x05 rule whose own cbFilter declares more bytes than the record actually carries, rather than silently ignoring the overrun", () => {
-    // Every other length-prefixed field this function reads (cbDxf, cce1, cce2, fmlaActive's own cce) is validated the identical way -- a declared length past the record's real end throws, and readCf12's own catch degrades the whole record for it. cbFilter is the one that looks unobservable if its skip is dropped (nothing reads the cursor again afterwards), but only because a WELL-FORMED cbFilter never has anywhere else to go wrong -- a malformed one still needs the same throw-and-degrade every sibling field already gets.
+    // Every other length-prefixed field this function reads (cbDxf, cce1, cce2, fmlaActive's own cce) is validated the identical way — a declared length past the record's real end throws, and readCf12's own catch degrades the whole record for it. cbFilter is the one that looks unobservable if its skip is dropped (nothing reads the cursor again afterwards), but only because a WELL-FORMED cbFilter never has anywhere else to go wrong — a malformed one still needs the same throw-and-degrade every sibling field already gets.
     const groups = groupsFrom(
       condFmt12Record(1, ONE_RANGE),
       cf12Record(0x05, [...u16(1000)], { icfTemplate: 0x001b }),
@@ -1102,11 +1102,11 @@ describe("readCondFmt12Group", () => {
       );
     });
 
-    it("does not promote a ct 0x02 rule whose icfTemplate is not the containsText family -- the same 'expression' boundary base CF's own formula-condition reading draws", () => {
+    it("does not promote a ct 0x02 rule whose icfTemplate is not the containsText family — the same 'expression' boundary base CF's own formula-condition reading draws", () => {
       const groups = groupsFrom(
         condFmt12Record(1, ONE_RANGE),
         cf12Record(0x02, [], {
-          icfTemplate: 0x0001, // "Formula" -- a plain formula condition, not a text template
+          icfTemplate: 0x0001, // "Formula" — a plain formula condition, not a text template
           formula1: ptgInt(1),
         }),
       );

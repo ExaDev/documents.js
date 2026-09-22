@@ -5,7 +5,7 @@ import { odfFormulaBytes } from "./odf";
 describe("odfFormulaBytes", () => {
   it("writes the mimetype part first, stored uncompressed, with the real ODF formula media type", () => {
     const bytes = odfFormulaBytes("<math:mi>x</math:mi>");
-    // ZIP local file header: signature(4) version(2) flags(2) then the compression method at offset 8-9 -- 0 means stored (no DEFLATE), the requirement ODF's own mimetype part has.
+    // ZIP local file header: signature(4) version(2) flags(2) then the compression method at offset 8-9 — 0 means stored (no DEFLATE), the requirement ODF's own mimetype part has.
     expect(Array.from(bytes.subarray(0, 4))).toEqual([0x50, 0x4b, 0x03, 0x04]);
     expect(Array.from(bytes.subarray(8, 10))).toEqual([0, 0]);
     // Filename length at offset 26-27, the filename itself starting at offset 30.

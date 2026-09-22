@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { md5 } from "./md5";
 
-// RFC 1321 Appendix A.5's own "MD5 test suite", verbatim -- the published conformance vectors for this algorithm, so a transcription error in the T table or a wrong rotation amount fails here rather than silently producing plausible-looking garbage a PDF key derivation would then build on.
+// RFC 1321 Appendix A.5's own "MD5 test suite", verbatim — the published conformance vectors for this algorithm, so a transcription error in the T table or a wrong rotation amount fails here rather than silently producing plausible-looking garbage a PDF key derivation would then build on.
 
 function hex(bytes: Uint8Array<ArrayBuffer>): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
@@ -36,7 +36,7 @@ describe("md5: RFC 1321 test suite", () => {
 });
 
 describe("md5: block boundaries", () => {
-  // 55/56/57 bytes bracket the exact point where the 8-byte length field no longer fits alongside the 0x80 terminator and padding spills into a second block -- the single most common place a hand-written padding routine goes wrong.
+  // 55/56/57 bytes bracket the exact point where the 8-byte length field no longer fits alongside the 0x80 terminator and padding spills into a second block — the single most common place a hand-written padding routine goes wrong.
   const boundaries: readonly (readonly [number, string])[] = [
     [55, "ef1772b6dff9a122358552954ad0df65"],
     [56, "3b0c8ac703f828b04c6c197006d17218"],

@@ -7,7 +7,7 @@ import { BiffFormatError } from "./biff/records";
 import { RECORD_BOF, RECORD_EOF, BOF_TYPE_WORKBOOK } from "./biff/record-types";
 import { isXlsFile, readWorkbookStreams } from "./container";
 
-/** A minimal but readable BOF+EOF workbook stream, just enough for readWorkbookStreams to succeed past the container layer -- the container's own concern is stream selection, not BIFF record content. */
+/** A minimal but readable BOF+EOF workbook stream, just enough for readWorkbookStreams to succeed past the container layer — the container's own concern is stream selection, not BIFF record content. */
 function minimalWorkbookStream(): Uint8Array<ArrayBuffer> {
   return new Uint8Array([
     ...record(RECORD_BOF, bofData(BOF_TYPE_WORKBOOK)),
@@ -73,7 +73,7 @@ describe("readWorkbookStreams", () => {
   });
 
   it("refuses bytes with no compound-file signature", () => {
-    // Bytes this short and this unlike a [MS-CFB] header would also fail further in, inside readCompoundFile itself -- but that failure carries a different message ("compound-file container could not be read"), so asserting the exact text here proves it is the signature guard that fired, not a downstream parse failure that happens to throw the same error type.
+    // Bytes this short and this unlike a [MS-CFB] header would also fail further in, inside readCompoundFile itself — but that failure carries a different message ("compound-file container could not be read"), so asserting the exact text here proves it is the signature guard that fired, not a downstream parse failure that happens to throw the same error type.
     expect(() =>
       readWorkbookStreams(new Uint8Array([0x50, 0x4b, 0x03, 0x04])),
     ).toThrow(
@@ -90,7 +90,7 @@ describe("readWorkbookStreams", () => {
   });
 
   it("recognises a legacy 'Book' stream even when it is not the container's only stream", () => {
-    // A single-stream container can't tell `.some` and `.every` apart -- both agree when there's only one thing to check. Adding an unrelated second stream that is NOT 'Book' makes them disagree: `.some` still finds the 'Book' stream and reports BIFF5/BIFF7, while `.every` would see a stream that isn't 'Book' and wrongly fall through to "holds no 'Workbook' stream" instead.
+    // A single-stream container can't tell `.some` and `.every` apart — both agree when there's only one thing to check. Adding an unrelated second stream that is NOT 'Book' makes them disagree: `.some` still finds the 'Book' stream and reports BIFF5/BIFF7, while `.every` would see a stream that isn't 'Book' and wrongly fall through to "holds no 'Workbook' stream" instead.
     const bytes = compoundFile([
       { path: "Book", bytes: minimalWorkbookStream() },
       { path: "\x05SummaryInformation", bytes: new Uint8Array([1]) },

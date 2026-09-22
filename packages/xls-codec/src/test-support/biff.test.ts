@@ -1,4 +1,4 @@
-// Direct tests for this module's own byte-packing, distinct from the reader/writer tests that merely consume these fixtures as inputs -- a bug here would corrupt every test built on top of it without necessarily showing up as an assertion failure in the consuming test itself.
+// Direct tests for this module's own byte-packing, distinct from the reader/writer tests that merely consume these fixtures as inputs — a bug here would corrupt every test built on top of it without necessarily showing up as an assertion failure in the consuming test itself.
 
 import { describe, expect, it } from "vitest";
 

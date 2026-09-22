@@ -4,7 +4,7 @@ import { buildFib } from "./fib";
 
 describe("buildFib", () => {
   it("writes a pair whose last byte lands exactly at the declared blob boundary", () => {
-    // fcClx sits at value index 66; a cbRgFcLcb of 34 gives a blob of exactly 272 bytes (34 * 8), which ends precisely at fcClx/lcbClx's own last byte -- the boundary the pair-writer's own bounds guard checks.
+    // fcClx sits at value index 66; a cbRgFcLcb of 34 gives a blob of exactly 272 bytes (34 * 8), which ends precisely at fcClx/lcbClx's own last byte — the boundary the pair-writer's own bounds guard checks.
     const bytes = buildFib({
       cbRgFcLcb: 34,
       fcClx: 0xabcdef,

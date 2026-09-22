@@ -6,7 +6,7 @@ import {
   documentCreateOperation,
 } from "./editor";
 
-// A byte-level signature unique to each writable format's own real output -- checked against the raw bytes so a wrong createDocumentBytes() case (a fallthrough to the wrong writer, or the wrong writer entirely) is caught even though every writer's output is equally non-empty. OOXML formats are identified by a real zip entry name (uncompressed in every zip's local-file-header/central-directory, unlike a compressed entry's own content); ODF formats by their own "mimetype" entry's content-type string; PDF by its literal header.
+// A byte-level signature unique to each writable format's own real output — checked against the raw bytes so a wrong createDocumentBytes() case (a fallthrough to the wrong writer, or the wrong writer entirely) is caught even though every writer's output is equally non-empty. OOXML formats are identified by a real zip entry name (uncompressed in every zip's local-file-header/central-directory, unlike a compressed entry's own content); ODF formats by their own "mimetype" entry's content-type string; PDF by its literal header.
 const FORMAT_SIGNATURES = {
   docx: "word/document.xml",
   pptx: "ppt/presentation.xml",
@@ -145,7 +145,7 @@ describe("documentAppendParagraphsOperation", () => {
       targetFormat: "markdown",
       paragraphs: [
         {
-          // Heading1, not a plain style: proves body.appendParagraph's own styleId argument genuinely reached the editor (a plain paragraph and a heading are otherwise indistinguishable by run content alone) -- markdown lowers it to a real "# " heading, read back as headingLevel below.
+          // Heading1, not a plain style: proves body.appendParagraph's own styleId argument genuinely reached the editor (a plain paragraph and a heading are otherwise indistinguishable by run content alone) — markdown lowers it to a real "# " heading, read back as headingLevel below.
           styleId: "Heading1",
           runs: [
             {
@@ -211,7 +211,7 @@ describe("documentAppendParagraphsOperation", () => {
         paragraphs: [{ text: "x", runs: [{ underline: true }] }],
       }),
     ).rejects.toThrow(
-      "A run does not support underline for markdown -- remove it or target docx/odt instead.",
+      "A run does not support underline for markdown — remove it or target docx/odt instead.",
     );
   });
 
@@ -230,7 +230,7 @@ describe("documentAppendParagraphsOperation", () => {
         ],
       }),
     ).rejects.toThrow(
-      "A run does not support underline, fontFamily for markdown -- remove them or target docx/odt instead.",
+      "A run does not support underline, fontFamily for markdown — remove them or target docx/odt instead.",
     );
   });
 
@@ -249,7 +249,7 @@ describe("documentAppendParagraphsOperation", () => {
         ],
       }),
     ).rejects.toThrow(
-      "A run does not support hyperlink for docx/odt -- remove it or target docx/odt instead.",
+      "A run does not support hyperlink for docx/odt — remove it or target docx/odt instead.",
     );
   });
 
@@ -266,7 +266,7 @@ describe("documentAppendParagraphsOperation", () => {
         paragraphs: [{ text: "x", headingLevel: 1 }],
       }),
     ).rejects.toThrow(
-      "A paragraph does not support headingLevel for markdown -- remove it or target docx/odt instead.",
+      "A paragraph does not support headingLevel for markdown — remove it or target docx/odt instead.",
     );
   });
 

@@ -17,7 +17,7 @@ function paethPredictor(a: number, b: number, c: number): number {
   return c;
 }
 
-// The value a filter type predicts from the left (a), above (b), and above-left (c) samples -- added back in during unfiltering, or subtracted out during filtering. Returning a value from a pure function (rather than assigning inside a switch) sidesteps having to prove a switch over a literal union is exhaustive to a variable declared without an initialiser.
+// The value a filter type predicts from the left (a), above (b), and above-left (c) samples — added back in during unfiltering, or subtracted out during filtering. Returning a value from a pure function (rather than assigning inside a switch) sidesteps having to prove a switch over a literal union is exhaustive to a variable declared without an initialiser.
 function isPngFilterType(value: number): value is PngFilterType {
   return (
     value === 0 || value === 1 || value === 2 || value === 3 || value === 4
@@ -142,7 +142,7 @@ function filterRowInto(
 
 const ALL_FILTER_TYPES: readonly PngFilterType[] = [0, 1, 2, 3, 4];
 
-// Filters raw (unfiltered) pixel bytes into PNG's per-scanline IDAT payload shape. `strategy: 'none'` always emits filter type 0 (useful for deterministic, human-auditable test output); `'adaptive'` (the default) picks, per row, whichever of the five filters minimises the sum of the filtered bytes' absolute values interpreted as signed -- the heuristic the PNG spec itself recommends.
+// Filters raw (unfiltered) pixel bytes into PNG's per-scanline IDAT payload shape. `strategy: 'none'` always emits filter type 0 (useful for deterministic, human-auditable test output); `'adaptive'` (the default) picks, per row, whichever of the five filters minimises the sum of the filtered bytes' absolute values interpreted as signed — the heuristic the PNG spec itself recommends.
 export function filterScanlines(
   raw: Uint8Array<ArrayBuffer>,
   height: number,

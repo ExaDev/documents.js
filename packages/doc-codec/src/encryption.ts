@@ -15,15 +15,15 @@ import { readUint16LE, readUint32LE } from "./bytes";
 import { DocFormatError, DocUnsupportedError } from "./errors";
 import { FIB_LKEY_OFFSET } from "./fib/offsets";
 
-// [MS-DOC] 2.2.6 "Encryption and Obfuscation (Password to Open)" (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-doc/37639397-6451-427b-9cf2-01d56e927f25) names three schemes, selected by FibBase's own fEncrypted/fObfuscated flags (fib/fib.ts's peekFibBaseFlags): fObfuscated=1 is XOR obfuscation Method 2 (2.2.6.1, this module -- see archive-codec's own crypto/xor-obfuscation.ts for the real, cross-validated Method 1/Method 2 algorithm and why it diverges from the published spec text for array construction), fObfuscated=0 is RC4 encryption (2.2.6.2, this module) or RC4 CryptoAPI (2.2.6.3, a different EncryptionHeader shape this module does not implement, rejected below by its own EncryptionVersionInfo).
+// [MS-DOC] 2.2.6 "Encryption and Obfuscation (Password to Open)" (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-doc/37639397-6451-427b-9cf2-01d56e927f25) names three schemes, selected by FibBase's own fEncrypted/fObfuscated flags (fib/fib.ts's peekFibBaseFlags): fObfuscated=1 is XOR obfuscation Method 2 (2.2.6.1, this module — see archive-codec's own crypto/xor-obfuscation.ts for the real, cross-validated Method 1/Method 2 algorithm and why it diverges from the published spec text for array construction), fObfuscated=0 is RC4 encryption (2.2.6.2, this module) or RC4 CryptoAPI (2.2.6.3, a different EncryptionHeader shape this module does not implement, rejected below by its own EncryptionVersionInfo).
 //
-// XOR obfuscation needs no EncryptionHeader in the Table stream the way RC4 does: [MS-DOC]'s own XOR Obfuscation section states the password verifier "MUST be stored in FibBase.lKey" directly -- the same 32-bit field RC4 instead uses as the Table stream's own unencrypted-prefix byte length -- so FIB_LKEY_OFFSET is read here under two entirely different interpretations depending on fObfuscated, not one shared meaning. lKey's own high 16 bits are createXorObfuscationKey's output ([MS-OFFCRYPTO] 2.3.7.4's own CreatePasswordVerifier_Method2, which packs CreateXorKey_Method1 as the high word and CreatePasswordVerifier_Method1 as the low word), and its low 16 bits are createXorObfuscationPasswordVerifier's output -- confirmed against LibreOffice's own WW8 import (`ww8par.cxx`'s `eAlgo = XOR` branch checks `aCtx.VerifyKey(m_xWwFib->m_nKey, m_xWwFib->m_nHash)`, where `m_nKey`/`m_nHash` are that same FIB field's own high/low halves). Unlike RC4's Table stream (whose own EncryptionHeader occupies an unencrypted FibBase.lKey-byte prefix), XOR obfuscation's Table stream carries no unencrypted prefix at all and is obfuscated in full from its own byte 0 -- confirmed against the same LibreOffice source, whose `DecryptXOR` call for the Table stream passes no prior seek/skip the way the WordDocument stream's own 68-byte copy-then-decrypt does.
+// XOR obfuscation needs no EncryptionHeader in the Table stream the way RC4 does: [MS-DOC]'s own XOR Obfuscation section states the password verifier "MUST be stored in FibBase.lKey" directly — the same 32-bit field RC4 instead uses as the Table stream's own unencrypted-prefix byte length — so FIB_LKEY_OFFSET is read here under two entirely different interpretations depending on fObfuscated, not one shared meaning. lKey's own high 16 bits are createXorObfuscationKey's output ([MS-OFFCRYPTO] 2.3.7.4's own CreatePasswordVerifier_Method2, which packs CreateXorKey_Method1 as the high word and CreatePasswordVerifier_Method1 as the low word), and its low 16 bits are createXorObfuscationPasswordVerifier's output — confirmed against LibreOffice's own WW8 import (`ww8par.cxx`'s `eAlgo = XOR` branch checks `aCtx.VerifyKey(m_xWwFib->m_nKey, m_xWwFib->m_nHash)`, where `m_nKey`/`m_nHash` are that same FIB field's own high/low halves). Unlike RC4's Table stream (whose own EncryptionHeader occupies an unencrypted FibBase.lKey-byte prefix), XOR obfuscation's Table stream carries no unencrypted prefix at all and is obfuscated in full from its own byte 0 — confirmed against the same LibreOffice source, whose `DecryptXOR` call for the Table stream passes no prior seek/skip the way the WordDocument stream's own 68-byte copy-then-decrypt does.
 //
-// [MS-DOC] 2.2.6.2's own EncryptionHeader *is* [MS-OFFCRYPTO] 2.3.6.1's RC4 encryption header, byte-identical to what xls-codec's own workbook/encryption.ts already reads for FilePass -- EncryptionVersionInfo(4) + Salt(16) + EncryptedVerifier(16) + EncryptedVerifierHash(16), confirmed via Apache POI's own EncryptionMode.binaryRC4 (versionMajor=1/versionMinor=1) resolving both FilePassRecord's and doc-codec's own EncryptionHeader reads through the identical path -- so this module needs no new crypto, only the doc-specific container layout, which differs from BIFF8's in three real ways:
+// [MS-DOC] 2.2.6.2's own EncryptionHeader *is* [MS-OFFCRYPTO] 2.3.6.1's RC4 encryption header, byte-identical to what xls-codec's own workbook/encryption.ts already reads for FilePass — EncryptionVersionInfo(4) + Salt(16) + EncryptedVerifier(16) + EncryptedVerifierHash(16), confirmed via Apache POI's own EncryptionMode.binaryRC4 (versionMajor=1/versionMinor=1) resolving both FilePassRecord's and doc-codec's own EncryptionHeader reads through the identical path — so this module needs no new crypto, only the doc-specific container layout, which differs from BIFF8's in three real ways:
 //
-// 1. Location: unlike FilePass (an inline record within the Workbook stream), the EncryptionHeader here sits unencrypted at the very start of the Table stream (0Table/1Table, whichever FibBase.fWhichTblStm selects), its own byte length given by FibBase.lKey (fib/offsets.ts's own FIB_LKEY_OFFSET) -- 52 bytes for this scheme, though this module trusts the file's own stated lKey as the authoritative unencrypted-prefix length rather than hardcoding 52, in case a producer pads it.
-// 2. Re-keying interval: 512 bytes, not xls-codec's 1024 -- archive-codec's OFFICE_RC4_DOC_BLOCK_SIZE, a real [MS-DOC]-specific value confirmed independently against Apache POI's BinaryRC4Decryptor (chunkSize = 512), contrasted directly with Biff8DecryptingStream.RC4_REKEYING_INTERVAL (1024) for xls-codec -- two genuinely separate implementations, not one shared class with a parameter.
-// 3. Per-stream block-zero origin: WordDocument and Table are each encrypted independently, each with its own block-number counter starting at zero at that stream's own byte 0 ("the block number MUST be set to zero at the beginning of the stream", stated for both) -- unlike xls-codec's single continuous Workbook-stream offset. WordDocument's own unencrypted prefix is a fixed 68 bytes, a literal both 2.2.6.1 and 2.2.6.2 state identically ("the initial 68 bytes MUST be written out with their untransformed values") rather than a computed FIB-relative size; Table's own unencrypted prefix is FibBase.lKey, since the EncryptionHeader occupying it has to be readable before any key can be derived at all. The Data stream is also encrypted in full per the spec, but this reader does not read the Data stream at all today, so decrypting it is out of scope until something needs to.
+// 1. Location: unlike FilePass (an inline record within the Workbook stream), the EncryptionHeader here sits unencrypted at the very start of the Table stream (0Table/1Table, whichever FibBase.fWhichTblStm selects), its own byte length given by FibBase.lKey (fib/offsets.ts's own FIB_LKEY_OFFSET) — 52 bytes for this scheme, though this module trusts the file's own stated lKey as the authoritative unencrypted-prefix length rather than hardcoding 52, in case a producer pads it.
+// 2. Re-keying interval: 512 bytes, not xls-codec's 1024 — archive-codec's OFFICE_RC4_DOC_BLOCK_SIZE, a real [MS-DOC]-specific value confirmed independently against Apache POI's BinaryRC4Decryptor (chunkSize = 512), contrasted directly with Biff8DecryptingStream.RC4_REKEYING_INTERVAL (1024) for xls-codec — two genuinely separate implementations, not one shared class with a parameter.
+// 3. Per-stream block-zero origin: WordDocument and Table are each encrypted independently, each with its own block-number counter starting at zero at that stream's own byte 0 ("the block number MUST be set to zero at the beginning of the stream", stated for both) — unlike xls-codec's single continuous Workbook-stream offset. WordDocument's own unencrypted prefix is a fixed 68 bytes, a literal both 2.2.6.1 and 2.2.6.2 state identically ("the initial 68 bytes MUST be written out with their untransformed values") rather than a computed FIB-relative size; Table's own unencrypted prefix is FibBase.lKey, since the EncryptionHeader occupying it has to be readable before any key can be derived at all. The Data stream is also encrypted in full per the spec, but this reader does not read the Data stream at all today, so decrypting it is out of scope until something needs to.
 
 /** [MS-DOC] 2.2.6.2's own EncryptionHeader field layout, byte offsets within the Table stream's own first FibBase.lKey bytes: EncryptionVersionInfo (vMajor/vMinor, 2 bytes each) at 0, then Salt/EncryptedVerifier/EncryptedVerifierHash, each OFFICE_RC4_VERIFIER_LENGTH (16) bytes, back to back. */
 const HEADER_OFFSET = {
@@ -33,7 +33,7 @@ const HEADER_OFFSET = {
   encryptedVerifier: 4 + OFFICE_RC4_VERIFIER_LENGTH,
   encryptedVerifierHash: 4 + OFFICE_RC4_VERIFIER_LENGTH * 2,
 } as const;
-/** The RC4 (non-CryptoAPI) EncryptionHeader's own total size -- EncryptionVersionInfo(4) + Salt(16) + EncryptedVerifier(16) + EncryptedVerifierHash(16). Used only to slice the header's own fields out of the Table stream; the actual unencrypted-prefix boundary for decrypting the rest of the Table stream is FibBase.lKey itself (see this file's own top comment), not this constant. */
+/** The RC4 (non-CryptoAPI) EncryptionHeader's own total size — EncryptionVersionInfo(4) + Salt(16) + EncryptedVerifier(16) + EncryptedVerifierHash(16). Used only to slice the header's own fields out of the Table stream; the actual unencrypted-prefix boundary for decrypting the rest of the Table stream is FibBase.lKey itself (see this file's own top comment), not this constant. */
 const RC4_HEADER_SIZE = 4 + OFFICE_RC4_VERIFIER_LENGTH * 3;
 /** [MS-DOC] 2.2.6.2/2.2.6.1's own literal, stated identically in both sections: the WordDocument stream's initial 68 bytes are never encrypted regardless of scheme. Not further decomposed by the spec into named sub-fields covering exactly this span, so it is carried here as the constant the spec itself states rather than derived from FibBase's own field sizes (which do not sum to 68). */
 const WORD_DOCUMENT_UNENCRYPTED_PREFIX = 68;
@@ -47,7 +47,7 @@ interface DocRc4Header {
   readonly encryptedVerifierHash: Uint8Array<ArrayBuffer>;
 }
 
-/** A bounds-checked subarray that keeps the `Uint8Array<ArrayBuffer>` generic parameter archive-codec's own crypto functions require -- bytes.ts's own `slice` returns a bare `Uint8Array`, which is doc-codec's own convention everywhere else but too wide here, since `md5`/`rc4` construct a `DataView` directly over the buffer and need to know it genuinely is one, not just ArrayBufferLike. */
+/** A bounds-checked subarray that keeps the `Uint8Array<ArrayBuffer>` generic parameter archive-codec's own crypto functions require — bytes.ts's own `slice` returns a bare `Uint8Array`, which is doc-codec's own convention everywhere else but too wide here, since `md5`/`rc4` construct a `DataView` directly over the buffer and need to know it genuinely is one, not just ArrayBufferLike. */
 function checkedSubarray(
   bytes: Uint8Array<ArrayBuffer>,
   offset: number,
@@ -75,7 +75,7 @@ function readRc4Header(table: Uint8Array<ArrayBuffer>): DocRc4Header {
       `this document uses RC4 CryptoAPI encryption (EncryptionVersionInfo ${versionMajor}.${versionMinor}, [MS-DOC] 2.2.6.3), which this reader does not decrypt`,
     );
   }
-  // Sliced directly rather than through checkedSubarray's own bounds check: `header` is already exactly RC4_HEADER_SIZE bytes (checkedSubarray's own call above guarantees it), and HEADER_OFFSET.salt/encryptedVerifier/encryptedVerifierHash back-to-back at OFFICE_RC4_VERIFIER_LENGTH apiece add up to exactly that same RC4_HEADER_SIZE with no slack -- there is no header this function ever sees for which one of these three could run past its own end.
+  // Sliced directly rather than through checkedSubarray's own bounds check: `header` is already exactly RC4_HEADER_SIZE bytes (checkedSubarray's own call above guarantees it), and HEADER_OFFSET.salt/encryptedVerifier/encryptedVerifierHash back-to-back at OFFICE_RC4_VERIFIER_LENGTH apiece add up to exactly that same RC4_HEADER_SIZE with no slack — there is no header this function ever sees for which one of these three could run past its own end.
   return {
     salt: header.subarray(
       HEADER_OFFSET.salt,
@@ -109,7 +109,7 @@ function verifyPassword(
     header.encryptedVerifierHash,
     OFFICE_RC4_DOC_BLOCK_SIZE,
   );
-  // No separate length check: md5 always returns a fixed 16-byte digest, and decryptedVerifierHash is always exactly OFFICE_RC4_VERIFIER_LENGTH (16) bytes, decrypted from header.encryptedVerifierHash's own fixed-size span -- the two arrays are always the same length, never merely usually so.
+  // No separate length check: md5 always returns a fixed 16-byte digest, and decryptedVerifierHash is always exactly OFFICE_RC4_VERIFIER_LENGTH (16) bytes, decrypted from header.encryptedVerifierHash's own fixed-size span — the two arrays are always the same length, never merely usually so.
   const computedHash = md5(decryptedVerifier);
   const matches = computedHash.every(
     (byte, index) => byte === decryptedVerifierHash[index],
@@ -121,7 +121,7 @@ function verifyPassword(
   }
 }
 
-/** Decrypts everything after `prefixLength` bytes of `stream`, leaving the prefix itself untouched -- WORD_DOCUMENT_UNENCRYPTED_PREFIX for WordDocument, FibBase.lKey for Table, each stream's own block-number counter starting fresh at its own byte 0 (this file's own top comment, point 3). */
+/** Decrypts everything after `prefixLength` bytes of `stream`, leaving the prefix itself untouched — WORD_DOCUMENT_UNENCRYPTED_PREFIX for WordDocument, FibBase.lKey for Table, each stream's own block-number counter starting fresh at its own byte 0 (this file's own top comment, point 3). */
 function decryptStreamRc4(
   baseHash: Uint8Array<ArrayBuffer>,
   stream: Uint8Array<ArrayBuffer>,
@@ -167,7 +167,7 @@ function decryptDocStreamsRc4(
   };
 }
 
-/** Decrypts everything after `prefixLength` bytes of `stream` against Method 2's own transform, leaving the prefix itself untouched -- `initialIndex` is `prefixLength % 16`, the XorArrayIndex the decrypted span's own first byte starts at (confirmed against LibreOffice's own `ww8par.cxx` `DecryptXOR`, whose `InitCipher(); Skip(nSt)` is exactly this: reset to 0, then advance by the skipped prefix's own length mod 16). */
+/** Decrypts everything after `prefixLength` bytes of `stream` against Method 2's own transform, leaving the prefix itself untouched — `initialIndex` is `prefixLength % 16`, the XorArrayIndex the decrypted span's own first byte starts at (confirmed against LibreOffice's own `ww8par.cxx` `DecryptXOR`, whose `InitCipher(); Skip(nSt)` is exactly this: reset to 0, then advance by the skipped prefix's own length mod 16). */
 function decryptStreamXor(
   array: Uint8Array<ArrayBuffer>,
   stream: Uint8Array<ArrayBuffer>,
@@ -187,7 +187,7 @@ function decryptStreamXor(
 }
 
 /**
- * Decrypts an XOR-obfuscated (fEncrypted=1, fObfuscated=1) document's WordDocument and Table streams given the password, verifying it first against FibBase's own lKey field -- not a Table-stream EncryptionHeader the way RC4 needs, see this file's own top comment for why. The Table stream carries no unencrypted prefix under this scheme, unlike RC4's own FibBase.lKey-byte EncryptionHeader; Data (also obfuscated per [MS-DOC], from its own byte 0) is out of scope, matching decryptDocStreamsRc4 and this package's own read.ts, which does not read the Data stream at all.
+ * Decrypts an XOR-obfuscated (fEncrypted=1, fObfuscated=1) document's WordDocument and Table streams given the password, verifying it first against FibBase's own lKey field — not a Table-stream EncryptionHeader the way RC4 needs, see this file's own top comment for why. The Table stream carries no unencrypted prefix under this scheme, unlike RC4's own FibBase.lKey-byte EncryptionHeader; Data (also obfuscated per [MS-DOC], from its own byte 0) is out of scope, matching decryptDocStreamsRc4 and this package's own read.ts, which does not read the Data stream at all.
  */
 function decryptDocStreamsXor(
   wordDocument: Uint8Array<ArrayBuffer>,
@@ -198,7 +198,7 @@ function decryptDocStreamsXor(
   const headerKey = (lKey >>> 16) & 0xffff;
   const headerVerifier = lKey & 0xffff;
 
-  // A password too long or carrying a character outside single-byte ASCII/Latin-1 cannot be the real one -- see xls-codec's own workbook/encryption.ts for the identical reasoning. archive-codec's own createXorObfuscationKey/createXorObfuscationPasswordVerifier throw only RangeError for exactly this reason, so no instanceof check or fallback rethrow is needed: whatever they throw here always means the same thing.
+  // A password too long or carrying a character outside single-byte ASCII/Latin-1 cannot be the real one — see xls-codec's own workbook/encryption.ts for the identical reasoning. archive-codec's own createXorObfuscationKey/createXorObfuscationPasswordVerifier throw only RangeError for exactly this reason, so no instanceof check or fallback rethrow is needed: whatever they throw here always means the same thing.
   let computedKey: number;
   let computedVerifier: number;
   try {
@@ -232,7 +232,7 @@ function decryptDocStreamsXor(
 /**
  * Decrypts an encrypted document's WordDocument and Table streams given the password, dispatching on `fObfuscated` between [MS-DOC] 2.2.6.2's RC4 encryption header and 2.2.6.1's XOR obfuscation (Method 2).
  *
- * Throws `DocUnsupportedError` for a missing password, an incorrect one, or an encryption scheme this module does not implement (RC4 CryptoAPI) -- there is no partial or best-effort result to return in any of those cases.
+ * Throws `DocUnsupportedError` for a missing password, an incorrect one, or an encryption scheme this module does not implement (RC4 CryptoAPI) — there is no partial or best-effort result to return in any of those cases.
  */
 export function decryptDocStreams(
   wordDocument: Uint8Array<ArrayBuffer>,

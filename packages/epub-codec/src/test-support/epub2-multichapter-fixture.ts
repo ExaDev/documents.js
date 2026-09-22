@@ -1,7 +1,7 @@
 import { EPUB_MIME_TYPE } from "../format";
 import { zipPackage } from "../zip";
 
-// A hand-authored, real two-chapter EPUB 2 fixture -- built directly via zipPackage from literal XML strings, matching test-support/epub2-fixture.ts's own precedent. Exists specifically for ExaDev/documents.js#963's own named shape: a footnote reference in one spine document (chapter1.xhtml) whose body lives in a separate "notes.xhtml"-style document (chapter2.xhtml) -- the EPUB 2 linked-anchor idiom (no epub:type vocabulary at all, just the class="footnote" convention) is, per the issue's own wording, "the more common real-world EPUB 2 shape" this gap targets.
+// A hand-authored, real two-chapter EPUB 2 fixture — built directly via zipPackage from literal XML strings, matching test-support/epub2-fixture.ts's own precedent. Exists specifically for ExaDev/documents.js#963's own named shape: a footnote reference in one spine document (chapter1.xhtml) whose body lives in a separate "notes.xhtml"-style document (chapter2.xhtml) — the EPUB 2 linked-anchor idiom (no epub:type vocabulary at all, just the class="footnote" convention) is, per the issue's own wording, "the more common real-world EPUB 2 shape" this gap targets.
 
 const CONTAINER_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
@@ -50,7 +50,7 @@ const TOC_NCX = `<?xml version="1.0" encoding="UTF-8"?>
 </ncx>
 `;
 
-// The reference site carries the class="footnote" signal (the EPUB 2 idiom src/xhtml/footnote.ts's isFootnoteReference recognises absent any epub:type); its target -- a separate <p id="note1"> -- lives in chapter2.xhtml, not this document.
+// The reference site carries the class="footnote" signal (the EPUB 2 idiom src/xhtml/footnote.ts's isFootnoteReference recognises absent any epub:type); its target — a separate <p id="note1"> — lives in chapter2.xhtml, not this document.
 const CHAPTER1_XHTML = `<?xml version="1.0" encoding="UTF-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head><title>Chapter One</title></head>

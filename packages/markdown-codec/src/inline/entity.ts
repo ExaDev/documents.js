@@ -1,6 +1,6 @@
-// HTML entity and numeric character reference decoding, per CommonMark 0.31.2's "Entity and numeric character references" section. Reads src/scan/entity-table.ts's generated WHATWG named-character-reference table (semicolon-terminated names only, which is the only form CommonMark recognises -- HTML5's own legacy unterminated forms such as `&amp` are deliberately NOT valid CommonMark entities).
+// HTML entity and numeric character reference decoding, per CommonMark 0.31.2's "Entity and numeric character references" section. Reads src/scan/entity-table.ts's generated WHATWG named-character-reference table (semicolon-terminated names only, which is the only form CommonMark recognises — HTML5's own legacy unterminated forms such as `&amp` are deliberately NOT valid CommonMark entities).
 //
-// Kept separate from src/inline/inline.ts because the same decoding runs in two structurally different places: as an inline construct in its own right (producing a MarkdownEntityNode, which keeps the source text alongside the decoded value so writeMarkdown can emit the original spelling back), and as part of unescapeString below, which flattens escapes and entities inside a link destination or title -- where there is no node to attach a `raw` field to and only the decoded string survives.
+// Kept separate from src/inline/inline.ts because the same decoding runs in two structurally different places: as an inline construct in its own right (producing a MarkdownEntityNode, which keeps the source text alongside the decoded value so writeMarkdown can emit the original spelling back), and as part of unescapeString below, which flattens escapes and entities inside a link destination or title — where there is no node to attach a `raw` field to and only the decoded string survives.
 
 import { HTML_ENTITY_TABLE } from "../scan/entity-table";
 import { isAsciiPunctuation } from "./chars";
@@ -12,14 +12,14 @@ const MAX_CODEPOINT = 0x10ffff;
 const SURROGATE_FIRST = 0xd800;
 const SURROGATE_LAST = 0xdfff;
 
-// spec 0.31.2 grammar: a named reference is `&` + an entity name from the WHATWG list + `;`; a decimal reference is `&#` + 1-7 digits + `;`; a hexadecimal reference is `&#X`/`&#x` + 1-6 hex digits + `;`. The 31-character name bound and the digit-count bounds are the spec's own, not this package's invention -- they exist so a long run of text after a stray `&` cannot be scanned indefinitely.
+// spec 0.31.2 grammar: a named reference is `&` + an entity name from the WHATWG list + `;`; a decimal reference is `&#` + 1-7 digits + `;`; a hexadecimal reference is `&#X`/`&#x` + 1-6 hex digits + `;`. The 31-character name bound and the digit-count bounds are the spec's own, not this package's invention — they exist so a long run of text after a stray `&` cannot be scanned indefinitely.
 const ENTITY_PATTERN =
   /^&(?:#[Xx]([0-9A-Fa-f]{1,6})|#([0-9]{1,7})|([A-Za-z][A-Za-z0-9]{1,31}));/;
 
 export interface EntityMatch {
   // The literal source text consumed, including the leading `&` and trailing `;`.
   readonly raw: string;
-  // The character(s) the reference decodes to -- more than one code point for the handful of WHATWG names that map to a sequence (e.g. `&NotEqualTilde;`).
+  // The character(s) the reference decodes to — more than one code point for the handful of WHATWG names that map to a sequence (e.g. `&NotEqualTilde;`).
   readonly value: string;
 }
 
@@ -34,7 +34,7 @@ function codepointToString(codepoint: number): string {
   return String.fromCodePoint(codepoint);
 }
 
-// Matches an entity or numeric character reference starting at `start` (which must be the `&`). Returns undefined when what follows is not a valid reference at all -- a bare `&` is ordinary text, never an error.
+// Matches an entity or numeric character reference starting at `start` (which must be the `&`). Returns undefined when what follows is not a valid reference at all — a bare `&` is ordinary text, never an error.
 // No separate "does text[start] even open with '&'?" guard: ENTITY_PATTERN's own source is anchored at `^&`, so a slice that doesn't open with '&' can never match regardless — the same reasoning src/html/html.ts's matchHtmlTag/matchHtmlBlockStart apply to their own leading '<' checks.
 export function matchEntity(
   text: string,
@@ -55,14 +55,14 @@ export function matchEntity(
     return undefined;
   }
   const resolved = HTML_ENTITY_TABLE[name];
-  // An unrecognised name is not an entity at all -- `&MissingGlyph;` stays literal text, rather than degrading to a replacement character the way an out-of-range numeric reference does.
+  // An unrecognised name is not an entity at all — `&MissingGlyph;` stays literal text, rather than degrading to a replacement character the way an out-of-range numeric reference does.
   if (resolved === undefined) {
     return undefined;
   }
   return { raw, value: resolved };
 }
 
-// Resolves backslash escapes and character references inside a string that is NOT itself parsed as inline content -- a link destination or a link title. spec 0.31.2: "backslash escapes and entity and numeric character references are recognized" in both. This is a flattening operation with no node structure of its own, which is exactly why it lives here rather than being expressed in terms of the inline parser's own dispatch loop.
+// Resolves backslash escapes and character references inside a string that is NOT itself parsed as inline content — a link destination or a link title. spec 0.31.2: "backslash escapes and entity and numeric character references are recognized" in both. This is a flattening operation with no node structure of its own, which is exactly why it lives here rather than being expressed in terms of the inline parser's own dispatch loop.
 export function unescapeString(text: string): string {
   // No "does text hold neither '\\' nor '&' at all?" fast path: for a string with neither, the loop below never takes the backslash/entity branches, so it does nothing but copy every character straight through — reconstructing `text` exactly, just one character-append at a time rather than in a single return. The fast path changed how much work this function did for that input, never what it produced.
   let result = "";

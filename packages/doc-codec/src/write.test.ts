@@ -41,7 +41,7 @@ import {
   writeDocContent,
 } from "./write";
 
-// Verifies writeDocContent by reading its own output back through this package's own reader (readDocContent) -- the round trip this session's own writer packages (archive-codec's CFB writer, odf.js's typed writer) are all verified the same way, and the standing convention this task itself names. This round trip alone cannot prove third-party conformance, though: ExaDev/documents.js#892 is the confirmed counterexample -- a table passed this exact suite for the whole time LibreOffice's own .doc import filter rejected it outright, because readDocContent tolerated a document whose Main Document text did not end in the ordinary paragraph mark [MS-DOC] requires. Byte-level and real-reader verification for the table writer specifically lives in the README's own "Third-party verification" paragraph and its accompanying LibreOffice checks, not here.
+// Verifies writeDocContent by reading its own output back through this package's own reader (readDocContent) — the round trip this session's own writer packages (archive-codec's CFB writer, odf.js's typed writer) are all verified the same way, and the standing convention this task itself names. This round trip alone cannot prove third-party conformance, though: ExaDev/documents.js#892 is the confirmed counterexample — a table passed this exact suite for the whole time LibreOffice's own .doc import filter rejected it outright, because readDocContent tolerated a document whose Main Document text did not end in the ordinary paragraph mark [MS-DOC] requires. Byte-level and real-reader verification for the table writer specifically lives in the README's own "Third-party verification" paragraph and its accompanying LibreOffice checks, not here.
 
 function document(blocks: readonly ContentBlock[]): ContentDocument {
   return {
@@ -115,14 +115,14 @@ function tableAt(result: ContentDocument, index: number): ContentTable {
   return block;
 }
 
-/** The one cell a single-cell, single-row table round-trips to -- the shape most decoration assertions below want, since a border or fill is a per-cell fact and needs no other cell to state it. */
+/** The one cell a single-cell, single-row table round-trips to — the shape most decoration assertions below want, since a border or fill is a per-cell fact and needs no other cell to state it. */
 function onlyCell(result: ContentDocument): ContentTableCell {
   const cell = tableAt(result, 0).rows[0]?.cells[0];
   if (cell === undefined) throw new Error("expected one cell");
   return cell;
 }
 
-/** The whole Main Document text stream, control characters included -- the only way to observe which exact terminator character (a section mark vs. an ordinary paragraph mark) writeDocContent chose at a given position, since readDocContent's own section split relies on PlcfSed's cp boundaries rather than on this specific character value. */
+/** The whole Main Document text stream, control characters included — the only way to observe which exact terminator character (a section mark vs. an ordinary paragraph mark) writeDocContent chose at a given position, since readDocContent's own section split relies on PlcfSed's cp boundaries rather than on this specific character value. */
 function rawText(bytes: Uint8Array<ArrayBuffer>): string {
   const { wordDocument, table, fib } = readDocStreams(bytes);
   const pieceTable = parseClx(slice(table, fib.fcClx, fib.lcbClx, "Clx"));
@@ -193,7 +193,7 @@ describe("writeDocContent", () => {
   });
 
   it("round-trips a run explicitly turning a property off", () => {
-    // bold:false must survive as a genuine ToggleOperand 0x00, not be silently equivalent to omitting the sprm -- distinguished here by writing it adjacent to a bold:true run, which would otherwise merge with an "absent" run into one Chpx exception.
+    // bold:false must survive as a genuine ToggleOperand 0x00, not be silently equivalent to omitting the sprm — distinguished here by writing it adjacent to a bold:true run, which would otherwise merge with an "absent" run into one Chpx exception.
     const input = document([
       paragraph([
         { text: "bold", bold: true },
@@ -284,7 +284,7 @@ describe("writeDocContent", () => {
   });
 
   it("round-trips a paragraph's own left and right indent together", () => {
-    // sprmPDxaLeft (0x845E) and sprmPDxaRight (0x845D) differ by one bit -- a regression here would show up as one indent silently overwriting the other rather than as a missing property, so this pins both present at once with different, sign-distinct values.
+    // sprmPDxaLeft (0x845E) and sprmPDxaRight (0x845D) differ by one bit — a regression here would show up as one indent silently overwriting the other rather than as a missing property, so this pins both present at once with different, sign-distinct values.
     const input = document([
       paragraph([{ text: "boxed" }], {
         indentLeftPt: 18,
@@ -358,7 +358,7 @@ describe("writeDocContent", () => {
   });
 
   it("round-trips characters outside the Basic Multilingual Plane and outside Latin-1", () => {
-    // This writer only ever emits 16-bit (uncompressed) pieces (see text/piece-table-write.ts), so a character the reader's own COMPRESSED_CHARACTER_MAP has no entry for is never at risk -- a surrogate pair is simply two ordinary UTF-16 code units to a 16-bit piece.
+    // This writer only ever emits 16-bit (uncompressed) pieces (see text/piece-table-write.ts), so a character the reader's own COMPRESSED_CHARACTER_MAP has no entry for is never at risk — a surrogate pair is simply two ordinary UTF-16 code units to a 16-bit piece.
     const input = document([paragraph([{ text: "café 中文 😀" }])]);
     const result = roundTrip(input);
     expect(paragraphAt(result, 0).runs[0]?.text).toBe("café 中文 😀");
@@ -400,7 +400,7 @@ describe("writeDocContent", () => {
   });
 
   it("does not write past the text stream's own end when its length lands exactly on the next page boundary", () => {
-    // TEXT_FC (0x400) plus a 256-character text stream (512 bytes of 16-bit units) lands exactly on the next 512-byte FKP page boundary, leaving zero padding before the first ChpxFkp page begins -- if the text-writing loop's own bound wrote one character too many, the spurious extra code unit would land in that page's own first two bytes rather than in harmless padding.
+    // TEXT_FC (0x400) plus a 256-character text stream (512 bytes of 16-bit units) lands exactly on the next 512-byte FKP page boundary, leaving zero padding before the first ChpxFkp page begins — if the text-writing loop's own bound wrote one character too many, the spurious extra code unit would land in that page's own first two bytes rather than in harmless padding.
     const text = "A".repeat(255); // + the paragraph's own terminator makes 256 characters.
     const input = document([paragraph([{ text }])]);
     const result = roundTrip(input);
@@ -436,7 +436,7 @@ describe("writeDocContent", () => {
   });
 
   it("refuses a block kind it does not yet write, such as a construct-end marker", () => {
-    // A pageBreak used to be this test's refused kind and now writes (see the page-break describe below), so the generic non-paragraph-block refusal is exercised through a construct-boundary marker, which stays refused until ExaDev/documents.js#1122 lands. A close marker carries only its kind -- no descriptor, which is the open half's payload.
+    // A pageBreak used to be this test's refused kind and now writes (see the page-break describe below), so the generic non-paragraph-block refusal is exercised through a construct-boundary marker, which stays refused until ExaDev/documents.js#1122 lands. A close marker carries only its kind — no descriptor, which is the open half's payload.
     const input = document([{ kind: "constructEnd" }]);
     expect(() => writeDocContent(input)).toThrow(
       /doc-codec's writer does not yet support 'constructEnd' blocks/,
@@ -490,7 +490,7 @@ describe("writeDocContent", () => {
   });
 });
 
-// A manual page break is the end-of-section character (0x000C) placed where no section ends, per [MS-DOC]'s own PlcfSed.aCP text ("An end-of-section character (0x0C) which occurs at a CP and which is not the last character in a section specifies a manual page break"), and the writer's spelling retargets the preceding paragraph's own terminator to 0x000C -- so the ordinary case round-trips exactly, while a break with no ordinary paragraph before it to carry it mints the empty 0x000C-terminated paragraph the format requires (see appendPageBreak's own comment for why that empty paragraph is the format's own limit, not a loss).
+// A manual page break is the end-of-section character (0x000C) placed where no section ends, per [MS-DOC]'s own PlcfSed.aCP text ("An end-of-section character (0x0C) which occurs at a CP and which is not the last character in a section specifies a manual page break"), and the writer's spelling retargets the preceding paragraph's own terminator to 0x000C — so the ordinary case round-trips exactly, while a break with no ordinary paragraph before it to carry it mints the empty 0x000C-terminated paragraph the format requires (see appendPageBreak's own comment for why that empty paragraph is the format's own limit, not a loss).
 describe("writeDocContent page breaks", () => {
   it("round-trips a page break between two paragraphs as [paragraph, pageBreak, paragraph]", () => {
     const result = roundTrip(
@@ -516,7 +516,7 @@ describe("writeDocContent page breaks", () => {
         paragraph([{ text: "after two breaks" }]),
       ]),
     );
-    // The first break retargets "kept"'s own terminator; the second has no ordinary paragraph mark behind it any more, so it mints its own empty 0x000C-terminated paragraph -- visible in the round trip as the empty paragraph between the two breaks, exactly as appendPageBreak's comment states.
+    // The first break retargets "kept"'s own terminator; the second has no ordinary paragraph mark behind it any more, so it mints its own empty 0x000C-terminated paragraph — visible in the round trip as the empty paragraph between the two breaks, exactly as appendPageBreak's comment states.
     expect(blocksOf(result)).toEqual([
       { kind: "paragraph", runs: [{ text: "kept" }], alignment: "center" },
       { kind: "pageBreak" },
@@ -591,7 +591,7 @@ describe("writeDocContent page breaks", () => {
       throw new Error("a .doc always reads back as a wordprocessing document");
     }
     expect(result.sections).toHaveLength(2);
-    // The break's 0x000C lands immediately before the section's own end-of-section character, and closeSection's existing trailing-paragraph guarantee supplies the ordinary paragraph mark the section boundary needs -- so the break itself survives, with the paragraph it forced stated in the round trip.
+    // The break's 0x000C lands immediately before the section's own end-of-section character, and closeSection's existing trailing-paragraph guarantee supplies the ordinary paragraph mark the section boundary needs — so the break itself survives, with the paragraph it forced stated in the round trip.
     expect(result.sections[0]?.blocks).toEqual([
       { kind: "paragraph", runs: [{ text: "ending on a break" }] },
       { kind: "pageBreak" },
@@ -725,7 +725,7 @@ describe("writeDocContent multiple sections", () => {
       throw new Error("a .doc always reads back as a wordprocessing document");
     }
     expect(result.sections).toHaveLength(2);
-    // The section's own end-of-section character may not land on the table's own row-ending mark (closeSection's own guarantee -- see writeDocContent's own comment), so a trailing empty paragraph closes it first, exactly as [MS-DOC] 2.4.4's worked example requires.
+    // The section's own end-of-section character may not land on the table's own row-ending mark (closeSection's own guarantee — see writeDocContent's own comment), so a trailing empty paragraph closes it first, exactly as [MS-DOC] 2.4.4's worked example requires.
     expect(result.sections[0]?.blocks.map((block) => block.kind)).toEqual([
       "table",
       "paragraph",
@@ -946,7 +946,7 @@ describe("writeDocContent stories", () => {
     ).toThrow(DocFormatError);
   });
 
-  it("re-writes a full readDocContent output unchanged -- a genuine DocContent assigns straight across", () => {
+  it("re-writes a full readDocContent output unchanged — a genuine DocContent assigns straight across", () => {
     const first = roundTripStories({
       ...baseDocument([paragraph([{ text: "body" }])]),
       footnotes: [{ id: "1", text: "note" }],
@@ -1093,7 +1093,7 @@ describe("writeDocContent inline pictures", () => {
   });
 });
 
-// ExaDev/documents.js#1059: writeDocContent used to hardcode istd 0 for every paragraph, so styleId/headingLevel never round-tripped at all. These pin the mint-a-real-STSH-entry fix -- identity only, no formatting of a style's own (every property still writes as a direct exception, unchanged).
+// ExaDev/documents.js#1059: writeDocContent used to hardcode istd 0 for every paragraph, so styleId/headingLevel never round-tripped at all. These pin the mint-a-real-STSH-entry fix — identity only, no formatting of a style's own (every property still writes as a direct exception, unchanged).
 describe("writeDocContent style identity", () => {
   it("round-trips a heading's own styleId and headingLevel through a real STSH entry", () => {
     const input = document([
@@ -1103,7 +1103,7 @@ describe("writeDocContent style identity", () => {
     const result = roundTrip(input);
     expect(paragraphAt(result, 0).styleId).toBe("heading 1");
     expect(paragraphAt(result, 0).headingLevel).toBe(1);
-    // An ordinary paragraph with neither field keeps neither -- istd 0 stays an unnamed hole rather than a real "Normal" entry, so an absent styleId round-trips as absent, not as the string "Normal".
+    // An ordinary paragraph with neither field keeps neither — istd 0 stays an unnamed hole rather than a real "Normal" entry, so an absent styleId round-trips as absent, not as the string "Normal".
     expect(paragraphAt(result, 1).styleId).toBeUndefined();
     expect(paragraphAt(result, 1).headingLevel).toBeUndefined();
   });
@@ -1212,7 +1212,7 @@ describe("writeDocContent numbering", () => {
     ]);
     const bytes = writeDocContent(input);
     const result = readDocContent(bytes);
-    // Neither original numId ("5"/"9") survives: [MS-DOC] addresses a list by a one-based ilfo, not an opaque identifier, so this package's own writer renumbers to whichever ilfo it mints -- see list/numbering-write.ts's own top comment.
+    // Neither original numId ("5"/"9") survives: [MS-DOC] addresses a list by a one-based ilfo, not an opaque identifier, so this package's own writer renumbers to whichever ilfo it mints — see list/numbering-write.ts's own top comment.
     expect(paragraphAt(result, 0).list).toEqual({ numId: "1", level: 0 });
     expect(paragraphAt(result, 1).list).toEqual({ numId: "2", level: 0 });
     expect(result.numbering["1"]?.levels["0"]?.format).toBe("decimal");
@@ -1379,7 +1379,7 @@ describe("writeDocContent tables", () => {
   });
 
   it("round-trips a horizontally merged cell's colSpan via the merged row's own narrower, wider physical cells", () => {
-    // A real, independent [MS-DOC] implementation (LibreOffice 26.2.5.2) was confirmed not to read TCGRF.horzMerge/sprmTMerge at all for a horizontal merge -- it states one purely through a merged row's own physical cell layout: fewer, wider cells than an unmerged row in the same table (ExaDev/documents.js#895). This writer matches that encoding whenever some other row in the table would otherwise reveal the merged boundary anyway, so the merged row genuinely has 2 physical cells here, not 3 -- the reader recovers colSpan by comparing this row's own boundaries against the second, unmerged row's, which is what reveals that the table has 3 conceptual columns at all (see the dedicated "recovers colSpan and columnWidthsPt" test below for the fallback this writer uses instead when no row ever reveals that boundary on its own).
+    // A real, independent [MS-DOC] implementation (LibreOffice 26.2.5.2) was confirmed not to read TCGRF.horzMerge/sprmTMerge at all for a horizontal merge — it states one purely through a merged row's own physical cell layout: fewer, wider cells than an unmerged row in the same table (ExaDev/documents.js#895). This writer matches that encoding whenever some other row in the table would otherwise reveal the merged boundary anyway, so the merged row genuinely has 2 physical cells here, not 3 — the reader recovers colSpan by comparing this row's own boundaries against the second, unmerged row's, which is what reveals that the table has 3 conceptual columns at all (see the dedicated "recovers colSpan and columnWidthsPt" test below for the fallback this writer uses instead when no row ever reveals that boundary on its own).
     const input = document([
       {
         kind: "table",
@@ -1422,7 +1422,7 @@ describe("writeDocContent tables", () => {
   });
 
   it("recovers colSpan and columnWidthsPt via a horizontal-merge continuation cell when no row in the table ever states the boundary a merge crosses (ExaDev/documents.js#992)", () => {
-    // [MS-DOC]'s own physical model (see the previous test's note) states a table's column grid entirely through the boundaries each row's own TDefTableOperand declares. When literally every row merges across the identical span -- as a single-row table with one merged cell necessarily does, having no other row to compare against -- the merged-pair boundary is never stated by the ordinary narrower/wider physical-cell encoding at all. table/write.ts's own lost-boundary fallback detects exactly this and keeps the boundary physically present instead: the merged cell is written as 2 physical cells, the first carrying the real content, the second an empty TCGRF.horzMerge continuation -- so the row's own rgdxaCenter states all 3 of the table's columns after all.
+    // [MS-DOC]'s own physical model (see the previous test's note) states a table's column grid entirely through the boundaries each row's own TDefTableOperand declares. When literally every row merges across the identical span — as a single-row table with one merged cell necessarily does, having no other row to compare against — the merged-pair boundary is never stated by the ordinary narrower/wider physical-cell encoding at all. table/write.ts's own lost-boundary fallback detects exactly this and keeps the boundary physically present instead: the merged cell is written as 2 physical cells, the first carrying the real content, the second an empty TCGRF.horzMerge continuation — so the row's own rgdxaCenter states all 3 of the table's columns after all.
     const input = document([
       {
         kind: "table",
@@ -1453,7 +1453,7 @@ describe("writeDocContent tables", () => {
   });
 
   it("recovers colSpan and columnWidthsPt when every row of a multi-row table merges across the identical boundary (ExaDev/documents.js#992)", () => {
-    // The previous test's single row is the simplest case of this gap; the issue itself names the general one -- a boundary every row merges across identically, however many rows the table has. Both rows here merge columns 0-1 into one cell, so neither row's own rgdxaCenter would ever state that boundary under the ordinary narrower/wider encoding: the fallback must apply to both rows, not just one, since either row on its own is a table with no other row to compare against.
+    // The previous test's single row is the simplest case of this gap; the issue itself names the general one — a boundary every row merges across identically, however many rows the table has. Both rows here merge columns 0-1 into one cell, so neither row's own rgdxaCenter would ever state that boundary under the ordinary narrower/wider encoding: the fallback must apply to both rows, not just one, since either row on its own is a table with no other row to compare against.
     const input = document([
       {
         kind: "table",
@@ -1491,7 +1491,7 @@ describe("writeDocContent tables", () => {
   });
 
   it("recovers two adjacent lost boundaries inside a single colSpan-3 cell", () => {
-    // A single-row table has no other row to state a boundary through, so both of the wide cell's own internal boundaries are lost at once -- splitAtLostBoundaries must break the one cell into three physical sub-cells (content, continuation, continuation), not just one.
+    // A single-row table has no other row to state a boundary through, so both of the wide cell's own internal boundaries are lost at once — splitAtLostBoundaries must break the one cell into three physical sub-cells (content, continuation, continuation), not just one.
     const input = document([
       {
         kind: "table",
@@ -1517,7 +1517,7 @@ describe("writeDocContent tables", () => {
   });
 
   it("recovers non-contiguous lost boundaries when a third row states the boundary in between two that stay lost", () => {
-    // Rows A and B both merge columns 0-3 into one cell, identically, so neither boundary 1 nor boundary 3 (columns 0|1 and 2|3) is ever stated by either of them. Row C merges only columns 0-1 and 2-3, which states the boundary in between (2) but not the ones either side (1 and 3) -- so the table's own lost set is {1, 3}, a non-contiguous pair with a recoverable gap between them, rather than the single contiguous run every other test in this suite exercises.
+    // Rows A and B both merge columns 0-3 into one cell, identically, so neither boundary 1 nor boundary 3 (columns 0|1 and 2|3) is ever stated by either of them. Row C merges only columns 0-1 and 2-3, which states the boundary in between (2) but not the ones either side (1 and 3) — so the table's own lost set is {1, 3}, a non-contiguous pair with a recoverable gap between them, rather than the single contiguous run every other test in this suite exercises.
     const input = document([
       {
         kind: "table",
@@ -1604,7 +1604,7 @@ describe("writeDocContent tables", () => {
   });
 
   it("recovers colSpan and rowSpan together when a vertical-merge anchor's own colSpan crosses a lost boundary (ExaDev/documents.js#992)", () => {
-    // The anchor (row 0) and its own vertical-merge continuation (row 1) are the table's only two rows, and both merge columns 0-2 identically -- there is no third row to reveal either internal boundary, so both are lost. The fallback must split the rowSpan anchor itself, not just an ordinary cell, and must split the continuation's own inherited span the same way.
+    // The anchor (row 0) and its own vertical-merge continuation (row 1) are the table's only two rows, and both merge columns 0-2 identically — there is no third row to reveal either internal boundary, so both are lost. The fallback must split the rowSpan anchor itself, not just an ordinary cell, and must split the continuation's own inherited span the same way.
     const input = document([
       {
         kind: "table",
@@ -1643,7 +1643,7 @@ describe("writeDocContent tables", () => {
   });
 
   it("writes an ordinary, fully unmerged 20-column table without the lost-boundary fallback touching it", () => {
-    // No cell here ever merges, so recoverableBoundaries states every internal boundary itself and the fallback assigns nothing to any row -- an ordinary wide table stays exactly as costly as it always was, unaffected by the boundary-distribution logic that exists only for merged tables. Every one of the table's own 19 internal boundaries must come back stated: a recoverableBoundaries or column-tracking defect that silently treated some of them as unrecoverable would surface here as a spurious onWarning, not as wrong content, since flattenTable's own fallback machinery would otherwise engage for a table that never needed it at all.
+    // No cell here ever merges, so recoverableBoundaries states every internal boundary itself and the fallback assigns nothing to any row — an ordinary wide table stays exactly as costly as it always was, unaffected by the boundary-distribution logic that exists only for merged tables. Every one of the table's own 19 internal boundaries must come back stated: a recoverableBoundaries or column-tracking defect that silently treated some of them as unrecoverable would surface here as a spurious onWarning, not as wrong content, since flattenTable's own fallback machinery would otherwise engage for a table that never needed it at all.
     const columnCount = 20;
     const input = document([
       {
@@ -1673,7 +1673,7 @@ describe("writeDocContent tables", () => {
   });
 
   it("writes a wide table where every row merges across the entire grid without exceeding any single row's own PapxInFkp budget (ExaDev/documents.js#992 regression)", () => {
-    // Every row here has exactly one cell spanning the whole grid, so none of the table's 23 internal boundaries is ever stated by any row -- all 23 are lost. Splitting every row at every lost boundary (this writer's own pre-fix behaviour) would make each of the 3 rows state all 24 columns physically, which alone exceeds a PapxInFkp's own 510-byte GrpPrlAndIstd ceiling (see the README's own 15 + 22 × columns <= 487 arithmetic, which gives 21 columns as the exact per-row ceiling) even though the table has rows enough to share the work; the fix must spread the 23 boundaries across the 3 rows instead of restating every one of them in every row.
+    // Every row here has exactly one cell spanning the whole grid, so none of the table's 23 internal boundaries is ever stated by any row — all 23 are lost. Splitting every row at every lost boundary (this writer's own pre-fix behaviour) would make each of the 3 rows state all 24 columns physically, which alone exceeds a PapxInFkp's own 510-byte GrpPrlAndIstd ceiling (see the README's own 15 + 22 × columns <= 487 arithmetic, which gives 21 columns as the exact per-row ceiling) even though the table has rows enough to share the work; the fix must spread the 23 boundaries across the 3 rows instead of restating every one of them in every row.
     const columnCount = 24;
     const rowCount = 3;
     const columnWidthsPt = Array.from({ length: columnCount }, () => 20);
@@ -1698,7 +1698,7 @@ describe("writeDocContent tables", () => {
   });
 
   it("keeps every row's own #992 fix when a table is wide enough that one row's assigned split sits right at the per-row PapxInFkp budget (ExaDev/documents.js#1013)", () => {
-    // 41 columns, 2 rows, every row merging across the whole grid: 40 internal boundaries are lost and distributed round-robin, 20 to each row. A row assigned 20 boundaries splits into 21 physical TC80 cells -- exactly the ceiling an undecorated row's own row-mark grpprl can still fit alone on a PapxFkp page (15 fixed bytes -- sprmPFInTable and sprmPFTtp at 3 bytes each, sprmTDefTable's own opcode and cb at 2 bytes each with no istd field of its own, TDefTableOperand's own NumberOfColumns byte and the extra (n+1)th rgdxaCenter boundary every row's TAP carries beyond the per-cell figure, and GrpPrlAndIstd's own istd prefix that buildPapxPage adds ahead of the grpprl -- plus 22 bytes per physical cell+boundary pair, must stay at or under the 487-byte grpPrlAndIstd a lone paragraph can actually claim once a page's own front-reserved rgfc/BxPap bytes are subtracted from the raw 510-byte MAX_GRP_PRL_AND_ISTD ceiling -- see fkp-write.ts's own fitsAloneOnPapxPage). Neither row here needs the new per-row fallback, so both keep #992's own fix intact: no warning, and the full 41-column grid recovers on read.
+    // 41 columns, 2 rows, every row merging across the whole grid: 40 internal boundaries are lost and distributed round-robin, 20 to each row. A row assigned 20 boundaries splits into 21 physical TC80 cells — exactly the ceiling an undecorated row's own row-mark grpprl can still fit alone on a PapxFkp page (15 fixed bytes — sprmPFInTable and sprmPFTtp at 3 bytes each, sprmTDefTable's own opcode and cb at 2 bytes each with no istd field of its own, TDefTableOperand's own NumberOfColumns byte and the extra (n+1)th rgdxaCenter boundary every row's TAP carries beyond the per-cell figure, and GrpPrlAndIstd's own istd prefix that buildPapxPage adds ahead of the grpprl — plus 22 bytes per physical cell+boundary pair, must stay at or under the 487-byte grpPrlAndIstd a lone paragraph can actually claim once a page's own front-reserved rgfc/BxPap bytes are subtracted from the raw 510-byte MAX_GRP_PRL_AND_ISTD ceiling — see fkp-write.ts's own fitsAloneOnPapxPage). Neither row here needs the new per-row fallback, so both keep #992's own fix intact: no warning, and the full 41-column grid recovers on read.
     const columnCount = 41;
     const rowCount = 2;
     const columnWidthsPt = Array.from({ length: columnCount }, () => 20);
@@ -1726,7 +1726,7 @@ describe("writeDocContent tables", () => {
   });
 
   it("trims one over-budget row down to what fits instead of dropping all of its assigned boundaries, reporting the degradation via onWarning (ExaDev/documents.js#1013, #992 follow-up)", () => {
-    // One column wider than the previous test: 41 internal boundaries now, round-robin distribution gives row 0 the extra one (21 boundaries, the odd remainder always lands on row 0) and row 1 the other 20. Row 0's own full 21-boundary split would produce 22 physical cells -- one past the 21-cell ceiling the previous test sits exactly at -- so flattenTable's own per-row budget check (table/write.ts) rejects it, but rather than dropping every one of row 0's assigned boundaries (this fallback's own original, all-or-nothing behaviour), it trims from the end until what remains fits: 20 of row 0's 21 boundaries survive, only the single highest-valued one is dropped. Row 1 is untouched and still states its own 20 boundaries. Combined, the two rows' own boundaries cover all but one of the table's 41 internal boundaries -- 41 of 42 columns recover, not the 21 an all-or-nothing fallback would leave -- and both rows' colSpan correctly reflects that near-complete, honestly-recovered grid.
+    // One column wider than the previous test: 41 internal boundaries now, round-robin distribution gives row 0 the extra one (21 boundaries, the odd remainder always lands on row 0) and row 1 the other 20. Row 0's own full 21-boundary split would produce 22 physical cells — one past the 21-cell ceiling the previous test sits exactly at — so flattenTable's own per-row budget check (table/write.ts) rejects it, but rather than dropping every one of row 0's assigned boundaries (this fallback's own original, all-or-nothing behaviour), it trims from the end until what remains fits: 20 of row 0's 21 boundaries survive, only the single highest-valued one is dropped. Row 1 is untouched and still states its own 20 boundaries. Combined, the two rows' own boundaries cover all but one of the table's 41 internal boundaries — 41 of 42 columns recover, not the 21 an all-or-nothing fallback would leave — and both rows' colSpan correctly reflects that near-complete, honestly-recovered grid.
     const columnCount = 42;
     const rowCount = 2;
     const columnWidthsPt = Array.from({ length: columnCount }, () => 20);
@@ -1764,7 +1764,7 @@ describe("writeDocContent tables", () => {
   });
 
   it("writes a single-row table whose one merged cell's split exactly fits the per-row budget, and trims to what fits one column past it, instead of throwing or dropping every boundary (ExaDev/documents.js#1013 regression: this writer used to throw DocFormatError above 21 columns here)", () => {
-    // A single-row table has no other row to share lost boundaries with, so every one of its internal boundaries is assigned to that one row (distributeLostBoundaries' own single-bucket case). 21 columns means 20 lost boundaries, splitting the merged cell into 21 physical cells -- the same per-row ceiling the two-row test above sits at -- and still gets #992's own fix in full. 22 columns means 21 lost boundaries, one physical cell past that ceiling: table/write.ts's own budget check now trims the assignment down to what fits instead of throwing or dropping every boundary -- 20 of the 21 survive, recovering 21 of the table's 22 columns even with no sibling row to share the work with.
+    // A single-row table has no other row to share lost boundaries with, so every one of its internal boundaries is assigned to that one row (distributeLostBoundaries' own single-bucket case). 21 columns means 20 lost boundaries, splitting the merged cell into 21 physical cells — the same per-row ceiling the two-row test above sits at — and still gets #992's own fix in full. 22 columns means 21 lost boundaries, one physical cell past that ceiling: table/write.ts's own budget check now trims the assignment down to what fits instead of throwing or dropping every boundary — 20 of the 21 survive, recovering 21 of the table's 22 columns even with no sibling row to share the work with.
     const withinBudget = 21;
     const overBudget = 22;
 
@@ -1816,7 +1816,7 @@ describe("writeDocContent tables", () => {
   });
 
   it("falls back for a lost-boundary split past the format's own 63-cell-per-row ceiling instead of throwing, trimming to what the row-ending mark's own byte budget still allows (ExaDev/documents.js#992 follow-up: this writer used to throw DocFormatError, not fall back, past 63 physical cells here)", () => {
-    // A single-row table with one cell spanning all 64 columns assigns every one of the table's 63 internal boundaries to that one row (no sibling to share with). The full split would need 64 physical cells -- one past TDefTableOperand's own hard NumberOfColumns ceiling ([MS-DOC] 2.9.321's own "MUST NOT exceed 63", not 2.4.3's separate "between 1 and 63 table cells" limit) -- which table/write.ts's own trial encoding used to hand straight to encodeTableRowGrpprl, throwing before the row-ending mark's own byte budget was ever tested. rowSplitFits now checks the cell count first and treats an over-ceiling split as "doesn't fit" like any other, so the same trimming loop that recovers a byte-budget overflow also recovers this one: it lands at the row-ending mark's own byte-budget ceiling (20 of the 63 assigned boundaries, 21 physical cells) long before the 63-cell limit itself would ever bind for an undecorated row.
+    // A single-row table with one cell spanning all 64 columns assigns every one of the table's 63 internal boundaries to that one row (no sibling to share with). The full split would need 64 physical cells — one past TDefTableOperand's own hard NumberOfColumns ceiling ([MS-DOC] 2.9.321's own "MUST NOT exceed 63", not 2.4.3's separate "between 1 and 63 table cells" limit) — which table/write.ts's own trial encoding used to hand straight to encodeTableRowGrpprl, throwing before the row-ending mark's own byte budget was ever tested. rowSplitFits now checks the cell count first and treats an over-ceiling split as "doesn't fit" like any other, so the same trimming loop that recovers a byte-budget overflow also recovers this one: it lands at the row-ending mark's own byte-budget ceiling (20 of the 63 assigned boundaries, 21 physical cells) long before the 63-cell limit itself would ever bind for an undecorated row.
     const columnCount = 64;
     const input = document([
       {
@@ -1937,7 +1937,7 @@ describe("writeDocContent tables", () => {
   });
 
   it("ends a vertical merge exactly after its own rowSpan, treating the very next row's cell as ordinary even when it is also blank", () => {
-    // The anchor's rowSpan of 3 covers itself plus 2 continuation rows (remaining decrements 2 -> 1 -> 0 across them); a 4th row's own cell at the identical column, though also blank, sits one row past where the merge already ended and must read back as its own independent, ordinary cell -- not a third continuation -- pinning placeCell's own remaining > 0 boundary rather than remaining >= 0.
+    // The anchor's rowSpan of 3 covers itself plus 2 continuation rows (remaining decrements 2 -> 1 -> 0 across them); a 4th row's own cell at the identical column, though also blank, sits one row past where the merge already ended and must read back as its own independent, ordinary cell — not a third continuation — pinning placeCell's own remaining > 0 boundary rather than remaining >= 0.
     const input = document([
       {
         kind: "table",
@@ -2234,7 +2234,7 @@ describe("writeDocContent tables", () => {
   });
 
   it("writes a vertical-merge anchor's own TCGRF as VERT_MERGE_RESTART, an ordinary cell's as plain 0, decoded straight from each row mark's own grpprl rather than through the schema round trip", () => {
-    // table/read.ts's own rowSpan computation (vertMergeChainLastRow) only ever inspects a FOLLOWING row's own vertMerge value when deciding how far a chain reaches -- never the anchor's own -- so this specific byte cannot be pinned by asserting anything about the round-tripped ContentTableCell (see flattenRow's own vertMerge comment for the full reasoning). It is still a real, load-bearing byte a genuine MS-DOC consumer other than this package's own reader depends on (LibreOffice's own import, and [MS-DOC] 2.9.317 itself), so it is verified here by decoding each row mark's own grpprl directly with the identical readGrpprl/applyTableSprms pair table/read.ts itself uses, rather than round-tripping through readDocContent. A third, wholly ordinary row is included alongside the anchor and its continuation specifically so a mutant collapsing the ternary to always 3 has something to disagree with: the anchor alone cannot tell "always 3" apart from the real rowSpan > 1 test.
+    // table/read.ts's own rowSpan computation (vertMergeChainLastRow) only ever inspects a FOLLOWING row's own vertMerge value when deciding how far a chain reaches — never the anchor's own — so this specific byte cannot be pinned by asserting anything about the round-tripped ContentTableCell (see flattenRow's own vertMerge comment for the full reasoning). It is still a real, load-bearing byte a genuine MS-DOC consumer other than this package's own reader depends on (LibreOffice's own import, and [MS-DOC] 2.9.317 itself), so it is verified here by decoding each row mark's own grpprl directly with the identical readGrpprl/applyTableSprms pair table/read.ts itself uses, rather than round-tripping through readDocContent. A third, wholly ordinary row is included alongside the anchor and its continuation specifically so a mutant collapsing the ternary to always 3 has something to disagree with: the anchor alone cannot tell "always 3" apart from the real rowSpan > 1 test.
     const input: readonly ContentBlock[] = [
       {
         kind: "table",
@@ -2270,7 +2270,7 @@ describe("writeDocContent tables", () => {
   });
 
   it("writes TCGRF.horzMerge 2 on a lost-boundary split's own first sub-cell, whether or not that cell is also a vertical-merge continuation", () => {
-    // logicalCellsForRow (table/read.ts) derives a physical cell's own colSpan purely from its physical boundaries against the table's shared canonical grid -- it never actually reads a NON-continuation cell's own horzMerge value at all (only a FOLLOWING cell's horzMerge === HORZ_MERGE_CONTINUATION decides whether that following cell folds into the one before it), so this specific byte cannot be pinned through the schema round trip either, for the identical reason the vertMerge test above cannot. It is still a real, spec-conformant TCGRF value ([MS-DOC] 2.9.317: "2 or 3 ... the first cell of a horizontally merged set") this writer states for a genuine third-party MS-DOC consumer, decoded here the same direct way. A single table with one rowSpan-2, colSpan-3 anchor and its own continuation row leaves both of the merge's own two internal boundaries lost (neither row states either on its own), assigned one to each row by distributeLostBoundaries' own round-robin -- so both the anchor row (isContinuation false) and the continuation row (isContinuation true) each end up splitting their own inherited span at their one assigned boundary, exercising the subSpans.length > 1 ternary in both of flattenRow's own branches at once.
+    // logicalCellsForRow (table/read.ts) derives a physical cell's own colSpan purely from its physical boundaries against the table's shared canonical grid — it never actually reads a NON-continuation cell's own horzMerge value at all (only a FOLLOWING cell's horzMerge === HORZ_MERGE_CONTINUATION decides whether that following cell folds into the one before it), so this specific byte cannot be pinned through the schema round trip either, for the identical reason the vertMerge test above cannot. It is still a real, spec-conformant TCGRF value ([MS-DOC] 2.9.317: "2 or 3 ... the first cell of a horizontally merged set") this writer states for a genuine third-party MS-DOC consumer, decoded here the same direct way. A single table with one rowSpan-2, colSpan-3 anchor and its own continuation row leaves both of the merge's own two internal boundaries lost (neither row states either on its own), assigned one to each row by distributeLostBoundaries' own round-robin — so both the anchor row (isContinuation false) and the continuation row (isContinuation true) each end up splitting their own inherited span at their one assigned boundary, exercising the subSpans.length > 1 ternary in both of flattenRow's own branches at once.
     const input: readonly ContentBlock[] = [
       {
         kind: "table",
@@ -2342,7 +2342,7 @@ describe("writeDocContent tables", () => {
   });
 
   it("writes TCGRF.horzMerge plain 0 on a vertical-merge continuation cell that never needed a lost-boundary split either", () => {
-    // The mirror image of the plain-0 test just above, but for isContinuation's own TRUE branch specifically (flattenRow's own OTHER subSpans.length > 1 site): a mutant collapsing that branch's ternary to always 2, or its >= 1 near-miss, has nothing to disagree with in the earlier "whether or not that cell is also a vertical-merge continuation" test, since the continuation cell asserted on there genuinely IS split. A single-column table can never lose a boundary at all -- there is only ever one physical cell per row, nothing for a boundary to fall between -- so its continuation row's own inherited span is always subSpans.length === 1.
+    // The mirror image of the plain-0 test just above, but for isContinuation's own TRUE branch specifically (flattenRow's own OTHER subSpans.length > 1 site): a mutant collapsing that branch's ternary to always 2, or its >= 1 near-miss, has nothing to disagree with in the earlier "whether or not that cell is also a vertical-merge continuation" test, since the continuation cell asserted on there genuinely IS split. A single-column table can never lose a boundary at all — there is only ever one physical cell per row, nothing for a boundary to fall between — so its continuation row's own inherited span is always subSpans.length === 1.
     const input: readonly ContentBlock[] = [
       {
         kind: "table",
@@ -2451,7 +2451,7 @@ describe("writeDocContent tables", () => {
   });
 
   it("falls all the way back to writing a row wholly unsplit when even its single most valuable assigned boundary cannot fit, warning with the singular wording (ExaDev/documents.js#1013)", () => {
-    // 20 ordinary, undecorated single-column cells plus one further 2-wide merged cell (21 columns, 1 row): the 20 plain cells' own boundaries are all recoverable on their own, leaving exactly the merge's own single internal boundary lost -- and, being a single row, assigned entirely to this one row. Splitting it would raise the row from 21 to 22 physical cells, which -- entirely from the 20 plain cells' own fixed 22-bytes-per-cell cost plus the row's own fixed 15-byte overhead -- already sits close enough to the 487-byte PapxInFkp ceiling that the extra cell tips it over, while the unsplit 21-cell form still fits. rowSplitFits therefore rejects the only candidate this row could ever try (kept.length reaches 0), which is the "could not state ... at all" wording this describe block's other trimming tests never reach, since each of them still keeps at least one boundary.
+    // 20 ordinary, undecorated single-column cells plus one further 2-wide merged cell (21 columns, 1 row): the 20 plain cells' own boundaries are all recoverable on their own, leaving exactly the merge's own single internal boundary lost — and, being a single row, assigned entirely to this one row. Splitting it would raise the row from 21 to 22 physical cells, which — entirely from the 20 plain cells' own fixed 22-bytes-per-cell cost plus the row's own fixed 15-byte overhead — already sits close enough to the 487-byte PapxInFkp ceiling that the extra cell tips it over, while the unsplit 21-cell form still fits. rowSplitFits therefore rejects the only candidate this row could ever try (kept.length reaches 0), which is the "could not state ... at all" wording this describe block's other trimming tests never reach, since each of them still keeps at least one boundary.
     const plainColumnCount = 20;
     const columnWidthsPt = [
       ...Array.from({ length: plainColumnCount }, () => 20),
@@ -2499,7 +2499,7 @@ describe("writeDocContent tables", () => {
   });
 
   it("never engages the lost-boundary fallback at all for a row with no merges, even one whose own bare cells already overflow the format's own byte budget", () => {
-    // 25 ordinary, single-column, unmerged cells: recoverableBoundaries states every internal boundary on its own (nothing merges across any of them), so this row's own assigned lost-boundary set is empty and flattenTable's own fallback code never runs for it at all -- not even to try, fail, and warn. The row's own bare, undecorated cells already cost 15 + 22 x 25 = 565 bytes, past the 487-byte PapxInFkp ceiling regardless of any lost-boundary machinery, so writeDocContent still throws -- but from the real, unrelated buildPapxPages call this fallback exists to route around only when boundaries are actually lost, never from this describe block's own onWarning at all.
+    // 25 ordinary, single-column, unmerged cells: recoverableBoundaries states every internal boundary on its own (nothing merges across any of them), so this row's own assigned lost-boundary set is empty and flattenTable's own fallback code never runs for it at all — not even to try, fail, and warn. The row's own bare, undecorated cells already cost 15 + 22 x 25 = 565 bytes, past the 487-byte PapxInFkp ceiling regardless of any lost-boundary machinery, so writeDocContent still throws — but from the real, unrelated buildPapxPages call this fallback exists to route around only when boundaries are actually lost, never from this describe block's own onWarning at all.
     const columnCount = 25;
     const input = document([
       {
@@ -2524,7 +2524,7 @@ describe("writeDocContent tables", () => {
   });
 
   it("throws for a row so wide that even its own fully-unsplit merged form still overflows the format's byte budget, after warning it could not state any of its assigned boundaries", () => {
-    // 30 colSpan-2 pairs (60 columns, 1 row): every pair's own internal boundary is lost (a single row states nothing any other row could corroborate), all 30 assigned to this one row. Even the fully collapsed, wholly-unsplit form -- kept.length trimmed all the way to 0, the smallest this row could ever ask rowSplitFits to try -- still costs 15 + 22 x 30 = 675 bytes, past the 487-byte ceiling: the trimming loop's own downward scan exhausts every candidate down to kept.length === 0 and stops there (rather than looping forever re-trying an already-empty candidate), leaving flattenRow to encode the row unsplit regardless, which writeDocContent's own later buildPapxPages call then genuinely rejects.
+    // 30 colSpan-2 pairs (60 columns, 1 row): every pair's own internal boundary is lost (a single row states nothing any other row could corroborate), all 30 assigned to this one row. Even the fully collapsed, wholly-unsplit form — kept.length trimmed all the way to 0, the smallest this row could ever ask rowSplitFits to try — still costs 15 + 22 x 30 = 675 bytes, past the 487-byte ceiling: the trimming loop's own downward scan exhausts every candidate down to kept.length === 0 and stops there (rather than looping forever re-trying an already-empty candidate), leaving flattenRow to encode the row unsplit regardless, which writeDocContent's own later buildPapxPages call then genuinely rejects.
     const pairCount = 30;
     const input = document([
       {
@@ -2579,10 +2579,10 @@ describe("writeDocContent tables", () => {
     if (block?.kind !== "table") {
       throw new Error("expected a table block");
     }
-    // The cell above a genuinely blank cell must not come back claiming a rowSpan it never had -- that would be exactly the "blank cell silently mis-written as a vertical-merge continuation" defect.
+    // The cell above a genuinely blank cell must not come back claiming a rowSpan it never had — that would be exactly the "blank cell silently mis-written as a vertical-merge continuation" defect.
     expect(block.rows[0]?.cells[0]?.rowSpan).toBeUndefined();
     expect(cellText(block.rows[0]?.cells[0])).toBe("A1");
-    // Unlike a vertical-merge continuation (which the reader normalises back to `blocks: []` regardless of its own paragraph content, since a continuation's content is never rendered), an ordinary blank cell keeps the single empty paragraph [MS-DOC] requires every physical cell to carry -- the closest a lossless round trip of "no blocks" can reach.
+    // Unlike a vertical-merge continuation (which the reader normalises back to `blocks: []` regardless of its own paragraph content, since a continuation's content is never rendered), an ordinary blank cell keeps the single empty paragraph [MS-DOC] requires every physical cell to carry — the closest a lossless round trip of "no blocks" can reach.
     expect(block.rows[1]?.cells[0]?.blocks).toEqual([
       { kind: "paragraph", runs: [] },
     ]);
@@ -2613,7 +2613,7 @@ describe("writeDocContent tables", () => {
               { blocks: [paragraph([{ text: "C2" }])] },
             ],
           },
-          // Neither row above ever states the boundary between the anchor's own 2 merged columns, since both merge across it identically -- a third, wholly unmerged row is what reveals the table genuinely has 3 columns here, so the lost-boundary fallback never triggers for this particular table (see this describe block's own "recovers colSpan and columnWidthsPt" tests for what the fallback does when no row reveals it at all).
+          // Neither row above ever states the boundary between the anchor's own 2 merged columns, since both merge across it identically — a third, wholly unmerged row is what reveals the table genuinely has 3 columns here, so the lost-boundary fallback never triggers for this particular table (see this describe block's own "recovers colSpan and columnWidthsPt" tests for what the fallback does when no row reveals it at all).
           {
             cells: [
               { blocks: [paragraph([{ text: "A3" }])] },
@@ -2646,7 +2646,7 @@ describe("writeDocContent tables", () => {
   });
 
   it("appends a trailing empty paragraph when a table is the section's own last block, so the document's last character is a genuine paragraph mark rather than the table's own row-ending cell mark", () => {
-    // [MS-DOC]'s own "Main Document" glossary entry: "The last character in the main document MUST be a paragraph mark (Unicode 0x000D)" -- never the row-ending mark's own cell-mark character (0x0007), even though a row-ending mark is a perfectly legal paragraph-boundary terminator everywhere else. Without this, a real third-party [MS-DOC] reader (LibreOffice) does not merely lose a property -- it fails to recognise the table at all (ExaDev/documents.js#892).
+    // [MS-DOC]'s own "Main Document" glossary entry: "The last character in the main document MUST be a paragraph mark (Unicode 0x000D)" — never the row-ending mark's own cell-mark character (0x0007), even though a row-ending mark is a perfectly legal paragraph-boundary terminator everywhere else. Without this, a real third-party [MS-DOC] reader (LibreOffice) does not merely lose a property — it fails to recognise the table at all (ExaDev/documents.js#892).
     const input = document([
       {
         kind: "table",
@@ -2695,7 +2695,7 @@ describe("writeDocContent tables", () => {
     expect(() => writeDocContent(input)).toThrow(DocUnsupportedError);
   });
 
-  // ContentTableCell.background and .borders, through TC80's own four Brc80 fields, the sprmTSetBrc exact-colour layer beside them, and the row's own sprmTDefTableShd array (src/table/decoration.ts). Every case here was additionally checked against real LibreOffice 26.2.5.2 output in both directions -- see the README's own "Third-party verification" paragraph for exactly which sub-cases that covered and which it did not.
+  // ContentTableCell.background and .borders, through TC80's own four Brc80 fields, the sprmTSetBrc exact-colour layer beside them, and the row's own sprmTDefTableShd array (src/table/decoration.ts). Every case here was additionally checked against real LibreOffice 26.2.5.2 output in both directions — see the README's own "Third-party verification" paragraph for exactly which sub-cases that covered and which it did not.
   describe("cell decoration", () => {
     // A single-cell table carrying whatever decoration a test wants to state, so each assertion below is about the decoration alone rather than about cell structure it re-establishes every time.
     const decorated = (cell: Partial<ContentTableCell>): ContentDocument =>
@@ -2728,7 +2728,7 @@ describe("writeDocContent tables", () => {
       expect(onlyCell(result).background).toEqual(background);
     });
 
-    it("round-trips a genuine two-colour pattern fill -- a percentage grey -- instead of dropping it (ExaDev/documents.js#951)", () => {
+    it("round-trips a genuine two-colour pattern fill — a percentage grey — instead of dropping it (ExaDev/documents.js#951)", () => {
       const background = {
         kind: "pattern" as const,
         patternType: "percent20" as const,
@@ -3048,7 +3048,7 @@ describe("writeDocContent: hyperlinks (#1187)", () => {
   });
 });
 
-// Every one of these names an invariant writeDocContent's own logic maintains, never one a caller's input could violate -- no real call through writeDocContent's own public surface can ever reach the assertDefined each one guards (see write.ts's own top comment for why). Asserted against a hardcoded duplicate rather than by importing and comparing a constant to itself, the same discipline errors.test.ts's own assertDefined tests follow -- otherwise a mutant emptying the constant's own declaration would still pass, since both sides of the comparison would be the identical mutated value.
+// Every one of these names an invariant writeDocContent's own logic maintains, never one a caller's input could violate — no real call through writeDocContent's own public surface can ever reach the assertDefined each one guards (see write.ts's own top comment for why). Asserted against a hardcoded duplicate rather than by importing and comparing a constant to itself, the same discipline errors.test.ts's own assertDefined tests follow — otherwise a mutant emptying the constant's own declaration would still pass, since both sides of the comparison would be the identical mutated value.
 describe("writeDocContent's own internal-defect messages", () => {
   it("names the numId NO_ILFO_MINTED_MESSAGE reports, JSON-quoted", () => {
     expect(NO_ILFO_MINTED_MESSAGE("3")).toBe(
@@ -3139,7 +3139,7 @@ describe("layoutParagraphText", () => {
   });
 
   it("gives a paragraph with no runs of its own a fresh, plain exception for its terminator alone", () => {
-    // No run at all means chpxRuns is still empty when the mark is reached -- lastRun is undefined, so the extension check can never match, and the mark gets pushed as its own one-character exception rather than extending nothing.
+    // No run at all means chpxRuns is still empty when the mark is reached — lastRun is undefined, so the extension check can never match, and the mark gets pushed as its own one-character exception rather than extending nothing.
     const { chpxRuns } = layoutParagraphText([
       { runs: [], terminator: PARAGRAPH_MARK },
     ]);

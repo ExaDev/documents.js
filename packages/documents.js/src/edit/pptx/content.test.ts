@@ -315,7 +315,7 @@ describe("buildPptxPackage", () => {
 
 describe("embeddedPresentationSerialiser", () => {
   it("round-trips a docx embedded presentation through ooxml.js's docx writer, the nested deck re-serialised by buildPptxPackage", () => {
-    // The wiring half of #742's port: ooxml.js's docx writer accepts an injected presentation serialiser because it cannot depend on the one pptx builder in the ecosystem -- this package's own buildPptxPackage -- without inverting the family's layering. This value IS that wiring, so the proof has to be the whole loop: a presentation embed built into a docx through ooxml.js's writer with the serialiser injected, then re-read, with the deck's own content surviving.
+    // The wiring half of #742's port: ooxml.js's docx writer accepts an injected presentation serialiser because it cannot depend on the one pptx builder in the ecosystem — this package's own buildPptxPackage — without inverting the family's layering. This value IS that wiring, so the proof has to be the whole loop: a presentation embed built into a docx through ooxml.js's writer with the serialiser injected, then re-read, with the deck's own content surviving.
     const deck = presentationDoc([
       {
         size: SLIDE_SIZE,
@@ -572,7 +572,7 @@ describe("buildPptxPackage: table merges follow the dense grid", () => {
     ).toEqual(["0,1", "1,0", "1,1"]);
   });
 
-  // ExaDev/documents.js#1376: verticalAlign never wrote or read back at all -- writing it here onto both an anchor cell and a covered entry, then reading the built package back through readPptxContent, exercises the write path (applyCellDecoration -> PptxTableCell.verticalAlign -> a:tcPr/@anchor) and the read path (readTableCell -> readTableCellVerticalAlign) together, the same full round trip builtCells' own narrower a:tc-inspecting helper above does not cover.
+  // ExaDev/documents.js#1376: verticalAlign never wrote or read back at all — writing it here onto both an anchor cell and a covered entry, then reading the built package back through readPptxContent, exercises the write path (applyCellDecoration -> PptxTableCell.verticalAlign -> a:tcPr/@anchor) and the read path (readTableCell -> readTableCellVerticalAlign) together, the same full round trip builtCells' own narrower a:tc-inspecting helper above does not cover.
   it("round-trips a cell's verticalAlign, on both an anchor and a covered entry, through a real build-then-read cycle", () => {
     const pkg = buildPptxPackage(
       presentationDoc([

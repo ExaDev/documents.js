@@ -1,4 +1,4 @@
-// The MD4 message digest, RFC 1320 (https://www.rfc-editor.org/rfc/rfc1320), hand-written for the one thing in this package that needs it: an Escher blip's rgbUid ([MS-ODRAW] OfficeArtFBSE and the OfficeArtBlip family both define the field as "an MD4 message digest ... that specifies the unique identifier of the pixel data in the BLIP", and a real consumer keys its picture cache on it, so writing zeros would hand every reader a digest that names no data). No platform crypto API offers MD4 -- WebCrypto never has, and OpenSSL 3 dropped it from its default provider -- the identical reason archive-codec hand-writes RC4 and MD5 for the legacy encryption schemes; this module stays local to xls-codec until a second package needs it, rather than promoting a one-consumer primitive into a sibling.
+// The MD4 message digest, RFC 1320 (https://www.rfc-editor.org/rfc/rfc1320), hand-written for the one thing in this package that needs it: an Escher blip's rgbUid ([MS-ODRAW] OfficeArtFBSE and the OfficeArtBlip family both define the field as "an MD4 message digest ... that specifies the unique identifier of the pixel data in the BLIP", and a real consumer keys its picture cache on it, so writing zeros would hand every reader a digest that names no data). No platform crypto API offers MD4 — WebCrypto never has, and OpenSSL 3 dropped it from its default provider — the identical reason archive-codec hand-writes RC4 and MD5 for the legacy encryption schemes; this module stays local to xls-codec until a second package needs it, rather than promoting a one-consumer primitive into a sibling.
 //
 // The three rounds below are a direct transcription of RFC 1320 A.3's own 48-operation schedule rather than a loop over index/rotation tables: the schedule's per-operation orderings (round 1 straight through X[0..15] with rotations 3/7/11/19; round 2 stepping by 4 with rotations 3/5/9/13; round 3 over the permuted 0,8,4,12... order with rotations 3/9/11/15) are the digest itself, and spelling them out keeps every line checkable against the published pseudocode.
 
@@ -38,7 +38,7 @@ type BlockWords = readonly [
 type WordIndex =
   0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
 
-/** The three auxiliary functions of RFC 1320 2.2, each a bit-selection over x/y/z -- G and H are MD4's own, not MD5's similarly-named ones. */
+/** The three auxiliary functions of RFC 1320 2.2, each a bit-selection over x/y/z — G and H are MD4's own, not MD5's similarly-named ones. */
 function f(x: number, y: number, z: number): number {
   return (x & y) | (~x & z);
 }
@@ -56,7 +56,7 @@ function rotateLeft(x: number, count: number): number {
   return ((x << count) | (x >>> (32 - count))) >>> 0;
 }
 
-/** The padding of RFC 1320 3.1: the message, a single 1 bit, zeros, then the 64-bit little-endian bit length, filling the final block(s) to a 64-byte multiple. The length field's high 32 bits are never written: every message this hand-written digest ever hashes is an in-memory Escher blip payload, thousands of bytes at most, so `message.length * 8` never approaches 2**32 -- and a freshly allocated Uint8Array is already zero-filled, so stating the high word explicitly would be a redundant call rather than a real fact about the message. */
+/** The padding of RFC 1320 3.1: the message, a single 1 bit, zeros, then the 64-bit little-endian bit length, filling the final block(s) to a 64-byte multiple. The length field's high 32 bits are never written: every message this hand-written digest ever hashes is an in-memory Escher blip payload, thousands of bytes at most, so `message.length * 8` never approaches 2**32 — and a freshly allocated Uint8Array is already zero-filled, so stating the high word explicitly would be a redundant call rather than a real fact about the message. */
 function padMessage(message: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
   const bitLength = message.length * 8;
   const paddedLength =
@@ -69,7 +69,7 @@ function padMessage(message: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
   return out;
 }
 
-/** RFC 1320 A.3's register rotation, restated once: after an operation updates the frame's first register, the frame rotates right so the next operation's target is first again -- exactly the ABCD/DABC/CDAB/BCDA cycling the printed schedule shows. */
+/** RFC 1320 A.3's register rotation, restated once: after an operation updates the frame's first register, the frame rotates right so the next operation's target is first again — exactly the ABCD/DABC/CDAB/BCDA cycling the printed schedule shows. */
 function rotateRegisters(
   frame: [number, number, number, number],
   updated: number,
@@ -78,7 +78,7 @@ function rotateRegisters(
 }
 
 /**
- * The MD4 digest of `message`, as 32 lowercase hex characters -- the digest bytes in order, which RFC 1320 3.5 states begin with the LOW-order byte of A ("beginning with the low-order byte of A, and ending with the high-order byte of D"), so each register is emitted little-endian rather than as a big-endian hex word.
+ * The MD4 digest of `message`, as 32 lowercase hex characters — the digest bytes in order, which RFC 1320 3.5 states begin with the LOW-order byte of A ("beginning with the low-order byte of A, and ending with the high-order byte of D"), so each register is emitted little-endian rather than as a big-endian hex word.
  */
 export function md4(message: Uint8Array<ArrayBuffer>): string {
   const padded = padMessage(message);
@@ -94,7 +94,7 @@ export function md4(message: Uint8Array<ArrayBuffer>): string {
 
   for (let offset = 0; offset < padded.length; offset += BLOCK_SIZE) {
     const x: BlockWords = [
-      // The first word needs no offset term at all -- `+ 0 * 4` is always exactly `offset` regardless of which arithmetic operator produced the zero, so stating it would only be restating the same value a different, more roundabout way.
+      // The first word needs no offset term at all — `+ 0 * 4` is always exactly `offset` regardless of which arithmetic operator produced the zero, so stating it would only be restating the same value a different, more roundabout way.
       view.getUint32(offset, true),
       view.getUint32(offset + 1 * 4, true),
       view.getUint32(offset + 2 * 4, true),
@@ -191,7 +191,7 @@ export function md4(message: Uint8Array<ArrayBuffer>): string {
     hh(7, 11);
     hh(15, 15);
 
-    // RFC 1320 3.3 step 4: "add that to the input values" -- the Davies-Meyer-style feed-forward that makes each block's output depend on its input chaining value.
+    // RFC 1320 3.3 step 4: "add that to the input values" — the Davies-Meyer-style feed-forward that makes each block's output depend on its input chaining value.
     a = (a + savedA) >>> 0;
     b = (b + savedB) >>> 0;
     c = (c + savedC) >>> 0;

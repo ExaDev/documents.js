@@ -70,7 +70,7 @@ describe("buildGposKernLookup against the real vendored Carlito", () => {
   });
 
   it("reads the bold and italic faces, which declare their own different values", () => {
-    // Each face kerns independently -- asserting the same numbers across faces would prove only that the parser is consistent, not that it read each face.
+    // Each face kerns independently — asserting the same numbers across faces would prove only that the parser is consistent, not that it read each face.
     const bold = kernerFor(carlitoBoldBytes());
     expect(bold("AV")).toBe(-105);
     expect(bold("To")).toBe(-177);
@@ -117,7 +117,7 @@ describe("buildGposKernLookup against the real vendored Caladea", () => {
   });
 
   it("resolves pairs that only its PairPos format 1 subtable describes", () => {
-    // Each of these is listed explicitly in a format 1 subtable, and the class-based format 2 subtables later in the same lookup give a genuinely different answer for every one of them -- 0 for the first four, and a larger adjustment for the last three. That makes these values a real discriminator: a parser that failed to read format 1, or that reached the format 2 subtables first, would return the other number rather than these.
+    // Each of these is listed explicitly in a format 1 subtable, and the class-based format 2 subtables later in the same lookup give a genuinely different answer for every one of them — 0 for the first four, and a larger adjustment for the last three. That makes these values a real discriminator: a parser that failed to read format 1, or that reached the format 2 subtables first, would return the other number rather than these.
     const kern = kernerFor(caladeaRegularBytes());
     expect(kern("av")).toBe(-20); // format 2 alone would say 0
     expect(kern("FC")).toBe(-7); // format 2 alone would say 0
@@ -136,7 +136,7 @@ describe("buildGposKernLookup reports what a font does not kern", () => {
   });
 
   it("distinguishes a pair a subtable covers but leaves alone from one nothing covers", () => {
-    // 'r' is covered as a first glyph and 'rn' really does resolve, to an adjustment of zero -- a different fact from 'll' above, and worth reporting as such rather than collapsing both into undefined.
+    // 'r' is covered as a first glyph and 'rn' really does resolve, to an adjustment of zero — a different fact from 'll' above, and worth reporting as such rather than collapsing both into undefined.
     const kern = kernerFor(carlitoRegularBytes());
     expect(kern("rn")).toBe(0);
     expect(kern("ll")).toBeUndefined();
@@ -169,7 +169,7 @@ describe("buildGposKernLookup takes glyph IDs, not characters", () => {
   });
 });
 
-// A minimal, spec-shaped GPOS carrying exactly one kern feature and one lookup, for the cases no vendored font contains. Every face here declares valueFormat1 = XAdvance alone with valueFormat2 = 0, so the ValueRecord field-ordering and record-stride arithmetic below -- what happens when XAdvance is preceded by other fields, or when a second ValueRecord widens every record -- has no real font to exercise it and needs building by hand.
+// A minimal, spec-shaped GPOS carrying exactly one kern feature and one lookup, for the cases no vendored font contains. Every face here declares valueFormat1 = XAdvance alone with valueFormat2 = 0, so the ValueRecord field-ordering and record-stride arithmetic below — what happens when XAdvance is preceded by other fields, or when a second ValueRecord widens every record — has no real font to exercise it and needs building by hand.
 const GPOS_PROLOGUE_SIZE = 56;
 
 function buildGpos(
@@ -236,7 +236,7 @@ function fontWithGpos(gpos: Uint8Array<ArrayBuffer>): SfntFont {
   return parse(bytes);
 }
 
-// A PairPos format 1 subtable covering one first glyph, with one second glyph carrying `value1` then `value2` -- each an int16 per set bit of its own valueFormat, in the spec's fixed field order.
+// A PairPos format 1 subtable covering one first glyph, with one second glyph carrying `value1` then `value2` — each an int16 per set bit of its own valueFormat, in the spec's fixed field order.
 function pairPosFormat1(options: {
   firstGlyphId: number;
   secondGlyphId: number;
@@ -316,7 +316,7 @@ describe("buildGposKernLookup reads XAdvance out of a ValueRecord of any shape",
   });
 
   it("ignores the trailing fields and the whole second ValueRecord", () => {
-    // YAdvance follows XAdvance, and valueFormat2's own record follows both -- neither may be mistaken for the first glyph's horizontal adjustment, and both widen the record the parser must stride over.
+    // YAdvance follows XAdvance, and valueFormat2's own record follows both — neither may be mistaken for the first glyph's horizontal adjustment, and both widen the record the parser must stride over.
     const valueFormat1 = VALUE_FORMAT_X_ADVANCE | VALUE_FORMAT_Y_ADVANCE;
     const valueFormat2 = VALUE_FORMAT_X_PLACEMENT | VALUE_FORMAT_X_ADVANCE;
     const font = fontWithGpos(

@@ -41,7 +41,7 @@ import {
   pptxToPdf,
 } from "./convert";
 
-// PDF object dictionaries are written as ordinary, uncompressed PDF objects (only content streams and image/font data are deflated), so a font resource is genuinely inspectable in the raw bytes -- which is the point of asserting on them here rather than on this package's own reader: a test that only asked readPdf what it recovered would be asking the writer's own sibling to confirm the writer's output, and could pass while the bytes carried no font program at all. 'latin1' rather than 'utf-8': PDF bytes are not valid UTF-8, and a replacement character mid-stream could otherwise swallow an ASCII marker we are searching for. Every byte above 0x7F decodes to some non-ASCII character under this label, so no spurious ASCII match can be manufactured by the decode.
+// PDF object dictionaries are written as ordinary, uncompressed PDF objects (only content streams and image/font data are deflated), so a font resource is genuinely inspectable in the raw bytes — which is the point of asserting on them here rather than on this package's own reader: a test that only asked readPdf what it recovered would be asking the writer's own sibling to confirm the writer's output, and could pass while the bytes carried no font program at all. 'latin1' rather than 'utf-8': PDF bytes are not valid UTF-8, and a replacement character mid-stream could otherwise swallow an ASCII marker we are searching for. Every byte above 0x7F decodes to some non-ASCII character under this label, so no spurious ASCII match can be manufactured by the decode.
 function asLatin1(bytes: Uint8Array<ArrayBuffer>): string {
   return new TextDecoder("latin1").decode(bytes);
 }
@@ -71,7 +71,7 @@ function expectEmbeddedTrueTypeFontResource(
 }
 
 describe("X -> PDF: a family pdf-codec has a vendored metric-compatible substitute for", () => {
-  // Calibri is not one of the standard 14 and never was renderable faithfully by them -- the old pipeline drew it as Helvetica with a width-correction factor. It now renders through the real, metric-compatible Carlito face, embedded in the output.
+  // Calibri is not one of the standard 14 and never was renderable faithfully by them — the old pipeline drew it as Helvetica with a width-correction factor. It now renders through the real, metric-compatible Carlito face, embedded in the output.
   it("docxToPdf embeds a real Carlito font program for a Calibri document rather than falling back to Helvetica", () => {
     const pdf = docxToPdf(minimalDocxBytes());
     expectEmbeddedTrueTypeFontResource(pdf);
@@ -100,7 +100,7 @@ describe("X -> PDF: a family the source document embeds itself", () => {
     expect(embeddedFaceNames(pdf)).toEqual(["Caladea-Regular"]);
   });
 
-  // The control for the test above: the identical document, asking for the identical family, with the Fonts/ parts and their font-face declarations removed. Caladea has no vendored substitute of its own (only Calibri and Cambria do), so with nothing embedded there is nothing left but the standard 14 -- which is what proves the embedding above came from the source package rather than from anywhere else in the resolution chain.
+  // The control for the test above: the identical document, asking for the identical family, with the Fonts/ parts and their font-face declarations removed. Caladea has no vendored substitute of its own (only Calibri and Cambria do), so with nothing embedded there is nothing left but the standard 14 — which is what proves the embedding above came from the source package rather than from anywhere else in the resolution chain.
   it("odtToPdf falls back to a standard font for the same document with its embedded faces removed", () => {
     const pdf = odtToPdf(fontRequestOdtBytes("Caladea"));
     expect(embeddedFaceNames(pdf)).toEqual([]);
@@ -166,7 +166,7 @@ describe("X -> PDF: caller-supplied faces", () => {
   });
 });
 
-// The backward-compatibility guarantee this phase had to keep: wiring a FontRegistry into all six conversions must not change a single byte of output for a document that embeds no fonts and asks for no family a vendored substitute claims. Each reference below reproduces the exact pre-registry pipeline -- createStandardFontMeasurer() into the format's own layout engine, then writePdf with no `fonts` option at all -- so this is a genuine before/after byte comparison rather than a self-consistency check of the new code against itself.
+// The backward-compatibility guarantee this phase had to keep: wiring a FontRegistry into all six conversions must not change a single byte of output for a document that embeds no fonts and asks for no family a vendored substitute claims. Each reference below reproduces the exact pre-registry pipeline — createStandardFontMeasurer() into the format's own layout engine, then writePdf with no `fonts` option at all — so this is a genuine before/after byte comparison rather than a self-consistency check of the new code against itself.
 //
 // Only the docx fixture needed a variant for it: the standard minimalDocxBytes asks for Calibri (as Word itself does), which is precisely a family that now resolves to an embedded Carlito face. The five ODF/pptx fixtures declare no family at all and so resolve through DEFAULT_LAYOUT_FONT's Helvetica, which the standard 14 covers directly.
 function referenceDocxPdf(
@@ -311,7 +311,7 @@ describe("X -> PDF: backward compatibility", () => {
     },
   );
 
-  // The proof that the comparison above can actually fail: the identical two pipelines, over the identical fixture except for the family its docDefaults ask for, genuinely diverge -- so byte identity for Arial is a real result about the registry, not a comparison that would pass however the wiring behaved.
+  // The proof that the comparison above can actually fail: the identical two pipelines, over the identical fixture except for the family its docDefaults ask for, genuinely diverge — so byte identity for Arial is a real result about the registry, not a comparison that would pass however the wiring behaved.
   it("is deliberately NOT byte-identical for the same document asking for Calibri", () => {
     expect(docxToPdf(minimalDocxBytes())).not.toEqual(
       referenceDocxPdf(minimalDocxBytes()),

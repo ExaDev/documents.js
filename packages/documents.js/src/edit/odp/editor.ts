@@ -59,7 +59,7 @@ function findOfficePresentation(pkg: Package): XmlElement {
   return presentation;
 }
 
-// Finds the shared style:page-layout-properties element every slide this editor creates references via draw:page/@draw:master-page-name -> style:master-page -> style:page-layout-name -> style:page-layout (scaffold.ts's own PAGE_LAYOUT_NAME/MASTER_PAGE_NAME) -- the odp equivalent of pptx/editor.ts's own findSldSz, except odp's page geometry lives in styles.xml rather than presentation.xml, since ODF's model resolves it per-draw:page through the master-page chain rather than once presentation-wide (see odf.js's own resolveDrawPageSize).
+// Finds the shared style:page-layout-properties element every slide this editor creates references via draw:page/@draw:master-page-name -> style:master-page -> style:page-layout-name -> style:page-layout (scaffold.ts's own PAGE_LAYOUT_NAME/MASTER_PAGE_NAME) — the odp equivalent of pptx/editor.ts's own findSldSz, except odp's page geometry lives in styles.xml rather than presentation.xml, since ODF's model resolves it per-draw:page through the master-page chain rather than once presentation-wide (see odf.js's own resolveDrawPageSize).
 function findPageLayoutProperties(pkg: Package): XmlElement {
   const stylesRoot = findRoot(pkg, STYLES_PART_PATH);
   const automaticStyles = directChild(stylesRoot, "office:automatic-styles");
@@ -88,7 +88,7 @@ export class OdpEditor {
     this.pkg = pkg;
   }
 
-  // Reads/patches meta.xml directly on the live package -- ExaDev/documents.js#933's own "editor.metadata = {...}" gap, mirroring OdtEditor's own identical getter/setter exactly (src/edit/odt/editor.ts's own comment states the full title/author/subject/keywords-only rationale).
+  // Reads/patches meta.xml directly on the live package — ExaDev/documents.js#933's own "editor.metadata = {...}" gap, mirroring OdtEditor's own identical getter/setter exactly (src/edit/odt/editor.ts's own comment states the full title/author/subject/keywords-only rationale).
   get metadata(): LayoutMetadata {
     return readOdfMetadata(this.pkg);
   }
@@ -161,7 +161,7 @@ export class OdpEditor {
     presentation.children.splice(insertAt, 0, moved);
   }
 
-  // Every slide this editor creates shares one style:page-layout (scaffold.ts's own PAGE_LAYOUT_NAME) via the master-page it references, so this reads/writes that one shared geometry -- deck-wide, like pptx/editor.ts's own slideSize, even though ODF's own model technically permits a per-draw:page size (a genuinely different master-page-name per slide, which this editor never creates).
+  // Every slide this editor creates shares one style:page-layout (scaffold.ts's own PAGE_LAYOUT_NAME) via the master-page it references, so this reads/writes that one shared geometry — deck-wide, like pptx/editor.ts's own slideSize, even though ODF's own model technically permits a per-draw:page size (a genuinely different master-page-name per slide, which this editor never creates).
   get slideSize(): PageSize {
     const properties = findPageLayoutProperties(this.pkg);
     const widthValue = attr(properties, "fo:page-width");
@@ -198,7 +198,7 @@ export interface CreateOdpOptions {
   readonly clock?: ClockPort;
 }
 
-// Creates a fresh odp with real office:meta creation/modification timestamps -- mirrors createDocx's own default-on clock behaviour exactly (src/edit/docx/editor.ts).
+// Creates a fresh odp with real office:meta creation/modification timestamps — mirrors createDocx's own default-on clock behaviour exactly (src/edit/docx/editor.ts).
 export function createOdp(options?: CreateOdpOptions): OdpEditor {
   const clock = options?.clock ?? systemClock;
   const metadata = resolveMetadataTimestamps({}, clock);

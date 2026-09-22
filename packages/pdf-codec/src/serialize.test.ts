@@ -29,7 +29,7 @@ describe("formatNumber", () => {
   });
 
   it("rounds to 0 below NUMBER_EPSILON even where toFixed alone would round up to a nonzero string", () => {
-    // 0.00006 is below the 0.0001 epsilon guard, but toFixed(4) rounds IT UP to "0.0001" on its own (nearest-4dp rounding kicks in past 0.00005) -- so this is the one magnitude range where skipping the guard entirely would change the answer, unlike 0.00000001 above.
+    // 0.00006 is below the 0.0001 epsilon guard, but toFixed(4) rounds IT UP to "0.0001" on its own (nearest-4dp rounding kicks in past 0.00005) — so this is the one magnitude range where skipping the guard entirely would change the answer, unlike 0.00000001 above.
     expect(formatNumber(0.00006)).toBe("0");
   });
 
@@ -82,7 +82,7 @@ describe("writeObject / serializeObject", () => {
   });
 
   it("zero-pads a single-hex-digit escape to two digits", () => {
-    // \x01 escapes to "01", not "1" -- padStart(2, "0") actually mattering, unlike every other escape in this file's tests, whose codes are already two hex digits wide.
+    // \x01 escapes to "01", not "1" — padStart(2, "0") actually mattering, unlike every other escape in this file's tests, whose codes are already two hex digits wide.
     expect(text(serializeObject(pdfName("\x01")))).toBe("/#01");
   });
 

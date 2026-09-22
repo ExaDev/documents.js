@@ -13,7 +13,7 @@ function font(
 }
 
 describe("createFontRegistry with no options", () => {
-  it("resolves every family/weight/style combination identically to calling resolveStandardFont directly -- byte-identical to today's behavior", () => {
+  it("resolves every family/weight/style combination identically to calling resolveStandardFont directly — byte-identical to today's behavior", () => {
     const registry = createFontRegistry();
     const cases: readonly [string, boolean, boolean][] = [
       ["Arial", false, false],
@@ -21,7 +21,7 @@ describe("createFontRegistry with no options", () => {
       ["Courier New", false, true],
       ["Aptos", true, true],
       ["SomeCompletelyUnknownFace", false, false],
-      // Calibri/Cambria are also in the vendored substitute table -- with no options, `substitutes` defaults to 'vendored', so a real FontRegistry.resolve for these would NOT match resolveStandardFont's own output (it would embed Carlito/Caladea instead, see the dedicated tests below). Proving byte-identical fallback here therefore needs substitutes disabled explicitly for exactly these two families.
+      // Calibri/Cambria are also in the vendored substitute table — with no options, `substitutes` defaults to 'vendored', so a real FontRegistry.resolve for these would NOT match resolveStandardFont's own output (it would embed Carlito/Caladea instead, see the dedicated tests below). Proving byte-identical fallback here therefore needs substitutes disabled explicitly for exactly these two families.
     ];
     for (const [family, bold, italic] of cases) {
       const direct = resolveStandardFont(family, bold, italic);
@@ -116,7 +116,7 @@ describe("createFontRegistry vendored substitute table (step 4)", () => {
     expect(onSubstitution).not.toHaveBeenCalled();
   });
 
-  it('does not resolve "Cambria Math" to Caladea -- the vendored table is an exact normalized-name match, never a prefix match', () => {
+  it('does not resolve "Cambria Math" to Caladea — the vendored table is an exact normalized-name match, never a prefix match', () => {
     // Direct proof against the table itself: 'cambriamath' is a materially different normalized key from 'cambria'.
     expect(resolveVendoredSubstituteFamily("Cambria Math")).toBeUndefined();
 
@@ -126,7 +126,7 @@ describe("createFontRegistry vendored substitute table (step 4)", () => {
     if (resolved.kind !== "standard") {
       throw new Error("expected the standard-14 fallback");
     }
-    // 'cambriamath' matches none of fonts.ts's own FAMILY_BY_NORMALIZED_NAME entries either (not 'cambria', no 'mono'/'serif' substring), so it falls all the way through to the unmatched default -- proving this is a genuine miss, not an accidental match on a different table.
+    // 'cambriamath' matches none of fonts.ts's own FAMILY_BY_NORMALIZED_NAME entries either (not 'cambria', no 'mono'/'serif' substring), so it falls all the way through to the unmatched default — proving this is a genuine miss, not an accidental match on a different table.
     expect(resolved).toEqual({
       kind: "standard",
       standardName: resolveStandardFont("Cambria Math", false, false)

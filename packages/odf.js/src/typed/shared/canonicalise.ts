@@ -19,20 +19,20 @@ import { canonicalOdfConstructDescriptor } from "./constructs";
 import { closeListPlan, planListMembership, type ListPlanState } from "./list";
 import { assertTableObeysGridRule } from "./table-grid";
 
-// The write-side canonical form every ODF content writer in this package states its own round-trip law against: what reading a WRITTEN document back actually produces, for the pieces of the content model this package's writers already share verbatim (a paragraph's runs and formatting, a table's cells, an image block) -- factored out once typed/odt/write.ts's own normaliseOdtContent first stated it, now reused by typed/odp/write.ts (a shape's own text paragraphs, and a table nested inside a shape) rather than restated per format. See typed/odt/write.ts's own top-of-file note for the fuller philosophy this canonical-form discipline follows; this module owns only the pieces genuinely identical across every writer, not a format's own section/slide-level structure.
+// The write-side canonical form every ODF content writer in this package states its own round-trip law against: what reading a WRITTEN document back actually produces, for the pieces of the content model this package's writers already share verbatim (a paragraph's runs and formatting, a table's cells, an image block) — factored out once typed/odt/write.ts's own normaliseOdtContent first stated it, now reused by typed/odp/write.ts (a shape's own text paragraphs, and a table nested inside a shape) rather than restated per format. See typed/odt/write.ts's own top-of-file note for the fuller philosophy this canonical-form discipline follows; this module owns only the pieces genuinely identical across every writer, not a format's own section/slide-level structure.
 
 function unsupportedContent(what: string, where: string): Error {
   return new Error(
-    `${where} carries ${what}, which no ODF writer in this package can produce yet -- refusing to state a canonical form for content that would be silently lost on write. See ExaDev/documents.js for the tracked follow-up covering the fidelity constructs and embedded objects.`,
+    `${where} carries ${what}, which no ODF writer in this package can produce yet — refusing to state a canonical form for content that would be silently lost on write. See ExaDev/documents.js for the tracked follow-up covering the fidelity constructs and embedded objects.`,
   );
 }
 
-// ODF states every colour as six hex digits (its own text:color datatype -- see typed/shared/color.ts), so a Color component that is not a whole 1/255 step cannot be carried: 0.9 is written as "e6" and read back as 230/255. Round-tripping through document-schema.js's own hex pair IS that quantisation, stated once here rather than approximated with an epsilon comparison in a test.
+// ODF states every colour as six hex digits (its own text:color datatype — see typed/shared/color.ts), so a Color component that is not a whole 1/255 step cannot be carried: 0.9 is written as "e6" and read back as 230/255. Round-tripping through document-schema.js's own hex pair IS that quantisation, stated once here rather than approximated with an epsilon comparison in a test.
 export function canonicalColor(color: Color): Color {
   return rgbHexToColor(colorToRgbHex(color));
 }
 
-// A cell fill written and read back through this package's own writers: always a 'solid' ContentCellFill, since style:table-cell-properties/@fo:background-color (ODF's own flat-colour cell-fill attribute) has no two-colour pattern-fill vocabulary at all (ExaDev/documents.js#951) -- the writer resolves a 'pattern' fill to resolveCellFillColor's own single representative colour before it ever reaches ODF, and undefined when that resolves to nothing (a pattern stating neither of its own colours), matching an absent background exactly.
+// A cell fill written and read back through this package's own writers: always a 'solid' ContentCellFill, since style:table-cell-properties/@fo:background-color (ODF's own flat-colour cell-fill attribute) has no two-colour pattern-fill vocabulary at all (ExaDev/documents.js#951) — the writer resolves a 'pattern' fill to resolveCellFillColor's own single representative colour before it ever reaches ODF, and undefined when that resolves to nothing (a pattern stating neither of its own colours), matching an absent background exactly.
 export function canonicalCellFill(
   fill: ContentCellFill,
 ): ContentCellFill | undefined {
@@ -42,7 +42,7 @@ export function canonicalCellFill(
     : { kind: "solid", color: canonicalColor(color) };
 }
 
-// One run carrying only the fields it actually states. The reader builds every run with all seven formatting fields present and most of them undefined (typed/shared/paragraph.ts's runFromText), while a hand-built document states only what it means -- the same run, spelled two ways. The canonical form is the spelled-only one, so the two are comparable at all.
+// One run carrying only the fields it actually states. The reader builds every run with all seven formatting fields present and most of them undefined (typed/shared/paragraph.ts's runFromText), while a hand-built document states only what it means — the same run, spelled two ways. The canonical form is the spelled-only one, so the two are comparable at all.
 export function canonicalRun(run: ContentRun): ContentRun {
   const canonical: ContentRun = { text: run.text };
   if (run.bold !== undefined) {
@@ -72,7 +72,7 @@ export function canonicalRun(run: ContentRun): ContentRun {
   return canonical;
 }
 
-// One paragraph in the exact shape reading the written document back produces: runs segmented into what ODF's inline content model can carry (see segmentOdfParagraphRuns's own note), list membership renumbered onto the given canonical numId (undefined strips membership entirely -- a table cell, which never carries list membership, always passes undefined here), and every field the format has no spelling for dropped. styleId is the interesting one -- a heading's identity is STRUCTURAL in ODF (a text:h carrying text:outline-level), so a reader always re-derives it as "Heading{level}" and it survives exactly; every other paragraph's styleId is a producer's own style name, and this package's writers mint their own automatic-style names, so an incoming one cannot survive and is dropped rather than pretended about. `allowConstructs` gates whether a run-level construct extent (a field, bookmark, note, annotation, or tracked change) is even considered here: false (the default, for a caller with no construct writer wired up) still refuses one outright; true lets typed/shared/paragraph.ts's writeOdfParagraphChildren decide construct-by-construct, mapping the surviving extents' startRun/endRun onto the canonical run list the SAME segmentation this function already applies produces, and still throwing (via odf.js's own assertWritableParagraph, called before this ever runs) for a construct kind no writer resolves yet. Every construct-bearing writer path now passes true -- the odt writer's body paragraphs, a table cell's own paragraphs, and an odp/odg shape's own text (ExaDev/documents.js#969 closed the last two): the read side recovers extents in all three positions through the same shared paragraph reader, so refusing any of them on write was an asymmetry rather than a boundary.
+// One paragraph in the exact shape reading the written document back produces: runs segmented into what ODF's inline content model can carry (see segmentOdfParagraphRuns's own note), list membership renumbered onto the given canonical numId (undefined strips membership entirely — a table cell, which never carries list membership, always passes undefined here), and every field the format has no spelling for dropped. styleId is the interesting one — a heading's identity is STRUCTURAL in ODF (a text:h carrying text:outline-level), so a reader always re-derives it as "Heading{level}" and it survives exactly; every other paragraph's styleId is a producer's own style name, and this package's writers mint their own automatic-style names, so an incoming one cannot survive and is dropped rather than pretended about. `allowConstructs` gates whether a run-level construct extent (a field, bookmark, note, annotation, or tracked change) is even considered here: false (the default, for a caller with no construct writer wired up) still refuses one outright; true lets typed/shared/paragraph.ts's writeOdfParagraphChildren decide construct-by-construct, mapping the surviving extents' startRun/endRun onto the canonical run list the SAME segmentation this function already applies produces, and still throwing (via odf.js's own assertWritableParagraph, called before this ever runs) for a construct kind no writer resolves yet. Every construct-bearing writer path now passes true — the odt writer's body paragraphs, a table cell's own paragraphs, and an odp/odg shape's own text (ExaDev/documents.js#969 closed the last two): the read side recovers extents in all three positions through the same shared paragraph reader, so refusing any of them on write was an asymmetry rather than a boundary.
 export function canonicalParagraph(
   paragraph: ContentParagraph,
   listNumId: string | undefined,
@@ -91,7 +91,7 @@ export function canonicalParagraph(
   const { canonical: segmentedRuns, boundaryMap } =
     segmentOdfParagraphRunsMapped(
       paragraph.runs,
-      // The false branch needs no boundary set at all: segmentOdfParagraphRunsMapped's own merge loop only ever tests protectedBoundaries.has(index) for index in [0, runs.length) -- index 0 never merges regardless (there is no preceding group yet) and index === runs.length is never reached by that loop -- so a two-element {0, runs.length} set here would carry no member the merge decision ever actually consults. The true branch's own {0, runs.length} pair is equally inert for the same reason; only the construct extents' own interior startRun/endRun values (which DO fall inside that range) do any work, so this is the one boundary source worth constructing.
+      // The false branch needs no boundary set at all: segmentOdfParagraphRunsMapped's own merge loop only ever tests protectedBoundaries.has(index) for index in [0, runs.length) — index 0 never merges regardless (there is no preceding group yet) and index === runs.length is never reached by that loop — so a two-element {0, runs.length} set here would carry no member the merge decision ever actually consults. The true branch's own {0, runs.length} pair is equally inert for the same reason; only the construct extents' own interior startRun/endRun values (which DO fall inside that range) do any work, so this is the one boundary source worth constructing.
       allowConstructs
         ? new Set<number>(
             (paragraph.constructs ?? []).flatMap((extent) => [
@@ -162,7 +162,7 @@ function canonicalCellDecoration(
     canonical.background = canonicalCellFill(cell.background);
   }
   if (cell.borders !== undefined) {
-    // An absent border style is written as "solid", which is what ContentBorderSchema already documents an absent style to mean -- so it comes back stated rather than absent.
+    // An absent border style is written as "solid", which is what ContentBorderSchema already documents an absent style to mean — so it comes back stated rather than absent.
     const borders: NonNullable<ContentTableCell["borders"]> = {};
     for (const edge of ["left", "right", "top", "bottom"] as const) {
       const border = cell.borders[edge];
@@ -209,7 +209,7 @@ export function canonicalCell(
   return { ...canonical, ...canonicalCellDecoration(cell) };
 }
 
-// The one canonical ContentTable a written-and-reread table equals, wherever writeOdfTable places it (odt's own top-level tables, or one nested inside an odp/odg shape's draw:frame) -- every mapping forced by ODF's own table:table content model rather than chosen here, matching typed/shared/table.ts's own writeOdfTable/readOdfTable as the single writer/reader pair every caller shares. `listState` is the caller's own document-wide ListPlanState (typed/odt/write.ts's planDocument, typed/odp/write.ts's own presentation-wide state -- see each caller's own top-of-file note), threaded through every cell so a list minted inside this table -- including one nested inside a cell of a table nested inside one of THIS table's own cells -- is numbered in the identical document-encounter order readOdfTable's own listIdState mints it in on the way back in. Closed before every cell's own canonicalCell call (each cell is its own list-run scope, so two adjacent cells can never canonicalise to the same numId even when both carry an identical incoming one) and once more after the whole table, for whatever sibling block follows this table in the caller's own block list -- a close between cells or immediately after canonicalCell's own return would only ever be overwritten by one of those two before anything could observe it, so only these two calls do real work.
+// The one canonical ContentTable a written-and-reread table equals, wherever writeOdfTable places it (odt's own top-level tables, or one nested inside an odp/odg shape's draw:frame) — every mapping forced by ODF's own table:table content model rather than chosen here, matching typed/shared/table.ts's own writeOdfTable/readOdfTable as the single writer/reader pair every caller shares. `listState` is the caller's own document-wide ListPlanState (typed/odt/write.ts's planDocument, typed/odp/write.ts's own presentation-wide state — see each caller's own top-of-file note), threaded through every cell so a list minted inside this table — including one nested inside a cell of a table nested inside one of THIS table's own cells — is numbered in the identical document-encounter order readOdfTable's own listIdState mints it in on the way back in. Closed before every cell's own canonicalCell call (each cell is its own list-run scope, so two adjacent cells can never canonicalise to the same numId even when both carry an identical incoming one) and once more after the whole table, for whatever sibling block follows this table in the caller's own block list — a close between cells or immediately after canonicalCell's own return would only ever be overwritten by one of those two before anything could observe it, so only these two calls do real work.
 export function canonicalTable(
   table: ContentTable,
   listState: ListPlanState,
@@ -238,7 +238,7 @@ export function canonicalTable(
   return canonical;
 }
 
-// The one canonical LayoutMetadata a written-and-reread document's own metadata equals: exactly the seven fields typed/shared/metadata.ts's writeOdfMetadata puts into meta.xml and readOdfMetadata reads back, each passed through when stated and dropped when absent (an empty keywords array writes no meta:keyword elements at all, so it reads back absent rather than empty). Every other LayoutMetadata field -- `producer`, `language`, and the rest -- is dropped: none has a meta.xml spelling this package writes or reads, so carrying it would be claiming a fidelity meta.xml does not have. Shared by every content writer here rather than restated per format: what meta.xml can carry is a property of the part, not of which body element sits beside it.
+// The one canonical LayoutMetadata a written-and-reread document's own metadata equals: exactly the seven fields typed/shared/metadata.ts's writeOdfMetadata puts into meta.xml and readOdfMetadata reads back, each passed through when stated and dropped when absent (an empty keywords array writes no meta:keyword elements at all, so it reads back absent rather than empty). Every other LayoutMetadata field — `producer`, `language`, and the rest — is dropped: none has a meta.xml spelling this package writes or reads, so carrying it would be claiming a fidelity meta.xml does not have. Shared by every content writer here rather than restated per format: what meta.xml can carry is a property of the part, not of which body element sits beside it.
 export function canonicalMetadata(metadata: LayoutMetadata): LayoutMetadata {
   const canonical: LayoutMetadata = {};
   if (metadata.title !== undefined) {
@@ -265,7 +265,7 @@ export function canonicalMetadata(metadata: LayoutMetadata): LayoutMetadata {
   return canonical;
 }
 
-// The one canonical ContentImageBlock a written-and-reread image equals: format/base64/size/altText survive verbatim (an image part is copied byte-for-byte into the package, never re-encoded), and every other field (sourcePath, source, frames -- a reader's and a layout pass's own facts, never content) is dropped.
+// The one canonical ContentImageBlock a written-and-reread image equals: format/base64/size/altText survive verbatim (an image part is copied byte-for-byte into the package, never re-encoded), and every other field (sourcePath, source, frames — a reader's and a layout pass's own facts, never content) is dropped.
 export function canonicalImage(image: ContentImageBlock): ContentImageBlock {
   const canonical: ContentImageBlock = {
     kind: "image",

@@ -24,7 +24,7 @@ interface Cursor {
   readonly column: number;
 }
 
-// A slide table's own cursor is genuinely two-dimensional, exactly like docx/odt's own table-view.tsx (see that screen's doc comment for why this stays outside SelectionState rather than a single SET_SELECTION index) -- and this screen borrows that one's rendering shape wholesale (a simple, unvirtualised bordered grid). What is new here is the merge-anchor flow, lifted from the ODS spreadsheet grid's own range-select-then-merge convention: 'm' anchors the merge rectangle at the current cursor cell; hjkl/arrows then move the OPPOSITE corner; a second 'm' (or Enter) commits MERGE_SLIDE_TABLE_CELLS for the rectangle between the two; Esc cancels a pending merge without leaving the screen (and only pops the screen once no merge is pending).
+// A slide table's own cursor is genuinely two-dimensional, exactly like docx/odt's own table-view.tsx (see that screen's doc comment for why this stays outside SelectionState rather than a single SET_SELECTION index) — and this screen borrows that one's rendering shape wholesale (a simple, unvirtualised bordered grid). What is new here is the merge-anchor flow, lifted from the ODS spreadsheet grid's own range-select-then-merge convention: 'm' anchors the merge rectangle at the current cursor cell; hjkl/arrows then move the OPPOSITE corner; a second 'm' (or Enter) commits MERGE_SLIDE_TABLE_CELLS for the rectangle between the two; Esc cancels a pending merge without leaving the screen (and only pops the screen once no merge is pending).
 export function SlideTableDetailScreen(
   props: SlideTableDetailScreenProps,
 ): ReactElement {
@@ -64,7 +64,7 @@ export function SlideTableDetailScreen(
   useInput(
     (input, key) => {
       if (table === undefined) {
-        // The fallback view below tells the user to press Esc to go back, so Esc must still work even with no table to navigate -- every other key is genuinely meaningless here (there is no grid to move a cursor over or merge cells in).
+        // The fallback view below tells the user to press Esc to go back, so Esc must still work even with no table to navigate — every other key is genuinely meaningless here (there is no grid to move a cursor over or merge cells in).
         if (key.escape) {
           dispatch({ type: "POP_SCREEN" });
         }
@@ -121,7 +121,7 @@ export function SlideTableDetailScreen(
           Slide {slideIndex + 1}, table {tableIndex + 1}
         </Text>
         <Text color="yellow">
-          This table no longer exists -- press Esc to go back
+          This table no longer exists — press Esc to go back
         </Text>
       </Box>
     );

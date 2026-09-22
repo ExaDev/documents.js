@@ -977,7 +977,7 @@ typed/document-tree.
 ### BREAKING CHANGES
 
 * DocxDocument no longer carries headers/footers string
-arrays -- the structural headerFooterParts/sectionHeaderFooters model
+arrays — the structural headerFooterParts/sectionHeaderFooters model
 (which also carries unreferenced parts) replaces them.
 
 # [4.7.0](https://github.com/ExaDev/documents.js/compare/ooxml.js@4.6.0...ooxml.js@4.7.0) (2026-08-22)
@@ -1622,7 +1622,7 @@ tables arrays, and each run's own resolved hyperlink field supersedes
 the flat hyperlinks array. PptxPresentation is renamed PptxDocument and
 its shape changes from { slides: [{ index, text, shapes: [{ text }],
 tables, notes }] } to { metadata, slides: [{ size, shapes: [{ name,
-frame, rotationDeg, insets, blocks }], notes }] } -- array position
+frame, rotationDeg, insets, blocks }], notes }] } — array position
 supersedes the old index field, and each shape's own blocks (paragraphs/
 tables/images) supersedes the separate flat shapes/tables arrays.
 

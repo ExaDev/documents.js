@@ -27,14 +27,14 @@ import {
   ParagraphFamilyBodyList,
 } from "./paragraph-family.js";
 
-// Ink's reconciler settles a `stdin.write()`-driven state update (and any effect it schedules, which can itself dispatch and schedule a further render) over more than one macrotask tick, not synchronously within the call, so a handful of `setImmediate` ticks are needed before reading `lastFrame()` or sending the next keystroke. A bare Escape additionally needs real elapsed time on top of that: Ink buffers it for up to 20ms (`pendingInputFlushDelayMilliseconds` in its own `App.js`) to disambiguate a lone Escape press from the start of a multi-byte ANSI sequence (an arrow key) -- confirmed necessary empirically: `setImmediate` ticks alone reliably delivered a plain character but silently dropped every Escape in this same harness. That real wait is only paid after an actual Escape write (`flush({ afterEscape: true })`), not on every flush, so the suite's total wall-clock time does not compound across the several non-Escape flushes each test also does.
+// Ink's reconciler settles a `stdin.write()`-driven state update (and any effect it schedules, which can itself dispatch and schedule a further render) over more than one macrotask tick, not synchronously within the call, so a handful of `setImmediate` ticks are needed before reading `lastFrame()` or sending the next keystroke. A bare Escape additionally needs real elapsed time on top of that: Ink buffers it for up to 20ms (`pendingInputFlushDelayMilliseconds` in its own `App.js`) to disambiguate a lone Escape press from the start of a multi-byte ANSI sequence (an arrow key) — confirmed necessary empirically: `setImmediate` ticks alone reliably delivered a plain character but silently dropped every Escape in this same harness. That real wait is only paid after an actual Escape write (`flush({ afterEscape: true })`), not on every flush, so the suite's total wall-clock time does not compound across the several non-Escape flushes each test also does.
 const SETTLE_TICKS = 4;
 const ESCAPE_FLUSH_MARGIN_MS = 30;
 
 async function flush(
   options: { readonly afterEscape?: boolean } = {},
 ): Promise<void> {
-  // A reduce-built promise chain, not a for-loop with an await inside it -- each tick must still observe the previous one's effects before scheduling the next, but this expresses that sequencing without an await-in-loop construct for the linter to flag at all.
+  // A reduce-built promise chain, not a for-loop with an await inside it — each tick must still observe the previous one's effects before scheduling the next, but this expresses that sequencing without an await-in-loop construct for the linter to flag at all.
   await Array.from({ length: SETTLE_TICKS }).reduce<Promise<void>>(
     (previous) =>
       previous.then(
@@ -61,7 +61,7 @@ function Marker(): ReactElement {
   const dispatch = useAppDispatch();
   const screen = currentScreen(state);
 
-  // Unconditionally active (not gated on `screen.kind !== 'bodyList'`) so this hook's own raw-mode registration never toggles off and back on in the same render ParagraphFamilyBodyList's own `useInput` mounts/unmounts in -- confirmed empirically that gating it caused Escape to go unhandled after a same-render screen swap.
+  // Unconditionally active (not gated on `screen.kind !== 'bodyList'`) so this hook's own raw-mode registration never toggles off and back on in the same render ParagraphFamilyBodyList's own `useInput` mounts/unmounts in — confirmed empirically that gating it caused Escape to go unhandled after a same-render screen swap.
   useInput((_input, key) => {
     if (key.escape && screen.kind !== "bodyList") {
       dispatch({ type: "POP_SCREEN" });
@@ -77,7 +77,7 @@ function Marker(): ReactElement {
   return <Text>ON {screen.kind}</Text>;
 }
 
-// A thin harness rather than constructing `createDocx()` and handing it straight to the adapter: dispatching the real CREATE_DOCUMENT action exercises the exact path a real app run takes (state.openDocument populated by the reducer, the adapter built from it fresh every render), and CREATE_DOCUMENT's own handler calls `createDocx()` internally regardless -- so this is still a real `createDocx()`-backed adapter underneath, just reached the way the app itself reaches it.
+// A thin harness rather than constructing `createDocx()` and handing it straight to the adapter: dispatching the real CREATE_DOCUMENT action exercises the exact path a real app run takes (state.openDocument populated by the reducer, the adapter built from it fresh every render), and CREATE_DOCUMENT's own handler calls `createDocx()` internally regardless — so this is still a real `createDocx()`-backed adapter underneath, just reached the way the app itself reaches it.
 function DocxHarness(): ReactElement | null {
   const state = useAppState();
   const dispatch = useAppDispatch();
@@ -117,7 +117,7 @@ function renderHarness() {
   );
 }
 
-// A generalised, docx/odt/markdown harness for the 'T' table-creation wizard tests below -- reused for all three formats rather than duplicating DocxHarness, since the wizard itself is genuinely format-agnostic (APPEND_TABLE's own reducer case resolves the open docx/odt/markdown document uniformly, exactly as the module doc comment on createParagraphFamilyAdapter's own `appendParagraph` already establishes for paragraphs). Markdown has no CREATE_DOCUMENT path (EditableFormat doesn't include it) -- a fresh MarkdownOpenDocument is built directly via createMarkdownEditor() and dispatched through OPEN_FILE_SUCCESS instead, the same real action openDocumentAtPath's own caller dispatches, matching reducer.test.ts's own openMarkdownDocument convention.
+// A generalised, docx/odt/markdown harness for the 'T' table-creation wizard tests below — reused for all three formats rather than duplicating DocxHarness, since the wizard itself is genuinely format-agnostic (APPEND_TABLE's own reducer case resolves the open docx/odt/markdown document uniformly, exactly as the module doc comment on createParagraphFamilyAdapter's own `appendParagraph` already establishes for paragraphs). Markdown has no CREATE_DOCUMENT path (EditableFormat doesn't include it) — a fresh MarkdownOpenDocument is built directly via createMarkdownEditor() and dispatched through OPEN_FILE_SUCCESS instead, the same real action openDocumentAtPath's own caller dispatches, matching reducer.test.ts's own openMarkdownDocument convention.
 function BodyListHarness({
   format,
 }: {
@@ -169,7 +169,7 @@ function BodyListHarness({
 type WordprocessingOpenDocument =
   DocxOpenDocument | OdtOpenDocument | MarkdownOpenDocument;
 
-// The one content-reading step genuinely specific to each format: docx/odt read through their own already-decoded package, markdown re-serialises its live editor to text first (readMarkdownContent takes text, not a package) -- mirroring format/read-metadata.ts's own per-format dispatch.
+// The one content-reading step genuinely specific to each format: docx/odt read through their own already-decoded package, markdown re-serialises its live editor to text first (readMarkdownContent takes text, not a package) — mirroring format/read-metadata.ts's own per-format dispatch.
 function wordprocessingContentFor(
   doc: WordprocessingOpenDocument,
 ): ContentDocument {
@@ -182,7 +182,7 @@ function wordprocessingContentFor(
   return readMarkdownContent(doc.editor.toMarkdownText());
 }
 
-// Reads the document's own first table block fresh through readDocxContent/readOdtContent/readMarkdownContent on every render -- the real proof a wizard-driven APPEND_TABLE dispatch reached the package, and (for the merge tests) that the anchor cell carries the real colSpan/rowSpan a creation-time merge writes.
+// Reads the document's own first table block fresh through readDocxContent/readOdtContent/readMarkdownContent on every render — the real proof a wizard-driven APPEND_TABLE dispatch reached the package, and (for the merge tests) that the anchor cell carries the real colSpan/rowSpan a creation-time merge writes.
 function TableProbe({
   doc,
 }: {
@@ -216,13 +216,13 @@ function TableProbe({
   );
 }
 
-// ContentEmbeddedObjectBlock has no top-level re-export from documents.js (only the ContentBlock union itself does) -- narrowed via Extract from that union's own block-array element type instead, the same trick TableProbe above already uses for its table-block narrowing.
+// ContentEmbeddedObjectBlock has no top-level re-export from documents.js (only the ContentBlock union itself does) — narrowed via Extract from that union's own block-array element type instead, the same trick TableProbe above already uses for its table-block narrowing.
 type WordprocessingBlock = Extract<
   ContentDocument,
   { readonly kind: "wordprocessing" }
 >["sections"][number]["blocks"][number];
 
-// Reads the document's own first embedded-formula block fresh through readDocxContent/readOdtContent/readMarkdownContent on every render -- the real proof an 'm'-driven INSERT_ODT_FORMULA dispatch reached the package, mirroring TableProbe's own convention. docx never reaches this probe with a formula present, since paragraph-detail.tsx's own 'm' handler (paragraph-scoped, not this body-list screen's) is what docx uses instead; markdown never reaches it with one present either, since CommonMark/GFM has no formula construct at all -- always 'none' for markdown.
+// Reads the document's own first embedded-formula block fresh through readDocxContent/readOdtContent/readMarkdownContent on every render — the real proof an 'm'-driven INSERT_ODT_FORMULA dispatch reached the package, mirroring TableProbe's own convention. docx never reaches this probe with a formula present, since paragraph-detail.tsx's own 'm' handler (paragraph-scoped, not this body-list screen's) is what docx uses instead; markdown never reaches it with one present either, since CommonMark/GFM has no formula construct at all — always 'none' for markdown.
 function FormulaProbe({
   doc,
 }: {
@@ -265,7 +265,7 @@ function renderBodyListHarness(
   );
 }
 
-// The rows/columns/merge-rectangle TextFields all start pre-filled with their own default value and the cursor at the end (see export-options.test.tsx's own comment on this exact TextField behaviour) -- typing a digit appends to that default rather than replacing it, so a test wanting a specific value first clears the single pre-filled default digit with one backspace.
+// The rows/columns/merge-rectangle TextFields all start pre-filled with their own default value and the cursor at the end (see export-options.test.tsx's own comment on this exact TextField behaviour) — typing a digit appends to that default rather than replacing it, so a test wanting a specific value first clears the single pre-filled default digit with one backspace.
 const BACKSPACE = "\x7F";
 async function replaceField(
   stdin: { readonly write: (data: string) => void },
@@ -277,7 +277,7 @@ async function replaceField(
   await flush();
 }
 
-// Confirms a just-typed draft actually reached the rendered frame, plus a further short real wait, before the caller sends anything else -- see paragraph-detail.test.tsx's own identical helper for the exact race this closes (ink-text-input's own onSubmit closes over whatever `originalValue` prop its own most recent render saw, and the frame showing the typed text is not, on its own, proof that render has fully settled). Used here for the formula picker's own raw-MathML entry, a longer, more varied string than the table wizard's own single-digit fields above.
+// Confirms a just-typed draft actually reached the rendered frame, plus a further short real wait, before the caller sends anything else — see paragraph-detail.test.tsx's own identical helper for the exact race this closes (ink-text-input's own onSubmit closes over whatever `originalValue` prop its own most recent render saw, and the frame showing the typed text is not, on its own, proof that render has fully settled). Used here for the formula picker's own raw-MathML entry, a longer, more varied string than the table wizard's own single-digit fields above.
 async function writeAndConfirm(
   stdin: { readonly write: (data: string) => void },
   lastFrame: () => string | undefined,
@@ -297,7 +297,7 @@ describe("ParagraphFamilyBodyList", () => {
     const { lastFrame } = renderHarness();
     await flush();
     expect(lastFrame()).toContain(
-      "No paragraphs or tables yet -- press 'a' to append a paragraph.",
+      "No paragraphs or tables yet — press 'a' to append a paragraph.",
     );
     expect(lastFrame()).toContain("ON bodyList");
   });
@@ -333,7 +333,7 @@ describe("ParagraphFamilyBodyList", () => {
     expect(lastFrame()).toContain("ON bodyList");
     expect(lastFrame()).toContain("Paragraphs (2/2)");
 
-    // Two paragraphs now exist; the list's own cursor is local to this mount (see paragraph-family.ts's own note on `usePersistedSelection`) and starts back at row 0 -- move down once with 'j' to reach the second paragraph, then open it.
+    // Two paragraphs now exist; the list's own cursor is local to this mount (see paragraph-family.ts's own note on `usePersistedSelection`) and starts back at row 0 — move down once with 'j' to reach the second paragraph, then open it.
     stdin.write("j");
     await flush();
     stdin.write(ENTER);
@@ -342,7 +342,7 @@ describe("ParagraphFamilyBodyList", () => {
   }, 20_000); // Generous relative to this suite's normal sub-second runtime: this test alone makes three round trips through Ink's real Escape-disambiguation wait (see `flush`'s own comment), and the default 10s unit-test timeout has been observed to run close under heavy concurrent load on this machine.
 });
 
-// A generous per-test timeout throughout this describe.each: each test makes several sequential flush() round trips (one per wizard step), and the default 10s unit-test timeout has been observed to run close under heavy concurrent load on this machine -- the same reasoning already documented on the "navigates ... with Enter" test above.
+// A generous per-test timeout throughout this describe.each: each test makes several sequential flush() round trips (one per wizard step), and the default 10s unit-test timeout has been observed to run close under heavy concurrent load on this machine — the same reasoning already documented on the "navigates ... with Enter" test above.
 const WIZARD_TEST_TIMEOUT_MS = 20_000;
 
 describe.each(["docx", "odt", "markdown"] as const)(
@@ -418,7 +418,7 @@ describe.each(["docx", "odt", "markdown"] as const)(
         await flush();
 
         if (format === "markdown") {
-          // The table is still created (3x3), just left unmerged -- see reducer.ts's own APPEND_TABLE case and reducer.test.ts's identical assertion at the state level.
+          // The table is still created (3x3), just left unmerged — see reducer.ts's own APPEND_TABLE case and reducer.test.ts's identical assertion at the state level.
           expect(lastFrame()).toContain(
             "probe:table=3x3 anchorColSpan=1 anchorRowSpan=1",
           );
@@ -503,7 +503,7 @@ describe('ParagraphFamilyBodyList "m" formula insertion (odt body-scoped)', () =
 
       stdin.write("m");
       await flush();
-      // Six presets precede the "Raw MathML..." row -- navigate down to it.
+      // Six presets precede the "Raw MathML..." row — navigate down to it.
       for (let step = 0; step < 6; step += 1) {
         stdin.write("j");
         await flush();
@@ -551,7 +551,7 @@ describe('ParagraphFamilyBodyList "m" formula insertion (odt body-scoped)', () =
       stdin.write(ENTER);
       await flush();
 
-      // A closing tag missing its final '>' -- parseXml (fast-xml-parser) is lenient about several malformed shapes, but a truncated closing tag is a genuine, confirmed throw (see paragraph-detail.test.tsx's own identical fixture and comment).
+      // A closing tag missing its final '>' — parseXml (fast-xml-parser) is lenient about several malformed shapes, but a truncated closing tag is a genuine, confirmed throw (see paragraph-detail.test.tsx's own identical fixture and comment).
       await writeAndConfirm(stdin, lastFrame, "<mfrac><mi>x</mi></mfrac");
       stdin.write(ENTER);
       await vi.waitFor(() => {
@@ -575,7 +575,7 @@ describe('ParagraphFamilyBodyList "m" formula insertion (odt body-scoped)', () =
     expect(lastFrame()).not.toContain("Insert formula");
   });
 
-  it("does not expose the formula flow for a markdown document either -- CommonMark/GFM has no formula construct at all", async () => {
+  it("does not expose the formula flow for a markdown document either — CommonMark/GFM has no formula construct at all", async () => {
     const { lastFrame, stdin } = renderBodyListHarness("markdown");
     await flush();
 

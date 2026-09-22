@@ -133,7 +133,7 @@ describe("applyCharacterSprms", () => {
   });
 
   it("falls through the switch's own default case for a character-family sprm this reader does not convert", () => {
-    // sgc bits 10-12 of 0x0800 decode to SGC.character (2), but the full value matches none of the SPRM_C_* opcodes this reader handles -- the one way to actually reach the switch's default case rather than the sgc guard above it.
+    // sgc bits 10-12 of 0x0800 decode to SGC.character (2), but the full value matches none of the SPRM_C_* opcodes this reader handles — the one way to actually reach the switch's default case rather than the sgc guard above it.
     const result = applyCharacterSprms([prl(0x0800, [0x00])], { bold: true });
     expect(result.bold).toBe(true);
   });

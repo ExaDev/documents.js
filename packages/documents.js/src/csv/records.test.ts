@@ -15,7 +15,7 @@ describe("parseCsvRecords", () => {
     ]);
   });
 
-  it("accepts CRLF, LF, and CR record breaks alike -- the writer always emits CRLF, but real-world files arrive LF-only or CR-only", () => {
+  it("accepts CRLF, LF, and CR record breaks alike — the writer always emits CRLF, but real-world files arrive LF-only or CR-only", () => {
     const expected = [
       ["a", "b"],
       ["1", "2"],

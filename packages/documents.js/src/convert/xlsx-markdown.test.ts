@@ -7,14 +7,14 @@ import { createLocalDocumentConverter } from "./local";
 import { xlsxMarkdownCodec } from "./codec";
 import { markdownToXlsx, odsToXlsx, xlsxToMarkdown } from "./convert";
 
-// xlsx <-> markdown is the one pair whose two formats share no ContentDocument variant (spreadsheet vs wordprocessing), so it routes through PDF internally -- the same composed-edge shape xlsxToPdf/pdfToXlsx use. These tests prove the single-call functions exist and round-trip (the issue's core ask: a caller no longer has to chain xlsxToPdf -> pdfToMarkdown by hand), that the codec wraps them, and that the DocumentConverter port now routes the pair instead of rejecting it with UnsupportedConversionError.
+// xlsx <-> markdown is the one pair whose two formats share no ContentDocument variant (spreadsheet vs wordprocessing), so it routes through PDF internally — the same composed-edge shape xlsxToPdf/pdfToXlsx use. These tests prove the single-call functions exist and round-trip (the issue's core ask: a caller no longer has to chain xlsxToPdf -> pdfToMarkdown by hand), that the codec wraps them, and that the DocumentConverter port now routes the pair instead of rejecting it with UnsupportedConversionError.
 
 const xlsxBytes = (): Uint8Array<ArrayBuffer> => odsToXlsx(gridOdsBytes());
 
 describe("xlsx <-> markdown composed bridge", () => {
   it("xlsxToMarkdown produces markdown carrying the rendered cell text", () => {
     const markdown = decodeMarkdownText(xlsxToMarkdown(xlsxBytes()));
-    // The grid fixture's cells (header Alpha/Beta/Gamma, then One/Two/Three, Four/Five/Six) survive the xlsx -> pdf render and the pdf -> markdown reconstruction as text -- the whole point of the composed edge.
+    // The grid fixture's cells (header Alpha/Beta/Gamma, then One/Two/Three, Four/Five/Six) survive the xlsx -> pdf render and the pdf -> markdown reconstruction as text — the whole point of the composed edge.
     expect(markdown).toContain("Alpha");
     expect(markdown).toContain("Beta");
     expect(markdown).toContain("Gamma");
@@ -24,7 +24,7 @@ describe("xlsx <-> markdown composed bridge", () => {
     const markdownBytes = xlsxToMarkdown(xlsxBytes());
     const roundTripped = markdownToXlsx(markdownBytes);
     const content = readXlsxContent(decodeOoxmlPackage(roundTripped));
-    // readXlsxContent's declared return type is the full ContentDocument union even though it always produces the spreadsheet variant -- narrow it the same way every other test in this package does.
+    // readXlsxContent's declared return type is the full ContentDocument union even though it always produces the spreadsheet variant — narrow it the same way every other test in this package does.
     if (content.kind !== "spreadsheet") {
       throw new Error("expected a spreadsheet ContentDocument");
     }

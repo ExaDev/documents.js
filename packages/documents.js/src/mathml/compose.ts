@@ -8,7 +8,7 @@ export const EMPTY_BOX: MathBox = {
   items: [],
 };
 
-// Translates every item in `items` by (dxPt, dyPt) -- the one place this module touches an individual MathLayoutItem's own coordinate fields, since MathStroke's points and MathAssembledGlyphs' placements are each a nested array unlike MathGlyphRun/MathRule's flat xPt/yPt. No dxPt===0&&dyPt===0 fast path: adding zero to any coordinate is a no-op, so the general map below already produces an equal (if not reference-identical) result for a zero shift, on every item kind, with nothing for a special case to shortcut.
+// Translates every item in `items` by (dxPt, dyPt) — the one place this module touches an individual MathLayoutItem's own coordinate fields, since MathStroke's points and MathAssembledGlyphs' placements are each a nested array unlike MathGlyphRun/MathRule's flat xPt/yPt. No dxPt===0&&dyPt===0 fast path: adding zero to any coordinate is a no-op, so the general map below already produces an equal (if not reference-identical) result for a zero shift, on every item kind, with nothing for a special case to shortcut.
 export function shiftItems(
   items: readonly MathLayoutItem[],
   dxPt: number,
@@ -38,7 +38,7 @@ export function shiftItems(
   });
 }
 
-// Embeds `child` into a box whose own overall ascent is `overallAscentPt`, at horizontal offset `dxPt`, with the child's own baseline shifted `baselineOffsetPt` below the box's main baseline (negative = above -- a superscript or an mfrac numerator; positive = below -- a subscript or an mfrac denominator; zero = the ordinary same-baseline case every mrow child uses). This is the single placement primitive every composing construct in layout.ts (mrow, msub/msup/msubsup, mfrac's numerator/denominator) shares, derived once here: the child's own baseline sits at `child.ascentPt` from ITS OWN top, and needs to land at `overallAscentPt + baselineOffsetPt` from the PARENT box's top, so the y-shift to apply is the difference of those two.
+// Embeds `child` into a box whose own overall ascent is `overallAscentPt`, at horizontal offset `dxPt`, with the child's own baseline shifted `baselineOffsetPt` below the box's main baseline (negative = above — a superscript or an mfrac numerator; positive = below — a subscript or an mfrac denominator; zero = the ordinary same-baseline case every mrow child uses). This is the single placement primitive every composing construct in layout.ts (mrow, msub/msup/msubsup, mfrac's numerator/denominator) shares, derived once here: the child's own baseline sits at `child.ascentPt` from ITS OWN top, and needs to land at `overallAscentPt + baselineOffsetPt` from the PARENT box's top, so the y-shift to apply is the difference of those two.
 export function placeChild(
   child: MathBox,
   dxPt: number,
@@ -49,7 +49,7 @@ export function placeChild(
   return shiftItems(child.items, dxPt, dyPt);
 }
 
-// Concatenates `boxes` left to right, every child's own baseline aligned to one shared baseline (the standard mrow merge) -- ascent/descent of the result are the max across children, and each child is placed via placeChild with baselineOffsetPt=0. `gapsPt[i]` (default 0) is extra horizontal space inserted BEFORE boxes[i] (i>0), letting a caller thread MathML operator lspace/rspace into the same pass without a second traversal.
+// Concatenates `boxes` left to right, every child's own baseline aligned to one shared baseline (the standard mrow merge) — ascent/descent of the result are the max across children, and each child is placed via placeChild with baselineOffsetPt=0. `gapsPt[i]` (default 0) is extra horizontal space inserted BEFORE boxes[i] (i>0), letting a caller thread MathML operator lspace/rspace into the same pass without a second traversal.
 export function concatBoxesHorizontally(
   boxes: readonly MathBox[],
   gapsPt: readonly number[] = [],

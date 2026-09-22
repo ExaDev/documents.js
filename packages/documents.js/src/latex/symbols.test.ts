@@ -9,7 +9,7 @@ import {
   SymbolResolver,
 } from "./symbols";
 
-// The full command -> glyph table glyphOfSymbolText resolves against, restated here (not imported -- COMMAND_GLYPHS is module-private) so every entry gets its own assertion pair and a mutated string literal anywhere in the table is caught by the one command that names it.
+// The full command -> glyph table glyphOfSymbolText resolves against, restated here (not imported — COMMAND_GLYPHS is module-private) so every entry gets its own assertion pair and a mutated string literal anywhere in the table is caught by the one command that names it.
 const COMMAND_GLYPHS: Readonly<Record<string, string>> = {
   "\\alpha": "α",
   "\\beta": "β",
@@ -127,7 +127,7 @@ describe("SymbolResolver", () => {
   });
 });
 
-// The prose scanner's conservatism is the point (precision over recall): every case below pins a boundary the matcher must respect -- the two where/let forms it reads, and the shapes it declines rather than mis-seeding the table.
+// The prose scanner's conservatism is the point (precision over recall): every case below pins a boundary the matcher must respect — the two where/let forms it reads, and the shapes it declines rather than mis-seeding the table.
 
 function wordprocessing(paragraphs: readonly string[]): ContentDocument {
   return {
@@ -192,7 +192,7 @@ describe("extractSymbolDefinitionsFromProse", () => {
     expect(entries.map((entry) => entry.glyph)).toEqual(["m_e"]);
   });
 
-  it('declines whole words -- "where the resistance is high" seeds nothing', () => {
+  it('declines whole words — "where the resistance is high" seeds nothing', () => {
     expect(
       extractSymbolDefinitionsFromProse(
         wordprocessing(["where the resistance is high"]),
@@ -200,7 +200,7 @@ describe("extractSymbolDefinitionsFromProse", () => {
     ).toEqual([]);
   });
 
-  it('declines non-defining verbs -- "where R varies along the line" seeds nothing', () => {
+  it('declines non-defining verbs — "where R varies along the line" seeds nothing', () => {
     expect(
       extractSymbolDefinitionsFromProse(
         wordprocessing(["where R varies along the line"]),

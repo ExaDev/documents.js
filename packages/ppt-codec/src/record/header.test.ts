@@ -71,7 +71,7 @@ describe("readRecordHeader", () => {
   });
 
   it("names the true remaining-byte count at a non-zero offset, not the buffer's own total length", () => {
-    // offset 5 into a 7-byte buffer leaves 2 bytes, not 7 -- an arithmetic mutant that added offset back onto bytes.length instead of subtracting it would report 12 here.
+    // offset 5 into a 7-byte buffer leaves 2 bytes, not 7 — an arithmetic mutant that added offset back onto bytes.length instead of subtracting it would report 12 here.
     expect(() => readRecordHeader(new Uint8Array(7), 5)).toThrow(
       "record header at offset 5 needs 8 bytes but only 2 remain",
     );

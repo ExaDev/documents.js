@@ -12,7 +12,7 @@ import {
   UnsupportedFontSourceFormatError,
 } from "./document-fonts";
 
-// Proves the DocumentFormat-dispatch itself, not the underlying face extraction (already covered end to end by src/fonts/ooxml.test.ts/odf.test.ts) -- each case asserts extractSourceFontsForFormat(format, bytes) produces exactly what extractSourceFonts({kind, package}) already produces for the identical package, so a regression in the dispatch (wrong codec picked, wrong FontSourcePackage discriminant) surfaces as a real mismatch rather than a false pass.
+// Proves the DocumentFormat-dispatch itself, not the underlying face extraction (already covered end to end by src/fonts/ooxml.test.ts/odf.test.ts) — each case asserts extractSourceFontsForFormat(format, bytes) produces exactly what extractSourceFonts({kind, package}) already produces for the identical package, so a regression in the dispatch (wrong codec picked, wrong FontSourcePackage discriminant) surfaces as a real mismatch rather than a false pass.
 
 describe("extractSourceFontsForFormat", () => {
   it('docx: dispatches through ooxml.js decodePackage to the "docx" discriminant', () => {

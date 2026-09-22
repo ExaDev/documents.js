@@ -1,8 +1,8 @@
 import { zipPackage } from "odf.js";
 
-// Hand-authored ODF XML zipped via odf.js's own zipPackage, matching this repo's own src/test-support/docx-extras-fixture.ts convention -- a real package built at the byte level rather than through any format-specific write API, since neither odf.js nor documents.js exposes a .odm writer at all. Ported from documents.js's own src/test-support/odm.ts: the text:section/text:section-source shape below (a self-closing text:section-source, a relative "../chapterN.odt" href, text:filter-name="writer8", no xlink:show/xlink:type) is exactly what a real, unmodified LibreOffice .odm was empirically confirmed to produce -- see documents.js's own odmToPdf README/gotchas entry for the real-file verification this shape is checked against.
+// Hand-authored ODF XML zipped via odf.js's own zipPackage, matching this repo's own src/test-support/docx-extras-fixture.ts convention — a real package built at the byte level rather than through any format-specific write API, since neither odf.js nor documents.js exposes a .odm writer at all. Ported from documents.js's own src/test-support/odm.ts: the text:section/text:section-source shape below (a self-closing text:section-source, a relative "../chapterN.odt" href, text:filter-name="writer8", no xlink:show/xlink:type) is exactly what a real, unmodified LibreOffice .odm was empirically confirmed to produce — see documents.js's own odmToPdf README/gotchas entry for the real-file verification this shape is checked against.
 //
-// Deliberately carries no "mimetype" zip entry: odf.js's own readOdm (typed/odm/read.ts) and readOdtContent go straight to the "content.xml" part and never consult a mimetype entry at all -- decodePackage's zip reader has no format-sniffing step of its own either, since every caller here already supplies the document's format explicitly. An earlier version of this fixture carried one anyway, purely to mimic a real archive's shape, with nothing in this operation's own tests (or odf.js's) that could ever observe it -- untestable padding, not a real requirement, so it is gone.
+// Deliberately carries no "mimetype" zip entry: odf.js's own readOdm (typed/odm/read.ts) and readOdtContent go straight to the "content.xml" part and never consult a mimetype entry at all — decodePackage's zip reader has no format-sniffing step of its own either, since every caller here already supplies the document's format explicitly. An earlier version of this fixture carried one anyway, purely to mimic a real archive's shape, with nothing in this operation's own tests (or odf.js's) that could ever observe it — untestable padding, not a real requirement, so it is gone.
 
 function enc(value: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(value);
@@ -49,7 +49,7 @@ function chapterContentXml(
   );
 }
 
-// A minimal but structurally authentic odt chapter -- one heading and one paragraph -- with caller-supplied text so a test can tell which chapter's content ended up where in the combined output.
+// A minimal but structurally authentic odt chapter — one heading and one paragraph — with caller-supplied text so a test can tell which chapter's content ended up where in the combined output.
 export function chapterOdtBytes(
   heading: string,
   body: string,

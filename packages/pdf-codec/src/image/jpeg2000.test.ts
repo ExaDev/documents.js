@@ -10,7 +10,7 @@ import {
 } from "./jpeg2000-errors";
 import { decodeJpeg2000, readJpeg2000Metadata } from "./jpeg2000";
 
-// The lossy fixtures have no exact answer to reproduce (see src/test-support/jpeg2000.ts), so they are held to the tightest bound that is meaningful at all: every sample within one of what OpenJPEG's own decoder produced, and all but a small fraction of them identical. A wrong context label, a wrong subband gain or a wrong lifting constant does not land inside a bound like this -- it lands orders of magnitude outside it.
+// The lossy fixtures have no exact answer to reproduce (see src/test-support/jpeg2000.ts), so they are held to the tightest bound that is meaningful at all: every sample within one of what OpenJPEG's own decoder produced, and all but a small fraction of them identical. A wrong context label, a wrong subband gain or a wrong lifting constant does not land inside a bound like this — it lands orders of magnitude outside it.
 const IRREVERSIBLE_MAX_SAMPLE_DIFFERENCE = 1;
 const IRREVERSIBLE_MAX_DIFFERING_FRACTION = 0.01;
 

@@ -7,7 +7,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// The adapter only ever reads input.files?.[0] -- a numeric-indexed, length-and-item object is all FileList's real interface requires for that, so this builds one directly rather than via object-spreading a File[] (which TypeScript flags as overwriting length/index properties it considers already declared by the array's own structural type).
+// The adapter only ever reads input.files?.[0] — a numeric-indexed, length-and-item object is all FileList's real interface requires for that, so this builds one directly rather than via object-spreading a File[] (which TypeScript flags as overwriting length/index properties it considers already declared by the array's own structural type).
 function fileList(files: File[]): FileList {
   const list: FileList = {
     length: files.length,
@@ -20,7 +20,7 @@ function fileList(files: File[]): FileList {
   return list;
 }
 
-// The adapter drives the picker via input.click(), which a real browser resolves only after the user interacts -- here we intercept the click itself to synthesize the OS picker's outcome (a chosen file, or none) before dispatching the 'change' listener the code awaits.
+// The adapter drives the picker via input.click(), which a real browser resolves only after the user interacts — here we intercept the click itself to synthesize the OS picker's outcome (a chosen file, or none) before dispatching the 'change' listener the code awaits.
 function stubPickedFiles(files: File[]): void {
   vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(function (
     this: HTMLInputElement,

@@ -4,7 +4,7 @@ import type { ContentParagraph } from "document-schema.js";
 import { el, txt } from "../../xml/fragment";
 import { readDocxContent } from "./read";
 
-// A docx whose body does NOT sit at word/document.xml. OPC names the main part through the package root's officeDocument relationship and everything hanging off it through that part's own relationships, so a producer is free to call the body anything; Word opens such a file without complaint (ExaDev/documents.js#1314). Every package here is built in code -- no real-world file is committed as a fixture.
+// A docx whose body does NOT sit at word/document.xml. OPC names the main part through the package root's officeDocument relationship and everything hanging off it through that part's own relationships, so a producer is free to call the body anything; Word opens such a file without complaint (ExaDev/documents.js#1314). Every package here is built in code — no real-world file is committed as a fixture.
 
 const RELATIONSHIPS_NS =
   "http://schemas.openxmlformats.org/package/2006/relationships";

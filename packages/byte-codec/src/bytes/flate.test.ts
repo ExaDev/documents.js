@@ -92,7 +92,7 @@ describe("inflateTolerant", () => {
   });
 
   it("recovers raw (unwrapped) DEFLATE data mislabelled as a zlib stream", () => {
-    // zlibSync's own internal raw-deflate writer, exposed indirectly: strip the 2-byte zlib header and 4-byte trailing Adler-32 checksum from a real zlib stream to get a raw DEFLATE payload with no wrapper -- exactly what some real-world producers mislabel as FlateDecode.
+    // zlibSync's own internal raw-deflate writer, exposed indirectly: strip the 2-byte zlib header and 4-byte trailing Adler-32 checksum from a real zlib stream to get a raw DEFLATE payload with no wrapper — exactly what some real-world producers mislabel as FlateDecode.
     const original = new TextEncoder().encode(
       "raw deflate payload, no zlib wrapper",
     );

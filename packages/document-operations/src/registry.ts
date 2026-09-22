@@ -29,7 +29,7 @@ import { outlineDocumentOperation } from "./operations/outline";
 import { pdfInspectOperation } from "./operations/pdf-inspect";
 
 /**
- * Every document operation this package defines, one entry per MCP tool/CLI command/REST route -- "the same registry as the MCP" a consumer that needs to enumerate every operation (rather than importing one by name) reaches for: an MCP server registers each entry as a tool, a REST server adds one route per entry, and a CLI can validate its own parsed flags against an entry's inputSchema before dispatching to its run().
+ * Every document operation this package defines, one entry per MCP tool/CLI command/REST route — "the same registry as the MCP" a consumer that needs to enumerate every operation (rather than importing one by name) reaches for: an MCP server registers each entry as a tool, a REST server adds one route per entry, and a CLI can validate its own parsed flags against an entry's inputSchema before dispatching to its run().
  */
 export const DOCUMENT_OPERATIONS: readonly DocumentOperation[] = [
   convertDocumentOperation,

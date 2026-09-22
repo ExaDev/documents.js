@@ -11,9 +11,9 @@ import { encodeXmlText } from "../../xml/entities";
 import { ptToEmu } from "../shared/units";
 import { quoteSheetNameIfNeeded } from "./defined-names";
 
-// The write-side inverse of typed/xlsx/drawings.ts (ExaDev/documents.js#973): a worksheet's own images/embeddedObjects back into a real xl/drawings/drawingN.xml, one xdr:oneCellAnchor per picture or chart graphic frame. oneCellAnchor is chosen over twoCellAnchor throughout -- never absoluteAnchor either -- because every anchor field readAnchorPlacement needs for THIS spelling (the from-marker's column/row/offset, the frame's own width/height) is already exactly what ContentSheetImage/ContentEmbeddedObject carry; a twoCellAnchor's own to-marker would have to be derived by inverting the sheet's column-width/row-height geometry (typed/xlsx/drawings.ts's own SheetGridGeometry, built for the READ direction) for no fidelity gain, since oneCellAnchor's xdr:ext already states the frame size directly and losslessly. This is also a real, common producer spelling -- Excel's own "Move, but don't size with cells" convention for an inserted picture, per drawings.ts's own top-of-file note.
+// The write-side inverse of typed/xlsx/drawings.ts (ExaDev/documents.js#973): a worksheet's own images/embeddedObjects back into a real xl/drawings/drawingN.xml, one xdr:oneCellAnchor per picture or chart graphic frame. oneCellAnchor is chosen over twoCellAnchor throughout — never absoluteAnchor either — because every anchor field readAnchorPlacement needs for THIS spelling (the from-marker's column/row/offset, the frame's own width/height) is already exactly what ContentSheetImage/ContentEmbeddedObject carry; a twoCellAnchor's own to-marker would have to be derived by inverting the sheet's column-width/row-height geometry (typed/xlsx/drawings.ts's own SheetGridGeometry, built for the READ direction) for no fidelity gain, since oneCellAnchor's xdr:ext already states the frame size directly and losslessly. This is also a real, common producer spelling — Excel's own "Move, but don't size with cells" convention for an inserted picture, per drawings.ts's own top-of-file note.
 //
-// A chart embedded object's own cached series/category model (the small one-sheet spreadsheet ContentDocument typed/xlsx/drawings.ts's chartCells produces) is written back through the SAME cache-only vocabulary the pptx chart reader and this reader's own readChartTable understand: c:tx as a literal c:v, c:cat/c:val as strRef/numRef pairs whose own c:f is a real, sheet-qualified range formula (cosmetic only -- neither reader ever consults it) and whose cache carries every point. No embedded workbook (c:externalData) is written -- the reader never opens one either (typed/pptx/chart.ts's own top comment), so there is nothing on the read side that would ever notice its absence.
+// A chart embedded object's own cached series/category model (the small one-sheet spreadsheet ContentDocument typed/xlsx/drawings.ts's chartCells produces) is written back through the SAME cache-only vocabulary the pptx chart reader and this reader's own readChartTable understand: c:tx as a literal c:v, c:cat/c:val as strRef/numRef pairs whose own c:f is a real, sheet-qualified range formula (cosmetic only — neither reader ever consults it) and whose cache carries every point. No embedded workbook (c:externalData) is written — the reader never opens one either (typed/pptx/chart.ts's own top comment), so there is nothing on the read side that would ever notice its absence.
 
 const XDR_NS =
   "http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing";
@@ -27,7 +27,7 @@ const PKG_RELS_NS =
 const REL_IMAGE = `${R_NS}/image`;
 const REL_CHART = `${R_NS}/chart`;
 
-// The Content_Types overrides build.ts needs for every drawing/chart part this module writes -- CT_DRAWING for its own xl/drawings/drawingN.xml, CT_CHART for each xl/charts/chartN.xml this module's own extraParts carries.
+// The Content_Types overrides build.ts needs for every drawing/chart part this module writes — CT_DRAWING for its own xl/drawings/drawingN.xml, CT_CHART for each xl/charts/chartN.xml this module's own extraParts carries.
 export const CT_DRAWING =
   "application/vnd.openxmlformats-officedocument.drawing+xml";
 export const CT_CHART =
@@ -176,7 +176,7 @@ function chartSeriesFromDocument(document: ContentDocument): ChartSeriesData {
   return { sheetName: sheet.name, categories, series };
 }
 
-// c:catAx/c:valAx need distinct workbook-unique axis ids -- any two literals satisfy real Excel and this ecosystem's own reader (which never reads c:axId at all), so a fixed pair suffices since every chart part is its own standalone XML document with no cross-chart id scope.
+// c:catAx/c:valAx need distinct workbook-unique axis ids — any two literals satisfy real Excel and this ecosystem's own reader (which never reads c:axId at all), so a fixed pair suffices since every chart part is its own standalone XML document with no cross-chart id scope.
 const CATEGORY_AXIS_ID = "111111111";
 const VALUE_AXIS_ID = "222222222";
 
@@ -250,7 +250,7 @@ function buildChartRoot(document: ContentDocument): XmlElement {
   );
 }
 
-// Global, workbook-wide counters for chart and media file numbering -- shared across every sheet's own buildSheetDrawing call (build.ts threads one instance through its own sequential sheet walk), so chart1.xml/image1.png number up across the whole workbook the way a real producer's own output does, never restarting per sheet.
+// Global, workbook-wide counters for chart and media file numbering — shared across every sheet's own buildSheetDrawing call (build.ts threads one instance through its own sequential sheet walk), so chart1.xml/image1.png number up across the whole workbook the way a real producer's own output does, never restarting per sheet.
 export interface DrawingCounters {
   nextChart: number;
   nextMedia: number;
@@ -299,7 +299,7 @@ function requireAnchorFields(object: ContentEmbeddedObject): {
   return { anchorRow, anchorColumn, offsetXPt, offsetYPt };
 }
 
-// One worksheet's own drawing layer: every image and chart embedded object it carries, laid out as xdr:oneCellAnchor entries in the sheet's own array order (images first, then embedded objects, mirroring ContentSheetSchema's own field order). undefined for a sheet carrying neither, which is the common case and gets no drawing part, no worksheet relationship, and no Content_Types override at all -- exactly the existing threaded-comments precedent (comments-write.ts's own sheetHasComments gate).
+// One worksheet's own drawing layer: every image and chart embedded object it carries, laid out as xdr:oneCellAnchor entries in the sheet's own array order (images first, then embedded objects, mirroring ContentSheetSchema's own field order). undefined for a sheet carrying neither, which is the common case and gets no drawing part, no worksheet relationship, and no Content_Types override at all — exactly the existing threaded-comments precedent (comments-write.ts's own sheetHasComments gate).
 export function buildSheetDrawing(
   sheet: ContentSheet,
   counters: DrawingCounters,
@@ -325,7 +325,7 @@ export function buildSheetDrawing(
   for (const image of images) {
     if (image.format === "svg") {
       throw new Error(
-        "buildXlsxPackageFromContent: a sheet image in svg format has no OOXML blip this writer can produce (SpreadsheetML's a:blip only references a raster part Excel decodes directly -- png/jpeg/gif)",
+        "buildXlsxPackageFromContent: a sheet image in svg format has no OOXML blip this writer can produce (SpreadsheetML's a:blip only references a raster part Excel decodes directly — png/jpeg/gif)",
       );
     }
     const mediaName = `image${counters.nextMedia++}.${image.format}`;

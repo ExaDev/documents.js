@@ -148,7 +148,7 @@ describe("patchCoreProperties", () => {
   it("XML-encodes a value written into a new or existing element", () => {
     const pkg = packageWithCore([]);
     patchCoreProperties(pkg, { title: "Q&A <draft>" });
-    // Asserted against the raw serialized XML, not readCoreProperties: that reader decodes entities on the way back out, so raw and encoded storage are indistinguishable to it -- deleting the encoding call entirely would still leave readCoreProperties reporting "Q&A <draft>" and every test green. The serialized text is the only place a missing encoding call would actually show up (as unescaped '&'/'<'/'>' corrupting the XML).
+    // Asserted against the raw serialized XML, not readCoreProperties: that reader decodes entities on the way back out, so raw and encoded storage are indistinguishable to it — deleting the encoding call entirely would still leave readCoreProperties reporting "Q&A <draft>" and every test green. The serialized text is the only place a missing encoding call would actually show up (as unescaped '&'/'<'/'>' corrupting the XML).
     const part = pkg.parts["docProps/core.xml"];
     if (part?.kind !== "xml") {
       throw new Error("expected an xml part");
@@ -229,7 +229,7 @@ describe("patchCoreProperties", () => {
     }).toThrow(/no 'docProps\/core\.xml' XML part/);
   });
 
-  // ExaDev/documents.js#1007 round 2: every core-properties child is optional, so a real producer writing only cp:keywords has no reason to ever declare the dc namespace -- a legally-minimal core.xml. Creating a dc-prefixed element into it without also declaring xmlns:dc would be a fatal namespace well-formedness error real consumers (Word, LibreOffice) reject outright.
+  // ExaDev/documents.js#1007 round 2: every core-properties child is optional, so a real producer writing only cp:keywords has no reason to ever declare the dc namespace — a legally-minimal core.xml. Creating a dc-prefixed element into it without also declaring xmlns:dc would be a fatal namespace well-formedness error real consumers (Word, LibreOffice) reject outright.
   it("declares the dc namespace on the root when a patch creates the first dc-prefixed element in a core.xml that only ever bound cp", () => {
     const core = el(
       "cp:coreProperties",

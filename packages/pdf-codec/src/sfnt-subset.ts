@@ -8,17 +8,17 @@ import { hasBytes, sfntTableBytes, u16, u32 } from "./sfnt";
 
 // A glyph subsetter for a TrueType-outline ('glyf'/'loca') sfnt font: given the Unicode code points a document actually uses for one face, it emits a new, much smaller sfnt font carrying only those glyphs' outlines.
 //
-// The one design decision everything else follows from: glyph IDs are PRESERVED, never renumbered. A glyph that was ID 79 in the source font is still ID 79 in the subset; every unused ID below the highest used one survives as an empty 'loca' entry (zero bytes of glyph data) rather than being squeezed out. That buys three things a renumbering subsetter has to work for. A composite glyph's own component records reference their base letter and combining marks by glyph ID, inside bytes this subsetter copies verbatim; preserving IDs means those references stay correct without rewriting a single glyph's bytes. A caller's own already-resolved code-point-to-glyph-ID mapping (what cmap-table.ts hands back, and what a text run has already been laid out against) stays valid against the subset. And CID == GID stays trivially true for the embedded font program, which is the same invariant the math-font pipeline already relies on for its own, unrelated reason (see math-font-write.ts: a bare CFF program embedded for a /CIDFontType0 is indexed by glyph order, so no /CIDToGIDMap is needed) -- here it means a /CIDFontType2 needs only /CIDToGIDMap /Identity.
+// The one design decision everything else follows from: glyph IDs are PRESERVED, never renumbered. A glyph that was ID 79 in the source font is still ID 79 in the subset; every unused ID below the highest used one survives as an empty 'loca' entry (zero bytes of glyph data) rather than being squeezed out. That buys three things a renumbering subsetter has to work for. A composite glyph's own component records reference their base letter and combining marks by glyph ID, inside bytes this subsetter copies verbatim; preserving IDs means those references stay correct without rewriting a single glyph's bytes. A caller's own already-resolved code-point-to-glyph-ID mapping (what cmap-table.ts hands back, and what a text run has already been laid out against) stays valid against the subset. And CID == GID stays trivially true for the embedded font program, which is the same invariant the math-font pipeline already relies on for its own, unrelated reason (see math-font-write.ts: a bare CFF program embedded for a /CIDFontType0 is indexed by glyph order, so no /CIDToGIDMap is needed) — here it means a /CIDFontType2 needs only /CIDToGIDMap /Identity.
 //
-// The honest cost, stated rather than buried: an unused slot still occupies four bytes of 'loca' and four of 'hmtx', so those two tables stay proportional to the HIGHEST used glyph ID rather than to the number of glyphs actually kept. Outlines are where the bulk of a text font lives, and they collapse to the handful of glyphs a document really uses, so the output is a small fraction of the source either way -- but for a document that touches one glyph near the end of a large font's glyph order (an accented character's own combining mark, say), most of what remains is those two index tables rather than outline data.
+// The honest cost, stated rather than buried: an unused slot still occupies four bytes of 'loca' and four of 'hmtx', so those two tables stay proportional to the HIGHEST used glyph ID rather than to the number of glyphs actually kept. Outlines are where the bulk of a text font lives, and they collapse to the handful of glyphs a document really uses, so the output is a small fraction of the source either way — but for a document that touches one glyph near the end of a large font's glyph order (an accented character's own combining mark, say), most of what remains is those two index tables rather than outline data.
 //
 // What the output contains (ISO/IEC 14496-22 for the sfnt tables themselves, ISO 32000-1 9.9 for what a PDF embedded font program actually needs):
 //   - rebuilt: 'head' (with indexToLocFormat forced long), 'hhea', 'maxp', 'loca', 'glyf', 'hmtx'
-//   - copied verbatim when the source has them: 'cvt ', 'fpgm', 'prep' -- the hinting programs, which are global to the font rather than per-glyph, so a subset that drops them renders differently at small sizes than the font it was cut from
+//   - copied verbatim when the source has them: 'cvt ', 'fpgm', 'prep' — the hinting programs, which are global to the font rather than per-glyph, so a subset that drops them renders differently at small sizes than the font it was cut from
 //   - stubbed: 'post', as a version 3.0 header meaning "this font carries no glyph names"
 //   - omitted: 'cmap' (a CIDFontType2 program is addressed by glyph ID through the PDF font dictionary's own encoding, never through the font's own character map), and 'name'/'OS/2'/'GSUB'/'GPOS'/'kern' (a PDF FontDescriptor carries the metrics and style bits a consumer reads, and nothing in an embedded program's own layout tables is consulted once text has already been laid out and positioned)
 //
-// The whole module returns `undefined` rather than throwing for any font it cannot subset correctly -- a CFF-flavoured font with no 'glyf' at all, a missing or truncated table it must rebuild, a composite whose component list runs past the end of its own glyph, or a 'cmap' pointing outside the glyph range. The caller's fallback for each is the same (embed the source font whole, or substitute another face), and none of them is a defect in this code worth aborting a whole document's conversion over.
+// The whole module returns `undefined` rather than throwing for any font it cannot subset correctly — a CFF-flavoured font with no 'glyf' at all, a missing or truncated table it must rebuild, a composite whose component list runs past the end of its own glyph, or a 'cmap' pointing outside the glyph range. The caller's fallback for each is the same (embed the source font whole, or substitute another face), and none of them is a defect in this code worth aborting a whole document's conversion over.
 
 export interface SfntSubsetResult {
   readonly bytes: Uint8Array<ArrayBuffer>;
@@ -38,7 +38,7 @@ const INDEX_TO_LOC_FORMAT_LONG = 1;
 const HHEA_TABLE_SIZE = 36;
 const HHEA_NUMBER_OF_HMETRICS_OFFSET = 34;
 
-const MAXP_MIN_SIZE = 6; // version (Fixed) + numGlyphs -- the whole of a version 0.5 'maxp'
+const MAXP_MIN_SIZE = 6; // version (Fixed) + numGlyphs — the whole of a version 0.5 'maxp'
 const MAXP_NUM_GLYPHS_OFFSET = 4;
 
 // A 'post' version 3.0 header, the format whose whole meaning is "no glyph names follow" (clause 5.2.5). Everything after the version and the four metric fields is a memory-usage hint no consumer of an embedded PDF font program reads.
@@ -54,7 +54,7 @@ const LOCA_LONG_ENTRY_SIZE = 4;
 const TABLE_DIRECTORY_HEADER_SIZE = 12;
 const TABLE_RECORD_SIZE = 16;
 const SFNT_VERSION_TRUETYPE = 0x00010000;
-// The value a whole file's checksum is defined to sum to once 'head's own checkSumAdjustment is filled in (clause 4.1) -- so the adjustment is this constant minus the checksum of the file with that field zeroed.
+// The value a whole file's checksum is defined to sum to once 'head's own checkSumAdjustment is filled in (clause 4.1) — so the adjustment is this constant minus the checksum of the file with that field zeroed.
 const CHECKSUM_ADJUSTMENT_MAGIC = 0xb1b0afba;
 
 const GLYPH_ALIGNMENT = 4;
@@ -86,7 +86,7 @@ function writeU32(
   bytes[offset + 3] = value & 0xff;
 }
 
-// The sfnt checksum (clause 4.1): the sum of a region's big-endian uint32s, truncated to 32 bits. Callers pass a 4-byte-aligned region only -- every table this module writes is zero-padded to a multiple of four, which is the same thing the spec's own "pad with zeroes" wording produces.
+// The sfnt checksum (clause 4.1): the sum of a region's big-endian uint32s, truncated to 32 bits. Callers pass a 4-byte-aligned region only — every table this module writes is zero-padded to a multiple of four, which is the same thing the spec's own "pad with zeroes" wording produces.
 function checksum(
   bytes: Uint8Array<ArrayBuffer>,
   offset: number,
@@ -109,7 +109,7 @@ interface SourceHmtx {
   readonly numberOfHMetrics: number;
 }
 
-// One glyph's advance width and left side bearing, both as their raw 16-bit patterns so the bearing round-trips without a signed/unsigned conversion in either direction. Beyond `numberOfHMetrics` a font stores only bearings, every such glyph sharing the last explicit advance (clause 5.2.4) -- the subset re-expands that into a full record per glyph, so its own numberOfHMetrics can simply equal its glyph count.
+// One glyph's advance width and left side bearing, both as their raw 16-bit patterns so the bearing round-trips without a signed/unsigned conversion in either direction. Beyond `numberOfHMetrics` a font stores only bearings, every such glyph sharing the last explicit advance (clause 5.2.4) — the subset re-expands that into a full record per glyph, so its own numberOfHMetrics can simply equal its glyph count.
 function readHorizontalMetrics(
   source: SourceHmtx,
   glyphId: number,
@@ -161,7 +161,7 @@ function buildPostStub(font: SfntFont): Uint8Array<ArrayBuffer> {
   return post;
 }
 
-// The transitive closure a subset needs: the glyphs the code points map to, any glyph IDs handed over directly (a ligature glyph 'GSUB' substitution produced, which no single code point's 'cmap' entry reaches), GID 0, and -- following each composite's own component records, which themselves may be composite -- every glyph any of those is assembled from.
+// The transitive closure a subset needs: the glyphs the code points map to, any glyph IDs handed over directly (a ligature glyph 'GSUB' substitution produced, which no single code point's 'cmap' entry reaches), GID 0, and — following each composite's own component records, which themselves may be composite — every glyph any of those is assembled from.
 function collectGlyphIds(
   glyf: GlyfTable,
   cmap: CmapLookup,
@@ -208,7 +208,7 @@ function collectGlyphIds(
     }
     const components = glyf.compositeComponents(glyphId);
     if (components === undefined) {
-      return undefined; // a composite whose component list is truncated -- glyf.ts never returns a partial walk, and half a composite's components would emit a visibly broken glyph
+      return undefined; // a composite whose component list is truncated — glyf.ts never returns a partial walk, and half a composite's components would emit a visibly broken glyph
     }
     for (const component of components) {
       if (component.glyphIndex >= numGlyphs) {
@@ -278,7 +278,7 @@ export function subsetSfnt(
   const glyphIds = [...collected.used].sort((a, b) => a - b);
   const numGlyphs = glyphIds[glyphIds.length - 1]! + 1; // GID-preserving: the subset spans 0..maxUsedGid, with every unused slot in between kept empty
 
-  // 'glyf' and 'loca' together. Each used glyph's own bytes go in verbatim, padded to a four-byte boundary; every unused glyph gets a zero-length entry, which is exactly how the format already represents a glyph with no outline. The padding lands inside the glyph's own 'loca' range, since the next entry points past it -- the standard way the format expresses alignment, and invisible to a consumer, which stops at the end of the glyph's own contour data.
+  // 'glyf' and 'loca' together. Each used glyph's own bytes go in verbatim, padded to a four-byte boundary; every unused glyph gets a zero-length entry, which is exactly how the format already represents a glyph with no outline. The padding lands inside the glyph's own 'loca' range, since the next entry points past it — the standard way the format expresses alignment, and invisible to a consumer, which stops at the end of the glyph's own contour data.
   const outlines = new Map<number, Uint8Array<ArrayBuffer>>();
   let glyfLength = 0;
   for (const glyphId of glyphIds) {
@@ -303,7 +303,7 @@ export function subsetSfnt(
   }
   writeU32(locaData, numGlyphs * LOCA_LONG_ENTRY_SIZE, glyfOffset);
 
-  // 'hmtx', re-expanded to one full record per glyph so the subset's own numberOfHMetrics can equal its glyph count -- one code path, always legal, at a cost of two bytes per glyph the source stored bearing-only.
+  // 'hmtx', re-expanded to one full record per glyph so the subset's own numberOfHMetrics can equal its glyph count — one code path, always legal, at a cost of two bytes per glyph the source stored bearing-only.
   const hmtxData = new Uint8Array(numGlyphs * LONG_HOR_METRIC_SIZE);
   for (let glyphId = 0; glyphId < numGlyphs; glyphId++) {
     const metrics = readHorizontalMetrics(

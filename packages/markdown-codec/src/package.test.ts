@@ -1,6 +1,6 @@
 // The tree-form half of the public surface: readMarkdown/writeMarkdown/markdownCodec over document-schema.js's DocumentTree, and the three properties that make them trustworthy as the primary entry points.
 //
-// (i) They are exactly assembleTree/flattenTree composed onto the flat pair -- pinned by constructing the same value both ways, so a future edit that swapped assembleTree for bare decompose (dropping the styles-minting pass) or forgot to flatten before emitting would fail here rather than silently changing what callers get. (ii) The transform is transparent to the markdown itself: the tree pair renders byte-identical text to the flat pair over real multi-construct content, which is what lets src/conformance.test.ts keep measuring the flat pair alone and still speak for both. (iii) Bytes survive a full round trip through the tree: decode -> encode -> decode reproduces the identical package, and the re-encoded bytes still carry the document's real content rather than an empty-but-valid shell.
+// (i) They are exactly assembleTree/flattenTree composed onto the flat pair — pinned by constructing the same value both ways, so a future edit that swapped assembleTree for bare decompose (dropping the styles-minting pass) or forgot to flatten before emitting would fail here rather than silently changing what callers get. (ii) The transform is transparent to the markdown itself: the tree pair renders byte-identical text to the flat pair over real multi-construct content, which is what lets src/conformance.test.ts keep measuring the flat pair alone and still speak for both. (iii) Bytes survive a full round trip through the tree: decode -> encode -> decode reproduces the identical package, and the re-encoded bytes still carry the document's real content rather than an empty-but-valid shell.
 //
 // The blockquote fixture below is not decorative: two blockquote paragraphs share an indentLeftPt tuple, which is the one construct this package's lowering produces that assembleTree's minting actually hoists onto a styles-table entry. It is the case where "assembleTree" and "decompose plus an envelope" produce genuinely different values, so it is the case that proves which one readMarkdown calls.
 
@@ -29,7 +29,7 @@ import {
 import { readMarkdown, readMarkdownContent } from "./read";
 import { writeMarkdown, writeMarkdownContent } from "./write";
 
-// Every construct the lower/emit pair maps differently -- headings, a nested-paragraph blockquote, both list kinds, a GFM table, inline emphasis and a link, and a footnote whose definition rides a constructStart/constructEnd pair (the one block shape decompose promotes to a group of its own).
+// Every construct the lower/emit pair maps differently — headings, a nested-paragraph blockquote, both list kinds, a GFM table, inline emphasis and a link, and a footnote whose definition rides a constructStart/constructEnd pair (the one block shape decompose promotes to a group of its own).
 const SAMPLE = [
   "# Title",
   "",
@@ -53,7 +53,7 @@ const SAMPLE = [
   "",
 ].join("\n");
 
-// Two blockquote paragraphs sharing one indentLeftPt tuple -- the minting case, see this file's own top-of-file note.
+// Two blockquote paragraphs sharing one indentLeftPt tuple — the minting case, see this file's own top-of-file note.
 const BLOCKQUOTED =
   "> Quoted one.\n>\n> Quoted two.\n\n> Quoted three.\n>\n> Quoted four.\n";
 
@@ -69,7 +69,7 @@ const FOOTNOTE_SHAPES = {
   afterHeading: "# Heading\n\nBody[^1].\n\n[^1]: note\n",
 } as const;
 
-// Construct groups sit wherever their marker pair sat in the block flow, which for a footnote definition following a heading is inside that heading's own group rather than at the section's top level -- so this walks the whole subtree rather than filtering one children array. Filtered to ANCHOR groups where the tests count footnote definitions specifically: since blockquotes became divisions, a fixture's quotes promote construct groups of their own beside the anchors.
+// Construct groups sit wherever their marker pair sat in the block flow, which for a footnote definition following a heading is inside that heading's own group rather than at the section's top level — so this walks the whole subtree rather than filtering one children array. Filtered to ANCHOR groups where the tests count footnote definitions specifically: since blockquotes became divisions, a fixture's quotes promote construct groups of their own beside the anchors.
 function collectConstructGroups(node: unknown): SectionConstructGroupNode[] {
   if (!isTreeGroup(node)) return [];
   const here = isSectionConstructGroupNode(node) ? [node] : [];
@@ -155,7 +155,7 @@ describe("readMarkdown: markdown text -> DocumentTree", () => {
     ).toThrow();
   });
 
-  it("flattens back to exactly the flat document over every construct spelling this package now mints -- run-level title extents, the division pair, the embedded formula, codeLanguage, task and item-identity memberships, and HTML residue", () => {
+  it("flattens back to exactly the flat document over every construct spelling this package now mints — run-level title extents, the division pair, the embedded formula, codeLanguage, task and item-identity memberships, and HTML residue", () => {
     const source = [
       '# Heading with [a titled link](/u "the title")',
       "",
@@ -213,7 +213,7 @@ describe("writeMarkdown: DocumentTree -> markdown text", () => {
     expect(written).toContain("## Section two");
     expect(written).toContain("[a link](https://example.com)");
     expect(written).toContain("| a | b |");
-    // The trailing full stop comes back escaped (`body\.`) -- this package escapes ASCII punctuation on emit -- so the assertion stops at the last unescaped character rather than pinning an escape this test has no opinion about.
+    // The trailing full stop comes back escaped (`body\.`) — this package escapes ASCII punctuation on emit — so the assertion stops at the last unescaped character rather than pinning an escape this test has no opinion about.
     expect(written).toContain("[^1]: The note body");
   });
 
@@ -249,7 +249,7 @@ describe("writeMarkdown: DocumentTree -> markdown text", () => {
     );
   });
 
-  it("throws MarkdownUnsupportedDocumentKindError, not a bare Error, for a formula package with no formula node -- flattenTree has its own single-ContentFormula-node constraint for this kind that this check pre-empts entirely", () => {
+  it("throws MarkdownUnsupportedDocumentKindError, not a bare Error, for a formula package with no formula node — flattenTree has its own single-ContentFormula-node constraint for this kind that this check pre-empts entirely", () => {
     // Hand-built rather than routed through assembleTree: assembleTree(ContentDocument) always produces exactly one formula node for a 'formula' document, so this empty-children shape (the one flattenTree itself rejects) can only arise from a caller constructing a DocumentTree directly.
     const formula: DocumentTree = {
       kind: "formula",

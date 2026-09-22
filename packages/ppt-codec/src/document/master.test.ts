@@ -301,7 +301,7 @@ describe("resolveCharacterProperties", () => {
       ],
       undefined,
     );
-    // A run at level 1 with no size of its own resolves to level 1's own 20, not level 0's 10 -- proving the walk actually reverses to nearest-first rather than reading level 0 first.
+    // A run at level 1 with no size of its own resolves to level 1's own 20, not level 0's 10 — proving the walk actually reverses to nearest-first rather than reading level 0 first.
     expect(
       resolveCharacterProperties(undefined, table, TEXT_TYPE_BODY, 1).sizePt,
     ).toBe(20);
@@ -323,7 +323,7 @@ describe("resolveCharacterProperties", () => {
 });
 
 describe("resolveParagraphProperties", () => {
-  it("never resolves indentLevel itself from the master -- it is always the run's own stated (or default) value", () => {
+  it("never resolves indentLevel itself from the master — it is always the run's own stated (or default) value", () => {
     const table = buildMasterStyleTable(
       [atomOf(TEXT_TYPE_BODY, [level({}, { indentLevel: 3 })])],
       undefined,

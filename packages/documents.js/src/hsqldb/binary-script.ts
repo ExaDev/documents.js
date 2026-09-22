@@ -10,11 +10,11 @@ import {
 import type { HsqldbTable } from "./script";
 import { parseHsqldbScript } from "./script";
 
-// Tier 4 -- HSQLDB's own whole-script BINARY (hsqldb.script_format=1) and COMPRESSED (=3) serialisations of database/script, the two alternatives to the TEXT format (=0) src/hsqldb/script.ts parses. These are NOT a different encoding of the same SQL text: org.hsqldb.scriptio.ScriptWriterBinary writes the database's own DDL as one org.hsqldb.Result record (the identical Result DatabaseScript.getScript builds for the TEXT writer, serialised through Result.write/RowOutputBinary rather than printed), followed by a per-table section carrying each MEMORY/TEXT table's rows in the SAME per-column binary encoding src/hsqldb/rowformat.ts already decodes for a CACHED table's row store. COMPRESSED is that identical byte stream wrapped in ordinary zlib DEFLATE (RFC 1950) -- ScriptWriterZipped's own java.util.zip.DeflaterOutputStream, whose default framing is zlib, not gzip -- and nothing else.
+// Tier 4 — HSQLDB's own whole-script BINARY (hsqldb.script_format=1) and COMPRESSED (=3) serialisations of database/script, the two alternatives to the TEXT format (=0) src/hsqldb/script.ts parses. These are NOT a different encoding of the same SQL text: org.hsqldb.scriptio.ScriptWriterBinary writes the database's own DDL as one org.hsqldb.Result record (the identical Result DatabaseScript.getScript builds for the TEXT writer, serialised through Result.write/RowOutputBinary rather than printed), followed by a per-table section carrying each MEMORY/TEXT table's rows in the SAME per-column binary encoding src/hsqldb/rowformat.ts already decodes for a CACHED table's row store. COMPRESSED is that identical byte stream wrapped in ordinary zlib DEFLATE (RFC 1950) — ScriptWriterZipped's own java.util.zip.DeflaterOutputStream, whose default framing is zlib, not gzip — and nothing else.
 //
-// The consequence for this package is that Tier 4 needs no new value decoding at all: it recovers the DDL text, hands it to Tier 1's own parseHsqldbScript to get the table/column definitions, and then splices in the row values the binary section carries. A CACHED table's rows are still NOT in the script in either format (ScriptWriterBase.writeExistingData only writes a table's rows when includeCachedData is set, which it never is for a checkpoint script), so a Tier 4 script from a database with CACHED tables still needs Tier 2's own database/data decode on top -- and gets it, because the DDL this module recovers includes the same SET TABLE ... INDEX'...' lines Tier 2 reads its roots from.
+// The consequence for this package is that Tier 4 needs no new value decoding at all: it recovers the DDL text, hands it to Tier 1's own parseHsqldbScript to get the table/column definitions, and then splices in the row values the binary section carries. A CACHED table's rows are still NOT in the script in either format (ScriptWriterBase.writeExistingData only writes a table's rows when includeCachedData is set, which it never is for a checkpoint script), so a Tier 4 script from a database with CACHED tables still needs Tier 2's own database/data decode on top — and gets it, because the DDL this module recovers includes the same SET TABLE ... INDEX'...' lines Tier 2 reads its roots from.
 //
-// Ground truth is the decompiled HSQLDB 1.8.0.10 engine bundled in LibreOffice 26.2's own hsqldb.jar (org.hsqldb.scriptio.ScriptWriterBinary/ScriptReaderBinary/ScriptWriterZipped/ScriptReaderZipped for the record framing, org.hsqldb.Result.write/Result(RowInputBinary) and its nested ResultMetaData for the DDL record, org.hsqldb.rowio.RowOutputBinary/RowInputBinary for the field encoding), verified against two real databases that same jar produced -- one at hsqldb.script_format=1 and one at =3, otherwise identical, each created, populated, switched to its format via `SET SCRIPTFORMAT`, checkpointed, and shut down through java.sql, then re-opened by the engine itself and dumped back through JDBC as the ground-truth oracle. Both oracles are byte-identical to each other and to what this module decodes. See src/test-support/odb.ts's own Tier 4 fixtures and src/hsqldb/binary-script.test.ts.
+// Ground truth is the decompiled HSQLDB 1.8.0.10 engine bundled in LibreOffice 26.2's own hsqldb.jar (org.hsqldb.scriptio.ScriptWriterBinary/ScriptReaderBinary/ScriptWriterZipped/ScriptReaderZipped for the record framing, org.hsqldb.Result.write/Result(RowInputBinary) and its nested ResultMetaData for the DDL record, org.hsqldb.rowio.RowOutputBinary/RowInputBinary for the field encoding), verified against two real databases that same jar produced — one at hsqldb.script_format=1 and one at =3, otherwise identical, each created, populated, switched to its format via `SET SCRIPTFORMAT`, checkpointed, and shut down through java.sql, then re-opened by the engine itself and dumped back through JDBC as the ground-truth oracle. Both oracles are byte-identical to each other and to what this module decodes. See src/test-support/odb.ts's own Tier 4 fixtures and src/hsqldb/binary-script.test.ts.
 
 export class HsqldbBinaryScriptParseError extends Error {
   readonly offset: number;
@@ -28,7 +28,7 @@ export class HsqldbBinaryScriptParseError extends Error {
   }
 }
 
-// org.hsqldb.ResultConstants.DATA -- the only Result mode ScriptWriterBinary ever writes, since DatabaseScript.getScript builds its script through Result.newSingleColumnResult("COMMAND", Types.VARCHAR).
+// org.hsqldb.ResultConstants.DATA — the only Result mode ScriptWriterBinary ever writes, since DatabaseScript.getScript builds its script through Result.newSingleColumnResult("COMMAND", Types.VARCHAR).
 const RESULT_MODE_DATA = 3;
 const SQL_TYPE_VARCHAR = 12;
 
@@ -37,9 +37,9 @@ const TABLE_INIT_WITH_SCHEMA = 1;
 const TABLE_INIT_WITHOUT_SCHEMA = 0;
 
 export interface HsqldbBinaryScript {
-  // The database's own DDL, recovered from the leading Result record and rejoined into exactly the TEXT-format script text the same database would have written at hsqldb.script_format=0 -- including its SET TABLE ... INDEX'...' lines, which src/hsqldb/cache.ts (Tier 2) needs to decode any CACHED table's rows out of database/data.
+  // The database's own DDL, recovered from the leading Result record and rejoined into exactly the TEXT-format script text the same database would have written at hsqldb.script_format=0 — including its SET TABLE ... INDEX'...' lines, which src/hsqldb/cache.ts (Tier 2) needs to decode any CACHED table's rows out of database/data.
   readonly scriptText: string;
-  // One table per CREATE TABLE statement in that DDL, with the rows the binary section carried for it (MEMORY and TEXT tables only -- a CACHED table's rows are never in the script, in any format).
+  // One table per CREATE TABLE statement in that DDL, with the rows the binary section carried for it (MEMORY and TEXT tables only — a CACHED table's rows are never in the script, in any format).
   readonly tables: readonly HsqldbTable[];
 }
 
@@ -98,7 +98,7 @@ class BinaryScriptCursor {
   }
 }
 
-// org.hsqldb.Result's own nested ResultMetaData(RowInputBinary, mode) constructor, restricted to the DATA mode ScriptWriterBinary writes: a column count, then per column a 2-byte type, two int32s (size/scale), four length-prefixed strings (label/tableName/colName/className), and -- only when tableName and colName are both non-empty, isTableColumn's own rule -- a further int32 attribute mask and two more strings (catalog/schema). Returns the column types, the only part of the metadata this module has any use for.
+// org.hsqldb.Result's own nested ResultMetaData(RowInputBinary, mode) constructor, restricted to the DATA mode ScriptWriterBinary writes: a column count, then per column a 2-byte type, two int32s (size/scale), four length-prefixed strings (label/tableName/colName/className), and — only when tableName and colName are both non-empty, isTableColumn's own rule — a further int32 attribute mask and two more strings (catalog/schema). Returns the column types, the only part of the metadata this module has any use for.
 function readResultMetaData(reader: BinaryScriptCursor): number[] {
   const columnCount = reader.readInt32("the DDL result's own column count");
   if (columnCount < 0) {
@@ -125,7 +125,7 @@ function readResultMetaData(reader: BinaryScriptCursor): number[] {
   return columnTypes;
 }
 
-// The leading record: one org.hsqldb.Result, written by Result.write and framed exactly as Result.read expects (a 4-byte total record length INCLUDING those four bytes, then mode/databaseID/sessionID, then -- for DATA mode -- the metadata, a row count, and that many rows in the same per-column field encoding a table row uses). Every row is a single VARCHAR: one DDL statement.
+// The leading record: one org.hsqldb.Result, written by Result.write and framed exactly as Result.read expects (a 4-byte total record length INCLUDING those four bytes, then mode/databaseID/sessionID, then — for DATA mode — the metadata, a row count, and that many rows in the same per-column field encoding a table row uses). Every row is a single VARCHAR: one DDL statement.
 function readDdlStatements(reader: BinaryScriptCursor): string[] {
   const recordStart = reader.position;
   const recordLength = reader.readInt32(
@@ -133,14 +133,14 @@ function readDdlStatements(reader: BinaryScriptCursor): string[] {
   );
   if (recordLength <= 4) {
     throw new HsqldbBinaryScriptParseError(
-      `the leading DDL result record declares an implausible length ${recordLength} -- not a recognisable HSQLDB binary script`,
+      `the leading DDL result record declares an implausible length ${recordLength} — not a recognisable HSQLDB binary script`,
       recordStart,
     );
   }
   const mode = reader.readInt32("the DDL result's own mode");
   if (mode !== RESULT_MODE_DATA) {
     throw new HsqldbBinaryScriptParseError(
-      `the leading record has Result mode ${mode}, not the DATA mode (${RESULT_MODE_DATA}) a script's own DDL result always carries -- not a recognisable HSQLDB binary script`,
+      `the leading record has Result mode ${mode}, not the DATA mode (${RESULT_MODE_DATA}) a script's own DDL result always carries — not a recognisable HSQLDB binary script`,
       recordStart,
     );
   }
@@ -151,7 +151,7 @@ function readDdlStatements(reader: BinaryScriptCursor): string[] {
   const firstColumnType = columnTypes[0];
   if (columnTypes.length !== 1 || firstColumnType !== SQL_TYPE_VARCHAR) {
     throw new HsqldbBinaryScriptParseError(
-      `the DDL result has ${columnTypes.length} column(s) of type [${columnTypes.join(", ")}] -- a script's own DDL result is always the single VARCHAR "COMMAND" column DatabaseScript.getScript builds`,
+      `the DDL result has ${columnTypes.length} column(s) of type [${columnTypes.join(", ")}] — a script's own DDL result is always the single VARCHAR "COMMAND" column DatabaseScript.getScript builds`,
       recordStart,
     );
   }
@@ -192,7 +192,7 @@ interface TableSection {
   readonly rows: ContentCellValue[][];
 }
 
-// One table's own data section: the init record (org.hsqldb.scriptio.ScriptWriterBinary.writeTableInit -- length, table name, a schema-presence flag, and the schema name when the flag is 1), then one record per row, then the terminator pair writeTableTerm writes (a zero length, then the table's own row count, which the engine's own reader cross-checks against how many rows it actually read -- mirrored here). Returns undefined when the record at the cursor is instead writeDataTerm's own lone zero length: the end of the whole data section.
+// One table's own data section: the init record (org.hsqldb.scriptio.ScriptWriterBinary.writeTableInit — length, table name, a schema-presence flag, and the schema name when the flag is 1), then one record per row, then the terminator pair writeTableTerm writes (a zero length, then the table's own row count, which the engine's own reader cross-checks against how many rows it actually read — mirrored here). Returns undefined when the record at the cursor is instead writeDataTerm's own lone zero length: the end of the whole data section.
 function readTableSection(
   reader: BinaryScriptCursor,
   tables: ReadonlyMap<string, HsqldbTable>,
@@ -276,14 +276,14 @@ function readTableSection(
   return { tableName, rows };
 }
 
-// Parses a whole-script BINARY (hsqldb.script_format=1) database/script part. Hand it already-inflated bytes for the COMPRESSED (=3) variant -- see inflateHsqldbCompressedScript below.
+// Parses a whole-script BINARY (hsqldb.script_format=1) database/script part. Hand it already-inflated bytes for the COMPRESSED (=3) variant — see inflateHsqldbCompressedScript below.
 export function parseHsqldbBinaryScript(
   bytes: Uint8Array<ArrayBuffer>,
   options?: HsqldbDecodeOptions,
 ): HsqldbBinaryScript {
   const reader = new BinaryScriptCursor(bytes);
   const statements = readDdlStatements(reader);
-  // Rejoined with newlines and handed straight to Tier 1: DatabaseScript.getScript builds each statement as a single line (its own StringBuffer never emits a raw newline outside a quoted literal), which is exactly what splitStatements' quote-aware newline split expects -- and an empty statement, which getIdentityUpdateDDL genuinely produces for a table with no identity column, is dropped there as a blank line.
+  // Rejoined with newlines and handed straight to Tier 1: DatabaseScript.getScript builds each statement as a single line (its own StringBuffer never emits a raw newline outside a quoted literal), which is exactly what splitStatements' quote-aware newline split expects — and an empty statement, which getIdentityUpdateDDL genuinely produces for a table with no identity column, is dropped there as a blank line.
   const scriptText = statements.join("\n");
   const tables = parseHsqldbScript(new TextEncoder().encode(scriptText));
   const tablesByName = new Map(
@@ -308,7 +308,7 @@ export function parseHsqldbBinaryScript(
   };
 }
 
-// org.hsqldb.scriptio.ScriptWriterZipped wraps ScriptWriterBinary's identical output in a java.util.zip.DeflaterOutputStream over a plain `new Deflater(-1)` -- i.e. zlib framing (RFC 1950), not raw DEFLATE and not gzip -- and ScriptReaderZipped reads it back through a plain InflaterInputStream. byte-codec's inflate is the exact zlib counterpart AND the family's bounded one: it caps the decompressed output at MAX_INFLATE_OUTPUT_BYTES, the same single-stream grant every PDF FlateDecode and PNG IDAT stream already operates under. A bare fflate unzlibSync here had no budget at all -- a small valid-shape .odb could expand a compressed script a thousandfold into the hundreds of megabytes inside whatever worker or process opened it (ExaDev/documents.js#1151's review).
+// org.hsqldb.scriptio.ScriptWriterZipped wraps ScriptWriterBinary's identical output in a java.util.zip.DeflaterOutputStream over a plain `new Deflater(-1)` — i.e. zlib framing (RFC 1950), not raw DEFLATE and not gzip — and ScriptReaderZipped reads it back through a plain InflaterInputStream. byte-codec's inflate is the exact zlib counterpart AND the family's bounded one: it caps the decompressed output at MAX_INFLATE_OUTPUT_BYTES, the same single-stream grant every PDF FlateDecode and PNG IDAT stream already operates under. A bare fflate unzlibSync here had no budget at all — a small valid-shape .odb could expand a compressed script a thousandfold into the hundreds of megabytes inside whatever worker or process opened it (ExaDev/documents.js#1151's review).
 export function inflateHsqldbCompressedScript(
   bytes: Uint8Array<ArrayBuffer>,
 ): Uint8Array<ArrayBuffer> {

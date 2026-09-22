@@ -320,7 +320,7 @@ describe("reconstructWordprocessing: annotation and form constructs (#721)", () 
     expect(list[start + 2]?.kind).toBe("constructEnd");
   });
 
-  it("emits nothing for signature fields -- certification is residue, not a control", () => {
+  it("emits nothing for signature fields — certification is residue, not a control", () => {
     const doc = reconstructWordprocessing(
       docFrom(
         [

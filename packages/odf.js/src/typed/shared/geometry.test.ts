@@ -7,7 +7,7 @@ import {
   parsePageSize,
 } from "./geometry";
 
-// Fixtures below marked "real LibreOffice output" are copied verbatim from styles.xml's style:page-layout-properties (the ja_ott_normal.ott template) and a Writer image-frame draw:custom-shape (Modern_business_letter_serif.ott's header) -- both under /Applications/LibreOffice.app/Contents/Resources/template/**, LibreOffice 26.2.5.2.
+// Fixtures below marked "real LibreOffice output" are copied verbatim from styles.xml's style:page-layout-properties (the ja_ott_normal.ott template) and a Writer image-frame draw:custom-shape (Modern_business_letter_serif.ott's header) — both under /Applications/LibreOffice.app/Contents/Resources/template/**, LibreOffice 26.2.5.2.
 
 describe("parsePageSize", () => {
   it("parses fo:page-width/fo:page-height (real LibreOffice output, A4 portrait)", () => {

@@ -16,7 +16,7 @@ import {
 
 // The write-side mirror of readCurrentUserAtom: the sole record of the "Current User" stream. [MS-PPT] 2.3.2: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/940d5700-e4d7-4fc0-ab48-fed5dbc48bc1
 
-// Written into both the ansiUserName and unicodeUserName fields -- cosmetic provenance a reader never inspects for anything this package projects into content, so a fixed producer name rather than a caller-supplied one keeps writePptStreams' own signature free of a parameter nothing downstream needs.
+// Written into both the ansiUserName and unicodeUserName fields — cosmetic provenance a reader never inspects for anything this package projects into content, so a fixed producer name rather than a caller-supplied one keeps writePptStreams' own signature free of a parameter nothing downstream needs.
 const PRODUCER_USER_NAME = "documents.js";
 // [MS-PPT] 2.3.2 relVersion: "This field is unused and MUST be ignored." Written as 8 (matching this package's own synthetic-presentation fixture) since the value is unconstrained.
 const REL_VERSION = 0x00000008;

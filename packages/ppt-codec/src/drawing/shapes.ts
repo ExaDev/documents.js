@@ -21,7 +21,7 @@ import {
   readShapeProperties,
 } from "./properties";
 
-// The drawing walk: a slide's DrawingContainer holds an [MS-ODRAW] OfficeArtDgContainer, and beneath it a tree of group and shape containers. This module flattens that tree into the shapes a reader actually cares about, resolving each one's rectangle into the slide's own coordinate system on the way down -- a grouped shape's anchor is stated in its group's private coordinate system, so the rectangle is only meaningful once every enclosing group's transform has been applied to it. [MS-PPT] 2.5.13 DrawingContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/0595b49f-da96-4402-b353-1f766e9d548f [MS-ODRAW] 2.2.13 OfficeArtDgContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/68976475-fcfd-4483-8fc4-75adc635130d [MS-ODRAW] 2.2.14 OfficeArtSpContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/16194cb9-b4b0-476c-9678-a6ac1f06b034 [MS-ODRAW] 2.2.16 OfficeArtSpgrContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/e42f26e5-c0eb-4d10-a708-eef5958af44d
+// The drawing walk: a slide's DrawingContainer holds an [MS-ODRAW] OfficeArtDgContainer, and beneath it a tree of group and shape containers. This module flattens that tree into the shapes a reader actually cares about, resolving each one's rectangle into the slide's own coordinate system on the way down — a grouped shape's anchor is stated in its group's private coordinate system, so the rectangle is only meaningful once every enclosing group's transform has been applied to it. [MS-PPT] 2.5.13 DrawingContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/0595b49f-da96-4402-b353-1f766e9d548f [MS-ODRAW] 2.2.13 OfficeArtDgContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/68976475-fcfd-4483-8fc4-75adc635130d [MS-ODRAW] 2.2.14 OfficeArtSpContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/16194cb9-b4b0-476c-9678-a6ac1f06b034 [MS-ODRAW] 2.2.16 OfficeArtSpgrContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/e42f26e5-c0eb-4d10-a708-eef5958af44d
 
 // [MS-ODRAW] 2.2.40 OfficeArtFSP's flags word, in the spec's own A-to-L order. Only the bits the walk acts on are named.
 const FSP_GROUP = 1 << 0;
@@ -40,21 +40,21 @@ export interface PptShape {
   readonly spid: number;
   // The shape's rectangle in slide coordinates, or undefined for a shape carrying no anchor at all.
   readonly anchor: ShapeRect | undefined;
-  // The shape's rotation in degrees clockwise, from its property table's rotation property -- undefined when the shape states none ([MS-ODRAW] 2.3.18.5).
+  // The shape's rotation in degrees clockwise, from its property table's rotation property — undefined when the shape states none ([MS-ODRAW] 2.3.18.5).
   readonly rotationDeg: number | undefined;
   // The OfficeArtClientTextbox holding this shape's text records, when it has one.
   readonly clientTextbox: PptRecord | undefined;
-  // The OfficeArtClientData record holding this shape's host-defined data -- for an OLE shape, the ExObjRefAtom naming its object.
+  // The OfficeArtClientData record holding this shape's host-defined data — for an OLE shape, the ExObjRefAtom naming its object.
   readonly clientData: PptRecord | undefined;
-  // The shape's property tables, merged -- the source of its rotation and, for a picture, its blip-store reference.
+  // The shape's property tables, merged — the source of its rotation and, for a picture, its blip-store reference.
   readonly properties: ReadonlyMap<number, ShapeProperty>;
 }
 
-// A table, which the format spells as a group whose own shape's property table states tableProperties with fIsTable set ([MS-ODRAW] 2.3.4.36): the group's own anchor places the table on the slide, and each cell is an ordinary OfficeArtSpContainer among the group's children, carrying its own anchor and its own text. A cell is not distinguished from any other shape by any flag -- the grid is genuinely derived from the cells' own rectangles, which is how every reader of this spelling recovers it.
+// A table, which the format spells as a group whose own shape's property table states tableProperties with fIsTable set ([MS-ODRAW] 2.3.4.36): the group's own anchor places the table on the slide, and each cell is an ordinary OfficeArtSpContainer among the group's children, carrying its own anchor and its own text. A cell is not distinguished from any other shape by any flag — the grid is genuinely derived from the cells' own rectangles, which is how every reader of this spelling recovers it.
 export interface PptTable {
   // The table's own rectangle in slide coordinates, from the group shape's anchor.
   readonly anchor: ShapeRect;
-  // The group's own rotation in degrees clockwise -- the whole table rotates as one shape.
+  // The group's own rotation in degrees clockwise — the whole table rotates as one shape.
   readonly rotationDeg: number | undefined;
   // The cell shapes in document order, each with its own rectangle in slide coordinates (a client anchor is absolute; a child anchor is mapped through the group's coordinate system like any grouped shape's).
   readonly cells: readonly PptShape[];
@@ -100,13 +100,13 @@ function readRectFields(
     size === 2
       ? view.getInt16(index * 2, true)
       : view.getInt32(index * 4, true);
-  // SmallRectStruct and RectStruct both order their fields top, left, right, bottom -- not the left-first order the names suggest -- while OfficeArtChildAnchor and OfficeArtFSPGR order theirs xLeft, yTop, xRight, yBottom. Reading either with the other's order silently transposes the rectangle.
+  // SmallRectStruct and RectStruct both order their fields top, left, right, bottom — not the left-first order the names suggest — while OfficeArtChildAnchor and OfficeArtFSPGR order theirs xLeft, yTop, xRight, yBottom. Reading either with the other's order silently transposes the rectangle.
   return order === "top-left"
     ? { top: at(0), left: at(1), right: at(2), bottom: at(3) }
     : { left: at(0), top: at(1), right: at(2), bottom: at(3) };
 }
 
-// [MS-PPT] 2.7.1: the client anchor's own recLen picks its payload -- 0x8 is a SmallRectStruct of 16-bit coordinates, 0x10 a RectStruct of 32-bit ones. Both are already in slide coordinates, which is why a grouped shape carrying one needs no group transform applied.
+// [MS-PPT] 2.7.1: the client anchor's own recLen picks its payload — 0x8 is a SmallRectStruct of 16-bit coordinates, 0x10 a RectStruct of 32-bit ones. Both are already in slide coordinates, which is why a grouped shape carrying one needs no group transform applied.
 function readClientAnchor(record: PptRecord): ShapeRect {
   const { recLen } = record.header;
   if (recLen === 0x00000008) {
@@ -125,7 +125,7 @@ interface ShapeIdentity {
   readonly flags: number;
 }
 
-// [MS-ODRAW] 2.2.14 makes shapeProp a required field of every OfficeArtSpContainer, so a container without a readable one is malformed rather than a shape with unknown identity -- read as one pair so neither half can be answered while the other fails.
+// [MS-ODRAW] 2.2.14 makes shapeProp a required field of every OfficeArtSpContainer, so a container without a readable one is malformed rather than a shape with unknown identity — read as one pair so neither half can be answered while the other fails.
 function readShapeIdentity(shape: PptRecord): ShapeIdentity {
   const fsp = findChild(childRecords(shape), OfficeArtFSP);
   if (fsp === undefined || fsp.data.length < 8) {
@@ -166,7 +166,7 @@ function rotationDegOf(
   return degrees === 0 ? undefined : degrees;
 }
 
-// Whether a group shape's property table states tableProperties with fIsTable set -- the one mark that separates a table from an ordinary grouping ([MS-ODRAW] 2.3.4.36: "flags for a group that represents a table"). A group stating no tableProperties at all is an ordinary group, the property's own documented default of 0x00000000.
+// Whether a group shape's property table states tableProperties with fIsTable set — the one mark that separates a table from an ordinary grouping ([MS-ODRAW] 2.3.4.36: "flags for a group that represents a table"). A group stating no tableProperties at all is an ordinary group, the property's own documented default of 0x00000000.
 function isTableGroup(properties: ReadonlyMap<number, ShapeProperty>): boolean {
   const tableProperties = properties.get(PROPERTY_TABLE_PROPERTIES);
   return (
@@ -175,7 +175,7 @@ function isTableGroup(properties: ReadonlyMap<number, ShapeProperty>): boolean {
   );
 }
 
-// Composes the transform a group's children are read through: their coordinates run in the space the group's OfficeArtFSPGR declares, and the group's own anchor says where that space lands in the parent's. The patriarch -- every drawing's outermost group -- is the exception the spec's structure creates rather than an assumption: it declares a degenerate coordinate system and no anchor, because its children are already in slide coordinates.
+// Composes the transform a group's children are read through: their coordinates run in the space the group's OfficeArtFSPGR declares, and the group's own anchor says where that space lands in the parent's. The patriarch — every drawing's outermost group — is the exception the spec's structure creates rather than an assumption: it declares a degenerate coordinate system and no anchor, because its children are already in slide coordinates.
 function groupTransform(groupShape: PptRecord, parent: Transform): Transform {
   const { spid, flags } = readShapeIdentity(groupShape);
   if ((flags & FSP_PATRIARCH) !== 0) {
@@ -242,7 +242,7 @@ function collectGroup(
   // [MS-ODRAW] 2.2.16: the first child of a group container is always the OfficeArtSpContainer holding that group's own shape information.
   const groupProperties = readShapeProperties(groupShape);
   if (isTableGroup(groupProperties)) {
-    // A table group's children are its cells, not shapes to flatten into the slide -- the grid is the content here, and a nested group inside a table is not a shape the format defines, so only OfficeArtSpContainer children are collected.
+    // A table group's children are its cells, not shapes to flatten into the slide — the grid is the content here, and a nested group inside a table is not a shape the format defines, so only OfficeArtSpContainer children are collected.
     const anchor = resolveAnchor(groupShape, parent);
     if (anchor === undefined) {
       throw new PptFormatError(

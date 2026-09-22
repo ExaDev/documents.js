@@ -1,4 +1,4 @@
-// Generated from Unicode's own UnicodeData.txt (https://www.unicode.org/Public/UCD/latest/ucd/UnicodeData.txt) by cross-referencing every "MATHEMATICAL <STYLE> CAPITAL/SMALL <LETTER>" codepoint name in the Mathematical Alphanumeric Symbols block (U+1D400-U+1D7FF), then filling the block's own well-known holes (italic small h, and eleven Script/Fraktur/Double-struck capitals plus three Script smalls) with the older Letterlike Symbols block's own matching codepoints (U+2100-U+214F, e.g. PLANCK CONSTANT for italic small h) by cross-referencing THEIR names the same way. Every mapping below was verified against the authoritative Unicode data file, not transcribed from memory; the exact 24 hole substitutions are the ones this module's own generation script hard-codes. The six Greek "symbol variant" base characters (GREEK LUNATE EPSILON SYMBOL U+03F5, GREEK THETA SYMBOL U+03D1, GREEK KAPPA SYMBOL U+03F0, GREEK PHI SYMBOL U+03D5, GREEK RHO SYMBOL U+03F1, GREEK PI SYMBOL U+03D6) and their five styled Mathematical Alphanumeric Symbols forms (bold, italic, bold-italic, bold-sans-serif, sans-serif-bold-italic -- the same five variants the rest of the Greek table covers, since Unicode never assigned symbol-variant glyphs for plain sans-serif, script, fraktur, or double-struck) were verified the identical way: downloading UnicodeData.txt directly and reading the "MATHEMATICAL <STYLE> <NAME> SYMBOL" entries at U+1D6DC-U+1D6E1 (bold), U+1D716-U+1D71B (italic), U+1D750-U+1D755 (bold-italic), U+1D78A-U+1D78F (bold-sans-serif), and U+1D7C4-U+1D7C9 (sans-serif-bold-italic) -- each range confirmed to contain exactly EPSILON/THETA/KAPPA/PHI/RHO/PI SYMBOL in that order, immediately following that style's own "partial differential" codepoint and immediately preceding the next style's capital-alpha codepoint (or, for sans-serif-bold-italic, MATHEMATICAL BOLD CAPITAL/SMALL DIGAMMA at U+1D7CA-U+1D7CB followed by two genuinely unassigned codepoints at U+1D7CC-U+1D7CD).
+// Generated from Unicode's own UnicodeData.txt (https://www.unicode.org/Public/UCD/latest/ucd/UnicodeData.txt) by cross-referencing every "MATHEMATICAL <STYLE> CAPITAL/SMALL <LETTER>" codepoint name in the Mathematical Alphanumeric Symbols block (U+1D400-U+1D7FF), then filling the block's own well-known holes (italic small h, and eleven Script/Fraktur/Double-struck capitals plus three Script smalls) with the older Letterlike Symbols block's own matching codepoints (U+2100-U+214F, e.g. PLANCK CONSTANT for italic small h) by cross-referencing THEIR names the same way. Every mapping below was verified against the authoritative Unicode data file, not transcribed from memory; the exact 24 hole substitutions are the ones this module's own generation script hard-codes. The six Greek "symbol variant" base characters (GREEK LUNATE EPSILON SYMBOL U+03F5, GREEK THETA SYMBOL U+03D1, GREEK KAPPA SYMBOL U+03F0, GREEK PHI SYMBOL U+03D5, GREEK RHO SYMBOL U+03F1, GREEK PI SYMBOL U+03D6) and their five styled Mathematical Alphanumeric Symbols forms (bold, italic, bold-italic, bold-sans-serif, sans-serif-bold-italic — the same five variants the rest of the Greek table covers, since Unicode never assigned symbol-variant glyphs for plain sans-serif, script, fraktur, or double-struck) were verified the identical way: downloading UnicodeData.txt directly and reading the "MATHEMATICAL <STYLE> <NAME> SYMBOL" entries at U+1D6DC-U+1D6E1 (bold), U+1D716-U+1D71B (italic), U+1D750-U+1D755 (bold-italic), U+1D78A-U+1D78F (bold-sans-serif), and U+1D7C4-U+1D7C9 (sans-serif-bold-italic) — each range confirmed to contain exactly EPSILON/THETA/KAPPA/PHI/RHO/PI SYMBOL in that order, immediately following that style's own "partial differential" codepoint and immediately preceding the next style's capital-alpha codepoint (or, for sans-serif-bold-italic, MATHEMATICAL BOLD CAPITAL/SMALL DIGAMMA at U+1D7CA-U+1D7CB followed by two genuinely unassigned codepoints at U+1D7CC-U+1D7CD).
 
 export type MathVariant =
   | "normal"
@@ -16,7 +16,7 @@ export type MathVariant =
   | "sans-serif-bold-italic"
   | "monospace";
 
-// variant -> [26 uppercase codepoints A-Z, 26 lowercase codepoints a-z]. 'normal' is deliberately absent (mathvariant='normal' -- or no mathvariant at all -- always means the plain ASCII letter itself, never a Mathematical Alphanumeric Symbols codepoint).
+// variant -> [26 uppercase codepoints A-Z, 26 lowercase codepoints a-z]. 'normal' is deliberately absent (mathvariant='normal' — or no mathvariant at all — always means the plain ASCII letter itself, never a Mathematical Alphanumeric Symbols codepoint).
 const LATIN_VARIANTS: Partial<
   Record<MathVariant, readonly [readonly number[], readonly number[]]>
 > = {
@@ -220,7 +220,7 @@ interface GreekVariantEntry {
   readonly lower: readonly number[]; // index-aligned with GREEK_LOWER_BASE
   readonly nabla: number;
   readonly partial: number;
-  // The five OpenType/Unicode Greek "symbol variant" glyphs Unicode actually styled in this block -- lunate epsilon (U+03F5), theta (U+03D1), kappa (U+03F0), phi (U+03D5), rho (U+03F1), and pi (U+03D6) symbols. Every one of the five variants below carries all six; Unicode never assigned styled symbol-variant glyphs for the other Greek-bearing variants (plain sans-serif, script, fraktur, double-struck all lack a Greek table entirely, so the question doesn't arise for them).
+  // The five OpenType/Unicode Greek "symbol variant" glyphs Unicode actually styled in this block — lunate epsilon (U+03F5), theta (U+03D1), kappa (U+03F0), phi (U+03D5), rho (U+03F1), and pi (U+03D6) symbols. Every one of the five variants below carries all six; Unicode never assigned styled symbol-variant glyphs for the other Greek-bearing variants (plain sans-serif, script, fraktur, double-struck all lack a Greek table entirely, so the question doesn't arise for them).
   readonly epsilon: number;
   readonly theta: number;
   readonly kappa: number;
@@ -229,7 +229,7 @@ interface GreekVariantEntry {
   readonly pi: number;
 }
 
-// variant -> Greek uppercase/lowercase codepoints, nabla (U+2207), partial differential (U+2202), and the six Greek "symbol variant" codepoints (lunate epsilon/theta/kappa/phi/rho/pi symbols) -- every one confirmed against UnicodeData.txt directly (see this module's own top-of-file generation note for the exact ranges and cross-check).
+// variant -> Greek uppercase/lowercase codepoints, nabla (U+2207), partial differential (U+2202), and the six Greek "symbol variant" codepoints (lunate epsilon/theta/kappa/phi/rho/pi symbols) — every one confirmed against UnicodeData.txt directly (see this module's own top-of-file generation note for the exact ranges and cross-check).
 const GREEK_VARIANTS: Partial<Record<MathVariant, GreekVariantEntry>> = {
   bold: {
     upper: [
@@ -333,7 +333,7 @@ const GREEK_VARIANTS: Partial<Record<MathVariant, GreekVariantEntry>> = {
   },
 };
 
-// Base Greek "symbol variant" codepoints -> the GreekVariantEntry field carrying their styled Mathematical Alphanumeric Symbols form. GREEK LUNATE EPSILON SYMBOL (U+03F5), GREEK THETA SYMBOL (U+03D1), GREEK KAPPA SYMBOL (U+03F0), GREEK PHI SYMBOL (U+03D5), GREEK RHO SYMBOL (U+03F1), GREEK PI SYMBOL (U+03D6) -- confirmed against UnicodeData.txt's own character names, not the ordinary (non-symbol) Greek letters GREEK_UPPER_BASE/GREEK_LOWER_BASE already cover.
+// Base Greek "symbol variant" codepoints -> the GreekVariantEntry field carrying their styled Mathematical Alphanumeric Symbols form. GREEK LUNATE EPSILON SYMBOL (U+03F5), GREEK THETA SYMBOL (U+03D1), GREEK KAPPA SYMBOL (U+03F0), GREEK PHI SYMBOL (U+03D5), GREEK RHO SYMBOL (U+03F1), GREEK PI SYMBOL (U+03D6) — confirmed against UnicodeData.txt's own character names, not the ordinary (non-symbol) Greek letters GREEK_UPPER_BASE/GREEK_LOWER_BASE already cover.
 const GREEK_SYMBOL_BASES: ReadonlyMap<
   number,
   keyof Pick<
@@ -349,7 +349,7 @@ const GREEK_SYMBOL_BASES: ReadonlyMap<
   [0x3d6, "pi"],
 ]);
 
-// variant -> [10 digit codepoints 0-9]. No 'italic' entry: Unicode defines no distinct math-italic digit codepoints (MathML mathvariant='italic' on <mn> has no glyph to map to), so italic digits fall back to the plain ASCII digit like 'normal' does -- the same "no mapping -> use the base character" rule this module applies uniformly.
+// variant -> [10 digit codepoints 0-9]. No 'italic' entry: Unicode defines no distinct math-italic digit codepoints (MathML mathvariant='italic' on <mn> has no glyph to map to), so italic digits fall back to the plain ASCII digit like 'normal' does — the same "no mapping -> use the base character" rule this module applies uniformly.
 const DIGIT_VARIANTS: Partial<Record<MathVariant, readonly number[]>> = {
   bold: [
     0x1d7ce, 0x1d7cf, 0x1d7d0, 0x1d7d1, 0x1d7d2, 0x1d7d3, 0x1d7d4, 0x1d7d5,
@@ -373,7 +373,7 @@ const DIGIT_VARIANTS: Partial<Record<MathVariant, readonly number[]>> = {
   ],
 };
 
-// Maps one code point through `variant`, returning the Mathematical Alphanumeric Symbols (or Letterlike Symbols hole-filler) codepoint when one exists for this exact (variant, character) pair, or `codePoint` itself unchanged otherwise -- covering three genuinely different "no mapping" cases identically: variant is 'normal', variant has no table for this character class at all (e.g. 'double-struck' has no Greek table), or this specific character isn't a Latin letter/digit/Greek letter/nabla/partial (punctuation, an operator, an already-styled symbol) and mathvariant simply never applies to it. Never throws: an unmappable input is not a formula-layout error, it is MathML's own documented fallback behaviour -- render the base glyph, unstyled.
+// Maps one code point through `variant`, returning the Mathematical Alphanumeric Symbols (or Letterlike Symbols hole-filler) codepoint when one exists for this exact (variant, character) pair, or `codePoint` itself unchanged otherwise — covering three genuinely different "no mapping" cases identically: variant is 'normal', variant has no table for this character class at all (e.g. 'double-struck' has no Greek table), or this specific character isn't a Latin letter/digit/Greek letter/nabla/partial (punctuation, an operator, an already-styled symbol) and mathvariant simply never applies to it. Never throws: an unmappable input is not a formula-layout error, it is MathML's own documented fallback behaviour — render the base glyph, unstyled.
 export function mapMathVariant(
   codePoint: number,
   variant: MathVariant,
@@ -416,7 +416,7 @@ export function mapMathVariant(
   return codePoint;
 }
 
-// Applies mapMathVariant to every code point in `text`, iterated by Unicode code point rather than UTF-16 code unit -- the target codepoints live in the supplementary Mathematical Alphanumeric Symbols plane, so a naive per-code-unit loop would split their surrogate pairs.
+// Applies mapMathVariant to every code point in `text`, iterated by Unicode code point rather than UTF-16 code unit — the target codepoints live in the supplementary Mathematical Alphanumeric Symbols plane, so a naive per-code-unit loop would split their surrogate pairs.
 export function applyMathVariant(text: string, variant: MathVariant): string {
   if (variant === "normal") {
     return text;
@@ -432,7 +432,7 @@ export function applyMathVariant(text: string, variant: MathVariant): string {
   return out;
 }
 
-// The MathML mathvariant attribute's own string values, mapped to this module's MathVariant union -- 'bold-sans-serif' etc. are MathML3's actual spelling (https://www.w3.org/TR/MathML3/chapter3.html#presm.mathvariant), reused verbatim as this module's own type where the spelling already matches.
+// The MathML mathvariant attribute's own string values, mapped to this module's MathVariant union — 'bold-sans-serif' etc. are MathML3's actual spelling (https://www.w3.org/TR/MathML3/chapter3.html#presm.mathvariant), reused verbatim as this module's own type where the spelling already matches.
 const MATHVARIANT_ATTRIBUTE_VALUES: ReadonlySet<string> = new Set<MathVariant>([
   "normal",
   "bold",

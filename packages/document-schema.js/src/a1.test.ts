@@ -34,7 +34,7 @@ describe("columnLettersToIndex / columnIndexToLetters", () => {
   });
 
   it("rejects the character immediately past 'Z' in code-point order, not just past it", () => {
-    // '[' is charCode 91, exactly ALPHABET_START_CODE (65) + ALPHABET_SIZE (26) -- the boundary itself, not one past it. 'Z' (90) must still be accepted.
+    // '[' is charCode 91, exactly ALPHABET_START_CODE (65) + ALPHABET_SIZE (26) — the boundary itself, not one past it. 'Z' (90) must still be accepted.
     expect(columnLettersToIndex("Z")).toBe(25);
     expect(columnLettersToIndex("[")).toBeUndefined();
     expect(columnLettersToIndex("A[")).toBeUndefined();

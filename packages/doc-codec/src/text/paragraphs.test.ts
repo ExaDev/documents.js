@@ -90,7 +90,7 @@ describe("splitEntriesByBoundaries", () => {
 });
 
 describe("paragraphs.ts's own internal-defect messages", () => {
-  // Every message named here is an invariant this module already maintains elsewhere in the same function, never one a caller's own input could violate -- see each message function's own comment. Tested against a hardcoded duplicate of the exact text, the same discipline prop/fkp-write.ts's own internal-defect messages follow.
+  // Every message named here is an invariant this module already maintains elsewhere in the same function, never one a caller's own input could violate — see each message function's own comment. Tested against a hardcoded duplicate of the exact text, the same discipline prop/fkp-write.ts's own internal-defect messages follow.
   it("carries noByteOffsetForParagraphMarkMessage's own exact text", () => {
     expect(noByteOffsetForParagraphMarkMessage(3)).toBe(
       "character 3 has no byte offset, so its paragraph's properties cannot be located",
@@ -117,7 +117,7 @@ describe("paragraphs.ts's own internal-defect messages", () => {
 });
 
 describe("computeCharacterProperties", () => {
-  // A ReadContext whose chpxTable/papxTable are never consulted by computeCharacterProperties itself (it takes grpprl and paragraphStyleCharacterPrls as plain arguments, never deriving them from these tables) -- built from real PropertyBinTable instances anyway, since ReadContext's own type carries no looser alternative and constructing genuine (if otherwise-unused) ones costs nothing here.
+  // A ReadContext whose chpxTable/papxTable are never consulted by computeCharacterProperties itself (it takes grpprl and paragraphStyleCharacterPrls as plain arguments, never deriving them from these tables) — built from real PropertyBinTable instances anyway, since ReadContext's own type carries no looser alternative and constructing genuine (if otherwise-unused) ones costs nothing here.
   function unusedBinTable(): PropertyBinTable {
     return new PropertyBinTable(
       new Uint8Array(FKP_PAGE_SIZE),

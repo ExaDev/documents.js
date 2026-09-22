@@ -15,19 +15,19 @@ import { readXref } from "./xref";
 
 export interface PdfDocument {
   readonly trailer: PdfDict;
-  // The validated /Root catalog, exposed because every document-level reader (destinations, outline, embedded files, optional content, AcroForm) walks catalog keys -- re-resolving trailer /Root at each call site would re-narrow a fact openPdfDocument already established.
+  // The validated /Root catalog, exposed because every document-level reader (destinations, outline, embedded files, optional content, AcroForm) walks catalog keys — re-resolving trailer /Root at each call site would re-narrow a fact openPdfDocument already established.
   readonly catalog: PdfDict;
   resolve(obj: PdfObject | undefined): PdfObject | undefined;
   resolveDict(obj: PdfObject | undefined): PdfDict | undefined;
   pages(): PdfDict[];
-  // The 0-based position of a page object in pages()' own order -- identity-matched against the tree's resolved leaf objects (NOT the inheritance-merged copies pages() returns, which are fresh objects). This is what a destination array's page reference resolves against.
+  // The 0-based position of a page object in pages()' own order — identity-matched against the tree's resolved leaf objects (NOT the inheritance-merged copies pages() returns, which are fresh objects). This is what a destination array's page reference resolves against.
   pageIndex(obj: PdfObject | undefined): number | undefined;
 }
 
-// Guards a reference cycle (object A pointing to B pointing back to A) -- a corrupt or adversarial file, not something a real producer emits.
+// Guards a reference cycle (object A pointing to B pointing back to A) — a corrupt or adversarial file, not something a real producer emits.
 const MAX_RESOLVE_DEPTH = 64;
 
-// A Page node's own inheritable attributes, per ISO 32000-1 Table 30 -- the set every mainstream producer actually relies on (most titles/body text never repeat /MediaBox or /Resources on every single page, inheriting the deck-wide value from an ancestor Pages node instead).
+// A Page node's own inheritable attributes, per ISO 32000-1 Table 30 — the set every mainstream producer actually relies on (most titles/body text never repeat /MediaBox or /Resources on every single page, inheriting the deck-wide value from an ancestor Pages node instead).
 const INHERITABLE_PAGE_KEYS = [
   "Resources",
   "MediaBox",
@@ -35,7 +35,7 @@ const INHERITABLE_PAGE_KEYS = [
   "Rotate",
 ] as const;
 
-// The first element of the trailer's /ID array, which every pre-revision-5 key derivation mixes in. A file with no /ID at all is malformed, but every mainstream reader carries on with an empty value rather than refusing it, and so does this one -- the /U verification below is what actually decides whether the derived key is right.
+// The first element of the trailer's /ID array, which every pre-revision-5 key derivation mixes in. A file with no /ID at all is malformed, but every mainstream reader carries on with an empty value rather than refusing it, and so does this one — the /U verification below is what actually decides whether the derived key is right.
 function firstFileId(trailer: PdfDict): Uint8Array<ArrayBuffer> {
   const id = asArray(dictGet(trailer, "ID"));
   const first = id?.[0];
@@ -59,7 +59,7 @@ function decryptDict(
   };
 }
 
-// Walks one indirect object applying the document's decryptor to every string and stream inside it. ISO 32000-1 7.5.7 is why nothing equivalent runs on an object stream's *contents*: an object stream is decrypted whole, as a stream, and the objects unpacked from it are then already in the clear -- decrypting their strings a second time would corrupt them.
+// Walks one indirect object applying the document's decryptor to every string and stream inside it. ISO 32000-1 7.5.7 is why nothing equivalent runs on an object stream's *contents*: an object stream is decrypted whole, as a stream, and the objects unpacked from it are then already in the clear — decrypting their strings a second time would corrupt them.
 function decryptObject(
   value: PdfObject,
   num: number,
@@ -103,7 +103,7 @@ export function openPdfDocument(
 
   const objectCache = new Map<number, PdfObject>();
   const objStmCache = new Map<number, PdfObject[]>();
-  // Assigned once, below, after the /Encrypt dictionary itself has been resolved -- it cannot be a `const` initialised at its own declaration, because resolving that dictionary goes through fetchDirect, which reads this very binding. Reading it there while still `undefined` is exactly right: ISO 32000-1 7.6.1 leaves the encryption dictionary's own strings unencrypted, so it must be fetched with decryption off.
+  // Assigned once, below, after the /Encrypt dictionary itself has been resolved — it cannot be a `const` initialised at its own declaration, because resolving that dictionary goes through fetchDirect, which reads this very binding. Reading it there while still `undefined` is exactly right: ISO 32000-1 7.6.1 leaves the encryption dictionary's own strings unencrypted, so it must be fetched with decryption off.
   let decryptor: PdfDecryptor | undefined;
 
   function fetchDirect(
@@ -220,7 +220,7 @@ export function openPdfDocument(
     return asDict(resolve(obj));
   }
 
-  // Returns its own type narrowed to PdfDict (never undefined) via the function's declared return type -- unlike a bare `if (x === undefined) throw; ` guard on a local, this narrowing is a real declared type, so it still holds inside the nested `pages()` closure below, which TypeScript's control-flow analysis would not otherwise carry across a function boundary.
+  // Returns its own type narrowed to PdfDict (never undefined) via the function's declared return type — unlike a bare `if (x === undefined) throw; ` guard on a local, this narrowing is a real declared type, so it still holds inside the nested `pages()` closure below, which TypeScript's control-flow analysis would not otherwise carry across a function boundary.
   function requireCatalog(dict: PdfDict | undefined): PdfDict {
     if (dict === undefined || !isName(dictGet(dict, "Type"), "Catalog")) {
       throw new PdfParseError(
@@ -231,7 +231,7 @@ export function openPdfDocument(
     return dict;
   }
 
-  // Decryption is installed here, before anything else is resolved, so every fetch after this point -- catalog, page tree, content streams, /Info strings -- comes back in the clear. The one resolve() below runs while `decryptor` is still undefined, which is what ISO 32000-1 7.6.1 requires: an encryption dictionary's own strings are never encrypted, so the object cached for it is correct exactly as read.
+  // Decryption is installed here, before anything else is resolved, so every fetch after this point — catalog, page tree, content streams, /Info strings — comes back in the clear. The one resolve() below runs while `decryptor` is still undefined, which is what ISO 32000-1 7.6.1 requires: an encryption dictionary's own strings are never encrypted, so the object cached for it is correct exactly as read.
   const encryptEntry = dictGet(xref.trailer, "Encrypt");
   if (encryptEntry !== undefined) {
     const encryptDict = resolveDict(encryptEntry);
@@ -249,7 +249,7 @@ export function openPdfDocument(
 
   const catalog = requireCatalog(resolveDict(dictGet(xref.trailer, "Root")));
 
-  // The page tree's resolved leaf objects in walk order -- the identity map pageIndex answers from. Filled by the walk itself, so it can never disagree with pages()' own ordering.
+  // The page tree's resolved leaf objects in walk order — the identity map pageIndex answers from. Filled by the walk itself, so it can never disagree with pages()' own ordering.
   const originalLeaves = new Map<PdfDict, number>();
 
   function pages(): PdfDict[] {
@@ -288,7 +288,7 @@ export function openPdfDocument(
     }
     const kids = asArray(dictGet(node, "Kids"));
     if (kids === undefined) {
-      // A leaf (no /Kids) is a Page regardless of whether /Type /Page is actually present -- some malformed producers omit it, and presence-of-Kids is the more robust real-world discriminant.
+      // A leaf (no /Kids) is a Page regardless of whether /Type /Page is actually present — some malformed producers omit it, and presence-of-Kids is the more robust real-world discriminant.
       const entries = new Map(node.entries);
       for (const key of INHERITABLE_PAGE_KEYS) {
         if (!entries.has(key) && merged[key] !== undefined) {

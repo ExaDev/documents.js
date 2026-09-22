@@ -112,7 +112,7 @@ describe("assertPackageRoundTrip", () => {
   it("throws when the tree fails schema validation", () => {
     // "fonts" is schema-typed as TreeEmbeddedFont[] | undefined but read by
     // neither flattenTree (it has no ContentDocument spelling at all) nor factorStyles (which carries an existing value through verbatim rather than recomputing it, per factor-styles.ts's own comment on the three package-level fields it re-carries untouched). A malformed value here is therefore invisible to the other two checks and trips only
-    // DocumentTreeSchema.parse -- isolating that one call. The cast is
+    // DocumentTreeSchema.parse — isolating that one call. The cast is
     // deliberate: this is exactly a value the type system exists to rule out, constructed so the runtime check has something real to catch.
     const invalidTree = {
       ...wordprocessingTree,
@@ -134,7 +134,7 @@ describe("assertPackageRoundTrip", () => {
   });
 
   it("throws when re-minting the tree doesn't reproduce it", () => {
-    // Two paragraphs sharing one run-level tuple (bold, differing only in text, which factor-styles.ts's own header notes is not a mintable property) cross the plan's repeat-count-of-two threshold, so a fresh mint of this content genuinely extracts a shared style entry. Tacking an extra, unreferenced entry onto the tree's own already-minted table makes the tree schema-valid and still flatten to the same content (flattenTree resolves refs the tree's nodes actually carry; an unused table entry is invisible to it) while no longer matching what re-minting that same content produces -- isolating the third check.
+    // Two paragraphs sharing one run-level tuple (bold, differing only in text, which factor-styles.ts's own header notes is not a mintable property) cross the plan's repeat-count-of-two threshold, so a fresh mint of this content genuinely extracts a shared style entry. Tacking an extra, unreferenced entry onto the tree's own already-minted table makes the tree schema-valid and still flatten to the same content (flattenTree resolves refs the tree's nodes actually carry; an unused table entry is invisible to it) while no longer matching what re-minting that same content produces — isolating the third check.
     const styledContent: ContentDocument = {
       kind: "wordprocessing",
       metadata: {},

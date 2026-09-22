@@ -10,11 +10,11 @@
 //
 // The tables in SINGLE_BYTE_PAGES were GENERATED, not typed: each is `bytes([b]).decode(codec)` over 0x80..0xFF from Python's own codec library, because a hand-transcribed 128-entry table is exactly where one transposed character hides until a real document decodes wrong. Bytes 0x00..0x7F are US-ASCII in every page here and are mapped directly rather than stored. A byte a page genuinely leaves undefined decodes as U+FFFD, which is what its own table says, rather than an invented mapping.
 //
-// The five East Asian DBCS pages (932 Shift-JIS, 936 GBK/GB2312, 949 UHC/Hangul, 950 Big5, 1361 Johab) are supported too, through DBCS_LEAD_BYTE_TABLES and DBCS_SINGLE_BYTE_EXTRAS in ./codepage-dbcs.ts -- generated the same way and by the same script's own header comment (scripts/generate-dbcs-tables.py) for the full citation and cross-validation notes.
+// The five East Asian DBCS pages (932 Shift-JIS, 936 GBK/GB2312, 949 UHC/Hangul, 950 Big5, 1361 Johab) are supported too, through DBCS_LEAD_BYTE_TABLES and DBCS_SINGLE_BYTE_EXTRAS in ./codepage-dbcs.ts — generated the same way and by the same script's own header comment (scripts/generate-dbcs-tables.py) for the full citation and cross-validation notes.
 //
-// One deliberate gap remains, reported rather than silently papered over: code page 42 (SYMBOL_CHARSET, what \fcharset2 names) is not a character encoding at all -- its bytes are glyph indices into whichever symbol font the run names, and the spec's own advice is to "find the last SYMBOL_CHARSET font control word \fN used, look up font N in the font table and find the face name" to know which. Without the font's own cmap there is no correct Unicode for those bytes, so they decode through cp1252 and report rtf/unsupported-codepage, so a caller sees the gap instead of receiving plausible-looking mojibake.
+// One deliberate gap remains, reported rather than silently papered over: code page 42 (SYMBOL_CHARSET, what \fcharset2 names) is not a character encoding at all — its bytes are glyph indices into whichever symbol font the run names, and the spec's own advice is to "find the last SYMBOL_CHARSET font control word \fN used, look up font N in the font table and find the face name" to know which. Without the font's own cmap there is no correct Unicode for those bytes, so they decode through cp1252 and report rtf/unsupported-codepage, so a caller sees the gap instead of receiving plausible-looking mojibake.
 //
-// UTF-8 (\ansicpg65001, which RichEdit and some non-Word producers emit) IS supported, through the platform's own TextDecoder. That is why this module decodes a byte RUN rather than one byte at a time: a stateful multi-byte encoding cannot be decoded byte-by-byte, and the reader accordingly buffers consecutive ANSI bytes and flushes them here at the first event that is not another byte. The DBCS pages share that same run-buffered entry point rather than adding one of their own -- a DBCS lead byte and its trail byte can arrive in the same run as ordinary single-byte characters either side of it, so the run itself, not the byte, is still the unit a codepage decodes.
+// UTF-8 (\ansicpg65001, which RichEdit and some non-Word producers emit) IS supported, through the platform's own TextDecoder. That is why this module decodes a byte RUN rather than one byte at a time: a stateful multi-byte encoding cannot be decoded byte-by-byte, and the reader accordingly buffers consecutive ANSI bytes and flushes them here at the first event that is not another byte. The DBCS pages share that same run-buffered entry point rather than adding one of their own — a DBCS lead byte and its trail byte can arrive in the same run as ordinary single-byte characters either side of it, so the run itself, not the byte, is still the unit a codepage decodes.
 
 import { RtfDiagnosticCodes } from "./diagnostics";
 import type { RtfDiagnosticSink } from "./diagnostics";
@@ -125,7 +125,7 @@ const SINGLE_BYTE_PAGES: ReadonlyMap<number, string> = new Map([
   ],
 ]);
 
-// The specification's own \fcharsetN table (RTF 1.9.1, "Font Table"), charset to code page. Charset 1 ("Default") maps to code page 0 there, meaning "whatever the system default is", which for a reader is the document's own page rather than a page of its own -- so it is absent here and a font declaring it simply inherits.
+// The specification's own \fcharsetN table (RTF 1.9.1, "Font Table"), charset to code page. Charset 1 ("Default") maps to code page 0 there, meaning "whatever the system default is", which for a reader is the document's own page rather than a page of its own — so it is absent here and a font declaring it simply inherits.
 const FCHARSET_CODEPAGES: ReadonlyMap<number, number> = new Map([
   [0, 1252],
   [2, 42],
@@ -179,7 +179,7 @@ export function isSupportedCodepage(codepage: number): boolean {
   );
 }
 
-// Decodes one run of ANSI bytes through `codepage`. A run, not a byte, because \ansicpg65001 is UTF-8 and a stateful multi-byte encoding cannot be decoded a byte at a time -- see this module's own header.
+// Decodes one run of ANSI bytes through `codepage`. A run, not a byte, because \ansicpg65001 is UTF-8 and a stateful multi-byte encoding cannot be decoded a byte at a time — see this module's own header.
 //
 // An unsupported page decodes through cp1252 and reports rtf/unsupported-codepage once per run rather than throwing: the rest of the document is still readable, and cp1252 agrees with every supported page on the ASCII range, so a document whose non-ASCII content is incidental still reads correctly. The sink is what makes that visible instead of silent. An empty input needs no dedicated fast path: TextDecoder.decode, the DBCS state machine, and the single-byte for-of loop below all already produce "" on their own for zero bytes, with no codepage lookup or diagnostic ever triggered along the way.
 export function decodeCodepageBytes(
@@ -205,13 +205,13 @@ export function decodeCodepageBytes(
   }
   let out = "";
   for (const byte of input) {
-    // charAt, not a bracket read: every entry in SINGLE_BYTE_PAGES is exactly 128 characters (0x80..0xFF, generated and verified against Python's own codec library -- see this module's own header), so `byte - 0x80` is always in range and a `?? "�"` fallback for the bracket-read's own `string | undefined` type would be pretending an unreachable case is real, per this family's no-defensive-over-engineering convention (base64.ts's own bytesToBase64 states the identical charAt-over-bracket-read reasoning).
+    // charAt, not a bracket read: every entry in SINGLE_BYTE_PAGES is exactly 128 characters (0x80..0xFF, generated and verified against Python's own codec library — see this module's own header), so `byte - 0x80` is always in range and a `?? "�"` fallback for the bracket-read's own `string | undefined` type would be pretending an unreachable case is real, per this family's no-defensive-over-engineering convention (base64.ts's own bytesToBase64 states the identical charAt-over-bracket-read reasoning).
     out += byte < 0x80 ? String.fromCharCode(byte) : table.charAt(byte - 0x80);
   }
   return out;
 }
 
-// The lead-byte state machine a DBCS page needs (see this module's own header): a byte under 0x80 is always ASCII, a byte the page uses as a lead byte consumes the byte after it too (or, at the end of a run with no byte left to consume, decodes alone as U+FFFD -- a genuine RTF document never actually splits a DBCS character's two bytes across separate runs, since \'hh escapes and raw bytes both feed the same buffered run this function receives whole), and every other byte is either one of the page's own single-byte extensions (932's halfwidth katakana and a handful of others -- see DBCS_SINGLE_BYTE_EXTRAS's own comment in ./codepage-dbcs.ts) or genuinely undefined and decodes as U+FFFD, the same fallback SINGLE_BYTE_PAGES uses above.
+// The lead-byte state machine a DBCS page needs (see this module's own header): a byte under 0x80 is always ASCII, a byte the page uses as a lead byte consumes the byte after it too (or, at the end of a run with no byte left to consume, decodes alone as U+FFFD — a genuine RTF document never actually splits a DBCS character's two bytes across separate runs, since \'hh escapes and raw bytes both feed the same buffered run this function receives whole), and every other byte is either one of the page's own single-byte extensions (932's halfwidth katakana and a handful of others — see DBCS_SINGLE_BYTE_EXTRAS's own comment in ./codepage-dbcs.ts) or genuinely undefined and decodes as U+FFFD, the same fallback SINGLE_BYTE_PAGES uses above.
 function decodeDbcsBytes(
   input: Uint8Array,
   codepage: number,
@@ -220,7 +220,7 @@ function decodeDbcsBytes(
   const singleByteExtras = DBCS_SINGLE_BYTE_EXTRAS.get(codepage);
   let out = "";
   let i = 0;
-  // No explicit i < input.length bound: i's own step varies (1 or 2 bytes per iteration), but a Uint8Array index at or past its own length always reads back undefined rather than throwing, so the byte === undefined check below is already the one true stopping condition -- a separate length comparison would only ever fire in lockstep with it.
+  // No explicit i < input.length bound: i's own step varies (1 or 2 bytes per iteration), but a Uint8Array index at or past its own length always reads back undefined rather than throwing, so the byte === undefined check below is already the one true stopping condition — a separate length comparison would only ever fire in lockstep with it.
   for (;;) {
     const byte = input[i];
     if (byte === undefined) {
@@ -234,9 +234,9 @@ function decodeDbcsBytes(
     const trailTable = leadTable.get(byte);
     if (trailTable !== undefined) {
       const trail = input[i + 1];
-      // charAt, not a bracket read: trailTable is always a dense 256-character string (DBCS_LEAD_BYTE_TABLES's own header comment), so a trail byte (0x00-0xFF) is always in range, and a `?? "�"` fallback for the bracket-read's own `string | undefined` type would be pretending an unreachable case is real -- the same reasoning decodeCodepageBytes's own single-byte loop already states for SINGLE_BYTE_PAGES.
+      // charAt, not a bracket read: trailTable is always a dense 256-character string (DBCS_LEAD_BYTE_TABLES's own header comment), so a trail byte (0x00-0xFF) is always in range, and a `?? "�"` fallback for the bracket-read's own `string | undefined` type would be pretending an unreachable case is real — the same reasoning decodeCodepageBytes's own single-byte loop already states for SINGLE_BYTE_PAGES.
       out += trail === undefined ? "�" : trailTable.charAt(trail);
-      // Always 2, even when trail is undefined: trail is only ever undefined when i + 1 is already past input's own end, meaning i was already the last index -- advancing by 1 or by 2 from there both land past input.length either way, so there is no real pair left to skip over by advancing the full 2.
+      // Always 2, even when trail is undefined: trail is only ever undefined when i + 1 is already past input's own end, meaning i was already the last index — advancing by 1 or by 2 from there both land past input.length either way, so there is no real pair left to skip over by advancing the full 2.
       i += 2;
       continue;
     }

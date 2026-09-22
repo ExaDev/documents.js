@@ -1,8 +1,8 @@
-// The built-in worksheet-function table PtgFunc and PtgFuncVar's own `iftab`/`tab` field resolves against ([MS-XLS] 2.5.198.17, Ftab -- https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/59667dd3-d6f6-4949-8a9b-b26f13949e3c). Every entry [MS-XLS] enumerates is listed here, cited to that same table by its own `iftab` value, so a formula naming a function this reader has never heard of still resolves through the identical published index rather than a partial guess.
+// The built-in worksheet-function table PtgFunc and PtgFuncVar's own `iftab`/`tab` field resolves against ([MS-XLS] 2.5.198.17, Ftab — https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/59667dd3-d6f6-4949-8a9b-b26f13949e3c). Every entry [MS-XLS] enumerates is listed here, cited to that same table by its own `iftab` value, so a formula naming a function this reader has never heard of still resolves through the identical published index rather than a partial guess.
 //
-// The second element of each tuple is the function's FIXED argument count when [MS-XLS]'s own grammar states one -- a `*params* = ...` production with no `[optional]` bracket and no `*N(repeated)` group. A function whose grammar admits an optional or repeated argument has no fixed count and is therefore never resolved through PtgFunc: real producers confirm this split empirically (verified against genuine LibreOffice-written BIFF8: PI(), SIN(A1), ROUND(A1,0), ATAN2(A1,B1), SYD(1,2,3,4), and REPLACE("abc",1,1,"x") all compile as PtgFunc with no on-disk argument count, exactly matching a fixed-arity grammar entry with no bracket; COUNT(A1:B1), SUMIF(A1:A1,1), and CONCATENATE("a","b","c") all compile as PtgFuncVar carrying an explicit cparams byte, exactly matching a grammar entry with a `[...]` or `*N(...)` clause) -- PtgFunc carries no argument count of its own, so a function's real arity has to come from somewhere, and this column is that somewhere. PtgFuncVar's own `cparams` field is the argument count on disk regardless of what this column says, since a variable-arity call always states its own count.
+// The second element of each tuple is the function's FIXED argument count when [MS-XLS]'s own grammar states one — a `*params* = ...` production with no `[optional]` bracket and no `*N(repeated)` group. A function whose grammar admits an optional or repeated argument has no fixed count and is therefore never resolved through PtgFunc: real producers confirm this split empirically (verified against genuine LibreOffice-written BIFF8: PI(), SIN(A1), ROUND(A1,0), ATAN2(A1,B1), SYD(1,2,3,4), and REPLACE("abc",1,1,"x") all compile as PtgFunc with no on-disk argument count, exactly matching a fixed-arity grammar entry with no bracket; COUNT(A1:B1), SUMIF(A1:A1,1), and CONCATENATE("a","b","c") all compile as PtgFuncVar carrying an explicit cparams byte, exactly matching a grammar entry with a `[...]` or `*N(...)` clause) — PtgFunc carries no argument count of its own, so a function's real arity has to come from somewhere, and this column is that somewhere. PtgFuncVar's own `cparams` field is the argument count on disk regardless of what this column says, since a variable-arity call always states its own count.
 //
-// Most of this table's entries are Excel 4.0 macro-sheet commands (WINDOWS, POKE, ADD.MENU, and the like) that can appear only in a macro-sheet substream, which readXlsContent never walks (it maps worksheet/dialog substreams only, [MS-XLS] 2.4.28's dt 0x00) -- carried here anyway because completeness against the published table costs nothing and this reader has no principled way to know in advance which formula a real file will contain.
+// Most of this table's entries are Excel 4.0 macro-sheet commands (WINDOWS, POKE, ADD.MENU, and the like) that can appear only in a macro-sheet substream, which readXlsContent never walks (it maps worksheet/dialog substreams only, [MS-XLS] 2.4.28's dt 0x00) — carried here anyway because completeness against the published table costs nothing and this reader has no principled way to know in advance which formula a real file will contain.
 
 /** One Ftab entry: the function's own displayed name, and its fixed argument count when the grammar states one (absent for a function [MS-XLS]'s own grammar allows a variable or optional argument list for, which always resolves through PtgFuncVar's own on-disk cparams instead). */
 type FtabEntry = readonly [name: string, fixedArity?: number];
@@ -257,7 +257,7 @@ const FTAB_ENTRIES: readonly (readonly [iftab: number, entry: FtabEntry])[] = [
   [0x00fc, ["FREQUENCY", 2]],
   [0x00fd, ["ADD.TOOLBAR"]],
   [0x00fe, ["DELETE.TOOLBAR", 1]],
-  // 0x00ff (User Defined Function) has no fixed name of its own -- the call names the UDF through its own operand, not through this table -- so it is intentionally not listed here.
+  // 0x00ff (User Defined Function) has no fixed name of its own — the call names the UDF through its own operand, not through this table — so it is intentionally not listed here.
   [0x0100, ["RESET.TOOLBAR", 1]],
   [0x0101, ["EVALUATE", 1]],
   [0x0102, ["GET.TOOLBAR"]],
@@ -383,12 +383,12 @@ const FTAB_ENTRIES: readonly (readonly [iftab: number, entry: FtabEntry])[] = [
   [0x017b, ["RTD"]],
 ];
 
-/** A function's displayed name, by its Ftab index -- consulted for both PtgFunc and PtgFuncVar. */
+/** A function's displayed name, by its Ftab index — consulted for both PtgFunc and PtgFuncVar. */
 export const FTAB_NAMES: ReadonlyMap<number, string> = new Map(
   FTAB_ENTRIES.map(([iftab, [name]]) => [iftab, name]),
 );
 
-/** A function's fixed argument count, by its Ftab index -- consulted only for PtgFunc, whose own token carries no count. Absent for every entry [MS-XLS]'s grammar gives an optional or repeated argument, which is never resolved through PtgFunc in practice (see the module comment). */
+/** A function's fixed argument count, by its Ftab index — consulted only for PtgFunc, whose own token carries no count. Absent for every entry [MS-XLS]'s grammar gives an optional or repeated argument, which is never resolved through PtgFunc in practice (see the module comment). */
 export const FTAB_FIXED_ARITY: ReadonlyMap<number, number> = new Map(
   FTAB_ENTRIES.filter(
     (entry): entry is [number, [string, number]] => entry[1][1] !== undefined,

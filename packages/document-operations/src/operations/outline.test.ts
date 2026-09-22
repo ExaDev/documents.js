@@ -50,7 +50,7 @@ describe("outlineDocumentOperation", () => {
   });
 
   it("projects a spreadsheet's own sheet-anchored embedded object as an 'embeddedObject'-kind leaf, identified structurally rather than by a kind field", async () => {
-    // A bare ContentEmbeddedObject (ContentSheet.embeddedObjects' own element type) carries neither "kind" nor "mathml" -- unlike a formula leaf, whose own outline text traces back to ContentFormula.presentation, this leaf has no analogous field at all, so leafKind's third, structural fallback ("no kind, no mathml -> embeddedObject") is the only branch that can ever classify it.
+    // A bare ContentEmbeddedObject (ContentSheet.embeddedObjects' own element type) carries neither "kind" nor "mathml" — unlike a formula leaf, whose own outline text traces back to ContentFormula.presentation, this leaf has no analogous field at all, so leafKind's third, structural fallback ("no kind, no mathml -> embeddedObject") is the only branch that can ever classify it.
     const pkg = buildOdsPackage({
       kind: "spreadsheet",
       metadata: {},
@@ -110,7 +110,7 @@ describe("outlineDocumentOperation", () => {
   });
 
   it("propagates an already-aborted signal through to resolving a path source's own bytes", async () => {
-    // A path that does not exist, so a real fs error (not the tree-read's own abort check) would result if resolveDocumentInput's own signal forwarding were ever dropped -- a real file's read would succeed either way, masking the difference behind the SAME signal still aborting the downstream tree read.
+    // A path that does not exist, so a real fs error (not the tree-read's own abort check) would result if resolveDocumentInput's own signal forwarding were ever dropped — a real file's read would succeed either way, masking the difference behind the SAME signal still aborting the downstream tree read.
     const controller = new AbortController();
     controller.abort();
 

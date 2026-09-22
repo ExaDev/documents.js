@@ -35,7 +35,7 @@ describe("HTML_ENTITY_TABLE", () => {
   });
 
   it("resolves a multi-codepoint entity to its full character sequence", () => {
-    // '&NotEqualTilde;' decodes to U+2242 U+0338 -- proves this table doesn't truncate a value to a single code unit.
+    // '&NotEqualTilde;' decodes to U+2242 U+0338 — proves this table doesn't truncate a value to a single code unit.
     expect(HTML_ENTITY_TABLE.NotEqualTilde).toBe("≂̸");
   });
 

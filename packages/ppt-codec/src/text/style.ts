@@ -2,7 +2,7 @@ import { PptFormatError } from "../errors";
 import { type PptRecord } from "../record/tree";
 import { RT_StyleTextPropAtom, RT_TextMasterStyleAtom } from "../record/types";
 
-// StyleTextPropAtom: the paragraph-level and character-level formatting for one text body, expressed as two run arrays measured in characters rather than as properties attached to the text. A run's own length is what says where it ends, so the whole atom is only parseable against the character count of the text body it accompanies -- which is why every function here takes that count rather than deriving it. [MS-PPT] 2.9.x StyleTextPropAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/a9a5fa71-238d-491e-acc7-fa1fffd5f100 [MS-PPT] TextPFRun: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/4e95a4f9-a9af-42b5-b81a-f8f991cb1418 [MS-PPT] TextCFRun: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/426f313a-a4f3-4ffb-a041-9a74ccf23f17 [MS-PPT] TextPFException: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/c15a13b3-db2c-4b50-a7e6-08045581a663 [MS-PPT] TextCFException: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/c75024a2-14cb-4d7d-9964-bdab2fcd9d93
+// StyleTextPropAtom: the paragraph-level and character-level formatting for one text body, expressed as two run arrays measured in characters rather than as properties attached to the text. A run's own length is what says where it ends, so the whole atom is only parseable against the character count of the text body it accompanies — which is why every function here takes that count rather than deriving it. [MS-PPT] 2.9.x StyleTextPropAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/a9a5fa71-238d-491e-acc7-fa1fffd5f100 [MS-PPT] TextPFRun: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/4e95a4f9-a9af-42b5-b81a-f8f991cb1418 [MS-PPT] TextCFRun: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/426f313a-a4f3-4ffb-a041-9a74ccf23f17 [MS-PPT] TextPFException: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/c15a13b3-db2c-4b50-a7e6-08045581a663 [MS-PPT] TextCFException: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/c75024a2-14cb-4d7d-9964-bdab2fcd9d93
 
 // TextAlignmentEnum ([MS-PPT] 2.13.x): https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/5fe09a4e-204e-41dd-a1e6-83ea729e0f25
 export const ALIGN_LEFT = 0x0000;
@@ -13,7 +13,7 @@ export const ALIGN_DISTRIBUTED = 0x0004;
 export const ALIGN_THAI_DISTRIBUTED = 0x0005;
 export const ALIGN_JUSTIFY_LOW = 0x0006;
 
-// PFMasks bit positions, in the spec's own A-to-Z order. Each bit says whether its field is present in the TextPFException that follows -- never what the field's value is. Exported (rather than kept private to this module) because style-write.ts's writeTextPFException sets the identical bits when serialising a property back to bytes -- one definition read and written by both directions rather than a second copy that could drift from this one.
+// PFMasks bit positions, in the spec's own A-to-Z order. Each bit says whether its field is present in the TextPFException that follows — never what the field's value is. Exported (rather than kept private to this module) because style-write.ts's writeTextPFException sets the identical bits when serialising a property back to bytes — one definition read and written by both directions rather than a second copy that could drift from this one.
 export const PF_HAS_BULLET = 1 << 0;
 export const PF_BULLET_HAS_FONT = 1 << 1;
 export const PF_BULLET_HAS_COLOR = 1 << 2;
@@ -53,14 +53,14 @@ export const CF_OLD_EA_TYPEFACE = 1 << 21;
 export const CF_ANSI_TYPEFACE = 1 << 22;
 export const CF_SYMBOL_TYPEFACE = 1 << 23;
 
-// CFStyle value bits, which share the low ten positions of CFMasks by construction -- the mask says a property is stated, the style says what it is. Exported for the same reason the mask bits above are.
+// CFStyle value bits, which share the low ten positions of CFMasks by construction — the mask says a property is stated, the style says what it is. Exported for the same reason the mask bits above are.
 export const STYLE_BOLD = 1 << 0;
 export const STYLE_ITALIC = 1 << 1;
 export const STYLE_UNDERLINE = 1 << 2;
 export const STYLE_SHADOW = 1 << 4;
 export const STYLE_EMBOSS = 1 << 9;
 
-// ColorIndexStruct.index ([MS-PPT] 2.12.2): 0x00-0x07 name one of the slide's own colour scheme slots (background, text, shadow, title text, fill, then Accent 1/2/3 -- see document/color-scheme.ts), 0xFE means the struct's own red/green/blue bytes are a literal colour, and 0xFF means the colour is genuinely unstated. Exported so style-write.ts's writeColorIndexStruct writes the identical sentinel readColorIndexStruct below checks for.
+// ColorIndexStruct.index ([MS-PPT] 2.12.2): 0x00-0x07 name one of the slide's own colour scheme slots (background, text, shadow, title text, fill, then Accent 1/2/3 — see document/color-scheme.ts), 0xFE means the struct's own red/green/blue bytes are a literal colour, and 0xFF means the colour is genuinely unstated. Exported so style-write.ts's writeColorIndexStruct writes the identical sentinel readColorIndexStruct below checks for.
 export const COLOR_INDEX_SRGB = 0xfe;
 export const COLOR_INDEX_UNDEFINED = 0xff;
 export const COLOR_SCHEME_SLOT_COUNT = 8;
@@ -71,7 +71,7 @@ export interface RgbColor {
   readonly blue: number;
 }
 
-// A run's own colour reference, before any colour-scheme lookup: either a literal RGB triple, or an index into whichever colour scheme (the slide's own, or its master's, when the slide states none) ends up applying to that run. Modelling this as a union rather than collapsing a scheme reference straight to `undefined` is what makes scheme-colour resolution possible at all -- discarding the index at parse time, the way this module used to, would make the two cases ("no colour stated" and "a scheme colour that hasn't been resolved yet") indistinguishable.
+// A run's own colour reference, before any colour-scheme lookup: either a literal RGB triple, or an index into whichever colour scheme (the slide's own, or its master's, when the slide states none) ends up applying to that run. Modelling this as a union rather than collapsing a scheme reference straight to `undefined` is what makes scheme-colour resolution possible at all — discarding the index at parse time, the way this module used to, would make the two cases ("no colour stated" and "a scheme colour that hasn't been resolved yet") indistinguishable.
 export type RunColor =
   | { readonly kind: "rgb"; readonly rgb: RgbColor }
   | { readonly kind: "scheme"; readonly schemeIndex: number };
@@ -79,11 +79,11 @@ export type RunColor =
 export interface ParagraphProperties {
   readonly indentLevel: number;
   readonly alignment: number | undefined;
-  /** ParaSpacing ([MS-PPT]), raw and unconverted: 0-13200 is a percentage of line height (value/100 = percent), negative is the absolute value in master units. content.ts's own paraSpacingToLineSpacing/paraSpacingToPoints do the schema-facing conversion -- this module stays format-level, with no document-schema.js knowledge of its own. */
+  /** ParaSpacing ([MS-PPT]), raw and unconverted: 0-13200 is a percentage of line height (value/100 = percent), negative is the absolute value in master units. content.ts's own paraSpacingToLineSpacing/paraSpacingToPoints do the schema-facing conversion — this module stays format-level, with no document-schema.js knowledge of its own. */
   readonly lineSpacing: number | undefined;
   readonly spaceBefore: number | undefined;
   readonly spaceAfter: number | undefined;
-  /** MarginOrIndent ([MS-PPT]): a signed offset in master units, no percentage form -- leftMargin is the paragraph's own left margin, indent the first line's own offset relative to it (negative for a hanging/bullet indent), the identical relationship DrawingML's later marL/indent pair states for the same binary predecessor format. */
+  /** MarginOrIndent ([MS-PPT]): a signed offset in master units, no percentage form — leftMargin is the paragraph's own left margin, indent the first line's own offset relative to it (negative for a hanging/bullet indent), the identical relationship DrawingML's later marL/indent pair states for the same binary predecessor format. */
   readonly leftMargin: number | undefined;
   readonly indent: number | undefined;
 }
@@ -180,7 +180,7 @@ function readColorIndexStruct(cursor: FieldCursor): RunColor | undefined {
   );
 }
 
-// A TextPFException's optional fields, read strictly in the spec's declared field order. That order is not the mask-bit order -- bulletChar (bit 7) is emitted before bulletFontRef (bit 4), and textAlignment (bit 11) before leftMargin (bit 8) -- so iterating the mask bits in numeric order would misalign every field after the first divergence.
+// A TextPFException's optional fields, read strictly in the spec's declared field order. That order is not the mask-bit order — bulletChar (bit 7) is emitted before bulletFontRef (bit 4), and textAlignment (bit 11) before leftMargin (bit 8) — so iterating the mask bits in numeric order would misalign every field after the first divergence.
 function readTextPFException(
   cursor: FieldCursor,
   indentLevel: number,
@@ -335,7 +335,7 @@ export function readStyleTextPropAtom(
     cursor,
     characterCount,
     "StyleTextPropAtom paragraph runs",
-    // A TextPFRun is count, then a 2-byte indentLevel, then the exception itself -- the indent level is the run's own field rather than one of the exception's masked ones, so it is read here before handing the cursor over.
+    // A TextPFRun is count, then a 2-byte indentLevel, then the exception itself — the indent level is the run's own field rather than one of the exception's masked ones, so it is read here before handing the cursor over.
     (at) => {
       const indentLevel = at.u16();
       return readTextPFException(at, indentLevel);
@@ -352,7 +352,7 @@ export function readStyleTextPropAtom(
 
 // [MS-PPT] 2.9.35's own cap: "cLevels ... MUST be less than or equal to 0x0005."
 const MASTER_STYLE_MAX_LEVELS = 5;
-// [MS-PPT] 2.9.35: TextMasterStyleLevel's own optional `level` field is present "if the value of the TextMasterStyleAtom record that contains this TextMasterStyleLevel is 0x005, 0x006, 0x007, or 0x008" -- i.e. the containing atom's own recInstance (its TextTypeEnum) is at least CENTER_BODY. For TITLE/BODY/NOTES/OTHER, a level's own index within lstLvl1..lstLvl5 already states which outline level it is.
+// [MS-PPT] 2.9.35: TextMasterStyleLevel's own optional `level` field is present "if the value of the TextMasterStyleAtom record that contains this TextMasterStyleLevel is 0x005, 0x006, 0x007, or 0x008" — i.e. the containing atom's own recInstance (its TextTypeEnum) is at least CENTER_BODY. For TITLE/BODY/NOTES/OTHER, a level's own index within lstLvl1..lstLvl5 already states which outline level it is.
 const MASTER_STYLE_TYPES_WITH_EXPLICIT_LEVEL = 0x005;
 
 export interface MasterStyleLevel {
@@ -361,13 +361,13 @@ export interface MasterStyleLevel {
 }
 
 export interface MasterTextStyleAtom {
-  // The TextTypeEnum member this atom's own formatting applies to -- the atom's own rh.recInstance, per [MS-PPT] 2.9.35.
+  // The TextTypeEnum member this atom's own formatting applies to — the atom's own rh.recInstance, per [MS-PPT] 2.9.35.
   readonly textType: number;
   // Index 0 is the outermost outline level, matching lstLvl1; a shorter array than 5 means the remaining levels are not stated by this atom at all (see document/master.ts's own cascade, which walks this array from `min(indentLevel, levels.length - 1)` down to 0).
   readonly levels: readonly MasterStyleLevel[];
 }
 
-// TextMasterStyleAtom ([MS-PPT] 2.9.35): cLevels, then that many TextMasterStyleLevel entries -- each just a TextPFException/TextCFException pair (an optional `level` field first, for the four types that carry one), so this reuses readTextPFException/readTextCFException directly rather than re-deriving their byte layout. Read from either a MainMasterContainer (one recInstance-tagged atom per placeholder type the master carries) or the DocumentTextInfoContainer inside Environment (the single OTHER-typed document-wide default every type falls back to when its own master says nothing) -- both are the identical record shape, told apart only by where the caller found them.
+// TextMasterStyleAtom ([MS-PPT] 2.9.35): cLevels, then that many TextMasterStyleLevel entries — each just a TextPFException/TextCFException pair (an optional `level` field first, for the four types that carry one), so this reuses readTextPFException/readTextCFException directly rather than re-deriving their byte layout. Read from either a MainMasterContainer (one recInstance-tagged atom per placeholder type the master carries) or the DocumentTextInfoContainer inside Environment (the single OTHER-typed document-wide default every type falls back to when its own master says nothing) — both are the identical record shape, told apart only by where the caller found them.
 export function readTextMasterStyleAtom(
   record: PptRecord,
 ): MasterTextStyleAtom {

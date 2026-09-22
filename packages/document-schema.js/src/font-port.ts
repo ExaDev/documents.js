@@ -15,7 +15,7 @@ export interface FontFace {
   readonly italic: boolean;
 }
 
-// Reported whenever font resolution did not land on an exact-face match: either a family match narrowed down to that family's own regular face ('missing-face'), or a fall-through to a vendored metric-compatible substitute ('vendored-substitute'). Never raised for the standard-14 fallback itself -- that is the unconditional baseline, not a new event worth surfacing.
+// Reported whenever font resolution did not land on an exact-face match: either a family match narrowed down to that family's own regular face ('missing-face'), or a fall-through to a vendored metric-compatible substitute ('vendored-substitute'). Never raised for the standard-14 fallback itself — that is the unconditional baseline, not a new event worth surfacing.
 export interface FontSubstitution {
   readonly requestedFamily: string;
   readonly requestedBold: boolean;

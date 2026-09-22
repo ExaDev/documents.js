@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import { useAppDispatch, useAppState } from "../state/context.js";
 import { anyOverlayOpen } from "../state/types.js";
 
-// The very first screen: nothing is open yet, so there is no list to navigate -- just two entry points into the rest of the app. 'q'/Ctrl+C quit and the ':'/'/'/'?' overlays are already wired globally in app.tsx's AppShell; this screen only owns 'o' and 'n'.
+// The very first screen: nothing is open yet, so there is no list to navigate — just two entry points into the rest of the app. 'q'/Ctrl+C quit and the ':'/'/'/'?' overlays are already wired globally in app.tsx's AppShell; this screen only owns 'o' and 'n'.
 export function LauncherScreen(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();
@@ -33,7 +33,7 @@ export function LauncherScreen(): ReactElement {
       <Text bold>document-cli</Text>
       <Text dimColor>
         A terminal editor for docx, pptx, odt, odp, ods, odg, doc, xls, ppt,
-        markdown, odb and pdf -- xlsx, csv, svg, rtf, wpd and epub open as
+        markdown, odb and pdf — xlsx, csv, svg, rtf, wpd and epub open as
         read-only PDF previews.
       </Text>
       <Text> </Text>

@@ -32,14 +32,14 @@ export const Route = createFileRoute("/editors")({
 
 type EditorFormat = "docx" | "odt" | "doc" | "markdown";
 
-// The opened file, its inferred format, and its live snapshot always change together (the file/format are only ever set alongside the mutate() call whose result seeds the snapshot) and are only ever meaningful as a trio -- one state value carrying all three, rather than three separate pieces of state, is what makes that invariant a type-level fact instead of something every reader (and paragraph action below) needs to defensively re-check.
+// The opened file, its inferred format, and its live snapshot always change together (the file/format are only ever set alongside the mutate() call whose result seeds the snapshot) and are only ever meaningful as a trio — one state value carrying all three, rather than three separate pieces of state, is what makes that invariant a type-level fact instead of something every reader (and paragraph action below) needs to defensively re-check.
 interface EditorSession {
   file: OpenedFile;
   format: EditorFormat;
   snapshot: { id: number; paragraphs: string[] };
 }
 
-// The Editors tool: an in-browser editing surface over documents.js's live-view editors, which run in the worker and hold the document itself -- every edit below is applied to the live document through the rpc session (nothing is buffered client-side), and Save re-serialises the whole document through the format's own writer. The v1 surface is the paragraph list every format family shares: edit a paragraph's text in place, append, remove, save. Formats beyond these four (and deeper per-run styling) stay out until they have the same genuine cross-format surface.
+// The Editors tool: an in-browser editing surface over documents.js's live-view editors, which run in the worker and hold the document itself — every edit below is applied to the live document through the rpc session (nothing is buffered client-side), and Save re-serialises the whole document through the format's own writer. The v1 surface is the paragraph list every format family shares: edit a paragraph's text in place, append, remove, save. Formats beyond these four (and deeper per-run styling) stay out until they have the same genuine cross-format surface.
 function EditorsPage() {
   const [session, setSession] = useState<EditorSession | undefined>(undefined);
   const [newParagraph, setNewParagraph] = useState("");
@@ -75,7 +75,7 @@ function EditorsPage() {
     );
   };
 
-  // Every paragraph action below is wired only to elements rendered inside the `session !== undefined` panel further down, so by the time any of them can actually run, the session (and its file/snapshot) is already known to be defined -- there is no separate guard to check here.
+  // Every paragraph action below is wired only to elements rendered inside the `session !== undefined` panel further down, so by the time any of them can actually run, the session (and its file/snapshot) is already known to be defined — there is no separate guard to check here.
   const applySet = (index: number, text: string, session: EditorSession) => {
     setParagraphText.mutate(
       { id: session.snapshot.id, index, text },
@@ -188,7 +188,7 @@ function EditorsPage() {
                     minRows={1}
                     style={{ flex: 1 }}
                     onChange={(event) => {
-                      // Optimistic local edit: the input is driven by local state per keystroke, and the worker session is updated on blur -- one rpc round-trip per finished edit rather than per keystroke.
+                      // Optimistic local edit: the input is driven by local state per keystroke, and the worker session is updated on blur — one rpc round-trip per finished edit rather than per keystroke.
                       setSession({
                         ...session,
                         snapshot: {

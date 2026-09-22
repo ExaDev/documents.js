@@ -117,7 +117,7 @@ describe("resolveStyle: no styleName", () => {
     });
   });
 
-  it("resolves to just the family default-style when styleName is undefined -- a bare, unstyled element is ordinary valid ODF, not a diagnostic", () => {
+  it("resolves to just the family default-style when styleName is undefined — a bare, unstyled element is ordinary valid ODF, not a diagnostic", () => {
     const defaultStyle = el(
       "style:default-style",
       { "style:family": "paragraph" },
@@ -243,7 +243,7 @@ describe("resolveStyle: parent chain, root-first application", () => {
     });
   });
 
-  it("merges a parent style's border edge with a child style's own DIFFERENT edge, rather than the child's borderX fields wholesale replacing the parent's -- proving StyleProperties keeps border edges as separate flat fields specifically so this shallow field-by-field cascade merges them correctly (ExaDev/documents.js#1086)", () => {
+  it("merges a parent style's border edge with a child style's own DIFFERENT edge, rather than the child's borderX fields wholesale replacing the parent's — proving StyleProperties keeps border edges as separate flat fields specifically so this shallow field-by-field cascade merges them correctly (ExaDev/documents.js#1086)", () => {
     const parent = styleStyle("P", "paragraph", {}, [
       paragraphProps({ "fo:border-bottom": "0.75pt solid #000000" }),
     ]);
@@ -286,7 +286,7 @@ describe("resolveStyle: parent chain, root-first application", () => {
     expect(properties.borderBottom).toBeUndefined();
   });
 
-  it('applies no fourth "direct formatting" layer -- the referenced style\'s own properties are the final word, exactly as parsed', () => {
+  it('applies no fourth "direct formatting" layer — the referenced style\'s own properties are the final word, exactly as parsed', () => {
     const parent = styleStyle("P", "paragraph", {}, [
       paragraphProps({ "fo:text-align": "left" }),
     ]);
@@ -320,7 +320,7 @@ describe("resolveStyle: cycle guard", () => {
     expect(result.diagnostics).toHaveLength(1);
     expect(result.diagnostics[0]?.severity).toBe("warning");
     expect(result.diagnostics[0]?.message).toMatch(/cyclic/i);
-    // Both A and B were visited before the cycle was detected, so both still contributed their properties -- but A (the originally-requested target) is still applied LAST in the merge, since the walk collects target-to-root (A, then its parent B) and reverses before applying, exactly as the non-cyclic case does. A's own alignment ("left") is therefore still the final, most-specific value, not B's.
+    // Both A and B were visited before the cycle was detected, so both still contributed their properties — but A (the originally-requested target) is still applied LAST in the merge, since the walk collects target-to-root (A, then its parent B) and reverses before applying, exactly as the non-cyclic case does. A's own alignment ("left") is therefore still the final, most-specific value, not B's.
     expect(result.properties.alignment).toBe("left");
   });
 
@@ -417,7 +417,7 @@ describe("resolveStyle: cross-part resolution", () => {
     });
   });
 
-  it("does not let a same-name, different-family style collide -- family scoping is respected during lookup", () => {
+  it("does not let a same-name, different-family style collide — family scoping is respected during lookup", () => {
     const paragraphNamed = styleStyle("Shared", "paragraph", {}, [
       paragraphProps({ "fo:text-align": "left" }),
     ]);
@@ -481,7 +481,7 @@ describe("resolveStyle: malformed style entries during collection", () => {
       parts: { "styles.xml": stylesPackage([noName, noFamily, badFamily]) },
     };
 
-    // None of the three malformed entries ever get indexed under any real family -- looking any of their names up under a real family finds nothing, rather than throwing on the malformed attribute.
+    // None of the three malformed entries ever get indexed under any real family — looking any of their names up under a real family finds nothing, rather than throwing on the malformed attribute.
     expect(
       resolveStyle("NoFamily", "paragraph", pkg).diagnostics[0]?.message,
     ).toMatch(/not found/i);

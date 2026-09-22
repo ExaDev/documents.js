@@ -12,7 +12,7 @@ import {
   type StyleProperties,
 } from "./properties";
 
-// The style:style/style:text-properties/style:paragraph-properties fixtures below marked "real LibreOffice output" are copied verbatim (attribute-for-attribute) from content.xml produced by `soffice --headless --convert-to odt` (LibreOffice 26.2.5.2) against a hand-written HTML fixture exercising bold/italic/underline/strikethrough runs and left/center/right/justify paragraphs with custom spacing, indent, colour, font and size -- not retyped from memory. See registry.ts's own prefix-verification comment for the equivalent note on style:name prefixes.
+// The style:style/style:text-properties/style:paragraph-properties fixtures below marked "real LibreOffice output" are copied verbatim (attribute-for-attribute) from content.xml produced by `soffice --headless --convert-to odt` (LibreOffice 26.2.5.2) against a hand-written HTML fixture exercising bold/italic/underline/strikethrough runs and left/center/right/justify paragraphs with custom spacing, indent, colour, font and size — not retyped from memory. See registry.ts's own prefix-verification comment for the equivalent note on style:name prefixes.
 
 describe("parseLength", () => {
   it("parses every ODF length unit into points", () => {
@@ -335,7 +335,7 @@ describe("parseParagraphProperties", () => {
     expect(result.properties.spacingBeforePt).toBeCloseTo(12, 1);
     expect(result.properties.spacingAfterPt).toBeCloseTo(6, 1);
     expect(result.properties.indentFirstLinePt).toBeCloseTo(18, 1);
-    // fo:margin-right has no corresponding field in this model at all -- unmodelled, so hasUnknown regardless of the other three siblings.
+    // fo:margin-right has no corresponding field in this model at all — unmodelled, so hasUnknown regardless of the other three siblings.
     expect(result.hasUnknown).toBe(true);
   });
 
@@ -367,7 +367,7 @@ describe("parseParagraphProperties", () => {
     ).toBe(true);
   });
 
-  // fo:break-before/fo:break-after are enumerated by the OASIS ODF 1.2 schema to exactly auto/column/page/even-page/odd-page (OpenDocument v1.3 part 3, section 20.185). "page" is the page break the boolean model carries; "auto" is its explicit absence (the same normal/false split fo:font-weight takes). "column" is not a page break at all, and "even-page"/"odd-page" carry a parity the boolean cannot hold -- each of those three stays hasUnknown so the element quarantines as residue rather than silently losing its extra meaning.
+  // fo:break-before/fo:break-after are enumerated by the OASIS ODF 1.2 schema to exactly auto/column/page/even-page/odd-page (OpenDocument v1.3 part 3, section 20.185). "page" is the page break the boolean model carries; "auto" is its explicit absence (the same normal/false split fo:font-weight takes). "column" is not a page break at all, and "even-page"/"odd-page" carry a parity the boolean cannot hold — each of those three stays hasUnknown so the element quarantines as residue rather than silently losing its extra meaning.
   it('parses fo:break-before="page" to pageBreakBefore: true, and "auto" to false, cleanly', () => {
     expect(
       parseParagraphProperties(
@@ -412,8 +412,8 @@ describe("parseParagraphProperties", () => {
     expect(result.hasUnknown).toBe(true);
   });
 
-  // fo:border-* parsing, added for ExaDev/documents.js#1086 -- the odt half of #1082's own docx w:pBdr reading, so a border-only paragraph (Word's AutoCorrect "---" horizontal rule, or LibreOffice's own equivalent) is detected the same way regardless of source format.
-  it("parses a bottom-only border -- the exact shape a border-only horizontal rule takes", () => {
+  // fo:border-* parsing, added for ExaDev/documents.js#1086 — the odt half of #1082's own docx w:pBdr reading, so a border-only paragraph (Word's AutoCorrect "---" horizontal rule, or LibreOffice's own equivalent) is detected the same way regardless of source format.
+  it("parses a bottom-only border — the exact shape a border-only horizontal rule takes", () => {
     const element = el("style:paragraph-properties", {
       "fo:border-bottom": "0.75pt solid #000000",
     });
@@ -495,7 +495,7 @@ describe("parseParagraphProperties", () => {
     expect(result.hasUnknown).toBe(false);
   });
 
-  it("recovers width and colour for an fo:border-* value whose style token this model has no member for (groove/ridge/inset/outset), leaving style unset and NOT flagging hasUnknown -- the border itself is fully recovered, only its style keyword has no equivalent", () => {
+  it("recovers width and colour for an fo:border-* value whose style token this model has no member for (groove/ridge/inset/outset), leaving style unset and NOT flagging hasUnknown — the border itself is fully recovered, only its style keyword has no equivalent", () => {
     const element = el("style:paragraph-properties", {
       "fo:border-bottom": "0.75pt groove #000000",
     });

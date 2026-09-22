@@ -8,9 +8,9 @@ import { anyOverlayOpen, currentScreen } from "../../../state/types.js";
 import { paragraphFamilyDocument } from "../../shared/paragraph-family.js";
 import { RunTextEditor } from "../docx/run-editor.js";
 
-// OdtListItem (documents.js) now exposes `.text` (its own paragraphs, newline-joined -- the same convention OdtTableCell.text/OdpShape.text already use) alongside `appendParagraph()`/`addNestedList()`, so an item's real content is readable and editable here, not just countable.
+// OdtListItem (documents.js) now exposes `.text` (its own paragraphs, newline-joined — the same convention OdtTableCell.text/OdpShape.text already use) alongside `appendParagraph()`/`addNestedList()`, so an item's real content is readable and editable here, not just countable.
 //
-// Tab/">" indents the selected item into the preceding sibling's nested list (INDENT_LIST_ITEM, OdtList.indentItem). Outdent ("<") and navigating INTO an already-nested list are deliberately out of scope here: this screen only ever addresses a TOP-LEVEL list (`doc.editor.lists()[screen.blockIndex]`), with no route to drill into an item's own nestedLists(), so there is nothing reachable from this screen for outdent to act on yet -- tracked as its own follow-up.
+// Tab/">" indents the selected item into the preceding sibling's nested list (INDENT_LIST_ITEM, OdtList.indentItem). Outdent ("<") and navigating INTO an already-nested list are deliberately out of scope here: this screen only ever addresses a TOP-LEVEL list (`doc.editor.lists()[screen.blockIndex]`), with no route to drill into an item's own nestedLists(), so there is nothing reachable from this screen for outdent to act on yet — tracked as its own follow-up.
 export function ListEditorScreen(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();
@@ -29,7 +29,7 @@ export function ListEditorScreen(): ReactElement {
     blockIndex !== undefined && doc?.format === "odt"
       ? doc.editor.lists()[blockIndex]
       : undefined;
-  // Fresh every render, matching this codebase's own live-view rule (state/types.ts's top-of-file note) -- never cached in useState/useMemo, since any mutation elsewhere invalidates an array captured on an earlier render.
+  // Fresh every render, matching this codebase's own live-view rule (state/types.ts's top-of-file note) — never cached in useState/useMemo, since any mutation elsewhere invalidates an array captured on an earlier render.
   const items = list === undefined ? [] : list.items();
   const rows = items.map((item, index) => ({ item, index }));
   const itemCount = items.length;
@@ -64,7 +64,7 @@ export function ListEditorScreen(): ReactElement {
         dispatch({
           type: "SET_STATUS",
           severity: "warning",
-          text: "Outdenting isn't reachable from this screen yet -- it only browses top-level lists, with no route into an item's own nested list",
+          text: "Outdenting isn't reachable from this screen yet — it only browses top-level lists, with no route into an item's own nested list",
         });
       }
     },
@@ -93,7 +93,7 @@ export function ListEditorScreen(): ReactElement {
     const item = items[editingIndex];
     if (item === undefined) {
       throw new Error(
-        `ListEditorScreen is editing item index ${editingIndex}, but list ${screen.blockIndex} only has ${items.length} items -- selecting a row always sets editingIndex to a valid index from that same items array, so this indicates a bug in that selection.`,
+        `ListEditorScreen is editing item index ${editingIndex}, but list ${screen.blockIndex} only has ${items.length} items — selecting a row always sets editingIndex to a valid index from that same items array, so this indicates a bug in that selection.`,
       );
     }
     return (
@@ -128,7 +128,7 @@ export function ListEditorScreen(): ReactElement {
       <ListView
         items={rows}
         selectedIndex={selectedIndex}
-        emptyMessage="This list has no items yet -- press 'a' to add one."
+        emptyMessage="This list has no items yet — press 'a' to add one."
         renderItem={(row, isSelected) => {
           const trimmed = row.item.text.trim();
           return (

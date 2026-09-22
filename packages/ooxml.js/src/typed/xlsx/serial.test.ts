@@ -58,7 +58,7 @@ describe("serialToIsoDate: the 1900 system and its Lotus phantom leap day", () =
     expect(serialToIsoDate(61, false)).toBe("1900-03-01");
   });
 
-  it("refuses serial 60 outright -- 1900-02-29 never existed, and an invalid ISO date is worse than degrading to the number", () => {
+  it("refuses serial 60 outright — 1900-02-29 never existed, and an invalid ISO date is worse than degrading to the number", () => {
     expect(serialToIsoDate(60, false)).toBeUndefined();
     expect(serialToIsoDate(60.75, false)).toBeUndefined();
   });
@@ -88,7 +88,7 @@ describe("serialToIsoDate: the 1904 system", () => {
 
 describe("serialToIsoTime", () => {
   it("recovers a clean wall-clock time from the fifteen-significant-digit fraction a real producer stores", () => {
-    // 0.604166666666667 * 86400000 is 52199999.999999 ms exactly -- rounding to the nearest millisecond is what makes this 14:30:00 rather than 14:29:59.
+    // 0.604166666666667 * 86400000 is 52199999.999999 ms exactly — rounding to the nearest millisecond is what makes this 14:30:00 rather than 14:29:59.
     expect(serialToIsoTime(0.604166666666667)).toBe("14:30:00");
   });
 
@@ -208,7 +208,7 @@ describe("isoTimeToSerial: a time of day is the fraction-of-a-day part alone", (
     }
   });
 
-  it("rejects an elapsed duration -- ContentCellValue's own time variant is a wall-clock time of day, not one", () => {
+  it("rejects an elapsed duration — ContentCellValue's own time variant is a wall-clock time of day, not one", () => {
     expect(isoTimeToSerial("24:00:00")).toBeUndefined();
     expect(isoTimeToSerial("25:30:00")).toBeUndefined();
     expect(isoTimeToSerial("12:60:00")).toBeUndefined();
@@ -251,8 +251,8 @@ describe("utcMsOfCalendarDate: rejects a rollover in any one of year/month indep
     expect(utcMsOfCalendarDate(2026, 13, 1)).toBeUndefined();
   });
 
-  it("rejects a year rollover even when the resulting month happens to read back unchanged -- a day large enough to cross an entire leap year lands back on the same month index, one year later", () => {
-    // 2024 was a leap year (366 days); day 367 of January 2024 is January 1, 2025 -- getUTCMonth() reads back 0 (January) either way, but getUTCFullYear() reads back 2025, not the requested 2024.
+  it("rejects a year rollover even when the resulting month happens to read back unchanged — a day large enough to cross an entire leap year lands back on the same month index, one year later", () => {
+    // 2024 was a leap year (366 days); day 367 of January 2024 is January 1, 2025 — getUTCMonth() reads back 0 (January) either way, but getUTCFullYear() reads back 2025, not the requested 2024.
     expect(Date.UTC(2024, 0, 367)).toBe(Date.UTC(2025, 0, 1));
     expect(utcMsOfCalendarDate(2024, 1, 367)).toBeUndefined();
   });

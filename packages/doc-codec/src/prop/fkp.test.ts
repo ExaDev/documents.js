@@ -118,7 +118,7 @@ describe("parsePapxFkp", () => {
     );
   });
 
-  it("resolves bOffset 0 to undefined -- the paragraph takes the document defaults", () => {
+  it("resolves bOffset 0 to undefined — the paragraph takes the document defaults", () => {
     const fkp = parsePapxFkp(
       buildPapxFkp([{ fc: 0x400, istd: 0, omitPapx: true }], 0x410),
     );
@@ -176,7 +176,7 @@ describe("parsePapxFkp", () => {
     const bxPapAt = 8;
     page[bxPapAt] = 0x40 / 2; // bOffset -> papxAt 0x40.
     page[0x40] = 0; // cb.
-    page[0x41] = 0; // cb' -- below its own minimum of 1.
+    page[0x41] = 0; // cb' — below its own minimum of 1.
     expect(() => parsePapxFkp(page).papx(0)).toThrow(
       /cb 0 and cb' 0, but \[MS-DOC\] requires cb' to be at least 1/,
     );
@@ -197,7 +197,7 @@ describe("parsePapxFkp", () => {
     );
   });
 
-  it("accepts a GrpPrlAndIstd of exactly 2 bytes -- the istd alone, no grpprl", () => {
+  it("accepts a GrpPrlAndIstd of exactly 2 bytes — the istd alone, no grpprl", () => {
     // cb' 1 gives a GrpPrlAndIstd of 2*1 = 2 bytes, exactly the istd with an empty grpprl.
     const page = new Uint8Array(FKP_PAGE_SIZE);
     const view = new DataView(page.buffer);
@@ -280,7 +280,7 @@ describe("PropertyBinTable", () => {
   }
 
   it("resolves chpxGrpprl to undefined for an fc exactly on the table's own trailing boundary key, one past every real page", () => {
-    // The bin table's own last key marks the exclusive end of its last page's coverage rather than the start of a further one -- findLargestAtMost itself already treats landing on it as out of range, the same "final key terminates rather than opens a range" rule a PLC's own keys follow.
+    // The bin table's own last key marks the exclusive end of its last page's coverage rather than the start of a further one — findLargestAtMost itself already treats landing on it as out of range, the same "final key terminates rather than opens a range" rule a PLC's own keys follow.
     const page = buildChpxFkp([{ fc: 0x400 }], 0x410);
     const wordDocument = wordDocumentWith(2, page);
     const bin = new PropertyBinTable(
@@ -292,7 +292,7 @@ describe("PropertyBinTable", () => {
   });
 
   it("names 'formatted disk page 5' when the bin table names a page number the WordDocument stream is too short to hold", () => {
-    // A one-page WordDocument (page 0 only), but the bin table's own entry names page 5 -- resolving it slices FKP_PAGE_SIZE bytes at an offset the stream does not reach.
+    // A one-page WordDocument (page 0 only), but the bin table's own entry names page 5 — resolving it slices FKP_PAGE_SIZE bytes at an offset the stream does not reach.
     const wordDocument = new Uint8Array(FKP_PAGE_SIZE);
     const bin = new PropertyBinTable(
       wordDocument,
@@ -400,7 +400,7 @@ describe("PropertyBinTable", () => {
   });
 
   it("genuinely reuses the first lookup's own parsed page rather than re-parsing on every call", () => {
-    // Corrupting the page's own byte-511 crun field between the two lookups would make a fresh parse throw -- a cache that actually stores the first parse survives it; one that only silently succeeded twice by coincidence (the same input parsed identically) would not.
+    // Corrupting the page's own byte-511 crun field between the two lookups would make a fresh parse throw — a cache that actually stores the first parse survives it; one that only silently succeeded twice by coincidence (the same input parsed identically) would not.
     const page = buildChpxFkp(
       [{ fc: 0x400, grpprl: [0x35, 0x08, 0x01] }],
       0x410,

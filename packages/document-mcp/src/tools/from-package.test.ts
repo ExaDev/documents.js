@@ -27,7 +27,7 @@ import {
 } from "vitest";
 import { createServer } from "../server";
 
-// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip -- proving `from_package` is registered under that name, reads a real DocumentTree back in via documentFromJson, and rebuilds real bytes from it via documents.js's own buildDocumentBytes. Mirrors document-cli's own src/commands/from-package.test.ts, which proves the identical round trip for the CLI's --dump-package/from-package pair.
+// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip — proving `from_package` is registered under that name, reads a real DocumentTree back in via documentFromJson, and rebuilds real bytes from it via documents.js's own buildDocumentBytes. Mirrors document-cli's own src/commands/from-package.test.ts, which proves the identical round trip for the CLI's --dump-package/from-package pair.
 
 interface ConnectedPair {
   readonly client: Client;
@@ -68,7 +68,7 @@ describe("from_package", () => {
     const editor = createDocx();
     editor.body.appendParagraph().appendRun({ text: PARAGRAPH_TEXT });
 
-    // docxToPdf's own onDocument hands back the exact DocumentTree (content + pages, with per-node frames) a real docx-to-pdf conversion built internally -- the same value document-cli's --dump-package writes to disk, reused here rather than hand-built, since a hand-built DocumentTree would need to fabricate a plausible frame set from scratch.
+    // docxToPdf's own onDocument hands back the exact DocumentTree (content + pages, with per-node frames) a real docx-to-pdf conversion built internally — the same value document-cli's --dump-package writes to disk, reused here rather than hand-built, since a hand-built DocumentTree would need to fabricate a plausible frame set from scratch.
     let capturedPackage: DocumentTree | undefined;
     docxToPdf(editor.toBytes(), {
       onDocument: (pkg) => {
@@ -77,7 +77,7 @@ describe("from_package", () => {
     });
     if (capturedPackage === undefined) {
       throw new Error(
-        "docxToPdf never invoked onDocument -- fixture setup is broken",
+        "docxToPdf never invoked onDocument — fixture setup is broken",
       );
     }
 
@@ -105,7 +105,7 @@ describe("from_package", () => {
     });
     if (capturedSheetPackage === undefined) {
       throw new Error(
-        "odsToPdf never invoked onDocument -- fixture setup is broken",
+        "odsToPdf never invoked onDocument — fixture setup is broken",
       );
     }
 
@@ -169,7 +169,7 @@ describe("from_package", () => {
   });
 
   it("builds a real xlsx from a spreadsheet-kind DocumentTree now that documents.js wires a real xlsx content codec", async () => {
-    // xlsx used to be rejected outright here -- documents.js's own DOCUMENT_FORMAT_CODECS registry gained a real xlsx content codec (wrapping ooxml.js's readXlsxContent/buildXlsxPackage), and buildDocumentBytes now dispatches through it like every other format instead of naming xlsx as a special exception.
+    // xlsx used to be rejected outright here — documents.js's own DOCUMENT_FORMAT_CODECS registry gained a real xlsx content codec (wrapping ooxml.js's readXlsxContent/buildXlsxPackage), and buildDocumentBytes now dispatches through it like every other format instead of naming xlsx as a special exception.
     const rebuiltPath = join(workspace, "rebuilt.xlsx");
 
     const result = await pair.client.callTool({
@@ -227,7 +227,7 @@ describe("from_package", () => {
   });
 
   it("rejects a pre-schema-4 package dump (formatVersion 1, layout half) through the rename tombstone", async () => {
-    // Hand-built rather than captured: no current documents.js conversion can produce this shape any more (documents.js 1.x's formatVersion 1, a 'layout' half beside 'content'), under the document-package.schema.json name every release before ExaDev/documents.js#661's rename used. documentFromJson refuses any document-package-stemmed URI outright, by name alone, before it ever reaches the version-major gate -- so this dies in the rename tombstone, not the version gate, and the tool surfaces that error's message verbatim.
+    // Hand-built rather than captured: no current documents.js conversion can produce this shape any more (documents.js 1.x's formatVersion 1, a 'layout' half beside 'content'), under the document-package.schema.json name every release before ExaDev/documents.js#661's rename used. documentFromJson refuses any document-package-stemmed URI outright, by name alone, before it ever reaches the version-major gate — so this dies in the rename tombstone, not the version gate, and the tool surfaces that error's message verbatim.
     const legacyPath = join(workspace, "legacy.package.json");
     await writeFile(
       legacyPath,
@@ -258,7 +258,7 @@ describe("from_package", () => {
   });
 
   it("also rejects the fused formatVersion 2 shape (schema 3.x flat content+pages) through the same rename tombstone", async () => {
-    // The other pre-tree shape: documents.js 2.x (on document-schema.js 3.x, here pinned @3.0.0) dumped formatVersion 2 with flat content+pages -- also under the document-package.schema.json name, so it hits the identical rename tombstone the formatVersion-1 dump above does, regardless of how much further back its own shape sits.
+    // The other pre-tree shape: documents.js 2.x (on document-schema.js 3.x, here pinned @3.0.0) dumped formatVersion 2 with flat content+pages — also under the document-package.schema.json name, so it hits the identical rename tombstone the formatVersion-1 dump above does, regardless of how much further back its own shape sits.
     const legacyPath = join(workspace, "legacy-fused.package.json");
     await writeFile(
       legacyPath,
@@ -288,7 +288,7 @@ describe("from_package", () => {
   });
 
   it("rejects a layout-document dump with the demotion error naming where the schema moved", async () => {
-    // A layout-document dump was never a DocumentTree, but its $schema URI is still recognised -- answered by the demotion tombstone rather than the no-recognised-$schema branch, so a caller holding one learns the schema moved to pdf-codec instead of hearing the value is unrecognised.
+    // A layout-document dump was never a DocumentTree, but its $schema URI is still recognised — answered by the demotion tombstone rather than the no-recognised-$schema branch, so a caller holding one learns the schema moved to pdf-codec instead of hearing the value is unrecognised.
     const layoutPath = join(workspace, "legacy-layout.package.json");
     await writeFile(
       layoutPath,

@@ -2,5 +2,5 @@
 #
 # This is load-bearing now that Prettier enforces formatting through ESLint: it writes LF, and `prettier/prettier` reports a CRLF file as a formatting error on every line. Without this, a Windows checkout with git's default core.autocrlf would fail the lint task wholesale rather than in one place.
 #
-# No .bat/.cmd/.ps1 exception is needed -- this workspace has none.
+# No .bat/.cmd/.ps1 exception is needed — this workspace has none.
 * text=auto eol=lf

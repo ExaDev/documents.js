@@ -38,7 +38,7 @@ export const ODF_VERSION = "1.3";
 const PAGE_LAYOUT_NAME = "PM1";
 const MASTER_PAGE_NAME = "Standard";
 
-// 72pt (1in), matching createEmptyDocxPackage's own default section margins (1440 twips = 1in) -- see src/edit/docx/scaffold.ts.
+// 72pt (1in), matching createEmptyDocxPackage's own default section margins (1440 twips = 1in) — see src/edit/docx/scaffold.ts.
 const DEFAULT_MARGIN_PT = 72;
 
 function declaration(): XmlNode {
@@ -52,7 +52,7 @@ function declaration(): XmlNode {
   };
 }
 
-// style:page-layout (in styles.xml's own office:automatic-styles) carries the actual page geometry; style:master-page (in office:master-styles) merely names it -- this is the exact chain odf.js's own readOdtContent reads back via readFirstMasterPageGeometry (src/typed/odt/read.ts), so a document built by this scaffold round-trips its own default page size/margins through this package's own reader too.
+// style:page-layout (in styles.xml's own office:automatic-styles) carries the actual page geometry; style:master-page (in office:master-styles) merely names it — this is the exact chain odf.js's own readOdtContent reads back via readFirstMasterPageGeometry (src/typed/odt/read.ts), so a document built by this scaffold round-trips its own default page size/margins through this package's own reader too.
 function buildPageLayout(): XmlElement {
   return el("style:page-layout", { "style:name": PAGE_LAYOUT_NAME }, [
     el("style:page-layout-properties", {
@@ -66,7 +66,7 @@ function buildPageLayout(): XmlElement {
   ]);
 }
 
-// One Heading_20_N common style per level of the heading visual convention (layout/shared.ts's HEADING_STYLES -- the PDF layout engine's own table, so an odt this scaffold builds renders its headings the same way odtToPdf renders the same document). ODF has no built-in styles the way WordprocessingML has Heading1..6 built in: every style name a document references must be defined in its own office:styles or it resolves to nothing, so OdtParagraph's headingLevel setter (paragraph.ts), which points text:style-name at "Heading_20_N" (ODF's _20_ escape for the space in "Heading N"), needs these definitions present for the reference to carry the heading's size and weight in a real consumer. A headingLevel deeper than the table (nothing in this family produces one -- markdown and the PDF rank inference both cap at six) still writes a valid text:h whose outline level carries the depth; its style name simply resolves to nothing, the documented unresolvable-name tolerance.
+// One Heading_20_N common style per level of the heading visual convention (layout/shared.ts's HEADING_STYLES — the PDF layout engine's own table, so an odt this scaffold builds renders its headings the same way odtToPdf renders the same document). ODF has no built-in styles the way WordprocessingML has Heading1..6 built in: every style name a document references must be defined in its own office:styles or it resolves to nothing, so OdtParagraph's headingLevel setter (paragraph.ts), which points text:style-name at "Heading_20_N" (ODF's _20_ escape for the space in "Heading N"), needs these definitions present for the reference to carry the heading's size and weight in a real consumer. A headingLevel deeper than the table (nothing in this family produces one — markdown and the PDF rank inference both cap at six) still writes a valid text:h whose outline level carries the depth; its style name simply resolves to nothing, the documented unresolvable-name tolerance.
 function buildHeadingStyles(): XmlElement[] {
   return Object.entries(HEADING_STYLES).map(([level, style]) =>
     el(
@@ -117,7 +117,7 @@ function buildContentXml(): XmlElement {
   );
 }
 
-// The office:meta children a LayoutMetadata value maps onto: dc:title, meta:initial-creator (the human AUTHOR -- NOT dc:creator, which in ODF means "last modified by", a concept LayoutMetadata has no field for), dc:subject, one meta:keyword element PER keyword (not comma-joined, unlike OOXML's own cp:keywords -- see src/opc/core-properties.ts), meta:generator (the originating application, LayoutMetadata's own `creator` field), meta:creation-date, and dc:date (last-modified). Element order is not significant (confirmed against real LibreOffice output); each child is pushed only when the corresponding field is present. Duplicated identically across odt/odp/ods/odg scaffold.ts, matching this directory's own existing convention of each format scaffold declaring its own small XML-building helpers rather than sharing them through an extra module.
+// The office:meta children a LayoutMetadata value maps onto: dc:title, meta:initial-creator (the human AUTHOR — NOT dc:creator, which in ODF means "last modified by", a concept LayoutMetadata has no field for), dc:subject, one meta:keyword element PER keyword (not comma-joined, unlike OOXML's own cp:keywords — see src/opc/core-properties.ts), meta:generator (the originating application, LayoutMetadata's own `creator` field), meta:creation-date, and dc:date (last-modified). Element order is not significant (confirmed against real LibreOffice output); each child is pushed only when the corresponding field is present. Duplicated identically across odt/odp/ods/odg scaffold.ts, matching this directory's own existing convention of each format scaffold declaring its own small XML-building helpers rather than sharing them through an extra module.
 function buildOfficeMeta(metadata: LayoutMetadata | undefined): XmlElement[] {
   if (metadata === undefined) {
     return [];
@@ -170,7 +170,7 @@ export interface CreateEmptyOdtPackageOptions {
   readonly metadata?: LayoutMetadata;
 }
 
-// Builds a minimal but genuinely valid, openable odt package from nothing: the mandatory mimetype part (via setDocumentMediaType), a content.xml with an empty office:automatic-styles and an empty office:body/office:text, a styles.xml with the page-layout -> master-page chain readOdtContent itself resolves for page geometry, a minimal meta.xml, and a manifest listing every part (via syncManifest) -- the same four-part shape (mimetype, content.xml, styles.xml, META-INF/manifest.xml, plus meta.xml) odf.js's own round-trip fixtures use. A caller passing no options gets byte-for-byte the same package as before office:meta population existed -- options.metadata is purely additive.
+// Builds a minimal but genuinely valid, openable odt package from nothing: the mandatory mimetype part (via setDocumentMediaType), a content.xml with an empty office:automatic-styles and an empty office:body/office:text, a styles.xml with the page-layout -> master-page chain readOdtContent itself resolves for page geometry, a minimal meta.xml, and a manifest listing every part (via syncManifest) — the same four-part shape (mimetype, content.xml, styles.xml, META-INF/manifest.xml, plus meta.xml) odf.js's own round-trip fixtures use. A caller passing no options gets byte-for-byte the same package as before office:meta population existed — options.metadata is purely additive.
 export function createEmptyOdtPackage(
   options?: CreateEmptyOdtPackageOptions,
 ): Package {

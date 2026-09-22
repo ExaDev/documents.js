@@ -8,7 +8,7 @@ import { useAppDispatch, useAppState } from "../../../state/context.js";
 import { anyOverlayOpen, currentScreen } from "../../../state/types.js";
 import { requireOdbDocument } from "./shared.js";
 
-// The title line, the href line beneath it, the hint line, and the status line at the bottom -- one more row of chrome than ListView's own default reserves, matching table-rows.tsx's own reasoning.
+// The title line, the href line beneath it, the hint line, and the status line at the bottom — one more row of chrome than ListView's own default reserves, matching table-rows.tsx's own reasoning.
 const FORM_DETAIL_RESERVED_ROWS = 5;
 
 function requireForm(forms: readonly OdbForm[], formName: string): OdbForm {
@@ -21,7 +21,7 @@ function requireForm(forms: readonly OdbForm[], formName: string): OdbForm {
   return form;
 }
 
-// A form's own control tree, rendered one already-indented line per row through the same `formatOdbFormLines` the `odb-forms` command prints -- so what the TUI shows and what the CLI writes cannot drift apart. Selecting a row does nothing: every line is fully rendered inline and there is nothing further to drill into, exactly as in table-rows.tsx.
+// A form's own control tree, rendered one already-indented line per row through the same `formatOdbFormLines` the `odb-forms` command prints — so what the TUI shows and what the CLI writes cannot drift apart. Selecting a row does nothing: every line is fully rendered inline and there is nothing further to drill into, exactly as in table-rows.tsx.
 export function OdbFormDetailScreen(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();

@@ -61,7 +61,7 @@ describe("readXfrm", () => {
     expect(readXfrm(el("a:xfrm"))).toBeUndefined();
   });
 
-  // a:off/a:ext are present in every case below -- only one of the four required ATTRIBUTES they carry is missing, isolating each clause of the x/y/cx/cy undefined check from the other tests above, which only ever exercise the earlier "a:off or a:ext element itself is missing" guard.
+  // a:off/a:ext are present in every case below — only one of the four required ATTRIBUTES they carry is missing, isolating each clause of the x/y/cx/cy undefined check from the other tests above, which only ever exercise the earlier "a:off or a:ext element itself is missing" guard.
   it("returns undefined when a:off is missing its x attribute", () => {
     const xfrm = el("a:xfrm", {}, [
       el("a:off", { y: "0" }),
@@ -166,7 +166,7 @@ describe("readTheme", () => {
   });
 
   it("uses lastClr over the windowText/window fallback, even when val is 'window'", () => {
-    // val="window" would fall back to white if lastClr were ignored -- a distinct lastClr here proves the real cached value is read, not merely coinciding with what the fallback happens to also produce (every other fixture's own lastClr is black or white, indistinguishable from its own fallback).
+    // val="window" would fall back to white if lastClr were ignored — a distinct lastClr here proves the real cached value is read, not merely coinciding with what the fallback happens to also produce (every other fixture's own lastClr is black or white, indistinguishable from its own fallback).
     const root = el("a:theme", {}, [
       el("a:themeElements", {}, [
         el("a:clrScheme", {}, [
@@ -398,7 +398,7 @@ describe("readGroupXfrm", () => {
     expect(readGroupXfrm(undefined)).toBeUndefined();
   });
 
-  // a:chOff/a:chExt are present in every case below -- only one of the four required ATTRIBUTES they carry is missing, isolating each clause of the cx/cy/ccx/ccy undefined check from the earlier "no chOff/chExt element at all" test above.
+  // a:chOff/a:chExt are present in every case below — only one of the four required ATTRIBUTES they carry is missing, isolating each clause of the cx/cy/ccx/ccy undefined check from the earlier "no chOff/chExt element at all" test above.
   function groupXfrm(
     chOff: ReturnType<typeof el>,
     chExt: ReturnType<typeof el>,
@@ -557,7 +557,7 @@ describe("applyGroupTransform", () => {
   });
 
   it("subtracts, rather than adds, the group's own child-space offset when mapping into the parent space", () => {
-    // A non-zero childOffXPt/childOffYPt (every other test above zeroes both, which cannot distinguish addition from subtraction): child at (10,10) in a space whose own origin sits at (5,5), one scale unit wide, so the child's own offset from that origin -- (10-5, 10-5) = (5,5) -- is what should be added onto the group's own placement (50,50), giving (55,55).
+    // A non-zero childOffXPt/childOffYPt (every other test above zeroes both, which cannot distinguish addition from subtraction): child at (10,10) in a space whose own origin sits at (5,5), one scale unit wide, so the child's own offset from that origin — (10-5, 10-5) = (5,5) — is what should be added onto the group's own placement (50,50), giving (55,55).
     const group = unrotatedGroup({
       offXPt: 50,
       offYPt: 50,
@@ -578,7 +578,7 @@ describe("applyGroupTransform", () => {
   });
 
   it("still rotates about the group's own centre when the composite is mirrored but its rotation is exactly 0", () => {
-    // The identity shortcut requires BOTH compositeRotationDeg === 0 AND !compositeMirrored -- a mirrored group with no rotation must still go through the centre-mirroring path (a 0deg rotation is a no-op once there, but a mirror is not), rather than short-circuiting straight to the unrotated canonical box.
+    // The identity shortcut requires BOTH compositeRotationDeg === 0 AND !compositeMirrored — a mirrored group with no rotation must still go through the centre-mirroring path (a 0deg rotation is a no-op once there, but a mirror is not), rather than short-circuiting straight to the unrotated canonical box.
     const group: GroupChildTransform = {
       offXPt: 0,
       offYPt: 0,
@@ -591,7 +591,7 @@ describe("applyGroupTransform", () => {
       compositeRotationDeg: 0,
       compositeMirrored: true,
     };
-    // Group centre (100,50); child box centre (60,50) is 40 to the left of it -- mirroring flips that to 40 to the right, i.e. a final box centre of (140,50), top-left (120,40).
+    // Group centre (100,50); child box centre (60,50) is 40 to the left of it — mirroring flips that to 40 to the right, i.e. a final box centre of (140,50), top-left (120,40).
     const child = { xPt: 40, yPt: 40, widthPt: 40, heightPt: 20 };
     const result = applyGroupTransform(group, child);
     expect(result.xPt).toBeCloseTo(120, 9);
@@ -682,7 +682,7 @@ describe("composeGroupTransform", () => {
   });
 
   it("wraps a negative subtraction result back into [0, 360)", () => {
-    // parent 30deg minus own 90deg is -60deg -- the negative case normalizeDeg's own "add 360" branch exists for, which every other subtraction test above lands on the positive side of.
+    // parent 30deg minus own 90deg is -60deg — the negative case normalizeDeg's own "add 360" branch exists for, which every other subtraction test above lands on the positive side of.
     const parent: GroupChildTransform = {
       offXPt: 0,
       offYPt: 0,
@@ -776,7 +776,7 @@ describe("composeShapeRotationDeg", () => {
     expect(composeShapeRotationDeg(parent, 30)).toBe(120);
   });
 
-  it("subtracts the shape's own rotation from a mirrored enclosing composite -- the flip negates the sense of the shape's own rotation", () => {
+  it("subtracts the shape's own rotation from a mirrored enclosing composite — the flip negates the sense of the shape's own rotation", () => {
     const parent: GroupChildTransform = {
       offXPt: 0,
       offYPt: 0,

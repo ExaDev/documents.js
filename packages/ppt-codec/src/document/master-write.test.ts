@@ -176,7 +176,7 @@ describe("writeMainMaster", () => {
 
 describe("writeSlideAtom", () => {
   it("truncates a placeholderTypes array longer than the field's own 8-byte width, rather than overflowing into masterIdRef", () => {
-    // Uint8Array.set throws RangeError when its source is longer than the destination it targets, so a caller-supplied array longer than the field's own 8 bytes would crash outright were it not sliced down first -- this proves the slice actually runs, not just that a short array happens to fit either way.
+    // Uint8Array.set throws RangeError when its source is longer than the destination it targets, so a caller-supplied array longer than the field's own 8 bytes would crash outright were it not sliced down first — this proves the slice actually runs, not just that a short array happens to fit either way.
     const bytes = writeSlideAtom({
       geom: 0,
       placeholderTypes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
@@ -187,7 +187,7 @@ describe("writeSlideAtom", () => {
     const record = readRecordAt(bytes, 0);
     expect(record.header.recVer).toBe(0x2);
     const view = new DataView(record.data.buffer, record.data.byteOffset);
-    // geom(4) + placeholderTypes(8) = 12, then masterIdRef -- untouched by the 9th and 10th placeholder types the field has no room for.
+    // geom(4) + placeholderTypes(8) = 12, then masterIdRef — untouched by the 9th and 10th placeholder types the field has no room for.
     for (let i = 0; i < 8; i += 1) {
       expect(record.data[4 + i]).toBe(i + 1);
     }

@@ -30,7 +30,7 @@ describe("replaceRun: appending beyond every existing run's coverage", () => {
     expect(repeatAttr(target, ROW_REPEAT_ATTR)).toBeUndefined();
   });
 
-  it("a far-out targetIndex on an empty array creates exactly TWO elements -- a gap placeholder and the target -- never one per skipped position", () => {
+  it("a far-out targetIndex on an empty array creates exactly TWO elements — a gap placeholder and the target — never one per skipped position", () => {
     const children: XmlNode[] = [];
     const target = replaceRun(
       children,
@@ -71,7 +71,7 @@ describe("replaceRun: appending beyond every existing run's coverage", () => {
 });
 
 describe("replaceRun: individuating within an existing repeated run", () => {
-  it("a run whose own repeat count is already 1 is returned unchanged -- no split, no mutation", () => {
+  it("a run whose own repeat count is already 1 is returned unchanged — no split, no mutation", () => {
     const row = el(ROW_TAG, {}, [
       el("table:table-cell", { "office:value-type": "string" }),
     ]);
@@ -87,7 +87,7 @@ describe("replaceRun: individuating within an existing repeated run", () => {
     expect(children).toHaveLength(1);
   });
 
-  it('splitting the FIRST position of a repeated run produces [target, after] -- no empty "before" element', () => {
+  it('splitting the FIRST position of a repeated run produces [target, after] — no empty "before" element', () => {
     const run = el(ROW_TAG);
     run.attributes.push({ name: ROW_REPEAT_ATTR, value: "10" });
     const children: XmlNode[] = [run];
@@ -108,7 +108,7 @@ describe("replaceRun: individuating within an existing repeated run", () => {
     expect(repeatAttr(after, ROW_REPEAT_ATTR)).toBe("9");
   });
 
-  it('splitting the LAST position of a repeated run produces [before, target] -- no empty "after" element', () => {
+  it('splitting the LAST position of a repeated run produces [before, target] — no empty "after" element', () => {
     const run = el(ROW_TAG, {}, []);
     run.attributes.push({ name: ROW_REPEAT_ATTR, value: "10" });
     const children: XmlNode[] = [run];
@@ -150,7 +150,7 @@ describe("replaceRun: individuating within an existing repeated run", () => {
     expect(repeatAttr(before, ROW_REPEAT_ATTR)).toBe("500000");
     expect(repeatAttr(target, ROW_REPEAT_ATTR)).toBeUndefined();
     expect(repeatAttr(after, ROW_REPEAT_ATTR)).toBe("516574");
-    // Bounded-duration assertion (mirroring src/layout/sheets.test.ts's own cancellation test pattern): a genuinely O(1) split completes near-instantly regardless of the 1,016,575-row run it split -- a regression that accidentally started expanding the run element-by-element would blow this budget by orders of magnitude, not just run "a bit slower".
+    // Bounded-duration assertion (mirroring src/layout/sheets.test.ts's own cancellation test pattern): a genuinely O(1) split completes near-instantly regardless of the 1,016,575-row run it split — a regression that accidentally started expanding the run element-by-element would blow this budget by orders of magnitude, not just run "a bit slower".
     expect(elapsedMs).toBeLessThan(500);
   });
 
@@ -185,7 +185,7 @@ describe("replaceRun: individuating within an existing repeated run", () => {
           ?.value,
       ).toBe("Q1");
     }
-    // The clones are independent objects, not shared references -- mutating one must never affect a sibling part.
+    // The clones are independent objects, not shared references — mutating one must never affect a sibling part.
     if (target.children[0]?.type === "element") {
       target.children[0].attributes.push({
         name: "office:value-type",

@@ -3,13 +3,13 @@ import { compoundFile } from "../test-support/cfb";
 import { CompoundFileFormatError, readCompoundFile } from "./read";
 import { writeCompoundFile } from "./write";
 
-// Coverage for the bounded [MS-CFB] reader (src/cfb/read.ts): header/sector-size parsing, DIFAT/FAT chain walking, the directory entry tree, stream extraction from both the FAT and the mini stream, and the guards. Fixtures come from src/test-support/cfb.ts -- a hand-built minimal compound-file writer whose construction is documented there -- because the reader under test consumes actual compound-file bytes (a hand-built in-memory model would skip the parse entirely).
+// Coverage for the bounded [MS-CFB] reader (src/cfb/read.ts): header/sector-size parsing, DIFAT/FAT chain walking, the directory entry tree, stream extraction from both the FAT and the mini stream, and the guards. Fixtures come from src/test-support/cfb.ts — a hand-built minimal compound-file writer whose construction is documented there — because the reader under test consumes actual compound-file bytes (a hand-built in-memory model would skip the parse entirely).
 
 const enc = (s: string): Uint8Array<ArrayBuffer> => new TextEncoder().encode(s);
 
 describe("readCompoundFile", () => {
   it("extracts a FAT-resident stream larger than the mini-stream cutoff", () => {
-    // 5000 bytes >= the 4096-byte cutoff, so the stream occupies whole sectors chained in the FAT -- the plain path every large stream takes.
+    // 5000 bytes >= the 4096-byte cutoff, so the stream occupies whole sectors chained in the FAT — the plain path every large stream takes.
     const payload = enc("X".repeat(5000));
     const streams = readCompoundFile(
       compoundFile([{ path: "BigStream", bytes: payload }]),
@@ -19,7 +19,7 @@ describe("readCompoundFile", () => {
   });
 
   it("extracts a mini-stream-resident stream shorter than the cutoff, via the mini-FAT", () => {
-    // 100 bytes < 4096, so the stream lives in the mini stream -- the root entry's own stream, carved into 64-byte mini sectors by the mini-FAT -- which is where a small real-world embed (an OLE-packaged file of a few kilobytes) genuinely lands.
+    // 100 bytes < 4096, so the stream lives in the mini stream — the root entry's own stream, carved into 64-byte mini sectors by the mini-FAT — which is where a small real-world embed (an OLE-packaged file of a few kilobytes) genuinely lands.
     const payload = enc("mini stream payload");
     const streams = readCompoundFile(
       compoundFile([{ path: "SmallStream", bytes: payload }]),
@@ -43,7 +43,7 @@ describe("readCompoundFile", () => {
   });
 
   it("extracts both FAT- and mini-stream-resident streams from a version-4 file (4096-byte sectors)", () => {
-    // Version 4 zero-pads the 512-byte header out to the full 4096-byte first sector ([MS-CFB] 2.2), so sector N starts at (N + 1) * 4096 -- an offset that only coincides with version 3's 512 + N * sectorSize because version 3's sector size is itself 512. Real-world .bin embeds written by 64-bit producers are version 4, so this is the layout the embedded-object recovery path genuinely meets.
+    // Version 4 zero-pads the 512-byte header out to the full 4096-byte first sector ([MS-CFB] 2.2), so sector N starts at (N + 1) * 4096 — an offset that only coincides with version 3's 512 + N * sectorSize because version 3's sector size is itself 512. Real-world .bin embeds written by 64-bit producers are version 4, so this is the layout the embedded-object recovery path genuinely meets.
     const small = enc("mini stream payload");
     const large = enc("V".repeat(4096));
     const streams = readCompoundFile(
@@ -76,7 +76,7 @@ describe("readCompoundFile", () => {
   });
 
   it("extracts a FAT-resident stream whose size is not a whole multiple of the sector size, truncating to the declared size", () => {
-    // 4500 bytes sits above the cutoff (FAT-resident) but needs 9 sectors = 4608 bytes of storage, so extraction must slice the chain's 4608 bytes back to 4500 -- trailing sector padding never becomes stream content. The mini-stream arm of the same truncation is covered by the small-stream tests (their payloads never fill their last 64-byte mini sector either).
+    // 4500 bytes sits above the cutoff (FAT-resident) but needs 9 sectors = 4608 bytes of storage, so extraction must slice the chain's 4608 bytes back to 4500 — trailing sector padding never becomes stream content. The mini-stream arm of the same truncation is covered by the small-stream tests (their payloads never fill their last 64-byte mini sector either).
     const payload = enc("Z".repeat(4500));
     const streams = readCompoundFile(
       compoundFile([{ path: "Partial", bytes: payload }]),
@@ -184,7 +184,7 @@ describe("readCompoundFile", () => {
   }, 20000); // v8 coverage instrumentation (CI's own _test:coverage task, and every Stryker mutant run) multiplies this test's real cost far past the default 5000ms budget: a 300 KiB byte-fill loop plus a full round trip is measured well under a second uninstrumented, but has been observed to exceed 5s on a loaded GitHub runner under coverage. A generous fixed timeout, not a smaller payload, keeps the fixture large enough to force the fixed-point loop past 1 while removing the flake.
 
   it("needs a second mini FAT sector once the mini stream passes 128 mini sectors", () => {
-    // Each stream's own byte content is distinct (filled with its own index), not uniformly zero: a mini-FAT sector physically misplaced during the write would corrupt whichever OTHER stream's data actually occupies that sector, and only content that differs per stream can make that corruption visible -- an all-zero payload would still read back as all zero even after such a misplacement.
+    // Each stream's own byte content is distinct (filled with its own index), not uniformly zero: a mini-FAT sector physically misplaced during the write would corrupt whichever OTHER stream's data actually occupies that sector, and only content that differs per stream can make that corruption visible — an all-zero payload would still read back as all zero even after such a misplacement.
     const miniSectorsNeeded = 129;
     const inputs = Array.from({ length: miniSectorsNeeded }, (_unused, i) => ({
       path: `M${i}`,
@@ -296,7 +296,7 @@ describe("readCompoundFile malformed-input handling", () => {
   });
 
   it("accepts input exactly the 512-byte header's own length, rejecting it only for having no sector past it", () => {
-    // Exactly HEADER_SIZE bytes must not trip the "shorter than the header" check (bytes.length < HEADER_SIZE is false at equality) -- it fails a later, distinct check instead (no complete sector follows the header), proving the boundary itself is inclusive.
+    // Exactly HEADER_SIZE bytes must not trip the "shorter than the header" check (bytes.length < HEADER_SIZE is false at equality) — it fails a later, distinct check instead (no complete sector follows the header), proving the boundary itself is inclusive.
     const bytes = compoundFile([]).slice(0, 512);
     expect(() => readCompoundFile(bytes)).toThrow(
       "compound file holds no complete 512-byte sector after its header",
@@ -370,7 +370,7 @@ describe("readCompoundFile malformed-input handling", () => {
   });
 
   it("accepts a file with exactly one complete sector past the header (sectorCount 1)", () => {
-    // Truncating compoundFile([])'s own 3-sector file (FAT, directory, nothing else) to just the header plus its one FAT sector leaves sectorCount === 1 -- the boundary sectorCount < 1 must not reject, so the failure instead comes from the directory chain stepping onto sector 1, which this truncation removed.
+    // Truncating compoundFile([])'s own 3-sector file (FAT, directory, nothing else) to just the header plus its one FAT sector leaves sectorCount === 1 — the boundary sectorCount < 1 must not reject, so the failure instead comes from the directory chain stepping onto sector 1, which this truncation removed.
     const bytes = compoundFile([]).slice(0, HEADER_BYTES + FAT_SECTOR_BYTES);
     expect(() => readCompoundFile(bytes)).toThrow(
       "a FAT chain steps to sector 1, which is outside the file's 1 sectors",
@@ -378,7 +378,7 @@ describe("readCompoundFile malformed-input handling", () => {
   });
 
   it("throws its exact message for a DIFAT chain of exactly one sector that terminates without cycling", () => {
-    // A hand-built fixture, not compoundFile()/writeCompoundFile() output: both always keep the DIFAT inside the header's own 109-entry array, so a genuinely chained DIFAT walk of a KNOWN, minimal length has to be built directly. sectorCount is pinned to 1 (one sector past the header) so the chain-walk's own iteration counter reaches its "sectorCount visited" boundary on the very first, legitimate, non-repeating sector -- proving the counter's bound is inclusive of that many sectors, not exclusive.
+    // A hand-built fixture, not compoundFile()/writeCompoundFile() output: both always keep the DIFAT inside the header's own 109-entry array, so a genuinely chained DIFAT walk of a KNOWN, minimal length has to be built directly. sectorCount is pinned to 1 (one sector past the header) so the chain-walk's own iteration counter reaches its "sectorCount visited" boundary on the very first, legitimate, non-repeating sector — proving the counter's bound is inclusive of that many sectors, not exclusive.
     const bytes = new Uint8Array(HEADER_BYTES + 512);
     const view = new DataView(bytes.buffer);
     bytes.set([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1], 0);
@@ -388,7 +388,7 @@ describe("readCompoundFile malformed-input handling", () => {
     view.setUint16(0x20, 6, true); // miniSectorShift: 64-byte mini sectors
     view.setUint32(0x38, 64, true); // miniStreamCutoff, at least the mini sector size
     view.setUint32(0x44, 0, true); // firstDifatSector: sector 0 is the sole chained DIFAT sector
-    // The header's own 109-entry DIFAT array: every slot FREESECT, so it contributes no FAT sectors of its own -- every candidate comes from the chained DIFAT sector below.
+    // The header's own 109-entry DIFAT array: every slot FREESECT, so it contributes no FAT sectors of its own — every candidate comes from the chained DIFAT sector below.
     for (let i = 0; i < 109; i++) {
       view.setUint32(0x4c + i * 4, 0xffffffff, true);
     }
@@ -398,14 +398,14 @@ describe("readCompoundFile malformed-input handling", () => {
       view.setUint32(HEADER_BYTES + i * 4, 0xffffffff, true);
     }
     view.setUint32(HEADER_BYTES + 127 * 4, 0xfffffffe, true);
-    // With no FAT sectors accepted from either source, the walk must reach the "no FAT sectors" check -- which it can only do if the one-sector DIFAT walk above was allowed to complete rather than being rejected as "too many sectors visited".
+    // With no FAT sectors accepted from either source, the walk must reach the "no FAT sectors" check — which it can only do if the one-sector DIFAT walk above was allowed to complete rather than being rejected as "too many sectors visited".
     expect(() => readCompoundFile(bytes)).toThrow(
       "compound file declares no FAT sectors, so no sector chain can be walked",
     );
   });
 
   it("names a chained DIFAT sector's own provenance when one of its entries is out of range", () => {
-    // Same minimal one-DIFAT-sector fixture as above, except entry 0 of the chained sector names a FAT sector one past the file's own single sector -- proving the thrown message cites "a DIFAT sector", not the header array's own provenance string (already covered by the header-DIFAT-array case elsewhere in this file).
+    // Same minimal one-DIFAT-sector fixture as above, except entry 0 of the chained sector names a FAT sector one past the file's own single sector — proving the thrown message cites "a DIFAT sector", not the header array's own provenance string (already covered by the header-DIFAT-array case elsewhere in this file).
     const bytes = new Uint8Array(HEADER_BYTES + 512);
     const view = new DataView(bytes.buffer);
     bytes.set([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1], 0);
@@ -430,7 +430,7 @@ describe("readCompoundFile malformed-input handling", () => {
   });
 
   it("throws naming the exact sector when a FAT chain entry lies beyond the sectors the DIFAT named", () => {
-    // The DIFAT names only sector 0 as a FAT sector (a single 512-byte FAT table of 128 entries, valid sector numbers 0-127), but the file itself holds 200 sectors -- large enough that a directory chain starting at sector 128 passes the chain-walk's own file-bounds check yet steps past what the one declared FAT sector can address.
+    // The DIFAT names only sector 0 as a FAT sector (a single 512-byte FAT table of 128 entries, valid sector numbers 0-127), but the file itself holds 200 sectors — large enough that a directory chain starting at sector 128 passes the chain-walk's own file-bounds check yet steps past what the one declared FAT sector can address.
     const totalSectors = 200;
     const bytes = new Uint8Array(HEADER_BYTES + totalSectors * 512);
     const view = new DataView(bytes.buffer);
@@ -452,7 +452,7 @@ describe("readCompoundFile malformed-input handling", () => {
   });
 
   it("accepts a FAT entry read exactly at the declared FAT sectors' own last valid offset", () => {
-    // Sector 127 is the very last entry a single 512-byte FAT sector addresses (128 four-byte entries, indices 0-127) -- the boundary offset + 4 > fatBytes.length must not reject it. Its own FAT entry (left as zero from the allocation) reads back as 0, not ENDOFCHAIN, so the chain would loop forever if extended; instead its slot is set to ENDOFCHAIN directly so the chain resolves to one bare sector, whose all-zero directory contents fail a later, distinct check.
+    // Sector 127 is the very last entry a single 512-byte FAT sector addresses (128 four-byte entries, indices 0-127) — the boundary offset + 4 > fatBytes.length must not reject it. Its own FAT entry (left as zero from the allocation) reads back as 0, not ENDOFCHAIN, so the chain would loop forever if extended; instead its slot is set to ENDOFCHAIN directly so the chain resolves to one bare sector, whose all-zero directory contents fail a later, distinct check.
     const totalSectors = 200;
     const bytes = new Uint8Array(HEADER_BYTES + totalSectors * 512);
     const view = new DataView(bytes.buffer);
@@ -492,7 +492,7 @@ describe("readCompoundFile malformed-input handling", () => {
   });
 
   it("throws for a DIFAT chain entry naming a sector outside the file", () => {
-    // test-support/cfb.ts's own compoundFile never chains a DIFAT sector (its header comment says so: the DIFAT always fits the header's 109-entry array). Corrupting a DIFAT-chain entry specifically needs a file that genuinely has one, so this reaches for ../cfb/write.ts's writeCompoundFile instead -- not to test a round trip (write.test.ts already does that), but purely as a source of valid DIFAT-chained bytes to corrupt one byte of, exactly like every other case in this block corrupts a compoundFile()-built fixture.
+    // test-support/cfb.ts's own compoundFile never chains a DIFAT sector (its header comment says so: the DIFAT always fits the header's 109-entry array). Corrupting a DIFAT-chain entry specifically needs a file that genuinely has one, so this reaches for ../cfb/write.ts's writeCompoundFile instead — not to test a round trip (write.test.ts already does that), but purely as a source of valid DIFAT-chained bytes to corrupt one byte of, exactly like every other case in this block corrupts a compoundFile()-built fixture.
     const payload = new Uint8Array(8 * 1024 * 1024);
     const bytes = writeCompoundFile([{ path: "WordDocument", bytes: payload }]);
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -502,7 +502,7 @@ describe("readCompoundFile malformed-input handling", () => {
     expect(firstDifatSector).not.toBe(0xfffffffe); // sanity: this fixture really does chain a DIFAT sector
     const sectorCount = Math.floor(bytes.length / sectorSize) - 1;
     const entriesPerDifatSector = sectorSize / 4 - 1;
-    // Corrupt the chained DIFAT sector's own final slot -- its next-DIFAT-sector pointer, ENDOFCHAIN in this one-DIFAT-sector fixture -- to point past the file. This is the DIFAT chain-walk's own sector-number check (on the sector named IN the chain), not acceptFatSector's check on an ordinary FAT-index entry within it.
+    // Corrupt the chained DIFAT sector's own final slot — its next-DIFAT-sector pointer, ENDOFCHAIN in this one-DIFAT-sector fixture — to point past the file. This is the DIFAT chain-walk's own sector-number check (on the sector named IN the chain), not acceptFatSector's check on an ordinary FAT-index entry within it.
     view.setUint32(
       (firstDifatSector + 1) * sectorSize + entriesPerDifatSector * 4,
       sectorCount,
@@ -522,7 +522,7 @@ describe("readCompoundFile malformed-input handling", () => {
     const sectorSize = 1 << sectorShift;
     const firstDifatSector = view.getUint32(0x44, true);
     const entriesPerDifatSector = sectorSize / 4 - 1;
-    // The chained DIFAT sector's own final slot (its own next-DIFAT-sector pointer), corrupted to point back at itself rather than ENDOFCHAIN or a genuinely later sector -- an infinite chain that must trip the visited-sector-count guard rather than looping forever.
+    // The chained DIFAT sector's own final slot (its own next-DIFAT-sector pointer), corrupted to point back at itself rather than ENDOFCHAIN or a genuinely later sector — an infinite chain that must trip the visited-sector-count guard rather than looping forever.
     view.setUint32(
       (firstDifatSector + 1) * sectorSize + entriesPerDifatSector * 4,
       firstDifatSector,
@@ -593,7 +593,7 @@ describe("readCompoundFile malformed-input handling", () => {
   });
 
   it("throws its exact message for an empty directory chain", () => {
-    // A directory whose own single sector's chain entry is corrupted straight to ENDOFCHAIN, making chainBytes(firstDirectorySector) return zero bytes -- the directory's FAT chain, not its content, is what determines emptiness here.
+    // A directory whose own single sector's chain entry is corrupted straight to ENDOFCHAIN, making chainBytes(firstDirectorySector) return zero bytes — the directory's FAT chain, not its content, is what determines emptiness here.
     const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
     const view = new DataView(bytes.buffer);
     view.setUint32(0x30, 0xfffffffe, true); // firstDirectorySector := ENDOFCHAIN
@@ -614,7 +614,7 @@ describe("readCompoundFile malformed-input handling", () => {
     const bytes = compoundFile([{ path: "A", bytes: enc("x") }]); // 1 byte -> 1 mini sector
     const view = new DataView(bytes.buffer);
     const miniFatStart = view.getUint32(0x3c, true);
-    // Pointed exactly one mini sector past the mini stream's single sector -- the boundary itself, not merely somewhere comfortably out of range, so a >= mutated to > cannot let it through unnoticed.
+    // Pointed exactly one mini sector past the mini stream's single sector — the boundary itself, not merely somewhere comfortably out of range, so a >= mutated to > cannot let it through unnoticed.
     view.setUint32((miniFatStart + 1) * 512, 1, true);
     expect(() => readCompoundFile(bytes)).toThrow(
       "a mini-FAT chain steps to mini sector 1, which is outside the mini stream's 1 mini sectors",
@@ -672,7 +672,7 @@ describe("readCompoundFile malformed-input handling", () => {
   });
 
   it("combines the size field's low and high 32-bit halves by addition and a 2^32 multiplier", () => {
-    // A high half of 1 with a zero low half declares exactly 4294967296 bytes (2^32) -- a size only the high half's own *4294967296 term, added to the low half, can produce. Corrupting either the operator (+ to -) or the multiplier (* to /) yields a size so different (negative, or a tiny fraction) that the mini-resident extraction path below it never throws at all, rather than citing this exact figure.
+    // A high half of 1 with a zero low half declares exactly 4294967296 bytes (2^32) — a size only the high half's own *4294967296 term, added to the low half, can produce. Corrupting either the operator (+ to -) or the multiplier (* to /) yields a size so different (negative, or a tiny fraction) that the mini-resident extraction path below it never throws at all, rather than citing this exact figure.
     const bytes = compoundFile([{ path: "A", bytes: enc("x".repeat(5000)) }]);
     const view = new DataView(bytes.buffer);
     view.setUint32(entryOffset(1) + 0x78, 0, true);
@@ -683,7 +683,7 @@ describe("readCompoundFile malformed-input handling", () => {
   });
 
   it("accepts a declared size of exactly Number.MAX_SAFE_INTEGER, rejecting only one byte past it", () => {
-    // Number.MAX_SAFE_INTEGER itself must not trip the "beyond the integer range" guard -- the boundary is inclusive -- so this fixture's own tiny chain instead fails the (distinct) declared-size-versus-chain-length check.
+    // Number.MAX_SAFE_INTEGER itself must not trip the "beyond the integer range" guard — the boundary is inclusive — so this fixture's own tiny chain instead fails the (distinct) declared-size-versus-chain-length check.
     const atLimit = compoundFile([{ path: "A", bytes: enc("x".repeat(5000)) }]);
     const atLimitView = new DataView(atLimit.buffer);
     atLimitView.setUint32(entryOffset(1) + 0x78, 0xffffffff, true);
@@ -704,7 +704,7 @@ describe("readCompoundFile malformed-input handling", () => {
   });
 
   it("extracts a zero-length stream without ever inspecting its own starting sector", () => {
-    // [MS-CFB] 2.6.1: a zero-length stream's starting sector is meaningless, so extractStream must return empty without walking anything -- corrupt entry 1's own startSector to a mini sector far outside this 1-mini-sector fixture's single valid one, so a version that DID walk it would throw, while the real early return never gets that far.
+    // [MS-CFB] 2.6.1: a zero-length stream's starting sector is meaningless, so extractStream must return empty without walking anything — corrupt entry 1's own startSector to a mini sector far outside this 1-mini-sector fixture's single valid one, so a version that DID walk it would throw, while the real early return never gets that far.
     const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
     const view = new DataView(bytes.buffer);
     view.setUint32(entryOffset(1) + 0x78, 0, true); // size := 0
@@ -781,7 +781,7 @@ describe("readCompoundFile malformed-input handling", () => {
   });
 
   it("throws its exact message when the tree reaches a second root-typed (object type 5) entry", () => {
-    // Object type 5 passes the descend-stage's own storage/stream/root check (line ~384) unchanged, since ROOT is one of the three types it accepts -- it is only the self-stage's own switch, which explicitly handles STREAM and STORAGE alone, that has no case for a second type-5 entry reached anywhere but the directory's own id-0 slot. A's own name and length stay genuinely valid, so this exercises that check in isolation from the name-length and object-type-acceptance checks above it.
+    // Object type 5 passes the descend-stage's own storage/stream/root check (line ~384) unchanged, since ROOT is one of the three types it accepts — it is only the self-stage's own switch, which explicitly handles STREAM and STORAGE alone, that has no case for a second type-5 entry reached anywhere but the directory's own id-0 slot. A's own name and length stay genuinely valid, so this exercises that check in isolation from the name-length and object-type-acceptance checks above it.
     const bytes = compoundFile([{ path: "A", bytes: enc("x") }]);
     bytes[entryOffset(1) + 0x42] = 5; // A's own object type, corrupted from STREAM (2) to ROOT (5)
     expect(() => readCompoundFile(bytes)).toThrow(
@@ -801,7 +801,7 @@ describe("readCompoundFile malformed-input handling", () => {
   });
 
   it("throws naming the exact budget and entry name when the cumulative extracted size exceeds it", () => {
-    // Two 5000-byte streams with a 6000-byte budget: the second extraction tips the cumulative total over, so the whole read fails rather than returning a partial listing -- the same stance archive-codec's ZIP walk takes on its guards, and for the same reason (a hostile FAT can alias one sector into many streams, multiplying extraction beyond the file's own size).
+    // Two 5000-byte streams with a 6000-byte budget: the second extraction tips the cumulative total over, so the whole read fails rather than returning a partial listing — the same stance archive-codec's ZIP walk takes on its guards, and for the same reason (a hostile FAT can alias one sector into many streams, multiplying extraction beyond the file's own size).
     const bytes = compoundFile([
       { path: "A", bytes: enc("x".repeat(5000)) },
       { path: "B", bytes: enc("y".repeat(5000)) },
@@ -809,12 +809,12 @@ describe("readCompoundFile malformed-input handling", () => {
     expect(() => readCompoundFile(bytes, { maxTotalBytes: 6000 })).toThrow(
       "cumulative extracted stream size exceeded the 6000-byte budget at 'B'",
     );
-    // The same file under the default budget reads fine -- the guard fires on the budget, not on the structure.
+    // The same file under the default budget reads fine — the guard fires on the budget, not on the structure.
     expect(readCompoundFile(bytes)).toHaveLength(2);
   });
 
   it("accepts a cumulative extracted size exactly equal to the budget", () => {
-    // 5000 bytes twice is exactly 10000 -- the boundary itself must be allowed, not just amounts strictly under it.
+    // 5000 bytes twice is exactly 10000 — the boundary itself must be allowed, not just amounts strictly under it.
     const bytes = compoundFile([
       { path: "A", bytes: enc("x".repeat(5000)) },
       { path: "B", bytes: enc("y".repeat(5000)) },

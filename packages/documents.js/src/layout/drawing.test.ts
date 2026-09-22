@@ -156,7 +156,7 @@ describe("convertDrawingToLayout: line vector", () => {
 });
 
 describe("convertDrawingToLayout: path vector", () => {
-  // The path's own subpath/segment points are LOCAL to the vector's frame (top-left origin, y down, sized to frame.widthPt x frame.heightPt -- ContentVectorSchema's own 'path' variant contract): resolving to PDF-absolute space is frame.xPt/yPt + the local point, then a single flip of the whole page-space point.
+  // The path's own subpath/segment points are LOCAL to the vector's frame (top-left origin, y down, sized to frame.widthPt x frame.heightPt — ContentVectorSchema's own 'path' variant contract): resolving to PDF-absolute space is frame.xPt/yPt + the local point, then a single flip of the whole page-space point.
   it("resolves a closed subpath's line segments through frame offset + page flip together", () => {
     const vector: ContentVector = {
       kind: "path",
@@ -319,7 +319,7 @@ describe("convertDrawingToLayout: multiple pages", () => {
   });
 });
 
-// Narrows a recovered LayoutItem to a LayoutPath, failing the test loudly rather than asserting the type -- this repo forbids type assertions anywhere, tests included.
+// Narrows a recovered LayoutItem to a LayoutPath, failing the test loudly rather than asserting the type — this repo forbids type assertions anywhere, tests included.
 function expectPath(item: LayoutItem | undefined): LayoutPath {
   if (item?.kind !== "path") {
     throw new Error(

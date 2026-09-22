@@ -68,7 +68,7 @@ function baseContext(
   };
 }
 
-/** One MsoDrawing record wrapping the given patriarch+shape Escher bytes -- a real file may split this across several MsoDrawing records, but one is enough for these tests since drawing.ts concatenates them all before parsing regardless. */
+/** One MsoDrawing record wrapping the given patriarch+shape Escher bytes — a real file may split this across several MsoDrawing records, but one is enough for these tests since drawing.ts concatenates them all before parsing regardless. */
 function msoDrawing(
   shapeContainers: readonly (readonly number[])[],
 ): Uint8Array<ArrayBuffer> {
@@ -138,7 +138,7 @@ function pictureObjGroup(storageId: number): RecordGroup {
   return group;
 }
 
-/** An anchor whose own placement collapses to exactly zero width, at a real (non-zero) height -- isolating widthPt<=0 from heightPt<=0 in every one of the three shape-to-content functions that share the identical guard. */
+/** An anchor whose own placement collapses to exactly zero width, at a real (non-zero) height — isolating widthPt<=0 from heightPt<=0 in every one of the three shape-to-content functions that share the identical guard. */
 const ZERO_WIDTH_ANCHOR = {
   colL: 0,
   dxL: 0,
@@ -301,7 +301,7 @@ describe("readSheetDrawing", () => {
 
   it("resolves a Chart-type shape by finding its own nested BOF(chart)...EOF substream, bounded by offset", () => {
     const anchor = clientAnchorSheet(0, 0, 0, 0, 2, 0, 2, 0);
-    // Built directly from the record() framing (BOF worksheet, drawing+Obj, nested BOF chart, EOF chart, EOF worksheet) so splitSubstreams' own nesting logic produces the real chart Substream this reader has to locate by offset -- worksheetRecords' own helper only handles a flat, unnested record list.
+    // Built directly from the record() framing (BOF worksheet, drawing+Obj, nested BOF chart, EOF chart, EOF worksheet) so splitSubstreams' own nesting logic produces the real chart Substream this reader has to locate by offset — worksheetRecords' own helper only handles a flat, unnested record list.
     const chunks = [
       record(RECORD_BOF, bofData(BOF_TYPE_WORKSHEET)),
       msoDrawing([rectangleShape(30, anchor)]),
@@ -375,7 +375,7 @@ describe("chartTableCells", () => {
   });
 
   it("writes the shared category column once, not once per series, even when series disagree", () => {
-    // Two series whose own category arrays genuinely disagree at index 1 -- the first series to label a given point wins, and the category cell at (row 2, column 0) appears exactly once, never one entry per series.
+    // Two series whose own category arrays genuinely disagree at index 1 — the first series to label a given point wins, and the category cell at (row 2, column 0) appears exactly once, never one entry per series.
     const cells = chartTableCells([
       { name: "A", categories: ["Jan", "Feb"], values: ["1", "2"] },
       { name: "B", categories: ["Jan", "Mar"], values: ["3", "4"] },
@@ -477,7 +477,7 @@ describe("imageFromShape", () => {
 
 describe("embeddedObjectFromObjRecord", () => {
   const objGroup = pictureObjGroup(7);
-  // A genuinely valid Package stream (not arbitrary bytes) -- readEmbeddedObjectPackage's own foreign-payload degrade would otherwise return undefined regardless of the size guard below, making the guard's own removal invisible to these tests.
+  // A genuinely valid Package stream (not arbitrary bytes) — readEmbeddedObjectPackage's own foreign-payload degrade would otherwise return undefined regardless of the size guard below, making the guard's own removal invisible to these tests.
   const packageBytes = writeEmbeddedObjectPackage({
     objectKind: "drawing",
     document: {

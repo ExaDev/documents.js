@@ -17,7 +17,7 @@ function collectDiagnostics(): {
   return { sink: (d) => diagnostics.push(d), diagnostics };
 }
 
-// Replaces the digit run after the last "startxref\n" with a bogus offset, entirely at the byte level -- the fixture's compressed streams are binary and a UTF-8 text round-trip (decode/replace/re-encode) would silently mangle every byte >=0x80 in them.
+// Replaces the digit run after the last "startxref\n" with a bogus offset, entirely at the byte level — the fixture's compressed streams are binary and a UTF-8 text round-trip (decode/replace/re-encode) would silently mangle every byte >=0x80 in them.
 function corruptTrailingStartxrefOffset(
   bytes: Uint8Array<ArrayBuffer>,
 ): Uint8Array<ArrayBuffer> {
@@ -132,7 +132,7 @@ describe("readXref: recovery", () => {
 
   it("recovers compressed entries from a scanned /Type /ObjStm when the whole table needed rebuilding", () => {
     const { sink, diagnostics } = collectDiagnostics();
-    // Force recovery on an otherwise-valid xref-stream file by corrupting startxref's target -- purely at the byte level, since the file's compressed streams are binary and would be mangled by any UTF-8 text round-trip.
+    // Force recovery on an otherwise-valid xref-stream file by corrupting startxref's target — purely at the byte level, since the file's compressed streams are binary and would be mangled by any UTF-8 text round-trip.
     const corrupted = corruptTrailingStartxrefOffset(
       xrefStreamWithObjectStreamPdf(),
     );

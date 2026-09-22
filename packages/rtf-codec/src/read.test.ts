@@ -28,7 +28,7 @@ import {
 import { bookmarkAnchorDescriptor } from "./constructs";
 import { bytes, text } from "./test-support/bytes";
 
-// Stands in for a hostile producer who writes the identical spec-conformant ObjectHeader/NativeDataSize/NativeData/Presentation envelope writeEmbeddedObjectData produces, but wraps an arbitrary JSON payload inside NativeData's own Package stream instead of a genuine ContentEmbeddedObject -- writeEmbeddedObjectData itself always rebuilds its payload object field-by-field from a real ContentEmbeddedObject, so it cannot be used to smuggle an extra key the way a raw \objdata forged by hand can. Reuses a real envelope's own ObjectHeader and Presentation bytes verbatim (both fixed, independent of the JSON payload) and only replaces NativeData, so the forged bytes are byte-identical to a real \objdata this codec produced except for the one field under test.
+// Stands in for a hostile producer who writes the identical spec-conformant ObjectHeader/NativeDataSize/NativeData/Presentation envelope writeEmbeddedObjectData produces, but wraps an arbitrary JSON payload inside NativeData's own Package stream instead of a genuine ContentEmbeddedObject — writeEmbeddedObjectData itself always rebuilds its payload object field-by-field from a real ContentEmbeddedObject, so it cannot be used to smuggle an extra key the way a raw \objdata forged by hand can. Reuses a real envelope's own ObjectHeader and Presentation bytes verbatim (both fixed, independent of the JSON payload) and only replaces NativeData, so the forged bytes are byte-identical to a real \objdata this codec produced except for the one field under test.
 function forgeEmbeddedObjectData(payload: unknown): Uint8Array<ArrayBuffer> {
   const base = writeEmbeddedObjectData({
     objectKind: "spreadsheet",
@@ -36,7 +36,7 @@ function forgeEmbeddedObjectData(payload: unknown): Uint8Array<ArrayBuffer> {
     frame: { xPt: 0, yPt: 0, widthPt: 1, heightPt: 1 },
   });
   const view = new DataView(base.buffer, base.byteOffset, base.byteLength);
-  // OLEVersion(4) + FormatID(4) + ClassName "Package" (length-prefix 4 + 8 bytes) + TopicName "" (4) + ItemName "" (4) -- see embedded-object.ts's own writeObjectHeader. Sanity-checked against the real FormatID this writer always emits, rather than assumed blind, so a future change to that layout fails loudly here instead of silently forging a bad envelope.
+  // OLEVersion(4) + FormatID(4) + ClassName "Package" (length-prefix 4 + 8 bytes) + TopicName "" (4) + ItemName "" (4) — see embedded-object.ts's own writeObjectHeader. Sanity-checked against the real FormatID this writer always emits, rather than assumed blind, so a future change to that layout fails loudly here instead of silently forging a bad envelope.
   const headerLength = 28;
   if (view.getUint32(4, true) !== 0x00000002) {
     throw new Error(
@@ -109,14 +109,14 @@ describe("document shape", () => {
   });
 
   it("rejects a document whose very first token is not itself a group-opening brace, even when a later token happens to be a control word named rtf", () => {
-    // No leading "{" at all: the first token is the \rtf control word itself, so its own kind is "controlWord", not "groupStart". A second \rtf1 immediately after makes the SECOND and THIRD conditions of assertRtfHeaderPresent's own OR chain both individually false on this input -- the first condition (checking the very first token's kind) is the only one standing between this and being wrongly accepted as well-formed.
+    // No leading "{" at all: the first token is the \rtf control word itself, so its own kind is "controlWord", not "groupStart". A second \rtf1 immediately after makes the SECOND and THIRD conditions of assertRtfHeaderPresent's own OR chain both individually false on this input — the first condition (checking the very first token's kind) is the only one standing between this and being wrongly accepted as well-formed.
     expect(() => readRtfContent(bytes("\\rtf1\\rtf1"))).toThrow(
       RtfNotAnRtfDocumentError,
     );
   });
 
   it("rejects a properly braced document whose first control word names a destination other than rtf", () => {
-    // The brace and the control-word shape are both correct here -- only the control word's own NAME is wrong (\ansi, not \rtf) -- so this is the one fixture that actually exercises assertRtfHeaderPresent's own third OR clause: the first two conditions are both false on this input, leaving the name check alone to reject it.
+    // The brace and the control-word shape are both correct here — only the control word's own NAME is wrong (\ansi, not \rtf) — so this is the one fixture that actually exercises assertRtfHeaderPresent's own third OR clause: the first two conditions are both false on this input, leaving the name check alone to reject it.
     expect(() => readRtfContent(bytes("{\\ansi not rtf}"))).toThrow(
       RtfNotAnRtfDocumentError,
     );
@@ -257,7 +257,7 @@ describe("character formatting", () => {
   });
 
   it("reads \\upN and \\dnN by the sign of their half-point offset, with zero restoring the baseline", () => {
-    // "\upN Move up N half-points (default is 6)" -- bare means the default raise, a negative moves down into the other family (\dn-3 raises by the mirror argument), and zero is no move at all. The doubled spaces after a parameterised word are the delimiter space plus a real text space, the same convention the \b0 fixture above uses.
+    // "\upN Move up N half-points (default is 6)" — bare means the default raise, a negative moves down into the other family (\dn-3 raises by the mirror argument), and zero is no move at all. The doubled spaces after a parameterised word are the delimiter space plus a real text space, the same convention the \b0 fixture above uses.
     const runs =
       paragraphsOf(
         `${HEADER}\\pard \\up raised\\up0  base\\dn3  lowered\\dn-3  raised again\\dn0  base again\\par}`,
@@ -303,7 +303,7 @@ describe("character formatting", () => {
   });
 
   it("reads \\rtlch and \\ltrch onto ContentRun.direction, with the last-stated of the pair winning", () => {
-    // The middle two groups spell the pair the way a real producer does, the run's real direction last (\rtlch\ltrch for an LTR run, \ltrch\rtlch for an RTL one), and each closing brace restores the enclosing state -- so the text between groups is unstated again.
+    // The middle two groups spell the pair the way a real producer does, the run's real direction last (\rtlch\ltrch for an LTR run, \ltrch\rtlch for an RTL one), and each closing brace restores the enclosing state — so the text between groups is unstated again.
     const runs =
       paragraphsOf(
         `${HEADER}\\pard plain {\\rtlch rtl}{\\rtlch\\ltrch ltr} and {\\ltrch\\rtlch rtl again}{\\ltrch ltr}\\par`,
@@ -329,7 +329,7 @@ describe("character formatting", () => {
 
 describe("text, escapes, and Unicode", () => {
   it("merges text either side of an inert skipped destination into one run, not two", () => {
-    // \b turns bold on with nothing yet accumulated under it, {\footnote ...} is a "skip" destination whose own close never re-enters the token loop as a groupEnd, and \b0 turns bold back off before any real text has appeared under the bold key at all -- so the run key is genuinely unchanged (still the pre-\b key) by the time "B" arrives, and flushBytes' own pendingBytes.length===0 guard is what keeps a spurious empty flush from resetting the run accumulator at the \b/\b0 boundary in between. Without that guard, "A" and "B" would flush into two separate same-key runs instead of merging into one.
+    // \b turns bold on with nothing yet accumulated under it, {\footnote ...} is a "skip" destination whose own close never re-enters the token loop as a groupEnd, and \b0 turns bold back off before any real text has appeared under the bold key at all — so the run key is genuinely unchanged (still the pre-\b key) by the time "B" arrives, and flushBytes' own pendingBytes.length===0 guard is what keeps a spurious empty flush from resetting the run accumulator at the \b/\b0 boundary in between. Without that guard, "A" and "B" would flush into two separate same-key runs instead of merging into one.
     const runs =
       paragraphsOf(`${HEADER}\\pard A\\b{\\footnote ignored}\\b0 B\\par}`)[0]
         ?.runs ?? [];
@@ -523,7 +523,7 @@ describe("lists", () => {
   });
 
   it("falls back to the list's own level 0 when \\ilvlN names a depth the \\listsimple table never defined", () => {
-    // LIST_TABLES's own list 101 (bound to \ls1) is \listsimple, carrying exactly one \listlevel at index 0 -- \ilvl2 names a depth with no definition of its own, so the level's numberFormat (bullet, here) must be read from level 0's definition rather than from an undefined level.
+    // LIST_TABLES's own list 101 (bound to \ls1) is \listsimple, carrying exactly one \listlevel at index 0 — \ilvl2 names a depth with no definition of its own, so the level's numberFormat (bullet, here) must be read from level 0's definition rather than from an undefined level.
     const paragraph = paragraphsOf(
       `${HEADER}${LIST_TABLES}\\pard\\ls1\\ilvl2 Deep item\\par}`,
     )[0];
@@ -531,7 +531,7 @@ describe("lists", () => {
   });
 
   it("carries a \\lfolevel start-at override through to the paragraph's own numId", () => {
-    // The same \list102 both overrides name, restarted at 5 by \ls3's own \lfolevel while \ls2 leaves it at 1 -- so the override table, not the list table, is what tells the two apart.
+    // The same \list102 both overrides name, restarted at 5 by \ls3's own \lfolevel while \ls2 leaves it at 1 — so the override table, not the list table, is what tells the two apart.
     const tables =
       "{\\*\\listtable" +
       "{\\list\\listtemplateid2\\listsimple{\\listlevel\\levelnfc0\\leveljc0\\levelstartat1{\\leveltext \\'02\\'00.;}{\\levelnumbers\\'01;}}\\listid102}" +
@@ -601,7 +601,7 @@ describe("tables", () => {
   });
 
   it("reads the \\rtlrow/\\ltrrow <rowwrite> member onto ContentTableRow.direction", () => {
-    // Each row's own \trowd opens a fresh row definition, so a direction stated inside one row's definition reaches that row alone -- the second row's plain \trowd leaves it at the unstated default.
+    // Each row's own \trowd opens a fresh row definition, so a direction stated inside one row's definition reaches that row alone — the second row's plain \trowd leaves it at the unstated default.
     const table = firstTable(
       HEADER +
         "\\trowd\\trleft0\\rtlrow\\cellx4320\\cellx8640" +
@@ -709,7 +709,7 @@ describe("pictures", () => {
   });
 
   it("reads a \\pngblip picture whose entire payload arrives as \\'hh escapes rather than plain hex text", () => {
-    // Every other \pict fixture in this file states its payload as literal hex characters (a "text" token, state.picture.hex), never as \'hh escapes (a "hex" token, state.picture.binary) -- buildPicture prefers binary over hex when both are populated, so a picture destination that only ever sees \'hh escapes exercises a path nothing else here reaches.
+    // Every other \pict fixture in this file states its payload as literal hex characters (a "text" token, state.picture.hex), never as \'hh escapes (a "hex" token, state.picture.binary) — buildPicture prefers binary over hex when both are populated, so a picture destination that only ever sees \'hh escapes exercises a path nothing else here reaches.
     const escaped =
       PNG_HEX.match(/.{2}/g)
         ?.map((pair) => `\\'${pair}`)
@@ -722,7 +722,7 @@ describe("pictures", () => {
   });
 
   it("does not fold a \\binN token opened inside a bookmark nested in \\pict into the picture's own binary buffer", () => {
-    // \*\bkmkstart opens a genuine child group inside \pict, inheriting state.picture by reference the same way a nested group in the ANSI-half or \*\objdata fixtures elsewhere in this file do -- the \binN token sits INSIDE that bookmark's own group (not between its close and \*\bkmkend's open, which is still \pict's own direct scope and proves nothing). A binary token routed by destination alone would push the bookmark's own junk bytes into state.picture.binary, and buildPicture prefers ANY non-empty binary over the real, fully-formed hex payload sitting in state.picture.hex, so even three stray bytes there are enough to discard the real image entirely.
+    // \*\bkmkstart opens a genuine child group inside \pict, inheriting state.picture by reference the same way a nested group in the ANSI-half or \*\objdata fixtures elsewhere in this file do — the \binN token sits INSIDE that bookmark's own group (not between its close and \*\bkmkend's open, which is still \pict's own direct scope and proves nothing). A binary token routed by destination alone would push the bookmark's own junk bytes into state.picture.binary, and buildPicture prefers ANY non-empty binary over the real, fully-formed hex payload sitting in state.picture.hex, so even three stray bytes there are enough to discard the real image entirely.
     const image = blocksOf(
       `${HEADER}\\pard{\\pict\\pngblip\\picwgoal1440\\pichgoal720{\\*\\bkmkstart \\bin3 JJJ}{\\*\\bkmkend x}${PNG_HEX}}\\par}`,
     ).find((block): block is ContentImageBlock => block.kind === "image");
@@ -767,7 +767,7 @@ describe("pictures", () => {
     expect(images).toHaveLength(1);
   });
 
-  // `picture` is carried forward by reference across every descendant group inside {\pict ...} (a stray hex byte in a nested group must still reach the same PictureState the real \pict destination started), which means a plain nested group with no destination of its own -- a malformed producer's stray "{}", not RTF's own <pict> grammar, which has no legitimate use for one -- inherits destination "picture" too. Without an ownership marker analogous to objectDataOwner/objectOwner, that nested group's own closing brace re-fires buildPicture on the identical PictureState the outer \pict group will fire on again when IT closes, doubling the image.
+  // `picture` is carried forward by reference across every descendant group inside {\pict ...} (a stray hex byte in a nested group must still reach the same PictureState the real \pict destination started), which means a plain nested group with no destination of its own — a malformed producer's stray "{}", not RTF's own <pict> grammar, which has no legitimate use for one — inherits destination "picture" too. Without an ownership marker analogous to objectDataOwner/objectOwner, that nested group's own closing brace re-fires buildPicture on the identical PictureState the outer \pict group will fire on again when IT closes, doubling the image.
   it("builds one image, not two, when a plain nested group closes inside \\pict after the payload", () => {
     const images = blocksOf(
       `${HEADER}\\pard{\\pict\\pngblip\\picwgoal720\\pichgoal720 ${PNG_HEX}{}}\\par}`,
@@ -777,7 +777,7 @@ describe("pictures", () => {
 });
 
 describe("embedded objects", () => {
-  // A genuine [MS-CFB] compound file wrapping this package's own JSON envelope -- built with the same writeEmbeddedObjectData the writer uses, so this describes the read state machine's own group/destination handling (\object -> {\*\objdata ...} -> hex -> compound file -> decode) independently of write.ts's own RTF emission around it.
+  // A genuine [MS-CFB] compound file wrapping this package's own JSON envelope — built with the same writeEmbeddedObjectData the writer uses, so this describes the read state machine's own group/destination handling (\object -> {\*\objdata ...} -> hex -> compound file -> decode) independently of write.ts's own RTF emission around it.
   const embedded = {
     kind: "spreadsheet" as const,
     metadata: { title: "Embedded sheet" },
@@ -809,7 +809,7 @@ describe("embedded objects", () => {
   });
 
   it("skips a non-hex, non-whitespace byte inside \\objdata's own #SDATA text rather than folding it into the nibble pairing", () => {
-    // Inserted at an even offset -- a real byte boundary -- so a reader that correctly discards the stray "g" decodes identically to the unmodified hex; a reader that instead treats it as a pairable nibble value corrupts every byte from this point on.
+    // Inserted at an even offset — a real byte boundary — so a reader that correctly discards the stray "g" decodes identically to the unmodified hex; a reader that instead treats it as a pairable nibble value corrupts every byte from this point on.
     const poisoned = `${OBJDATA_HEX.slice(0, 10)}g${OBJDATA_HEX.slice(10)}`;
     const object = blocksOf(
       `${HEADER}\\pard{\\object\\objemb{\\*\\objdata ${poisoned}}}\\par}`,
@@ -829,7 +829,7 @@ describe("embedded objects", () => {
       .map((p) => p.runs.map((r) => r.text).join(""))
       .join("");
     expect(text).not.toContain("fallback text");
-    // \result's own scratch rendering must not touch the paragraph "before " was already accumulating in when \object opened, nor the text "after" that continues once \object closes -- both sit in the SAME paragraph as \object itself, with no \par between them, so a fix that only stops the fallback text from appearing (without checking these) would pass even if it deleted the paragraph's real content along with it.
+    // \result's own scratch rendering must not touch the paragraph "before " was already accumulating in when \object opened, nor the text "after" that continues once \object closes — both sit in the SAME paragraph as \object itself, with no \par between them, so a fix that only stops the fallback text from appearing (without checking these) would pass even if it deleted the paragraph's real content along with it.
     expect(text).toContain("before");
     expect(text).toContain("after");
   });
@@ -847,7 +847,7 @@ describe("embedded objects", () => {
     expect(text).not.toContain("fallback");
   });
 
-  // RTF 1.9.1's own <result> = '{' \result <para>+ '}' lets the group's own closing brace stand in for the final paragraph's \par -- a producer routinely omits it, exactly as a table cell's own \cell already stands in for one. A \result whose content never closes a block of its own (no \par anywhere inside it) must not be silently kept back once \objdata decodes: block-index retraction sees an empty range here and leaves the fallback text sitting in the shared run buffer, where it bleeds into whatever paragraph closes next.
+  // RTF 1.9.1's own <result> = '{' \result <para>+ '}' lets the group's own closing brace stand in for the final paragraph's \par — a producer routinely omits it, exactly as a table cell's own \cell already stands in for one. A \result whose content never closes a block of its own (no \par anywhere inside it) must not be silently kept back once \objdata decodes: block-index retraction sees an empty range here and leaves the fallback text sitting in the shared run buffer, where it bleeds into whatever paragraph closes next.
   it("does not leak a bare-inline \\result (no trailing \\par) into the document when \\objdata decodes successfully", () => {
     const { document } = readRtfContent(
       bytes(
@@ -888,7 +888,7 @@ describe("embedded objects", () => {
     expect(cellText).not.toContain("fallback");
   });
 
-  // \result's own destination group inherits inTable=true by cloning \object's own para when \object sits in a table cell, but a \pard inside \result's own content (RTF 1.9.1's own \pard resets every paragraph property, \intbl included) resets a DESCENDANT group's copy of that same field to false -- and the paragraph it closes is filed under whichever of blocks/cellBlocks that descendant's own inTable says, not whatever \result's own outer group still (staled) says. Without \result's own scratch starting inTable at false regardless of \object's real placement, the write lands in `blocks` while endResultScratch reads back from `cellBlocks` (or vice versa), and the whole fallback is silently lost -- this combination (\objdata failing to decode, inside a table cell, \result opening with its own \pard) was untested before this fix.
+  // \result's own destination group inherits inTable=true by cloning \object's own para when \object sits in a table cell, but a \pard inside \result's own content (RTF 1.9.1's own \pard resets every paragraph property, \intbl included) resets a DESCENDANT group's copy of that same field to false — and the paragraph it closes is filed under whichever of blocks/cellBlocks that descendant's own inTable says, not whatever \result's own outer group still (staled) says. Without \result's own scratch starting inTable at false regardless of \object's real placement, the write lands in `blocks` while endResultScratch reads back from `cellBlocks` (or vice versa), and the whole fallback is silently lost — this combination (\objdata failing to decode, inside a table cell, \result opening with its own \pard) was untested before this fix.
   it("recovers \\result's own fallback content when \\objdata fails to decode inside a table cell", () => {
     const table = firstTable(
       `${HEADER}\\trowd\\trleft0\\cellx4320\\pard\\intbl before {\\object\\objemb{\\*\\objdata 68656c6c6f}{\\result{\\pard\\plain FALLBACK\\par}}} after\\cell\\row\\pard x\\par}`,
@@ -903,7 +903,7 @@ describe("embedded objects", () => {
     expect(cellText).toContain("after");
   });
 
-  // The mirror-image direction of the fix above: there, \result inherited inTable=true by cloning \object's own para and a descendant \pard reset its own copy back to false. Here \result's own group starts at inTable=false (that inherited case is already closed), but \result's own body restates \intbl directly on that SAME group's para before any nested group opens -- RTF 1.9.1's own <result> grammar admits \intbl among <parfmt>* on \result's own para, so this is spec-legal input, not malformed. A nested {\pard\plain ...} child still clones that now-true value and still resets its OWN copy to false via \pard, so the finished paragraph is filed into `blocks` while \result's own group-end reads back a para whose inTable is still true -- the opposite list from where content actually landed, silently losing it, and it is the divergence itself (not which side ends up true or false) that endResultScratch's own read must not depend on.
+  // The mirror-image direction of the fix above: there, \result inherited inTable=true by cloning \object's own para and a descendant \pard reset its own copy back to false. Here \result's own group starts at inTable=false (that inherited case is already closed), but \result's own body restates \intbl directly on that SAME group's para before any nested group opens — RTF 1.9.1's own <result> grammar admits \intbl among <parfmt>* on \result's own para, so this is spec-legal input, not malformed. A nested {\pard\plain ...} child still clones that now-true value and still resets its OWN copy to false via \pard, so the finished paragraph is filed into `blocks` while \result's own group-end reads back a para whose inTable is still true — the opposite list from where content actually landed, silently losing it, and it is the divergence itself (not which side ends up true or false) that endResultScratch's own read must not depend on.
   it("recovers \\result's own fallback content when \\intbl is restated directly on \\result's own group, not inherited from \\object", () => {
     const table = firstTable(
       `${HEADER}\\trowd\\trleft0\\cellx4320\\pard\\intbl before {\\object\\objemb{\\*\\objdata 68656c6c6f}{\\result\\intbl{\\pard\\plain FALLBACK\\par}}} after\\cell\\row\\pard x\\par}`,
@@ -929,7 +929,7 @@ describe("embedded objects", () => {
     );
   });
 
-  // The identical \intbl-restated-directly-on-\result divergence, on the OTHER of the two EMBEDDED_OBJECT_UNREADABLE messages: an \object with no \objdata destination at all states its own diagnostic unconditionally ("its \result fallback content is used in its place", no hedge), unlike buildEmbeddedObject's own decode-failure message above. Before the fix, that unconditional wording was flatly false whenever this divergence lost the fallback silently -- it is only accurate once the content is actually recovered.
+  // The identical \intbl-restated-directly-on-\result divergence, on the OTHER of the two EMBEDDED_OBJECT_UNREADABLE messages: an \object with no \objdata destination at all states its own diagnostic unconditionally ("its \result fallback content is used in its place", no hedge), unlike buildEmbeddedObject's own decode-failure message above. Before the fix, that unconditional wording was flatly false whenever this divergence lost the fallback silently — it is only accurate once the content is actually recovered.
   it("recovers \\result's own fallback content, with an accurate diagnostic, when an \\object has no \\objdata at all and \\intbl is restated directly on \\result's own group", () => {
     const table = firstTable(
       `${HEADER}\\trowd\\trleft0\\cellx4320\\pard\\intbl before {\\object\\objemb{\\result\\intbl{\\pard\\plain FALLBACK\\par}}} after\\cell\\row\\pard x\\par}`,
@@ -976,7 +976,7 @@ describe("embedded objects", () => {
     expect(object).not.toHaveProperty("extra");
   });
 
-  // RTF's own <obj> grammar allows only one \result child, but a malformed producer can still write two -- the second sibling must not silently overwrite the first's own recovered content with no diagnostic, mirroring how a second \objdata sibling is already handled just below.
+  // RTF's own <obj> grammar allows only one \result child, but a malformed producer can still write two — the second sibling must not silently overwrite the first's own recovered content with no diagnostic, mirroring how a second \objdata sibling is already handled just below.
   it("keeps only the first of two \\result siblings, with a diagnostic noting the duplicate, when \\objdata cannot decode", () => {
     const { document, diagnostics } = readRtfContent(
       bytes(
@@ -1022,7 +1022,7 @@ describe("embedded objects", () => {
     ).toBe(true);
   });
 
-  // A real Word-authored \object's OLESaveToStream data (a genuine embedded .xls range, an Equation Editor formula, ...) has no JSON envelope inside its NativeData and so never decodes here -- "hello" stands in for that: real bytes, wrong shape. This is exactly the case RTF 1.9.1's own advice for \result exists for -- "This allows RTF readers that do not understand objects ... to use the current result, in place of the object, to maintain appearance" -- so the fallback preview paragraph is what a real Word-shaped, undecodable \object should recover as, appended to the surrounding section rather than dropped.
+  // A real Word-authored \object's OLESaveToStream data (a genuine embedded .xls range, an Equation Editor formula, ...) has no JSON envelope inside its NativeData and so never decodes here — "hello" stands in for that: real bytes, wrong shape. This is exactly the case RTF 1.9.1's own advice for \result exists for — "This allows RTF readers that do not understand objects ... to use the current result, in place of the object, to maintain appearance" — so the fallback preview paragraph is what a real Word-shaped, undecodable \object should recover as, appended to the surrounding section rather than dropped.
   it("recovers \\result's own fallback paragraphs when \\objdata cannot be decoded", () => {
     const { document, diagnostics } = readRtfContent(
       bytes(
@@ -1035,7 +1035,7 @@ describe("embedded objects", () => {
       );
     }
     const blocks = document.sections[0]?.blocks ?? [];
-    // No embeddedObject block -- the real object never decoded -- and \result's own recovered content survives as an ordinary paragraph, but not truly spliced into \object's own former position: addBlocks appends the fallback to the section's own block list without ending the paragraph still accumulating "before "/" after" around \object (no \pard/\par appears between them), so the fallback paragraph lands as its own block BEFORE that paragraph closes, and "before "/" after" end up as two runs of that one surrounding paragraph rather than split into separate blocks around the fallback -- asserted here by exact block order/content, not merely by substring presence, since a substring check alone cannot tell "spliced in place" from "appended first".
+    // No embeddedObject block — the real object never decoded — and \result's own recovered content survives as an ordinary paragraph, but not truly spliced into \object's own former position: addBlocks appends the fallback to the section's own block list without ending the paragraph still accumulating "before "/" after" around \object (no \pard/\par appears between them), so the fallback paragraph lands as its own block BEFORE that paragraph closes, and "before "/" after" end up as two runs of that one surrounding paragraph rather than split into separate blocks around the fallback — asserted here by exact block order/content, not merely by substring presence, since a substring check alone cannot tell "spliced in place" from "appended first".
     expect(blocks.some((block) => block.kind === "embeddedObject")).toBe(false);
     const paragraphs = blocks.filter(
       (block): block is ContentParagraph => block.kind === "paragraph",
@@ -1051,7 +1051,7 @@ describe("embedded objects", () => {
           diagnostic.code === RtfDiagnosticCodes.EMBEDDED_OBJECT_UNREADABLE,
       ),
     ).toBe(true);
-    // The recovery must not leave the group stack unbalanced -- reading \result as body content mid-object is a change to how deeply nested groups are interpreted, not to brace matching itself, so the reader must never report a brace fault for input that has none.
+    // The recovery must not leave the group stack unbalanced — reading \result as body content mid-object is a change to how deeply nested groups are interpreted, not to brace matching itself, so the reader must never report a brace fault for input that has none.
     expect(
       diagnostics.some(
         (diagnostic) => diagnostic.code === RtfDiagnosticCodes.UNBALANCED_GROUP,
@@ -1059,7 +1059,7 @@ describe("embedded objects", () => {
     ).toBe(false);
   });
 
-  // \result's own content builds into a totally isolated scratch accumulator that beginResultScratch swaps in place of the real one, restored only when \result's own group closes (endResultScratch). A truncated file can leave \result's group -- and therefore every group around it -- open at end of input with no closing brace at all, so endResultScratch never runs and the swap is never undone: finish() must not build the final document from that abandoned scratch state, or the real body accumulated before \object ever opened is silently replaced by whatever \result's own truncated content happened to hold, exactly backwards from \object's own real-content-over-fallback preference.
+  // \result's own content builds into a totally isolated scratch accumulator that beginResultScratch swaps in place of the real one, restored only when \result's own group closes (endResultScratch). A truncated file can leave \result's group — and therefore every group around it — open at end of input with no closing brace at all, so endResultScratch never runs and the swap is never undone: finish() must not build the final document from that abandoned scratch state, or the real body accumulated before \object ever opened is silently replaced by whatever \result's own truncated content happened to hold, exactly backwards from \object's own real-content-over-fallback preference.
   it("keeps the real document body, not \\result's own scratch content, when \\result's group never closes", () => {
     const { document, diagnostics } = readRtfContent(
       bytes(
@@ -1156,7 +1156,7 @@ describe("embedded objects", () => {
     ).toBe(false);
   });
 
-  // RTF 1.9.1's own <obj> grammar juxtaposes <objdata> and <result> with no '&' between them, so its own Formal Syntax legend ("AB" = "Item A followed by item B") states \objdata before \result as the required order -- but the spec's own robustness clause ("RTF readers should be robust enough to handle some minor variations") means a real producer's <result>-before-\objdata ordering must still be tolerated, not rejected as malformed. A reader that decides \result's fate from whichever sibling it happens to read first would double-render (or silently drop) content depending on order alone.
+  // RTF 1.9.1's own <obj> grammar juxtaposes <objdata> and <result> with no '&' between them, so its own Formal Syntax legend ("AB" = "Item A followed by item B") states \objdata before \result as the required order — but the spec's own robustness clause ("RTF readers should be robust enough to handle some minor variations") means a real producer's <result>-before-\objdata ordering must still be tolerated, not rejected as malformed. A reader that decides \result's fate from whichever sibling it happens to read first would double-render (or silently drop) content depending on order alone.
   it("renders the decoded object exactly once when \\result appears before \\objdata in the source", () => {
     const { document, diagnostics } = readRtfContent(
       bytes(
@@ -1204,7 +1204,7 @@ describe("embedded objects", () => {
     expect(paragraphText).toContain("before");
     expect(paragraphText).toContain("[Embedded worksheet]");
     expect(paragraphText).toContain("after");
-    // Exactly one fallback rendering, not one per occurrence -- \result was read (and, before this fix, would already have been committed) before \objdata's own failure was even known.
+    // Exactly one fallback rendering, not one per occurrence — \result was read (and, before this fix, would already have been committed) before \objdata's own failure was even known.
     expect(paragraphText.split("[Embedded worksheet]")).toHaveLength(2);
     expect(
       diagnostics.some(
@@ -1243,7 +1243,7 @@ describe("embedded objects", () => {
   });
 
   it("keeps a bare inline \\result paragraph ahead of an inTable one nested inside it, in splice order", () => {
-    // \result's own para starts inTable:false (a fresh reset at the group's own open, not inherited from wherever \object itself sits) -- the nested {\pard\intbl second\par} group sets only ITS OWN cloned para true and closes into cellBlocks directly, reverting to \result's own untouched para once it closes, so "first" (accumulated afterward with no further \pard) closes via \result's own group-end using that same untouched inTable:false, into `blocks`. endResultScratch concatenates blocks before cellBlocks, so a correct reset here keeps "first" ahead of "second" in the spliced order regardless of which one actually closed first chronologically; a stuck inTable:true would instead route "first" into cellBlocks too, behind "second" there (since it closes later), reversing the pair.
+    // \result's own para starts inTable:false (a fresh reset at the group's own open, not inherited from wherever \object itself sits) — the nested {\pard\intbl second\par} group sets only ITS OWN cloned para true and closes into cellBlocks directly, reverting to \result's own untouched para once it closes, so "first" (accumulated afterward with no further \pard) closes via \result's own group-end using that same untouched inTable:false, into `blocks`. endResultScratch concatenates blocks before cellBlocks, so a correct reset here keeps "first" ahead of "second" in the spliced order regardless of which one actually closed first chronologically; a stuck inTable:true would instead route "first" into cellBlocks too, behind "second" there (since it closes later), reversing the pair.
     const { document } = readRtfContent(
       bytes(
         `${HEADER}\\pard{\\object\\objemb{\\result{\\pard\\intbl second\\par}first}}\\par}`,
@@ -1275,7 +1275,7 @@ describe("embedded objects", () => {
     expect(unreadable[0]?.message).not.toContain("no \\objdata payload at all");
   });
 
-  // \objdata's own grammar is (\binN #BDATA) | #SDATA: every test above delivers #SDATA (plain hex-digit text), which is only one of the two legal wire forms. \binN's raw-byte-run form, and repeated \'hh escapes inside the destination (an alternative RTF affords anywhere, not only in #SDATA-shaped destinations), are the other two shapes buildEmbeddedObject's own byte extraction has to handle identically -- covered here directly rather than only through hex text.
+  // \objdata's own grammar is (\binN #BDATA) | #SDATA: every test above delivers #SDATA (plain hex-digit text), which is only one of the two legal wire forms. \binN's raw-byte-run form, and repeated \'hh escapes inside the destination (an alternative RTF affords anywhere, not only in #SDATA-shaped destinations), are the other two shapes buildEmbeddedObject's own byte extraction has to handle identically — covered here directly rather than only through hex text.
   it("reads \\objdata delivered as a \\binN raw-byte run rather than #SDATA hex text", () => {
     const raw = writeEmbeddedObjectData({
       objectKind: "spreadsheet",
@@ -1292,7 +1292,7 @@ describe("embedded objects", () => {
   });
 
   it("does not fold a \\binN token opened inside a bookmark nested in \\*\\objdata into the object's own byte buffer", () => {
-    // \*\bkmkstart is a real, known destination that opens a genuine child group inside \*\objdata, inheriting state.objectData by reference exactly as the text/hex fixtures above prove -- the \binN token sits INSIDE that bookmark's own group (not between its close and \*\bkmkend's open, which is still \*\objdata's own direct scope and proves nothing). A binary token routed by destination alone would splice the bookmark's own junk bytes into the front of the real payload and corrupt it.
+    // \*\bkmkstart is a real, known destination that opens a genuine child group inside \*\objdata, inheriting state.objectData by reference exactly as the text/hex fixtures above prove — the \binN token sits INSIDE that bookmark's own group (not between its close and \*\bkmkend's open, which is still \*\objdata's own direct scope and proves nothing). A binary token routed by destination alone would splice the bookmark's own junk bytes into the front of the real payload and corrupt it.
     const raw = writeEmbeddedObjectData({
       objectKind: "spreadsheet",
       document: embedded,
@@ -1325,7 +1325,7 @@ describe("embedded objects", () => {
     expect(object?.document).toEqual(embedded);
   });
 
-  // \'hh is a generic RTF character escape valid anywhere in a destination's text, not only inside a destination shaped for it -- so a single \objdata payload can legitimately deliver part of its data as plain #SDATA hex-digit text and the rest as scattered \'hh escapes. Collecting the two into separate buffers and keeping only whichever one turned out non-empty would silently discard whichever source came second; this proves both survive, in order.
+  // \'hh is a generic RTF character escape valid anywhere in a destination's text, not only inside a destination shaped for it — so a single \objdata payload can legitimately deliver part of its data as plain #SDATA hex-digit text and the rest as scattered \'hh escapes. Collecting the two into separate buffers and keeping only whichever one turned out non-empty would silently discard whichever source came second; this proves both survive, in order.
   it("reads \\objdata whose payload is split between #SDATA hex text and \\'hh escapes, rather than dropping whichever came second", () => {
     const raw = writeEmbeddedObjectData({
       objectKind: "spreadsheet",
@@ -1346,7 +1346,7 @@ describe("embedded objects", () => {
     expect(object?.document).toEqual(embedded);
   });
 
-  // RTF 1.9.1's own <objdata> production is '{\*' \objdata (<objalias>? & <objsect>?) <data> '}' -- \objalias and \objsect are legal sub-groups nested directly inside \objdata's own braces, before its real payload. A reader that predicts \objdata's decode via a flat token scan (rather than the same group-aware walk the live read uses) folds those sub-groups' own bytes into the payload it scans, disagreeing with the live read about whether \objdata will decode at all -- exactly the double-render bug this test guards against.
+  // RTF 1.9.1's own <objdata> production is '{\*' \objdata (<objalias>? & <objsect>?) <data> '}' — \objalias and \objsect are legal sub-groups nested directly inside \objdata's own braces, before its real payload. A reader that predicts \objdata's decode via a flat token scan (rather than the same group-aware walk the live read uses) folds those sub-groups' own bytes into the payload it scans, disagreeing with the live read about whether \objdata will decode at all — exactly the double-render bug this test guards against.
   it("decodes \\objdata unaffected by legal nested {\\*\\objalias ...}/{\\*\\objsect ...} sub-groups, without double-rendering \\result's own fallback content", () => {
     const { document, diagnostics } = readRtfContent(
       bytes(
@@ -1372,7 +1372,7 @@ describe("embedded objects", () => {
       .flatMap((paragraph) => paragraph.runs.map((run) => run.text))
       .join("");
     expect(paragraphText).not.toContain("should not appear");
-    // \objalias and \objsect are ordinary, spec-legal sub-productions of \objdata -- recognised destinations, not unrecognised ones this reader happens to tolerate.
+    // \objalias and \objsect are ordinary, spec-legal sub-productions of \objdata — recognised destinations, not unrecognised ones this reader happens to tolerate.
     expect(
       diagnostics.some(
         (diagnostic) =>
@@ -1386,7 +1386,7 @@ describe("embedded objects", () => {
     ).toBe(false);
   });
 
-  // RTF 1.9.1's own <obj> production lists <objclsid> ('{\*' \oleclsid #PCDATA '}') as a direct, optional child of \object, right alongside <objalias>/<objsect>/<objtime> -- ordinary, spec-legal \object content, not an unrecognised destination this reader happens to tolerate.
+  // RTF 1.9.1's own <obj> production lists <objclsid> ('{\*' \oleclsid #PCDATA '}') as a direct, optional child of \object, right alongside <objalias>/<objsect>/<objtime> — ordinary, spec-legal \object content, not an unrecognised destination this reader happens to tolerate.
   it("does not report UNKNOWN_DESTINATION_SKIPPED for a spec-legal {\\*\\oleclsid ...} sub-group", () => {
     const { diagnostics } = readRtfContent(
       bytes(
@@ -1401,7 +1401,7 @@ describe("embedded objects", () => {
     ).toBe(false);
   });
 
-  // \object's own group can legally close having found neither an \objdata nor a \result child at all (a producer that wrote only the informational \objw/\objh size hint and nothing else) -- a distinct, otherwise-silent construct substitution from either "objdata exists but fails to decode" (buildEmbeddedObject's own diagnostic) or "no objdata, but result recovers instead" (the sibling test above), and previously the only one of the three that produced no diagnostic at all.
+  // \object's own group can legally close having found neither an \objdata nor a \result child at all (a producer that wrote only the informational \objw/\objh size hint and nothing else) — a distinct, otherwise-silent construct substitution from either "objdata exists but fails to decode" (buildEmbeddedObject's own diagnostic) or "no objdata, but result recovers instead" (the sibling test above), and previously the only one of the three that produced no diagnostic at all.
   it("reports a diagnostic when an \\object has neither \\objdata nor \\result content at all", () => {
     const { document, diagnostics } = readRtfContent(
       bytes(
@@ -1580,7 +1580,7 @@ describe("fields and destinations", () => {
     expect(runs[0]?.hyperlink).toBe("#section2");
   });
 
-  // Regression guard: formFieldControlType (constructs.ts) must anchor on the instruction's own leading token, not merely find FORMTEXT/FORMCHECKBOX/FORMDROPDOWN anywhere in the string -- an unanchored match would fire on the identical word sitting inside an unrelated field's own switch argument, here a HYPERLINK target that happens to end in "FORMTEXT".
+  // Regression guard: formFieldControlType (constructs.ts) must anchor on the instruction's own leading token, not merely find FORMTEXT/FORMCHECKBOX/FORMDROPDOWN anywhere in the string — an unanchored match would fire on the identical word sitting inside an unrelated field's own switch argument, here a HYPERLINK target that happens to end in "FORMTEXT".
   it("does not mistake a HYPERLINK target containing the word FORMTEXT for a form field", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst{HYPERLINK "http://example.com/FORMTEXT"}}{\\fldrslt here}}\\par}`,
@@ -1590,7 +1590,7 @@ describe("fields and destinations", () => {
     expect(linked?.hyperlink).toBe("http://example.com/FORMTEXT");
   });
 
-  // Regression guard: an ordinary field (no FORMTEXT/FORMCHECKBOX/FORMDROPDOWN instruction) must not fragment the runs around it. Every run of text here -- before the field, its own \fldrslt, and after it -- carries identical (default) formatting, so a reader that coalesces same-key text into one run produces exactly one run; one that force-flushes at every \field boundary regardless of whether it is a genuine form field produces three.
+  // Regression guard: an ordinary field (no FORMTEXT/FORMCHECKBOX/FORMDROPDOWN instruction) must not fragment the runs around it. Every run of text here — before the field, its own \fldrslt, and after it — carries identical (default) formatting, so a reader that coalesces same-key text into one run produces exactly one run; one that force-flushes at every \field boundary regardless of whether it is a genuine form field produces three.
   it("does not fragment identically-formatted text around an ordinary PAGE field into extra runs", () => {
     const runs =
       paragraphsOf(
@@ -1669,7 +1669,7 @@ describe("fields and destinations", () => {
   });
 
   it("stays silent about a legacy destination that duplicates what it already read", () => {
-    // {\*\pn ...} is Word 6/95 paragraph numbering, superseded by the \lsN/\ilvlN this reader takes, and a real Word document carries one per numbered paragraph -- reporting it would bury the drops that matter.
+    // {\*\pn ...} is Word 6/95 paragraph numbering, superseded by the \lsN/\ilvlN this reader takes, and a real Word document carries one per numbered paragraph — reporting it would bury the drops that matter.
     const { diagnostics } = readRtfContent(
       bytes(
         `${HEADER}\\pard{\\pntext 1.\\tab}{\\*\\pn\\pnlvlbody\\pnstart1\\pndec}Item\\par}`,
@@ -1695,7 +1695,7 @@ describe("fields and destinations", () => {
   });
 });
 
-// RTF 1.9.1, "Form Fields": a form field is an ordinary \field whose \*\fldinst names FORMTEXT/FORMCHECKBOX/FORMDROPDOWN, with a sibling \*\formfield destination carrying the control's own data (\fftypeN, \ffname, \ffres/\ffdefres, and a dropdown's \*\ffl entries). The fixtures below are trimmed from a real producer's own output (PHPRtfLite), braces and all, including the anonymous scoping group \*\formfield wraps its own control words in -- this reader never needs to know that group is there, because an unrecognised first control word simply inherits the enclosing destination, the same mechanism an ordinary {\b bold} run-formatting group already relies on.
+// RTF 1.9.1, "Form Fields": a form field is an ordinary \field whose \*\fldinst names FORMTEXT/FORMCHECKBOX/FORMDROPDOWN, with a sibling \*\formfield destination carrying the control's own data (\fftypeN, \ffname, \ffres/\ffdefres, and a dropdown's \*\ffl entries). The fixtures below are trimmed from a real producer's own output (PHPRtfLite), braces and all, including the anonymous scoping group \*\formfield wraps its own control words in — this reader never needs to know that group is there, because an unrecognised first control word simply inherits the enclosing destination, the same mechanism an ordinary {\b bold} run-formatting group already relies on.
 describe("form fields", () => {
   it("reads a FORMCHECKBOX field as a checkbox contentControl point extent between the surrounding runs", () => {
     const paragraph = paragraphsOf(
@@ -1713,7 +1713,7 @@ describe("form fields", () => {
     );
   });
 
-  // Pins the unchecked half of the pair the "reads a FORMCHECKBOX field..." test above already covers checked for, both against the identical PHPRtfLite \ffres25 fixture. \ffres25 is [MS-DOC] 2.9.79 FFDataBits's own reserved "undefined" sentinel for a checkbox's iRes, not a PHPRtfLite-specific constant -- it falls through to \ffdefres (the field's reset default) exactly as the spec's "Undefined checkboxes are treated as unchecked" describes when the default itself says 0.
+  // Pins the unchecked half of the pair the "reads a FORMCHECKBOX field..." test above already covers checked for, both against the identical PHPRtfLite \ffres25 fixture. \ffres25 is [MS-DOC] 2.9.79 FFDataBits's own reserved "undefined" sentinel for a checkbox's iRes, not a PHPRtfLite-specific constant — it falls through to \ffdefres (the field's reset default) exactly as the spec's "Undefined checkboxes are treated as unchecked" describes when the default itself says 0.
   it("falls through \\ffres's own undefined sentinel (25) to \\ffdefres for a checkbox's checked state", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMCHECKBOX {\\*\\formfield{\\fftype1\\ffres25\\ffhps20\\ffdefres0}}}{\\fldrslt }}\\par}`,
@@ -1741,7 +1741,7 @@ describe("form fields", () => {
     });
   });
 
-  // Real Word's own FFDataBits encoding, not PHPRtfLite's: a meaningful (non-sentinel) \ffres and a \ffdefres that genuinely differ from each other. \ffres is the field's own current state and must win over \ffdefres's reset default in both directions -- these two fixtures pin that priority each way, since a precedence bug that merely swapped which control word wins (rather than handling the sentinel) would get one of the two backwards.
+  // Real Word's own FFDataBits encoding, not PHPRtfLite's: a meaningful (non-sentinel) \ffres and a \ffdefres that genuinely differ from each other. \ffres is the field's own current state and must win over \ffdefres's reset default in both directions — these two fixtures pin that priority each way, since a precedence bug that merely swapped which control word wins (rather than handling the sentinel) would get one of the two backwards.
   it("prioritises a meaningful \\ffres over a differing \\ffdefres when the box is checked despite a false default", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMCHECKBOX {\\*\\formfield{\\fftype1\\ffres1\\ffdefres0}}}{\\fldrslt }}\\par}`,
@@ -1760,7 +1760,7 @@ describe("form fields", () => {
     });
   });
 
-  // Regression guard: \ffres/\ffdefres are RTF 1.9.1's own generic "Value" control words (Appendix B), exactly like \ffprot, so a bare occurrence must default to 0 per the spec's own "Change Formatting Property" convention -- not read as `undefined` and fall through to \ffdefres the way FORM_FIELD_RESULT_UNDEFINED's own sentinel handling does for a genuinely absent \ffres. A bare \ffres therefore means \ffres0, taking priority over \ffdefres1 exactly as an explicit \ffres0 already does above.
+  // Regression guard: \ffres/\ffdefres are RTF 1.9.1's own generic "Value" control words (Appendix B), exactly like \ffprot, so a bare occurrence must default to 0 per the spec's own "Change Formatting Property" convention — not read as `undefined` and fall through to \ffdefres the way FORM_FIELD_RESULT_UNDEFINED's own sentinel handling does for a genuinely absent \ffres. A bare \ffres therefore means \ffres0, taking priority over \ffdefres1 exactly as an explicit \ffres0 already does above.
   it("reads a bare \\ffres (no explicit parameter) as \\ffres0, not as absent", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMCHECKBOX {\\*\\formfield{\\fftype1\\ffres\\ffdefres1}}}{\\fldrslt }}\\par}`,
@@ -1770,7 +1770,7 @@ describe("form fields", () => {
     });
   });
 
-  // \ffdefres0 names "Hello" (index 0) as the field's own recorded default selection -- the sentinel \ffres25 (see FORM_FIELD_RESULT_UNDEFINED in constructs.ts, and its own dropdown-branch comment) falls through to it exactly as a checkbox's sentinel \ffres falls through to \ffdefres, so `value` reads back "Hello" here even though the \fldrslt text shown ("Guten Tag") is a different entry -- \fldrslt is merely the field's last-rendered display text, not authoritative over \ffres/\ffdefres for which entry is "selected" in FFDataBits terms.
+  // \ffdefres0 names "Hello" (index 0) as the field's own recorded default selection — the sentinel \ffres25 (see FORM_FIELD_RESULT_UNDEFINED in constructs.ts, and its own dropdown-branch comment) falls through to it exactly as a checkbox's sentinel \ffres falls through to \ffdefres, so `value` reads back "Hello" here even though the \fldrslt text shown ("Guten Tag") is a different entry — \fldrslt is merely the field's last-rendered display text, not authoritative over \ffres/\ffdefres for which entry is "selected" in FFDataBits terms.
   it("reads a FORMDROPDOWN field's \\*\\ffl entries as the contentControl's options, falling through \\ffres25's undefined sentinel to \\ffdefres for the selected value, with its \\fldrslt as the wrapped run", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMDROPDOWN  {\\*\\formfield{\\fftype2\\ffres25\\fftypetxt0\\ffhaslistbox\\ffdefres0{\\*\\ffl Hello}{\\*\\ffl Guten Tag}}}}{\\fldrslt Guten Tag}}\\par}`,
@@ -1791,7 +1791,7 @@ describe("form fields", () => {
   });
 
   it("never routes a nested destination's own text into a \\*\\ffl entry, even one sharing state.field.formField by reference", () => {
-    // \listtext nested directly inside the first \*\ffl group shares state.field.formField by reference (the same shape the bookmark and \*\fldinst fixtures elsewhere in this file exercise) but its own destination is "listText", not "formFieldListItem" -- a check keyed on state.field.formField's own definedness alone would let "stray" leak into the entry ahead of "Hello" itself.
+    // \listtext nested directly inside the first \*\ffl group shares state.field.formField by reference (the same shape the bookmark and \*\fldinst fixtures elsewhere in this file exercise) but its own destination is "listText", not "formFieldListItem" — a check keyed on state.field.formField's own definedness alone would let "stray" leak into the entry ahead of "Hello" itself.
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMDROPDOWN  {\\*\\formfield{\\fftype2\\ffres0\\fftypetxt0\\ffhaslistbox\\ffdefres0{\\*\\ffl{\\listtext stray}Hello}{\\*\\ffl Guten Tag}}}}{\\fldrslt Hello}}\\par}`,
     )[0];
@@ -1801,7 +1801,7 @@ describe("form fields", () => {
     });
   });
 
-  // The same \ffres field FFDataBits gives a checkbox's own state carries, for iTypeDrop, a zero-based index into the \*\ffl list -- a genuinely real Word fixture rather than PHPRtfLite's own always-25 constant: unlike the "reads a FORMDROPDOWN..." test above, whose \ffres25 sentinel falls through to \ffdefres0 for its "Hello" value, this fixture's own \ffres1 already names a real (non-sentinel) selection directly, with no fallback involved.
+  // The same \ffres field FFDataBits gives a checkbox's own state carries, for iTypeDrop, a zero-based index into the \*\ffl list — a genuinely real Word fixture rather than PHPRtfLite's own always-25 constant: unlike the "reads a FORMDROPDOWN..." test above, whose \ffres25 sentinel falls through to \ffdefres0 for its "Hello" value, this fixture's own \ffres1 already names a real (non-sentinel) selection directly, with no fallback involved.
   it("reads a FORMDROPDOWN field's \\ffres as a zero-based index selecting one of its own \\*\\ffl entries", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMDROPDOWN  {\\*\\formfield{\\fftype2\\ffres1\\fftypetxt0\\ffhaslistbox\\ffdefres0{\\*\\ffl Hello}{\\*\\ffl Guten Tag}}}}{\\fldrslt Guten Tag}}\\par}`,
@@ -1835,7 +1835,7 @@ describe("form fields", () => {
     });
   });
 
-  // Regression guard, dropdown side of the identical bare-Value-word-defaults-to-0 fix as the checkbox's own "reads a bare \ffres..." test above: a bare \ffdefres names index 0 ("Hello"), not "no default recorded" -- distinct from the "leaves...unset" fixture directly above, which has no \ffdefres control word at all rather than a bare one.
+  // Regression guard, dropdown side of the identical bare-Value-word-defaults-to-0 fix as the checkbox's own "reads a bare \ffres..." test above: a bare \ffdefres names index 0 ("Hello"), not "no default recorded" — distinct from the "leaves...unset" fixture directly above, which has no \ffdefres control word at all rather than a bare one.
   it("reads a bare \\ffdefres (no explicit parameter) as index 0, selecting the first \\*\\ffl entry", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMDROPDOWN  {\\*\\formfield{\\fftype2\\ffdefres\\fftypetxt0\\ffhaslistbox{\\*\\ffl Hello}{\\*\\ffl Guten Tag}}}}{\\fldrslt Hello}}\\par}`,
@@ -1866,7 +1866,7 @@ describe("form fields", () => {
   });
 
   it("ignores a stray \\par inside a \\*\\formfield destination rather than force-closing the surrounding paragraph", () => {
-    // \*\formfield carries no #PCDATA or real block structure of its own (its content is entirely its own \fftypeN/\ffname/... control words), so a structure word like \par landing inside it -- a malformed producer's mistake, not RTF's own grammar -- must be silently ignored, exactly like the analogous bookmark/fieldInstruction guards elsewhere in this file. A destination check that matched only formFieldName/formFieldHelpText/formFieldListItem, and missed formField itself, would let this \par force-close the paragraph the whole field is sitting in in the middle of the destination's own control words, splitting one paragraph into two.
+    // \*\formfield carries no #PCDATA or real block structure of its own (its content is entirely its own \fftypeN/\ffname/... control words), so a structure word like \par landing inside it — a malformed producer's mistake, not RTF's own grammar — must be silently ignored, exactly like the analogous bookmark/fieldInstruction guards elsewhere in this file. A destination check that matched only formFieldName/formFieldHelpText/formFieldListItem, and missed formField itself, would let this \par force-close the paragraph the whole field is sitting in in the middle of the destination's own control words, splitting one paragraph into two.
     const paragraphs = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\par\\fftypetxt0{\\*\\ffname Text1}}}}{\\fldrslt Lorem ipsum.}}\\par}`,
     );
@@ -1878,7 +1878,7 @@ describe("form fields", () => {
     });
   });
 
-  // Regression guard: an earlier round of this reader promoted \ffdeftext (FFData.xstzTextDef, the field's DEFAULT/reset text) onto the descriptor's `value`, which document-schema.js's own ContentControlDescriptor defines as the control's CURRENT value -- for a text field, that current value is whatever text is actually wrapped in \fldrslt's own runs ("Lorem ipsum." here), never the default. `value` must stay unset even though a real \ffdeftext group is present, and the genuinely current text must still be readable from the wrapped runs, exactly as it is when no \ffdeftext exists at all (see "reads a FORMTEXT field's \*\ffname..." above).
+  // Regression guard: an earlier round of this reader promoted \ffdeftext (FFData.xstzTextDef, the field's DEFAULT/reset text) onto the descriptor's `value`, which document-schema.js's own ContentControlDescriptor defines as the control's CURRENT value — for a text field, that current value is whatever text is actually wrapped in \fldrslt's own runs ("Lorem ipsum." here), never the default. `value` must stay unset even though a real \ffdeftext group is present, and the genuinely current text must still be readable from the wrapped runs, exactly as it is when no \ffdeftext exists at all (see "reads a FORMTEXT field's \*\ffname..." above).
   it("leaves a FORMTEXT field's value unset when \\*\\ffdeftext is present, reporting its default text nowhere while its \\fldrslt runs still carry the real current text", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\fftypetxt0{\\*\\ffdeftext Jane Doe}{\\*\\ffname Text1}}}}{\\fldrslt Lorem ipsum.}}\\par}`,
@@ -1897,7 +1897,7 @@ describe("form fields", () => {
     ).toBe("Lorem ipsum.");
   });
 
-  // The same guard with no wrapped-run content at all: `value` must still stay unset -- \ffdeftext is never promoted to `value` unconditionally, not merely "unless the runs are non-empty".
+  // The same guard with no wrapped-run content at all: `value` must still stay unset — \ffdeftext is never promoted to `value` unconditionally, not merely "unless the runs are non-empty".
   it("leaves a FORMTEXT field's value unset when \\*\\ffdeftext is present and \\fldrslt is empty", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\fftypetxt0{\\*\\ffdeftext Jane Doe}{\\*\\ffname Text1}}}}{\\fldrslt }}\\par}`,
@@ -1909,7 +1909,7 @@ describe("form fields", () => {
     });
   });
 
-  // Regression guard: \*\ffformat/\*\ffstattext/\*\ffentrymcr/\*\ffexitmcr are RTF's own remaining <formstrings> destination strings alongside \*\ffdeftext (RTF 1.5's own Form Fields table), which this reader already recognises and silently skips (SILENT_SKIP_DESTINATIONS in read.ts) for the identical reason -- no ContentControlDescriptor field exists to carry a text field's input-format mask, status-line text, or entry/exit macro name. A fully-populated real-world text field naming all five siblings must produce no UNKNOWN_DESTINATION_SKIPPED diagnostic for any of them.
+  // Regression guard: \*\ffformat/\*\ffstattext/\*\ffentrymcr/\*\ffexitmcr are RTF's own remaining <formstrings> destination strings alongside \*\ffdeftext (RTF 1.5's own Form Fields table), which this reader already recognises and silently skips (SILENT_SKIP_DESTINATIONS in read.ts) for the identical reason — no ContentControlDescriptor field exists to carry a text field's input-format mask, status-line text, or entry/exit macro name. A fully-populated real-world text field naming all five siblings must produce no UNKNOWN_DESTINATION_SKIPPED diagnostic for any of them.
   it("stays silent about \\*\\ffformat/\\*\\ffstattext/\\*\\ffentrymcr/\\*\\ffexitmcr, the remaining <formstrings> siblings of \\*\\ffdeftext", () => {
     const { diagnostics, document } = readRtfContent(
       bytes(
@@ -1955,7 +1955,7 @@ describe("form fields", () => {
     });
   });
 
-  // Regression guard: [MS-DOC] 2.9.79 FFDataBits itself states no default at all for fOwnHelp -- it is a fixed-width bit always physically present in the binary structure, so "default" is not a meaningful concept there. The real justification is RTF's own separate Form Fields table, which classifies \ffownhelpN as a Value control word ("1 if there is associated help text, 0 otherwise") rather than a Toggle word, so an absent control word carries no "on" meaning to inherit and this reader's own FormFieldState simply starts at false. A \*\formfield group that never spells \ffownhelp at all must therefore default identically to an explicit \ffownhelp0 -- an earlier version of this reader defaulted the absent-control-word case to true instead, which would have surfaced this same auto-generated-looking help text as an author-set alias purely because the producer happened to omit the bit rather than spell it out as 0.
+  // Regression guard: [MS-DOC] 2.9.79 FFDataBits itself states no default at all for fOwnHelp — it is a fixed-width bit always physically present in the binary structure, so "default" is not a meaningful concept there. The real justification is RTF's own separate Form Fields table, which classifies \ffownhelpN as a Value control word ("1 if there is associated help text, 0 otherwise") rather than a Toggle word, so an absent control word carries no "on" meaning to inherit and this reader's own FormFieldState simply starts at false. A \*\formfield group that never spells \ffownhelp at all must therefore default identically to an explicit \ffownhelp0 — an earlier version of this reader defaulted the absent-control-word case to true instead, which would have surfaced this same auto-generated-looking help text as an author-set alias purely because the producer happened to omit the bit rather than spell it out as 0.
   it("leaves a FORMTEXT field's alias unset when \\ffownhelp never appears at all, matching \\ffownhelp0's own default", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\fftypetxt0{\\*\\ffhelptext Auto generated}{\\*\\ffname Text1}}}}{\\fldrslt Lorem ipsum.}}\\par}`,
@@ -1979,7 +1979,7 @@ describe("form fields", () => {
     });
   });
 
-  // \ffprotN is classified as a "Value" control word in RTF 1.9.1's own control-word-type table, not a "Toggle" word like \b/\i -- a Value word's own bare (unparameterised) form defaults to 0, not to "on" the way a bare \b/\i would. This regression-guards against an earlier version of this reader applying the toggle convention uniformly to every bare boolean form-field control word, which read a bare \ffprot as protected; see formFieldValueBit's own comment in read.ts for the exact citations.
+  // \ffprotN is classified as a "Value" control word in RTF 1.9.1's own control-word-type table, not a "Toggle" word like \b/\i — a Value word's own bare (unparameterised) form defaults to 0, not to "on" the way a bare \b/\i would. This regression-guards against an earlier version of this reader applying the toggle convention uniformly to every bare boolean form-field control word, which read a bare \ffprot as protected; see formFieldValueBit's own comment in read.ts for the exact citations.
   it("reads a bare \\ffprot (no explicit parameter) as unprotected, since \\ffprot is a Value word whose bare form defaults to 0, not a Toggle word", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\fftypetxt0\\ffprot}}}{\\fldrslt Lorem ipsum.}}\\par}`,
@@ -1990,7 +1990,7 @@ describe("form fields", () => {
     });
   });
 
-  // \ffownhelp shares \ffprot's own Value-word classification but is deliberately read differently: LibreOffice's real RTF exporter (sw/source/filter/ww8/rtfattributeoutput.cxx) emits this bare form whenever the control model exposes a HelpText property at all, alongside that genuine, non-empty HelpText, so a bare \ffownhelp reads as true here rather than following the Value-word literal 0-default \ffprot's bare form still uses -- see read.ts's own comment on applyFormFieldControlWord's "ffownhelp" case.
+  // \ffownhelp shares \ffprot's own Value-word classification but is deliberately read differently: LibreOffice's real RTF exporter (sw/source/filter/ww8/rtfattributeoutput.cxx) emits this bare form whenever the control model exposes a HelpText property at all, alongside that genuine, non-empty HelpText, so a bare \ffownhelp reads as true here rather than following the Value-word literal 0-default \ffprot's bare form still uses — see read.ts's own comment on applyFormFieldControlWord's "ffownhelp" case.
   it("reads a bare \\ffownhelp (no explicit parameter) as true, promoting a non-empty \\ffhelptext to alias, matching real-world producers like LibreOffice that emit this bare form", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\fftypetxt0\\ffownhelp{\\*\\ffhelptext Client name}{\\*\\ffname Text1}}}}{\\fldrslt Lorem ipsum.}}\\par}`,
@@ -2003,7 +2003,7 @@ describe("form fields", () => {
     });
   });
 
-  // Regression guard against silently discarding real LibreOffice output rather than merely a synthetic minimal fixture: this exact byte sequence, checkbox included, is what LibreOffice's sw/source/filter/ww8/rtfattributeoutput.cxx actually emits for a checked FORMCHECKBOX carrying custom help text -- \ffownhelp bare, immediately before a non-empty \*\ffhelptext.
+  // Regression guard against silently discarding real LibreOffice output rather than merely a synthetic minimal fixture: this exact byte sequence, checkbox included, is what LibreOffice's sw/source/filter/ww8/rtfattributeoutput.cxx actually emits for a checked FORMCHECKBOX carrying custom help text — \ffownhelp bare, immediately before a non-empty \*\ffhelptext.
   it("reads a real LibreOffice-shaped FORMCHECKBOX's bare \\ffownhelp as carrying its \\ffhelptext through to alias", () => {
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMCHECKBOX {\\*\\formfield{\\fftype1\\ffhps20{\\*\\ffname Check1}\\ffownhelp{\\*\\ffhelptext Tick if applicable}\\ffdefres0\\ffres1}}}{\\fldrslt X}}\\par}`,
@@ -2044,7 +2044,7 @@ describe("form fields", () => {
     expect(paragraph?.constructs ?? []).toEqual([]);
   });
 
-  // Regression guard: \*\ffname/\*\ffhelptext/\*\ffl/\*\formfield itself carry a name, a help string, a list entry, or nothing but their own control words -- never formatted document flow -- so a stray \par/\page/\sect inside any of them must be swallowed exactly like the analogous stray word already is inside \*\bkmkstart/\*\bkmkend, not applied to the paragraph/section/document surrounding the field. Before this guard, a \par here split the surrounding paragraph in two and a \page injected a top-level pageBreak block that does not belong to the field at all.
+  // Regression guard: \*\ffname/\*\ffhelptext/\*\ffl/\*\formfield itself carry a name, a help string, a list entry, or nothing but their own control words — never formatted document flow — so a stray \par/\page/\sect inside any of them must be swallowed exactly like the analogous stray word already is inside \*\bkmkstart/\*\bkmkend, not applied to the paragraph/section/document surrounding the field. Before this guard, a \par here split the surrounding paragraph in two and a \page injected a top-level pageBreak block that does not belong to the field at all.
   it("swallows a stray \\par inside \\*\\ffname instead of splitting the surrounding paragraph", () => {
     const blocks = blocksOf(
       `${HEADER}\\pard before {\\field{\\*\\fldinst FORMTEXT {\\*\\formfield{\\fftype0\\fftypetxt0{\\*\\ffname a\\par b}}}}{\\fldrslt X}} after\\par}`,
@@ -2073,7 +2073,7 @@ describe("form fields", () => {
     });
   });
 
-  // Regression guard: a real Word-authored \field wraps its own \*\fldinst instruction text in an anonymous nested group (`{\*\fldinst {FORMTEXT }...}`), and that nested group inherits the enclosing "fieldInstruction" destination just like \*\fldinst itself does -- so, before FieldState's own formFieldStarted guard existed, both the nested group's close and \*\fldinst's own close independently satisfied startFormField's condition, opening two extents for what is really one field while only the field's own single closing brace ever popped one back off. Five consecutive such fields exercise the guard across several fields in a row rather than just one, pinning that each field's own contentControl still lands on the correct run range with no duplication or cross-field mis-nesting.
+  // Regression guard: a real Word-authored \field wraps its own \*\fldinst instruction text in an anonymous nested group (`{\*\fldinst {FORMTEXT }...}`), and that nested group inherits the enclosing "fieldInstruction" destination just like \*\fldinst itself does — so, before FieldState's own formFieldStarted guard existed, both the nested group's close and \*\fldinst's own close independently satisfied startFormField's condition, opening two extents for what is really one field while only the field's own single closing brace ever popped one back off. Five consecutive such fields exercise the guard across several fields in a row rather than just one, pinning that each field's own contentControl still lands on the correct run range with no duplication or cross-field mis-nesting.
   it("opens a Word-shaped nested \\*\\fldinst group's contentControl only once, across several consecutive fields", () => {
     const field =
       "{\\field{\\*\\fldinst {FORMTEXT }{\\*\\formfield{\\fftype0\\fftypetxt0{\\*\\ffname T}}}}{\\fldrslt X}}";
@@ -2136,7 +2136,7 @@ describe("form fields", () => {
     ]);
   });
 
-  // Regression guard for the flip side of the nested-\*\fldinst-group guard above: formFieldControlType is anchored on a \b word boundary, and a field's instruction is read incrementally across however many "fieldInstruction"-destination groups it is split across (see startFormField's own call site comment on the nested-anonymous-group case). A group that closes with the instruction reading exactly "FORMTEXT" -- nothing following it yet -- satisfies \b via the end of the string read so far, opening the extent; if the SAME instruction later grows a further identifier character directly onto that word with no separating space or switch delimiter ("FORMTEXTBOX" here), \b no longer holds once the instruction is complete, and the field is correctly not a real form field after all. Before gating endFormField's own call on formFieldStarted rather than re-deriving the type a second time from the (by-then-different) complete instruction, this field's opened extent was never closed: it leaked as an unpopped entry on the shared open-form-fields stack instead of being reported and discarded, one push short of the pop every other field's own close still performed correctly around it.
+  // Regression guard for the flip side of the nested-\*\fldinst-group guard above: formFieldControlType is anchored on a \b word boundary, and a field's instruction is read incrementally across however many "fieldInstruction"-destination groups it is split across (see startFormField's own call site comment on the nested-anonymous-group case). A group that closes with the instruction reading exactly "FORMTEXT" — nothing following it yet — satisfies \b via the end of the string read so far, opening the extent; if the SAME instruction later grows a further identifier character directly onto that word with no separating space or switch delimiter ("FORMTEXTBOX" here), \b no longer holds once the instruction is complete, and the field is correctly not a real form field after all. Before gating endFormField's own call on formFieldStarted rather than re-deriving the type a second time from the (by-then-different) complete instruction, this field's opened extent was never closed: it leaked as an unpopped entry on the shared open-form-fields stack instead of being reported and discarded, one push short of the pop every other field's own close still performed correctly around it.
   it("drops a form field whose instruction stops matching a keyword once complete, without disturbing the fields around it", () => {
     const good =
       "{\\field{\\*\\fldinst {FORMTEXT }{\\*\\formfield{\\fftype0\\fftypetxt0{\\*\\ffname T}}}}{\\fldrslt X}}";
@@ -2172,7 +2172,7 @@ describe("form fields", () => {
   });
 
   it("never opens a form field's own extent from a NESTED group's close whose destination isn't fieldInstruction, even one sharing state.field by reference", () => {
-    // \*\ud is a real, known destination in its own right ("body", not "fieldInstruction") -- \*\fldinst's own text "FORMTEXT" matches before this nested group even opens, but a check keyed on state.field's own definedness and formFieldControlType alone, without also requiring THIS group's own destination to genuinely be "fieldInstruction", would open the extent right here, at \*\ud's own premature close, rather than waiting for \*\fldinst's own real close. Appending "EXTRA" directly afterward (still within \*\fldinst's own outer scope) breaks the word-boundary match RTF's own control-word anchoring requires ("FORMTEXTEXTRA" no longer names any recognised keyword), so the CORRECT outcome is silence -- an ordinary, non-form field, never opened, never reported. Opening it early at \*\ud's own close instead forces formFieldStarted true before "EXTRA" is even read, so the field group's own later close reads the complete (now non-matching) instruction back, drops it, and reports FORM_FIELD_KEYWORD_LOST -- a diagnostic this input must never produce, since correct code never opens the extent in the first place.
+    // \*\ud is a real, known destination in its own right ("body", not "fieldInstruction") — \*\fldinst's own text "FORMTEXT" matches before this nested group even opens, but a check keyed on state.field's own definedness and formFieldControlType alone, without also requiring THIS group's own destination to genuinely be "fieldInstruction", would open the extent right here, at \*\ud's own premature close, rather than waiting for \*\fldinst's own real close. Appending "EXTRA" directly afterward (still within \*\fldinst's own outer scope) breaks the word-boundary match RTF's own control-word anchoring requires ("FORMTEXTEXTRA" no longer names any recognised keyword), so the CORRECT outcome is silence — an ordinary, non-form field, never opened, never reported. Opening it early at \*\ud's own close instead forces formFieldStarted true before "EXTRA" is even read, so the field group's own later close reads the complete (now non-matching) instruction back, drops it, and reports FORM_FIELD_KEYWORD_LOST — a diagnostic this input must never produce, since correct code never opens the extent in the first place.
     const { diagnostics } = readRtfContent(
       bytes(
         `${HEADER}\\pard{\\field{\\*\\fldinst FORMTEXT{\\*\\ud MORE}EXTRA}{\\fldrslt result}}after\\par}`,
@@ -2197,7 +2197,7 @@ describe("form fields", () => {
     });
   });
 
-  // Unlike \*\ffname/\*\ffhelptext/\*\ffl above, \fldrslt genuinely carries the field's own displayed content, so a \par or \cell inside it must still split the document the way it would anywhere else -- RTF 1.9.1's own <fieldrslt> production ('{' \fldrslt <para>+ '}') is grammatical for a multi-paragraph result even though real producers keep a form field inline. What this reader cannot do is keep the contentControl construct itself: a RunConstructExtent is scoped to one paragraph's own runs, so the construct is dropped, and endFormField reports why through the sink rather than disappearing silently.
+  // Unlike \*\ffname/\*\ffhelptext/\*\ffl above, \fldrslt genuinely carries the field's own displayed content, so a \par or \cell inside it must still split the document the way it would anywhere else — RTF 1.9.1's own <fieldrslt> production ('{' \fldrslt <para>+ '}') is grammatical for a multi-paragraph result even though real producers keep a form field inline. What this reader cannot do is keep the contentControl construct itself: a RunConstructExtent is scoped to one paragraph's own runs, so the construct is dropped, and endFormField reports why through the sink rather than disappearing silently.
   it("splits the document at a \\par inside \\fldrslt and drops the contentControl, reporting why", () => {
     const { document, diagnostics } = readRtfContent(
       bytes(
@@ -2251,7 +2251,7 @@ describe("form fields", () => {
   });
 
   it("does not crash on a bare \\*\\ffname outside any \\field group, where state.field is genuinely undefined", () => {
-    // \*\ffname is recognised (DESTINATION_KINDS maps it to "formFieldName") regardless of what encloses it, so a hostile or truncated producer's own stray occurrence outside \field reaches emitText with state.field inherited from the root -- undefined, never set by anything else. Without its own field?.formField !== undefined guard, `state.field.formField.name += text` would throw rather than silently discard, exactly as the trailing comment on this whole if-chain says every other unhandled destination already does.
+    // \*\ffname is recognised (DESTINATION_KINDS maps it to "formFieldName") regardless of what encloses it, so a hostile or truncated producer's own stray occurrence outside \field reaches emitText with state.field inherited from the root — undefined, never set by anything else. Without its own field?.formField !== undefined guard, `state.field.formField.name += text` would throw rather than silently discard, exactly as the trailing comment on this whole if-chain says every other unhandled destination already does.
     expect(() =>
       readRtfContent(bytes(`${HEADER}\\pard{\\*\\ffname stray}kept\\par}`)),
     ).not.toThrow();
@@ -2275,7 +2275,7 @@ describe("form fields", () => {
 });
 
 describe("byte runs larger than an argument list", () => {
-  // A single paragraph whose text is one uninterrupted byte run far past the argument-count ceiling a spread call has (V8 throws RangeError somewhere around 65k-125k arguments). Bare CR/LF does not break a run -- the tokenizer skips those bytes and keeps accumulating -- so a real long paragraph reaches this size easily, and nothing smaller than a fixture this size catches it.
+  // A single paragraph whose text is one uninterrupted byte run far past the argument-count ceiling a spread call has (V8 throws RangeError somewhere around 65k-125k arguments). Bare CR/LF does not break a run — the tokenizer skips those bytes and keeps accumulating — so a real long paragraph reaches this size easily, and nothing smaller than a fixture this size catches it.
   const LONG_RUN_LENGTH = 300_000;
 
   it("reads a text run far longer than a spread call could carry", () => {
@@ -2296,7 +2296,7 @@ describe("byte runs larger than an argument list", () => {
   });
 });
 
-// RTF 1.9.1, "Section Text": <section> is `<secfmt>* <hdrftr>? <para>+ (\sect <section>)?` -- a section's own formatting precedes its paragraphs and \sect ends it, so the properties in force when a \sect arrives are the ones belonging to the section that just closed.
+// RTF 1.9.1, "Section Text": <section> is `<secfmt>* <hdrftr>? <para>+ (\sect <section>)?` — a section's own formatting precedes its paragraphs and \sect ends it, so the properties in force when a \sect arrives are the ones belonging to the section that just closed.
 describe("sections", () => {
   it("starts a new ContentSection at each \\sect rather than collapsing the document to one", () => {
     const sections = sectionsOf(
@@ -2395,7 +2395,7 @@ describe("bookmarks", () => {
   });
 
   it("trims a bookmark's own name, since it is stated as ordinary #PCDATA rather than a delimiter-stripped control-word parameter", () => {
-    // The lone space right after \bkmkstart itself is consumed as the control word's own terminating delimiter (RTF's own rule for a bare, unparameterised control word), but a SECOND space before the name -- or one before the group's own closing brace -- is ordinary #PCDATA and becomes part of bookmark.name verbatim unless explicitly trimmed.
+    // The lone space right after \bkmkstart itself is consumed as the control word's own terminating delimiter (RTF's own rule for a bare, unparameterised control word), but a SECOND space before the name — or one before the group's own closing brace — is ordinary #PCDATA and becomes part of bookmark.name verbatim unless explicitly trimmed.
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\*\\bkmkstart  padded }marked{\\*\\bkmkend padded}\\par}`,
     )[0];
@@ -2405,7 +2405,7 @@ describe("bookmarks", () => {
   });
 
   it("keeps a bookmark's own plain-text name intact when it opens nested inside a \\*\\objdata destination", () => {
-    // \*\bkmkstart is a real, known destination (not \*\objdata's own "skip" siblings \*\objalias/\*\objsect), so it opens a genuine child group here rather than being jumped over -- and that child inherits state.objectData BY REFERENCE from its \*\objdata parent, same as any other descendant, even though its own destination is "bookmarkStart", not "objectData". A text token routed by destination alone (never checking THIS group's own state.objectData against the group it actually belongs to) would fold the bookmark's own name into the object's hex payload instead of the bookmark, leaving the name empty.
+    // \*\bkmkstart is a real, known destination (not \*\objdata's own "skip" siblings \*\objalias/\*\objsect), so it opens a genuine child group here rather than being jumped over — and that child inherits state.objectData BY REFERENCE from its \*\objdata parent, same as any other descendant, even though its own destination is "bookmarkStart", not "objectData". A text token routed by destination alone (never checking THIS group's own state.objectData against the group it actually belongs to) would fold the bookmark's own name into the object's hex payload instead of the bookmark, leaving the name empty.
     const paragraph = paragraphsOf(
       `${HEADER}\\pard{\\object\\objemb{\\*\\objdata{\\*\\bkmkstart marker}x{\\*\\bkmkend marker}00}}\\par}`,
     )[0];
@@ -2454,7 +2454,7 @@ describe("bookmarks", () => {
   });
 
   it("drops the later of two disjoint bookmarks that share a paragraph boundary, rather than reconstructing them as overlapping", () => {
-    // A's own \bkmkend and B's own \bkmkstart both land in the second paragraph of the same table cell -- the shape ExaDev/documents.js#1040 names: block-granularity cannot express "A ends immediately before this paragraph's own remainder, which is B's" as two separate extents, since the paragraph is this reader's finest addressable unit. The two source ranges never actually overlap (A: "one"/"two", B: "three"/"four"), but a naive block-extent reconstruction would otherwise splice B nested inside A and silently reassign B's own trailing paragraph to A.
+    // A's own \bkmkend and B's own \bkmkstart both land in the second paragraph of the same table cell — the shape ExaDev/documents.js#1040 names: block-granularity cannot express "A ends immediately before this paragraph's own remainder, which is B's" as two separate extents, since the paragraph is this reader's finest addressable unit. The two source ranges never actually overlap (A: "one"/"two", B: "three"/"four"), but a naive block-extent reconstruction would otherwise splice B nested inside A and silently reassign B's own trailing paragraph to A.
     const { document, diagnostics } = readRtfContent(
       bytes(
         `${HEADER}\\trowd\\trleft0\\cellx4320\\pard\\intbl{\\*\\bkmkstart A}one\\par\\pard\\intbl two{\\*\\bkmkend A}{\\*\\bkmkstart B}three\\par\\pard\\intbl{\\*\\bkmkend B}four\\cell\\row\\pard x\\par}`,
@@ -2478,7 +2478,7 @@ describe("bookmarks", () => {
     expect(
       start?.kind === "constructStart" ? start.descriptor : undefined,
     ).toEqual({ kind: "anchor", anchorType: "bookmark", name: "A" });
-    // B's own text still reads correctly -- only its own bookmark construct is dropped, not its content.
+    // B's own text still reads correctly — only its own bookmark construct is dropped, not its content.
     const paragraphs = cellBlocks.filter(
       (block): block is ContentParagraph => block.kind === "paragraph",
     );
@@ -2487,14 +2487,14 @@ describe("bookmarks", () => {
       "twothree",
       "four",
     ]);
-    // Adjacent runs, split apart only because startBookmark/endBookmark each flush the pending run at the marker's own position -- not two genuinely different formatting spans.
+    // Adjacent runs, split apart only because startBookmark/endBookmark each flush the pending run at the marker's own position — not two genuinely different formatting spans.
     expect(paragraphs[1]?.runs).toHaveLength(2);
     const crossed = diagnostics.find(
       (diagnostic) =>
         diagnostic.code === RtfDiagnosticCodes.BLOCK_CONSTRUCT_EXTENTS_CROSSED,
     );
     expect(crossed?.message).toBe(
-      "a 'anchor' construct's own block extent crosses an already-open one instead of nesting inside or sitting disjoint from it -- both bookmarks likely closed and opened within the same paragraph, which this reader cannot express as two separate extents, so this one is dropped",
+      "a 'anchor' construct's own block extent crosses an already-open one instead of nesting inside or sitting disjoint from it — both bookmarks likely closed and opened within the same paragraph, which this reader cannot express as two separate extents, so this one is dropped",
     );
   });
 
@@ -2535,9 +2535,9 @@ describe("bookmarks", () => {
   });
 });
 
-// RTF 1.9.1, "Character Revision Mark Properties": <chrev> is `\revised? \revauthN? \revdttmN? \crauthN? \crdateN? \deleted? \revauthdelN? \revdttmdelN? \mvf? \mvt? \mvauthN? \mvdateN?`, and every one of them is a character property -- so a tracked change is a run-scoped extent, never a block marker.
+// RTF 1.9.1, "Character Revision Mark Properties": <chrev> is `\revised? \revauthN? \revdttmN? \crauthN? \crdateN? \deleted? \revauthdelN? \revdttmdelN? \mvf? \mvt? \mvauthN? \mvdateN?`, and every one of them is a character property — so a tracked change is a run-scoped extent, never a block marker.
 describe("revision marks", () => {
-  // "\*\revtbl -- This group consists of subgroups that each identify the author of a revision in the document, as in {Author1;}."
+  // "\*\revtbl — This group consists of subgroups that each identify the author of a revision in the document, as in {Author1;}."
   const REVTBL = "{\\*\\revtbl{Unknown;}{A. Reviewer;}{B. Editor;}}";
   // 1 January 2024, 09:30, packed into the DTTM bit field the spec tabulates: minute 30, hour 9, day 1, month 1, year 2024-1900 = 124.
   const DTTM_2024_01_01_0930 =
@@ -2665,7 +2665,7 @@ describe("revision marks", () => {
   });
 });
 
-// RTF 1.9.1, "Table Definitions": <celldef> is the run of properties before each \cellxN, and <brdr> is `<brdrk> \brdrwN? \brspN? \brdrcfN?` -- the same border production paragraph borders use, so a cell's side is named by \clbrdrt/l/b/r and described by what follows it.
+// RTF 1.9.1, "Table Definitions": <celldef> is the run of properties before each \cellxN, and <brdr> is `<brdrk> \brdrwN? \brspN? \brdrcfN?` — the same border production paragraph borders use, so a cell's side is named by \clbrdrt/l/b/r and described by what follows it.
 describe("table cell formatting", () => {
   it("reads each side's own \\clbrdr* border with its style, width and colour", () => {
     const table = firstTable(
@@ -2795,7 +2795,7 @@ describe("table cell formatting", () => {
       `${HEADER}\\trowd\\trleft0\\clvertalt\\cellx1440\\clvertalc\\cellx2880\\clvertalb\\cellx4320` +
         "\\pard\\intbl top\\cell\\pard\\intbl middle\\cell\\pard\\intbl bottom\\cell\\row\\pard x\\par}",
     );
-    // \clvertalt is the spec's own default ("Text is top-aligned in cell (the default)"), and the field's absence already means top, so the word carries nothing the absence doesn't -- the same collapse the reader applies to \sbkpage against ContentSection.breakType.
+    // \clvertalt is the spec's own default ("Text is top-aligned in cell (the default)"), and the field's absence already means top, so the word carries nothing the absence doesn't — the same collapse the reader applies to \sbkpage against ContentSection.breakType.
     expect(table.rows[0]?.cells.map((cell) => cell.verticalAlign)).toEqual([
       undefined,
       "center",
@@ -2840,7 +2840,7 @@ describe("unicode fallback skip", () => {
   });
 
   it("counts a control word or symbol inside the fallback region as exactly one skipped character", () => {
-    // \uc1 skips one "character" -- here a \'hh escape, which the spec's own rule counts as a single character even though it is itself a control word, not a literal byte. If the escape were NOT consumed as the fallback, the decoded e-acute would leak into the visible text alongside the real Unicode character.
+    // \uc1 skips one "character" — here a \'hh escape, which the spec's own rule counts as a single character even though it is itself a control word, not a literal byte. If the escape were NOT consumed as the fallback, the decoded e-acute would leak into the visible text alongside the real Unicode character.
     const runs =
       paragraphsOf(`${HEADER}\\pard \\uc1\\u9731 \\'e9after\\par}`)[0]?.runs ??
       [];
@@ -2850,7 +2850,7 @@ describe("unicode fallback skip", () => {
   });
 
   it("consumes a fallback text run exactly its own length and resumes reading real text immediately after it", () => {
-    // \uc3 with a three-byte fallback run ("abc") that is its OWN complete text token -- ended by \b0, a genuine token boundary, rather than continuing into "real" within the same token -- so the skip count exactly exhausts it. The reader must advance past the whole token and reset its own byte offset there, not stop one byte short of it (which would leak a trailing byte of "abc" into the visible text).
+    // \uc3 with a three-byte fallback run ("abc") that is its OWN complete text token — ended by \b0, a genuine token boundary, rather than continuing into "real" within the same token — so the skip count exactly exhausts it. The reader must advance past the whole token and reset its own byte offset there, not stop one byte short of it (which would leak a trailing byte of "abc" into the visible text).
     const runs =
       paragraphsOf(`${HEADER}\\pard \\uc3\\u9731 abc\\b0 real\\par}`)[0]
         ?.runs ?? [];
@@ -2860,7 +2860,7 @@ describe("unicode fallback skip", () => {
   });
 
   it("counts a two-byte text run as fully consumed only once its own last byte is reached, then genuinely skips the control word right after it", () => {
-    // \uc3 with a two-byte fallback ("ab", its own complete token) plus \i (a control word, "considered a single character" per the spec) makes exactly 3 -- the skip must fully exhaust "ab" AND advance past \i, so \i's own formatting effect never reaches "real". A reader that stopped one byte short of "ab" (leaving its own token index unmoved) would leave \i unskipped, letting it toggle italics on for real.
+    // \uc3 with a two-byte fallback ("ab", its own complete token) plus \i (a control word, "considered a single character" per the spec) makes exactly 3 — the skip must fully exhaust "ab" AND advance past \i, so \i's own formatting effect never reaches "real". A reader that stopped one byte short of "ab" (leaving its own token index unmoved) would leave \i unskipped, letting it toggle italics on for real.
     const runs =
       paragraphsOf(`${HEADER}\\pard \\uc3\\u9731 ab\\i real\\par}`)[0]?.runs ??
       [];
@@ -2870,7 +2870,7 @@ describe("unicode fallback skip", () => {
   });
 
   it("leaves a text token's own trailing bytes visible when the fallback count is smaller than the whole token", () => {
-    // \uc2 skips only the first two bytes of the SEVEN-byte token "abcreal" -- the reader must resume from that exact byte offset within the SAME token, not skip the whole token or stop reading it altogether.
+    // \uc2 skips only the first two bytes of the SEVEN-byte token "abcreal" — the reader must resume from that exact byte offset within the SAME token, not skip the whole token or stop reading it altogether.
     const runs =
       paragraphsOf(`${HEADER}\\pard \\uc2\\u9731 abcreal\\par}`)[0]?.runs ?? [];
     const text = runs.map((run) => run.text).join("");
@@ -2880,7 +2880,7 @@ describe("unicode fallback skip", () => {
 
 describe("block-scoped construct extent ordering", () => {
   it("returns the block list itself, not undefined, when there are genuinely no extents to splice at all", () => {
-    // No bookmark anywhere in this document, so sectionBlockExtents is empty and insertConstructMarkers' own fast path is what actually produces the section's blocks -- an emptied fast path would hand endSection undefined instead of the real block list.
+    // No bookmark anywhere in this document, so sectionBlockExtents is empty and insertConstructMarkers' own fast path is what actually produces the section's blocks — an emptied fast path would hand endSection undefined instead of the real block list.
     const blocks = blocksOf(`${HEADER}\\pard one\\par\\pard two\\par}`);
     expect(blocks).toEqual([
       { kind: "paragraph", runs: [{ text: "one", sizePt: 12 }] },
@@ -2896,7 +2896,7 @@ describe("block-scoped construct extent ordering", () => {
   }
 
   it("nests a shorter extent inside a longer one that opens at the identical start index", () => {
-    // "outer" and "inner" both start in the first paragraph -- tied startIndex -- but "outer" spans one paragraph further before its own \bkmkend, so at that tie the longer extent must sort first (open outermost).
+    // "outer" and "inner" both start in the first paragraph — tied startIndex — but "outer" spans one paragraph further before its own \bkmkend, so at that tie the longer extent must sort first (open outermost).
     const blocks = blocksOf(
       `${HEADER}\\pard{\\*\\bkmkstart outer}{\\*\\bkmkstart inner}One\\par\\pard Two{\\*\\bkmkend inner}\\par\\pard Three{\\*\\bkmkend outer}\\par}`,
     );
@@ -2914,7 +2914,7 @@ describe("block-scoped construct extent ordering", () => {
   });
 
   it("keeps two disjoint extents in their own start order, earlier-starting first, when their spans do not tie", () => {
-    // "first" and "second" open at genuinely different, non-tied start indices -- the sort's own first comparator clause (by startIndex) is what this fixture exercises, distinct from the tied-start case above.
+    // "first" and "second" open at genuinely different, non-tied start indices — the sort's own first comparator clause (by startIndex) is what this fixture exercises, distinct from the tied-start case above.
     const blocks = blocksOf(
       `${HEADER}\\pard{\\*\\bkmkstart first}One\\par\\pard Two{\\*\\bkmkend first}\\par\\pard{\\*\\bkmkstart second}Three\\par\\pard Four{\\*\\bkmkend second}\\par}`,
     );
@@ -2926,7 +2926,7 @@ describe("block-scoped construct extent ordering", () => {
   });
 
   it("keeps a shorter extent nested inside a longer one that shares its exact end index, rather than dropping it as crossing", () => {
-    // "inner" starts strictly after "outer" but closes at the SAME index "outer" does -- true nesting with a shared endpoint, not a crossing pair. If the crossing check's own end-side comparison read "greater than or equal to" instead of strictly "greater than", this exact tie would be misread as a cross and "inner" would be dropped.
+    // "inner" starts strictly after "outer" but closes at the SAME index "outer" does — true nesting with a shared endpoint, not a crossing pair. If the crossing check's own end-side comparison read "greater than or equal to" instead of strictly "greater than", this exact tie would be misread as a cross and "inner" would be dropped.
     const blocks = blocksOf(
       `${HEADER}\\pard{\\*\\bkmkstart outer}Zero\\par\\pard{\\*\\bkmkstart inner}One\\par\\pard Two\\par\\pard Three{\\*\\bkmkend outer}{\\*\\bkmkend inner}\\par}`,
     );
@@ -2940,8 +2940,8 @@ describe("block-scoped construct extent ordering", () => {
     ).toHaveLength(2);
   });
 
-  it("still sorts an inner extent's later start ahead of an outer one's earlier start when the inner extent closes -- and so is pushed into the pending list -- first", () => {
-    // "outer" opens before "inner" does but closes after it, so "inner" is the one whose \bkmkend is seen first and is therefore the one flushClosingBookmarks pushes into sectionBlockExtents first -- the pre-sort array order here is [inner, outer], the REVERSE of correct start order. If the sort's own first comparator clause summed the two startIndex values instead of subtracting them, the comparator would return the same (wrong-signed) result regardless of which extent it was asked about first -- since addition is commutative -- and never trigger the swap this out-of-order push requires, leaving "inner" sorted ahead of "outer". dropCrossingExtents would then see "outer" arrive after "inner" already claimed the first slot and misread the true nesting as a cross, dropping "outer" entirely.
+  it("still sorts an inner extent's later start ahead of an outer one's earlier start when the inner extent closes — and so is pushed into the pending list — first", () => {
+    // "outer" opens before "inner" does but closes after it, so "inner" is the one whose \bkmkend is seen first and is therefore the one flushClosingBookmarks pushes into sectionBlockExtents first — the pre-sort array order here is [inner, outer], the REVERSE of correct start order. If the sort's own first comparator clause summed the two startIndex values instead of subtracting them, the comparator would return the same (wrong-signed) result regardless of which extent it was asked about first — since addition is commutative — and never trigger the swap this out-of-order push requires, leaving "inner" sorted ahead of "outer". dropCrossingExtents would then see "outer" arrive after "inner" already claimed the first slot and misread the true nesting as a cross, dropping "outer" entirely.
     const blocks = blocksOf(
       `${HEADER}\\pard{\\*\\bkmkstart outer}Zero\\par\\pard{\\*\\bkmkstart inner}One\\par\\pard{\\*\\bkmkend inner}Two\\par\\pard{\\*\\bkmkend outer}Three\\par}`,
     );
@@ -3074,7 +3074,7 @@ describe("table merges read into the dense grid", () => {
 
 describe("bookmark bookkeeping", () => {
   it("never routes a nested destination's own text into the enclosing bookmark's own name, even one sharing state.bookmark by reference", () => {
-    // \listtext is a real, known destination ("listText", not "body", not "fieldInstruction", not any of the formField* destinations already checked above) that can genuinely nest inside a \*\bkmkstart group while inheriting state.bookmark by reference -- the same shape the \*\ud-inside-\*\fldinst fixture elsewhere in this file exercises for state.field. A check keyed on state.bookmark's own definedness alone, without also requiring THIS group's own destination to genuinely be bookmarkStart/bookmarkEnd, would append "stray" straight into the bookmark's own name instead of silently discarding it (the trailing comment on this whole if-chain: "listText" ... discard).
+    // \listtext is a real, known destination ("listText", not "body", not "fieldInstruction", not any of the formField* destinations already checked above) that can genuinely nest inside a \*\bkmkstart group while inheriting state.bookmark by reference — the same shape the \*\ud-inside-\*\fldinst fixture elsewhere in this file exercises for state.field. A check keyed on state.bookmark's own definedness alone, without also requiring THIS group's own destination to genuinely be bookmarkStart/bookmarkEnd, would append "stray" straight into the bookmark's own name instead of silently discarding it (the trailing comment on this whole if-chain: "listText" ... discard).
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\*\\bkmkstart{\\listtext stray}name}marked{\\*\\bkmkend name}\\par}`,
     )[0];
@@ -3120,7 +3120,7 @@ describe("bookmark bookkeeping", () => {
   });
 
   it("resolves a bookmark's own \\bkmkcolfN/\\bkmkcollN range only when at least one of the pair is stated", () => {
-    // Naming only \bkmkcolf without \bkmkcoll (or vice versa) is spec-legal ("These controls are used within the \*\bkmkstart destination"), and must still produce a source-residue clause -- neither field being stated at all is the only case with no clause.
+    // Naming only \bkmkcolf without \bkmkcoll (or vice versa) is spec-legal ("These controls are used within the \*\bkmkstart destination"), and must still produce a source-residue clause — neither field being stated at all is the only case with no clause.
     const first = paragraphsOf(
       `${HEADER}\\pard{\\*\\bkmkstart\\bkmkcolf3 First}x{\\*\\bkmkend First}\\par}`,
     )[0];
@@ -3151,7 +3151,7 @@ describe("bookmark bookkeeping", () => {
   });
 
   it("genuinely deletes a resolved bookmark from the open set, so a second \\bkmkend for the same name reports it as unpaired rather than resolving twice", () => {
-    // If endBookmark's own delete call were a no-op, 'dup' would still be sitting in openBookmarks when the second bkmkend arrives: it would be silently (and wrongly) treated as still open instead of triggering the bkmkend-with-no-bkmkstart diagnostic here, AND it would still be open at the document's own end, triggering reportUnclosedBookmarks' own "has no matching \\bkmkend" diagnostic instead -- a DIFFERENT diagnostic that also names 'dup' and would, wrongly, still leave the naive count-only assertion this replaced at exactly one match, masking the missing delete entirely. Asserting the exact message (not just a length-one count of anything mentioning 'dup') is what actually distinguishes the two.
+    // If endBookmark's own delete call were a no-op, 'dup' would still be sitting in openBookmarks when the second bkmkend arrives: it would be silently (and wrongly) treated as still open instead of triggering the bkmkend-with-no-bkmkstart diagnostic here, AND it would still be open at the document's own end, triggering reportUnclosedBookmarks' own "has no matching \\bkmkend" diagnostic instead — a DIFFERENT diagnostic that also names 'dup' and would, wrongly, still leave the naive count-only assertion this replaced at exactly one match, masking the missing delete entirely. Asserting the exact message (not just a length-one count of anything mentioning 'dup') is what actually distinguishes the two.
     const { diagnostics } = readRtfContent(
       bytes(
         `${HEADER}\\pard {\\*\\bkmkstart dup}one{\\*\\bkmkend dup}{\\*\\bkmkend dup}\\par}`,
@@ -3171,7 +3171,7 @@ describe("bookmark bookkeeping", () => {
 
 describe("run and paragraph accumulation", () => {
   it("gives each closed paragraph its own distinct serial identity", () => {
-    // A bookmark opened in the second paragraph and closed in the third must resolve to a block-scoped extent (its own start and end genuinely differ), which only holds if each closed paragraph actually gets a serial distinct from every other one -- a serial that collided across paragraphs would make the second paragraph's own identity indistinguishable from the first's.
+    // A bookmark opened in the second paragraph and closed in the third must resolve to a block-scoped extent (its own start and end genuinely differ), which only holds if each closed paragraph actually gets a serial distinct from every other one — a serial that collided across paragraphs would make the second paragraph's own identity indistinguishable from the first's.
     const blocks = blocksOf(
       `${HEADER}\\pard One\\par\\pard{\\*\\bkmkstart s}Two\\par\\pard Three{\\*\\bkmkend s}\\par}`,
     );
@@ -3188,7 +3188,7 @@ describe("run and paragraph accumulation", () => {
     const paragraph = paragraphsOf(
       `${HEADER}{\\*\\revtbl{Unknown;}{A. Reviewer;}}\\pard kept \\revised\\revauth1 second\\revised0  middle \\deleted\\revauthdel1 first-in-source\\deleted0  end\\par}`,
     )[0];
-    // Two disjoint provenance extents on the same paragraph: the insertion opens AFTER the deletion in source order here is irrelevant -- what matters is the extents come back ordered by their own startRun, not source-declaration order, matching document-schema.js's own well-formedness expectation for RunConstructExtent[].
+    // Two disjoint provenance extents on the same paragraph: the insertion opens AFTER the deletion in source order here is irrelevant — what matters is the extents come back ordered by their own startRun, not source-declaration order, matching document-schema.js's own well-formedness expectation for RunConstructExtent[].
     const starts = (paragraph?.constructs ?? []).map(
       (extent) => extent.startRun,
     );
@@ -3197,7 +3197,7 @@ describe("run and paragraph accumulation", () => {
   });
 
   it("still tie-breaks two run-scoped constructs sharing a startRun by endRun, ascending, when a bookmark extent (pushed first, regardless of its own numeric range) shares its start with a shorter coalesced revision extent (pushed second)", () => {
-    // Both 'B' (a bookmark) and the revision mark on 'hi' start at run 0, but pendingRunConstructs entries are always spread into the pre-sort array BEFORE coalesceRunConstructs' own output, regardless of which one's numeric range is actually smaller -- so the pre-sort array here is [B(start=0,end=2), revision(start=0,end=1)], tied on the first comparator clause and wrong on the second. A second comparator clause that summed the two endRun values instead of subtracting them would return the same non-discriminating result regardless of argument order (both terms tied at zero on the first clause), never triggering the swap this reversed-by-numeric-value push order requires.
+    // Both 'B' (a bookmark) and the revision mark on 'hi' start at run 0, but pendingRunConstructs entries are always spread into the pre-sort array BEFORE coalesceRunConstructs' own output, regardless of which one's numeric range is actually smaller — so the pre-sort array here is [B(start=0,end=2), revision(start=0,end=1)], tied on the first comparator clause and wrong on the second. A second comparator clause that summed the two endRun values instead of subtracting them would return the same non-discriminating result regardless of argument order (both terms tied at zero on the first clause), never triggering the swap this reversed-by-numeric-value push order requires.
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\*\\bkmkstart B}\\revised\\revauth1 hi\\revised0  more{\\*\\bkmkend B}\\par}`,
     )[0];
@@ -3209,8 +3209,8 @@ describe("run and paragraph accumulation", () => {
     expect(extents[1]?.endRun).toBe(2);
   });
 
-  it("still sorts a nested bookmark pair into start order when the inner one's own endBookmark call -- and so its own push into pendingRunConstructs -- happens before the outer one's", () => {
-    // 'inner' opens after 'outer' (startRun 1, not 0) but closes first, so ITS OWN pendingRunConstructs.push happens before 'outer's -- the pre-sort array here is [inner(start=1), outer(start=0)], the reverse of correct start order, exactly mirroring the block-extent sort's own out-of-push-order case above. A sort comparator that summed instead of subtracted the two startRun values (or one whose "||" read "&&") would return the same, non-discriminating result regardless of which extent it was asked about first, and never trigger the swap this reversed push order requires.
+  it("still sorts a nested bookmark pair into start order when the inner one's own endBookmark call — and so its own push into pendingRunConstructs — happens before the outer one's", () => {
+    // 'inner' opens after 'outer' (startRun 1, not 0) but closes first, so ITS OWN pendingRunConstructs.push happens before 'outer's — the pre-sort array here is [inner(start=1), outer(start=0)], the reverse of correct start order, exactly mirroring the block-extent sort's own out-of-push-order case above. A sort comparator that summed instead of subtracted the two startRun values (or one whose "||" read "&&") would return the same, non-discriminating result regardless of which extent it was asked about first, and never trigger the swap this reversed push order requires.
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\*\\bkmkstart outer}one {\\*\\bkmkstart inner}two{\\*\\bkmkend inner} three{\\*\\bkmkend outer}\\par}`,
     )[0];
@@ -3271,7 +3271,7 @@ describe("paragraph geometry derivation", () => {
 
 describe("table row and column derivation", () => {
   it("does not open a synthetic empty cell when a \\row closes with no pending text and no cell already collected", () => {
-    // \row with genuinely nothing accumulated -- no \cell mark reached at all -- must not call endCell and manufacture a phantom cell from nothing; TABLE_ROW_WITHOUT_DEFINITION already covers that case on its own terms.
+    // \row with genuinely nothing accumulated — no \cell mark reached at all — must not call endCell and manufacture a phantom cell from nothing; TABLE_ROW_WITHOUT_DEFINITION already covers that case on its own terms.
     const { diagnostics } = readRtfContent(
       bytes(`${HEADER}\\trowd\\trleft0\\cellx1440\\row\\pard x\\par}`),
     );
@@ -3284,7 +3284,7 @@ describe("table row and column derivation", () => {
   });
 
   it("resets inTable to false once \\row closes, even with no \\pard afterward to do it instead", () => {
-    // Every other table fixture in this file follows its own \row with an explicit \pard, which resets para.inTable back to false on its own via defaultParagraphState() -- masking whether \row's OWN reset does anything at all. Typing text directly after \row, with no \pard in between, is the one shape that actually depends on \row's own case resetting inTable itself: without it, "after" would stay routed into the now-closed table's own cellBlocks instead of the section's real blocks.
+    // Every other table fixture in this file follows its own \row with an explicit \pard, which resets para.inTable back to false on its own via defaultParagraphState() — masking whether \row's OWN reset does anything at all. Typing text directly after \row, with no \pard in between, is the one shape that actually depends on \row's own case resetting inTable itself: without it, "after" would stay routed into the now-closed table's own cellBlocks instead of the section's real blocks.
     const blocks = blocksOf(
       `${HEADER}\\trowd\\trleft0\\cellx1440\\pard\\intbl cell\\cell\\row after\\par}`,
     );
@@ -3313,7 +3313,7 @@ describe("table row and column derivation", () => {
   });
 
   it("still closes a dangling cell holding only an already-flushed block (no pending text at all) when \\row follows directly", () => {
-    // A picture already pushed into cellBlocks via addBlocks, with nothing typed after it -- pendingRunText is genuinely empty here, so this exercises endRow's own cellBlocks.length check specifically, not the pendingRunText half of its guard.
+    // A picture already pushed into cellBlocks via addBlocks, with nothing typed after it — pendingRunText is genuinely empty here, so this exercises endRow's own cellBlocks.length check specifically, not the pendingRunText half of its guard.
     const PNG_HEX =
       "89504e470d0a1a0a0000000d494844520000000100000001080600000" +
       "01f15c4890000000a49444154789c6300010000050001" +
@@ -3334,7 +3334,7 @@ describe("table row and column derivation", () => {
   });
 
   it("splices a bookmark closed inside a cell into that cell's own blocks, not the section's", () => {
-    // 'inCell' opens in the cell's first paragraph and closes in its second, still inside the same cell -- endCell's own flushClosingBookmarks call must target inTable=true (the cell's own cellBlockExtents), not the section's, or the marker pair ends up missing from the cell entirely.
+    // 'inCell' opens in the cell's first paragraph and closes in its second, still inside the same cell — endCell's own flushClosingBookmarks call must target inTable=true (the cell's own cellBlockExtents), not the section's, or the marker pair ends up missing from the cell entirely.
     const table = firstTable(
       `${HEADER}\\trowd\\trleft0\\cellx1440\\pard\\intbl{\\*\\bkmkstart inCell}One\\par\\pard\\intbl Two{\\*\\bkmkend inCell}\\cell\\row\\pard x\\par}`,
     );
@@ -3348,7 +3348,7 @@ describe("table row and column derivation", () => {
   });
 
   it("still resolves a bookmark whose own \\bkmkend lands in an otherwise-empty trailing paragraph right before \\cell, via endCell's own explicit flush rather than endParagraph's", () => {
-    // \bkmkend here is the ONLY thing in its paragraph -- no text follows it before \cell -- so endParagraph's own force=false early return (runs.length === 0) fires without ever calling resolveBookmarkPositions, leaving 'trailing' still sitting in closingBookmarks when endCell reaches its OWN explicit flushClosingBookmarks(true, ...) call two lines later. That explicit call is the only thing that still resolves it; if its own hardcoded inTable argument read false instead of true, closing.inTable (true, since the bookmark opened inside \intbl) would no longer match, and 'trailing' would be wrongly dropped as straddling a cell boundary it never actually crossed.
+    // \bkmkend here is the ONLY thing in its paragraph — no text follows it before \cell — so endParagraph's own force=false early return (runs.length === 0) fires without ever calling resolveBookmarkPositions, leaving 'trailing' still sitting in closingBookmarks when endCell reaches its OWN explicit flushClosingBookmarks(true, ...) call two lines later. That explicit call is the only thing that still resolves it; if its own hardcoded inTable argument read false instead of true, closing.inTable (true, since the bookmark opened inside \intbl) would no longer match, and 'trailing' would be wrongly dropped as straddling a cell boundary it never actually crossed.
     const table = firstTable(
       `${HEADER}\\trowd\\trleft0\\cellx1440\\pard\\intbl{\\*\\bkmkstart trailing}One\\par\\pard\\intbl{\\*\\bkmkend trailing}\\cell\\row\\pard x\\par}`,
     );
@@ -3417,7 +3417,7 @@ describe("table row and column derivation", () => {
   });
 
   it("never scans for a continuation at all under a genuinely ordinary cell that carries no \\clvmgf anchor of its own", () => {
-    // Row 0's cell is a plain, unmerged cell -- no \clvmgf -- while row 1's cell at the identical column IS a \clvmrg continuation (malformed on its own, since nothing anchors it, but the reader's own rowSpan derivation must still be gated on THIS cell's own verticalMergeFirst flag, not on whether a match happens to exist somewhere later). A guard that entered the scanning loop unconditionally would find row 1's continuation anyway and wrongly extend row 0's plain cell to rowSpan 2.
+    // Row 0's cell is a plain, unmerged cell — no \clvmgf — while row 1's cell at the identical column IS a \clvmrg continuation (malformed on its own, since nothing anchors it, but the reader's own rowSpan derivation must still be gated on THIS cell's own verticalMergeFirst flag, not on whether a match happens to exist somewhere later). A guard that entered the scanning loop unconditionally would find row 1's continuation anyway and wrongly extend row 0's plain cell to rowSpan 2.
     const table = firstTable(
       HEADER +
         "\\trowd\\trleft0\\cellx1440\\pard\\intbl A\\cell\\row" +
@@ -3427,7 +3427,7 @@ describe("table row and column derivation", () => {
   });
 
   it("derives rowSpan of exactly three when a merge run spans two genuine continuation rows, not one", () => {
-    // Two REAL \clvmrg continuation rows after the anchor, not one: a scan loop that stepped backwards instead of forwards would revisit the anchor's own row on its second iteration (rowIndex itself is never a verticalMergeContinuation, so that immediately breaks the loop) and stop after counting only the FIRST continuation -- rowSpan 2 -- indistinguishable from the existing "exactly two, not three" fixture above, which only ever has one continuation row to begin with and so cannot tell a reversed loop direction apart from a correct one.
+    // Two REAL \clvmrg continuation rows after the anchor, not one: a scan loop that stepped backwards instead of forwards would revisit the anchor's own row on its second iteration (rowIndex itself is never a verticalMergeContinuation, so that immediately breaks the loop) and stop after counting only the FIRST continuation — rowSpan 2 — indistinguishable from the existing "exactly two, not three" fixture above, which only ever has one continuation row to begin with and so cannot tell a reversed loop direction apart from a correct one.
     const table = firstTable(
       HEADER +
         "\\trowd\\trleft0\\clvmgf\\cellx1440\\pard\\intbl A\\cell\\row" +
@@ -3540,7 +3540,7 @@ describe("block accumulation across \\object/\\result scratch rendering", () => 
   });
 
   it("flushes a run still pending before a genuinely non-empty addBlocks call, keeping it a separate run from identically-formatted text typed after", () => {
-    // A successfully-decoded picture is the ordinary non-empty case addBlocks' own flushRun call exists for: without it, "before" would stay pending across the image insertion and silently merge with "after" into one run once the image block itself has already been spliced between them positionally -- the two texts would still end up in the same final paragraph (addBlocks does not close the paragraph, only flushes and splices), so only the RUN boundary between them reveals a missing flush.
+    // A successfully-decoded picture is the ordinary non-empty case addBlocks' own flushRun call exists for: without it, "before" would stay pending across the image insertion and silently merge with "after" into one run once the image block itself has already been spliced between them positionally — the two texts would still end up in the same final paragraph (addBlocks does not close the paragraph, only flushes and splices), so only the RUN boundary between them reveals a missing flush.
     const PNG_HEX =
       "89504e470d0a1a0a0000000d494844520000000100000001080600000" +
       "01f15c4890000000a49444154789c6300010000050001" +
@@ -3553,7 +3553,7 @@ describe("block accumulation across \\object/\\result scratch rendering", () => 
   });
 
   it("never flushes a run still pending when addBlocks is called with a genuinely empty list, so it stays merged with identically-formatted text typed after the call", () => {
-    // A failed-picture-decode addBlocks call (the fixture above) never even reaches addBlocks' own emptiness check: buildPicture returning undefined is guarded by its OWN `if (image !== undefined)` at the call site, so addBlocks is never called there at all. objectState.resultBlocks is the one real call site that can genuinely pass an empty array -- an \object whose \result had no content of its own. \shppict (a "body"-kind destination, not a fresh \result scratch) types "blah" directly into the OUTER paragraph's own pendingRunText AFTER \result has already closed and restored state, so it is still genuinely pending -- unflushed -- at the exact moment \object's own close calls addBlocks(resultBlocks=[], ...). A guard-less addBlocks would flush it regardless of its own list being empty, splitting it from the identically-formatted text typed after \object closes.
+    // A failed-picture-decode addBlocks call (the fixture above) never even reaches addBlocks' own emptiness check: buildPicture returning undefined is guarded by its OWN `if (image !== undefined)` at the call site, so addBlocks is never called there at all. objectState.resultBlocks is the one real call site that can genuinely pass an empty array — an \object whose \result had no content of its own. \shppict (a "body"-kind destination, not a fresh \result scratch) types "blah" directly into the OUTER paragraph's own pendingRunText AFTER \result has already closed and restored state, so it is still genuinely pending — unflushed — at the exact moment \object's own close calls addBlocks(resultBlocks=[], ...). A guard-less addBlocks would flush it regardless of its own list being empty, splitting it from the identically-formatted text typed after \object closes.
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\object{\\result}{\\shppict blah}} more\\par}`,
     )[0];
@@ -3579,7 +3579,7 @@ describe("block accumulation across \\object/\\result scratch rendering", () => 
   });
 
   it("keeps a run pending before \\result as its own separate run, not merged with identically-formatted text typed after \\object closes", () => {
-    // \result here is genuinely EMPTY and \objdata is absent entirely, so nothing else along the way ever calls addBlocks with a non-empty list -- not \objdata's own decode (there is none), not \object's own close splicing resultBlocks in (endResultScratch returns [] for an empty scratch, and addBlocks' own length===0 guard makes that call a no-op too). beginResultScratch's own flushRun call is therefore the ONLY thing that can push "pending " into a real run before \object's group closes. captureAccumulatorState/restoreAccumulatorState round-trip the raw pendingRunText/pendingRunKey either way, so a MISSING flushRun call is invisible to a plain "is the text still there" check -- it only shows up as pendingRunKey surviving the round trip unflushed, which then lets "pending " silently merge with " more" into ONE run instead of staying two, since " more" shares the identical (plain) formatting key and appendText only flushes on a key CHANGE.
+    // \result here is genuinely EMPTY and \objdata is absent entirely, so nothing else along the way ever calls addBlocks with a non-empty list — not \objdata's own decode (there is none), not \object's own close splicing resultBlocks in (endResultScratch returns [] for an empty scratch, and addBlocks' own length===0 guard makes that call a no-op too). beginResultScratch's own flushRun call is therefore the ONLY thing that can push "pending " into a real run before \object's group closes. captureAccumulatorState/restoreAccumulatorState round-trip the raw pendingRunText/pendingRunKey either way, so a MISSING flushRun call is invisible to a plain "is the text still there" check — it only shows up as pendingRunKey surviving the round trip unflushed, which then lets "pending " silently merge with " more" into ONE run instead of staying two, since " more" shares the identical (plain) formatting key and appendText only flushes on a key CHANGE.
     const paragraph = paragraphsOf(
       `${HEADER}\\pard pending {\\object{\\result}} more\\par}`,
     )[0];
@@ -3598,7 +3598,7 @@ describe("block accumulation across \\object/\\result scratch rendering", () => 
   });
 
   it("closes a table whose \\row is the very last thing in \\result's own content, with no \\par after it to trigger endParagraph's own closeTable call", () => {
-    // \result's content ends on \row with para.inTable still true -- endParagraph(para, false)'s own internal closeTable() call is gated on `!para.inTable`, so it does NOT fire here (unlike the fixture above, where \result's content ends on an explicit \par OUTSIDE the table, and THAT closeTable call is what actually closes it, leaving endResultScratch's own trailing call redundant for that case). endResultScratch's own explicit closeTable() call is the only thing that can still turn tableRows into a real block here.
+    // \result's content ends on \row with para.inTable still true — endParagraph(para, false)'s own internal closeTable() call is gated on `!para.inTable`, so it does NOT fire here (unlike the fixture above, where \result's content ends on an explicit \par OUTSIDE the table, and THAT closeTable call is what actually closes it, leaving endResultScratch's own trailing call redundant for that case). endResultScratch's own explicit closeTable() call is the only thing that can still turn tableRows into a real block here.
     const blocks = blocksOf(
       `${HEADER}\\pard{\\object\\objemb{\\*\\objdata 00}{\\result{\\trowd\\trleft0\\cellx1440\\pard\\intbl cell\\cell\\row}}}\\par}`,
     );
@@ -3608,7 +3608,7 @@ describe("block accumulation across \\object/\\result scratch rendering", () => 
 
 describe("section finalisation", () => {
   it("drops a genuinely empty trailing section rather than emitting a blank ContentSection after a real one", () => {
-    // \sectd alone, with no \par and no text at all, leaves nothing pending -- finish()'s own trailing endSection() call reaches this section with blocks.length actually 0 (unlike an explicit \sect, which always force-closes at least an empty paragraph first).
+    // \sectd alone, with no \par and no text at all, leaves nothing pending — finish()'s own trailing endSection() call reaches this section with blocks.length actually 0 (unlike an explicit \sect, which always force-closes at least an empty paragraph first).
     const sections = sectionsOf(
       `${HEADER}\\sectd\\pard First.\\par\\sect\\sectd}`,
     );
@@ -3629,8 +3629,8 @@ describe("section finalisation", () => {
     expect(document.sections[0]?.blocks).toEqual([]);
   });
 
-  it("still pushes the document's only section through endSection itself when it is genuinely empty, not finish()'s own generic fallback -- observable via breakType surviving", () => {
-    // The "sections.length > 0" half of endSection's own drop condition matters specifically because it is FALSE for this, the very first section -- so an empty-but-first section is still pushed HERE, with its own real geometry and breakType, rather than silently skipped and left for finish()'s own fallback (which pushes only bare geometry and blocks: [], no breakType field at all) to paper over. A ">= 0" in place of "> 0" is always true regardless of section count, so it would wrongly skip this push too, and the sole difference an all-empty document can reveal is exactly the breakType finish()'s own fallback never carries.
+  it("still pushes the document's only section through endSection itself when it is genuinely empty, not finish()'s own generic fallback — observable via breakType surviving", () => {
+    // The "sections.length > 0" half of endSection's own drop condition matters specifically because it is FALSE for this, the very first section — so an empty-but-first section is still pushed HERE, with its own real geometry and breakType, rather than silently skipped and left for finish()'s own fallback (which pushes only bare geometry and blocks: [], no breakType field at all) to paper over. A ">= 0" in place of "> 0" is always true regardless of section count, so it would wrongly skip this push too, and the sole difference an all-empty document can reveal is exactly the breakType finish()'s own fallback never carries.
     const { document } = readRtfContent(bytes(`${HEADER}\\sectd\\sbknone}`));
     if (document.kind !== "wordprocessing") {
       throw new Error("expected a wordprocessing document");
@@ -3647,7 +3647,7 @@ describe("section finalisation", () => {
   });
 
   it("omits the breakType key entirely from a section that stated no \\sbk* of its own, rather than an explicit key holding undefined", () => {
-    // A plain toEqual (or any check that only reads section.breakType) cannot tell "the key is absent" apart from "the key is present with value undefined" -- both compare equal. Object.hasOwn is what actually distinguishes an unconditionally-spread { breakType: section.breakType } (present, undefined) from the real conditional spread this line performs.
+    // A plain toEqual (or any check that only reads section.breakType) cannot tell "the key is absent" apart from "the key is present with value undefined" — both compare equal. Object.hasOwn is what actually distinguishes an unconditionally-spread { breakType: section.breakType } (present, undefined) from the real conditional spread this line performs.
     const sections = sectionsOf(`${HEADER}\\pard x\\par}`);
     expect(sections[0]).toBeDefined();
     expect(Object.hasOwn(sections[0] ?? {}, "breakType")).toBe(false);
@@ -3790,7 +3790,7 @@ describe("picture derivation", () => {
 
 describe("embedded object size hints", () => {
   it("states both \\objw and \\objh in the degrade diagnostic when both are present", () => {
-    // The size-hint clause rides buildEmbeddedObject's OWN no-payload/undecodable messages, not the enclosing \object group's "no \objdata at all" message -- so a real (if empty) \objdata destination is what actually exercises it.
+    // The size-hint clause rides buildEmbeddedObject's OWN no-payload/undecodable messages, not the enclosing \object group's "no \objdata at all" message — so a real (if empty) \objdata destination is what actually exercises it.
     const { diagnostics } = readRtfContent(
       bytes(
         `${HEADER}\\pard{\\object\\objemb\\objw40\\objh20{\\*\\objdata }}\\par}`,
@@ -3827,7 +3827,7 @@ describe("embedded object size hints", () => {
   });
 
   it("does not let an unrelated \\object-scope word overwrite \\objh's own recorded height", () => {
-    // \objcropl is a real \object-scope word carrying its own numeric parameter (a crop amount, RTF 1.9.1 "Objects"), not \objw -- the only other name applyControlWord's own \object dispatch ever checks for. A dispatch that falls through to the \objh assignment for any name other than \objw, rather than genuinely matching "objh", would let this later, unrelated word silently overwrite the height \objh20 already recorded.
+    // \objcropl is a real \object-scope word carrying its own numeric parameter (a crop amount, RTF 1.9.1 "Objects"), not \objw — the only other name applyControlWord's own \object dispatch ever checks for. A dispatch that falls through to the \objh assignment for any name other than \objw, rather than genuinely matching "objh", would let this later, unrelated word silently overwrite the height \objh20 already recorded.
     const { diagnostics } = readRtfContent(
       bytes(
         `${HEADER}\\pard{\\object\\objemb\\objh20\\objcropl999{\\*\\objdata }}\\par}`,
@@ -3915,7 +3915,7 @@ describe("group-open dispatch", () => {
   });
 
   it("never initialises picture state for a RECOGNISED destination other than picture, either", () => {
-    // \b above has no recognised destination of its own at all (known === undefined), so it never reaches the `if (known !== undefined) { ... if (kind === "picture") ... }` branch this guards -- it exercises a DIFFERENT, earlier guard entirely. \*\bkmkstart IS a known, non-picture destination, so this is the one fixture that actually reaches the kind === "picture" check itself: a `true` in its place would still spuriously initialise picture state here too.
+    // \b above has no recognised destination of its own at all (known === undefined), so it never reaches the `if (known !== undefined) { ... if (kind === "picture") ... }` branch this guards — it exercises a DIFFERENT, earlier guard entirely. \*\bkmkstart IS a known, non-picture destination, so this is the one fixture that actually reaches the kind === "picture" check itself: a `true` in its place would still spuriously initialise picture state here too.
     const { diagnostics } = readRtfContent(
       bytes(
         `${HEADER}\\pard{\\*\\bkmkstart name}plain{\\*\\bkmkend name}\\par}`,
@@ -3956,7 +3956,7 @@ describe("group-open dispatch", () => {
   });
 
   it("never routes a nested destination's own hex escape into the enclosing \\pict's own binary payload", () => {
-    // \*\bkmkstart is a real, known destination -- a child group nested inside \pict -- so state.picture is inherited by reference (unlike destination, which the child correctly switches to "bookmarkStart"). A guard keyed on destination alone, forced true, would misroute the hex escape into the picture's own binary buffer instead of the bookmark's name.
+    // \*\bkmkstart is a real, known destination — a child group nested inside \pict — so state.picture is inherited by reference (unlike destination, which the child correctly switches to "bookmarkStart"). A guard keyed on destination alone, forced true, would misroute the hex escape into the picture's own binary buffer instead of the bookmark's name.
     const PNG_HEX =
       "89504e470d0a1a0a0000000d494844520000000100000001080600000" +
       "01f15c4890000000a49444154789c6300010000050001" +
@@ -3970,7 +3970,7 @@ describe("group-open dispatch", () => {
   });
 
   it("never routes a nested destination's own control word into the enclosing \\pict's own control-word handling", () => {
-    // A guard keyed on `state.destination === "picture"` alone (picture inherited by reference into every descendant, exactly as the hex-escape test above states) would misroute \bkmkcolf1 into applyPictureControlWord (a no-op for a name it does not recognise) instead of the bookmarkStart-specific handling that actually applies it -- silently dropping the column residue rather than quarantining it onto the anchor's own descriptor.
+    // A guard keyed on `state.destination === "picture"` alone (picture inherited by reference into every descendant, exactly as the hex-escape test above states) would misroute \bkmkcolf1 into applyPictureControlWord (a no-op for a name it does not recognise) instead of the bookmarkStart-specific handling that actually applies it — silently dropping the column residue rather than quarantining it onto the anchor's own descriptor.
     const paragraph = paragraphsOf(
       `${HEADER}\\pard{\\pict\\pngblip\\picwgoal720\\pichgoal720{\\*\\bkmkstart\\bkmkcolf1 name}}x{\\*\\bkmkend name}\\par}`,
     )[0];
@@ -3981,7 +3981,7 @@ describe("group-open dispatch", () => {
   });
 
   it("never routes a nested destination's own control word into the enclosing \\object's own \\objw/\\objh handling", () => {
-    // A guard keyed on `state.destination === "object"` alone (object inherited by reference into every descendant, exactly like picture above) would misroute \objw1440 into ContentBuilder's own object-scoped assignment even from a sibling destination that never stated it directly on \object itself -- surfacing a size-hint clause in the degrade diagnostic that the source never actually declared there.
+    // A guard keyed on `state.destination === "object"` alone (object inherited by reference into every descendant, exactly like picture above) would misroute \objw1440 into ContentBuilder's own object-scoped assignment even from a sibling destination that never stated it directly on \object itself — surfacing a size-hint clause in the degrade diagnostic that the source never actually declared there.
     const { diagnostics } = readRtfContent(
       bytes(
         `${HEADER}\\pard{\\object{\\*\\bkmkstart\\objw1440 name}{\\*\\objdata }}{\\*\\bkmkend name}\\par}`,
@@ -3997,7 +3997,7 @@ describe("group-open dispatch", () => {
   });
 
   it("never lets an arbitrary control word inside a bookmarkStart destination masquerade as \\bkmkcoll", () => {
-    // A forced-true `name === "bkmkcoll"` check here would set columnLast for ANY control word carrying a numeric parameter that reaches a bookmarkStart destination once name !== "bkmkcolf" -- \b1 included -- rather than only for a genuine \bkmkcollN. \b1 rather than a bare \b specifically: a bare toggle word's own param is already undefined, indistinguishable from columnLast's own untouched default.
+    // A forced-true `name === "bkmkcoll"` check here would set columnLast for ANY control word carrying a numeric parameter that reaches a bookmarkStart destination once name !== "bkmkcolf" — \b1 included — rather than only for a genuine \bkmkcollN. \b1 rather than a bare \b specifically: a bare toggle word's own param is already undefined, indistinguishable from columnLast's own untouched default.
     const paragraph = paragraphsOf(
       `${HEADER}\\pard{\\*\\bkmkstart\\b1 name}x{\\*\\bkmkend name}\\par}`,
     )[0];
@@ -4009,7 +4009,7 @@ describe("group-open dispatch", () => {
   });
 
   it("never applies a genuine \\ffprot from a sibling formField-related destination other than \\*\\formfield itself", () => {
-    // A forced-true `state.destination === "formField"` check here would apply \ffprot1 even from \*\ffname's own destination, since formField is shared by reference across every sibling -- locking content the source never actually locked from \*\formfield's own scope.
+    // A forced-true `state.destination === "formField"` check here would apply \ffprot1 even from \*\ffname's own destination, since formField is shared by reference across every sibling — locking content the source never actually locked from \*\formfield's own scope.
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\field{\\*\\fldinst FORMTEXT  {\\*\\formfield{\\fftype0\\fftypetxt0{\\*\\ffname\\ffprot1 Text1}}}}{\\fldrslt Lorem ipsum.}}\\par}`,
     )[0];
@@ -4070,7 +4070,7 @@ describe("group-open dispatch", () => {
   });
 
   it("never registers a bookmark opened inside a \\upr wrapper's own ANSI half, not just its text", () => {
-    // A plain group nested in the ANSI half falls through to state.destination ("unicodeWrapper") if the wrapperChild skip is disabled, and "unicodeWrapper" already silently discards direct TEXT on its own -- so the previous fixture's "kept"-only assertion can pass whether the ANSI half is genuinely skipped or merely text-discarded. A recognised, known destination (bkmkstart/bkmkend) tells the two apart: skipped, it is never opened at all and registers no bookmark; merely text-discarded, it is opened, processed, and closed as a real bookmark like any other, regardless of what its own #PCDATA renders as.
+    // A plain group nested in the ANSI half falls through to state.destination ("unicodeWrapper") if the wrapperChild skip is disabled, and "unicodeWrapper" already silently discards direct TEXT on its own — so the previous fixture's "kept"-only assertion can pass whether the ANSI half is genuinely skipped or merely text-discarded. A recognised, known destination (bkmkstart/bkmkend) tells the two apart: skipped, it is never opened at all and registers no bookmark; merely text-discarded, it is opened, processed, and closed as a real bookmark like any other, regardless of what its own #PCDATA renders as.
     const paragraph = paragraphsOf(
       `${HEADER}\\pard {\\upr {\\*\\bkmkstart hidden}x{\\*\\bkmkend hidden}{\\*\\ud kept}}\\par}`,
     )[0];
@@ -4125,7 +4125,7 @@ describe("group-open dispatch", () => {
 
 describe("unbalanced groups", () => {
   it("reports the exact still-open-at-end-of-input message, counting every group left open (the document's own root included)", () => {
-    // HEADER's own root {\rtf1 ... group is never closed by either fixture below -- neither ends with the document's own final "}" -- so the count always includes it alongside whatever else was left open.
+    // HEADER's own root {\rtf1 ... group is never closed by either fixture below — neither ends with the document's own final "}" — so the count always includes it alongside whatever else was left open.
     const { diagnostics } = readRtfContent(bytes(`${HEADER}\\pard{\\b text`));
     const found = diagnostics.find(
       (diagnostic) => diagnostic.code === RtfDiagnosticCodes.UNBALANCED_GROUP,
@@ -4136,7 +4136,7 @@ describe("unbalanced groups", () => {
   });
 
   it("still flushes and keeps trailing ANSI text that reached input's end with no closing brace or other event to flush it itself", () => {
-    // "text" here is the very last thing the tokenizer produced: nothing after it (no control word, no brace, no hex byte) ever triggers flushBytes on its own, so only the main loop's own unconditional trailing flushBytes() call -- reached once the token stream itself is exhausted -- moves it out of the pending-bytes buffer and into a run finish() can still build a paragraph from. Without that call, "text" is silently dropped: emitText/appendText never runs for it, runs stays empty, and endParagraph's own force=false early return then produces no paragraph at all instead of one holding this trailing text.
+    // "text" here is the very last thing the tokenizer produced: nothing after it (no control word, no brace, no hex byte) ever triggers flushBytes on its own, so only the main loop's own unconditional trailing flushBytes() call — reached once the token stream itself is exhausted — moves it out of the pending-bytes buffer and into a run finish() can still build a paragraph from. Without that call, "text" is silently dropped: emitText/appendText never runs for it, runs stays empty, and endParagraph's own force=false early return then produces no paragraph at all instead of one holding this trailing text.
     const paragraph = paragraphsOf(`${HEADER}\\pard{\\b text`).at(-1);
     expect(paragraph?.runs.map((run) => run.text).join("")).toBe("text");
   });
@@ -4175,7 +4175,7 @@ describe("\\uN surrogate arithmetic", () => {
   });
 
   it("emits no character at all for a bare \\u with no numeric parameter", () => {
-    // A malformed \u with no digits after it has code === undefined; the code branch that calls emitText must be skipped entirely rather than calling String.fromCharCode(undefined), which coerces to U+0000 (NaN's own ToUint16 result) and would silently insert a stray NUL character into the run. skipUnicodeFallback still runs unconditionally either way, consuming the one ANSI fallback character \uN's own grammar always requires -- so "b" here is the fallback, never part of the emitted text, regardless of code's own definedness.
+    // A malformed \u with no digits after it has code === undefined; the code branch that calls emitText must be skipped entirely rather than calling String.fromCharCode(undefined), which coerces to U+0000 (NaN's own ToUint16 result) and would silently insert a stray NUL character into the run. skipUnicodeFallback still runs unconditionally either way, consuming the one ANSI fallback character \uN's own grammar always requires — so "b" here is the fallback, never part of the emitted text, regardless of code's own definedness.
     const runs = paragraphsOf(`${HEADER}\\pard a\\u b\\par}`)[0]?.runs ?? [];
     expect(runs.map((run) => run.text).join("")).toBe("a");
   });
@@ -4373,7 +4373,7 @@ describe("structure control word edge cases", () => {
 
 describe("control word dispatch order", () => {
   it("reads \\bkmkcolf/\\bkmkcoll inside a bookmark start, but never lets a stray \\par there actually close a paragraph", () => {
-    // \par is a real structural word (builder.endParagraph), not merely a formatting flag, so a broken bookmarkStart guard that let it fall through would be directly observable as an extra paragraph -- unlike a stray \b, whose effect is confined to a group's own discarded char state either way.
+    // \par is a real structural word (builder.endParagraph), not merely a formatting flag, so a broken bookmarkStart guard that let it fall through would be directly observable as an extra paragraph — unlike a stray \b, whose effect is confined to a group's own discarded char state either way.
     const paragraphs = paragraphsOf(
       `${HEADER}\\pard before{\\*\\bkmkstart\\par Named}after{\\*\\bkmkend Named}\\par}`,
     );

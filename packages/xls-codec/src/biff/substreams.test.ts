@@ -40,7 +40,7 @@ function bofData(documentType: number): Uint8Array<ArrayBuffer> {
   );
 }
 
-/** Builds record fixtures carrying the stream offsets readRecords would have computed -- each record's own start, being four bytes of header plus its predecessor's data. */
+/** Builds record fixtures carrying the stream offsets readRecords would have computed — each record's own start, being four bytes of header plus its predecessor's data. */
 function records(
   ...specs: readonly { type: number; data: Uint8Array<ArrayBuffer> }[]
 ): BiffRecord[] {
@@ -273,7 +273,7 @@ describe("splitSubstreams", () => {
   });
 
   it("accepts a BOF carrying exactly its own four-byte prefix and nothing more", () => {
-    // BOF_PREFIX_SIZE (4) is the minimum, not a value that itself counts as "too few" -- the length check must be a strict `<`, not `<=`.
+    // BOF_PREFIX_SIZE (4) is the minimum, not a value that itself counts as "too few" — the length check must be a strict `<`, not `<=`.
     const substreams = splitSubstreams(
       groupRecords(
         records(
@@ -292,7 +292,7 @@ describe("splitSubstreams", () => {
   });
 
   it("nests a chart substream inside the worksheet substream that anchors it, resuming the worksheet's own records once the chart's EOF closes it", () => {
-    // An embedded chart's own BOF...EOF sits INSIDE the worksheet substream that anchors it ([MS-XLS] "Chart Area": "the chart is treated as a drawing ... contained within a worksheet") -- unlike splitSubstreams' pre-nesting behaviour, which would have treated the chart's BOF as ending the worksheet substream outright and silently dropped every worksheet record written after the chart's own EOF.
+    // An embedded chart's own BOF...EOF sits INSIDE the worksheet substream that anchors it ([MS-XLS] "Chart Area": "the chart is treated as a drawing ... contained within a worksheet") — unlike splitSubstreams' pre-nesting behaviour, which would have treated the chart's BOF as ending the worksheet substream outright and silently dropped every worksheet record written after the chart's own EOF.
     const substreams = splitSubstreams(
       groupRecords(
         records(

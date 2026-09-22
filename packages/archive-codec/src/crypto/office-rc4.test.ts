@@ -23,7 +23,7 @@ function fromHex(hex: string): Uint8Array<ArrayBuffer> {
 }
 
 describe("deriveOfficeRc4BlockKey", () => {
-  // A real vector from nolze/msoffcrypto-tool's own `_makekey` doctest (msoffcrypto/method/rc4.py), a third-party, real-world, actively-maintained library -- not authored for this test suite, and not something a bug in this module's own algorithm could pass by construction. This exact vector is what caught this module's own first implementation truncating Hfinal to 5 bytes (matching [MS-OFFCRYPTO] 2.3.6.1's own "encrypted using a 40-bit RC4 cipher" prose, which is wrong): the correct key is Hfinal in full, all 16 bytes, confirmed against this vector byte for byte, and independently against Apache POI's own BinaryRC4Decryptor/CryptoFunctions.generateKey.
+  // A real vector from nolze/msoffcrypto-tool's own `_makekey` doctest (msoffcrypto/method/rc4.py), a third-party, real-world, actively-maintained library — not authored for this test suite, and not something a bug in this module's own algorithm could pass by construction. This exact vector is what caught this module's own first implementation truncating Hfinal to 5 bytes (matching [MS-OFFCRYPTO] 2.3.6.1's own "encrypted using a 40-bit RC4 cipher" prose, which is wrong): the correct key is Hfinal in full, all 16 bytes, confirmed against this vector byte for byte, and independently against Apache POI's own BinaryRC4Decryptor/CryptoFunctions.generateKey.
   it("matches nolze/msoffcrypto-tool's own doctested block-0 key", () => {
     const salt = fromHex("e8772c1d91c56a37964761b280183217");
     const baseHash = deriveOfficeRc4BaseHash("password1", salt);
@@ -35,7 +35,7 @@ describe("deriveOfficeRc4BlockKey", () => {
 });
 
 describe("decryptOfficeRc4 password verification", () => {
-  // The same reference implementation's own `verifypw` doctest: decrypting a real EncryptedVerifier/EncryptedVerifierHash pair with the block-0 key and confirming MD5(decrypted verifier) equals the decrypted hash -- the exact check xls-codec's own workbook/encryption.ts performs before trusting a password.
+  // The same reference implementation's own `verifypw` doctest: decrypting a real EncryptedVerifier/EncryptedVerifierHash pair with the block-0 key and confirming MD5(decrypted verifier) equals the decrypted hash — the exact check xls-codec's own workbook/encryption.ts performs before trusting a password.
   it("recovers a verifier whose MD5 matches its own decrypted hash", () => {
     const salt = fromHex("e8772c1d91c56a37964761b280183217");
     const baseHash = deriveOfficeRc4BaseHash("password1", salt);

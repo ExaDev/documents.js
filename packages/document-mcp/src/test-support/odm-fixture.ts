@@ -1,6 +1,6 @@
 import { ODF_MEDIA_TYPES, zipPackage } from "odf.js";
 
-// Hand-authored ODF XML zipped via odf.js's own zipPackage, matching this repo's own src/test-support/docx-extras-fixture.ts convention -- a real package built at the byte level rather than through any format-specific write API, since neither odf.js nor documents.js exposes a .odm writer at all. Ported from documents.js's own src/test-support/odm.ts: the text:section/text:section-source shape below (a self-closing text:section-source, a relative "../chapterN.odt" href, text:filter-name="writer8", no xlink:show/xlink:type) is exactly what a real, unmodified LibreOffice .odm was empirically confirmed to produce -- see documents.js's own odmToPdf README/gotchas entry for the real-file verification this shape is checked against.
+// Hand-authored ODF XML zipped via odf.js's own zipPackage, matching this repo's own src/test-support/docx-extras-fixture.ts convention — a real package built at the byte level rather than through any format-specific write API, since neither odf.js nor documents.js exposes a .odm writer at all. Ported from documents.js's own src/test-support/odm.ts: the text:section/text:section-source shape below (a self-closing text:section-source, a relative "../chapterN.odt" href, text:filter-name="writer8", no xlink:show/xlink:type) is exactly what a real, unmodified LibreOffice .odm was empirically confirmed to produce — see documents.js's own odmToPdf README/gotchas entry for the real-file verification this shape is checked against.
 
 function enc(value: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(value);
@@ -50,7 +50,7 @@ function chapterContentXml(
   );
 }
 
-// A minimal but structurally authentic odt chapter -- a real mimetype-first-and-stored zip, one heading and one paragraph -- with caller-supplied text so a test can tell which chapter's content ended up where in the combined output.
+// A minimal but structurally authentic odt chapter — a real mimetype-first-and-stored zip, one heading and one paragraph — with caller-supplied text so a test can tell which chapter's content ended up where in the combined output.
 export function chapterOdtBytes(
   heading: string,
   body: string,

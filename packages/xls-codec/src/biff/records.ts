@@ -1,8 +1,8 @@
 import { MAX_RECORD_DATA_SIZE } from "./record-types";
 
-// The BIFF record framing, and nothing above it. [MS-XLS] 2.1.4 defines a record as exactly three components -- a two-byte unsigned record type, a two-byte unsigned record size, then `size` bytes of record data -- laid end to end with no padding, alignment, or terminator (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/170e90ce-87d7-4758-9331-dcf14cd72388). Every multi-byte integer in the stream is little-endian, as [MS-XLS] 1.3.1 fixes for the whole format (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/bc969080-8cb9-4dfe-afc0-059dfc43cd56).
+// The BIFF record framing, and nothing above it. [MS-XLS] 2.1.4 defines a record as exactly three components — a two-byte unsigned record type, a two-byte unsigned record size, then `size` bytes of record data — laid end to end with no padding, alignment, or terminator (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/170e90ce-87d7-4758-9331-dcf14cd72388). Every multi-byte integer in the stream is little-endian, as [MS-XLS] 1.3.1 fixes for the whole format (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/bc969080-8cb9-4dfe-afc0-059dfc43cd56).
 //
-// This layer deliberately does NOT merge Continue records into the record they continue, even though that is what "reading a record" ultimately has to mean. Continuation is not uniform: for most records a Continue's data simply appends, but for a record carrying an XLUnicodeRichExtendedString ([MS-XLS] 2.5.293, the SST case) a Continue that resumes mid-string re-states the string's own fHighByte flag in its first byte, which is framing belonging to the string rather than to the record. Blind concatenation would splice that flag byte into the character data and silently corrupt every string after the first continuation boundary -- the exact truncation-class bug that makes a naive BIFF reader look correct on small files and wrong on large ones. So the blocks are reported as written and each record's own reader decides how to join them; see biff/continued.ts for the reader that gets this right.
+// This layer deliberately does NOT merge Continue records into the record they continue, even though that is what "reading a record" ultimately has to mean. Continuation is not uniform: for most records a Continue's data simply appends, but for a record carrying an XLUnicodeRichExtendedString ([MS-XLS] 2.5.293, the SST case) a Continue that resumes mid-string re-states the string's own fHighByte flag in its first byte, which is framing belonging to the string rather than to the record. Blind concatenation would splice that flag byte into the character data and silently corrupt every string after the first continuation boundary — the exact truncation-class bug that makes a naive BIFF reader look correct on small files and wrong on large ones. So the blocks are reported as written and each record's own reader decides how to join them; see biff/continued.ts for the reader that gets this right.
 
 /** A single record as the stream carries it: its type from the enumeration ([MS-XLS] 2.3), and its data component, exactly `size` bytes long. */
 export interface BiffRecord {
@@ -23,7 +23,7 @@ export class BiffFormatError extends Error {
 /**
  * The one classification every per-record recovery boundary in this package draws around its own try/catch: a BiffFormatError is a malformed-input degrade (this one record, name, or rule resolves to nothing rather than aborting every other one in the same substream), while anything else is a genuine bug this package's own code produced and must not be silently absorbed alongside real malformed-input cases.
  *
- * Centralising the classification here -- rather than every call site restating `if (!(err instanceof BiffFormatError)) throw err` in its own catch block -- means the "is this recoverable" question is tested once, in this module's own test file, instead of being duplicated (and therefore separately mutation-tested) at every one of the dozens of sites across workbook/ and biff/ that degrade a malformed record the identical way.
+ * Centralising the classification here — rather than every call site restating `if (!(err instanceof BiffFormatError)) throw err` in its own catch block — means the "is this recoverable" question is tested once, in this module's own test file, instead of being duplicated (and therefore separately mutation-tested) at every one of the dozens of sites across workbook/ and biff/ that degrade a malformed record the identical way.
  */
 export function recoverFromFormatError<T>(err: unknown, fallback: T): T {
   if (err instanceof BiffFormatError) {
@@ -32,7 +32,7 @@ export function recoverFromFormatError<T>(err: unknown, fallback: T): T {
   throw err;
 }
 
-/** The four-byte record header: a two-byte type followed by a two-byte size. Exported for workbook/encryption.ts, which needs a record's own data start offset (the byte position right after this header) to derive the correct RC4 keystream position -- [MS-XLS] 2.2.10 counts a record's own header bytes toward the encryption stream's position even though the header itself is never encrypted. */
+/** The four-byte record header: a two-byte type followed by a two-byte size. Exported for workbook/encryption.ts, which needs a record's own data start offset (the byte position right after this header) to derive the correct RC4 keystream position — [MS-XLS] 2.2.10 counts a record's own header bytes toward the encryption stream's position even though the header itself is never encrypted. */
 export const HEADER_SIZE = 4;
 
 /**

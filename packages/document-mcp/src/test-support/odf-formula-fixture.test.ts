@@ -2,7 +2,7 @@ import { unzipPackage } from "odf.js";
 import { describe, expect, it } from "vitest";
 import { odfFormulaBytes } from "./odf-formula-fixture";
 
-// ODF (OASIS Open Document Format Part 3, "Packages") requires the "mimetype" part to be the zip's very first entry, stored uncompressed with a zero-length extra field, so a reader can identify the container's media type from fixed byte offsets alone. Checked directly against the raw zip bytes (a DataView over the local file header, not odf.js's own unzipPackage, which normalises stored vs deflated content away entirely) -- otherwise nothing pins the entry's own name or its "stored" flag, both of which a real ODF-consuming reader depends on.
+// ODF (OASIS Open Document Format Part 3, "Packages") requires the "mimetype" part to be the zip's very first entry, stored uncompressed with a zero-length extra field, so a reader can identify the container's media type from fixed byte offsets alone. Checked directly against the raw zip bytes (a DataView over the local file header, not odf.js's own unzipPackage, which normalises stored vs deflated content away entirely) — otherwise nothing pins the entry's own name or its "stored" flag, both of which a real ODF-consuming reader depends on.
 function assertMimetypeEntryLayout(bytes: Uint8Array, mediaType: string): void {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const decoder = new TextDecoder();

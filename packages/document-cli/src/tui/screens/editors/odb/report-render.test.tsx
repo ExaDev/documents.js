@@ -11,7 +11,7 @@ import {
 import { settle, waitForFrame } from "../../../test-support.js";
 import { OdbHarness } from "./test-support.js";
 
-// Unlike report-screens.test.tsx (which never touches disk, since browsing structure only ever reads the values seeded into the harness), rendering a report re-reads and re-decodes doc.path for real (render-odb-report.ts's own doc comment explains why an OdbOpenDocument carries no live Package). So this copies the real fixture into a scratch directory rather than pointing the harness at the checked-in fixture path directly -- the default destination the render screen pre-fills sits next to doc.path, and this suite genuinely writes there.
+// Unlike report-screens.test.tsx (which never touches disk, since browsing structure only ever reads the values seeded into the harness), rendering a report re-reads and re-decodes doc.path for real (render-odb-report.ts's own doc comment explains why an OdbOpenDocument carries no live Package). So this copies the real fixture into a scratch directory rather than pointing the harness at the checked-in fixture path directly — the default destination the render screen pre-fills sits next to doc.path, and this suite genuinely writes there.
 const REPORTS = loadFormAndReportOdbReports();
 const SAMPLE_TABLES: readonly HsqldbTable[] = [
   {
@@ -54,7 +54,7 @@ describe("the report-render flow (odbReportDetail -> odbReportRender)", () => {
       frame.includes("data source: query"),
     );
     await settle();
-    // Enter, on the report detail screen, renders this report rather than opening any one line -- see report-detail.tsx's own onSelect.
+    // Enter, on the report detail screen, renders this report rather than opening any one line — see report-detail.tsx's own onSelect.
     stdin.write("\r");
 
     await waitForFrame(lastFrame, (frame) =>
@@ -62,7 +62,7 @@ describe("the report-render flow (odbReportDetail -> odbReportRender)", () => {
     );
     await settle();
 
-    // The destination field arrives pre-filled with a real, writable path next to doc.path (defaultReportRenderDestination in report-render.tsx), cursor at its end -- the same "starts filled, cursor at end, typed text appends" convention export-options.test.tsx already exercises for ExportOptionsScreen's own destination field. Typing a suffix that itself ends in .pdf keeps the whole path a valid render target (detectFormat reads the LAST '.' in the final path segment), while genuinely exercising the field's own typing/onChange path rather than accepting the default untouched.
+    // The destination field arrives pre-filled with a real, writable path next to doc.path (defaultReportRenderDestination in report-render.tsx), cursor at its end — the same "starts filled, cursor at end, typed text appends" convention export-options.test.tsx already exercises for ExportOptionsScreen's own destination field. Typing a suffix that itself ends in .pdf keeps the whole path a valid render target (detectFormat reads the LAST '.' in the final path segment), while genuinely exercising the field's own typing/onChange path rather than accepting the default untouched.
     const typedSuffix = "-typed.pdf";
     const destination = join(
       dirname(odbPath),

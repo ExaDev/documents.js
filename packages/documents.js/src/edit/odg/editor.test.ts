@@ -39,7 +39,7 @@ describe("openOdg / createOdg", () => {
     const editor = openOdg(minimalOdgBytes());
     const pages = editor.pages();
     expect(pages).toHaveLength(1);
-    // Only the text frame is a draw:frame -- shapes() (like OdpSlide's own) does not include vector primitives (draw:rect/ellipse/line/path), matching page.ts's own documented scope.
+    // Only the text frame is a draw:frame — shapes() (like OdpSlide's own) does not include vector primitives (draw:rect/ellipse/line/path), matching page.ts's own documented scope.
     expect(pages[0]?.shapes().map((s) => s.name)).toEqual(["TextFrame"]);
   });
 
@@ -98,7 +98,7 @@ describe("OdgEditor.addPage / removePageAt", () => {
 });
 
 describe("OdgEditor.pageSize", () => {
-  it("defaults to A4 -- LibreOffice Draw's own real default", () => {
+  it("defaults to A4 — LibreOffice Draw's own real default", () => {
     const editor = createOdg();
     expect(editor.pageSize.widthPt).toBeCloseTo(595.28, 2);
     expect(editor.pageSize.heightPt).toBeCloseTo(841.89, 2);
@@ -284,7 +284,7 @@ describe("OdgPage.vectors: re-obtaining a live handle on an already-created vect
     expect(pages[0]?.vectors.map((v) => v.kind)).toEqual(["ellipse"]);
   });
 
-  it("addPath accepts an arbitrary caller-supplied subpath array, curves included -- a re-obtained handle reparses exactly those points back out of the written svg:d", () => {
+  it("addPath accepts an arbitrary caller-supplied subpath array, curves included — a re-obtained handle reparses exactly those points back out of the written svg:d", () => {
     const editor = createOdg();
     const page = editor.addPage();
     const subpaths: ContentSubpath[] = [
@@ -380,7 +380,7 @@ describe("paint order: vectors and shapes come back in document-add order, with 
     expect(pages[0]?.shapes).toHaveLength(2);
   });
 
-  it("reordering the add calls reorders the read-back paint order identically -- proving it is genuinely document-order-driven, not a coincidence", () => {
+  it("reordering the add calls reorders the read-back paint order identically — proving it is genuinely document-order-driven, not a coincidence", () => {
     const editor = createOdg();
     const page = editor.addPage();
     page.addLine({
@@ -466,7 +466,7 @@ describe("full editor round trip: open a real odg, add shapes and vectors includ
       "New label",
     );
 
-    // ...then, independently, via odf.js's own readOdgContent -- the actual downstream reader this package's ContentDocument pipeline depends on, proving the written package is genuinely valid ODF, not merely self-consistent with this package's own reader.
+    // ...then, independently, via odf.js's own readOdgContent — the actual downstream reader this package's ContentDocument pipeline depends on, proving the written package is genuinely valid ODF, not merely self-consistent with this package's own reader.
     const { pages } = readOdgContent(decodePackage(bytes));
     const firstPage = pages[0];
     if (firstPage === undefined) {
@@ -474,7 +474,7 @@ describe("full editor round trip: open a real odg, add shapes and vectors includ
     }
 
     const pathVectors = firstPage.vectors.filter((v) => v.kind === "path");
-    // The fixture already carries one real curve of its own (CurvePath1) -- the new one is disambiguated by its own distinctive fill colour.
+    // The fixture already carries one real curve of its own (CurvePath1) — the new one is disambiguated by its own distinctive fill colour.
     expect(pathVectors.length).toBeGreaterThanOrEqual(2);
     const newPath = pathVectors.find(
       (v) => v.fill?.g === 1 && v.fill.b === 1 && v.fill.r === 0,

@@ -33,7 +33,7 @@ import { readPptxContent } from "./pptx/read";
 import { buildXlsxPackageFromContent } from "./xlsx/build";
 import { readXlsxContent } from "./xlsx/content";
 
-// The DocumentTree-native surface, exercised end to end over real bytes rather than over an in-memory Package: every round trip below starts by zipping a package to bytes and decoding it back, so what these assert is the whole bytes -> DocumentTree -> bytes path a consumer actually drives, not just the tree adapter in isolation. Three separate properties are worth pinning per format, and each has its own test: the tree's SHAPE (that decomposition really happened -- one group per container, headings and lists nested inside their section group -- rather than a flat block list wearing a package envelope), the FLATTEN INVERSE (that the tree materialises back to exactly the flat content the content-level reader produces, which is what makes the two APIs interchangeable rather than merely adjacent), and the BYTE ROUND TRIP (that a package written back out and read again reproduces the same tree).
+// The DocumentTree-native surface, exercised end to end over real bytes rather than over an in-memory Package: every round trip below starts by zipping a package to bytes and decoding it back, so what these assert is the whole bytes -> DocumentTree -> bytes path a consumer actually drives, not just the tree adapter in isolation. Three separate properties are worth pinning per format, and each has its own test: the tree's SHAPE (that decomposition really happened — one group per container, headings and lists nested inside their section group — rather than a flat block list wearing a package envelope), the FLATTEN INVERSE (that the tree materialises back to exactly the flat content the content-level reader produces, which is what makes the two APIs interchangeable rather than merely adjacent), and the BYTE ROUND TRIP (that a package written back out and read again reproduces the same tree).
 
 const FIXTURES_DIR = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -91,7 +91,7 @@ function relationships(
 
 // --- docx ---------------------------------------------------------------------------------------------------------
 
-// A section carrying, in order: a level-1 heading (w:outlineLvl, ECMA-376's own heading mechanism), a body paragraph, two paragraphs of one numbered list (w:numPr), and a table. That mix is what makes the tree assertions meaningful -- a heading opens a group that swallows the blocks after it, a list opens its own, and a table stays a leaf.
+// A section carrying, in order: a level-1 heading (w:outlineLvl, ECMA-376's own heading mechanism), a body paragraph, two paragraphs of one numbered list (w:numPr), and a table. That mix is what makes the tree assertions meaningful — a heading opens a group that swallows the blocks after it, a list opens its own, and a table stays a leaf.
 function docxBody(): XmlNode {
   const heading = el("w:p", {}, [
     el("w:pPr", {}, [el("w:outlineLvl", { "w:val": "0" })]),
@@ -164,7 +164,7 @@ function docxBytes(): Uint8Array<ArrayBuffer> {
   });
 }
 
-// A section carrying one content control (structured document tag) wrapping two paragraphs -- the one thing docxBody() above never exercises: decompose must promote the sdt's matched constructStart/constructEnd pair into a SectionConstructGroupNode spanning both paragraphs, and buildDocxPackageFromContent's construct-writing side must write that same w:sdt back out.
+// A section carrying one content control (structured document tag) wrapping two paragraphs — the one thing docxBody() above never exercises: decompose must promote the sdt's matched constructStart/constructEnd pair into a SectionConstructGroupNode spanning both paragraphs, and buildDocxPackageFromContent's construct-writing side must write that same w:sdt back out.
 function docxBodyWithConstruct(): XmlNode {
   const sdt = el("w:sdt", {}, [
     el("w:sdtPr", {}, [
@@ -222,7 +222,7 @@ function docxBytesWithConstruct(): Uint8Array<ArrayBuffer> {
   });
 }
 
-// A section carrying three paragraphs whose one run each shares identical bold+red formatting -- the other thing docxBody() above never exercises: factorStyles must mint a shared styles-table entry over the three runs (bestGroup's own >= 2 positions threshold) and strip the matching run properties off all three, and buildDocxPackageFromContent must re-materialise them identically via flattenTree before writing.
+// A section carrying three paragraphs whose one run each shares identical bold+red formatting — the other thing docxBody() above never exercises: factorStyles must mint a shared styles-table entry over the three runs (bestGroup's own >= 2 positions threshold) and strip the matching run properties off all three, and buildDocxPackageFromContent must re-materialise them identically via flattenTree before writing.
 function boldRedRun(text: string): XmlNode {
   return el("w:r", {}, [
     el("w:rPr", {}, [el("w:b"), el("w:color", { "w:val": "FF0000" })]),
@@ -316,7 +316,7 @@ describe("readDocx: docx bytes -> DocumentTree", () => {
     ]);
     expect(lists[0]?.node.list).toEqual({ numId: "3", level: 0 });
 
-    // The table follows the last bullet at the same list level, so it lands inside that bullet's own group -- and stays a leaf there: decomposition groups a container's block flow, it never descends into a table's cells.
+    // The table follows the last bullet at the same list level, so it lands inside that bullet's own group — and stays a leaf there: decomposition groups a container's block flow, it never descends into a table's cells.
     const table = lists[1]?.children.find(
       (child) => "kind" in child && child.kind === "table",
     );
@@ -368,7 +368,7 @@ describe("readDocx: docx bytes -> DocumentTree", () => {
     const pkg = decodePackage(docxBytesWithRepeatedFormatting());
     const document = readDocx(pkg);
 
-    // The three paragraphs' identical bold+red run tuple crosses bestGroup's >= 2 positions threshold, so it mints one entry -- and every run loses its own direct bold/color in favour of the group-level ref that restores them.
+    // The three paragraphs' identical bold+red run tuple crosses bestGroup's >= 2 positions threshold, so it mints one entry — and every run loses its own direct bold/color in favour of the group-level ref that restores them.
     expect(document.styles).toEqual({
       s1: { run: { bold: true, color: { r: 1, g: 0, b: 0 } } },
     });
@@ -495,7 +495,7 @@ describe("buildDocxPackage: DocumentTree -> docx bytes", () => {
       serialiseEmbeddedPresentation: () => minimalPptxBytes(),
     });
     const after = readDocxContent(built);
-    // The written w:object rides a run inside its own paragraph, so the reader lifts the embed as the sibling after that paragraph's own (run-text-empty) block -- the same convention an inline image follows.
+    // The written w:object rides a run inside its own paragraph, so the reader lifts the embed as the sibling after that paragraph's own (run-text-empty) block — the same convention an inline image follows.
     const recovered = after.sections[0]?.blocks[1];
     expect(recovered?.kind).toBe("embeddedObject");
     expect(
@@ -598,7 +598,7 @@ describe("readPptx: pptx bytes -> DocumentTree", () => {
 
     const shapes = slides[0]?.children.filter(isShapeGroupNode) ?? [];
     expect(shapes).toHaveLength(2);
-    // A slide's paragraphs stay inside the shape that holds them -- flattening them across shapes would be a table-of-contents projection, not a decomposition.
+    // A slide's paragraphs stay inside the shape that holds them — flattening them across shapes would be a table-of-contents projection, not a decomposition.
     expect(
       shapes[1]?.children.filter(
         (child) => "kind" in child && child.kind === "paragraph",
@@ -659,7 +659,7 @@ describe("readXlsx / buildXlsxPackage: the xlsx DocumentTree boundary", () => {
   });
 
   it("builds byte-for-byte the package the flat pair builds, so routing through the tree costs no fidelity of its own", () => {
-    // The load-bearing property of this whole module: the tree path and the flat path are the same path. Stated as package equality rather than as a round-trip fixed point because the flat pair has two documented, pre-existing losses of its own -- cell comments are read but never written, and column widths re-approximate through xlsx's character-width unit on every write -- and neither is this module's to fix or to hide. What IS this module's to guarantee is that decompose-then-flatten adds nothing to that list, which is exactly what an identical built package says.
+    // The load-bearing property of this whole module: the tree path and the flat path are the same path. Stated as package equality rather than as a round-trip fixed point because the flat pair has two documented, pre-existing losses of its own — cell comments are read but never written, and column widths re-approximate through xlsx's character-width unit on every write — and neither is this module's to fix or to hide. What IS this module's to guarantee is that decompose-then-flatten adds nothing to that list, which is exactly what an identical built package says.
     const pkg = decodePackage(fixtureBytes("kitchen-sink.xlsx"));
 
     expect(buildXlsxPackage(readXlsx(pkg))).toEqual(
@@ -675,7 +675,7 @@ describe("readXlsx / buildXlsxPackage: the xlsx DocumentTree boundary", () => {
     );
   });
 
-  // A workbook's named ranges and table/List-object definitions have no flat ContentDocument spelling -- the schema's own verdict is that they ride the tree's definitions table naming their range -- so readXlsx attaches them where the flat reader structurally cannot.
+  // A workbook's named ranges and table/List-object definitions have no flat ContentDocument spelling — the schema's own verdict is that they ride the tree's definitions table naming their range — so readXlsx attaches them where the flat reader structurally cannot.
   function workbookWithTablesAndNames(): ReturnType<typeof decodePackage> {
     const worksheet = el("worksheet", {}, [
       el("sheetData", {}, [
@@ -803,7 +803,7 @@ describe("readXlsx / buildXlsxPackage: the xlsx DocumentTree boundary", () => {
       "xl/tables/table1.xml",
     );
     expect(Object.keys(treePackage.parts)).toContain("xl/tables/table1.xml");
-    // flattenTree itself still drops the table on the way to a flat ContentDocument -- unaffected by buildXlsxPackage now threading the tree's own definitions table through as buildXlsxPackageFromContent's own separate options argument.
+    // flattenTree itself still drops the table on the way to a flat ContentDocument — unaffected by buildXlsxPackage now threading the tree's own definitions table through as buildXlsxPackageFromContent's own separate options argument.
     expect(flattenTree(readXlsx(pkg))).toEqual(readXlsxContent(pkg));
   });
 

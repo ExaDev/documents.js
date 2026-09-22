@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import { useAppDispatch, useAppState } from "../../../state/context.js";
 import { anyOverlayOpen, currentScreen } from "../../../state/types.js";
 
-// A read-only screen reachable via the ':view-source' command, showing both `originalText` (the literal text this document was last opened/saved with -- see MarkdownOpenDocument's own doc comment: never mutated, never written back directly) and `doc.editor.toMarkdownText()` (what a save would write right now). These can genuinely differ even with zero edits made this session -- a heading-style, bullet-marker, or line-ending choice the writer normalises, or any construct README.md's own Gotchas table documents as lossy on the read side -- so both are shown side by side, labelled distinctly, rather than picking one and hiding the difference.
+// A read-only screen reachable via the ':view-source' command, showing both `originalText` (the literal text this document was last opened/saved with — see MarkdownOpenDocument's own doc comment: never mutated, never written back directly) and `doc.editor.toMarkdownText()` (what a save would write right now). These can genuinely differ even with zero edits made this session — a heading-style, bullet-marker, or line-ending choice the writer normalises, or any construct README.md's own Gotchas table documents as lossy on the read side — so both are shown side by side, labelled distinctly, rather than picking one and hiding the difference.
 export function MarkdownViewSourceScreen(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();

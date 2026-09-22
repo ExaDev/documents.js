@@ -1,12 +1,12 @@
-// A hand-built [MS-OLEPS] Property Set Stream encoder for the oleps reader's tests, independent of oleps/write.ts's own construction (the same "test-support hand-rolls its own bytes rather than reusing the module under test" discipline test-support/cfb.ts already follows for the CFB reader): given a formatId and a list of typed field specs, it emits a genuine single-property-set stream -- header, then the PropertySet packet's Size/NumProperties/PropertyIdentifierAndOffset dictionary/typed values -- whose bytes the reader under test must parse back into the same fields.
+// A hand-built [MS-OLEPS] Property Set Stream encoder for the oleps reader's tests, independent of oleps/write.ts's own construction (the same "test-support hand-rolls its own bytes rather than reusing the module under test" discipline test-support/cfb.ts already follows for the CFB reader): given a formatId and a list of typed field specs, it emits a genuine single-property-set stream — header, then the PropertySet packet's Size/NumProperties/PropertyIdentifierAndOffset dictionary/typed values — whose bytes the reader under test must parse back into the same fields.
 //
 // Test-support only: excluded from the published dist per the family convention.
 
 export type FieldValue =
   | { readonly type: "VT_I2"; readonly value: number }
   | { readonly type: "VT_I4"; readonly value: number }
-  | { readonly type: "VT_LPSTR"; readonly value: string } // ASCII only -- windows-1252 and ASCII agree below 0x80, which is all these tests ever need to encode
-  | { readonly type: "VT_LPSTR_UTF16"; readonly value: string } // a VT_LPSTR (0x001E) CodePageString whose Characters are UTF-16LE -- what a real producer writes when the property set's own CodePage declares CP_WINUNICODE ([MS-OLEPS] 2.19)
+  | { readonly type: "VT_LPSTR"; readonly value: string } // ASCII only — windows-1252 and ASCII agree below 0x80, which is all these tests ever need to encode
+  | { readonly type: "VT_LPSTR_UTF16"; readonly value: string } // a VT_LPSTR (0x001E) CodePageString whose Characters are UTF-16LE — what a real producer writes when the property set's own CodePage declares CP_WINUNICODE ([MS-OLEPS] 2.19)
   | { readonly type: "VT_LPWSTR"; readonly value: string }
   | {
       readonly type: "VT_FILETIME";
@@ -102,7 +102,7 @@ function encodeValue(value: FieldValue): Uint8Array<ArrayBuffer> {
       return bytes;
     }
     case "VT_LPSTR_UTF16": {
-      // The identical CodePageString shape VT_LPSTR uses (Size, then null-terminated Characters padded to 4 bytes), but Characters is UTF-16LE, not ASCII -- Size therefore counts bytes, not code units, and is twice encodeUnicodeString's own Length.
+      // The identical CodePageString shape VT_LPSTR uses (Size, then null-terminated Characters padded to 4 bytes), but Characters is UTF-16LE, not ASCII — Size therefore counts bytes, not code units, and is twice encodeUnicodeString's own Length.
       const wide = encodeUnicodeString(value.value);
       const wideView = new DataView(wide.buffer);
       const units = wideView.getUint32(0, true);
@@ -124,7 +124,7 @@ function encodeValue(value: FieldValue): Uint8Array<ArrayBuffer> {
   }
 }
 
-/** Builds a single-property-set [MS-OLEPS] PropertySetStream: header (ByteOrder/Version/SystemIdentifier/CLSID=GUID_NULL/NumPropertySets=1/FMTID0/Offset0), then the PropertySet packet -- fields emitted in the given order, each entry's PropertyIdentifierAndOffset pointing at its own value, immediately after the dictionary. */
+/** Builds a single-property-set [MS-OLEPS] PropertySetStream: header (ByteOrder/Version/SystemIdentifier/CLSID=GUID_NULL/NumPropertySets=1/FMTID0/Offset0), then the PropertySet packet — fields emitted in the given order, each entry's PropertyIdentifierAndOffset pointing at its own value, immediately after the dictionary. */
 export function propertySetStream(
   formatId: string,
   fields: readonly FieldSpec[],

@@ -6,37 +6,37 @@ import { encodeXmlText } from "../../xml/entities";
 import { attr, childrenWithTag, rootElement } from "../util";
 import { findMainPartPath, findRelatedPartPath } from "../opc";
 
-// Resolves word/numbering.xml's real w:abstractNum/w:num definitions -- the glyph/format, start-at value, and restart rule a consumer needs to actually render a list's own markers -- as a companion to (not a replacement for) ContentListMembership (document-schema.js), which read.ts's readListMembership already tracks unchanged: a paragraph's own numId/level membership. NumberingDefinitions is deliberately a separate, top-level structure exported alongside DocxDocument rather than folded into ContentListMembership itself, for two reasons: (1) ContentListMembership is document-schema.js's own schema, shared verbatim across ooxml.js/odf.js/documents.js -- widening it with an ooxml-specific numbering-definition payload would leak this package's own model into a schema the sibling packages also depend on; (2) a definition is a genuinely document-level resource referenced by numId, not a per-paragraph one -- every paragraph sharing a numId would otherwise carry an identical copy of that numId's full level table repeated on every paragraph, rather than the keyed-map-once, referenced-by-id-many-times shape this file provides.
+// Resolves word/numbering.xml's real w:abstractNum/w:num definitions — the glyph/format, start-at value, and restart rule a consumer needs to actually render a list's own markers — as a companion to (not a replacement for) ContentListMembership (document-schema.js), which read.ts's readListMembership already tracks unchanged: a paragraph's own numId/level membership. NumberingDefinitions is deliberately a separate, top-level structure exported alongside DocxDocument rather than folded into ContentListMembership itself, for two reasons: (1) ContentListMembership is document-schema.js's own schema, shared verbatim across ooxml.js/odf.js/documents.js — widening it with an ooxml-specific numbering-definition payload would leak this package's own model into a schema the sibling packages also depend on; (2) a definition is a genuinely document-level resource referenced by numId, not a per-paragraph one — every paragraph sharing a numId would otherwise carry an identical copy of that numId's full level table repeated on every paragraph, rather than the keyed-map-once, referenced-by-id-many-times shape this file provides.
 
 export const NumberingLevelSchema = z.object({
-  // The raw ECMA-376 ST_NumberFormat value (w:numFmt/@w:val) verbatim -- e.g. 'decimal', 'lowerRoman', 'upperRoman', 'lowerLetter', 'upperLetter', 'bullet', 'none', 'ordinal', 'chicago', .... ST_NumberFormat has several dozen members; kept as the raw string rather than narrowed to a bounded enum, since a consumer rendering a list's own marker needs the exact value Word wrote, not a lossy narrowing to whichever subset this reader happened to enumerate (the same reasoning readCellBorderEdge in read.ts applies the other way, where ContentBorder's own style field genuinely is a bounded four-member enum it must narrow into).
+  // The raw ECMA-376 ST_NumberFormat value (w:numFmt/@w:val) verbatim — e.g. 'decimal', 'lowerRoman', 'upperRoman', 'lowerLetter', 'upperLetter', 'bullet', 'none', 'ordinal', 'chicago', .... ST_NumberFormat has several dozen members; kept as the raw string rather than narrowed to a bounded enum, since a consumer rendering a list's own marker needs the exact value Word wrote, not a lossy narrowing to whichever subset this reader happened to enumerate (the same reasoning readCellBorderEdge in read.ts applies the other way, where ContentBorder's own style field genuinely is a bounded four-member enum it must narrow into).
   format: z.string(),
   // w:lvlText/@w:val verbatim: a placeholder pattern like '%1.' or '%2)' for a numbered format (the digit names which level's own counter substitutes at that position, 1-based), or a literal bullet glyph string for format 'bullet'.
   text: z.string(),
   // w:start/@w:val: the value this level's counter begins from. Defaults to 1 when w:start itself is absent, ECMA-376's own default.
   startAt: z.number(),
-  // w:lvlRestart/@w:val, when present: the (1-based, per ECMA-376 ST_DecimalNumber) level whose own occurrence resets this level's counter back to startAt. Absent (undefined) is ECMA-376's own default behaviour, not "never restarts": a level with no explicit w:lvlRestart still restarts whenever a numbered paragraph at any shallower (numerically lower ilvl) level of the same list occurs -- the standard "each time you go back up a level, the deeper counters start over" list behaviour every real Word list already exhibits.
+  // w:lvlRestart/@w:val, when present: the (1-based, per ECMA-376 ST_DecimalNumber) level whose own occurrence resets this level's counter back to startAt. Absent (undefined) is ECMA-376's own default behaviour, not "never restarts": a level with no explicit w:lvlRestart still restarts whenever a numbered paragraph at any shallower (numerically lower ilvl) level of the same list occurs — the standard "each time you go back up a level, the deeper counters start over" list behaviour every real Word list already exhibits.
   restart: z.number().optional(),
 });
 export type NumberingLevel = z.infer<typeof NumberingLevelSchema>;
 
-// levels is keyed by the level's own zero-based ilvl, stringified (e.g. '0', '1', ...) -- the identical zero-based numbering ContentListMembership.level already uses, so `definitions[membership.numId]?.levels[String(membership.level)]` is the direct lookup path from a paragraph's own membership to its rendering definition. A record rather than a fixed-length array/tuple: an abstractNum's own w:lvlOverride can replace or add individual levels, so the set of populated levels is not guaranteed to be a dense 0..8 run in every real document, even though Word itself always writes all nine.
+// levels is keyed by the level's own zero-based ilvl, stringified (e.g. '0', '1', ...) — the identical zero-based numbering ContentListMembership.level already uses, so `definitions[membership.numId]?.levels[String(membership.level)]` is the direct lookup path from a paragraph's own membership to its rendering definition. A record rather than a fixed-length array/tuple: an abstractNum's own w:lvlOverride can replace or add individual levels, so the set of populated levels is not guaranteed to be a dense 0..8 run in every real document, even though Word itself always writes all nine.
 export const NumberingDefinitionSchema = z.object({
   levels: z.record(z.string(), NumberingLevelSchema),
 });
 export type NumberingDefinition = z.infer<typeof NumberingDefinitionSchema>;
 
-// Keyed by w:numId -- the same identifier ContentListMembership.numId carries.
+// Keyed by w:numId — the same identifier ContentListMembership.numId carries.
 export type NumberingDefinitions = Readonly<
   Record<string, NumberingDefinition>
 >;
 
-// The conventional name for the numbering part. OPC names it through the main part's own numbering relationship, so this is the fallback for a package that declares no usable one -- see typed/opc.ts.
+// The conventional name for the numbering part. OPC names it through the main part's own numbering relationship, so this is the fallback for a package that declares no usable one — see typed/opc.ts.
 export const NUMBERING_PART_PATH = "word/numbering.xml";
 const NUMBERING_REL_SUFFIX = "/numbering";
 const CONVENTIONAL_DOCUMENT_PART_PATH = "word/document.xml";
 
-// word/numbering.xml is its own standalone part, so its root element carries the wordprocessingml namespace declaration itself rather than inheriting one from an enclosing word/document.xml the way a fragment nested in the body would -- the same reason typed/docx/write.ts's own WML_NS is duplicated here rather than imported (importing it would pull that module's own writer surface into this read-and-write-shared one, the dependency direction the write side already takes in the other direction).
+// word/numbering.xml is its own standalone part, so its root element carries the wordprocessingml namespace declaration itself rather than inheriting one from an enclosing word/document.xml the way a fragment nested in the body would — the same reason typed/docx/write.ts's own WML_NS is duplicated here rather than imported (importing it would pull that module's own writer surface into this read-and-write-shared one, the dependency direction the write side already takes in the other direction).
 const WML_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
 function readLevel(lvl: XmlElement): NumberingLevel | undefined {
@@ -122,7 +122,7 @@ function numberingPartPath(pkg: Package): string {
   );
 }
 
-// Resolves every w:num's own numId to its abstractNumId's level table, with that num's own w:lvlOverride entries (if any) merged on top. A w:num with no matching w:abstractNumId, or whose abstractNumId doesn't resolve to a known w:abstractNum, is skipped entirely -- a malformed reference, not a partial definition worth returning. Returns an empty record when the numbering part itself is absent (a document with no lists at all).
+// Resolves every w:num's own numId to its abstractNumId's level table, with that num's own w:lvlOverride entries (if any) merged on top. A w:num with no matching w:abstractNumId, or whose abstractNumId doesn't resolve to a known w:abstractNum, is skipped entirely — a malformed reference, not a partial definition worth returning. Returns an empty record when the numbering part itself is absent (a document with no lists at all).
 export function readNumberingDefinitions(pkg: Package): NumberingDefinitions {
   const root = rootElement(pkg.parts[numberingPartPath(pkg)]);
   if (root === undefined) {
@@ -171,7 +171,7 @@ function buildNumberingLevel(ilvl: string, level: NumberingLevel): XmlElement {
   return el("w:lvl", { "w:ilvl": ilvl }, children);
 }
 
-// NumberingDefinitions -> word/numbering.xml's root element, returned unwrapped (an XmlElement, not an XmlPart) so the caller -- typed/docx/write.ts's buildDocxPackageFromContent, the only writer that emits genuinely new parts in this package -- supplies its own xml declaration exactly as it already does for every other part it builds, the same division of responsibility shading.ts's buildCellShading already follows for a smaller fragment. Returns undefined for an empty definitions record (a document with no lists at all), so the caller can skip emitting the part entirely rather than shipping a numbering.xml with no content -- the read side of that same absence (readNumberingDefinitions returns {} when the part itself is missing).
+// NumberingDefinitions -> word/numbering.xml's root element, returned unwrapped (an XmlElement, not an XmlPart) so the caller — typed/docx/write.ts's buildDocxPackageFromContent, the only writer that emits genuinely new parts in this package — supplies its own xml declaration exactly as it already does for every other part it builds, the same division of responsibility shading.ts's buildCellShading already follows for a smaller fragment. Returns undefined for an empty definitions record (a document with no lists at all), so the caller can skip emitting the part entirely rather than shipping a numbering.xml with no content — the read side of that same absence (readNumberingDefinitions returns {} when the part itself is missing).
 export function buildNumberingElement(
   definitions: NumberingDefinitions,
 ): XmlElement | undefined {

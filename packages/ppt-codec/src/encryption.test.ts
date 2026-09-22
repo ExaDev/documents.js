@@ -90,7 +90,7 @@ describe("readDocumentEncryptionAtom", () => {
       encryptionAtomBody({ keySizeBits: 0 }),
       { recVer: 0xf },
     );
-    // keySizeBits 0 was never really written by the header (the header states the raw 0), but the derivation used to build the fixture's own verifier still needs the true 40-bit key -- encryptionAtomBody itself passes keySizeBits straight through to deriveRc4CryptoApiBlockKey, which already treats 0 the same as 40 (see office-rc4-cryptoapi.test.ts), so the fixture and the reader agree without this test needing to special-case anything.
+    // keySizeBits 0 was never really written by the header (the header states the raw 0), but the derivation used to build the fixture's own verifier still needs the true 40-bit key — encryptionAtomBody itself passes keySizeBits straight through to deriveRc4CryptoApiBlockKey, which already treats 0 the same as 40 (see office-rc4-cryptoapi.test.ts), so the fixture and the reader agree without this test needing to special-case anything.
     const info = readDocumentEncryptionAtom(readRecordAt(bytes, 0));
     expect(info.keySizeBits).toBe(0x28);
   });
@@ -116,7 +116,7 @@ describe("readDocumentEncryptionAtom", () => {
   });
 
   it("accepts exactly the 12-byte fixed portion, at the boundary the length guard names", () => {
-    // versionMajor 2, versionMinor 2 (valid), headerSize 0 (invalid, but from a different, later check) -- proves the atom's own length passed the fixed-portion guard rather than failing it, by the specific error that fires instead.
+    // versionMajor 2, versionMinor 2 (valid), headerSize 0 (invalid, but from a different, later check) — proves the atom's own length passed the fixed-portion guard rather than failing it, by the specific error that fires instead.
     const bytes = atom(
       RT_CryptSession10Container,
       concatBytes(u16le(2), u16le(2), u32le(0x04), u32le(0)),
@@ -294,7 +294,7 @@ describe("readDocumentEncryptionAtom", () => {
 
   it("rejects an EncryptionVerifier truncated before its own salt/verifier/verifierHash fields", () => {
     const body = encryptionAtomBody();
-    // Truncate just past the saltSize field (12-byte fixed portion + 32-byte header + 4-byte saltSize), leaving no room for salt/encryptedVerifier/encryptedVerifierHash -- and rebuild the atom so its own recLen matches the truncated body rather than disagreeing with it.
+    // Truncate just past the saltSize field (12-byte fixed portion + 32-byte header + 4-byte saltSize), leaving no room for salt/encryptedVerifier/encryptedVerifierHash — and rebuild the atom so its own recLen matches the truncated body rather than disagreeing with it.
     const truncatedBody = body.subarray(0, 12 + 32 + 4);
     const bytes = atom(RT_CryptSession10Container, truncatedBody, {
       recVer: 0xf,
@@ -369,7 +369,7 @@ describe("decryptPptDocumentStream", () => {
   });
 
   it("rejects a persist object whose own record header runs past the stream", () => {
-    // Placed at the very end of the stream with only 4 bytes left -- fewer than RECORD_HEADER_SIZE (8) -- so the header-room guard itself is what fires, not the later recLen/objectEnd guard a persist object merely overlapping the encryption atom would trigger instead.
+    // Placed at the very end of the stream with only 4 bytes left — fewer than RECORD_HEADER_SIZE (8) — so the header-room guard itself is what fires, not the later recLen/objectEnd guard a persist object merely overlapping the encryption atom would trigger instead.
     const encryptionAtom = atom(
       RT_CryptSession10Container,
       encryptionAtomBody(),
@@ -391,7 +391,7 @@ describe("decryptPptDocumentStream", () => {
   });
 
   it("accepts a persist object whose record header ends exactly at the stream's own end", () => {
-    // Exactly RECORD_HEADER_SIZE (8) bytes remain after this offset -- offset + 8 equals the stream length precisely, the boundary the header-room guard's own comparison must not misfire on.
+    // Exactly RECORD_HEADER_SIZE (8) bytes remain after this offset — offset + 8 equals the stream length precisely, the boundary the header-room guard's own comparison must not misfire on.
     const key = deriveRc4CryptoApiBlockKey(PASSWORD, SALT, 7, KEY_SIZE_BITS);
     const encryptionAtom = atom(
       RT_CryptSession10Container,
@@ -410,7 +410,7 @@ describe("decryptPptDocumentStream", () => {
   });
 
   it("accepts a persist object whose own decrypted record ends exactly at the stream's own end", () => {
-    // The persist object is the very last thing in the stream, so objectEnd equals streamBytes.length precisely -- the boundary the recLen/objectEnd guard's own comparison must not misfire on.
+    // The persist object is the very last thing in the stream, so objectEnd equals streamBytes.length precisely — the boundary the recLen/objectEnd guard's own comparison must not misfire on.
     const key = deriveRc4CryptoApiBlockKey(PASSWORD, SALT, 7, KEY_SIZE_BITS);
     const plainObject = atom(RT_DocumentAtom, new Uint8Array(40).fill(0x42));
     const encryptedObject = rc4(key, plainObject);

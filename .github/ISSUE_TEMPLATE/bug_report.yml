@@ -1,11 +1,11 @@
 name: Bug report
-description: A package does something wrong -- a parse fails, a conversion loses something it should keep, or an API misbehaves.
+description: A package does something wrong — a parse fails, a conversion loses something it should keep, or an API misbehaves.
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        Fidelity issues are welcome here. If a conversion drops or mangles something, attach the source document if you can share it -- a real file that reproduces the problem is worth more than a description of it.
+        Fidelity issues are welcome here. If a conversion drops or mangles something, attach the source document if you can share it — a real file that reproduces the problem is worth more than a description of it.
 
         If the bug has security impact (a hostile document causing traversal, unbounded allocation, or code execution), please report it privately instead: see [SECURITY.md](https://github.com/ExaDev/documents.js/blob/main/SECURITY.md).
 
@@ -13,7 +13,7 @@ body:
     id: package
     attributes:
       label: Package
-      description: Which package is at fault. Pick the one the bug is actually in, not the one you called -- if you are not sure, pick the one you called and say so below.
+      description: Which package is at fault. Pick the one the bug is actually in, not the one you called — if you are not sure, pick the one you called and say so below.
       options:
         - archive-codec
         - byte-codec

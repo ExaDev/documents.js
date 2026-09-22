@@ -125,7 +125,7 @@ describe("buildManifest", () => {
     ).toBe("image/svg+xml");
   });
 
-  it('falls back to empty string -- not "application/octet-stream" -- for a part it cannot classify by name or by sniffing', () => {
+  it('falls back to empty string — not "application/octet-stream" — for a part it cannot classify by name or by sniffing', () => {
     const manifest = buildManifest(baseOdtPackage());
     expect(
       manifest.entries.find((e) => e.fullPath === "Pictures/image2.wmf")
@@ -176,7 +176,7 @@ describe("buildManifest", () => {
     expect(
       manifest.entries.find((e) => e.fullPath === "Object 1/")?.mediaType,
     ).toBe(ODT_MEDIA_TYPE);
-    // "Pictures/" itself holds only images, no content.xml -- it must never get a synthesized directory entry.
+    // "Pictures/" itself holds only images, no content.xml — it must never get a synthesized directory entry.
     expect(
       manifest.entries.find((e) => e.fullPath === "Pictures/"),
     ).toBeUndefined();
@@ -592,7 +592,7 @@ describe("validateManifest", () => {
           "manifest:version": "1.3",
           "manifest:media-type": ODT_MEDIA_TYPE,
         }),
-        txt("\n  "), // stray whitespace between elements -- exercises validateManifest's own non-file-entry-child skip
+        txt("\n  "), // stray whitespace between elements — exercises validateManifest's own non-file-entry-child skip
         encryptedEntry,
       ],
     );

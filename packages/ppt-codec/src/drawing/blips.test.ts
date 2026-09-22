@@ -40,7 +40,7 @@ function pngBytes(): Uint8Array<ArrayBuffer> {
 }
 
 function jpegBytes(): Uint8Array<ArrayBuffer> {
-  // A JPEG's own two-byte SOI marker as the payload -- enough to be an honest fixture (the reader never decodes it) without importing a JPEG encoder this package has no other use for.
+  // A JPEG's own two-byte SOI marker as the payload — enough to be an honest fixture (the reader never decodes it) without importing a JPEG encoder this package has no other use for.
   return new Uint8Array([0xff, 0xd8]);
 }
 
@@ -157,7 +157,7 @@ describe("readBlipStore", () => {
       ),
       undefined,
     );
-    // The empty WMF slot contributes nothing, and the JPEG after it stays the store's second entry -- pib 2.
+    // The empty WMF slot contributes nothing, and the JPEG after it stays the store's second entry — pib 2.
     expect(store).toHaveLength(2);
     expect(store[0]?.format).toBe("png");
     expect(store[1]?.format).toBe("jpeg");
@@ -194,7 +194,7 @@ describe("readBlipStore", () => {
     expect(store).toEqual([]);
   });
 
-  // cRefIsZero's own four-byte check must genuinely test each of the four bytes, not treat any one of them as always zero. An embedded-blip FBSE (like the test above) never reaches that check at all -- hasEmbedded returns first -- so each of these instead uses the delay-stream shape, where only cRefIsZero (or foDelay) stands between the entry and a resolved blip.
+  // cRefIsZero's own four-byte check must genuinely test each of the four bytes, not treat any one of them as always zero. An embedded-blip FBSE (like the test above) never reaches that check at all — hasEmbedded returns first — so each of these instead uses the delay-stream shape, where only cRefIsZero (or foDelay) stands between the entry and a resolved blip.
   it.each([
     ["its own second-least-significant byte", 0x00000100],
     ["its own second-most-significant byte", 0x00010000],
@@ -211,7 +211,7 @@ describe("readBlipStore", () => {
   });
 
   it("skips a cRef-0 empty slot even when its foDelay names a real Pictures-stream offset", () => {
-    // cRef 0 and foDelay FO_DELAY_NONE are two independent reasons a slot contributes nothing -- this proves cRef alone is enough, distinctly from the combined case above.
+    // cRef 0 and foDelay FO_DELAY_NONE are two independent reasons a slot contributes nothing — this proves cRef alone is enough, distinctly from the combined case above.
     const store = readBlipStore(
       documentWithStore(
         fbse({ blipType: 0x06, embedded: undefined, cRef: 0, foDelay: 0 }),
@@ -307,8 +307,8 @@ describe("writeDrawingGroupContainer / readBlipStore round trip", () => {
     expect(readBlipStore(readRecordAt(document, 0), undefined)).toEqual(blips);
   });
 
-  it("states each format's own MSOBLIPTYPE, blip recInstance, and the store's own entry count in the raw bytes -- none of which this package's own reader depends on to round-trip", () => {
-    // uidCount ((recInstance & 1) + 1) happens to come out to 1 -- the same value -- for both PNG's 0x6E0 and JPEG's 0x46A, so a reader-behavioural round trip alone cannot tell a swapped or wrong blip recInstance apart from a correct one; only reading the header field back directly can.
+  it("states each format's own MSOBLIPTYPE, blip recInstance, and the store's own entry count in the raw bytes — none of which this package's own reader depends on to round-trip", () => {
+    // uidCount ((recInstance & 1) + 1) happens to come out to 1 — the same value — for both PNG's 0x6E0 and JPEG's 0x46A, so a reader-behavioural round trip alone cannot tell a swapped or wrong blip recInstance apart from a correct one; only reading the header field back directly can.
     const blips: readonly PptBlip[] = [
       { format: "png", bytes: pngBytes() },
       { format: "jpeg", bytes: jpegBytes() },
@@ -328,14 +328,14 @@ describe("writeDrawingGroupContainer / readBlipStore round trip", () => {
     if (pngFbse === undefined || jpegFbse === undefined) {
       throw new Error("expected two FBSE entries");
     }
-    // btWin32/btMacOS, the FBSE's own first two data bytes, and the FBSE's own header recInstance -- all three state MSOBLIPTYPE (0x06 PNG, 0x05 JPEG).
+    // btWin32/btMacOS, the FBSE's own first two data bytes, and the FBSE's own header recInstance — all three state MSOBLIPTYPE (0x06 PNG, 0x05 JPEG).
     expect(pngFbse.data[0]).toBe(0x06);
     expect(pngFbse.data[1]).toBe(0x06);
     expect(pngFbse.header.recInstance).toBe(0x06);
     expect(jpegFbse.data[0]).toBe(0x05);
     expect(jpegFbse.data[1]).toBe(0x05);
     expect(jpegFbse.header.recInstance).toBe(0x05);
-    // The embedded blip sits at a computed byte offset inside the FBSE's own atom data, not as a formal child record a container-walking helper like findDescendants would reach -- read directly at the fixed 36-byte head's own end, exactly as readStoreEntry itself does.
+    // The embedded blip sits at a computed byte offset inside the FBSE's own atom data, not as a formal child record a container-walking helper like findDescendants would reach — read directly at the fixed 36-byte head's own end, exactly as readStoreEntry itself does.
     const FBSE_FIXED_SIZE = 36;
     const pngBlipRecord = readRecordAt(
       pngFbse.stream,

@@ -12,7 +12,7 @@ vi.mock("../adapters/fileAccess/createFileAccess", () => ({
   createFileAccess: () => createFileAccess(),
 }));
 
-// Stands in for the real @mantine/dropzone Dropzone: FileUpload.tsx's own logic (handleDrop, handleClick, the accept/activateOnClick wiring) is what this test exercises, not the third-party drag-and-drop machinery Dropzone itself provides -- that library's internals are out of this package's mutate glob entirely. Exposes onDrop/onClick as plain props a test can call directly (onDrop via the module-scope holder below, since nothing in the rendered output can trigger it the way a real click event triggers onClick), and renders every child (including the Accept/Reject/Idle slots) unconditionally so their content is always inspectable.
+// Stands in for the real @mantine/dropzone Dropzone: FileUpload.tsx's own logic (handleDrop, handleClick, the accept/activateOnClick wiring) is what this test exercises, not the third-party drag-and-drop machinery Dropzone itself provides — that library's internals are out of this package's mutate glob entirely. Exposes onDrop/onClick as plain props a test can call directly (onDrop via the module-scope holder below, since nothing in the rendered output can trigger it the way a real click event triggers onClick), and renders every child (including the Accept/Reject/Idle slots) unconditionally so their content is always inspectable.
 let latestOnDrop: ((files: FileWithPath[]) => void) | undefined;
 
 vi.mock("@mantine/dropzone", () => {
@@ -120,7 +120,7 @@ interface DroppedFileOverrides {
 function droppedFile(overrides: DroppedFileOverrides = {}): FileWithPath {
   const bytes = new Uint8Array(overrides.bytes ?? [1, 2, 3]);
   const name = overrides.name ?? "test.docx";
-  // Object.defineProperties, not object spread: FileWithPath.path/handle are readonly, and File's own name/size/type/lastModified live on the prototype as accessors rather than own enumerable properties, so a spread of `new File(...)` would silently drop every one of them (verified directly -- only Node's internal Blob/FileState symbols survive a spread). Defining the extra properties directly on the real File instance keeps its full prototype chain intact.
+  // Object.defineProperties, not object spread: FileWithPath.path/handle are readonly, and File's own name/size/type/lastModified live on the prototype as accessors rather than own enumerable properties, so a spread of `new File(...)` would silently drop every one of them (verified directly — only Node's internal Blob/FileState symbols survive a spread). Defining the extra properties directly on the real File instance keeps its full prototype chain intact.
   const file = new File([bytes], name);
   return Object.defineProperties(file, {
     path: { value: name, enumerable: true },
@@ -167,7 +167,7 @@ describe("FileUpload", () => {
   it("renders no hint paragraph at all when there is no file and no formatHint", () => {
     createFileAccess.mockReturnValue(fileAccessStub());
     const { container } = renderUpload();
-    // One <p> for the "Drag a file here..." label alone -- a second, empty one would mean the hint block rendered anyway with nothing to show.
+    // One <p> for the "Drag a file here..." label alone — a second, empty one would mean the hint block rendered anyway with nothing to show.
     expect(container.querySelectorAll("p")).toHaveLength(1);
   });
 

@@ -116,7 +116,7 @@ describe("convert", () => {
     ]);
     expect(exitCode).toBe(EXIT_USAGE_ERROR);
     expect(stderr).toBe(
-      "convert: cannot infer a target format -- pass an output path with a recognised extension, --out with one, or --to <format>\n",
+      "convert: cannot infer a target format — pass an output path with a recognised extension, --out with one, or --to <format>\n",
     );
   });
 

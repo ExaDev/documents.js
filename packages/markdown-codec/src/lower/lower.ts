@@ -1,17 +1,17 @@
-// The AST -> ContentDocument lowering stage: this package's own counterpart to ooxml.js's readDocx/readPptx and odf.js's readOdt/readOdp -- a thin adapter from parseMarkdown's own AST onto document-schema.js's shared ContentDocument pivot, not a second parser. Every mapping below, and the stable diagnostic code its own gap is recorded under (MarkdownDiagnosticCodes, src/diagnostics/diagnostics.ts), mirrors this package's own construct-by-construct design table:
+// The AST -> ContentDocument lowering stage: this package's own counterpart to ooxml.js's readDocx/readPptx and odf.js's readOdt/readOdp — a thin adapter from parseMarkdown's own AST onto document-schema.js's shared ContentDocument pivot, not a second parser. Every mapping below, and the stable diagnostic code its own gap is recorded under (MarkdownDiagnosticCodes, src/diagnostics/diagnostics.ts), mirrors this package's own construct-by-construct design table:
 //
-//  - document envelope -> one ContentSection, A4 + 1in default page geometry, overridable via ReadMarkdownOptions.pageSize/margins -- MarkdownDiagnosticCodes.INVENTED_PAGE_GEOMETRY (markdown has no page concept of its own; this ALWAYS fires, once per lowered document).
-//  - ATX/setext heading -> styleId "Heading1".."Heading6", mirroring odf.js's readOdt convention exactly (src/shared/style-constants.ts's headingStyleId), plus the canonical ContentParagraph.headingLevel document-schema.js defines -- the level number itself (always 1-6 here: ATX/setext cap at six), so a consumer that never learned this package's own styleId spelling still knows the heading's depth.
-//  - emphasis/strong/strikethrough -> italic/bold/strike ContentRun fields; links/autolinks -> ContentRun.hyperlink; code spans -> a Courier New run; a hard break -> a literal '\n'; a soft break -> a literal ' ' run carrying a 'markdown'-format residue (its own bare-newline spelling, restored verbatim by this package's own writer) -- all in src/lower/inline.ts, alongside MarkdownDiagnosticCodes.NESTED_EMPHASIS_FLATTENED and LINK_TITLE_DROPPED.
-//  - fenced/indented code block -> one paragraph, styleId 'CodeBlock', '\n'-joined literal, monospace. A fence's info string splits at its first word (splitInfoString below): the language word rides ContentParagraph.codeLanguage semantically, and any pandoc-style attribute remainder quarantines as markdown residue on the same paragraph for this package's own writer to re-emit verbatim -- nothing is dropped, so the row carries no diagnostic code of its own any more.
-//  - blockquote -> a `division` construct's boundary-marker pair (one per nesting level, the container boundary and exact depth the indent alone never carried) wrapping blocks that keep styleId 'Quote' plus indentLeftPt per level as the materialised formatting; a heading inside a quote keeps its own Heading{N} styleId (decorateParagraph below only applies 'Quote' when nothing more specific already set a styleId) and groups inside the pair's own extent, exactly as document-schema.js's decompose does for any heading inside a construct (ExaDev/document-schema.js#1122) -- no quote shape degrades any more (see lowerBlockquote).
-//  - thematic break -> an empty paragraph, styleId 'HorizontalRule' -- deliberately NOT ContentPageBreak (would inject a spurious page break into every generated PDF/docx this ContentDocument later feeds). Whether a consumer that does not resolve styleId at all renders this invisibly is a property of THAT consumer, not something this package's own read pipeline can detect or diagnose, so it carries no code of its own.
-//  - lists (bullet/ordered/task) -> flat ContentListMembership numId/level, encoding ordered-vs-unordered/task/tight-loose into the numId string itself (src/shared/list-id.ts), plus a minted itemId (src/shared/list-id.ts's mintListItemId) shared by every block one item directly contains -- MarkdownDiagnosticCodes.LIST_MARKER_TYPE_CONFLICT (a nested list's own marker type disagrees with its numId's minted type), LIST_ITEM_BLOCK_UNLISTED (a table or a resolved image directly inside an item -- ContentListMembership lives only on ContentParagraph). itemId lets src/emit's own writer re-attach a multi-block item's later blocks to its own marker line rather than flattening them into separate items, including a construct (a blockquote's division pair) sitting directly inside the item -- lowerBlockquote below threads the enclosing item's own membership straight through the quote's wrapped paragraphs (the same context-carrying dual carry the quote indent itself uses), which is exactly what lets src/emit's own ListRegionItem recognise the construct as belonging to that item rather than fracturing it out as separate top-level content. When the quote's own content is itself a list, lowerList always mints that list a completely fresh, unrelated numId/itemId (ExaDev/documents.js#990) -- none of ITS paragraphs share the enclosing item's itemId either, so the paragraph-sharing carry above has nothing to find -- and the fresh list's own numId instead carries the enclosing item's itemId as its own `+owner=` suffix (src/shared/list-id.ts), which src/emit's own constructCarriesListItemId reads back the same way.
+//  - document envelope -> one ContentSection, A4 + 1in default page geometry, overridable via ReadMarkdownOptions.pageSize/margins — MarkdownDiagnosticCodes.INVENTED_PAGE_GEOMETRY (markdown has no page concept of its own; this ALWAYS fires, once per lowered document).
+//  - ATX/setext heading -> styleId "Heading1".."Heading6", mirroring odf.js's readOdt convention exactly (src/shared/style-constants.ts's headingStyleId), plus the canonical ContentParagraph.headingLevel document-schema.js defines — the level number itself (always 1-6 here: ATX/setext cap at six), so a consumer that never learned this package's own styleId spelling still knows the heading's depth.
+//  - emphasis/strong/strikethrough -> italic/bold/strike ContentRun fields; links/autolinks -> ContentRun.hyperlink; code spans -> a Courier New run; a hard break -> a literal '\n'; a soft break -> a literal ' ' run carrying a 'markdown'-format residue (its own bare-newline spelling, restored verbatim by this package's own writer) — all in src/lower/inline.ts, alongside MarkdownDiagnosticCodes.NESTED_EMPHASIS_FLATTENED and LINK_TITLE_DROPPED.
+//  - fenced/indented code block -> one paragraph, styleId 'CodeBlock', '\n'-joined literal, monospace. A fence's info string splits at its first word (splitInfoString below): the language word rides ContentParagraph.codeLanguage semantically, and any pandoc-style attribute remainder quarantines as markdown residue on the same paragraph for this package's own writer to re-emit verbatim — nothing is dropped, so the row carries no diagnostic code of its own any more.
+//  - blockquote -> a `division` construct's boundary-marker pair (one per nesting level, the container boundary and exact depth the indent alone never carried) wrapping blocks that keep styleId 'Quote' plus indentLeftPt per level as the materialised formatting; a heading inside a quote keeps its own Heading{N} styleId (decorateParagraph below only applies 'Quote' when nothing more specific already set a styleId) and groups inside the pair's own extent, exactly as document-schema.js's decompose does for any heading inside a construct (ExaDev/document-schema.js#1122) — no quote shape degrades any more (see lowerBlockquote).
+//  - thematic break -> an empty paragraph, styleId 'HorizontalRule' — deliberately NOT ContentPageBreak (would inject a spurious page break into every generated PDF/docx this ContentDocument later feeds). Whether a consumer that does not resolve styleId at all renders this invisibly is a property of THAT consumer, not something this package's own read pipeline can detect or diagnose, so it carries no code of its own.
+//  - lists (bullet/ordered/task) -> flat ContentListMembership numId/level, encoding ordered-vs-unordered/task/tight-loose into the numId string itself (src/shared/list-id.ts), plus a minted itemId (src/shared/list-id.ts's mintListItemId) shared by every block one item directly contains — MarkdownDiagnosticCodes.LIST_MARKER_TYPE_CONFLICT (a nested list's own marker type disagrees with its numId's minted type), LIST_ITEM_BLOCK_UNLISTED (a table or a resolved image directly inside an item — ContentListMembership lives only on ContentParagraph). itemId lets src/emit's own writer re-attach a multi-block item's later blocks to its own marker line rather than flattening them into separate items, including a construct (a blockquote's division pair) sitting directly inside the item — lowerBlockquote below threads the enclosing item's own membership straight through the quote's wrapped paragraphs (the same context-carrying dual carry the quote indent itself uses), which is exactly what lets src/emit's own ListRegionItem recognise the construct as belonging to that item rather than fracturing it out as separate top-level content. When the quote's own content is itself a list, lowerList always mints that list a completely fresh, unrelated numId/itemId (ExaDev/documents.js#990) — none of ITS paragraphs share the enclosing item's itemId either, so the paragraph-sharing carry above has nothing to find — and the fresh list's own numId instead carries the enclosing item's itemId as its own `+owner=` suffix (src/shared/list-id.ts), which src/emit's own constructCarriesListItemId reads back the same way.
 //  - GFM tables -> ContentTable, src/lower/table.ts.
-//  - images -> ContentImageBlock via a synchronous MarkdownImageResolver port (src/lower/image.ts) -- MarkdownDiagnosticCodes.IMAGE_UNRESOLVED when the resolver (or native data: URI decoding) cannot produce a real PNG/JPEG; the image degrades to a text run of alt text + hyperlink, NEVER an invalid ContentImageBlock. A top-level image (a direct child of a paragraph) splits that paragraph precisely at the point it occurs; a nested one (inside emphasis/a link) never resolves at all -- see src/lower/inline.ts's own top-of-file note.
-//  - raw HTML -> preserved as literal text by default (styleId 'HTMLPreformatted' for block-level HTML), a rawHtml: 'drop' option available -- MarkdownDiagnosticCodes.RAW_HTML_PRESERVED_AS_TEXT / RAW_HTML_DROPPED. The one exception: a block-level HTML that is, in full, one well-formed <table> recognises straight to a real ContentTable instead (src/html/html-table.ts's own bounded recogniser, ExaDev/documents.js#1089) -- ahead of both the rawHtml option and RAW_HTML_PRESERVED_AS_TEXT/DROPPED, since a recognised table is genuine structure this package understands, not opaque markup to preserve or discard.
-//  - $$ display math (ExaDev/markdown-codec#53) -> one embedded FORMULA object whose presentation layer carries the LaTeX verbatim (lowerMathBlock below); \( \) inline math stays a Cambria-Math-marked run (src/lower/inline.ts, the run-level extent a formula is not) -- MarkdownDiagnosticCodes.MATH_INLINE_PRESERVED_AS_TEXT for the inline half. Neither is parsed as LaTeX or converted to MathML here -- that is a documents.js question (ExaDev/documents.js#563).
-//  - front matter (src/lower/front-matter.ts) -> a flat-scalar-only LayoutMetadata subset -- MarkdownDiagnosticCodes.FRONT_MATTER_KEY_UNMAPPED.
+//  - images -> ContentImageBlock via a synchronous MarkdownImageResolver port (src/lower/image.ts) — MarkdownDiagnosticCodes.IMAGE_UNRESOLVED when the resolver (or native data: URI decoding) cannot produce a real PNG/JPEG; the image degrades to a text run of alt text + hyperlink, NEVER an invalid ContentImageBlock. A top-level image (a direct child of a paragraph) splits that paragraph precisely at the point it occurs; a nested one (inside emphasis/a link) never resolves at all — see src/lower/inline.ts's own top-of-file note.
+//  - raw HTML -> preserved as literal text by default (styleId 'HTMLPreformatted' for block-level HTML), a rawHtml: 'drop' option available — MarkdownDiagnosticCodes.RAW_HTML_PRESERVED_AS_TEXT / RAW_HTML_DROPPED. The one exception: a block-level HTML that is, in full, one well-formed <table> recognises straight to a real ContentTable instead (src/html/html-table.ts's own bounded recogniser, ExaDev/documents.js#1089) — ahead of both the rawHtml option and RAW_HTML_PRESERVED_AS_TEXT/DROPPED, since a recognised table is genuine structure this package understands, not opaque markup to preserve or discard.
+//  - $$ display math (ExaDev/markdown-codec#53) -> one embedded FORMULA object whose presentation layer carries the LaTeX verbatim (lowerMathBlock below); \( \) inline math stays a Cambria-Math-marked run (src/lower/inline.ts, the run-level extent a formula is not) — MarkdownDiagnosticCodes.MATH_INLINE_PRESERVED_AS_TEXT for the inline half. Neither is parsed as LaTeX or converted to MathML here — that is a documents.js question (ExaDev/documents.js#563).
+//  - front matter (src/lower/front-matter.ts) -> a flat-scalar-only LayoutMetadata subset — MarkdownDiagnosticCodes.FRONT_MATTER_KEY_UNMAPPED.
 //  - footnote definition (ExaDev/markdown-codec#66) -> an `anchor` construct's boundary-marker pair (document-schema.js 4.2.0) bracketing its own lowered body blocks, headings included (ExaDev/document-schema.js#1122); the reference site is a point run-level `anchor` extent on the paragraph it sits inside (src/lower/inline.ts). See lowerFootnoteDefinition below for why the body rides the construct's extent rather than AnchorDescriptor's own `definition` field.
 
 import type {
@@ -71,7 +71,7 @@ import type { InlineLowerContext } from "./inline";
 import { lowerCodeBlockRun, lowerInlineNodes } from "./inline";
 import { lowerTable } from "./table";
 
-// lowerMarkdown/lowerParsedMarkdown accept ReadMarkdownOptions (src/options/options.ts) directly -- the same relationship src/emit/emit.ts's emitMarkdown already has with WriteMarkdownOptions, rather than a second, drift-prone options type of this module's own. src/read.ts's readMarkdown is consequently a thin wrapper over lowerMarkdown: diagnostics collection plus a signal check over this function's own real work.
+// lowerMarkdown/lowerParsedMarkdown accept ReadMarkdownOptions (src/options/options.ts) directly — the same relationship src/emit/emit.ts's emitMarkdown already has with WriteMarkdownOptions, rather than a second, drift-prone options type of this module's own. src/read.ts's readMarkdown is consequently a thin wrapper over lowerMarkdown: diagnostics collection plus a signal check over this function's own real work.
 
 interface ListMembership {
   readonly numId: string;
@@ -87,7 +87,7 @@ interface BlockLowerContext {
   readonly numIdState: NumIdMintState;
   readonly quoteDepth: number;
   readonly list: ListMembership | undefined;
-  // Whether GFM's table extension is enabled for this read (ReadMarkdownOptions.gfmTables, default true) -- gates lowerHtmlBlock's own HTML-table recognition (src/html/html-table.ts) the same way it already gates src/block/block.ts's own pipe-table promotion, since a ContentTable is a GFM-table-extension construct either way it is spelled in the source; with the extension off, a <table> HTML block stays exactly the opaque raw HTML it always was (src/conformance.test.ts's own CommonMark-only corpus run depends on this: a bare `| a |` line is ordinary paragraph text under pure CommonMark, and re-emitting a recognised table as GFM pipe syntax with the extension off would produce markdown the very same options can no longer parse back correctly).
+  // Whether GFM's table extension is enabled for this read (ReadMarkdownOptions.gfmTables, default true) — gates lowerHtmlBlock's own HTML-table recognition (src/html/html-table.ts) the same way it already gates src/block/block.ts's own pipe-table promotion, since a ContentTable is a GFM-table-extension construct either way it is spelled in the source; with the extension off, a <table> HTML block stays exactly the opaque raw HTML it always was (src/conformance.test.ts's own CommonMark-only corpus run depends on this: a bare `| a |` line is ordinary paragraph text under pure CommonMark, and re-emitting a recognised table as GFM pipe syntax with the extension off would produce markdown the very same options can no longer parse back correctly).
   readonly gfmTables: boolean;
 }
 
@@ -95,7 +95,7 @@ function inlineContext(context: BlockLowerContext): InlineLowerContext {
   return { sink: context.sink, rawHtml: context.rawHtmlMode };
 }
 
-// Applies the two cross-cutting decorations every leaf paragraph-shaped block picks up from its own enclosing context: blockquote nesting (indentLeftPt, and a 'Quote' styleId ONLY when the block did not already set a more specific one -- a heading, code block, thematic break, or preserved-HTML paragraph keeps its own styleId even while quoted) and list membership (ContentListMembership, when directly inside a list item).
+// Applies the two cross-cutting decorations every leaf paragraph-shaped block picks up from its own enclosing context: blockquote nesting (indentLeftPt, and a 'Quote' styleId ONLY when the block did not already set a more specific one — a heading, code block, thematic break, or preserved-HTML paragraph keeps its own styleId even while quoted) and list membership (ContentListMembership, when directly inside a list item).
 function decorateParagraph(
   paragraph: ContentParagraph,
   context: BlockLowerContext,
@@ -114,7 +114,7 @@ function decorateParagraph(
   return result;
 }
 
-// Splices a lowered inline sequence's run-level construct extents (a titled link's annotation extent, a footnote reference's point anchor) onto the paragraph being built, as that paragraph's own constructs field -- absent when the sequence opened none, which is the overwhelming common case.
+// Splices a lowered inline sequence's run-level construct extents (a titled link's annotation extent, a footnote reference's point anchor) onto the paragraph being built, as that paragraph's own constructs field — absent when the sequence opened none, which is the overwhelming common case.
 function paragraphWithConstructs(
   runs: ContentRun[],
   runConstructExtents: readonly RunConstructExtent[],
@@ -141,7 +141,7 @@ function lowerHeading(
   return [decorateParagraph(paragraph, context)];
 }
 
-// A top-level image (a direct child of the paragraph's own children, not nested inside emphasis/a link) splits the paragraph precisely at that point when it resolves to real bytes -- the full AST is already in hand at lowering time, so this is exact, unlike a reader that has to append images at the end as a fallback. An unresolved image (native data: URI decoding failed, no resolver was supplied, or the resolver itself returned undefined) is left IN its surrounding text segment, where src/lower/inline.ts's own 'image' case degrades it to an ordinary text run of alt text + hyperlink -- never a partially-invalid ContentImageBlock.
+// A top-level image (a direct child of the paragraph's own children, not nested inside emphasis/a link) splits the paragraph precisely at that point when it resolves to real bytes — the full AST is already in hand at lowering time, so this is exact, unlike a reader that has to append images at the end as a fallback. An unresolved image (native data: URI decoding failed, no resolver was supplied, or the resolver itself returned undefined) is left IN its surrounding text segment, where src/lower/inline.ts's own 'image' case degrades it to an ordinary text run of alt text + hyperlink — never a partially-invalid ContentImageBlock.
 function lowerParagraph(
   node: MarkdownParagraphNode,
   context: BlockLowerContext,
@@ -193,7 +193,7 @@ function lowerParagraph(
         code: MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED,
         severity: "info",
         message:
-          "a resolved image block directly inside a list item has no ContentListMembership field of its own -- only ContentParagraph carries .list -- so its association with the enclosing list item is lost",
+          "a resolved image block directly inside a list item has no ContentListMembership field of its own — only ContentParagraph carries .list — so its association with the enclosing list item is lost",
       });
     }
     const image: ContentBlock = {
@@ -204,7 +204,7 @@ function lowerParagraph(
       heightPt: resolved.heightPt,
       ...(child.alt.length > 0 ? { altText: child.alt } : {}),
     };
-    // The resolved-image title is the block-scoped arm of the same `link`-construct annotation an inline title rides: ContentImageBlock has no title field and no constructs field, so the pair brackets the image itself, and the descriptor's target carries the ORIGINAL destination into the bargain -- a fact even a title-less resolved image loses today (its bytes re-embed as a data: URI on the way out), but scoped here to the titled case this row is about.
+    // The resolved-image title is the block-scoped arm of the same `link`-construct annotation an inline title rides: ContentImageBlock has no title field and no constructs field, so the pair brackets the image itself, and the descriptor's target carries the ORIGINAL destination into the bargain — a fact even a title-less resolved image loses today (its bytes re-embed as a data: URI on the way out), but scoped here to the titled case this row is about.
     if (child.title === undefined) {
       blocks.push(image);
       continue;
@@ -226,7 +226,7 @@ function lowerParagraph(
   return blocks;
 }
 
-// A fence's info string splits at its first word: that word is the language (CommonMark's own "the first word of the info string is typically used to specify the language") and lands semantically on ContentParagraph.codeLanguage; everything after it is pandoc-style attribute syntax with no cross-format meaning and quarantines as markdown residue on the same paragraph, restorable verbatim by this package's own writer. One carve-out: an info string opening with `{` is an attribute block with no language word at all, so the whole string rides the residue and codeLanguage stays absent -- a language vocabulary never starts with an attribute opener. The AST's own info string is already unescaped and trimmed, so the split works on cleaned text and the writer re-emits the two halves joined by one space (a run of whitespace between them normalises to that single space -- the only reconstruction choice this makes).
+// A fence's info string splits at its first word: that word is the language (CommonMark's own "the first word of the info string is typically used to specify the language") and lands semantically on ContentParagraph.codeLanguage; everything after it is pandoc-style attribute syntax with no cross-format meaning and quarantines as markdown residue on the same paragraph, restorable verbatim by this package's own writer. One carve-out: an info string opening with `{` is an attribute block with no language word at all, so the whole string rides the residue and codeLanguage stays absent — a language vocabulary never starts with an attribute opener. The AST's own info string is already unescaped and trimmed, so the split works on cleaned text and the writer re-emits the two halves joined by one space (a run of whitespace between them normalises to that single space — the only reconstruction choice this makes).
 function splitInfoString(infoString: string): {
   readonly language: string | undefined;
   readonly remainder: string | undefined;
@@ -260,7 +260,7 @@ function lowerCodeBlock(
     kind: "paragraph",
     runs: [lowerCodeBlockRun(node.literal.replace(/\n$/, ""))],
     styleId: CODE_BLOCK_STYLE_ID,
-    // document-schema.js's own cross-format "whitespace inside this paragraph's runs is significant" signal -- set unconditionally, matching epub-codec's own readPre (every fenced/indented code block is preformatted regardless of run count), so a markdown -> odt/epub bridge carries the fact forward rather than losing it (ExaDev/documents.js#1020).
+    // document-schema.js's own cross-format "whitespace inside this paragraph's runs is significant" signal — set unconditionally, matching epub-codec's own readPre (every fenced/indented code block is preformatted regardless of run count), so a markdown -> odt/epub bridge carries the fact forward rather than losing it (ExaDev/documents.js#1020).
     preformatted: true,
     ...(info.language !== undefined ? { codeLanguage: info.language } : {}),
     ...(info.remainder !== undefined
@@ -293,7 +293,7 @@ function lowerHtmlBlock(
         code: MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED,
         severity: "info",
         message:
-          "an HTML-table block directly inside a list item has no ContentListMembership field of its own -- only ContentParagraph carries .list -- so its association with the enclosing list item is lost",
+          "an HTML-table block directly inside a list item has no ContentListMembership field of its own — only ContentParagraph carries .list — so its association with the enclosing list item is lost",
       });
     }
     return [table];
@@ -324,7 +324,7 @@ function lowerHtmlBlock(
   return [decorateParagraph(paragraph, context)];
 }
 
-// $$...$$ display math (ExaDev/markdown-codec#53) becomes an embedded FORMULA object -- the one block-level carrier a wordprocessing ContentDocument has for a ContentFormula -- with the literal LaTeX verbatim in the formula's rendering-authoritative presentation layer, no MathML (markdown carried none to read), and no semantic content layer (nobody has lowered this LaTeX to semantics; that is a documents.js question, ExaDev/documents.js#563, not something this package does on the way past). The frame is the zero box: an in-flow markdown block has no page position or intrinsic size to record, and ContentEmbeddedObjectBlock's frame is required -- origin-and-zero is the same "positioned by the flow, no size fact" spelling ooxml.js's own inline OLE reader established for the identical constraint.
+// $$...$$ display math (ExaDev/markdown-codec#53) becomes an embedded FORMULA object — the one block-level carrier a wordprocessing ContentDocument has for a ContentFormula — with the literal LaTeX verbatim in the formula's rendering-authoritative presentation layer, no MathML (markdown carried none to read), and no semantic content layer (nobody has lowered this LaTeX to semantics; that is a documents.js question, ExaDev/documents.js#563, not something this package does on the way past). The frame is the zero box: an in-flow markdown block has no page position or intrinsic size to record, and ContentEmbeddedObjectBlock's frame is required — origin-and-zero is the same "positioned by the flow, no size fact" spelling ooxml.js's own inline OLE reader established for the identical constraint.
 function lowerMathBlock(
   node: Extract<MarkdownBlockNode, { type: "mathBlock" }>,
   context: BlockLowerContext,
@@ -334,7 +334,7 @@ function lowerMathBlock(
       code: MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED,
       severity: "info",
       message:
-        "a display-math block directly inside a list item has no ContentListMembership field of its own -- only ContentParagraph carries .list -- so its association with the enclosing list item is lost",
+        "a display-math block directly inside a list item has no ContentListMembership field of its own — only ContentParagraph carries .list — so its association with the enclosing list item is lost",
     });
   }
   return [
@@ -354,7 +354,7 @@ function lowerMathBlock(
   ];
 }
 
-// A blockquote becomes a `division` construct pair (document-schema.js's arbitrarily nestable grouping of block flow -- tagged PDF /Sect is the cross-format analogue) bracketing the quote's lowered blocks, one pair per nesting level for a quoted quote: the pair is what carries the CONTAINER boundary and the exact depth, both of which indentLeftPt alone never held (same-depth adjacent quotes were indistinguishable from one multi-block quote; depth beyond level 1 was an approximation). The indent and 'Quote' styleId stay on the inner blocks as the materialised formatting, the same dual-carry a titled link's runs play -- a consumer that ignores constructs still sees an indented, Quote-styled paragraph, and this package's own writer recognises the pair-plus-indent pair as its own spelling rather than guessing at a foreign division. A heading anywhere in the quote's own subtree carries the pair too: document-schema.js's decompose groups a heading inside a construct's extent against nothing but that extent's own interior, regardless of what heading scope was open outside when the pair started (ExaDev/document-schema.js#1122), so there is no shape here decompose cannot build -- a quoted heading keeps both its own heading fidelity and the quote's own container fidelity.
+// A blockquote becomes a `division` construct pair (document-schema.js's arbitrarily nestable grouping of block flow — tagged PDF /Sect is the cross-format analogue) bracketing the quote's lowered blocks, one pair per nesting level for a quoted quote: the pair is what carries the CONTAINER boundary and the exact depth, both of which indentLeftPt alone never held (same-depth adjacent quotes were indistinguishable from one multi-block quote; depth beyond level 1 was an approximation). The indent and 'Quote' styleId stay on the inner blocks as the materialised formatting, the same dual-carry a titled link's runs play — a consumer that ignores constructs still sees an indented, Quote-styled paragraph, and this package's own writer recognises the pair-plus-indent pair as its own spelling rather than guessing at a foreign division. A heading anywhere in the quote's own subtree carries the pair too: document-schema.js's decompose groups a heading inside a construct's extent against nothing but that extent's own interior, regardless of what heading scope was open outside when the pair started (ExaDev/document-schema.js#1122), so there is no shape here decompose cannot build — a quoted heading keeps both its own heading fidelity and the quote's own container fidelity.
 function lowerBlockquote(
   node: Extract<MarkdownBlockNode, { type: "blockquote" }>,
   context: BlockLowerContext,
@@ -367,7 +367,7 @@ function lowerBlockquote(
   const blocks = node.children.flatMap((child) =>
     lowerBlock(child, nested, contentWidthPt),
   );
-  // An otherwise-empty blockquote (every child consumed away -- most commonly a lone link reference definition, which src/block/definitions.ts strips out entirely, leaving no paragraph behind) still needs a placeholder: there is no ContentBlock shape for "a bare blockquote container with nothing in it" other than an empty, indented paragraph.
+  // An otherwise-empty blockquote (every child consumed away — most commonly a lone link reference definition, which src/block/definitions.ts strips out entirely, leaving no paragraph behind) still needs a placeholder: there is no ContentBlock shape for "a bare blockquote container with nothing in it" other than an empty, indented paragraph.
   const inner =
     blocks.length === 0
       ? [decorateParagraph({ kind: "paragraph", runs: [] }, nested)]
@@ -379,7 +379,7 @@ function lowerBlockquote(
   ];
 }
 
-// Lowering one list item: every block the item directly contains carries the SAME membership -- numId, level, a minted itemId identifying this one item across those blocks, and the GFM checkbox state when the item is a task item (document-schema.js's ContentListMembership.checked, the field that retired this package's old checkbox-glyph prepend: the state now rides the membership instead of a text run, so it survives even when the item's first block is one the glyph could never be prepended to). A table or resolved image directly inside the item still carries no membership of its own -- only ContentParagraph has the field -- which remains LIST_ITEM_BLOCK_UNLISTED's gap.
+// Lowering one list item: every block the item directly contains carries the SAME membership — numId, level, a minted itemId identifying this one item across those blocks, and the GFM checkbox state when the item is a task item (document-schema.js's ContentListMembership.checked, the field that retired this package's old checkbox-glyph prepend: the state now rides the membership instead of a text run, so it survives even when the item's first block is one the glyph could never be prepended to). A table or resolved image directly inside the item still carries no membership of its own — only ContentParagraph has the field — which remains LIST_ITEM_BLOCK_UNLISTED's gap.
 function lowerListItem(
   item: MarkdownListItemNode,
   numId: string,
@@ -409,7 +409,7 @@ function lowerListItem(
     blocks.push(...childBlocks);
   }
   if (firstOwnBlock === undefined || firstOwnBlock.kind === "constructStart") {
-    // A truly empty item (no children at all), one whose sole content is a nested list, or one whose own first block is a construct (ExaDev/documents.js#1012 -- most commonly a blockquote's division pair) all share the same gap: none of them has an ORDINARY paragraph of its own to carry ContentListMembership(numId, level) on directly. Without a placeholder here, the item's own existence -- and, for the construct case, which item its dual-carried interior paragraph even belongs to -- has nowhere to attach except the construct's own interior, which src/emit/emit.ts's renderItems cannot read back before it has already decided how to open the region: a construct sitting at an item's own head is, at that point, indistinguishable from a genuinely fresh, unrelated construct that merely happens to wrap a list of its own (CommonMark spec 0.31.2 example 235, `> - foo\n- bar`, is exactly that unrelated shape, and must keep rendering as a bare quote with no borrowed item to attach it to). The placeholder carries the full membership, checked state included, so a task item wrapping only a nested list (or only a construct) keeps its checkbox; the construct's own interior still carries the SAME membership too (lowerBlockquote's own dual carry, unchanged), which is what lets emit.ts's existing constructCarriesListItemId absorb it as an ordinary continuation once the placeholder has established the item.
+    // A truly empty item (no children at all), one whose sole content is a nested list, or one whose own first block is a construct (ExaDev/documents.js#1012 — most commonly a blockquote's division pair) all share the same gap: none of them has an ORDINARY paragraph of its own to carry ContentListMembership(numId, level) on directly. Without a placeholder here, the item's own existence — and, for the construct case, which item its dual-carried interior paragraph even belongs to — has nowhere to attach except the construct's own interior, which src/emit/emit.ts's renderItems cannot read back before it has already decided how to open the region: a construct sitting at an item's own head is, at that point, indistinguishable from a genuinely fresh, unrelated construct that merely happens to wrap a list of its own (CommonMark spec 0.31.2 example 235, `> - foo\n- bar`, is exactly that unrelated shape, and must keep rendering as a bare quote with no borrowed item to attach it to). The placeholder carries the full membership, checked state included, so a task item wrapping only a nested list (or only a construct) keeps its checkbox; the construct's own interior still carries the SAME membership too (lowerBlockquote's own dual carry, unchanged), which is what lets emit.ts's existing constructCarriesListItemId absorb it as an ordinary continuation once the placeholder has established the item.
     blocks.unshift(
       decorateParagraph({ kind: "paragraph", runs: [] }, itemContext),
     );
@@ -417,9 +417,9 @@ function lowerListItem(
   return blocks;
 }
 
-// Mints a fresh numId for a TOP-LEVEL list (ancestorNumId undefined) or reuses its enclosing list's numId, incrementing only `level`, for a nested one -- see src/shared/list-id.ts's own top-of-file note for the full grammar and why nesting never mints again.
+// Mints a fresh numId for a TOP-LEVEL list (ancestorNumId undefined) or reuses its enclosing list's numId, incrementing only `level`, for a nested one — see src/shared/list-id.ts's own top-of-file note for the full grammar and why nesting never mints again.
 //
-// A FRESH mint tags itself with context.list?.itemId as the numId's own `+owner=` suffix (src/shared/list-id.ts) -- undefined for an ordinary top-level list (context.list is only ever set inside lowerListItem's own itemContext), and the enclosing item's real itemId for the one shape that reaches lowerBlock's generic "list" case with context.list still set: a list sitting directly inside a blockquote that is itself directly inside a list item (lowerBlockquote threads context.list straight through unchanged, at any quote nesting depth, since only lowerListItem ever replaces it). That list is always minted fresh -- ancestorNumId is undefined here regardless of how deeply nested the enclosing item is -- so without the owner tag, nothing in this list's own paragraphs would connect it back to the item its blockquote sits inside; src/emit/emit.ts's constructCarriesListItemId reads the tag back to recognise that ownership as data instead of guessing at it.
+// A FRESH mint tags itself with context.list?.itemId as the numId's own `+owner=` suffix (src/shared/list-id.ts) — undefined for an ordinary top-level list (context.list is only ever set inside lowerListItem's own itemContext), and the enclosing item's real itemId for the one shape that reaches lowerBlock's generic "list" case with context.list still set: a list sitting directly inside a blockquote that is itself directly inside a list item (lowerBlockquote threads context.list straight through unchanged, at any quote nesting depth, since only lowerListItem ever replaces it). That list is always minted fresh — ancestorNumId is undefined here regardless of how deeply nested the enclosing item is — so without the owner tag, nothing in this list's own paragraphs would connect it back to the item its blockquote sits inside; src/emit/emit.ts's constructCarriesListItemId reads the tag back to recognise that ownership as data instead of guessing at it.
 function lowerList(
   node: MarkdownListNode,
   ancestorNumId: string | undefined,
@@ -456,11 +456,11 @@ function lowerList(
   );
 }
 
-// A footnote definition becomes an `anchor` construct: a constructStart carrying the descriptor, the definition's own lowered body blocks, and a constructEnd -- document-schema.js 4.2.0's flat-form encoding of the construct group its package tree already had. A heading anywhere in the body lowers as an ordinary heading, keeping its own heading fidelity: document-schema.js's decompose groups a heading inside a construct's extent against nothing but that extent's own interior, regardless of what heading scope was open outside when the pair started (ExaDev/document-schema.js#1122), so there is no shape here decompose cannot build.
+// A footnote definition becomes an `anchor` construct: a constructStart carrying the descriptor, the definition's own lowered body blocks, and a constructEnd — document-schema.js 4.2.0's flat-form encoding of the construct group its package tree already had. A heading anywhere in the body lowers as an ordinary heading, keeping its own heading fidelity: document-schema.js's decompose groups a heading inside a construct's extent against nothing but that extent's own interior, regardless of what heading scope was open outside when the pair started (ExaDev/document-schema.js#1122), so there is no shape here decompose cannot build.
 //
-// Why the body rides the construct's EXTENT rather than AnchorDescriptor's own `definition` field: that field is documented as "the definitions-table key holding this marker's body", and a definitions table is a DocumentTree root field. A flat ContentDocument -- the only shape any codec in this family produces -- has no root to carry one, so there is no key to name and the field stays absent. The extent is not a workaround for that: a footnote body is genuinely block content (several paragraphs, a code block, a table), which a string field could not have held either way, and AnchorDescriptor's own note says outright that a ranged anchor "wraps the blocks it spans". A consumer that later factors these documents into a package is free to move the body into a definitions entry and populate `definition` then; nothing here has to be undone for it to.
+// Why the body rides the construct's EXTENT rather than AnchorDescriptor's own `definition` field: that field is documented as "the definitions-table key holding this marker's body", and a definitions table is a DocumentTree root field. A flat ContentDocument — the only shape any codec in this family produces — has no root to carry one, so there is no key to name and the field stays absent. The extent is not a workaround for that: a footnote body is genuinely block content (several paragraphs, a code block, a table), which a string field could not have held either way, and AnchorDescriptor's own note says outright that a ranged anchor "wraps the blocks it spans". A consumer that later factors these documents into a package is free to move the body into a definitions entry and populate `definition` then; nothing here has to be undone for it to.
 //
-// A definition with an empty body (`[^1]:` and nothing else) lowers to a pair with no blocks between the markers -- the point anchor the same descriptor note describes, not a special case.
+// A definition with an empty body (`[^1]:` and nothing else) lowers to a pair with no blocks between the markers — the point anchor the same descriptor note describes, not a special case.
 function lowerFootnoteDefinition(
   node: MarkdownFootnoteDefinitionNode,
   context: BlockLowerContext,
@@ -511,7 +511,7 @@ function lowerBlock(
           code: MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED,
           severity: "info",
           message:
-            "a table directly inside a list item has no ContentListMembership field of its own -- only ContentParagraph carries .list -- so its association with the enclosing list item is lost",
+            "a table directly inside a list item has no ContentListMembership field of its own — only ContentParagraph carries .list — so its association with the enclosing list item is lost",
         });
       }
       return [lowerTable(node, contentWidthPt, inlineContext(context))];
@@ -520,7 +520,7 @@ function lowerBlock(
     case "listItem":
     case "tableRow":
     case "tableCell":
-      // Unreachable through parseMarkdown's own toAstBlocks -- none of these four ever appears as a direct child of document/blockquote/listItem the way this function is called (a list's own items and a table's own rows are walked by lowerList/lowerTable directly, never handed to lowerBlock).
+      // Unreachable through parseMarkdown's own toAstBlocks — none of these four ever appears as a direct child of document/blockquote/listItem the way this function is called (a list's own items and a table's own rows are walked by lowerList/lowerTable directly, never handed to lowerBlock).
       return [];
   }
 }
@@ -564,7 +564,7 @@ export function lowerParsedMarkdown(
 }
 
 // The convenience, read.ts-independent entry point this package's own test suite (and src/read.ts's real readMarkdown) drives: input-size enforcement, front matter extraction (when requested), block parsing, and lowering, composed in one call over raw markdown TEXT rather than an already-parsed AST.
-// What one full text -> ContentDocument lowering run produced BESIDES the document itself: the document-global link reference definition table src/block/definitions.ts built (a fact the flat ContentDocument has no root to carry -- the tree-level readMarkdown splices it into the package's own definitions table), and the verbatim front-matter block when one was extracted (the same story for the package-level source residue table).
+// What one full text -> ContentDocument lowering run produced BESIDES the document itself: the document-global link reference definition table src/block/definitions.ts built (a fact the flat ContentDocument has no root to carry — the tree-level readMarkdown splices it into the package's own definitions table), and the verbatim front-matter block when one was extracted (the same story for the package-level source residue table).
 export interface LoweredMarkdownDetail {
   readonly document: ContentDocument;
   readonly references: LinkReferenceMap;

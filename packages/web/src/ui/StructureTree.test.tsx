@@ -16,7 +16,7 @@ function renderTree(data: unknown): string {
   return mounted.container.innerHTML;
 }
 
-// MantineProvider injects its own <style> elements into the mount container regardless of what its children render, so an empty StructureTree (which returns null) still leaves non-empty innerHTML -- the Tree's own root class is the actual signal that it rendered anything at all.
+// MantineProvider injects its own <style> elements into the mount container regardless of what its children render, so an empty StructureTree (which returns null) still leaves non-empty innerHTML — the Tree's own root class is the actual signal that it rendered anything at all.
 const TREE_ROOT_CLASS = "mantine-Tree-root";
 
 describe("StructureTree", () => {

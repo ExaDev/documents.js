@@ -5,7 +5,7 @@ import {
   SlideFamilySlideList,
 } from "../../shared/slide-family.js";
 
-// slide-detail, shape-editor and slide-table-detail are genuinely shared between pptx and odp (see their own doc comments in ../pptx/) -- re-exported here too so an odp-side caller (the app.tsx screen router) never has to know they physically live under the pptx/ directory.
+// slide-detail, shape-editor and slide-table-detail are genuinely shared between pptx and odp (see their own doc comments in ../pptx/) — re-exported here too so an odp-side caller (the app.tsx screen router) never has to know they physically live under the pptx/ directory.
 export {
   ShapeEditorScreen,
   SlideDetailScreen,

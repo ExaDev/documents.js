@@ -8,11 +8,11 @@ import type { MathStretchAxis } from "document-schema.js";
 import { loadMathFont } from "./math-font";
 import type { MathGlyphConstruction, MathGlyphPart } from "./math-table";
 
-// Every expected value below was independently verified against the real vendored assets/fonts/STIXTwoMath-Regular.otf's own raw bytes (a standalone Node script walking the sfnt table directory and the MATH table's own MathVariants subtable directly, not this package's own parser) -- these are real, external cross-checks, not values derived from and re-asserted against this module's own output. The arithmetic in the "exact placement" cases below was likewise worked out by hand from those raw font values and the OpenType MATH spec's own assembly model, then asserted, rather than recorded from a run.
+// Every expected value below was independently verified against the real vendored assets/fonts/STIXTwoMath-Regular.otf's own raw bytes (a standalone Node script walking the sfnt table directory and the MATH table's own MathVariants subtable directly, not this package's own parser) — these are real, external cross-checks, not values derived from and re-asserted against this module's own output. The arithmetic in the "exact placement" cases below was likewise worked out by hand from those raw font values and the OpenType MATH spec's own assembly model, then asserted, rather than recorded from a run.
 
-const PAREN = 0x28; // LEFT PARENTHESIS -- 13 vertical variants plus a bottom/extender/top assembly
-const RADICAL = 0x221a; // SQUARE ROOT -- 4 vertical variants plus a bottom-hook/extender/top assembly
-const OVER_BRACE = 0x23de; // TOP CURLY BRACKET -- 6 horizontal variants plus a five-part assembly with two extenders
+const PAREN = 0x28; // LEFT PARENTHESIS — 13 vertical variants plus a bottom/extender/top assembly
+const RADICAL = 0x221a; // SQUARE ROOT — 4 vertical variants plus a bottom-hook/extender/top assembly
+const OVER_BRACE = 0x23de; // TOP CURLY BRACKET — 6 horizontal variants plus a five-part assembly with two extenders
 const LATIN_X = 0x78; // not stretchy on either axis in this font
 
 function partsByGlyphId(
@@ -144,14 +144,14 @@ describe("MathVariants parsing against the real STIX Two Math font", () => {
   });
 
   it("lists vertical assembly parts bottom to top, corroborated by the Unicode names of the bracket pieces themselves", () => {
-    // Unicode gives the bracket family's own assembly pieces dedicated code points (the U+239B..U+23AD block), and their names say which end of the construction each one belongs to -- an external, font-independent check on this module's reading of the spec's own part ordering, rather than a restatement of it.
+    // Unicode gives the bracket family's own assembly pieces dedicated code points (the U+239B..U+23AD block), and their names say which end of the construction each one belongs to — an external, font-independent check on this module's reading of the spec's own part ordering, rather than a restatement of it.
     const font = loadMathFont().font;
     expect(
       verticalConstruction(PAREN).assembly!.parts.map((part) => part.glyphId),
     ).toEqual([
-      font.glyphId(0x239d), // LEFT PARENTHESIS LOWER HOOK -- first part, so the list starts at the BOTTOM
+      font.glyphId(0x239d), // LEFT PARENTHESIS LOWER HOOK — first part, so the list starts at the BOTTOM
       font.glyphId(0x239c), // LEFT PARENTHESIS EXTENSION
-      font.glyphId(0x239b), // LEFT PARENTHESIS UPPER HOOK -- last part, so the list ends at the TOP
+      font.glyphId(0x239b), // LEFT PARENTHESIS UPPER HOOK — last part, so the list ends at the TOP
     ]);
     expect(
       verticalConstruction(0x7b).assembly!.parts.map((part) => part.glyphId),
@@ -238,7 +238,7 @@ describe("MathVariants parsing against the real STIX Two Math font", () => {
     expect(
       construction!.variants.map((variant) => variant.advanceMeasurement),
     ).toEqual([631, 1001, 1501, 1771, 2181, 2601]);
-    // Five parts, two of them the same repeated extender glyph on either side of a fixed middle -- the shape a brace needs and a parenthesis does not.
+    // Five parts, two of them the same repeated extender glyph on either side of a fixed middle — the shape a brace needs and a parenthesis does not.
     expect(construction!.assembly!.parts.map((part) => part.glyphId)).toEqual([
       2106, 2073, 2107, 2073, 2108,
     ]);
@@ -301,7 +301,7 @@ describe("assembleStretchyGlyph part assembly against the real font", () => {
       loadMathFont().font.minConnectorOverlap,
     );
 
-    // Worked out by hand from the font's own part metrics: reaching 6000 needs the 1252-unit extender four times (bottom 1273 + 4x1252 + top 1273 = 7554 of raw advance across six parts), and the five seams between them are capped at 250 units by the bottom part's own end connector and the top part's own start connector -- so the construction lands at 7554 - 5x250 = 6304, the closest the font's own parts can get to 6000 from above.
+    // Worked out by hand from the font's own part metrics: reaching 6000 needs the 1252-unit extender four times (bottom 1273 + 4x1252 + top 1273 = 7554 of raw advance across six parts), and the five seams between them are capped at 250 units by the bottom part's own end connector and the top part's own start connector — so the construction lands at 7554 - 5x250 = 6304, the closest the font's own parts can get to 6000 from above.
     expect(result.placements.map((placement) => placement.glyphId)).toEqual([
       4862, 4861, 4861, 4861, 4861, 4860,
     ]);

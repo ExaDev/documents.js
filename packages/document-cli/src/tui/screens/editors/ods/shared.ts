@@ -7,7 +7,7 @@ import {
 } from "documents.js";
 import type { AppState, OdsOpenDocument } from "../../../state/types.js";
 
-// Every ods screen in this group needs the open document narrowed to `OdsOpenDocument` before touching `.editor`. The reducer's own `rootScreenForFormat`/`OPEN_FILE_SUCCESS`/`CREATE_DOCUMENT` guarantee that whichever of these screens is on top of the stack, the open document really is ods -- a mismatch here can only mean a routing bug elsewhere in the app, worth a loud failure rather than a silent fallback, matching the same "was rendered while the current screen was not X" throw already used by the sibling screens in ../../.
+// Every ods screen in this group needs the open document narrowed to `OdsOpenDocument` before touching `.editor`. The reducer's own `rootScreenForFormat`/`OPEN_FILE_SUCCESS`/`CREATE_DOCUMENT` guarantee that whichever of these screens is on top of the stack, the open document really is ods — a mismatch here can only mean a routing bug elsewhere in the app, worth a loud failure rather than a silent fallback, matching the same "was rendered while the current screen was not X" throw already used by the sibling screens in ../../.
 export function odsDocument(state: AppState): OdsOpenDocument {
   const doc = state.openDocument;
   if (doc?.format !== "ods") {
@@ -18,7 +18,7 @@ export function odsDocument(state: AppState): OdsOpenDocument {
   return doc;
 }
 
-// `OdsSheet` itself has no range/dimension enumerator at all, and `OdsSheet.cell(row, column)` materialises a real `table:table-column`/`table:table-row` element for whatever position it is called with -- see documents.js's own README gotcha on `src/edit/ods/address.ts`. Calling `cell()` merely to DISPLAY the grid would therefore silently mutate the document every time the viewport scrolls. `readOdsContent`'s own resolved `rows`/`columns`/`cells` arrays are the only read path that never writes anything back, which is why every display-only concern in this screen group goes through here instead of the live `OdsSheet`; writes still go through `OdsSheet.cell(...).value = ...` (wired to `SET_CELL_VALUE` in the reducer), never through this function.
+// `OdsSheet` itself has no range/dimension enumerator at all, and `OdsSheet.cell(row, column)` materialises a real `table:table-column`/`table:table-row` element for whatever position it is called with — see documents.js's own README gotcha on `src/edit/ods/address.ts`. Calling `cell()` merely to DISPLAY the grid would therefore silently mutate the document every time the viewport scrolls. `readOdsContent`'s own resolved `rows`/`columns`/`cells` arrays are the only read path that never writes anything back, which is why every display-only concern in this screen group goes through here instead of the live `OdsSheet`; writes still go through `OdsSheet.cell(...).value = ...` (wired to `SET_CELL_VALUE` in the reducer), never through this function.
 export function resolveSheet(
   editor: OdsEditor,
   sheetIndex: number,
@@ -34,7 +34,7 @@ export function resolveSheet(
 
 const MIN_GRID_EXTENT = 1;
 
-// "What's actually populated?" resolved from the same readOdsContent walk `resolveSheet` already did -- the sheet's real extent is the furthest cell/column/row index it declares, floored at 1x1 so a freshly-added, entirely empty sheet still offers a navigable A1 to start typing into. Extent grows on its own as further cells are written, since `OdsSheet.cell()` materialises a real column/row element at whatever position it is next called with.
+// "What's actually populated?" resolved from the same readOdsContent walk `resolveSheet` already did — the sheet's real extent is the furthest cell/column/row index it declares, floored at 1x1 so a freshly-added, entirely empty sheet still offers a navigable A1 to start typing into. Extent grows on its own as further cells are written, since `OdsSheet.cell()` materialises a real column/row element at whatever position it is next called with.
 export function sheetExtent(sheet: ContentSheet | undefined): {
   readonly rowCount: number;
   readonly columnCount: number;
@@ -74,7 +74,7 @@ export function cellLookup(
   return map;
 }
 
-// Single-character, plain-ASCII badges so the grid stays legible in any terminal -- no emoji, no box-drawing glyphs that might be missing from a given font.
+// Single-character, plain-ASCII badges so the grid stays legible in any terminal — no emoji, no box-drawing glyphs that might be missing from a given font.
 export const KIND_BADGE: Readonly<Record<ContentCellValue["kind"], string>> = {
   string: "S",
   number: "N",
@@ -88,7 +88,7 @@ export const KIND_BADGE: Readonly<Record<ContentCellValue["kind"], string>> = {
   empty: ".",
 };
 
-// Every kind a cell can genuinely be cycled to while editing, in display order -- 'empty' is reached by clearing the text instead of cycling to it (see cell-detail.tsx's own comment), so it is deliberately not a member of this list.
+// Every kind a cell can genuinely be cycled to while editing, in display order — 'empty' is reached by clearing the text instead of cycling to it (see cell-detail.tsx's own comment), so it is deliberately not a member of this list.
 export const CELL_VALUE_KINDS: readonly ContentCellValue["kind"][] = [
   "string",
   "number",
@@ -101,7 +101,7 @@ export const CELL_VALUE_KINDS: readonly ContentCellValue["kind"][] = [
   "error",
 ];
 
-// The text an existing cell's own value round-trips through the editor as, when Enter opens it for editing with no seed keystroke -- the *raw* value (`String(42.5)`), never the rendered `displayText` (which for a percentage/currency/date cell is formatted for reading, not for re-parsing back into the same kind).
+// The text an existing cell's own value round-trips through the editor as, when Enter opens it for editing with no seed keystroke — the *raw* value (`String(42.5)`), never the rendered `displayText` (which for a percentage/currency/date cell is formatted for reading, not for re-parsing back into the same kind).
 export function rawEditableText(value: ContentCellValue): string {
   switch (value.kind) {
     case "empty":
@@ -121,7 +121,7 @@ export function rawEditableText(value: ContentCellValue): string {
   }
 }
 
-// The kind a fresh type-to-edit seed keystroke implies, per the brief: a leading digit means number, TRUE/FALSE means boolean, anything else means string. This runs once, at the moment editing begins -- see cell-detail.tsx's own comment for why the kind does not keep re-inferring itself as the user keeps typing.
+// The kind a fresh type-to-edit seed keystroke implies, per the brief: a leading digit means number, TRUE/FALSE means boolean, anything else means string. This runs once, at the moment editing begins — see cell-detail.tsx's own comment for why the kind does not keep re-inferring itself as the user keeps typing.
 export function inferKind(seed: string): ContentCellValue["kind"] {
   const trimmed = seed.trim();
   if (trimmed.length === 0) {
@@ -145,7 +145,7 @@ function parseFiniteNumber(text: string): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-// The typed `ContentCellValue` a kind + the editor's current text buffer commit to, or `undefined` when the text does not actually fit the chosen kind (an unparsable number, neither "true" nor "false" for a boolean) -- the caller is expected to refuse the commit and keep editing rather than silently coercing to a fallback value.
+// The typed `ContentCellValue` a kind + the editor's current text buffer commit to, or `undefined` when the text does not actually fit the chosen kind (an unparsable number, neither "true" nor "false" for a boolean) — the caller is expected to refuse the commit and keep editing rather than silently coercing to a fallback value.
 export function buildCellValue(
   kind: ContentCellValue["kind"],
   text: string,

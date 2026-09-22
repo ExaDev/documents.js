@@ -54,7 +54,7 @@ function firstDrawPage(pkg: Package): XmlElement {
   return page;
 }
 
-// A slide's vectors read back through odf.js's OWN readDrawPageContent -- the same reader readOdgContent uses for a real drawing page, and a genuinely independent oracle rather than an inverse written alongside this package's writer. readOdp itself cannot serve here: ContentSlide has a shapes array and no vectors array at all, which is exactly why buildOdpPackage writes vector primitives as page-level geometry rather than as shapes.
+// A slide's vectors read back through odf.js's OWN readDrawPageContent — the same reader readOdgContent uses for a real drawing page, and a genuinely independent oracle rather than an inverse written alongside this package's writer. readOdp itself cannot serve here: ContentSlide has a shapes array and no vectors array at all, which is exactly why buildOdpPackage writes vector primitives as page-level geometry rather than as shapes.
 function readSlideVectors(pkg: Package): ContentVector[] {
   return readDrawPageContent(firstDrawPage(pkg).children, pkg).vectors;
 }
@@ -124,7 +124,7 @@ describe("buildOdpPackage", () => {
     expect(secondRun?.color).toEqual({ r: 0, g: 0, b: 1 });
   });
 
-  // A shape text box is not office:text: draw:text-box's content model is (text:p | text:list)* with no text:h anywhere in it, so the heading's DEPTH can never cross into a slide as markup. The one carryable fact is its visual weight: the text:p populateParagraph writes here points text:style-name at the scaffold's own Heading_20_N definition, so the heading keeps its size and bold -- proven resolvable by the round trip, which reads the style back through the cascade onto the runs -- rather than degrading to an unstyled paragraph that loses weight as well as depth.
+  // A shape text box is not office:text: draw:text-box's content model is (text:p | text:list)* with no text:h anywhere in it, so the heading's DEPTH can never cross into a slide as markup. The one carryable fact is its visual weight: the text:p populateParagraph writes here points text:style-name at the scaffold's own Heading_20_N definition, so the heading keeps its size and bold — proven resolvable by the round trip, which reads the style back through the cascade onto the runs — rather than degrading to an unstyled paragraph that loses weight as well as depth.
   it("points a heading paragraph in a text box at the scaffold's Heading_20_N style, keeping its visual weight without text:h", () => {
     const content = presentationDoc([
       {
@@ -273,7 +273,7 @@ describe("buildOdpPackage", () => {
       undefined,
       expect.closeTo(30, 4),
     ]);
-    // Each vector is page-level geometry on the draw:page itself, not a draw:frame -- and the containing ContentShape adds no empty text box of its own.
+    // Each vector is page-level geometry on the draw:page itself, not a draw:frame — and the containing ContentShape adds no empty text box of its own.
     expect(
       firstDrawPage(pkg)
         .children.filter((child) => child.type === "element")

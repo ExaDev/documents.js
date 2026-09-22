@@ -29,7 +29,7 @@ function line(x1Pt: number, y1Pt: number, x2Pt: number, y2Pt: number) {
   };
 }
 
-// A real-world publisher pattern several production PDFs use to draw a table's gridlines: a thin filled rectangle (fill only, no stroke) rather than a genuinely stroked LayoutLine/LayoutPath -- confirmed directly against real documents, where every observed gridline rect measured 0.12-2.30pt thick on its short axis. extractLineCandidates must recognise this shape alongside the line/path shapes it already accepts.
+// A real-world publisher pattern several production PDFs use to draw a table's gridlines: a thin filled rectangle (fill only, no stroke) rather than a genuinely stroked LayoutLine/LayoutPath — confirmed directly against real documents, where every observed gridline rect measured 0.12-2.30pt thick on its short axis. extractLineCandidates must recognise this shape alongside the line/path shapes it already accepts.
 describe("extractLineCandidates: thin filled rects as drawn gridlines", () => {
   it("reads a wide, thin rect as a horizontal line segment along its long axis", () => {
     const items: LayoutItem[] = [
@@ -56,7 +56,7 @@ describe("extractLineCandidates: thin filled rects as drawn gridlines", () => {
     expect(extractLineCandidates(items)).toEqual([]);
   });
 
-  it("ignores a small square rect (thin on neither axis relative to the other -- a corner-joint artefact, not a line)", () => {
+  it("ignores a small square rect (thin on neither axis relative to the other — a corner-joint artefact, not a line)", () => {
     const items: LayoutItem[] = [
       rect({ xPt: 0, yPt: 0, widthPt: 0.72, heightPt: 0.72 }),
     ];
@@ -64,7 +64,7 @@ describe("extractLineCandidates: thin filled rects as drawn gridlines", () => {
   });
 
   it("still requires the resulting segment to clear the existing minimum-length threshold once classified (extractLineCandidates itself does not filter by length, classifyAxisLine does)", () => {
-    // A thin-but-short rect produces a candidate segment here; detectGridLattice below (which runs classification + the length threshold) is what actually rejects it -- this test documents that division of responsibility rather than duplicating the length check in extractLineCandidates.
+    // A thin-but-short rect produces a candidate segment here; detectGridLattice below (which runs classification + the length threshold) is what actually rejects it — this test documents that division of responsibility rather than duplicating the length check in extractLineCandidates.
     const items: LayoutItem[] = [
       rect({ xPt: 0, yPt: 0, widthPt: 2, heightPt: 0.5 }),
     ];
@@ -130,7 +130,7 @@ describe("detectGridLattice: rect-drawn lattices", () => {
   });
 });
 
-// ExaDev/documents.js#1077: detectGridLattice used to dedupe every line candidate on the WHOLE page into one shared rowLines/columnLines set before testing closure, so a rule that had nothing to do with the real table -- drawn anywhere else on the page -- could still corrupt the one outer-rectangle test the whole page shared. Clustering first (segmentsCross/clusterSegments) fixes this by testing closure per connected component instead: a candidate line only joins the real table's cluster if it actually crosses one of the table's own perpendicular lines.
+// ExaDev/documents.js#1077: detectGridLattice used to dedupe every line candidate on the WHOLE page into one shared rowLines/columnLines set before testing closure, so a rule that had nothing to do with the real table — drawn anywhere else on the page — could still corrupt the one outer-rectangle test the whole page shared. Clustering first (segmentsCross/clusterSegments) fixes this by testing closure per connected component instead: a candidate line only joins the real table's cluster if it actually crosses one of the table's own perpendicular lines.
 describe("detectGridLattice: clustering keeps unrelated page furniture out of the real table's outer rectangle (ExaDev/documents.js#1077)", () => {
   // A real 3x3 (row x column) lattice, geometrically identical to rectLatticeItems() above but drawn as genuine LayoutLines.
   function tableLines() {
@@ -174,7 +174,7 @@ describe("detectGridLattice: a border interrupted by one small gap still closes 
       line(0, 200, 300, 200), // interior row divider, fully drawn
       line(0, 100, 300, 100), // bottom row divider, fully drawn
       line(0, 100, 0, 197), // left column, lower segment
-      line(0, 203, 0, 300), // left column, upper segment -- 6pt gap out of a 200pt span (97% union coverage, ~48.5% best-run)
+      line(0, 203, 0, 300), // left column, upper segment — 6pt gap out of a 200pt span (97% union coverage, ~48.5% best-run)
       line(150, 100, 150, 300), // interior column divider, fully drawn
       line(300, 100, 300, 300), // right column, fully drawn
     ];
@@ -184,11 +184,11 @@ describe("detectGridLattice: a border interrupted by one small gap still closes 
   });
 });
 
-// A real NGED specification's page (novus-power/hive#1397) crashed pdfToMarkdown with "Maximum call stack size exceeded" -- not from recursion, but from Math.min(...cells.map(...))/Math.max(...cells.map(...)) spreading a merged region's cell list into a function call, which throws once the array exceeds the JS engine's own argument-count limit (V8's is roughly 65536-125000 depending on version). A page whose line detection turns up a dense or malformed grid can merge tens of thousands of atomic cells into one region with no drawn boundary between them.
+// A real NGED specification's page (novus-power/hive#1397) crashed pdfToMarkdown with "Maximum call stack size exceeded" — not from recursion, but from Math.min(...cells.map(...))/Math.max(...cells.map(...)) spreading a merged region's cell list into a function call, which throws once the array exceeds the JS engine's own argument-count limit (V8's is roughly 65536-125000 depending on version). A page whose line detection turns up a dense or malformed grid can merge tens of thousands of atomic cells into one region with no drawn boundary between them.
 describe("findCellRegions: a merged region far larger than the JS engine's argument-count limit", () => {
   it("computes the region's bounds without spreading the cell list into Math.min/max", () => {
     const rowCount = 200_000;
-    // Two columns, kept apart by one fully-drawn divider at position 1; every one of the 200,000 interior row dividers is undrawn, so each column merges top-to-bottom into a single region of 200,000 cells -- two regions, each far past the argument-count limit a naive Math.min(...cells) would hit. Every line needs its own distinct position: two dividers sharing a position give unionCoverageRatio a zero-length span, which it treats as fully covered regardless of ranges.
+    // Two columns, kept apart by one fully-drawn divider at position 1; every one of the 200,000 interior row dividers is undrawn, so each column merges top-to-bottom into a single region of 200,000 cells — two regions, each far past the argument-count limit a naive Math.min(...cells) would hit. Every line needs its own distinct position: two dividers sharing a position give unionCoverageRatio a zero-length span, which it treats as fully covered regardless of ranges.
     const rowLines = Array.from({ length: rowCount + 1 }, (_, i) => ({
       position: i,
       ranges: [],
@@ -206,6 +206,6 @@ describe("findCellRegions: a merged region far larger than the JS engine's argum
       { rowStart: 0, rowEnd: rowCount, colStart: 0, colEnd: 1 },
       { rowStart: 0, rowEnd: rowCount, colStart: 1, colEnd: 2 },
     ]);
-    // Builds and reconciles 200,000 synthetic row dividers, which is genuine work even though it completes in well under a second uncontended -- under Stryker's per-statement instrumentation plus heavy concurrent host load it has measured a 5000ms-plus wall clock, the same "wall-clock dominated by scheduling, not this test's own CPU work" shape documented for read-graph.test.ts's docxToPdf timeout (ExaDev/documents.js#1039) and its sibling ODS mergeCells test (ExaDev/documents.js#1037).
+    // Builds and reconciles 200,000 synthetic row dividers, which is genuine work even though it completes in well under a second uncontended — under Stryker's per-statement instrumentation plus heavy concurrent host load it has measured a 5000ms-plus wall clock, the same "wall-clock dominated by scheduling, not this test's own CPU work" shape documented for read-graph.test.ts's docxToPdf timeout (ExaDev/documents.js#1039) and its sibling ODS mergeCells test (ExaDev/documents.js#1037).
   }, 60_000);
 });

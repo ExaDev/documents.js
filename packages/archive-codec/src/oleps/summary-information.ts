@@ -2,11 +2,11 @@ import { PropertySetFormatError, readPropertySetStream } from "./read";
 import { CP_WINUNICODE, PID_CODEPAGE, type PropertyValue } from "./wire";
 import { writePropertySetStream } from "./write";
 
-// The one named [MS-OLEPS] property set every legacy binary Office document ([MS-OSHARED] 2.3.3.2.2) carries its title/author/dates in: the fixed SummaryInformation property set, conventionally stored as a "\x05SummaryInformation" stream in the document's own [MS-CFB] compound file. This is the layer that knows PID 2 means a title -- ../cfb/read.ts and ./read.ts/./write.ts below it know nothing about SummaryInformation specifically, exactly as ../cfb/ole-package.ts knows the OLE Package stream's own field layout while ../cfb/read.ts knows only generic compound-file structure.
+// The one named [MS-OLEPS] property set every legacy binary Office document ([MS-OSHARED] 2.3.3.2.2) carries its title/author/dates in: the fixed SummaryInformation property set, conventionally stored as a "\x05SummaryInformation" stream in the document's own [MS-CFB] compound file. This is the layer that knows PID 2 means a title — ../cfb/read.ts and ./read.ts/./write.ts below it know nothing about SummaryInformation specifically, exactly as ../cfb/ole-package.ts knows the OLE Package stream's own field layout while ../cfb/read.ts knows only generic compound-file structure.
 //
-// Deliberately narrower than the full SummaryInformation property set [MS-OLEPS] 3.1 documents: only the seven fields a caller (doc-codec, xls-codec, ppt-codec) actually needs are read and written -- title, subject, author, keywords, comments, and the three FILETIME timestamps (created, last saved, last printed). PIDSI_TEMPLATE, PIDSI_LASTAUTHOR, PIDSI_REVNUMBER, PIDSI_APPNAME, PIDSI_EDITTIME, PIDSI_PAGECOUNT, PIDSI_WORDCOUNT, PIDSI_CHARCOUNT, and PIDSI_DOC_SECURITY are not read or written -- an honest, explicitly out-of-scope remainder, alongside DocumentSummaryInformation's own extended and user-defined property sets (a different stream, "\x05DocumentSummaryInformation", carrying company/manager/custom properties -- not attempted at all).
+// Deliberately narrower than the full SummaryInformation property set [MS-OLEPS] 3.1 documents: only the seven fields a caller (doc-codec, xls-codec, ppt-codec) actually needs are read and written — title, subject, author, keywords, comments, and the three FILETIME timestamps (created, last saved, last printed). PIDSI_TEMPLATE, PIDSI_LASTAUTHOR, PIDSI_REVNUMBER, PIDSI_APPNAME, PIDSI_EDITTIME, PIDSI_PAGECOUNT, PIDSI_WORDCOUNT, PIDSI_CHARCOUNT, and PIDSI_DOC_SECURITY are not read or written — an honest, explicitly out-of-scope remainder, alongside DocumentSummaryInformation's own extended and user-defined property sets (a different stream, "\x05DocumentSummaryInformation", carrying company/manager/custom properties — not attempted at all).
 //
-// KEYWORDS is [MS-OLEPS] 2.19/2.20's own single free-text string, not a vector -- there is no delimiter [MS-OLEPS] mandates, so this joins/splits on ", ", the convention already established for the identical shape in ooxml.js's cp:keywords and pdf-codec's /Keywords (see packages/ooxml.js/src/typed/shared/metadata.ts and packages/pdf-codec/src/read.ts).
+// KEYWORDS is [MS-OLEPS] 2.19/2.20's own single free-text string, not a vector — there is no delimiter [MS-OLEPS] mandates, so this joins/splits on ", ", the convention already established for the identical shape in ooxml.js's cp:keywords and pdf-codec's /Keywords (see packages/ooxml.js/src/typed/shared/metadata.ts and packages/pdf-codec/src/read.ts).
 
 // [MS-OLEPS] 3.1: the FMTID every SummaryInformation property set declares as its FMTID0.
 export const FMTID_SUMMARY_INFORMATION =
@@ -103,7 +103,7 @@ export function readSummaryInformation(
   };
 }
 
-// Builds a well-formed "\x05SummaryInformation" stream's bytes from the same shape readSummaryInformation returns. Only the fields actually present are written -- a real SummaryInformation stream need not carry every property, and a caller wanting an honestly-empty stream (just the CodePage property every real producer includes) can pass {}.
+// Builds a well-formed "\x05SummaryInformation" stream's bytes from the same shape readSummaryInformation returns. Only the fields actually present are written — a real SummaryInformation stream need not carry every property, and a caller wanting an honestly-empty stream (just the CodePage property every real producer includes) can pass {}.
 export function writeSummaryInformationStream(
   properties: SummaryInformationProperties,
 ): Uint8Array<ArrayBuffer> {

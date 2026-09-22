@@ -17,7 +17,7 @@ import {
   type RgbColor,
 } from "../text/style";
 
-/** One master's own resolved facts: its text-style cascade table and its own colour scheme. Bundled together because both are keyed off the same masterIdRef a slide's SlideAtom names -- a caller resolving one always needs the other too. */
+/** One master's own resolved facts: its text-style cascade table and its own colour scheme. Bundled together because both are keyed off the same masterIdRef a slide's SlideAtom names — a caller resolving one always needs the other too. */
 export interface MasterInfo {
   readonly styles: MasterStyleTable;
   readonly colorScheme: readonly RgbColor[];
@@ -30,7 +30,7 @@ export interface MasterStyleTable {
   readonly byType: ReadonlyMap<number, readonly MasterStyleLevel[]>;
 }
 
-/** Builds one MainMasterContainer's own MasterStyleTable from its direct-child TextMasterStyleAtoms, falling back to the document-wide default (the single OTHER-typed TextMasterStyleAtom [MS-PPT] states lives in the DocumentTextInfoContainer inside Environment) for any TextTypeEnum member the master itself carries no atom for. A real master this package's own writer produces always states TITLE/BODY/NOTES explicitly (master-write.ts's own comment), so the document default is realistically only ever consulted for OTHER-typed runs or a third-party master that omits one of the three -- but [MS-PPT] 2.9.35 makes it the genuine fallback of last resort for every type, not a special case for OTHER alone. */
+/** Builds one MainMasterContainer's own MasterStyleTable from its direct-child TextMasterStyleAtoms, falling back to the document-wide default (the single OTHER-typed TextMasterStyleAtom [MS-PPT] states lives in the DocumentTextInfoContainer inside Environment) for any TextTypeEnum member the master itself carries no atom for. A real master this package's own writer produces always states TITLE/BODY/NOTES explicitly (master-write.ts's own comment), so the document default is realistically only ever consulted for OTHER-typed runs or a third-party master that omits one of the three — but [MS-PPT] 2.9.35 makes it the genuine fallback of last resort for every type, not a special case for OTHER alone. */
 export function buildMasterStyleTable(
   masterAtoms: readonly MasterTextStyleAtom[],
   documentDefault: MasterTextStyleAtom | undefined,
@@ -71,7 +71,7 @@ function orderedMasterLevels(
     if (levels === undefined) {
       return [];
     }
-    // How many of the atom's own levels (from level 0) fall within the run's stated indentLevel -- indentLevel + 1 of them, unless the atom itself carries fewer, in which case every level it has is in range. Stated this way (clamping the take-count itself, not indentLevel against an off-by-one bound) rather than the mirror-image `Math.min(indentLevel, levels.length - 1) + 1`: that phrasing carries a genuinely equivalent mutant here, since Array.prototype.slice silently clips an end index past the array's own length, so swapping its "- 1" for "+ 1" produces byte-identical output for every indentLevel a real caller can supply -- no test could ever tell the two apart. This phrasing puts the arithmetic on indentLevel itself, where a "+ 1"/"- 1" swap changes a genuinely reachable take-count instead.
+    // How many of the atom's own levels (from level 0) fall within the run's stated indentLevel — indentLevel + 1 of them, unless the atom itself carries fewer, in which case every level it has is in range. Stated this way (clamping the take-count itself, not indentLevel against an off-by-one bound) rather than the mirror-image `Math.min(indentLevel, levels.length - 1) + 1`: that phrasing carries a genuinely equivalent mutant here, since Array.prototype.slice silently clips an end index past the array's own length, so swapping its "- 1" for "+ 1" produces byte-identical output for every indentLevel a real caller can supply — no test could ever tell the two apart. This phrasing puts the arithmetic on indentLevel itself, where a "+ 1"/"- 1" swap changes a genuinely reachable take-count instead.
     const takeCount = Math.min(indentLevel + 1, levels.length);
     return levels.slice(0, takeCount).reverse();
   };
@@ -97,7 +97,7 @@ function firstDefined<T, F>(
   return undefined;
 }
 
-/** Resolves a run's own ParagraphProperties (possibly stating nothing at all, when the run's paragraph itself carries no TextPFException of its own) against the master cascade -- every field the run itself states wins outright; every field it doesn't falls through to the first master level that does. indentLevel is never itself resolved from the cascade: it is the run's own stated (or default-zero) outline depth, and is what selects which master levels apply in the first place. */
+/** Resolves a run's own ParagraphProperties (possibly stating nothing at all, when the run's paragraph itself carries no TextPFException of its own) against the master cascade — every field the run itself states wins outright; every field it doesn't falls through to the first master level that does. indentLevel is never itself resolved from the cascade: it is the run's own stated (or default-zero) outline depth, and is what selects which master levels apply in the first place. */
 export function resolveParagraphProperties(
   run: ParagraphProperties | undefined,
   table: MasterStyleTable,
@@ -117,7 +117,7 @@ export function resolveParagraphProperties(
   };
 }
 
-/** The character-property counterpart of resolveParagraphProperties -- see that function's own comment for the cascade this implements. `color` resolves to whichever RunColor (literal or still-unresolved scheme reference) the cascade finds first; converting a scheme reference to an actual RgbColor is document/color-scheme.ts's own concern, deliberately kept separate since it needs the slide's colour scheme rather than anything the text-formatting cascade itself touches. */
+/** The character-property counterpart of resolveParagraphProperties — see that function's own comment for the cascade this implements. `color` resolves to whichever RunColor (literal or still-unresolved scheme reference) the cascade finds first; converting a scheme reference to an actual RgbColor is document/color-scheme.ts's own concern, deliberately kept separate since it needs the slide's colour scheme rather than anything the text-formatting cascade itself touches. */
 export function resolveCharacterProperties(
   run: CharacterProperties | undefined,
   table: MasterStyleTable,
@@ -143,7 +143,7 @@ export interface SlideAtomInfo {
   readonly notesIdRef: number;
 }
 
-// [MS-PPT] 2.5.2's 0x18-byte SlideAtom -- the read-side mirror of master-write.ts's own writeSlideAtom. Only the two persist-identifier fields this module needs are surfaced; geom/placeholderTypes/slideFlags are this package's own writer's concern; the read side's shapes come from the slide's own OfficeArtSpContainer tree regardless of what SlideAtom's own placeholder-type array claims.
+// [MS-PPT] 2.5.2's 0x18-byte SlideAtom — the read-side mirror of master-write.ts's own writeSlideAtom. Only the two persist-identifier fields this module needs are surfaced; geom/placeholderTypes/slideFlags are this package's own writer's concern; the read side's shapes come from the slide's own OfficeArtSpContainer tree regardless of what SlideAtom's own placeholder-type array claims.
 export function readSlideAtom(record: PptRecord): SlideAtomInfo {
   if (record.header.recType !== RT_SlideAtom) {
     throw new PptFormatError(

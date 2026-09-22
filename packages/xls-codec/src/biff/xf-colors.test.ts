@@ -37,7 +37,7 @@ describe("resolveIcvColor", () => {
   });
 
   it("resolves icv 8-63 through the fixed default table when no Palette is given", () => {
-    // icv 8: rgColor[0]'s own default (0,0,0); icv 24 (0x18): rgColor[16]'s own default (153,153,255) -- [MS-XLS] "Icv"'s own table.
+    // icv 8: rgColor[0]'s own default (0,0,0); icv 24 (0x18): rgColor[16]'s own default (153,153,255) — [MS-XLS] "Icv"'s own table.
     expect(resolveIcvColor(8, undefined)).toStrictEqual({ r: 0, g: 0, b: 0 });
     expect(resolveIcvColor(24, undefined)).toStrictEqual({
       r: 153 / 255,
@@ -69,7 +69,7 @@ describe("resolveIcvColor", () => {
 
 describe("DEFAULT_PALETTE_HEX_TO_ICV", () => {
   it("resolves every default-table colour back to SOME icv that itself resolves to the identical colour", () => {
-    // Not necessarily the SAME icv: the real default table genuinely repeats a handful of colours at more than one index (e.g. (0,0,128) at both rgColor[10] and rgColor[24], [MS-XLS] "Icv"'s own table), so the map -- built last-write-wins over the table's own entries -- may answer with a different index than the one a given colour started from. What must hold is that whichever icv it answers with round-trips to the same colour.
+    // Not necessarily the SAME icv: the real default table genuinely repeats a handful of colours at more than one index (e.g. (0,0,128) at both rgColor[10] and rgColor[24], [MS-XLS] "Icv"'s own table), so the map — built last-write-wins over the table's own entries — may answer with a different index than the one a given colour started from. What must hold is that whichever icv it answers with round-trips to the same colour.
     for (
       let icv = PALETTE_BASE_ICV;
       icv < PALETTE_BASE_ICV + PALETTE_ENTRY_COUNT;
@@ -264,7 +264,7 @@ describe("packXfDecorationWords / unpackXfDecoration", () => {
   it("packs the exact undecorated defaults ([MS-XLS]'s own 'no border, no fill' state) with no argument", () => {
     const { word2, word3, word4 } = packXfDecorationWords();
     expect(word2).toBe(0);
-    // word3's own fls field (bits 26-31) is 0 -- FLSNULL; icvTop/icvBottom (bits 0-13) are also 0.
+    // word3's own fls field (bits 26-31) is 0 — FLSNULL; icvTop/icvBottom (bits 0-13) are also 0.
     expect(word3).toBe(0);
     // word4: icvFore (0x40, Automatic foreground) | icvBack (0x41, Automatic background) << 7.
     expect(word4).toBe(0x40 | (0x41 << 7));
@@ -285,7 +285,7 @@ describe("packXfDecorationWords / unpackXfDecoration", () => {
     expect((word4 >>> 7) & 0x7f).toBe(0x41);
   });
 
-  it("forces icvBack back to Automatic for a solid fill, even if fillBackgroundIcv is set -- only icvFore is rendered", () => {
+  it("forces icvBack back to Automatic for a solid fill, even if fillBackgroundIcv is set — only icvFore is rendered", () => {
     const { word4 } = packXfDecorationWords({
       ...UNDECORATED_XF_FIELDS,
       fillPattern: FILL_PATTERN_SOLID,
@@ -319,7 +319,7 @@ describe("applyTint", () => {
   });
 
   it("tints pure black to a clean grey rather than a hue-division-by-zero NaN", () => {
-    // Black and white are the one case where max === min AND max + min is 0 or 2 -- the two values whose own s-formula denominators (max + min, and 2 - max - min) are themselves zero. Grey (0.5, 0.5, 0.5) computes a clean s = 0 through that division even without a dedicated achromatic shortcut; black and white do not, so only they can prove the shortcut is doing real work rather than merely restating what division already gives.
+    // Black and white are the one case where max === min AND max + min is 0 or 2 — the two values whose own s-formula denominators (max + min, and 2 - max - min) are themselves zero. Grey (0.5, 0.5, 0.5) computes a clean s = 0 through that division even without a dedicated achromatic shortcut; black and white do not, so only they can prove the shortcut is doing real work rather than merely restating what division already gives.
     expect(applyTint({ r: 0, g: 0, b: 0 }, 0.5)).toStrictEqual({
       r: 0.5,
       g: 0.5,
@@ -343,7 +343,7 @@ describe("applyTint", () => {
     expect(tinted.r).toBeGreaterThan(grey.r);
   });
 
-  // An independent reference implementation of the identical, standard sRGB<->HSL conversion (W3C CSS Color Module Level 3's own algorithm, https://www.w3.org/TR/css-color-3/#hsl-color) plus the tint formula the source's own top comment cites -- so the colours below (none of them a pure primary, unlike red/grey above, both of which happen to compute an exact 0.5 lightness that never exercises the s formula's own l > 0.5 branch or any hue branch but max === r) can be checked against a real computed expectation rather than only a directional bound.
+  // An independent reference implementation of the identical, standard sRGB<->HSL conversion (W3C CSS Color Module Level 3's own algorithm, https://www.w3.org/TR/css-color-3/#hsl-color) plus the tint formula the source's own top comment cites — so the colours below (none of them a pure primary, unlike red/grey above, both of which happen to compute an exact 0.5 lightness that never exercises the s formula's own l > 0.5 branch or any hue branch but max === r) can be checked against a real computed expectation rather than only a directional bound.
   function referenceTint(
     color: { r: number; g: number; b: number },
     tint: number,
@@ -385,19 +385,19 @@ describe("applyTint", () => {
   }
 
   it.each([
-    // A lightened variant of blue (b uniquely max, l <= 0.5) -- the hue branch neither red (max === r) nor the green case below exercises. r === g here, so this cannot by itself tell (r - g) / d apart from (r - g) * d (both are 0 either way); the case directly below is what needs r !== g.
+    // A lightened variant of blue (b uniquely max, l <= 0.5) — the hue branch neither red (max === r) nor the green case below exercises. r === g here, so this cannot by itself tell (r - g) / d apart from (r - g) * d (both are 0 either way); the case directly below is what needs r !== g.
     {
       label: "b-dominant, l<=0.5",
       color: { r: 0.2, g: 0.2, b: 0.6 },
       tint: 0.5,
     },
-    // b uniquely max again, but with r !== g this time -- proving the hue term is genuinely (r - g) / d, not (r - g) * d, which the case above cannot distinguish since its own r - g is 0.
+    // b uniquely max again, but with r !== g this time — proving the hue term is genuinely (r - g) / d, not (r - g) * d, which the case above cannot distinguish since its own r - g is 0.
     {
       label: "b-dominant with r!==g",
       color: { r: 0.3, g: 0.1, b: 0.7 },
       tint: 0.2,
     },
-    // g uniquely max, l > 0.5 -- the s formula's own d / (2 - max - min) branch, which red's exact 0.5 lightness never selects.
+    // g uniquely max, l > 0.5 — the s formula's own d / (2 - max - min) branch, which red's exact 0.5 lightness never selects.
     { label: "g-dominant, l>0.5", color: { r: 0.6, g: 1, b: 0.7 }, tint: 0.5 },
     // r max with g < b (red's own g === b never selects the "+6" branch of that ternary), shaded rather than tinted.
     {
@@ -405,7 +405,7 @@ describe("applyTint", () => {
       color: { r: 0.8, g: 0.1, b: 0.3 },
       tint: -0.4,
     },
-    // g-dominant with b well below r -- the one shape among these whose own computed hue puts h - 1/3 below zero, exercising hueToRgb's own negative-wraparound branch none of the other cases here reach.
+    // g-dominant with b well below r — the one shape among these whose own computed hue puts h - 1/3 below zero, exercising hueToRgb's own negative-wraparound branch none of the other cases here reach.
     {
       label: "g-dominant, low hue",
       color: { r: 0.9, g: 1, b: 0.1 },

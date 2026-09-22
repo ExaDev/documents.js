@@ -7,12 +7,12 @@ import {
 } from "../record/types";
 import { readTextHeaderAtom } from "../text/atoms";
 
-// SlideListWithTextContainer: the document's list of presentation slides, and -- for placeholder text specifically -- the text itself. A slide's title and body text are stored here rather than in the slide, and the slide's own shape points back at this list through an OutlineTextRefAtom; a reader that only walked slide drawings would find those shapes empty. [MS-PPT] 2.4.14.3: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/307e6d12-7304-47a8-acbd-3e7b8041ad3c [MS-PPT] 2.4.14.5 SlidePersistAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/48dce412-9692-4f93-aeb7-3d9fdd3a0a5a
+// SlideListWithTextContainer: the document's list of presentation slides, and — for placeholder text specifically — the text itself. A slide's title and body text are stored here rather than in the slide, and the slide's own shape points back at this list through an OutlineTextRefAtom; a reader that only walked slide drawings would find those shapes empty. [MS-PPT] 2.4.14.3: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/307e6d12-7304-47a8-acbd-3e7b8041ad3c [MS-PPT] 2.4.14.5 SlidePersistAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/48dce412-9692-4f93-aeb7-3d9fdd3a0a5a
 
 // [MS-PPT] 2.4.14.5: "rh.recLen MUST be 0x00000014."
 const SLIDE_PERSIST_ATOM_LEN = 0x00000014;
 
-// One text body from the list: its TextHeaderAtom's type, plus every record the grammar attaches to that header -- the text atom itself, its StyleTextPropAtom, and the metacharacter/bookmark/special-info records following them.
+// One text body from the list: its TextHeaderAtom's type, plus every record the grammar attaches to that header — the text atom itself, its StyleTextPropAtom, and the metacharacter/bookmark/special-info records following them.
 export interface OutlineText {
   readonly textType: number;
   readonly records: readonly PptRecord[];
@@ -31,7 +31,7 @@ interface MutableSlidePersist {
   readonly texts: { textType: number; records: PptRecord[] }[];
 }
 
-// Reads the list's slides and their placeholder texts. The container's grammar is positional rather than nested -- a SlidePersistAtom opens a slide, a TextHeaderAtom opens a text, and everything after one belongs to it until the next opener -- so this is a single pass with two current-item cursors rather than a tree walk.
+// Reads the list's slides and their placeholder texts. The container's grammar is positional rather than nested — a SlidePersistAtom opens a slide, a TextHeaderAtom opens a text, and everything after one belongs to it until the next opener — so this is a single pass with two current-item cursors rather than a tree walk.
 export function readSlideListWithText(
   listContainer: PptRecord,
 ): SlidePersist[] {

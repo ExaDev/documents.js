@@ -115,7 +115,7 @@ describe("resolveRunProperties: toggle properties", () => {
     expect(props.bold).toBeUndefined();
   });
 
-  it("a sibling property (colour) forcing a non-empty w:rPr still leaves every absent toggle undefined, not false (regression: ExaDev/documents.js#962's own 4th claim -- confirmed stale, not a live bug: readRunPropertiesLayer/mergeRunLayer already propagate an absent toggle through every cascade layer correctly)", () => {
+  it("a sibling property (colour) forcing a non-empty w:rPr still leaves every absent toggle undefined, not false (regression: ExaDev/documents.js#962's own 4th claim — confirmed stale, not a live bug: readRunPropertiesLayer/mergeRunLayer already propagate an absent toggle through every cascade layer correctly)", () => {
     const { paragraph, run } = paragraphWithRun(
       [],
       runEl([el("w:color", { "w:val": "FF0000" })]),
@@ -246,7 +246,7 @@ describe("resolveRunProperties: colour", () => {
     ).toEqual({ r: 1, g: 1, b: 1 });
   });
 
-  it("w:themeTint byte 0xFF leaves the resolved theme colour unchanged (regression: ExaDev/documents.js#962 -- previously ignored entirely)", () => {
+  it("w:themeTint byte 0xFF leaves the resolved theme colour unchanged (regression: ExaDev/documents.js#962 — previously ignored entirely)", () => {
     const themedTheme = {
       colorScheme: new Map([["accent1", { r: 0.2, g: 0.4, b: 0.6 }]]),
       majorFont: "Major Font",

@@ -19,7 +19,7 @@ describe("crc32", () => {
     ).toBe(0x414fa339);
   });
 
-  it("is sensitive to every byte -- a single-bit change changes the result", () => {
+  it("is sensitive to every byte — a single-bit change changes the result", () => {
     const a = crc32(new TextEncoder().encode("abcdef"));
     const b = crc32(new TextEncoder().encode("abcdeg"));
     expect(a).not.toBe(b);

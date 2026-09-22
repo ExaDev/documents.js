@@ -38,7 +38,7 @@ describe("buildToUnicodeCMap", () => {
   });
 
   it("encodes a code point above U+FFFF as a genuine UTF-16BE surrogate pair", () => {
-    // U+1D400 (mathematical bold capital A), one of the Mathematical Alphanumeric Symbols characters this family's own mathvariant mapping routinely produces. A bfchar destination is UTF-16BE, so a supplementary-plane code point occupies two 16-bit units, not one 32-bit one -- writing <0001d400> instead of <d835dc00> would make every reader recover the wrong character.
+    // U+1D400 (mathematical bold capital A), one of the Mathematical Alphanumeric Symbols characters this family's own mathvariant mapping routinely produces. A bfchar destination is UTF-16BE, so a supplementary-plane code point occupies two 16-bit units, not one 32-bit one — writing <0001d400> instead of <d835dc00> would make every reader recover the wrong character.
     expect(cmapText(new Map([[7, [0x1d400]]]))).toContain("<0007> <d835dc00>");
   });
 
@@ -48,7 +48,7 @@ describe("buildToUnicodeCMap", () => {
       entries.set(i + 1, [0x41 + (i % 26)]);
     }
     const text = cmapText(entries);
-    // A subsetted text face routinely carries more than 100 glyphs, so one oversized block is not a theoretical concern here -- it is the ordinary case.
+    // A subsetted text face routinely carries more than 100 glyphs, so one oversized block is not a theoretical concern here — it is the ordinary case.
     expect(bfcharBlockCounts(text)).toEqual([100, 100, 50]);
     expect(text.match(/beginbfchar/g)?.length).toBe(3);
     expect(text.match(/endbfchar/g)?.length).toBe(3);

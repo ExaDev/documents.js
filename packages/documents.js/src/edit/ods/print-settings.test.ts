@@ -37,7 +37,7 @@ function findTableElement(editor: OdsEditor): XmlElement {
   return table;
 }
 
-// The style:page-layout-properties element the most recently written printSettings minted -- style:page-layout is always appended (never reused, see print-settings.ts's own top-of-file note), so the LAST one in styles.xml/office:automatic-styles is always the current sheet's.
+// The style:page-layout-properties element the most recently written printSettings minted — style:page-layout is always appended (never reused, see print-settings.ts's own top-of-file note), so the LAST one in styles.xml/office:automatic-styles is always the current sheet's.
 function currentPageLayoutProperties(editor: OdsEditor): XmlElement {
   const stylesPart = editor.toPackage().parts["styles.xml"];
   const root =
@@ -142,7 +142,7 @@ describe("OdsSheet.printSettings: pageSize/margins/gridlines/headers/pageOrder",
   it("falls back to PAGE_SIZE_A4/DEFAULT_MARGINS/downThenOver when the sheet's own style chain never resolves a page layout at all", () => {
     const editor = createOds();
     const sheet = editor.sheets()[0]!;
-    // A freshly-created sheet has no table:style-name at all yet -- readSheetPrintSettings must fall back rather than throw.
+    // A freshly-created sheet has no table:style-name at all yet — readSheetPrintSettings must fall back rather than throw.
     const settings = sheet.printSettings;
     expect(settings.pageSize).toEqual({ widthPt: 595.28, heightPt: 841.89 });
     expect(settings.margins).toEqual({
@@ -401,7 +401,7 @@ describe("OdsSheet.printSettings: repeatColumns/repeatRows", () => {
   it("stamps a real default width/height on the exterior gap-filled columns/rows too, not just the in-range ones", () => {
     const editor = createOds();
     const sheet = editor.sheets()[0]!;
-    // columns/rows 3-5 are individuated (and wrapped) by the repeat range below; positions 0-2 are gap-filled by replaceRun's own case-3 as one compressed run ahead of it, and would otherwise be left at an ambiguous, unstyled 0 -- readOdsContent reports one compressed run as a single entry at its own start index (0), so only that index is checked for the exterior gap-fill.
+    // columns/rows 3-5 are individuated (and wrapped) by the repeat range below; positions 0-2 are gap-filled by replaceRun's own case-3 as one compressed run ahead of it, and would otherwise be left at an ambiguous, unstyled 0 — readOdsContent reports one compressed run as a single entry at its own start index (0), so only that index is checked for the exterior gap-fill.
     sheet.printSettings = {
       ...BASE,
       repeatColumns: { start: 3, end: 5 },

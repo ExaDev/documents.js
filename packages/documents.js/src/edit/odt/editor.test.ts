@@ -61,7 +61,7 @@ describe("live-view fidelity: mutating one run must not change any other part", 
   it("mutating a run in content.xml leaves every other part byte-for-byte unchanged, except appending the new automatic style", () => {
     const before = minimalOdtPackage();
     const editor = openOdt(minimalOdtBytes());
-    // The fixture's first paragraph-level child is a heading (text:h, no runs); the run to mutate lives in the first paragraph that carries one -- found rather than indexed, since paragraphs() surfaces text:p and text:h both.
+    // The fixture's first paragraph-level child is a heading (text:h, no runs); the run to mutate lives in the first paragraph that carries one — found rather than indexed, since paragraphs() surfaces text:p and text:h both.
     const run = editor
       .paragraphs()
       .find((p) => p.runs().length > 0)
@@ -90,7 +90,7 @@ describe("full editor round trip: open a real odt, mutate an existing run, add a
     const before = minimalOdtPackage();
     const editor = openOdt(minimalOdtBytes());
 
-    // Mutate bold/colour/alignment on the existing "bold text" run (a real text:span already present in the fixture, referencing a pre-existing automatic style) -- found rather than indexed, since the fixture's first paragraph-level child is a heading (text:h) and paragraphs() surfaces text:p and text:h both.
+    // Mutate bold/colour/alignment on the existing "bold text" run (a real text:span already present in the fixture, referencing a pre-existing automatic style) — found rather than indexed, since the fixture's first paragraph-level child is a heading (text:h) and paragraphs() surfaces text:p and text:h both.
     const paragraph = editor
       .paragraphs()
       .find((p) => p.runs().some((r) => r.text === "bold text"));
@@ -103,7 +103,7 @@ describe("full editor round trip: open a real odt, mutate an existing run, add a
         'expected the fixture to have an existing "bold text" run',
       );
     }
-    run.bold = true; // already true in the fixture -- re-asserting it still exercises the resolve-merge-intern path
+    run.bold = true; // already true in the fixture — re-asserting it still exercises the resolve-merge-intern path
     run.color = { r: 0, g: 0, b: 1 };
     paragraph.alignment = "center";
 
@@ -113,7 +113,7 @@ describe("full editor round trip: open a real odt, mutate an existing run, add a
     const bytes = editor.toBytes();
     assertAutomaticStylesOnlyAppended(before, editor.toPackage());
 
-    // Save, then reopen from the serialized bytes -- not the same in-memory Package -- to prove the mutation is real, encoded XML, not just an in-memory object mutation.
+    // Save, then reopen from the serialized bytes — not the same in-memory Package — to prove the mutation is real, encoded XML, not just an in-memory object mutation.
     const reopened = openOdt(bytes);
     const reopenedParagraphs = reopened.paragraphs();
     expect(reopenedParagraphs.map((p) => p.text)).toContain(
@@ -135,7 +135,7 @@ describe("full editor round trip: open a real odt, mutate an existing run, add a
     expect(reopenedRun?.bold).toBe(true);
     expect(reopenedRun?.color).toEqual({ r: 0, g: 0, b: 1 });
 
-    // Everything the edit never touched -- the heading, the table -- is still there untouched.
+    // Everything the edit never touched — the heading, the table — is still there untouched.
     expect(reopened.tables()[0]?.cell(0, 0).text).toContain("A1");
   });
 });

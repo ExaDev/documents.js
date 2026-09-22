@@ -59,7 +59,7 @@ function describeFieldValue(
   }
 }
 
-// Rounded to the same precision `formatPoints`/`RotationField` display at, so what the user sees before pressing Enter to edit matches what they see after -- documents.js's own geometry/rotation setters can round-trip a clean input (15) into a value with floating-point noise (14.999999999999998, confirmed empirically against a real OdpShape), and seeding the draft with that raw noise would be a visible regression the moment someone opens a field they already set.
+// Rounded to the same precision `formatPoints`/`RotationField` display at, so what the user sees before pressing Enter to edit matches what they see after — documents.js's own geometry/rotation setters can round-trip a clean input (15) into a value with floating-point noise (14.999999999999998, confirmed empirically against a real OdpShape), and seeding the draft with that raw noise would be a visible regression the moment someone opens a field they already set.
 function roundForDisplay(value: number): number {
   return Math.round(value * POINT_DISPLAY_PRECISION) / POINT_DISPLAY_PRECISION;
 }
@@ -96,7 +96,7 @@ interface FieldRowProps {
   readonly onCancel: () => void;
 }
 
-// A "multi-line text area" isn't achievable with the one text-input primitive this repo has (ink-text-input, single-line, Enter always submits -- see components/text-field.tsx) -- so editing genuinely happens one line at a time via TextField, but the un-edited VIEW of the text field renders the shape's real, un-flattened `.text` (embedded newlines and all) across as many Ink `<Text>` lines as it actually has, which is the closest a terminal gets to a text area for content that already spans several lines.
+// A "multi-line text area" isn't achievable with the one text-input primitive this repo has (ink-text-input, single-line, Enter always submits — see components/text-field.tsx) — so editing genuinely happens one line at a time via TextField, but the un-edited VIEW of the text field renders the shape's real, un-flattened `.text` (embedded newlines and all) across as many Ink `<Text>` lines as it actually has, which is the closest a terminal gets to a text area for content that already spans several lines.
 function FieldRow(props: FieldRowProps): ReactElement {
   const {
     fieldKey,
@@ -287,7 +287,7 @@ export function ShapeEditorScreen(props: ShapeEditorScreenProps): ReactElement {
           Slide {slideIndex + 1}, shape {shapeIndex + 1}
         </Text>
         <Text color="yellow">
-          This shape no longer exists -- press Esc to go back
+          This shape no longer exists — press Esc to go back
         </Text>
       </Box>
     );

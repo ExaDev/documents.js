@@ -8,9 +8,9 @@ import { attrValue, childrenWithTag } from "../../xml/query";
 import { decodeXmlText } from "../../xml/entities";
 import { odfResidue, type OdfResidueFormat } from "./constructs";
 
-// The form:form/form:<kind> tree walker, extracted from typed/odb/form.ts (which keeps it as its own reading engine and re-exports the types) so the odt reader can reuse the SAME walk for office:forms in an ordinary text document without importing odb/form.ts -- that module imports the odt reader for its own sub-document reading, so the walker living there would turn odt's forms row into a reader cycle. The tree shapes and attribute names here are the ones typed/odb/form.ts verified against real LibreOffice Base output; see that module's own top-of-file note for the evidence.
+// The form:form/form:<kind> tree walker, extracted from typed/odb/form.ts (which keeps it as its own reading engine and re-exports the types) so the odt reader can reuse the SAME walk for office:forms in an ordinary text document without importing odb/form.ts — that module imports the odt reader for its own sub-document reading, so the walker living there would turn odt's forms row into a reader cycle. The tree shapes and attribute names here are the ones typed/odb/form.ts verified against real LibreOffice Base output; see that module's own top-of-file note for the evidence.
 
-// A control's own real ODF element tag, e.g. 'form:text', 'form:listbox', 'form:fixed-text', kept verbatim rather than mapped onto a closed enum -- the odb reader's own convention, so an unrecognised kind degrades with its tag intact rather than being dropped.
+// A control's own real ODF element tag, e.g. 'form:text', 'form:listbox', 'form:fixed-text', kept verbatim rather than mapped onto a closed enum — the odb reader's own convention, so an unrecognised kind degrades with its tag intact rather than being dropped.
 export interface OdbFormControl {
   tag: string;
   name?: string;
@@ -36,7 +36,7 @@ const FORM_ELEMENT_TAG = "form:form";
 const FORM_PROPERTIES_TAG = "form:properties";
 const FORM_TAG_PREFIX = "form:";
 
-// A form:* attribute's own value, entity-decoded -- odf.js's lossless model keeps entities raw for round-trip fidelity, and every projected string this walker returns is exactly the boundary where that encoding needs undoing.
+// A form:* attribute's own value, entity-decoded — odf.js's lossless model keeps entities raw for round-trip fidelity, and every projected string this walker returns is exactly the boundary where that encoding needs undoing.
 function formAttr(element: XmlElement, name: string): string | undefined {
   const raw = attrValue(element, name);
   return raw === undefined ? undefined : decodeXmlText(raw);
@@ -126,7 +126,7 @@ function readFormDefinition(element: XmlElement): OdbFormDefinition {
   return definition;
 }
 
-// An office:forms element's own top-level form:form children, in document order -- the tree the odt reader maps onto content controls and the odb reader reads as OdbFormDefinition (via the re-export in typed/odb/form.ts).
+// An office:forms element's own top-level form:form children, in document order — the tree the odt reader maps onto content controls and the odb reader reads as OdbFormDefinition (via the re-export in typed/odb/form.ts).
 export function readOdfFormDefinitions(
   formsElement: XmlElement,
 ): OdbFormDefinition[] {
@@ -141,7 +141,7 @@ export function readOdfFormDefinitions(
 
 // --- the odt contentControl mapping ---------------------------------------------------------------------------------
 
-// Which ContentControlType a form:<kind> control degrades to. The members document-schema.js itself names as ODF spellings (checkbox, listbox->dropDown, combobox, button) map exactly; the text-entry family maps to plainText; a grid is a container of column controls (group); everything else has no analogue and degrades to richText with its whole element quarantined in residue -- the standing degrade-to-nearest-kind-with-residue rule.
+// Which ContentControlType a form:<kind> control degrades to. The members document-schema.js itself names as ODF spellings (checkbox, listbox->dropDown, combobox, button) map exactly; the text-entry family maps to plainText; a grid is a container of column controls (group); everything else has no analogue and degrades to richText with its whole element quarantined in residue — the standing degrade-to-nearest-kind-with-residue rule.
 const CONTROL_TYPE_BY_TAG: ReadonlyMap<string, ContentControlType> = new Map([
   ["form:text", "plainText"],
   ["form:textarea", "plainText"],
@@ -160,7 +160,7 @@ const CONTROL_TYPE_BY_TAG: ReadonlyMap<string, ContentControlType> = new Map([
   ["form:hidden", "richText"],
 ]);
 
-// A form:listbox's own literal option list ([OASIS ODF] 1.3, the form-listbox-elem/form-option-elem schema): zero or more form:option children, each a label/value pair (form:label the display text, form:value its underlying value -- the same displayText/value split ooxml.js's own readListItemOptions reads off w:listItem for the identical docx dropdown concept). A listbox bound to a live data source (form:list-source-type "sql"/"table"/"query" rather than the default "value-list") carries no literal form:option children at all, so this naturally reads as an empty list for that case too -- resolving a live query's own result set is out of this reader's reach regardless. Not read for form:combobox: that control's own child element is form:item, a distinct schema shape from form:listbox's form:option, and out of this fix's scope (ExaDev/documents.js#1016).
+// A form:listbox's own literal option list ([OASIS ODF] 1.3, the form-listbox-elem/form-option-elem schema): zero or more form:option children, each a label/value pair (form:label the display text, form:value its underlying value — the same displayText/value split ooxml.js's own readListItemOptions reads off w:listItem for the identical docx dropdown concept). A listbox bound to a live data source (form:list-source-type "sql"/"table"/"query" rather than the default "value-list") carries no literal form:option children at all, so this naturally reads as an empty list for that case too — resolving a live query's own result set is out of this reader's reach regardless. Not read for form:combobox: that control's own child element is form:item, a distinct schema shape from form:listbox's form:option, and out of this fix's scope (ExaDev/documents.js#1016).
 function readListboxOptions(element: XmlElement): string[] {
   const options: string[] = [];
   for (const option of childrenWithTag(element, "form:option")) {
@@ -173,7 +173,7 @@ function readListboxOptions(element: XmlElement): string[] {
   return options;
 }
 
-// The original form element a walker node came from is what residue serialises, so the construct builder walks the ELEMENTS directly rather than the projected nodes -- the projection loses the form:properties bag this mapping deliberately quarantines.
+// The original form element a walker node came from is what residue serialises, so the construct builder walks the ELEMENTS directly rather than the projected nodes — the projection loses the form:properties bag this mapping deliberately quarantines.
 function controlConstruct(
   element: XmlElement,
   format: OdfResidueFormat,
@@ -211,7 +211,7 @@ function controlConstruct(
   return [{ kind: "constructStart", descriptor }, { kind: "constructEnd" }];
 }
 
-// One office:forms element -> the point contentControl constructs its tree reads as, in pre-order: each form:form becomes a group control carrying its name, each control its mapped kind, tag, and value/checked state. ODF form controls have no rendered block extent in the text flow -- their geometry lives in the drawing layer's draw:control elements, which no reader resolves -- so every construct here is a point pair and the tree shape states as pre-order document order (the exact structure, bindings included, stays the odb reader's own model for documents that are form sub-documents). The office:forms wrapper element itself emits no construct: it is a pure container, and the group member already names what its child forms are.
+// One office:forms element -> the point contentControl constructs its tree reads as, in pre-order: each form:form becomes a group control carrying its name, each control its mapped kind, tag, and value/checked state. ODF form controls have no rendered block extent in the text flow — their geometry lives in the drawing layer's draw:control elements, which no reader resolves — so every construct here is a point pair and the tree shape states as pre-order document order (the exact structure, bindings included, stays the odb reader's own model for documents that are form sub-documents). The office:forms wrapper element itself emits no construct: it is a pure container, and the group member already names what its child forms are.
 export function readOdfFormControlConstructs(
   formsElement: XmlElement,
   format: OdfResidueFormat,

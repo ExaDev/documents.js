@@ -2,7 +2,7 @@ import { Jbig2ParseError } from "./jbig2-errors";
 
 // The bi-level bitmap every JBIG2 decoding procedure reads and writes, plus the region composition operators of ITU-T T.88 6.2.2 and the packing step that turns a finished page into the byte layout a 1-bit-per-pixel raster consumer expects.
 //
-// Storage is one byte per pixel rather than a packed bit array. That costs memory but removes an entire class of shift/mask bugs from the template-context builders in jbig2-generic.ts, which read up to sixteen neighbouring pixels -- several of them outside the bitmap -- for every single decoded pixel. The one place packing genuinely matters is the final output, which packBitmapRows below produces on the way out.
+// Storage is one byte per pixel rather than a packed bit array. That costs memory but removes an entire class of shift/mask bugs from the template-context builders in jbig2-generic.ts, which read up to sixteen neighbouring pixels — several of them outside the bitmap — for every single decoded pixel. The one place packing genuinely matters is the final output, which packBitmapRows below produces on the way out.
 
 export interface Jbig2Bitmap {
   readonly width: number;
@@ -11,7 +11,7 @@ export interface Jbig2Bitmap {
   readonly data: Uint8Array<ArrayBuffer>;
 }
 
-// A ceiling on how large a single bitmap this decoder will allocate, guarding against a corrupt or hostile segment header declaring an absurd region size. At one byte per pixel this caps a single allocation at 64 MiB, which still comfortably covers a 600 dpi A4 page (5100 x 6600 = 33.7 megapixels) -- the largest thing a real scanned-document JBIG2 stream contains.
+// A ceiling on how large a single bitmap this decoder will allocate, guarding against a corrupt or hostile segment header declaring an absurd region size. At one byte per pixel this caps a single allocation at 64 MiB, which still comfortably covers a 600 dpi A4 page (5100 x 6600 = 33.7 megapixels) — the largest thing a real scanned-document JBIG2 stream contains.
 export const MAX_JBIG2_BITMAP_PIXELS = 1 << 26;
 
 // A subclass of Jbig2ParseError rather than a standalone error: a declared region size this large only ever comes from a corrupt or hostile segment header, which is exactly what a parse failure is.
@@ -91,7 +91,7 @@ function combineValue(
   return source;
 }
 
-// Composites `source` onto `destination` with its top-left corner at (x, y), clipping anything that falls outside the destination -- T.88 6.2.2's own generic region composition, reused unchanged for symbol instance placement (6.4.5) since the operator set is identical.
+// Composites `source` onto `destination` with its top-left corner at (x, y), clipping anything that falls outside the destination — T.88 6.2.2's own generic region composition, reused unchanged for symbol instance placement (6.4.5) since the operator set is identical.
 export function combineBitmap(
   destination: Jbig2Bitmap,
   source: Jbig2Bitmap,
@@ -119,7 +119,7 @@ export function combineBitmap(
   }
 }
 
-// Packs a bitmap into 1 bit per pixel, most significant bit first, each row padded out to a whole number of bytes -- the layout a PDF image with /BitsPerComponent 1 expects, and the same one src/image/ccitt.ts produces. `width`/`height` are the caller's own requested output size rather than the bitmap's: a region smaller than the declared image reads as 0 (white) outside itself, and a larger one is cropped.
+// Packs a bitmap into 1 bit per pixel, most significant bit first, each row padded out to a whole number of bytes — the layout a PDF image with /BitsPerComponent 1 expects, and the same one src/image/ccitt.ts produces. `width`/`height` are the caller's own requested output size rather than the bitmap's: a region smaller than the declared image reads as 0 (white) outside itself, and a larger one is cropped.
 export function packBitmapRows(
   bitmap: Jbig2Bitmap,
   width: number,
@@ -139,7 +139,7 @@ export function packBitmapRows(
   return out;
 }
 
-// The inverse of packBitmapRows, for a bitmap that arrived already packed -- the MMR-coded generic region path, where src/image/ccitt.ts has produced exactly this layout with black in the 1 bits.
+// The inverse of packBitmapRows, for a bitmap that arrived already packed — the MMR-coded generic region path, where src/image/ccitt.ts has produced exactly this layout with black in the 1 bits.
 export function unpackBitmapRows(
   packed: Uint8Array<ArrayBuffer>,
   width: number,

@@ -1,7 +1,7 @@
 import type { GlyfTable } from "./glyf";
 import { hasBytes, i16, u8, u16 } from "./sfnt";
 
-// The 'glyf' point arrays glyf.ts deliberately leaves undecoded: the end-point/flag/coordinate lists of a simple glyph, plus composite resolution, decoded into on/off-curve contour points. glyf.ts's own header comment states why it stops at headers and component records -- subsetting copies glyph bytes verbatim and "nothing in this package rasterises an outline, so parsing coordinates would be building a consumer that does not exist". The raster port (src/raster.ts, ExaDev/documents.js#1198) is that consumer: filling a glyph means walking its contours, so this sibling module decodes them through GlyfTable's own public surface (glyphBytes/glyphHeader/compositeComponents) rather than widening glyf.ts itself, keeping byte-verbatim subsetting and outline decoding as two independently testable halves of the same table reader. Nothing here mutates or re-encodes; the output is pure geometry in the font's own design-unit space (y up, origin on the baseline), ready for whatever transform the caller composes onto it.
+// The 'glyf' point arrays glyf.ts deliberately leaves undecoded: the end-point/flag/coordinate lists of a simple glyph, plus composite resolution, decoded into on/off-curve contour points. glyf.ts's own header comment states why it stops at headers and component records — subsetting copies glyph bytes verbatim and "nothing in this package rasterises an outline, so parsing coordinates would be building a consumer that does not exist". The raster port (src/raster.ts, ExaDev/documents.js#1198) is that consumer: filling a glyph means walking its contours, so this sibling module decodes them through GlyfTable's own public surface (glyphBytes/glyphHeader/compositeComponents) rather than widening glyf.ts itself, keeping byte-verbatim subsetting and outline decoding as two independently testable halves of the same table reader. Nothing here mutates or re-encodes; the output is pure geometry in the font's own design-unit space (y up, origin on the baseline), ready for whatever transform the caller composes onto it.
 
 export interface GlyphContourPoint {
   readonly x: number;
@@ -25,7 +25,7 @@ const FLAG_Y_SAME_OR_POSITIVE = 0x20;
 // A composite may reference another composite, matching glyf.ts's own MAX_COMPOSITE_DEPTH: the format sets no nesting limit, so a cyclic component chain must terminate here rather than in the stack.
 const MAX_COMPOSITE_DEPTH = 5;
 
-// Decodes one simple glyph's contours from its own 'glyf' bytes (everything after the 10-byte header). Returns undefined rather than a partial outline: end-point indices must be strictly increasing and land inside the flag/coordinate arrays the glyph actually carries, and a glyph that violates either is malformed -- half a glyph rendered is worse than no glyph rendered plus the caller's diagnostic.
+// Decodes one simple glyph's contours from its own 'glyf' bytes (everything after the 10-byte header). Returns undefined rather than a partial outline: end-point indices must be strictly increasing and land inside the flag/coordinate arrays the glyph actually carries, and a glyph that violates either is malformed — half a glyph rendered is worse than no glyph rendered plus the caller's diagnostic.
 function decodeSimpleContours(
   glyph: Uint8Array<ArrayBuffer>,
 ): readonly (readonly GlyphContourPoint[])[] | undefined {
@@ -156,7 +156,7 @@ function placeComponentContours(
   );
 }
 
-// A glyph's full outline, composites resolved: a simple glyph's own contours, or every component's outline placed through its own transform, recursively. Undefined for anything the walk cannot resolve completely -- an unreadable glyph, a composite past the depth limit, or a component positioned by point matching (argument1/argument2 as point indices rather than x/y offsets), which needs exactly the coordinate arrays a byte-verbatim subsetter never decodes and half-placing would silently stack a mark on its base letter. The rule matches glyphInkBounds's own: undefined, never partial.
+// A glyph's full outline, composites resolved: a simple glyph's own contours, or every component's outline placed through its own transform, recursively. Undefined for anything the walk cannot resolve completely — an unreadable glyph, a composite past the depth limit, or a component positioned by point matching (argument1/argument2 as point indices rather than x/y offsets), which needs exactly the coordinate arrays a byte-verbatim subsetter never decodes and half-placing would silently stack a mark on its base letter. The rule matches glyphInkBounds's own: undefined, never partial.
 export function decodeGlyphOutline(
   glyf: GlyfTable,
   glyphId: number,

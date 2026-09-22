@@ -166,7 +166,7 @@ describe("parseStsh", () => {
       0,
       0, // Xstz's own null terminator.
       1,
-      0, // UpxPapx's own cbUpx = 1 -- one byte, too short for UpxPapx's own 2-byte istd prefix.
+      0, // UpxPapx's own cbUpx = 1 — one byte, too short for UpxPapx's own 2-byte istd prefix.
       0xff, // UpxPapx's own 1-byte payload.
       0x00, // the format's own even-byte pad, since cbUpx (1) is odd.
       0,
@@ -226,7 +226,7 @@ describe("parseStsh", () => {
       0, // filler up to offset 10.
       0,
       0, // cch = 0 (empty name).
-      0xaa, // one extra byte inside this entry's own declared cbStd (13, odd) -- unused by
+      0xaa, // one extra byte inside this entry's own declared cbStd (13, odd) — unused by
       // a table-kind style, but its oddness means the format's own even-byte LPStd pad byte genuinely follows this entry, unlike every entry buildStshForStyles itself mints.
     ];
     const name1 = "OK";
@@ -309,7 +309,7 @@ describe("parseStsh", () => {
     const bytes = buildStshForStyles(
       new Map([
         [0, "Odd"], // 3 characters.
-        [1, "Even1"], // 5 characters -- still exercises the other STD-length parity from the total record size.
+        [1, "Even1"], // 5 characters — still exercises the other STD-length parity from the total record size.
       ]),
     );
     const sheet = parseStsh(bytes);
@@ -462,7 +462,7 @@ describe("resolveStyleFormatting", () => {
 });
 
 describe("headingLevelFromIstd", () => {
-  it("resolves istd 0 to undefined -- below the heading range", () => {
+  it("resolves istd 0 to undefined — below the heading range", () => {
     expect(headingLevelFromIstd(0)).toBeUndefined();
   });
 
@@ -474,7 +474,7 @@ describe("headingLevelFromIstd", () => {
     expect(headingLevelFromIstd(9)).toBe(9);
   });
 
-  it("resolves istd 10 to undefined -- past the heading range", () => {
+  it("resolves istd 10 to undefined — past the heading range", () => {
     expect(headingLevelFromIstd(10)).toBeUndefined();
   });
 });
@@ -517,12 +517,12 @@ describe("mintStyleIstds", () => {
     expect(styleNames.get(10)).toBe("Custom");
   });
 
-  it("treats headingLevel 9 -- the top of the heading range -- as a genuine heading", () => {
+  it("treats headingLevel 9 — the top of the heading range — as a genuine heading", () => {
     const { istds } = mintStyleIstds([{ headingLevel: 9 }]);
     expect(istds).toEqual([9]);
   });
 
-  it("treats headingLevel 10 -- past the top of the heading range -- as an ordinary named style", () => {
+  it("treats headingLevel 10 — past the top of the heading range — as an ordinary named style", () => {
     const { istds } = mintStyleIstds([{ styleId: "Custom", headingLevel: 10 }]);
     expect(istds).toEqual([10]);
   });
@@ -587,15 +587,15 @@ describe("buildStshForStyles", () => {
     expect(words).toEqual([
       0, // cstd.
       0x000a, // cbSTDBaseInFile (STDF_SIZE_WITHOUT_POST_2000).
-      0x0001, // fStdStylenamesWritten -- [MS-DOC] requires 1.
+      0x0001, // fStdStylenamesWritten — [MS-DOC] requires 1.
       0, // stiMaxWhenSaved.
-      0x000f, // istdMaxFixedWhenSaved -- [MS-DOC] requires 0x000F.
+      0x000f, // istdMaxFixedWhenSaved — [MS-DOC] requires 0x000F.
       0, // nVerBuiltInNamesWhenSaved.
       0, // ftcAsci.
       0, // ftcFE.
       0, // ftcOther.
       0, // ftcBi.
-      4, // StshiLsd.cbLSD -- [MS-DOC] requires 4.
+      4, // StshiLsd.cbLSD — [MS-DOC] requires 4.
     ]);
   });
 

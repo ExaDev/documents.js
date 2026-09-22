@@ -38,13 +38,13 @@ import {
 } from "./convert";
 import { pdfToDocx, pdfToOdp, pdfToOdt, pdfToPptx } from "./from-pdf";
 
-// End-to-end proof that a page's painted geometry survives all the way from a real file, through PDF, into each of the four wordprocessing/presentation targets as real vector shapes -- not just that each builder writes markup when handed a drawing block (src/edit/{docx,pptx,odt,odp}/content.test.ts prove that in isolation) but that the recovery and the writing actually meet.
+// End-to-end proof that a page's painted geometry survives all the way from a real file, through PDF, into each of the four wordprocessing/presentation targets as real vector shapes — not just that each builder writes markup when handed a drawing block (src/edit/{docx,pptx,odt,odp}/content.test.ts prove that in isolation) but that the recovery and the writing actually meet.
 //
 // The source is this package's own ground-truth .odg fixture (src/test-support/odg.ts: hand-authored XML, never built through this package's own editor), whose page carries three rects, an ellipse, a line, a genuinely curved path taken verbatim from real LibreOffice output, and a text frame. odgToPdf paints all of it; readPdf's own shape-pattern detection classifies it back; reconstructWordprocessing/reconstructPresentation package it as an embedded drawing block; and each builder writes it out.
 
 const SOURCE_PDF = odgToPdf(minimalOdgBytes());
 
-// Every vector kind the fixture's own page paints, in paint order -- the rects first (two overlapping, then a third), then the ellipse, the line, and the curve. The text frame is not a vector and is recovered as ordinary text content instead.
+// Every vector kind the fixture's own page paints, in paint order — the rects first (two overlapping, then a third), then the ellipse, the line, and the curve. The text frame is not a vector and is recovered as ordinary text content instead.
 const EXPECTED_KINDS: readonly ContentVector["kind"][] = [
   "rect",
   "rect",
@@ -100,7 +100,7 @@ describe("recovered vector geometry reaching real output bytes", () => {
     ).toEqual(EXPECTED_KINDS);
   });
 
-  // Read back through odf.js's OWN readDrawPageContent, the same reader readOdgContent uses for a real drawing page -- a genuinely independent oracle, unlike the DrawingML side, whose reader is written alongside this package's writer.
+  // Read back through odf.js's OWN readDrawPageContent, the same reader readOdgContent uses for a real drawing page — a genuinely independent oracle, unlike the DrawingML side, whose reader is written alongside this package's writer.
   it("pdfToOdt writes every recovered vector as a real draw: primitive anchored in the text flow", () => {
     const pkg = decodeOdfPackage(pdfToOdt(SOURCE_PDF));
     const vectors = childrenWithTag(
@@ -183,7 +183,7 @@ describe("readDocxContent: a hand-authored vector-only w:drawing", () => {
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults></w:styles>',
   );
 
-  // The wps:spPr's own a:xfrm deliberately DISAGREES with the wrapping wp:anchor's own wp:positionH/wp:positionV -- a real producer's wps:wsp always mirrors the anchor's position, but nothing in the schema requires it to, and the anchor is the one place a page-absolute recovered coordinate genuinely lives (see src/ooxml/docx/vector.ts's own readDrawingMlVector doc comment). The recovered vector's frame must come from the ANCHOR (100pt, 50pt, 40pt x 30pt), never from spPr's own wildly different xfrm (500pt, 500pt, 10pt x 10pt).
+  // The wps:spPr's own a:xfrm deliberately DISAGREES with the wrapping wp:anchor's own wp:positionH/wp:positionV — a real producer's wps:wsp always mirrors the anchor's position, but nothing in the schema requires it to, and the anchor is the one place a page-absolute recovered coordinate genuinely lives (see src/ooxml/docx/vector.ts's own readDrawingMlVector doc comment). The recovered vector's frame must come from the ANCHOR (100pt, 50pt, 40pt x 30pt), never from spPr's own wildly different xfrm (500pt, 500pt, 10pt x 10pt).
   function documentXml(): Uint8Array<ArrayBuffer> {
     return enc(
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
@@ -254,7 +254,7 @@ describe("readPptxContent: a hand-authored slide mixing a vector shape, a connec
   const PRESENTATION_RELS_XML = enc(
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>',
   );
-  // A real slide's own shape tree: an ordinary text shape (shapes[0]), a connector (p:cxnSp -- occupies no shape slot at all, so it must not shift shapes[1]'s own index), a bare vector p:sp (shapes[1]), a SECOND ordinary text shape (shapes[2] -- deliberately separating the two vectors, so they do NOT collapse into one maximal run), and a p:grpSp wrapping a third vector p:sp (shapes[3], flattened out of the group exactly as readPptxContent itself flattens it).
+  // A real slide's own shape tree: an ordinary text shape (shapes[0]), a connector (p:cxnSp — occupies no shape slot at all, so it must not shift shapes[1]'s own index), a bare vector p:sp (shapes[1]), a SECOND ordinary text shape (shapes[2] — deliberately separating the two vectors, so they do NOT collapse into one maximal run), and a p:grpSp wrapping a third vector p:sp (shapes[3], flattened out of the group exactly as readPptxContent itself flattens it).
   const SLIDE1_XML = enc(
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
       "<p:cSld><p:spTree>" +
@@ -331,7 +331,7 @@ describe("readOdtContent: a hand-authored bare draw:rect sitting directly in off
   const STYLE_NS =
     'xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"';
 
-  // A draw:rect written directly as a sibling of text:p at office:text level -- not wrapped in any paragraph the way this package's own OdtBody.appendVectors writes one, proving detection reaches a vector that a THIRD-PARTY producer might place completely bare.
+  // A draw:rect written directly as a sibling of text:p at office:text level — not wrapped in any paragraph the way this package's own OdtBody.appendVectors writes one, proving detection reaches a vector that a THIRD-PARTY producer might place completely bare.
   function odtBytes(): Uint8Array<ArrayBuffer> {
     const contentXml = enc(
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<office:document-content ${OFFICE_NS} ${TEXT_NS} ${DRAW_NS} ${SVG_NS} ${STYLE_NS}>` +
@@ -386,7 +386,7 @@ describe("readOdpContent: a hand-authored slide interleaving a real shape and a 
   const STYLE_NS =
     'xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"';
 
-  // A slide carrying a real draw:frame text box (occupying slide.shapes[0]) followed by a bare draw:rect (a genuine vector primitive, occupying no shape slot at all) -- proving the vector inserts AFTER the real shape rather than always at the end, and confirming (per this module's own dedicated correspondence test below) that odf.js's own readOdpContent and readDrawPageContent agree on where shapes[0] sits.
+  // A slide carrying a real draw:frame text box (occupying slide.shapes[0]) followed by a bare draw:rect (a genuine vector primitive, occupying no shape slot at all) — proving the vector inserts AFTER the real shape rather than always at the end, and confirming (per this module's own dedicated correspondence test below) that odf.js's own readOdpContent and readDrawPageContent agree on where shapes[0] sits.
   function odpBytes(): Uint8Array<ArrayBuffer> {
     const contentXml = enc(
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<office:document-content ${OFFICE_NS} ${TEXT_NS} ${DRAW_NS} ${SVG_NS} ${STYLE_NS}>` +
@@ -463,7 +463,7 @@ describe("readOdpContent: a hand-authored slide interleaving a real shape and a 
 });
 
 // ---------------------------------------------------------------------------
-// Round-trip chain tests: recovered vector geometry crossing the odt<->docx and odp<->pptx bridges repeatedly, mirroring src/convert/formula.test.ts's own "survives repeated odt -> docx -> odt cycles" pattern -- proving the combined formula-and-vector splice (src/model/block-splice.ts) does not accumulate an extra empty paragraph/shape per hop the way running two independent, sequential splices against stale indices would.
+// Round-trip chain tests: recovered vector geometry crossing the odt<->docx and odp<->pptx bridges repeatedly, mirroring src/convert/formula.test.ts's own "survives repeated odt -> docx -> odt cycles" pattern — proving the combined formula-and-vector splice (src/model/block-splice.ts) does not accumulate an extra empty paragraph/shape per hop the way running two independent, sequential splices against stale indices would.
 // ---------------------------------------------------------------------------
 
 describe("odt <-> docx: a recovered drawing survives repeated cycles without accumulating empty paragraphs", () => {

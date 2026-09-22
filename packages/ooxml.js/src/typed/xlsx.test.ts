@@ -119,7 +119,7 @@ describe("readXlsxWorkbook", () => {
     expect(readXlsxWorkbook(pkg).definedNames).toEqual([]);
   });
 
-  // Every fixture above targets a rels Target with no leading slash and a sheet literally named "Sheet1" -- indistinguishable from the filename-derived Sheet<N> fallback name a broken correlation would produce instead, so a bug here would still read back the "right" name by coincidence. These two use a display name that differs from the fallback, so a broken correlation is forced to show up as the wrong name rather than an accidentally-matching one.
+  // Every fixture above targets a rels Target with no leading slash and a sheet literally named "Sheet1" — indistinguishable from the filename-derived Sheet<N> fallback name a broken correlation would produce instead, so a bug here would still read back the "right" name by coincidence. These two use a display name that differs from the fallback, so a broken correlation is forced to show up as the wrong name rather than an accidentally-matching one.
   it("resolves the sheet's display name via a workbook rels Target with no leading slash", () => {
     const workbookXml = enc(
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Data" sheetId="1" r:id="rId1"/></sheets></workbook>',

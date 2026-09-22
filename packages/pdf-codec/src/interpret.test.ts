@@ -223,7 +223,7 @@ describe("interpretContentStream: text", () => {
   });
 });
 
-// ISO 32000-1 Table 52 lists the text state parameters (font and size, character spacing, word spacing, horizontal scaling, leading, rise) among the device-independent graphics state parameters, so `q` saves them and `Q` restores them exactly as it does the CTM or the fill colour. Only the text matrix and text line matrix are excluded -- those are text object state (9.4.1), reset by BT and untouched by q/Q.
+// ISO 32000-1 Table 52 lists the text state parameters (font and size, character spacing, word spacing, horizontal scaling, leading, rise) among the device-independent graphics state parameters, so `q` saves them and `Q` restores them exactly as it does the CTM or the fill colour. Only the text matrix and text line matrix are excluded — those are text object state (9.4.1), reset by BT and untouched by q/Q.
 describe("interpretContentStream: text state is graphics state", () => {
   it("restores the font a Q's matching q selected, so a Tf inside the pair does not leak past it", () => {
     const { sink } = collectDiagnostics();
@@ -451,7 +451,7 @@ describe("interpretContentStream: axis-aligned rectangles", () => {
     ]);
   });
 
-  // The same four corners a `re` would have produced, drawn by hand instead -- a producer that constructs its rectangles corner by corner gets the same LayoutRect as one that uses the shape operator, because detection works on recovered geometry rather than on which operator built it.
+  // The same four corners a `re` would have produced, drawn by hand instead — a producer that constructs its rectangles corner by corner gets the same LayoutRect as one that uses the shape operator, because detection works on recovered geometry rather than on which operator built it.
   it("recovers a rectangle constructed corner by corner with m/l/l/l/h, not just one from a re operator", () => {
     const { sink } = collectDiagnostics();
     const items = interpretContentStream(
@@ -476,7 +476,7 @@ describe("interpretContentStream: axis-aligned rectangles", () => {
     ]);
   });
 
-  // Same rectangle again, but with the closing edge drawn explicitly before `h` rather than left implicit -- five points where the last repeats the first, which closedPolygonCorners collapses back to four.
+  // Same rectangle again, but with the closing edge drawn explicitly before `h` rather than left implicit — five points where the last repeats the first, which closedPolygonCorners collapses back to four.
   it("recovers a rectangle whose closing edge is drawn explicitly as well as closed", () => {
     const { sink } = collectDiagnostics();
     const items = interpretContentStream(
@@ -501,7 +501,7 @@ describe("interpretContentStream: axis-aligned rectangles", () => {
     ]);
   });
 
-  // A 90-degree rotation maps an axis-aligned rectangle onto another axis-aligned rectangle, so the recovered corners still describe a real rect -- with the CTM's own width/height swap applied.
+  // A 90-degree rotation maps an axis-aligned rectangle onto another axis-aligned rectangle, so the recovered corners still describe a real rect — with the CTM's own width/height swap applied.
   it("still recovers a rectangle under a 90-degree CTM rotation, with its sides swapped", () => {
     const { sink } = collectDiagnostics();
     const items = interpretContentStream(
@@ -526,7 +526,7 @@ describe("interpretContentStream: axis-aligned rectangles", () => {
     ]);
   });
 
-  // 30 degrees leaves no pair of edges axis-aligned, so there is no LayoutRect that could describe the result -- the general path is the only honest recovery.
+  // 30 degrees leaves no pair of edges axis-aligned, so there is no LayoutRect that could describe the result — the general path is the only honest recovery.
   it("falls through to a general path when the CTM rotation is not a multiple of 90 degrees", () => {
     const { sink } = collectDiagnostics();
     const items = interpretContentStream(
@@ -640,7 +640,7 @@ describe("interpretContentStream: ellipses", () => {
     ]);
   });
 
-  // Same four cardinal on-curve points, but the control points pulled well off the kappa ratio -- a genuinely different curve, so it must stay a general path rather than being rounded off to the nearest ellipse.
+  // Same four cardinal on-curve points, but the control points pulled well off the kappa ratio — a genuinely different curve, so it must stay a general path rather than being rounded off to the nearest ellipse.
   it("rejects a four-cubic path whose control points do not match the kappa ratio", () => {
     const { sink } = collectDiagnostics();
     const squarish = [
@@ -728,7 +728,7 @@ describe("interpretContentStream: lines", () => {
     ]);
   });
 
-  // A two-point path encloses no area, so a producer that filled one meant something other than a line -- detectLine declines rather than guessing, and the fill survives on the general path.
+  // A two-point path encloses no area, so a producer that filled one meant something other than a line — detectLine declines rather than guessing, and the fill survives on the general path.
   it("declines to call a filled two-point path a line", () => {
     const { sink } = collectDiagnostics();
     const items = interpretContentStream(
@@ -1117,7 +1117,7 @@ describe("interpretContentStream: XObjects", () => {
     ]);
   });
 
-  // ISO 32000-1 8.10.2: a form XObject's content stream executes in the graphics state in effect at the moment of Do, as if it were nested inline inside an implicit q/Q pair -- so the text state travels inward, and the form's own changes to it do not travel back out.
+  // ISO 32000-1 8.10.2: a form XObject's content stream executes in the graphics state in effect at the moment of Do, as if it were nested inline inside an implicit q/Q pair — so the text state travels inward, and the form's own changes to it do not travel back out.
   it("runs a Form XObject in the caller's text state, so a form with no Tf of its own draws in the inherited font", () => {
     const { sink } = collectDiagnostics();
     const formDict = pdfDict({

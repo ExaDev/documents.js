@@ -96,7 +96,7 @@ describe("hyperlink write: pptx a:hlinkClick", () => {
   });
 });
 
-// markdown-codec's own lower/inline.ts already emits ContentRun.hyperlink for a markdown link, so once buildDocxPackage/buildOdtPackage learned to write run.hyperlink (above), a markdown link crossing the markdownToDocx/markdownToOdt bridge started carrying its own URL through for free -- no markdown-specific code needed on either side.
+// markdown-codec's own lower/inline.ts already emits ContentRun.hyperlink for a markdown link, so once buildDocxPackage/buildOdtPackage learned to write run.hyperlink (above), a markdown link crossing the markdownToDocx/markdownToOdt bridge started carrying its own URL through for free — no markdown-specific code needed on either side.
 describe("hyperlink write: markdown bridges inherit it for free", () => {
   it("markdownToDocx wraps the link in w:hyperlink with an external relationship", () => {
     const md = new TextEncoder().encode(

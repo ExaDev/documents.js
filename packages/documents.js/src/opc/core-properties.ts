@@ -34,14 +34,14 @@ function textElement(tag: string, value: string): XmlElement {
   return el(tag, {}, [txt(encodeXmlText(value))]);
 }
 
-// dcterms:created/dcterms:modified both require xsi:type="dcterms:W3CDTF" per the OPC core-properties schema -- without it a strict reader has no declared type for the date-typed element's own text content.
+// dcterms:created/dcterms:modified both require xsi:type="dcterms:W3CDTF" per the OPC core-properties schema — without it a strict reader has no declared type for the date-typed element's own text content.
 function dateElement(tag: string, isoValue: string): XmlElement {
   return el(tag, { "xsi:type": W3CDTF_TYPE }, [txt(encodeXmlText(isoValue))]);
 }
 
-// Builds and inserts a real docProps/core.xml part -- OPC's own package-level core properties (dc:title, dc:creator, dc:subject, cp:keywords, dcterms:created, dcterms:modified) -- from a LayoutMetadata value, registers its content type, and adds the package-ROOT relationship a real OOXML reader needs to discover it at all. The one new part createEmptyDocxPackage/createEmptyPptxPackage write, and only when a caller supplies metadata (see those scaffolds' own optional `options.metadata`).
+// Builds and inserts a real docProps/core.xml part — OPC's own package-level core properties (dc:title, dc:creator, dc:subject, cp:keywords, dcterms:created, dcterms:modified) — from a LayoutMetadata value, registers its content type, and adds the package-ROOT relationship a real OOXML reader needs to discover it at all. The one new part createEmptyDocxPackage/createEmptyPptxPackage write, and only when a caller supplies metadata (see those scaffolds' own optional `options.metadata`).
 //
-// dc:creator carries metadata.AUTHOR (the human byline) -- NOT metadata.creator, which in document-schema.js's own LayoutMetadata names the ORIGINATING APPLICATION and has no OOXML core-properties counterpart at all: that concept belongs to docProps/app.xml's own Application element, which this function deliberately does not write (a smaller, separate follow-up, not attempted here). This is the exact inverse of ooxml.js's own readCoreProperties, which reads dc:creator back into .author and docProps/app.xml's Application back into .creator.
+// dc:creator carries metadata.AUTHOR (the human byline) — NOT metadata.creator, which in document-schema.js's own LayoutMetadata names the ORIGINATING APPLICATION and has no OOXML core-properties counterpart at all: that concept belongs to docProps/app.xml's own Application element, which this function deliberately does not write (a smaller, separate follow-up, not attempted here). This is the exact inverse of ooxml.js's own readCoreProperties, which reads dc:creator back into .author and docProps/app.xml's Application back into .creator.
 export function addCoreProperties(
   pkg: Package,
   metadata: LayoutMetadata,

@@ -1,10 +1,10 @@
 import { HsqldbSqlParseError, HsqldbSqlUnsupportedError } from "./errors";
 
-// The tokeniser for src/odb/sql/'s bounded SELECT engine: SQL text in, a flat SqlToken[] out, ending in exactly one 'end' token. It makes no grammatical decisions at all -- SELECT and JOIN are both just keyword tokens here, and it is the parser (src/odb/sql/parser.ts) that accepts the first and rejects the second.
+// The tokeniser for src/odb/sql/'s bounded SELECT engine: SQL text in, a flat SqlToken[] out, ending in exactly one 'end' token. It makes no grammatical decisions at all — SELECT and JOIN are both just keyword tokens here, and it is the parser (src/odb/sql/parser.ts) that accepts the first and rejects the second.
 //
-// It does apply the same closed-allowlist policy src/hsqldb/script.ts's own statement recognition does (see src/odb/sql/errors.ts's top-of-file comment for the full statement of the precedent being followed), just at the character level: KEYWORDS below is the set of words that lex as keywords rather than identifiers -- deliberately including every out-of-scope word (JOIN, DISTINCT, UNION, HAVING, ...) so the parser can name the construct it is refusing rather than reporting a baffling "unexpected identifier"; UNSUPPORTED_SYMBOLS names every symbol this engine recognises as real SQL and deliberately does not implement (arithmetic, string concatenation, comments, parameter placeholders, the != operator), each throwing HsqldbSqlUnsupportedError naming itself; and any character matching neither list throws HsqldbSqlParseError rather than being skipped.
+// It does apply the same closed-allowlist policy src/hsqldb/script.ts's own statement recognition does (see src/odb/sql/errors.ts's top-of-file comment for the full statement of the precedent being followed), just at the character level: KEYWORDS below is the set of words that lex as keywords rather than identifiers — deliberately including every out-of-scope word (JOIN, DISTINCT, UNION, HAVING, ...) so the parser can name the construct it is refusing rather than reporting a baffling "unexpected identifier"; UNSUPPORTED_SYMBOLS names every symbol this engine recognises as real SQL and deliberately does not implement (arithmetic, string concatenation, comments, parameter placeholders, the != operator), each throwing HsqldbSqlUnsupportedError naming itself; and any character matching neither list throws HsqldbSqlParseError rather than being skipped.
 //
-// Identifier folding follows SQL's own rule, which both HSQLDB and Firebird implement and which real LibreOffice-generated .odb queries depend on: an unquoted identifier is case-insensitive and folds to upper case, a double-quoted identifier is case-sensitive and is taken verbatim (with "" as an embedded double quote). `quoted` is kept on the token so the parser and evaluator can honour that distinction when resolving a name against real table/column names -- see src/odb/sql/evaluate.ts's own resolution rule.
+// Identifier folding follows SQL's own rule, which both HSQLDB and Firebird implement and which real LibreOffice-generated .odb queries depend on: an unquoted identifier is case-insensitive and folds to upper case, a double-quoted identifier is case-sensitive and is taken verbatim (with "" as an embedded double quote). `quoted` is kept on the token so the parser and evaluator can honour that distinction when resolving a name against real table/column names — see src/odb/sql/evaluate.ts's own resolution rule.
 
 export type SqlComparisonOperator = "=" | "<>" | "<" | ">" | "<=" | ">=";
 
@@ -220,7 +220,7 @@ function readNumber(
   return { value, next: cursor };
 }
 
-// A '...' literal, with '' as an embedded single quote -- the same escape convention src/hsqldb/script.ts's own INSERT-literal parsing already handles for HSQLDB script text.
+// A '...' literal, with '' as an embedded single quote — the same escape convention src/hsqldb/script.ts's own INSERT-literal parsing already handles for HSQLDB script text.
 function readStringLiteral(
   sql: string,
   start: number,

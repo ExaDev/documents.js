@@ -1,6 +1,6 @@
-// Inline content -> ContentRun[]: emphasis/strong/strikethrough become the boolean bold/italic/strike fields every ContentRun already carries, a link/autolink becomes ContentRun.hyperlink -- and a link carrying a title additionally opens a run-level `link` construct extent over its own runs (InlineLowerResult.runConstructExtents), the annotation a flat run field has nowhere to put --, a code span becomes a Courier New run, a footnote reference opens a point run-level `anchor` extent naming its own spelling run (the same result field), a hard break becomes a literal '\n' appended to the surrounding run's own text (matching pdf-codec's own text-layout atomiser, which already treats '\n' as an explicit line-break token -- see src/index's own top-of-file Usage note), and a soft break becomes a literal ' ' run -- CommonMark's own documented rendering equivalent, and the correct materialised content for any cross-format consumer, which has no concept of a source-level line wrap at all -- carrying source: { format: 'markdown', xml: '\n' } (ExaDev/documents.js#940): this package's own writer re-emits ANY markdown-format residue verbatim ahead of ordinary escaping (src/emit/inline.ts's renderLeaf), so a same-format round trip restores the exact bare-newline spelling CommonMark's own soft-break convention uses, while a foreign consumer that ignores residue still sees an ordinary space. One run is produced per leaf inline node -- no adjacent-run merging is attempted on this side; src/emit's own writer is the one that has to worry about what two adjacent runs look like once rendered back to markdown.
+// Inline content -> ContentRun[]: emphasis/strong/strikethrough become the boolean bold/italic/strike fields every ContentRun already carries, a link/autolink becomes ContentRun.hyperlink — and a link carrying a title additionally opens a run-level `link` construct extent over its own runs (InlineLowerResult.runConstructExtents), the annotation a flat run field has nowhere to put --, a code span becomes a Courier New run, a footnote reference opens a point run-level `anchor` extent naming its own spelling run (the same result field), a hard break becomes a literal '\n' appended to the surrounding run's own text (matching pdf-codec's own text-layout atomiser, which already treats '\n' as an explicit line-break token — see src/index's own top-of-file Usage note), and a soft break becomes a literal ' ' run — CommonMark's own documented rendering equivalent, and the correct materialised content for any cross-format consumer, which has no concept of a source-level line wrap at all — carrying source: { format: 'markdown', xml: '\n' } (ExaDev/documents.js#940): this package's own writer re-emits ANY markdown-format residue verbatim ahead of ordinary escaping (src/emit/inline.ts's renderLeaf), so a same-format round trip restores the exact bare-newline spelling CommonMark's own soft-break convention uses, while a foreign consumer that ignores residue still sees an ordinary space. One run is produced per leaf inline node — no adjacent-run merging is attempted on this side; src/emit's own writer is the one that has to worry about what two adjacent runs look like once rendered back to markdown.
 //
-// A TOP-LEVEL image (a direct child of the paragraph these runs belong to) is never passed to lowerInlineNodes at all -- see src/lower/lower.ts's own paragraph-splitting logic, which intercepts it before inline lowering ever runs. An image reached HERE is therefore always a NESTED one (inside emphasis/strong/strikethrough/a link's own text) and is deliberately never resolved to a real ContentImageBlock: splitting a paragraph out from the middle of an open emphasis/link span is a materially larger undertaking than this package's own scope, so a nested image degrades exactly like an unresolved top-level one -- a text run of its own alt text, hyperlinked at its own destination.
+// A TOP-LEVEL image (a direct child of the paragraph these runs belong to) is never passed to lowerInlineNodes at all — see src/lower/lower.ts's own paragraph-splitting logic, which intercepts it before inline lowering ever runs. An image reached HERE is therefore always a NESTED one (inside emphasis/strong/strikethrough/a link's own text) and is deliberately never resolved to a real ContentImageBlock: splitting a paragraph out from the middle of an open emphasis/link span is a materially larger undertaking than this package's own scope, so a nested image degrades exactly like an unresolved top-level one — a text run of its own alt text, hyperlinked at its own destination.
 
 import type { ContentRun, RunConstructExtent } from "document-schema.js";
 import type { MarkdownInlineNode } from "../ast/ast";
@@ -23,7 +23,7 @@ interface RunStyle {
   readonly hyperlink?: string;
 }
 
-// What lowering one inline sequence produces: the paragraph's runs, plus the run-level construct extents the walk opened over them -- a titled link's `link` descriptor with its `title` field (the one slot a flat ContentRun has nowhere to put an annotation; the standing reconciliation: ContentRun.hyperlink keeps the target, the construct carries what the run field cannot express), and a footnote reference's point `anchor` extent (the reference site itself, the mechanism that retired the old marked-run carry). The runs keep their hyperlink untouched; an extent adds what the run fields cannot express rather than replacing anything.
+// What lowering one inline sequence produces: the paragraph's runs, plus the run-level construct extents the walk opened over them — a titled link's `link` descriptor with its `title` field (the one slot a flat ContentRun has nowhere to put an annotation; the standing reconciliation: ContentRun.hyperlink keeps the target, the construct carries what the run field cannot express), and a footnote reference's point `anchor` extent (the reference site itself, the mechanism that retired the old marked-run carry). The runs keep their hyperlink untouched; an extent adds what the run fields cannot express rather than replacing anything.
 export interface InlineLowerResult {
   readonly runs: ContentRun[];
   readonly runConstructExtents: readonly RunConstructExtent[];
@@ -64,7 +64,7 @@ function lowerNestedEmphasisLike(
   lowerNodesInto(node.children, childStyle, context, runs, extents);
 }
 
-// One MarkdownInlineNode appended onto the paragraph's own run array, threading the accumulated style (bold/italic/strike/hyperlink) down through nested emphasis/strong/strikethrough/link -- CommonMark permits arbitrary nesting of all four, and ContentRun's own flat bold/italic/strike/hyperlink fields represent any COMBINATION of them correctly (an italic link inside a bold span is genuinely bold+italic+hyperlink on one run); only nesting the SAME construct inside itself loses information (see lowerNestedEmphasisLike above).
+// One MarkdownInlineNode appended onto the paragraph's own run array, threading the accumulated style (bold/italic/strike/hyperlink) down through nested emphasis/strong/strikethrough/link — CommonMark permits arbitrary nesting of all four, and ContentRun's own flat bold/italic/strike/hyperlink fields represent any COMBINATION of them correctly (an italic link inside a bold span is genuinely bold+italic+hyperlink on one run); only nesting the SAME construct inside itself loses information (see lowerNestedEmphasisLike above).
 //
 // The walk APPENDS into a shared run array rather than returning per-node slices because a titled link's extent must name the paragraph's FINAL run positions: recording runs.length on the way into the link and again on the way out is the only way to know the range the link's own children landed in once emphasis, breaks, and siblings have all been flattened into one sequence.
 function lowerInlineNodeInto(
@@ -81,7 +81,7 @@ function lowerInlineNodeInto(
       if (node.value.length > 0) runs.push(buildRun(node.value, style));
       return;
     case "softBreak":
-      // See this module's own top-of-file note: the run's materialised text is an ordinary space (the correct fallback for any consumer with no concept of a soft break), and the residue is this package's own spelling for a same-format writer to restore instead -- a bare newline, CommonMark's own literal soft-break convention.
+      // See this module's own top-of-file note: the run's materialised text is an ordinary space (the correct fallback for any consumer with no concept of a soft break), and the residue is this package's own spelling for a same-format writer to restore instead — a bare newline, CommonMark's own literal soft-break convention.
       runs.push({
         ...buildRun(" ", style),
         source: { format: "markdown", xml: "\n" },
@@ -91,7 +91,7 @@ function lowerInlineNodeInto(
       runs.push(buildRun("\n", style));
       return;
     case "codeSpan":
-      // A code span's own fontFamily is indistinguishable from a genuinely monospace run on the way back out -- see MarkdownDiagnosticCodes.CODE_SPAN_AS_MONOSPACE_RUN (src/emit/inline.ts), the write-side half of this same mapping.
+      // A code span's own fontFamily is indistinguishable from a genuinely monospace run on the way back out — see MarkdownDiagnosticCodes.CODE_SPAN_AS_MONOSPACE_RUN (src/emit/inline.ts), the write-side half of this same mapping.
       runs.push(buildRun(node.literal, style, MONOSPACE_FONT_FAMILY));
       return;
     case "rawHtml":
@@ -116,7 +116,7 @@ function lowerInlineNodeInto(
         });
       return;
     case "mathInline":
-      // Marked with MATH_INLINE_FONT_MARKER, the same opportunistic-reuse trick a code span's own Courier New marker plays -- src/emit/inline.ts's renderLeaf reconstructs the \( \) delimiters around this run's own text (rather than escaping it as ordinary punctuation) specifically because it carries this marker, not because of anything about the text's own shape (see src/ast/ast.ts's own MarkdownMathInlineNode comment for why a text-pattern-based approach was tried and reverted).
+      // Marked with MATH_INLINE_FONT_MARKER, the same opportunistic-reuse trick a code span's own Courier New marker plays — src/emit/inline.ts's renderLeaf reconstructs the \( \) delimiters around this run's own text (rather than escaping it as ordinary punctuation) specifically because it carries this marker, not because of anything about the text's own shape (see src/ast/ast.ts's own MarkdownMathInlineNode comment for why a text-pattern-based approach was tried and reverted).
       context.sink({
         code: MarkdownDiagnosticCodes.MATH_INLINE_PRESERVED_AS_TEXT,
         severity: "info",
@@ -126,7 +126,7 @@ function lowerInlineNodeInto(
       runs.push(buildRun(node.literal, style, MATH_INLINE_FONT_MARKER));
       return;
     case "footnoteReference": {
-      // The reference half of a footnote, now a real anchor construct: a POINT run-level extent (RunConstructExtent, document-schema.js 4.5.0 -- the mechanism whose absence once parked this as a font-marker-marked run) on the paragraph the reference sits inside, never splitting that paragraph to host a block wrapper. The run keeps the reference's own source spelling as ordinary text -- the materialised rendering, so a consumer that knows nothing about footnotes still shows `[^1]` rather than nothing -- and the extent carries the semantics, exactly the dual carry a titled link's runs and a blockquote's indent already play. The point names the boundary BEFORE the spelling run's own index, the same spelling ooxml.js's docx reader mints for a w:footnoteReference run (its mark run renders nothing, so the boundary and the run occupy one position). The write side's inverse is src/emit/inline.ts's renderLeaf, which spells a named run back out as `[^label]` rather than escaping it -- exactly what tells a genuine reference apart from a literal `\[^1\]` an author escaped deliberately, the fact the retired font marker used to carry.
+      // The reference half of a footnote, now a real anchor construct: a POINT run-level extent (RunConstructExtent, document-schema.js 4.5.0 — the mechanism whose absence once parked this as a font-marker-marked run) on the paragraph the reference sits inside, never splitting that paragraph to host a block wrapper. The run keeps the reference's own source spelling as ordinary text — the materialised rendering, so a consumer that knows nothing about footnotes still shows `[^1]` rather than nothing — and the extent carries the semantics, exactly the dual carry a titled link's runs and a blockquote's indent already play. The point names the boundary BEFORE the spelling run's own index, the same spelling ooxml.js's docx reader mints for a w:footnoteReference run (its mark run renders nothing, so the boundary and the run occupy one position). The write side's inverse is src/emit/inline.ts's renderLeaf, which spells a named run back out as `[^label]` rather than escaping it — exactly what tells a genuine reference apart from a literal `\[^1\]` an author escaped deliberately, the fact the retired font marker used to carry.
       runs.push(buildRun(`[^${node.label}]`, style));
       extents.push({
         descriptor: {
@@ -152,7 +152,7 @@ function lowerInlineNodeInto(
       const childStyle: RunStyle = { ...style, hyperlink: node.destination };
       const startRun = runs.length;
       lowerNodesInto(node.children, childStyle, context, runs, extents);
-      // A link with no visible text at all ("[](/url)") produces no child runs to carry the hyperlink on -- ContentRun is the only place `hyperlink` can live, so an empty-text link still needs one run (empty text, the hyperlink set) or the link itself silently disappears rather than degrading. The push happens before the extent below so a titled empty link's extent covers that synthetic run.
+      // A link with no visible text at all ("[](/url)") produces no child runs to carry the hyperlink on — ContentRun is the only place `hyperlink` can live, so an empty-text link still needs one run (empty text, the hyperlink set) or the link itself silently disappears rather than degrading. The push happens before the extent below so a titled empty link's extent covers that synthetic run.
       if (runs.length === startRun) {
         runs.push(buildRun("", childStyle));
       }
@@ -170,7 +170,7 @@ function lowerInlineNodeInto(
       return;
     }
     case "image":
-      // A NESTED image (inside emphasis/a link) -- see this module's own top-of-file note for why it never resolves to a real ContentImageBlock here. Its title has nowhere to ride either: the degraded run has no title field, and minting a run-level extent for it would put a link descriptor beside text that is no longer an image at all, so the title drops with the rest of the image's own shape.
+      // A NESTED image (inside emphasis/a link) — see this module's own top-of-file note for why it never resolves to a real ContentImageBlock here. Its title has nowhere to ride either: the degraded run has no title field, and minting a run-level extent for it would put a link descriptor beside text that is no longer an image at all, so the title drops with the rest of the image's own shape.
       if (node.title !== undefined) {
         context.sink({
           code: MarkdownDiagnosticCodes.LINK_TITLE_DROPPED,
@@ -214,7 +214,7 @@ export function lowerInlineNodes(
   return { runs, runConstructExtents: extents };
 }
 
-// A code block's literal content -> a single monospace run -- shared by the fenced- and indented-code-block lowering in src/lower/lower.ts, kept here since it is genuinely inline-run construction, just for a whole block's worth of text at once rather than a parsed inline tree.
+// A code block's literal content -> a single monospace run — shared by the fenced- and indented-code-block lowering in src/lower/lower.ts, kept here since it is genuinely inline-run construction, just for a whole block's worth of text at once rather than a parsed inline tree.
 export function lowerCodeBlockRun(literal: string): ContentRun {
   return { text: literal, fontFamily: MONOSPACE_FONT_FAMILY };
 }

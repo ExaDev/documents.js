@@ -24,7 +24,7 @@ import { odfFormulaBytes } from "../test-support/odf-formula-fixture";
 import { buildMultiPagePdf } from "../test-support/pdf-fixture";
 import { wpdFixtureBytes } from "../test-support/wpd-fixture";
 
-// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip -- proving `outline_document` is registered under that name, reads a real source document's own native tree directly (documents.js's readNativeDocumentTree, no bridging conversion involved), and answers with document-outline.js's buildOutline TOC projection as structured JSON an MCP client can render directly.
+// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip — proving `outline_document` is registered under that name, reads a real source document's own native tree directly (documents.js's readNativeDocumentTree, no bridging conversion involved), and answers with document-outline.js's buildOutline TOC projection as structured JSON an MCP client can render directly.
 
 interface ConnectedPair {
   readonly client: Client;
@@ -55,7 +55,7 @@ describe("outline_document", () => {
   });
 
   it("outlines a markdown document heading, list, and leaf structure exactly", async () => {
-    // encodeMarkdownText is the same encoder document-cli's stdin path uses; the fixture exercises every wordprocessing grouping signal -- two heading levels, a list nested inside the deeper heading, plain paragraphs as leaves -- so the assertion pins the whole projected shape, not a fragment of it.
+    // encodeMarkdownText is the same encoder document-cli's stdin path uses; the fixture exercises every wordprocessing grouping signal — two heading levels, a list nested inside the deeper heading, plain paragraphs as leaves — so the assertion pins the whole projected shape, not a fragment of it.
     const markdown =
       "# Chapter One\n\nIntro.\n\n## Section A\n\n- item one\n  - nested item\n\n# Chapter Two\n\nClosing.\n";
     const result = await pair.client.callTool({
@@ -119,7 +119,7 @@ describe("outline_document", () => {
     });
 
     expect(result.isError).toBeFalsy();
-    // A sheet's cells ride the sheet node and never appear in the outline -- only the sheet group itself, empty here because the sheet carries no images or embedded objects.
+    // A sheet's cells ride the sheet node and never appear in the outline — only the sheet group itself, empty here because the sheet carries no images or embedded objects.
     expect(result.structuredContent).toEqual({
       sourceFormat: "ods",
       kind: "spreadsheet",
@@ -127,7 +127,7 @@ describe("outline_document", () => {
     });
   });
 
-  it("outlines a multi-page drawing, one group per page -- odg reads its own native 'drawing' content directly, with no per-page selection constraint (the svg writer's own SvgMultiPageNotSpecifiedError has no bearing here at all, since nothing bridges through svg)", async () => {
+  it("outlines a multi-page drawing, one group per page — odg reads its own native 'drawing' content directly, with no per-page selection constraint (the svg writer's own SvgMultiPageNotSpecifiedError has no bearing here at all, since nothing bridges through svg)", async () => {
     const editor = createOdg();
     editor.addPage();
     editor.addPage();
@@ -141,7 +141,7 @@ describe("outline_document", () => {
     });
 
     expect(result.isError).toBeFalsy();
-    // Every page reports empty children, since none carries a shape -- the same "empty because there is nothing on it yet" convention the spreadsheet test above uses.
+    // Every page reports empty children, since none carries a shape — the same "empty because there is nothing on it yet" convention the spreadsheet test above uses.
     expect(result.structuredContent).toEqual({
       sourceFormat: "odg",
       kind: "drawing",
@@ -167,7 +167,7 @@ describe("outline_document", () => {
     });
 
     expect(result.isError).toBe(true);
-    // The docx reader's own failure text surfaces verbatim -- 'invalid zip data', what fflate says for bytes that are not a zip at all -- so the caller learns what actually failed to read rather than a generic wrapper message.
+    // The docx reader's own failure text surfaces verbatim — 'invalid zip data', what fflate says for bytes that are not a zip at all — so the caller learns what actually failed to read rather than a generic wrapper message.
     const [block] = result.content;
     expect(block?.type === "text" ? block.text : undefined).toContain(
       "invalid zip data",
@@ -185,7 +185,7 @@ describe("outline_document", () => {
 
 const SHAPE_FRAME: Box = { xPt: 0, yPt: 0, widthPt: 100, heightPt: 20 };
 
-// One real, minimal source document per DocumentFormat not already pinned exactly by a test above (markdown and ods carry their own deep structural assertion; odg carries its own regression pin) -- every DocumentFormat readNativeDocumentTree dispatches through gets driven at least once, so a format-specific reader gap surfaces here rather than staying invisible behind the two pre-existing deep tests, which only ever touched 2 of the twelve.
+// One real, minimal source document per DocumentFormat not already pinned exactly by a test above (markdown and ods carry their own deep structural assertion; odg carries its own regression pin) — every DocumentFormat readNativeDocumentTree dispatches through gets driven at least once, so a format-specific reader gap surfaces here rather than staying invisible behind the two pre-existing deep tests, which only ever touched 2 of the twelve.
 function buildFormatFixtures(): Record<
   Exclude<DocumentFormat, "markdown" | "ods" | "odg">,
   { readonly bytes: Uint8Array<ArrayBuffer>; readonly kind: string }
@@ -234,7 +234,7 @@ function buildFormatFixtures(): Record<
     return odsToXlsx(editor.toBytes());
   })();
 
-  // doc/xls/ppt/epub have no live-view editor the way docx/odt/pptx/odp above do -- each codec's own writer takes a plain ContentDocument literal directly, matching this file's own inline-construction convention for the formats that need one.
+  // doc/xls/ppt/epub have no live-view editor the way docx/odt/pptx/odp above do — each codec's own writer takes a plain ContentDocument literal directly, matching this file's own inline-construction convention for the formats that need one.
   const docBytes = writeDocContent({
     kind: "wordprocessing",
     metadata: {},

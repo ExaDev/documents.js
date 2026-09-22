@@ -18,7 +18,7 @@ import {
   DOCX_EXTRAS_FIXTURE,
 } from "../test-support/docx-extras-fixture";
 
-// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip -- not the tool callback in isolation -- so this proves the wiring: that `docx_extras` is registered under that name on the server createServer() returns, that it reads a real docx through documents.js's decodePackage/readDocxExtras, and that the real DocxExtras data reaches the caller as structuredContent.
+// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip — not the tool callback in isolation — so this proves the wiring: that `docx_extras` is registered under that name on the server createServer() returns, that it reads a real docx through documents.js's decodePackage/readDocxExtras, and that the real DocxExtras data reaches the caller as structuredContent.
 
 interface ConnectedPair {
   readonly client: Client;
@@ -69,7 +69,7 @@ describe("docx_extras", () => {
     });
 
     expect(result.isError).toBeFalsy();
-    // toEqual, not toStrictEqual: the reader materialises every schema-optional paragraph/run property as an explicit undefined key, and structuredContent carries that object across the in-memory transport without a JSON boundary -- a strict comparison would demand every optional key be spelled undefined here, which the JSON mirror below (where JSON.stringify has already dropped them) could never satisfy.
+    // toEqual, not toStrictEqual: the reader materialises every schema-optional paragraph/run property as an explicit undefined key, and structuredContent carries that object across the in-memory transport without a JSON boundary — a strict comparison would demand every optional key be spelled undefined here, which the JSON mirror below (where JSON.stringify has already dropped them) could never satisfy.
     expect(result.structuredContent).toEqual({
       // Each comment and note carries its own w:id, the key a comment extent's or note reference's anchor name joins its body back through.
       comments: [
@@ -81,7 +81,7 @@ describe("docx_extras", () => {
         { id: "1", text: DOCX_EXTRAS_FIXTURE.commentWithoutAuthorText },
       ],
       footnotes: [{ id: "1", text: DOCX_EXTRAS_FIXTURE.footnoteText }],
-      // The fixture writes word/header1.xml/word/footer1.xml with no relationships at all, so these parts surface through the unreferenced-part walk; its scaffold styles.xml has no docDefaults, so the part runs resolve bare. sectionHeaderFooters is positional -- createDocx's single sectPr spells no references, hence [{}].
+      // The fixture writes word/header1.xml/word/footer1.xml with no relationships at all, so these parts surface through the unreferenced-part walk; its scaffold styles.xml has no docDefaults, so the part runs resolve bare. sectionHeaderFooters is positional — createDocx's single sectPr spells no references, hence [{}].
       headerFooterParts: [
         {
           path: "word/footer1.xml",
@@ -118,7 +118,7 @@ describe("docx_extras", () => {
       },
     });
 
-    // content mirrors structuredContent as JSON text -- the same "content is JSON.stringify(structuredContent)" convention every other tool in this package follows. Same toEqual reasoning as above: JSON.stringify drops the undefined-valued optional keys structuredContent still carries.
+    // content mirrors structuredContent as JSON text — the same "content is JSON.stringify(structuredContent)" convention every other tool in this package follows. Same toEqual reasoning as above: JSON.stringify drops the undefined-valued optional keys structuredContent still carries.
     const [block] = result.content;
     expect(block?.type).toBe("text");
     expect(block?.type === "text" ? JSON.parse(block.text) : undefined).toEqual(

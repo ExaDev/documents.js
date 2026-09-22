@@ -87,18 +87,18 @@ import {
 } from "./text/style";
 import { POINTS_PER_INCH, emuToPoints, masterUnitsToPoints } from "./units";
 
-// The read path, top to bottom: an [MS-CFB] compound file's two required streams, the persist directory that says which of the file's appended edits is live, the document container that edit names, and then each slide's drawing and text mapped onto document-schema.js's presentation content model -- the same ContentSlide/ContentShape/ContentParagraph/ContentRun vocabulary ooxml.js's pptx reader and odf.js's odp reader produce, so a .ppt reaches every consumer of that schema without a second representation of a slide existing anywhere. [MS-PPT] 2.1.1 Current User Stream: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/76cfa657-07a6-464b-81ab-4c017c611f64 [MS-PPT] 2.1.2 PowerPoint Document Stream: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/1fc22d56-28f9-4818-bd45-67c2bf721ccf
+// The read path, top to bottom: an [MS-CFB] compound file's two required streams, the persist directory that says which of the file's appended edits is live, the document container that edit names, and then each slide's drawing and text mapped onto document-schema.js's presentation content model — the same ContentSlide/ContentShape/ContentParagraph/ContentRun vocabulary ooxml.js's pptx reader and odf.js's odp reader produce, so a .ppt reaches every consumer of that schema without a second representation of a slide existing anywhere. [MS-PPT] 2.1.1 Current User Stream: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/76cfa657-07a6-464b-81ab-4c017c611f64 [MS-PPT] 2.1.2 PowerPoint Document Stream: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/1fc22d56-28f9-4818-bd45-67c2bf721ccf
 
 // [MS-PPT] 2.1.1/2.1.2: both stream names are mandated exactly, including the space.
 export const CURRENT_USER_STREAM = "Current User";
 export const POWERPOINT_DOCUMENT_STREAM = "PowerPoint Document";
-// [MS-PPT] 2.1.3: the optional stream a producer moves blips into when they are not embedded in the blip store itself -- genuinely optional, since an FBSE may carry its blip inline instead. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/150a72bc-487f-467e-994e-01270dfaf9bf
+// [MS-PPT] 2.1.3: the optional stream a producer moves blips into when they are not embedded in the blip store itself — genuinely optional, since an FBSE may carry its blip inline instead. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/150a72bc-487f-467e-994e-01270dfaf9bf
 export const PICTURES_STREAM = "Pictures";
 
-/** The [MS-OLEPS] Property Set Stream a .ppt's title/author/dates live in when present ([MS-OSHARED] 2.3.3.2.2) -- a genuinely optional stream, unlike the two above, since a valid PowerPoint binary document need not carry document properties at all. */
+/** The [MS-OLEPS] Property Set Stream a .ppt's title/author/dates live in when present ([MS-OSHARED] 2.3.3.2.2) — a genuinely optional stream, unlike the two above, since a valid PowerPoint binary document need not carry document properties at all. */
 export const SUMMARY_INFORMATION_STREAM = "\x05SummaryInformation";
 
-// PowerPoint's own default text insets: 0.1 inch left and right, 0.05 inch top and bottom -- the same figures ECMA-376 later wrote into a:bodyPr's defaults, and the ones ooxml.js applies to a pptx shape stating none. A per-shape override lives in the shape's OfficeArtFOPT text properties (dxTextLeft/dyTextTop/dxTextRight/dyTextBottom -- insetsForShape below reads them). Exported because the write side needs them too: ContentShape requires all four insets, and a shape the writer builds for itself (a notes body, a master placeholder) has to state the same defaults a read of that shape would report rather than invent its own.
+// PowerPoint's own default text insets: 0.1 inch left and right, 0.05 inch top and bottom — the same figures ECMA-376 later wrote into a:bodyPr's defaults, and the ones ooxml.js applies to a pptx shape stating none. A per-shape override lives in the shape's OfficeArtFOPT text properties (dxTextLeft/dyTextTop/dxTextRight/dyTextBottom — insetsForShape below reads them). Exported because the write side needs them too: ContentShape requires all four insets, and a shape the writer builds for itself (a notes body, a master placeholder) has to state the same defaults a read of that shape would report rather than invent its own.
 export const DEFAULT_INSET_LEFT_RIGHT_PT = 0.1 * POINTS_PER_INCH;
 export const DEFAULT_INSET_TOP_BOTTOM_PT = 0.05 * POINTS_PER_INCH;
 
@@ -109,7 +109,7 @@ interface ShapeInsets {
   readonly insetBottomPt: number;
 }
 
-// A shape's own text insets: each of the four OfficeArtFOPT properties overrides its own default independently (a producer that only narrows the left margin still gets the standard 0.05in top/bottom), and a picture -- having no text body of its own -- falls back to zero on whichever side its own properties leave unstated, rather than to the text-shape default (see the isPicture comment above this function's call sites).
+// A shape's own text insets: each of the four OfficeArtFOPT properties overrides its own default independently (a producer that only narrows the left margin still gets the standard 0.05in top/bottom), and a picture — having no text body of its own — falls back to zero on whichever side its own properties leave unstated, rather than to the text-shape default (see the isPicture comment above this function's call sites).
 function insetsForShape(
   properties: ReadonlyMap<number, ShapeProperty>,
   isPicture: boolean,
@@ -130,7 +130,7 @@ function insetsForShape(
 
 const NO_STYLE: StyleTextProps = { paragraphRuns: [], characterRuns: [] };
 
-// The recovered nested content for an embedded OLE object: what readExternalOleEmbeds/resolveOleObjectStorage recover as raw [MS-CFB] compound-file bytes are second-order content this single-format package cannot itself decode -- it depends on no sibling format codec, per the monorepo README's own layering rule, so it has no doc-codec/xls-codec/ooxml.js reader available to turn those bytes into a real nested document. This port is the family's own established answer to that exact problem (ooxml.js's docx writer takes an analogous EmbeddedPresentationSerialiser port for the identical reason, one layer up in documents.js, which already depends on every format codec): a caller that DOES hold every codec -- documents.js -- supplies the decode, and this package stays decoupled either way. Returning undefined for anything (no port supplied, an unrecognised progId, a decode failure) degrades to no embedded block, matching the read-side tiered-degrade convention ooxml.js's own embedded-object recovery already states: one bad or unrecoverable embedded object never fails the host slide's read.
+// The recovered nested content for an embedded OLE object: what readExternalOleEmbeds/resolveOleObjectStorage recover as raw [MS-CFB] compound-file bytes are second-order content this single-format package cannot itself decode — it depends on no sibling format codec, per the monorepo README's own layering rule, so it has no doc-codec/xls-codec/ooxml.js reader available to turn those bytes into a real nested document. This port is the family's own established answer to that exact problem (ooxml.js's docx writer takes an analogous EmbeddedPresentationSerialiser port for the identical reason, one layer up in documents.js, which already depends on every format codec): a caller that DOES hold every codec — documents.js — supplies the decode, and this package stays decoupled either way. Returning undefined for anything (no port supplied, an unrecognised progId, a decode failure) degrades to no embedded block, matching the read-side tiered-degrade convention ooxml.js's own embedded-object recovery already states: one bad or unrecoverable embedded object never fails the host slide's read.
 export type DecodeEmbeddedObjectPort = (
   storageBytes: Uint8Array<ArrayBuffer>,
   progId: string | undefined,
@@ -156,7 +156,7 @@ interface DocumentContext {
   readonly decodeEmbeddedObject: DecodeEmbeddedObjectPort | undefined;
 }
 
-// A DocumentContext narrowed onto one slide by its resolved master -- the formatting cascade and colour scheme a run's unstated properties resolve against, which is per-slide because a slide's own scheme can differ from its master's.
+// A DocumentContext narrowed onto one slide by its resolved master — the formatting cascade and colour scheme a run's unstated properties resolve against, which is per-slide because a slide's own scheme can differ from its master's.
 interface DrawingContext extends DocumentContext {
   readonly masterInfo: MasterInfo;
 }
@@ -185,7 +185,7 @@ interface ShapeText {
   readonly records: readonly PptRecord[];
 }
 
-// A shape's text, whether it is stored on the shape itself or -- for a placeholder -- in the document's slide list, which the shape points into with an OutlineTextRefAtom. The two spellings are not alternatives a producer picks freely: a title or body placeholder's text is genuinely absent from the slide's own drawing, so a reader that only looked at the client textbox would report those shapes as empty. They also disagree about where TextHeaderAtom itself ends up: a client textbox's own children include it as a raw record, but readSlideListWithText (document/slide-list.ts) already consumes it while building each OutlineText, capturing its textType separately rather than leaving it in `records` -- so the two branches below resolve textType in genuinely different ways rather than both searching `records` for one.
+// A shape's text, whether it is stored on the shape itself or — for a placeholder — in the document's slide list, which the shape points into with an OutlineTextRefAtom. The two spellings are not alternatives a producer picks freely: a title or body placeholder's text is genuinely absent from the slide's own drawing, so a reader that only looked at the client textbox would report those shapes as empty. They also disagree about where TextHeaderAtom itself ends up: a client textbox's own children include it as a raw record, but readSlideListWithText (document/slide-list.ts) already consumes it while building each OutlineText, capturing its textType separately rather than leaving it in `records` — so the two branches below resolve textType in genuinely different ways rather than both searching `records` for one.
 function textRecordsFor(
   clientTextbox: PptRecord,
   persist: SlidePersist,
@@ -248,7 +248,7 @@ function blocksFor(
   );
 }
 
-// A picture shape's image block, sized to the shape's own frame -- the same frame-sized spelling ooxml.js's pptx reader gives a p:pic, so a picture reads identically from either format. An unresolvable pib (past the end of the store, an empty slot, a WMF/EMF/TIFF/DIB blip this package decodes none of) keeps the shape with empty content rather than dropping it, mirroring readPicShape's own "unresolvable image keeps the geometry" convention.
+// A picture shape's image block, sized to the shape's own frame — the same frame-sized spelling ooxml.js's pptx reader gives a p:pic, so a picture reads identically from either format. An unresolvable pib (past the end of the store, an empty slot, a WMF/EMF/TIFF/DIB blip this package decodes none of) keeps the shape with empty content rather than dropping it, mirroring readPicShape's own "unresolvable image keeps the geometry" convention.
 function imageBlocksFor(
   pibProperty: ShapeProperty | undefined,
   context: DrawingContext,
@@ -273,7 +273,7 @@ function imageBlocksFor(
   ];
 }
 
-// A shape's OLE-embedded object, when its OfficeArtClientData names one, the document's own external-object list resolves it, its persist entry's storage recovers, AND a decode port turns those bytes into a real nested document -- any one of those failing degrades to no additional block, the shape's own picture/text blocks (already collected by imageBlocksFor/blocksFor above) standing alone exactly as if this package had no OLE support at all. This mirrors ooxml.js's own OLE graphic-frame reading precedent: the fallback picture stays, and the embedded-object block sits beside it rather than replacing it, when a document was actually recovered.
+// A shape's OLE-embedded object, when its OfficeArtClientData names one, the document's own external-object list resolves it, its persist entry's storage recovers, AND a decode port turns those bytes into a real nested document — any one of those failing degrades to no additional block, the shape's own picture/text blocks (already collected by imageBlocksFor/blocksFor above) standing alone exactly as if this package had no OLE support at all. This mirrors ooxml.js's own OLE graphic-frame reading precedent: the fallback picture stays, and the embedded-object block sits beside it rather than replacing it, when a document was actually recovered.
 function embeddedObjectBlocksFor(
   clientData: PptRecord | undefined,
   context: DrawingContext,
@@ -312,7 +312,7 @@ function embeddedObjectBlocksFor(
   ];
 }
 
-// A table's grid, derived from its cells' own rectangles -- the one place the format states it, since no record names a row or a column and every cell is an ordinary anchored shape. Row boundaries are the distinct cell tops, column boundaries the distinct cell lefts, each in document-declared order; a cell lands at the intersection of its own top and left; a grid position no cell occupies reads as an empty cell, because the schema's table is dense and the format's is not. A cell carrying no anchor contributes nothing at all, the same "positioned, but unknown where" drop the slide's own walk applies to a shape with no anchor, and neither does a shape with a degenerate rectangle -- a real PowerPoint table's group carries a run of zero-width and zero-height shapes spelling its gridlines (confirmed by inspecting Microsoft Office PowerPoint's own output), which are not cells and would otherwise plant phantom rows and columns. master-unit arithmetic stays exact through to points (72/576 is exactly 1/8, exactly representable), so boundaries derived by subtraction never drift off a cell edge.
+// A table's grid, derived from its cells' own rectangles — the one place the format states it, since no record names a row or a column and every cell is an ordinary anchored shape. Row boundaries are the distinct cell tops, column boundaries the distinct cell lefts, each in document-declared order; a cell lands at the intersection of its own top and left; a grid position no cell occupies reads as an empty cell, because the schema's table is dense and the format's is not. A cell carrying no anchor contributes nothing at all, the same "positioned, but unknown where" drop the slide's own walk applies to a shape with no anchor, and neither does a shape with a degenerate rectangle — a real PowerPoint table's group carries a run of zero-width and zero-height shapes spelling its gridlines (confirmed by inspecting Microsoft Office PowerPoint's own output), which are not cells and would otherwise plant phantom rows and columns. master-unit arithmetic stays exact through to points (72/576 is exactly 1/8, exactly representable), so boundaries derived by subtraction never drift off a cell edge.
 function tableBlockFor(table: PptTable, context: DrawingContext): ContentTable {
   const placed = table.cells.flatMap((cell) =>
     cell.anchor === undefined ||
@@ -346,7 +346,7 @@ function tableBlockFor(table: PptTable, context: DrawingContext): ContentTable {
         ? { blocks: [] }
         : { blocks: blocksFor(at.cell.clientTextbox, context) };
     });
-    // Every entry in `inRow` came from `placed` above, which already filters out any anchor with bottom <= top -- so `bottom` (the max over at least one such anchor's own bottom, seeded no lower than `top`) is always strictly greater than `top`, and heightPt is therefore always positive. No fallback branch is reachable, so none is written.
+    // Every entry in `inRow` came from `placed` above, which already filters out any anchor with bottom <= top — so `bottom` (the max over at least one such anchor's own bottom, seeded no lower than `top`) is always strictly greater than `top`, and heightPt is therefore always positive. No fallback branch is reachable, so none is written.
     const heightPt = masterUnitsToPoints(bottom - top);
     return { cells, heightPt };
   });
@@ -355,7 +355,7 @@ function tableBlockFor(table: PptTable, context: DrawingContext): ContentTable {
 
 // Every notes slide's text, keyed by the slideId of the presentation slide it belongs to. [MS-PPT] 3.5.3 makes this the association: "A notes slide is associated with its presentation slide by means of the slideIdRef field in the NotesContainer record", and it explicitly warns that the notes list's own order is not meaningful, so the mapping has to be built from each container's own atom rather than by pairing the two lists positionally. A NotesContainer naming the notes master states slideIdRef 0x00000000, which no presentation slide's own slideId can be, so such an entry simply matches nothing.
 //
-// A real producer does not always write that mandated 0x00000000, though: LibreOffice 26.2.5.2's own notes master states slideIdRef 0x80000001 instead, confirmed by inspecting its raw bytes. That is harmless here only because a presentation slide's own slideId (this package writes 256 + index, and no other producer this package has been checked against uses anything near it) never reaches that high -- [MS-PPT] 2.2.13 reserves 0x80000000 and above for MasterId, so a real slideId that large would already be spec-nonconformant. If a slideId this package's own write.ts mints (see FIRST_SLIDE_ID's own note) ever moved up into that range, or a third-party file's own genuine slideId did, this lookup would risk pairing a slide with the wrong notes -- or with the master's own sentinel entry -- rather than with none. Nothing here currently guards that bound, since it would take roughly two billion slides to reach it from this package's own writer, but a future notes-aware reader keying on slideIdRef anywhere else should carry the identical caveat.
+// A real producer does not always write that mandated 0x00000000, though: LibreOffice 26.2.5.2's own notes master states slideIdRef 0x80000001 instead, confirmed by inspecting its raw bytes. That is harmless here only because a presentation slide's own slideId (this package writes 256 + index, and no other producer this package has been checked against uses anything near it) never reaches that high — [MS-PPT] 2.2.13 reserves 0x80000000 and above for MasterId, so a real slideId that large would already be spec-nonconformant. If a slideId this package's own write.ts mints (see FIRST_SLIDE_ID's own note) ever moved up into that range, or a third-party file's own genuine slideId did, this lookup would risk pairing a slide with the wrong notes — or with the master's own sentinel entry — rather than with none. Nothing here currently guards that bound, since it would take roughly two billion slides to reach it from this package's own writer, but a future notes-aware reader keying on slideIdRef anywhere else should carry the identical caveat.
 function readNotesBySlideId(
   streamBytes: Uint8Array<ArrayBuffer>,
   directory: ReadonlyMap<number, number>,
@@ -380,7 +380,7 @@ function readNotesBySlideId(
   return notes;
 }
 
-// A slide's own colour scheme, when it states one directly, else its master's. [MS-PPT] 2.5.1 mandates every SlideContainer carry its own SlideSchemeColorSchemeAtom, and a real producer that visually "follows the master's scheme" does so by duplicating the master's own RGB values into it rather than omitting the atom -- but this package's own writer (write.ts's writeSlideContainer) does not currently write one at all, so this reader tolerates its absence by falling back to the resolved master's colour scheme, which is also what an absent atom would mean in practice for a slide that genuinely follows its master.
+// A slide's own colour scheme, when it states one directly, else its master's. [MS-PPT] 2.5.1 mandates every SlideContainer carry its own SlideSchemeColorSchemeAtom, and a real producer that visually "follows the master's scheme" does so by duplicating the master's own RGB values into it rather than omitting the atom — but this package's own writer (write.ts's writeSlideContainer) does not currently write one at all, so this reader tolerates its absence by falling back to the resolved master's colour scheme, which is also what an absent atom would mean in practice for a slide that genuinely follows its master.
 function colorSchemeFor(
   slideChildren: readonly PptRecord[],
   master: MasterInfo,
@@ -391,7 +391,7 @@ function colorSchemeFor(
     : readSlideSchemeColorSchemeAtom(ownScheme);
 }
 
-// Every master persist object, keyed by its own identifier ([MS-PPT] 2.2.13 MasterId), resolved from the master list's own MasterPersistAtom entries -- the same RT_SlidePersistAtom shape the slide list itself uses ([MS-PPT] 2.4.14.1/2.4.14.2), read with the identical readSlideListWithText a slide's own list uses, its own `slideId` field simply naming a master rather than a slide here. A real .ppt genuinely carries more than one master when it mixes design templates within one deck, unlike this package's own writer, which only ever produces one -- SlideAtom.masterIdRef is a real per-slide choice, not a formality.
+// Every master persist object, keyed by its own identifier ([MS-PPT] 2.2.13 MasterId), resolved from the master list's own MasterPersistAtom entries — the same RT_SlidePersistAtom shape the slide list itself uses ([MS-PPT] 2.4.14.1/2.4.14.2), read with the identical readSlideListWithText a slide's own list uses, its own `slideId` field simply naming a master rather than a slide here. A real .ppt genuinely carries more than one master when it mixes design templates within one deck, unlike this package's own writer, which only ever produces one — SlideAtom.masterIdRef is a real per-slide choice, not a formality.
 function readMastersById(
   streamBytes: Uint8Array<ArrayBuffer>,
   directory: ReadonlyMap<number, number>,
@@ -515,7 +515,7 @@ function readSlide(
       0,
       masterUnitsToPoints(shape.anchor.bottom) - top,
     );
-    // A picture has no text body of its own -- its insets are genuinely zero rather than defaulted, since nothing ever positions text against them (the same convention ooxml.js's pptx reader states for a shape with no p:txBody).
+    // A picture has no text body of its own — its insets are genuinely zero rather than defaulted, since nothing ever positions text against them (the same convention ooxml.js's pptx reader states for a shape with no p:txBody).
     const isPicture = shape.properties.get(PROPERTY_PIB) !== undefined;
     shapes.push({
       frame: { xPt: left, yPt: top, widthPt, heightPt },
@@ -544,7 +544,7 @@ function readSlide(
   return { size, shapes, notes };
 }
 
-// Reads the two [MS-PPT] streams directly, for a caller that already holds them. The compound file below this is archive-codec's business, and separating the two keeps every record-level behaviour testable without a container around it. `picturesStream`, when supplied, is the optional "Pictures" stream ([MS-PPT] 2.1.3) a producer moves blips into instead of embedding them in the blip store; it is ignored for an encrypted document, whose pictures stream is itself RC4-encrypted by a per-picture scheme ([MS-PPT] 2.1.3's own decryption steps) this package does not implement -- such pictures read as no image rather than as garbage.
+// Reads the two [MS-PPT] streams directly, for a caller that already holds them. The compound file below this is archive-codec's business, and separating the two keeps every record-level behaviour testable without a container around it. `picturesStream`, when supplied, is the optional "Pictures" stream ([MS-PPT] 2.1.3) a producer moves blips into instead of embedding them in the blip store; it is ignored for an encrypted document, whose pictures stream is itself RC4-encrypted by a per-picture scheme ([MS-PPT] 2.1.3's own decryption steps) this package does not implement — such pictures read as no image rather than as garbage.
 export function readPptStreams(
   currentUserStream: Uint8Array<ArrayBuffer>,
   powerPointDocumentStream: Uint8Array<ArrayBuffer>,
@@ -606,7 +606,7 @@ export function readPptStreams(
 
   const environment = findChild(children, RT_Environment);
   const fontNames = readFontNames(environment);
-  // [MS-PPT] 2.9.35: the DocumentTextInfoContainer's own TextMasterStyleAtom (a direct child of Environment, recInstance OTHER) is the fallback of last resort every TextTypeEnum member falls through to when its own master states nothing -- see document/master.ts's own top comment.
+  // [MS-PPT] 2.9.35: the DocumentTextInfoContainer's own TextMasterStyleAtom (a direct child of Environment, recInstance OTHER) is the fallback of last resort every TextTypeEnum member falls through to when its own master states nothing — see document/master.ts's own top comment.
   const documentDefaultRecord =
     environment === undefined
       ? undefined
@@ -616,7 +616,7 @@ export function readPptStreams(
       ? undefined
       : readTextMasterStyleAtom(documentDefaultRecord);
 
-  // The master, slide and notes lists all carry RT_SlideListWithText and differ only by recInstance, so matching on the record type alone would find whichever came first -- the master list.
+  // The master, slide and notes lists all carry RT_SlideListWithText and differ only by recInstance, so matching on the record type alone would find whichever came first — the master list.
   const listWithInstance = (instance: number): PptRecord | undefined =>
     children.find(
       (record) =>
@@ -644,7 +644,7 @@ export function readPptStreams(
   const externalOleEmbeds = readExternalOleEmbeds(children);
 
   return {
-    // Document properties live in the compound file's own "\x05SummaryInformation" stream ([MS-OSHARED]), not in any [MS-PPT] record -- genuinely outside what a caller holding only these two streams can supply. readPptContent, one level up, is where a container-level caller gets the real value: it looks the stream up itself and overrides this field when one is present.
+    // Document properties live in the compound file's own "\x05SummaryInformation" stream ([MS-OSHARED]), not in any [MS-PPT] record — genuinely outside what a caller holding only these two streams can supply. readPptContent, one level up, is where a container-level caller gets the real value: it looks the stream up itself and overrides this field when one is present.
     metadata: {},
     slides: persists.map((persist) =>
       readSlide(
@@ -665,7 +665,7 @@ export function readPptStreams(
   };
 }
 
-// Reads a .ppt file's bytes into the flat metadata + slides form. readPptStreams below is the pure record-level read (metadata always {}, since it has no container to look a SummaryInformation stream up in); this wraps it with the one container-level fact readPptStreams cannot know -- whether the compound file also carries a "\x05SummaryInformation" stream -- mapped onto LayoutMetadata through summaryInformationToLayoutMetadata (see src/metadata.ts) when present. `password` decrypts a presentation protected by [MS-OFFCRYPTO] 2.3.5 RC4 CryptoAPI -- see encryption.ts. It is ignored for an unencrypted presentation, and a missing or incorrect password against an encrypted one throws rather than returning a partial or garbled document.
+// Reads a .ppt file's bytes into the flat metadata + slides form. readPptStreams below is the pure record-level read (metadata always {}, since it has no container to look a SummaryInformation stream up in); this wraps it with the one container-level fact readPptStreams cannot know — whether the compound file also carries a "\x05SummaryInformation" stream — mapped onto LayoutMetadata through summaryInformationToLayoutMetadata (see src/metadata.ts) when present. `password` decrypts a presentation protected by [MS-OFFCRYPTO] 2.3.5 RC4 CryptoAPI — see encryption.ts. It is ignored for an unencrypted presentation, and a missing or incorrect password against an encrypted one throws rather than returning a partial or garbled document.
 export function readPptContent(
   bytes: Uint8Array<ArrayBuffer>,
   password?: string,

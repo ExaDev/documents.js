@@ -19,7 +19,7 @@ import { settle, waitForFrame } from "../../test-support.js";
 const ENTER_KEY = "\r";
 const ESCAPE_KEY = "\x1B";
 
-// A minimal stand-in for app.tsx's own screen router, scoped to exactly the screens this family owns, so these tests exercise the real exported components in the same "look at the top of the stack, render the matching screen" shape app.tsx will eventually use -- not a bespoke test-only rendering path.
+// A minimal stand-in for app.tsx's own screen router, scoped to exactly the screens this family owns, so these tests exercise the real exported components in the same "look at the top of the stack, render the matching screen" shape app.tsx will eventually use — not a bespoke test-only rendering path.
 function SlideFamilyRouter({
   format,
 }: {
@@ -52,7 +52,7 @@ function waitForText(
   return waitForFrame(lastFrame, (frame) => frame.includes(text));
 }
 
-// `settle()` (see test-support.ts) before every `stdin.write` that follows a screen swap -- every navigation in this family swaps in a whole new screen component, so every write in this suite needs it, not just the first one after opening the document.
+// `settle()` (see test-support.ts) before every `stdin.write` that follows a screen swap — every navigation in this family swaps in a whole new screen component, so every write in this suite needs it, not just the first one after opening the document.
 async function sendKey(
   stdin: { readonly write: (data: string) => void },
   key: string,
@@ -86,7 +86,7 @@ function buildOdpTestBytes(): Uint8Array<ArrayBuffer> {
   return editor.toBytes();
 }
 
-// A real OPEN_FILE_SUCCESS dispatch (not CREATE_DOCUMENT) so the rendered slides/shapes come from bytes this test built and controls exactly, the same way opening a real file would populate state -- dispatched from a `useEffect` since AppStateProvider owns the reducer and there is no way to seed its initial state from outside.
+// A real OPEN_FILE_SUCCESS dispatch (not CREATE_DOCUMENT) so the rendered slides/shapes come from bytes this test built and controls exactly, the same way opening a real file would populate state — dispatched from a `useEffect` since AppStateProvider owns the reducer and there is no way to seed its initial state from outside.
 function OpenTestDocument({
   format,
   bytes,
@@ -166,7 +166,7 @@ describe("SlideFamilySlideList navigation", () => {
 
     // The cursor starts on slide 1; Enter should push slideDetail for slide index 0, not whichever slide was just appended.
     await sendKey(stdin, ENTER_KEY);
-    const detail = await waitForText(lastFrame, "Slide 1 -- 2 shapes");
+    const detail = await waitForText(lastFrame, "Slide 1 — 2 shapes");
     expect(detail).toContain('1. [Text] "Q3 Results"');
     expect(detail).toContain("2. [Image] (no text)");
   });
@@ -175,7 +175,7 @@ describe("SlideFamilySlideList navigation", () => {
     const { lastFrame, stdin } = renderOpened("pptx", buildPptxTestBytes());
     await waitForText(lastFrame, "PowerPoint slides (2)");
     await sendKey(stdin, ENTER_KEY);
-    await waitForText(lastFrame, "Slide 1 -- 2 shapes");
+    await waitForText(lastFrame, "Slide 1 — 2 shapes");
 
     await sendKey(stdin, ENTER_KEY);
     const shapeEditor = await waitForText(lastFrame, "Slide 1, shape 1");
@@ -187,13 +187,13 @@ describe("SlideFamilySlideList navigation", () => {
     const { lastFrame, stdin } = renderOpened("pptx", buildPptxTestBytes());
     await waitForText(lastFrame, "PowerPoint slides (2)");
     await sendKey(stdin, ENTER_KEY);
-    await waitForText(lastFrame, "Slide 1 -- 2 shapes");
+    await waitForText(lastFrame, "Slide 1 — 2 shapes");
 
     await sendKey(stdin, ENTER_KEY);
     await waitForText(lastFrame, "Slide 1, shape 1");
 
     await sendKey(stdin, ESCAPE_KEY);
-    await waitForText(lastFrame, "Slide 1 -- 2 shapes");
+    await waitForText(lastFrame, "Slide 1 — 2 shapes");
 
     await sendKey(stdin, ESCAPE_KEY);
     await waitForText(lastFrame, "PowerPoint slides (2)");

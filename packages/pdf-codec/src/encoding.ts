@@ -790,7 +790,7 @@ export const ZAPFDINGBATS_GLYPH_NAMES: readonly string[] = [
   "",
 ];
 
-// The Adobe StandardEncoding (ISO 32000-1 Annex D.2, and what a Type 1 or CFF font program means by its own predefined encoding 0): PDF character code (0-255) -> PostScript glyph name. Generated from fontTools' own `fontTools.encodings.StandardEncoding` table rather than transcribed, so it agrees with the table every mainstream font tool writes and reads against. It parts company with WinAnsi across most of the upper half -- 0xA9 is quotesingle here and the trademark sign there -- which is why approximating one as the other silently produced wrong characters.
+// The Adobe StandardEncoding (ISO 32000-1 Annex D.2, and what a Type 1 or CFF font program means by its own predefined encoding 0): PDF character code (0-255) -> PostScript glyph name. Generated from fontTools' own `fontTools.encodings.StandardEncoding` table rather than transcribed, so it agrees with the table every mainstream font tool writes and reads against. It parts company with WinAnsi across most of the upper half — 0xA9 is quotesingle here and the trademark sign there — which is why approximating one as the other silently produced wrong characters.
 export const STANDARD_GLYPH_NAMES: readonly string[] = [
   "",
   "",
@@ -1055,7 +1055,7 @@ export function standardGlyphName(code: number): string | undefined {
   return name === undefined || name === "" ? undefined : name;
 }
 
-// MacRomanEncoding (ISO 32000-1 Annex D.2): PDF character code (0-255) -> PostScript glyph name, generated from fontTools' own `fontTools.encodings.MacRoman` table. That table is the Mac OS Roman glyph repertoire a real font's (1,0) cmap subtable is keyed by, and is a superset of the Latin subset Annex D itself tabulates: it additionally names the mathematical and typographic glyphs Mac OS Roman puts in the upper half (0xAD notequal, 0xB2 lessequal, 0xBD Omega, 0xC5 approxequal), which is what a viewer resolves them to. It agrees with Annex D everywhere Annex D defines a glyph at all, 0xDB included -- currency there, rather than the Euro sign later Mac OS Roman revisions moved into that slot.
+// MacRomanEncoding (ISO 32000-1 Annex D.2): PDF character code (0-255) -> PostScript glyph name, generated from fontTools' own `fontTools.encodings.MacRoman` table. That table is the Mac OS Roman glyph repertoire a real font's (1,0) cmap subtable is keyed by, and is a superset of the Latin subset Annex D itself tabulates: it additionally names the mathematical and typographic glyphs Mac OS Roman puts in the upper half (0xAD notequal, 0xB2 lessequal, 0xBD Omega, 0xC5 approxequal), which is what a viewer resolves them to. It agrees with Annex D everywhere Annex D defines a glyph at all, 0xDB included — currency there, rather than the Euro sign later Mac OS Roman revisions moved into that slot.
 export const MACROMAN_GLYPH_NAMES: readonly string[] = [
   "NUL",
   "Eth",
@@ -1320,7 +1320,7 @@ export function macRomanGlyphName(code: number): string | undefined {
   return name === undefined || name === "" ? undefined : name;
 }
 
-// A simple font's /Encoding (or /Encoding /BaseEncoding) name resolved to the table it names (ISO 32000-1 Table 114). Returns `undefined` for a name this codec has no table for -- MacExpertEncoding, or anything a producer invented -- which the caller reports as an approximation rather than silently treating it as one of the three.
+// A simple font's /Encoding (or /Encoding /BaseEncoding) name resolved to the table it names (ISO 32000-1 Table 114). Returns `undefined` for a name this codec has no table for — MacExpertEncoding, or anything a producer invented — which the caller reports as an approximation rather than silently treating it as one of the three.
 export function namedEncodingGlyphName(
   encodingName: string,
 ): ((code: number) => string | undefined) | undefined {
@@ -1695,10 +1695,10 @@ const SYMBOL_AND_ZAPFDINGBATS_GLYPH_UNICODE: ReadonlyMap<string, number> =
 
 let glyphNameToUnicodeTable: ReadonlyMap<string, number> | undefined;
 
-// DEL (0x7F) is labelled "bullet" in WINANSI_GLYPH_NAMES, the same placeholder used for the genuinely-unassigned CP1252 positions -- but unlike those, winansi.ts's own Unicode<->WinAnsi table (built for the write path, via a mechanical TextDecoder('windows-1252') sweep) happens to map 0x7F to itself rather than leaving it undefined. Left unexcluded, that spurious self-mapping would win the "bullet" name ahead of the real one at 0x95 under first-occurrence-wins iteration.
+// DEL (0x7F) is labelled "bullet" in WINANSI_GLYPH_NAMES, the same placeholder used for the genuinely-unassigned CP1252 positions — but unlike those, winansi.ts's own Unicode<->WinAnsi table (built for the write path, via a mechanical TextDecoder('windows-1252') sweep) happens to map 0x7F to itself rather than leaving it undefined. Left unexcluded, that spurious self-mapping would win the "bullet" name ahead of the real one at 0x95 under first-occurrence-wins iteration.
 const NON_GLYPH_CODES = new Set([0x7f]);
 
-// Derived, not transcribed: cross-references WINANSI_GLYPH_NAMES (code -> name) against winansi.ts's own code -> Unicode table by code, built once on first use, first occurrence wins. Covers every glyph name WinAnsi itself defines -- the overwhelming common case for a simple font's /Encoding /Differences array, since most real-world non-embedded fonts stay within Latin-1 plus the CP1252 extensions. Two duplication patterns in WINANSI_GLYPH_NAMES are why first-wins matters: a handful of codes repeat the placeholder name "bullet" for CP1252 positions that are genuinely unassigned (see winansi.ts's own note on 0x81/0x8D/0x8F/0x90/0x9D, plus 0x7F excluded above) -- those never appear in the Unicode table this cross-references (0x7F aside), so they're skipped regardless of iteration order; and "space" itself is reused for both the ordinary space (0x20) and the non-breaking space (0xA0), where ascending code order deliberately lets the far more common plain space win. A glyph name a /Differences array names that falls outside WinAnsi's own repertoire (a Greek letter, a math operator, a ZapfDingbats "aNNN" name, or the "uniXXXX" convention some producers emit directly) is resolved by this function's own further fallbacks below, not by this table.
+// Derived, not transcribed: cross-references WINANSI_GLYPH_NAMES (code -> name) against winansi.ts's own code -> Unicode table by code, built once on first use, first occurrence wins. Covers every glyph name WinAnsi itself defines — the overwhelming common case for a simple font's /Encoding /Differences array, since most real-world non-embedded fonts stay within Latin-1 plus the CP1252 extensions. Two duplication patterns in WINANSI_GLYPH_NAMES are why first-wins matters: a handful of codes repeat the placeholder name "bullet" for CP1252 positions that are genuinely unassigned (see winansi.ts's own note on 0x81/0x8D/0x8F/0x90/0x9D, plus 0x7F excluded above) — those never appear in the Unicode table this cross-references (0x7F aside), so they're skipped regardless of iteration order; and "space" itself is reused for both the ordinary space (0x20) and the non-breaking space (0xA0), where ascending code order deliberately lets the far more common plain space win. A glyph name a /Differences array names that falls outside WinAnsi's own repertoire (a Greek letter, a math operator, a ZapfDingbats "aNNN" name, or the "uniXXXX" convention some producers emit directly) is resolved by this function's own further fallbacks below, not by this table.
 export function glyphNameToUnicode(name: string): number | undefined {
   if (glyphNameToUnicodeTable === undefined) {
     const table = new Map<string, number>();
@@ -1710,7 +1710,7 @@ export function glyphNameToUnicode(name: string): number | undefined {
       if (glyphName === undefined || glyphName === "") {
         continue;
       }
-      // First occurrence wins: "space" is the one glyph name genuinely reused for two different code points in this table (0x20, the ordinary space, and 0xA0, the non-breaking space) -- ascending code order means the far more common plain space wins the ambiguity.
+      // First occurrence wins: "space" is the one glyph name genuinely reused for two different code points in this table (0x20, the ordinary space, and 0xA0, the non-breaking space) — ascending code order means the far more common plain space wins the ambiguity.
       if (table.has(glyphName)) {
         continue;
       }
@@ -1728,7 +1728,7 @@ export function glyphNameToUnicode(name: string): number | undefined {
   return known ?? algorithmicGlyphNameToUnicode(base);
 }
 
-// The two constructed glyph-name forms the Adobe Glyph List Specification defines for a glyph with no registered name -- "uniXXXX" (one four-digit BMP code point; the specification also allows a sequence of them, which names a multi-character string this single-code-point mapping deliberately does not attempt) and "uXXXX" through "uXXXXXX" (one code point, four to six digits). A font subsetting tool that strips a font's real names commonly re-emits them in one of these forms, which makes them a genuine mapping rather than a guess. A name in neither form, and in no table above, resolves to nothing at all: "g27", "cid42", and "index3" name a glyph's position in a particular font, and carry no information about which character it draws.
+// The two constructed glyph-name forms the Adobe Glyph List Specification defines for a glyph with no registered name — "uniXXXX" (one four-digit BMP code point; the specification also allows a sequence of them, which names a multi-character string this single-code-point mapping deliberately does not attempt) and "uXXXX" through "uXXXXXX" (one code point, four to six digits). A font subsetting tool that strips a font's real names commonly re-emits them in one of these forms, which makes them a genuine mapping rather than a guess. A name in neither form, and in no table above, resolves to nothing at all: "g27", "cid42", and "index3" name a glyph's position in a particular font, and carry no information about which character it draws.
 function algorithmicGlyphNameToUnicode(name: string): number | undefined {
   const uniMatch = /^uni([0-9A-Fa-f]{4})$/.exec(name);
   if (uniMatch?.[1] !== undefined) {

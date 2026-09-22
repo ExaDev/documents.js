@@ -6,7 +6,7 @@ import {
   minimalXlsxBytes,
 } from "./embedded";
 
-// Direct structural coverage for this file's own fixture-building strings (never published, but real code Stryker mutates all the same): every builder is unzipped and its content-types override and root relationship target are decoded back to text and compared against the exact markup expected, rather than merely checking that the functions "don't throw" -- a mutant collapsing any of these to an empty string still zips, and still gets read by every consuming suite's fallback-tolerant assertions, without this.
+// Direct structural coverage for this file's own fixture-building strings (never published, but real code Stryker mutates all the same): every builder is unzipped and its content-types override and root relationship target are decoded back to text and compared against the exact markup expected, rather than merely checking that the functions "don't throw" — a mutant collapsing any of these to an empty string still zips, and still gets read by every consuming suite's fallback-tolerant assertions, without this.
 const dec = (bytes: Uint8Array<ArrayBuffer>): string =>
   new TextDecoder().decode(bytes);
 

@@ -14,7 +14,7 @@ import type {
 } from "./port";
 import { DOCUMENT_FORMATS, type DocumentFormat } from "./port";
 
-// Derived from the composition pathfinder (resolveCompositionPlan in composition.ts), not from a hand-maintained edge list: every (source, target) pair the pathfinder can route, plus the special-case odf -> pdf pair (the pathfinder deliberately excludes odf, since a standalone formula document renders through src/mathml's own formula-positioning path rather than a ContentDocument -> LayoutDocument layout engine -- local.ts routes it to the hand-written odfToPdf directly). Sorted by source then target so the array is deterministic and a test can assert it exactly.
+// Derived from the composition pathfinder (resolveCompositionPlan in composition.ts), not from a hand-maintained edge list: every (source, target) pair the pathfinder can route, plus the special-case odf -> pdf pair (the pathfinder deliberately excludes odf, since a standalone formula document renders through src/mathml's own formula-positioning path rather than a ContentDocument -> LayoutDocument layout engine — local.ts routes it to the hand-written odfToPdf directly). Sorted by source then target so the array is deterministic and a test can assert it exactly.
 const SUPPORTED_CONVERSIONS: readonly {
   readonly source: DocumentFormat;
   readonly target: DocumentFormat;
@@ -80,7 +80,7 @@ function fromPdfDiagnostic(diagnostic: PdfDiagnostic): Diagnostic {
 
 export function createLocalDocumentConverter(): DocumentConverter {
   return {
-    // 2 added ConversionResult's optional `package` field (see port.ts), which the local implementation below populates from every conversion function's own onDocument callback; 3 added convert()'s own ConversionOptions.fonts/onFontSubstitution, which an implementation is now expected to honour for every conversion that lays text out; 4 added ConversionOptions.images (a MarkdownImageResolver), honoured by the markdown-sourced to-PDF and bridge edges; 5 added ConversionOptions.clock, forwarded to every X-to-PDF conversion's /CreationDate and /ModDate stamping; 6 added ConversionOptions.page, forwarded to any svg-target hop (drawing pages are anonymous, so an index selects the page the way `sheet` names a sheet); 7 changed ConversionResult.package's TYPE to the tree-form DocumentTree of document-schema.js 4.0.0 (children carry the decomposed group tree plus the minted styles table, where it previously carried the flat { content, pages } envelope) -- a consumer reading the field must flatten (document-schema.js exports flattenTree) or walk the tree.
+    // 2 added ConversionResult's optional `package` field (see port.ts), which the local implementation below populates from every conversion function's own onDocument callback; 3 added convert()'s own ConversionOptions.fonts/onFontSubstitution, which an implementation is now expected to honour for every conversion that lays text out; 4 added ConversionOptions.images (a MarkdownImageResolver), honoured by the markdown-sourced to-PDF and bridge edges; 5 added ConversionOptions.clock, forwarded to every X-to-PDF conversion's /CreationDate and /ModDate stamping; 6 added ConversionOptions.page, forwarded to any svg-target hop (drawing pages are anonymous, so an index selects the page the way `sheet` names a sheet); 7 changed ConversionResult.package's TYPE to the tree-form DocumentTree of document-schema.js 4.0.0 (children carry the decomposed group tree plus the minted styles table, where it previously carried the flat { content, pages } envelope) — a consumer reading the field must flatten (document-schema.js exports flattenTree) or walk the tree.
     contractVersion: 7,
     conversions: SUPPORTED_CONVERSIONS,
     convert(
@@ -93,13 +93,13 @@ export function createLocalDocumentConverter(): DocumentConverter {
       const onDocument = (pkg: DocumentTree): void => {
         documentPackage = pkg;
       };
-      // Recorded as a diagnostic AND forwarded to the caller's own callback -- two channels for two consumers, not a duplicate: the diagnostics array is what a caller who passed no callback reads afterwards, the callback is what a caller wanting the structured FontSubstitution value receives live.
+      // Recorded as a diagnostic AND forwarded to the caller's own callback — two channels for two consumers, not a duplicate: the diagnostics array is what a caller who passed no callback reads afterwards, the callback is what a caller wanting the structured FontSubstitution value receives live.
       const onFontSubstitution = (substitution: FontSubstitution): void => {
         diagnostics.push(fontSubstitutionDiagnostic(substitution));
         options.onFontSubstitution?.(substitution);
       };
 
-      // odf -> pdf is a SPECIAL case: odf is deliberately excluded from the composition engine (src/convert/composition.ts's own module doc), since a standalone formula document renders through src/mathml's own formula-positioning path rather than a ContentDocument -> LayoutDocument layout engine. resolveCompositionPlan consequently returns undefined for it, so it is routed to the real odfToPdf function directly rather than through convertDocument. onDocument is forwarded (matching the normal path's own wiring), so odfToPdf reports a genuine 'formula'-kind ContentDocument alongside an empty-items LayoutDocument (formula positioning happens inside writePdf, not as page items) -- `package` is populated for this pair just like every other X->pdf.
+      // odf -> pdf is a SPECIAL case: odf is deliberately excluded from the composition engine (src/convert/composition.ts's own module doc), since a standalone formula document renders through src/mathml's own formula-positioning path rather than a ContentDocument -> LayoutDocument layout engine. resolveCompositionPlan consequently returns undefined for it, so it is routed to the real odfToPdf function directly rather than through convertDocument. onDocument is forwarded (matching the normal path's own wiring), so odfToPdf reports a genuine 'formula'-kind ContentDocument alongside an empty-items LayoutDocument (formula positioning happens inside writePdf, not as page items) — `package` is populated for this pair just like every other X->pdf.
       if (source.format === "odf" && targetFormat === "pdf") {
         const bytes = odfToPdf(source.bytes, {
           signal: options.signal,

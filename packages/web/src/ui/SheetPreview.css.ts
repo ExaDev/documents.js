@@ -25,7 +25,7 @@ export const rowHeaderCell = style([
 
 export const cornerCell = style([headerCell, { left: 0, zIndex: 1 }]);
 
-// A cell's fill color is arbitrary per-cell data (an {r,g,b} float triple), not one of a finite set of variants -- set per-instance via assignInlineVars rather than modeled as a recipe variant.
+// A cell's fill color is arbitrary per-cell data (an {r,g,b} float triple), not one of a finite set of variants — set per-instance via assignInlineVars rather than modeled as a recipe variant.
 export const cellBackgroundVar = createVar();
 
 export const cell = recipe({

@@ -294,7 +294,7 @@ describe("findMatchingPlaceholder", () => {
   });
 
   it("falls back to matching by type when an idx is given but no shape carries it", () => {
-    // key.idx names a shape nothing in root actually has -- the idx branch must not short-circuit to "no match" on that alone, since a genuine type match still exists to fall back to.
+    // key.idx names a shape nothing in root actually has — the idx branch must not short-circuit to "no match" on that alone, since a genuine type match still exists to fall back to.
     const root = el("p:sldLayout", {}, [
       el("p:cSld", {}, [
         el("p:spTree", {}, [placeholderShape({ type: "title" })]),
@@ -311,7 +311,7 @@ describe("findMatchingPlaceholder", () => {
   });
 
   it("returns undefined, rather than an untyped shape, when the key names neither an idx nor a type", () => {
-    // A shape with no p:ph type attribute at all also normalizes to an undefined type -- the function must still refuse to treat "no type to match" as a match against "no type on the shape", since that is not what the caller asked for.
+    // A shape with no p:ph type attribute at all also normalizes to an undefined type — the function must still refuse to treat "no type to match" as a match against "no type on the shape", since that is not what the caller asked for.
     const root = el("p:sldLayout", {}, [
       el("p:cSld", {}, [el("p:spTree", {}, [placeholderShape({})])]),
     ]);
@@ -454,7 +454,7 @@ describe("resolveDefaultRunProperties", () => {
   });
 
   it("clamps a level above 8 down to 8, never wrapping back to an earlier level's own style", () => {
-    // The fixture master defines only a:lvl1pPr -- a level clamped down to 0 instead of up to 8 would wrongly resolve it.
+    // The fixture master defines only a:lvl1pPr — a level clamped down to 0 instead of up to 8 would wrongly resolve it.
     const pkg = buildFixturePackage();
     const context = resolveSlideInheritance(pkg, "ppt/slides/slide1.xml");
     expect(

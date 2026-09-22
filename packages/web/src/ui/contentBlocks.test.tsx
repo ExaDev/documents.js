@@ -1,5 +1,5 @@
 /// <reference lib="dom" />
-// tsconfig.node.json (which typechecks every *.test.ts(x)) deliberately omits the DOM lib -- nothing under it needed real DOM types before this file, the first React-component-level test in this package. This file genuinely does (a real jsdom mount via react-dom/client, per the MathMlView note below), so it opts in per-file via this triple-slash reference rather than widening the shared tsconfig's lib for every node-context file it also covers (vite.config.ts, e2e/**).
+// tsconfig.node.json (which typechecks every *.test.ts(x)) deliberately omits the DOM lib — nothing under it needed real DOM types before this file, the first React-component-level test in this package. This file genuinely does (a real jsdom mount via react-dom/client, per the MathMlView note below), so it opts in per-file via this triple-slash reference rather than widening the shared tsconfig's lib for every node-context file it also covers (vite.config.ts, e2e/**).
 import type {
   ContentBlock,
   ContentEmbeddedObjectBlock,
@@ -45,7 +45,7 @@ afterEach(() => {
   container.remove();
 });
 
-// MathMlView populates its container imperatively in a useEffect (real browser DOM APIs, createElementNS included), so a real mount via react-dom/client is required -- renderToStaticMarkup never runs effects and would see only the empty container div every block renders into.
+// MathMlView populates its container imperatively in a useEffect (real browser DOM APIs, createElementNS included), so a real mount via react-dom/client is required — renderToStaticMarkup never runs effects and would see only the empty container div every block renders into.
 function renderBlocks(blocks: readonly ContentBlock[]): string {
   act(() => {
     root.render(<>{renderBlocksNeutral(blocks)}</>);

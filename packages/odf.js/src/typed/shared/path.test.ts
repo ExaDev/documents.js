@@ -11,7 +11,7 @@ import {
   scaleOdfRawPoint,
 } from "./path";
 
-// Fixtures marked "real LibreOffice output" are the exact svg:d/draw:points/svg:viewBox strings captured from a genuine .odg file built via the LibreOffice UNO API (a StarBasic macro run headlessly, NOT hand-authored guesses) -- see this module's own top-of-file note for the full verification method and derivation.
+// Fixtures marked "real LibreOffice output" are the exact svg:d/draw:points/svg:viewBox strings captured from a genuine .odg file built via the LibreOffice UNO API (a StarBasic macro run headlessly, NOT hand-authored guesses) — see this module's own top-of-file note for the full verification method and derivation.
 
 describe("parseOdfViewBox", () => {
   it('parses "minX minY width height" (real LibreOffice output)', () => {
@@ -32,7 +32,7 @@ describe("parseOdfViewBox", () => {
     });
   });
 
-  it("returns undefined for a width or height of zero or negative -- meaningless to scale against", () => {
+  it("returns undefined for a width or height of zero or negative — meaningless to scale against", () => {
     expect(parseOdfViewBox("0 0 0 100")).toBeUndefined();
     expect(parseOdfViewBox("0 0 100 -5")).toBeUndefined();
   });
@@ -207,7 +207,7 @@ describe("scaleOdfRawPoint / buildOdfSubpaths", () => {
   const viewBox = { minX: 0, minY: 0, width: 100, height: 200 };
   const frame = { xPt: 10, yPt: 20, widthPt: 50, heightPt: 100 };
 
-  it("scales a raw point into the LOCAL coordinate space (frame size only) -- does NOT add the frame's own page-space xPt/yPt offset", () => {
+  it("scales a raw point into the LOCAL coordinate space (frame size only) — does NOT add the frame's own page-space xPt/yPt offset", () => {
     expect(scaleOdfRawPoint({ x: 50, y: 100 }, viewBox, frame)).toEqual({
       xPt: 25,
       yPt: 50,
@@ -270,7 +270,7 @@ describe("formatOdfViewBox", () => {
     });
   });
 
-  // A fractional extent still has to match parseOdfViewBox's own four-number grammar, which has no exponent form at all -- the same hazard formatOdfLength's own expandExponential closes for lengths, reached here through formatOdfNumber.
+  // A fractional extent still has to match parseOdfViewBox's own four-number grammar, which has no exponent form at all — the same hazard formatOdfLength's own expandExponential closes for lengths, reached here through formatOdfNumber.
   it("spells a very small extent in fixed-point decimal, never exponent notation", () => {
     const viewBox = formatOdfViewBox({
       xPt: 0,

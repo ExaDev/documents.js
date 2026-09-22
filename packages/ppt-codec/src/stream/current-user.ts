@@ -9,7 +9,7 @@ export const CURRENT_USER_HEADER_TOKEN_PLAIN = 0xe391c05f;
 // [MS-PPT] 2.3.2 headerToken: "The file MUST be an encrypted document."
 export const CURRENT_USER_HEADER_TOKEN_ENCRYPTED = 0xf3d1c4df;
 
-// [MS-PPT] 2.3.2 size: "It MUST be 0x00000014." -- the 20 bytes from size through unused, the portion preceding the variable-length ansiUserName.
+// [MS-PPT] 2.3.2 size: "It MUST be 0x00000014." — the 20 bytes from size through unused, the portion preceding the variable-length ansiUserName.
 export const CURRENT_USER_FIXED_SIZE = 0x00000014;
 // [MS-PPT] 2.3.2 docFileVersion: "It MUST be 0x03F4." Exported so stream/current-user-write.ts's writeCurrentUserAtom stamps the identical mandated value this reader checks for, rather than a second copy of the same constant.
 export const CURRENT_USER_DOC_FILE_VERSION = 0x03f4;
@@ -29,7 +29,7 @@ function decodeAnsi(bytes: Uint8Array<ArrayBuffer>): string {
   return text;
 }
 
-// Exported because ole/embedded.ts's ProgIDAtom reading needs the identical little-endian UTF-16 decode this module already carries for ansiUserName's own unicodeUserName sibling field -- one implementation rather than a second copy that could drift from it.
+// Exported because ole/embedded.ts's ProgIDAtom reading needs the identical little-endian UTF-16 decode this module already carries for ansiUserName's own unicodeUserName sibling field — one implementation rather than a second copy that could drift from it.
 export function decodeUtf16Le(bytes: Uint8Array<ArrayBuffer>): string {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let text = "";
@@ -80,7 +80,7 @@ export function readCurrentUserAtom(
     );
   }
 
-  // ansiUserName occupies lenUserName bytes immediately after the fixed portion, relVersion the 4 bytes after that, and unicodeUserName -- when present at all, which the spec makes optional -- exactly 2 * lenUserName bytes after relVersion. A short record is not a failure here: the Unicode name is simply absent.
+  // ansiUserName occupies lenUserName bytes immediately after the fixed portion, relVersion the 4 bytes after that, and unicodeUserName — when present at all, which the spec makes optional — exactly 2 * lenUserName bytes after relVersion. A short record is not a failure here: the Unicode name is simply absent.
 
   const ansiEnd = CURRENT_USER_FIXED_SIZE + lenUserName;
   if (ansiEnd > data.length) {
@@ -90,7 +90,7 @@ export function readCurrentUserAtom(
   }
   const unicodeStart = ansiEnd + 4;
   const unicodeEnd = unicodeStart + lenUserName * 2;
-  // No separate `lenUserName > 0` guard: when lenUserName is 0, unicodeEnd equals unicodeStart, so decodeUtf16Le would decode the identical empty slice decodeAnsi's own empty ansiUserName slice already does -- the two branches are indistinguishable for a zero-length name, so gating on the name's length as well as the buffer's would only add a comparison that can never change the result.
+  // No separate `lenUserName > 0` guard: when lenUserName is 0, unicodeEnd equals unicodeStart, so decodeUtf16Le would decode the identical empty slice decodeAnsi's own empty ansiUserName slice already does — the two branches are indistinguishable for a zero-length name, so gating on the name's length as well as the buffer's would only add a comparison that can never change the result.
   const userName =
     unicodeEnd <= data.length
       ? decodeUtf16Le(data.subarray(unicodeStart, unicodeEnd))

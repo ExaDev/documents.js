@@ -1,7 +1,7 @@
 {
   "name": "document-rest",
   "version": "1.4.51",
-  "description": "A plain REST API server exposing document-operations' conversion, editing, inspection, and .odb operations as JSON-over-HTTP endpoints -- one POST route per operation, for a caller with no MCP client and no Node runtime of their own.",
+  "description": "A plain REST API server exposing document-operations' conversion, editing, inspection, and .odb operations as JSON-over-HTTP endpoints — one POST route per operation, for a caller with no MCP client and no Node runtime of their own.",
   "type": "module",
   "repository": {
     "type": "git",

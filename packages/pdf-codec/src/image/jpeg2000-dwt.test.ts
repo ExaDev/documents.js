@@ -67,7 +67,7 @@ describe("inverseDwt53Level", () => {
   });
 
   it("handles a resolution level whose coordinates start at an odd position", () => {
-    // Over [1, 5) the first sample is odd-indexed, so the low-pass band spans [1, 3) and the high-pass [0, 2) -- the case an image whose origin is not on the reference grid's own origin produces.
+    // Over [1, 5) the first sample is odd-indexed, so the low-pass band spans [1, 3) and the high-pass [0, 2) — the case an image whose origin is not on the reference grid's own origin produces.
     const bounds = { u0: 1, u1: 5, v0: 0, v1: 1 };
     expect(subbandBounds(bounds)).toMatchObject({
       llU0: 1,
@@ -338,7 +338,7 @@ describe("synthesiseLine", () => {
     }).not.toThrow();
   });
 
-  it("reads and writes exactly once, at i0, for a length-1 range -- without applying the gain at an even i0", () => {
+  it("reads and writes exactly once, at i0, for a length-1 range — without applying the gain at an even i0", () => {
     let written: [number, number] | undefined;
     synthesiseLine(
       () => 42,
@@ -470,17 +470,17 @@ describe("inverse53Filter", () => {
 
 describe("inverse97Filter", () => {
   it("writes to exactly the buffer cells the F-8/F-9 normalisation pass needs for i0 = 0, i1 = 8, and no others", () => {
-    // F-8/F-9 is the widest of the four passes (its own n range is the other three's each extended by one or two further steps), so the overall touched set below is entirely this pass's own -- direct evidence for its own loop bound and for `last`'s own division.
+    // F-8/F-9 is the widest of the four passes (its own n range is the other three's each extended by one or two further steps), so the overall touched set below is entirely this pass's own — direct evidence for its own loop bound and for `last`'s own division.
     const buffer = new Float32Array(30).fill(SENTINEL);
     inverse97Filter(buffer, 0, 8);
-    // base = 6, first = floor(0/2) = 0, last = floor(8/2) = 4. F-8/F-9: n from first - 2 = -2 to last + 2 = 6, touching both even(n) = base + 2n and odd(n) = base + 2n + 1 for each -- every integer from base + 2*(-2) = 2 to base + 2*6 + 1 = 19.
+    // base = 6, first = floor(0/2) = 0, last = floor(8/2) = 4. F-8/F-9: n from first - 2 = -2 to last + 2 = 6, touching both even(n) = base + 2n and odd(n) = base + 2n + 1 for each — every integer from base + 2*(-2) = 2 to base + 2*6 + 1 = 19.
     expect(touchedIndices(buffer)).toEqual(
       Array.from({ length: 18 }, (_, index) => index + 2),
     );
   });
 
   it("applies F-12's own beta step at n = last + 1, its outermost even index", () => {
-    // F-12's own range is a subset of F-8/F-9's, already touched either way, so only the exact value at its own outermost cell -- computed once, independently, straight from the same Float32Array/constants the production code uses -- can show whether F-12 actually ran there.
+    // F-12's own range is a subset of F-8/F-9's, already touched either way, so only the exact value at its own outermost cell — computed once, independently, straight from the same Float32Array/constants the production code uses — can show whether F-12 actually ran there.
     const buffer = new Float32Array(30).fill(SENTINEL);
     inverse97Filter(buffer, 0, 4);
     expect(buffer[12]).toBeCloseTo(54.763057708740234, 5);

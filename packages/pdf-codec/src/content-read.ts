@@ -5,7 +5,7 @@ import type { PdfDict, PdfObject } from "./objects";
 import { asNumber, dictGet, pdfDict } from "./objects";
 import { parseValue } from "./parse";
 
-// A content stream's own grammar is a sequence of operand values (numbers, names, strings, arrays, dicts -- the exact same value grammar parse.ts already implements for indirect objects) followed by an operator keyword that consumes them, e.g. "1 0 0 1 10 20 cm". This module turns that sequence into explicit (operands, operator) pairs; interpret.ts (the graphics/text state machine) is the only thing that knows what any particular operator means.
+// A content stream's own grammar is a sequence of operand values (numbers, names, strings, arrays, dicts — the exact same value grammar parse.ts already implements for indirect objects) followed by an operator keyword that consumes them, e.g. "1 0 0 1 10 20 cm". This module turns that sequence into explicit (operands, operator) pairs; interpret.ts (the graphics/text state machine) is the only thing that knows what any particular operator means.
 
 export interface ContentOperation {
   readonly operands: readonly PdfObject[];
@@ -80,7 +80,7 @@ function looksLikeEiAt(reader: ByteReader, offset: number): boolean {
   return matches;
 }
 
-// "EI" must be boundary-checked (preceded and followed by whitespace) since raw inline-image data can coincidentally contain that exact byte pair -- the same heuristic real-world PDF interpreters use in the absence of an explicit /L, genuinely ambiguous only for adversarial input.
+// "EI" must be boundary-checked (preceded and followed by whitespace) since raw inline-image data can coincidentally contain that exact byte pair — the same heuristic real-world PDF interpreters use in the absence of an explicit /L, genuinely ambiguous only for adversarial input.
 function findEiBoundary(
   reader: ByteReader,
   fromOffset: number,
@@ -164,7 +164,7 @@ function readInlineImage(
       });
       dataEnd = reader.length;
     } else {
-      // The single whitespace byte separating the data from "EI" (ISO 32000-1 8.9.7) is not part of the data -- trim it, when present, the same way parse.ts trims a stream's trailing EOL before a scanned "endstream".
+      // The single whitespace byte separating the data from "EI" (ISO 32000-1 8.9.7) is not part of the data — trim it, when present, the same way parse.ts trims a stream's trailing EOL before a scanned "endstream".
       dataEnd =
         found > dataStart &&
         isAsciiWhitespace(reader.slice(found - 1, found)[0])

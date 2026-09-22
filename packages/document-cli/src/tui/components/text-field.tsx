@@ -11,7 +11,7 @@ export interface TextFieldProps {
   readonly placeholder?: string;
 }
 
-// ink-text-input handles Enter (onSubmit) and editing keys but has no notion of cancelling -- Escape reaches its handler as an empty `input` string, so it neither submits nor inserts anything, which leaves Escape free for this wrapper to claim.
+// ink-text-input handles Enter (onSubmit) and editing keys but has no notion of cancelling — Escape reaches its handler as an empty `input` string, so it neither submits nor inserts anything, which leaves Escape free for this wrapper to claim.
 export function TextField(props: TextFieldProps): ReactElement {
   useInput(
     (_input, key) => {

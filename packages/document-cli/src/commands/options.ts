@@ -1,6 +1,6 @@
 import { type Command } from "commander";
 
-// The common flag surface every conversion-shaped command shares -- centralised here since the identical `.option()` calls are registered verbatim across all twenty-seven explicit per-format conversion commands, the generic `convert` command, and the odm/odb bridge commands; duplicating them at every one of those call sites would drift the moment a single flag's wording changed.
+// The common flag surface every conversion-shaped command shares — centralised here since the identical `.option()` calls are registered verbatim across all twenty-seven explicit per-format conversion commands, the generic `convert` command, and the odm/odb bridge commands; duplicating them at every one of those call sites would drift the moment a single flag's wording changed.
 export function addOutOption(command: Command): Command {
   return command.option(
     "-o, --out <file>",
@@ -47,7 +47,7 @@ export function addDumpPackageOption(command: Command): Command {
   );
 }
 
-// Accumulates repeated --font-file <path> flags into a list, in the order given -- which is also the order documents.js's own FontRegistry resolves them in, so an earlier --font-file wins a family+weight+slope tie against a later one.
+// Accumulates repeated --font-file <path> flags into a list, in the order given — which is also the order documents.js's own FontRegistry resolves them in, so an earlier --font-file wins a family+weight+slope tie against a later one.
 function collectFontFile(
   value: string,
   previous: readonly string[],
@@ -55,7 +55,7 @@ function collectFontFile(
   return [...previous, value];
 }
 
-// The two font flags, registered only on commands whose target can actually be pdf -- the conversions that run a layout engine and resolve a typeface to draw with. A pdf-to-<format> reconstruction reads a PDF's own already-positioned glyphs and a format-to-format bridge runs no layout engine at all, so offering these there would advertise an option that could not do anything (the same reasoning that keeps --dump-package out of addConversionFlags below).
+// The two font flags, registered only on commands whose target can actually be pdf — the conversions that run a layout engine and resolve a typeface to draw with. A pdf-to-<format> reconstruction reads a PDF's own already-positioned glyphs and a format-to-format bridge runs no layout engine at all, so offering these there would advertise an option that could not do anything (the same reasoning that keeps --dump-package out of addConversionFlags below).
 export function addFontOptions(command: Command): Command {
   command.option(
     "--font-file <path>",
@@ -71,7 +71,7 @@ export function addFontOptions(command: Command): Command {
   return command;
 }
 
-// The shared flag set for a command that reads one file, converts or extracts from it, and writes one file: output destination, a run timeout, and the three output-shaping flags every such command supports. --dump-package is deliberately not included here -- it exists only where a DocumentConverter port conversion runs and populates ConversionResult.package, so it is added separately by the conversion commands themselves (commands/convert.ts), not the direct-call commands (odm/odb/metadata/...) that bypass the port entirely.
+// The shared flag set for a command that reads one file, converts or extracts from it, and writes one file: output destination, a run timeout, and the three output-shaping flags every such command supports. --dump-package is deliberately not included here — it exists only where a DocumentConverter port conversion runs and populates ConversionResult.package, so it is added separately by the conversion commands themselves (commands/convert.ts), not the direct-call commands (odm/odb/metadata/...) that bypass the port entirely.
 export function addConversionFlags(command: Command): Command {
   addOutOption(command);
   addTimeoutOption(command);
@@ -81,7 +81,7 @@ export function addConversionFlags(command: Command): Command {
   return command;
 }
 
-// The raw shape commander produces once addConversionFlags has registered its five options -- kept separate from commands/shared.ts's ConversionCommandOptions (which uses timeoutMs, matching buildConversionAction's own contract) because commander derives its attribute name from the flag itself ("timeout"), not from the interface the built action expects.
+// The raw shape commander produces once addConversionFlags has registered its five options — kept separate from commands/shared.ts's ConversionCommandOptions (which uses timeoutMs, matching buildConversionAction's own contract) because commander derives its attribute name from the flag itself ("timeout"), not from the interface the built action expects.
 export interface ConversionCliFlags {
   readonly out?: string;
   readonly timeout?: number;
@@ -96,7 +96,7 @@ export interface FontCliFlags {
   readonly reportFontSubstitutions?: boolean;
 }
 
-// The three selection flags documents.js's converter threads to its csv and svg edges: a csv source reads (and a csv target writes) with `delimiter`, a csv target picks `sheet` when the source document carries more than one, and an svg target picks `page` when the source document has more than one (0-based, matching the array index documents.js's own SvgPageNotFoundError reports). Registered only on the commands whose fixed format pair can reach the edge in question, plus unconditionally on `convert` and `from-package` whose target is only known at run time -- the same registration reasoning addFontOptions's own comment documents for the font flags.
+// The three selection flags documents.js's converter threads to its csv and svg edges: a csv source reads (and a csv target writes) with `delimiter`, a csv target picks `sheet` when the source document carries more than one, and an svg target picks `page` when the source document has more than one (0-based, matching the array index documents.js's own SvgPageNotFoundError reports). Registered only on the commands whose fixed format pair can reach the edge in question, plus unconditionally on `convert` and `from-package` whose target is only known at run time — the same registration reasoning addFontOptions's own comment documents for the font flags.
 export function addDelimiterOption(command: Command): Command {
   return command.option(
     "--delimiter <char>",

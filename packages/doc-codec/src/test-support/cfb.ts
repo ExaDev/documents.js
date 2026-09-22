@@ -1,13 +1,13 @@
 // A hand-built minimal [MS-CFB] compound-file writer for the reader's tests, structurally identical to archive-codec's own (ooxml.js's embedded-payload fixtures mirror the same layout in their own test-support). It is duplicated rather than imported because test-support is excluded from every package's published dist by design, so there is nothing to import: a .doc fixture needs a real compound file to live in, and archive-codec's builder is the family's established shape for producing one.
 //
-// Given slash-separated stream paths and their bytes, it emits a genuine compound file -- version 3 (512-byte sectors) by default, version 4 (4096-byte sectors, the 512-byte header zero-padded out to the full sector-sized header region) via the majorVersion option -- always with the 4096-byte mini-stream cutoff and 64-byte mini sectors both versions mandate, whose header, DIFAT, FAT, directory, and mini-FAT the reader under test must parse to get the streams back.
+// Given slash-separated stream paths and their bytes, it emits a genuine compound file — version 3 (512-byte sectors) by default, version 4 (4096-byte sectors, the 512-byte header zero-padded out to the full sector-sized header region) via the majorVersion option — always with the 4096-byte mini-stream cutoff and 64-byte mini sectors both versions mandate, whose header, DIFAT, FAT, directory, and mini-FAT the reader under test must parse to get the streams back.
 //
 // Construction, in the order the bytes are laid out:
 //
 // 1. Storage tree: each entry's path splits on '/'; intermediate segments become storage entries (directory object type 1), the last segment the stream entry (type 2). Entry IDs are assigned root-first then depth-first in the given order; the root storage entry (type 5, name "Root Entry") is always ID 0, as [MS-CFB] 2.6.1 requires of the first directory entry.
 // 2. Sector layout, in order: FAT sectors, then directory sectors (4 entries per 512-byte sector), then the FAT-resident streams' data sectors, then the mini stream's sectors, then the mini-FAT sector(s). The FAT-sector count reaches a fixed point against the total sector count, because each FAT sector maps 128 sectors including itself.
 // 3. Streams shorter than the cutoff live in the mini stream: every small stream is zero-padded to a whole number of 64-byte mini sectors, and the small streams concatenate into one byte string stored as the root entry's own stream (its starting sector and size), carved up by the mini-FAT's chains. Streams at or above the cutoff occupy whole FAT-chained sectors of their own.
-// 4. The directory tree links a storage's children as a right-sibling chain (the storage's child points at the first, each child's right sibling at the next). [MS-CFB] recommends producers order and balance the sibling tree by name; that is a recommendation about tree shape, not a reader requirement, and this writer deliberately skips it -- the reader under test traverses left/right/child structurally, exactly as real-world readers must for the unbalanced trees real producers emit.
+// 4. The directory tree links a storage's children as a right-sibling chain (the storage's child points at the first, each child's right sibling at the next). [MS-CFB] recommends producers order and balance the sibling tree by name; that is a recommendation about tree shape, not a reader requirement, and this writer deliberately skips it — the reader under test traverses left/right/child structurally, exactly as real-world readers must for the unbalanced trees real producers emit.
 // 5. FAT marking: FAT sectors are FATSECT (0xFFFFFFFD); the directory, mini-stream, and mini-FAT sectors and every big stream's sectors chain with ENDOFCHAIN (0xFFFFFFFE) terminators; unused entries are FREESECT (0xFFFFFFFF). The DIFAT lives entirely in the header's 109-entry array (no DIFAT sectors), so FirstDIFATSectorLocation is ENDOFCHAIN.
 //
 // Test-support only: excluded from the published dist per the family convention, and names are limited to ASCII of at most 31 characters (the directory entry's 64-byte UTF-16 name field including its null terminator).
@@ -30,11 +30,11 @@ interface StorageNode {
 interface DirectoryRecord {
   readonly node: StorageNode;
   readonly id: number;
-  /** This entry's own right-sibling id, NOSTREAM for the last child of its parent -- filled in once every one of this node's OWN siblings has been assigned an id (see the recursive `record` builder below), never looked up again afterward. */
+  /** This entry's own right-sibling id, NOSTREAM for the last child of its parent — filled in once every one of this node's OWN siblings has been assigned an id (see the recursive `record` builder below), never looked up again afterward. */
   rightId: number;
   /** The id of this storage's first child, NOSTREAM for a childless storage or a stream. Filled in the same pass as rightId, for the identical reason: by the time a node's own record function returns, every one of its children already has a real id to name. */
   childId: number;
-  /** A stream's own starting sector -- a mini-sector index once its record has passed through the mini-stream placement pass, a FAT sector once through the big-stream one. 0 (an otherwise-meaningless placeholder) for a storage node, which carries no stream and never has this field read. */
+  /** A stream's own starting sector — a mini-sector index once its record has passed through the mini-stream placement pass, a FAT sector once through the big-stream one. 0 (an otherwise-meaningless placeholder) for a storage node, which carries no stream and never has this field read. */
   streamStart: number;
 }
 
@@ -55,7 +55,7 @@ const FATSECT = 0xfffffffd;
 const NOSTREAM = 0xffffffff;
 // [MS-CFB] 2.2: the header's own DIFAT array holds exactly this many sector numbers, regardless of sector size or how many FAT sectors a given file actually has.
 const HEADER_DIFAT_ENTRIES = 109;
-// [MS-CFB] 2.6.1: every producer's root storage entry carries this literal name -- readCompoundFile's own comment notes nothing in this family's reader depends on it, but a spec-conformant writer sets it regardless, since third-party tooling may.
+// [MS-CFB] 2.6.1: every producer's root storage entry carries this literal name — readCompoundFile's own comment notes nothing in this family's reader depends on it, but a spec-conformant writer sets it regardless, since third-party tooling may.
 const ROOT_ENTRY_NAME = "Root Entry";
 
 const enc = (s: string): Uint8Array<ArrayBuffer> => new TextEncoder().encode(s);
@@ -68,7 +68,7 @@ function put32(view: DataView, offset: number, value: number): void {
   view.setUint32(offset, value, true);
 }
 
-// Every caller already guarantees node.name is non-empty (compoundFile's own path-splitting rejects an empty leaf or storage segment before a StorageNode is ever built, and the root's own name is always the literal ROOT_ENTRY_NAME it is constructed with) -- so this checks only what neither caller already rules out: the 31-character length bound and the ASCII-only bound.
+// Every caller already guarantees node.name is non-empty (compoundFile's own path-splitting rejects an empty leaf or storage segment before a StorageNode is ever built, and the root's own name is always the literal ROOT_ENTRY_NAME it is constructed with) — so this checks only what neither caller already rules out: the 31-character length bound and the ASCII-only bound.
 function checkedName(node: StorageNode): Uint8Array<ArrayBuffer> {
   const encoded = enc(node.name);
   if (encoded.length > 31 || encoded.some((byte) => byte > 0x7f)) {
@@ -96,7 +96,7 @@ function writeDirectoryEntry(
   // The name field's bytes past the name stay zero: that zero pair IS the terminating null EntryNameLength counts.
   put16(entry, 0x40, encoded.length * 2 + 2);
   entry.setUint8(0x42, objectType);
-  // 0x43 (the colour flag) and 0x7c (the high 32 bits of the 64-bit stream size) are left at their buffer's own zero-initialised value rather than written explicitly: `directory` (the caller's backing buffer) is a fresh `new Uint8Array`, so both bytes already read back as 0 -- the colour flag's own real value is genuinely meaningless to a structural reader (no producer or reader in this family balances the sibling tree by colour), and every stream this builder writes stays well under 4 GiB, so the size's high dword is always 0.
+  // 0x43 (the colour flag) and 0x7c (the high 32 bits of the 64-bit stream size) are left at their buffer's own zero-initialised value rather than written explicitly: `directory` (the caller's backing buffer) is a fresh `new Uint8Array`, so both bytes already read back as 0 — the colour flag's own real value is genuinely meaningless to a structural reader (no producer or reader in this family balances the sibling tree by colour), and every stream this builder writes stays well under 4 GiB, so the size's high dword is always 0.
   put32(entry, 0x44, NOSTREAM);
   put32(entry, 0x48, rightId);
   put32(entry, 0x4c, childId);
@@ -118,7 +118,7 @@ export function compoundFile(
   entries: readonly CompoundFileEntrySpec[],
   options: CompoundFileOptions = {},
 ): Uint8Array<ArrayBuffer> {
-  // Sector geometry is the version's own: 512-byte sectors for version 3, 4096 for version 4 -- whose 512-byte header the file zero-pads out to the full first sector ([MS-CFB] 2.2), so sector N always starts at (N + 1) * sectorSize, never 512 + N * sectorSize.
+  // Sector geometry is the version's own: 512-byte sectors for version 3, 4096 for version 4 — whose 512-byte header the file zero-pads out to the full first sector ([MS-CFB] 2.2), so sector N always starts at (N + 1) * sectorSize, never 512 + N * sectorSize.
   const majorVersion = options.majorVersion ?? 3;
   const sectorSize = majorVersion === 4 ? 4096 : 512;
   const sectorShift = majorVersion === 4 ? 12 : 9;
@@ -158,7 +158,7 @@ export function compoundFile(
     node.children.push({ name: leaf, children: [], stream: entry.bytes });
   }
 
-  // Directory entry IDs: the root is 0, then depth-first in insertion order -- `created` claims its own id and is pushed to `records` BEFORE its children ever get a chance to recurse, which is what keeps the root at id 0 regardless of how deep the tree beneath it goes. Each child's own rightId/childId is filled in only once record() returns for it (with a real id already assigned to work with), and the sibling-linking and first-child lookup below read straight off the DirectoryRecord objects record() already produced -- never a second lookup by StorageNode identity -- so there is no absent-record case to guard: every node this function is ever asked about already has one.
+  // Directory entry IDs: the root is 0, then depth-first in insertion order — `created` claims its own id and is pushed to `records` BEFORE its children ever get a chance to recurse, which is what keeps the root at id 0 regardless of how deep the tree beneath it goes. Each child's own rightId/childId is filled in only once record() returns for it (with a real id already assigned to work with), and the sibling-linking and first-child lookup below read straight off the DirectoryRecord objects record() already produced — never a second lookup by StorageNode identity — so there is no absent-record case to guard: every node this function is ever asked about already has one.
   const records: DirectoryRecord[] = [];
   const record = (node: StorageNode): DirectoryRecord => {
     const created: DirectoryRecord = {
@@ -233,7 +233,7 @@ export function compoundFile(
     fatSectorCount = needed;
   }
 
-  // Sector allocation in layout order. Every FAT sector's own number equals its plain loop index (sector 0, 1, ..., fatSectorCount - 1), so nothing downstream needs an array of them -- fatSectorCount alone is the whole allocation.
+  // Sector allocation in layout order. Every FAT sector's own number equals its plain loop index (sector 0, 1, ..., fatSectorCount - 1), so nothing downstream needs an array of them — fatSectorCount alone is the whole allocation.
   const directoryStart = fatSectorCount;
   let nextSector = directoryStart + directorySectorCount;
   for (const record of bigStreamRecords) {
@@ -321,7 +321,7 @@ export function compoundFile(
   put32(view, 0x44, ENDOFCHAIN); // first DIFAT sector: none, the DIFAT fits the header array
   // Number of DIFAT sectors (0x48) is left at file's own zero-initialised value rather than written explicitly: this writer never uses a DIFAT sector (the DIFAT always fits the header's own 109-entry array), so the true value is always 0, matching a fresh Uint8Array's own default.
   //
-  // HEADER_DIFAT_ENTRIES is the header's own fixed array size, entirely independent of how many FAT sectors this file actually has -- every FAT sector's own number equals its position (sector 0, 1, ..., fatSectorCount - 1), so the entry it names is `i` itself.
+  // HEADER_DIFAT_ENTRIES is the header's own fixed array size, entirely independent of how many FAT sectors this file actually has — every FAT sector's own number equals its position (sector 0, 1, ..., fatSectorCount - 1), so the entry it names is `i` itself.
   Array.from({ length: HEADER_DIFAT_ENTRIES }).forEach((_ignored, i) => {
     put32(view, 0x4c + i * 4, i < fatSectorCount ? i : FREESECT);
   });

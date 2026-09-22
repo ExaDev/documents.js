@@ -22,7 +22,7 @@ import {
 } from "./rule-residue";
 import { formatSqref, parseSqref } from "./sqref";
 
-// xlsx conditionalFormatting/cfRule <-> ContentSheetConditionalFormat, promoted from the anchor-cell residue landing typed/xlsx/content.ts's own applyCellResidueRules used to quarantine every rule under, for every CLOSED-form ECMA-376 rule type document-schema.js's own discriminated union names (ExaDev/documents.js#758, verified against real-producer-validation-and-cellis.xlsx's cellIs pair and real-producer-colorscale.xlsx's colorScale rule). One conditionalFormatting wrapper's own sqref is shared by every cfRule nested inside it, so each promoted rule copies that wrapper's parsed ranges onto its own `ranges` field rather than the wrapper carrying them once -- the schema puts ranges on the RULE, not on a wrapper concept the tree/flat model has no place for. A cfRule whose type this union does not cover ('expression', the one deliberate ECMA-376 member left unpromoted -- see document-schema.js's own doc comment) is left for the caller to hand to the pre-existing whole-element residue mechanism unchanged, as a synthetic single-rule conditionalFormatting clone carrying the original wrapper's own attributes so the sqref that clone needs to anchor and reconstruct from survives Alongside it.
+// xlsx conditionalFormatting/cfRule <-> ContentSheetConditionalFormat, promoted from the anchor-cell residue landing typed/xlsx/content.ts's own applyCellResidueRules used to quarantine every rule under, for every CLOSED-form ECMA-376 rule type document-schema.js's own discriminated union names (ExaDev/documents.js#758, verified against real-producer-validation-and-cellis.xlsx's cellIs pair and real-producer-colorscale.xlsx's colorScale rule). One conditionalFormatting wrapper's own sqref is shared by every cfRule nested inside it, so each promoted rule copies that wrapper's parsed ranges onto its own `ranges` field rather than the wrapper carrying them once — the schema puts ranges on the RULE, not on a wrapper concept the tree/flat model has no place for. A cfRule whose type this union does not cover ('expression', the one deliberate ECMA-376 member left unpromoted — see document-schema.js's own doc comment) is left for the caller to hand to the pre-existing whole-element residue mechanism unchanged, as a synthetic single-rule conditionalFormatting clone carrying the original wrapper's own attributes so the sqref that clone needs to anchor and reconstruct from survives Alongside it.
 
 const CF_RULE_MANAGED_ATTRIBUTES = new Set([
   "type",
@@ -45,7 +45,7 @@ const CF_RULE_MANAGED_ATTRIBUTES = new Set([
 
 export interface ConditionalFormatReadResult {
   formats: ContentSheetConditionalFormat[];
-  // Synthetic single-cfRule <conditionalFormatting sqref="..."> wrapper elements, one per cfRule this union could not promote (an unpromotable type, or a wrapper whose own sqref parsed to no range at all) -- fed to content.ts's own applyCellResidueRules exactly as a whole quarantined rule always has been.
+  // Synthetic single-cfRule <conditionalFormatting sqref="..."> wrapper elements, one per cfRule this union could not promote (an unpromotable type, or a wrapper whose own sqref parsed to no range at all) — fed to content.ts's own applyCellResidueRules exactly as a whole quarantined rule always has been.
   residueElements: XmlElement[];
 }
 
@@ -273,7 +273,7 @@ function readDataBar(dataBarEl: XmlElement): DataBarReading | undefined {
     return undefined;
   }
   const result: DataBarReading = { min, max, color };
-  // CT_DataBar/@showValue's own documented default is true -- absent means "show", so only an explicit false is worth recording, matching this reader's own "absent means default" convention throughout.
+  // CT_DataBar/@showValue's own documented default is true — absent means "show", so only an explicit false is worth recording, matching this reader's own "absent means default" convention throughout.
   const showValueRaw = attr(dataBarEl, "showValue");
   if (showValueRaw !== undefined && !readXmlBool(showValueRaw)) {
     result.showValue = false;
@@ -317,7 +317,7 @@ function readIconSet(iconSetEl: XmlElement): IconSetReading | undefined {
   return result;
 }
 
-// Resolves a cfRule's own dxfId against the workbook's <dxfs> table, then extracts whatever of textColor/background the referenced <dxf> carries -- the two properties actually observed on a real producer's differential format (font colour, fill background); everything else the dxf carries (alignment, border, numFmt, protection, or a font/fill's own OTHER children) rides the resulting style's `source` residue verbatim, in document order, so a same-format write can restore it (buildDxfElement below is the exact inverse).
+// Resolves a cfRule's own dxfId against the workbook's <dxfs> table, then extracts whatever of textColor/background the referenced <dxf> carries — the two properties actually observed on a real producer's differential format (font colour, fill background); everything else the dxf carries (alignment, border, numFmt, protection, or a font/fill's own OTHER children) rides the resulting style's `source` residue verbatim, in document order, so a same-format write can restore it (buildDxfElement below is the exact inverse).
 function styleFromDxf(
   dxf: XmlElement,
 ): ContentSheetConditionalFormatStyle | undefined {
@@ -430,7 +430,7 @@ function resolveStyle(
   return dxf === undefined ? undefined : styleFromDxf(dxf);
 }
 
-// Every branch below builds its ENTIRE return literal in one expression (conditional spreads for the optional fields) rather than declaring a widened `ContentSheetConditionalFormat`-typed local and mutating it afterwards -- the latter loses the discriminant narrowing the moment the wider union type is spelled out, so a later `result.style = style` would not typecheck for a colorScale/dataBar/iconSet branch (none of which have a `style` field at all). Returning the literal directly lets TypeScript check it against the ONE union member its own `type` tag names.
+// Every branch below builds its ENTIRE return literal in one expression (conditional spreads for the optional fields) rather than declaring a widened `ContentSheetConditionalFormat`-typed local and mutating it afterwards — the latter loses the discriminant narrowing the moment the wider union type is spelled out, so a later `result.style = style` would not typecheck for a colorScale/dataBar/iconSet branch (none of which have a `style` field at all). Returning the literal directly lets TypeScript check it against the ONE union member its own `type` tag names.
 function readCfRule(
   cfRule: XmlElement,
   ranges: readonly ContentSheetRange[],
@@ -490,7 +490,7 @@ function readCfRule(
   }
 
   if (type === "aboveAverage") {
-    // CT_CfRule/@aboveAverage's own documented default is true -- only an explicit false is worth recording.
+    // CT_CfRule/@aboveAverage's own documented default is true — only an explicit false is worth recording.
     const aboveAverageRaw = attr(cfRule, "aboveAverage");
     const stdDevRaw = attr(cfRule, "stdDev");
     const stdDev =
@@ -567,13 +567,13 @@ function readCfRule(
     };
   }
 
-  // 'expression', or any type this union does not name -- left for the caller's whole-element residue fallback.
+  // 'expression', or any type this union does not name — left for the caller's whole-element residue fallback.
   return undefined;
 }
 
 // --- the write side -------------------------------------------------------------------------------------------
 
-// The write-side allocator for <dxfs><dxf> entries: one per cfRule that needs a dxfId, in emission order. Deliberately undeduplicated -- unlike CellFormatTable's own cellXfs interning (shared across every cell a workbook has, so dedup avoids a combinatorial blow-up), a workbook has at most a handful of conditional-format rules, and dedup here is a real optimization but not one round-trip correctness needs.
+// The write-side allocator for <dxfs><dxf> entries: one per cfRule that needs a dxfId, in emission order. Deliberately undeduplicated — unlike CellFormatTable's own cellXfs interning (shared across every cell a workbook has, so dedup avoids a combinatorial blow-up), a workbook has at most a handful of conditional-format rules, and dedup here is a real optimization but not one round-trip correctness needs.
 export class DxfTable {
   private readonly elements: XmlElement[] = [];
 
@@ -611,7 +611,7 @@ function extractResidueElements(
   return elements;
 }
 
-// CT_Dxf's own fixed child sequence (font?, numFmt?, fill?, alignment?, border?, protection?) -- the exact inverse of styleFromDxf/dxfResidueChildren above, re-inserting the structured textColor/background at their spec position and passing every other residue element through verbatim in that same order, regardless of what order they happened to ride in the residue string.
+// CT_Dxf's own fixed child sequence (font?, numFmt?, fill?, alignment?, border?, protection?) — the exact inverse of styleFromDxf/dxfResidueChildren above, re-inserting the structured textColor/background at their spec position and passing every other residue element through verbatim in that same order, regardless of what order they happened to ride in the residue string.
 function buildDxfElement(
   style: ContentSheetConditionalFormatStyle,
 ): XmlElement {
@@ -812,7 +812,7 @@ function buildCfRuleElement(
         buildCfvoElement(rule.max),
         el("color", { rgb: `FF${colorToRgbHex(rule.color)}` }),
       ];
-      // CT_DataBar/@showValue -- an attribute of the <dataBar> element itself, not of the enclosing <cfRule>.
+      // CT_DataBar/@showValue — an attribute of the <dataBar> element itself, not of the enclosing <cfRule>.
       const dataBarAttrs: Record<string, string> =
         rule.showValue === false ? { showValue: writeXmlBool(false) } : {};
       children.push(el("dataBar", dataBarAttrs, dataBarChildren));
@@ -843,7 +843,7 @@ function buildCfRuleElement(
   return el("cfRule", attrs, children);
 }
 
-// Groups rules by their own shared `ranges` into one <conditionalFormatting sqref="..."> wrapper per distinct range set -- matching a real producer's own grouping (real-producer-validation-and-cellis.xlsx wraps its two cellIs rules, which share the identical B1:B2 target, in one conditionalFormatting element) -- then assigns every rule missing an explicit `priority` the next integer CT_CfRule's own REQUIRED priority attribute has not already claimed, so a hand-built ContentSheetConditionalFormat with no priority at all still writes a valid, unique priority per rule.
+// Groups rules by their own shared `ranges` into one <conditionalFormatting sqref="..."> wrapper per distinct range set — matching a real producer's own grouping (real-producer-validation-and-cellis.xlsx wraps its two cellIs rules, which share the identical B1:B2 target, in one conditionalFormatting element) — then assigns every rule missing an explicit `priority` the next integer CT_CfRule's own REQUIRED priority attribute has not already claimed, so a hand-built ContentSheetConditionalFormat with no priority at all still writes a valid, unique priority per rule.
 export function buildConditionalFormattingElements(
   formats: readonly ContentSheetConditionalFormat[],
   dxfTable: DxfTable,

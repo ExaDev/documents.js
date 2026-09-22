@@ -1,8 +1,8 @@
 import { expect } from "vitest";
 
-// Little-endian integer readers over raw zip bytes, shared by every test that walks a zip's physical local-file-header layout rather than trusting a round trip through unzipPackage's Record (which makes no ordering promise of its own to test against). Never imported by src/index.ts and never reaches dist/ -- test-only, mirroring the same test-only, never-exported convention as this package's other test-support helpers.
+// Little-endian integer readers over raw zip bytes, shared by every test that walks a zip's physical local-file-header layout rather than trusting a round trip through unzipPackage's Record (which makes no ordering promise of its own to test against). Never imported by src/index.ts and never reaches dist/ — test-only, mirroring the same test-only, never-exported convention as this package's other test-support helpers.
 
-// A single out-of-range check on the whole [offset, offset + byteCount) span, rather than one `bytes[i] === undefined` comparison per byte -- the per-byte form used to leave middle bytes (b1 of 4, say) impossible to isolate as the sole missing one, since a real Uint8Array's undefined region is always a contiguous prefix (negative indices) or suffix (indices past the end), never a single interior gap: no test input could ever tell "byte 1 alone is missing" apart from "the guard doesn't check byte 1 at all", so that mutation was unkillable by construction. A span check has no such interior case to isolate.
+// A single out-of-range check on the whole [offset, offset + byteCount) span, rather than one `bytes[i] === undefined` comparison per byte — the per-byte form used to leave middle bytes (b1 of 4, say) impossible to isolate as the sole missing one, since a real Uint8Array's undefined region is always a contiguous prefix (negative indices) or suffix (indices past the end), never a single interior gap: no test input could ever tell "byte 1 alone is missing" apart from "the guard doesn't check byte 1 at all", so that mutation was unkillable by construction. A span check has no such interior case to isolate.
 function requireBytesInRange(
   bytes: Uint8Array,
   offset: number,
@@ -18,7 +18,7 @@ function requireBytesInRange(
 
 export function readUint16LE(bytes: Uint8Array, offset: number): number {
   requireBytesInRange(bytes, offset, 2, "uint16");
-  // Bounds already verified above, so both indices are in range -- this is the standard escape hatch for a typed-array read TypeScript otherwise types as `number | undefined` under noUncheckedIndexedAccess with no way to narrow it from a separately-expressed arithmetic guard.
+  // Bounds already verified above, so both indices are in range — this is the standard escape hatch for a typed-array read TypeScript otherwise types as `number | undefined` under noUncheckedIndexedAccess with no way to narrow it from a separately-expressed arithmetic guard.
   const b0 = bytes[offset]!;
   const b1 = bytes[offset + 1]!;
   return b0 | (b1 << 8);
@@ -26,7 +26,7 @@ export function readUint16LE(bytes: Uint8Array, offset: number): number {
 
 export function readUint32LE(bytes: Uint8Array, offset: number): number {
   requireBytesInRange(bytes, offset, 4, "uint32");
-  // Bounds already verified above, so all four indices are in range -- see readUint16LE's identical comment.
+  // Bounds already verified above, so all four indices are in range — see readUint16LE's identical comment.
   const b0 = bytes[offset]!;
   const b1 = bytes[offset + 1]!;
   const b2 = bytes[offset + 2]!;

@@ -5,7 +5,7 @@ import {
   readImageDimensions,
 } from "./dimensions";
 
-// A minimal PNG carrying only what this module reads: the 8-byte signature plus an IHDR chunk (length, type, width, height, and the five remaining bytes IHDR requires -- bit depth, colour type, compression, filter, interlace -- whose values don't matter to a dimensions-only reader). No IDAT/IEND: this module never walks past IHDR.
+// A minimal PNG carrying only what this module reads: the 8-byte signature plus an IHDR chunk (length, type, width, height, and the five remaining bytes IHDR requires — bit depth, colour type, compression, filter, interlace — whose values don't matter to a dimensions-only reader). No IDAT/IEND: this module never walks past IHDR.
 function fakePng(widthPx: number, heightPx: number): Uint8Array {
   const bytes = new Uint8Array(33);
   bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0); // signature
@@ -98,7 +98,7 @@ function concatBytes(...chunks: number[][]): Uint8Array {
 }
 
 const SOI = [0xff, 0xd8];
-// An SOF0 segment carrying only height/width/components -- the same shape fakeJpeg() builds inline, expressed as a reusable segment for streams that need other markers around it.
+// An SOF0 segment carrying only height/width/components — the same shape fakeJpeg() builds inline, expressed as a reusable segment for streams that need other markers around it.
 function sof0Segment(widthPx: number, heightPx: number): number[] {
   return jpegSegment(0xc0, [
     8, // precision
@@ -116,7 +116,7 @@ describe("detectImageFormat boundary cases", () => {
   });
 
   it("does not treat a partially-matching 8-byte array as PNG", () => {
-    // Only byte 0 matches the real signature -- .some() would wrongly accept this, .every() correctly rejects it.
+    // Only byte 0 matches the real signature — .some() would wrongly accept this, .every() correctly rejects it.
     const bytes = new Uint8Array([0x89, 0, 0, 0, 0, 0, 0, 0]);
     expect(detectImageFormat(bytes)).toBeUndefined();
   });

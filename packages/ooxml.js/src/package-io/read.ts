@@ -23,10 +23,10 @@ export function packageFromEntries(
   return { parts };
 }
 
-// An XML part (after any BOM/whitespace) starts with '<'; no standard OOXML binary part (png, jpeg, font, emf, embedded zip, ...) starts with '<', so a misclassification only ever stores an XML part losslessly as base64 -- it never misparses a binary part.
+// An XML part (after any BOM/whitespace) starts with '<'; no standard OOXML binary part (png, jpeg, font, emf, embedded zip, ...) starts with '<', so a misclassification only ever stores an XML part losslessly as base64 — it never misparses a binary part.
 function looksLikeXml(bytes: Uint8Array<ArrayBuffer>): boolean {
   let i = 0;
-  // No separate length guard needed: bytes[0]/[1]/[2] are each `undefined` for any array shorter than three bytes (an out-of-range index never throws), and undefined can never equal a real BOM byte value -- so a short array already fails this comparison on its own.
+  // No separate length guard needed: bytes[0]/[1]/[2] are each `undefined` for any array shorter than three bytes (an out-of-range index never throws), and undefined can never equal a real BOM byte value — so a short array already fails this comparison on its own.
   if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
     i = 3;
   }

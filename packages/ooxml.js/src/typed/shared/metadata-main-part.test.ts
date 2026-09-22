@@ -8,7 +8,7 @@ import {
   readCoreProperties,
 } from "./metadata";
 
-// A package whose metadata parts are not at docProps/core.xml and docProps/app.xml. OPC names both through relationships the package root declares, and the conventional paths are what every mainstream producer happens to use rather than what the format requires -- the same rule the main part follows (ExaDev/documents.js#1314, #1340).
+// A package whose metadata parts are not at docProps/core.xml and docProps/app.xml. OPC names both through relationships the package root declares, and the conventional paths are what every mainstream producer happens to use rather than what the format requires — the same rule the main part follows (ExaDev/documents.js#1314, #1340).
 
 const RELATIONSHIPS_NS =
   "http://schemas.openxmlformats.org/package/2006/relationships";

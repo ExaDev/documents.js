@@ -22,7 +22,7 @@ export function cffTableFromSfnt(
   return cff;
 }
 
-// The real, vendored STIX Two Math font's own 'CFF ' table -- 691 KB of genuine CFF data produced by a real font toolchain, not a fixture written to satisfy these parsers.
+// The real, vendored STIX Two Math font's own 'CFF ' table — 691 KB of genuine CFF data produced by a real font toolchain, not a fixture written to satisfy these parsers.
 export function stixMathCffBytes(): Uint8Array<ArrayBuffer> {
   return cffTableFromSfnt(
     base64ToBytes(STIX_TWO_MATH_FONT_BASE64),
@@ -30,7 +30,7 @@ export function stixMathCffBytes(): Uint8Array<ArrayBuffer> {
   );
 }
 
-// A CFF INDEX (spec section 5). offSize is computed from the largest offset actually needed (spec Table 2: the smallest of 1/2/3/4 bytes that holds it), not hardcoded to 1 -- a fixture with enough entries or entry bytes to push the final offset past 255 (this package's own subrBias tests need a Local Subrs INDEX of over a thousand entries to reach the 1240-entry medium-bias threshold) still needs a spec-conformant INDEX, not a truncated one-byte offset that wraps.
+// A CFF INDEX (spec section 5). offSize is computed from the largest offset actually needed (spec Table 2: the smallest of 1/2/3/4 bytes that holds it), not hardcoded to 1 — a fixture with enough entries or entry bytes to push the final offset past 255 (this package's own subrBias tests need a Local Subrs INDEX of over a thousand entries to reach the 1240-entry medium-bias threshold) still needs a spec-conformant INDEX, not a truncated one-byte offset that wraps.
 export function cffIndex(entries: readonly (readonly number[])[]): number[] {
   if (entries.length === 0) {
     return [0, 0];
@@ -63,7 +63,7 @@ export function cffIndex(entries: readonly (readonly number[])[]): number[] {
   ];
 }
 
-// A charstring operand in its 3-byte int16 form (TN 5177 section 3.2, operand 28): valid for any value in [-32768, 32767], which is every integer a curve-bounds test needs to place a control point at. Deliberately uniform rather than picking the shortest single-byte encoding a real font toolchain would choose -- cff-bounds.ts's own readOperand already has dedicated tests for its other operand forms, so a charstring built purely to drive the curve-extrema math needs only one encoding it never has to think about.
+// A charstring operand in its 3-byte int16 form (TN 5177 section 3.2, operand 28): valid for any value in [-32768, 32767], which is every integer a curve-bounds test needs to place a control point at. Deliberately uniform rather than picking the shortest single-byte encoding a real font toolchain would choose — cff-bounds.ts's own readOperand already has dedicated tests for its other operand forms, so a charstring built purely to drive the curve-extrema math needs only one encoding it never has to think about.
 export function csInt16(value: number): number[] {
   const unsigned = value & 0xffff;
   return [28, (unsigned >>> 8) & 0xff, unsigned & 0xff];
@@ -71,7 +71,7 @@ export function csInt16(value: number): number[] {
 
 export const CFF_HEADER = [1, 0, 4, 1]; // major 1, minor 0, hdrSize 4, offSize 1
 
-// A minimal CFF program: header, a Name INDEX holding `name`, and a Top DICT INDEX holding `topDict`. Deliberately stops there -- the String and Global Subr INDEXes that a real program carries next are only reached by a reader that gets past the Top DICT, which is exactly what the fixtures built from this are testing does not happen.
+// A minimal CFF program: header, a Name INDEX holding `name`, and a Top DICT INDEX holding `topDict`. Deliberately stops there — the String and Global Subr INDEXes that a real program carries next are only reached by a reader that gets past the Top DICT, which is exactly what the fixtures built from this are testing does not happen.
 export function cffFont(
   name: string,
   topDict: readonly number[],
@@ -89,7 +89,7 @@ export const ROS_OPERANDS_AND_OPERATOR = [
   28, 0x01, 0x87, 28, 0x01, 0x88, 139, 12, 30,
 ];
 
-// A DICT operand always written in the 5-byte 32-bit integer form (spec Table 3, operand 29), so an offset operand occupies the same space whatever its value -- which is what lets the builder below lay a whole font out in one pass rather than iterating until the Top DICT's own size stops changing.
+// A DICT operand always written in the 5-byte 32-bit integer form (spec Table 3, operand 29), so an offset operand occupies the same space whatever its value — which is what lets the builder below lay a whole font out in one pass rather than iterating until the Top DICT's own size stops changing.
 function dictInt32(value: number): number[] {
   return [
     29,
@@ -102,7 +102,7 @@ function dictInt32(value: number): number[] {
 
 export const CFF_STANDARD_STRING_COUNT = 391; // SIDs below this index the standard strings (spec Appendix A); the String INDEX starts here
 
-// A charset (spec section 13) in format 1: one run of consecutive SIDs per range, each range a first SID plus a count of additional glyphs it covers -- the form a real font toolchain reaches for once its glyph SIDs are dense enough that format 0's one-SID-per-glyph listing wastes space. Builds the same glyph-order SIDs cffFontWithBuiltinEncoding's own format 0 charset does (CFF_STANDARD_STRING_COUNT + index per glyph), just run-length-encoded into ranges of `rangeSize` glyphs apiece so a test can choose whether the whole charset is one range or several.
+// A charset (spec section 13) in format 1: one run of consecutive SIDs per range, each range a first SID plus a count of additional glyphs it covers — the form a real font toolchain reaches for once its glyph SIDs are dense enough that format 0's one-SID-per-glyph listing wastes space. Builds the same glyph-order SIDs cffFontWithBuiltinEncoding's own format 0 charset does (CFF_STANDARD_STRING_COUNT + index per glyph), just run-length-encoded into ranges of `rangeSize` glyphs apiece so a test can choose whether the whole charset is one range or several.
 function charsetFormat1(glyphCount: number, rangeSize: number): number[] {
   const bytes = [1];
   for (let glyphId = 1; glyphId < glyphCount;) {
@@ -131,7 +131,7 @@ function charsetFormat2(glyphCount: number, rangeSize: number): number[] {
   return bytes;
 }
 
-// An Encoding (spec section 12) in format 1: ranges of consecutive codes assigned to consecutive glyph IDs starting at 1, each range a first code plus a count of additional codes it covers -- the form a font toolchain reaches for once most of its codes are contiguous, rather than format 0's one-code-per-glyph list. Run-length-encodes `codesByGlyph` (glyph 1's code, glyph 2's code, ...) into the fewest ranges that reproduce it: a run of consecutive codes collapses into one range with nLeft > 0, and any break (a gap, or an unmapped glyph's placeholder 0) starts a new one -- so a caller supplying genuinely consecutive codes exercises the multi-code, nLeft > 0 span this format exists for, not just one range per glyph.
+// An Encoding (spec section 12) in format 1: ranges of consecutive codes assigned to consecutive glyph IDs starting at 1, each range a first code plus a count of additional codes it covers — the form a font toolchain reaches for once most of its codes are contiguous, rather than format 0's one-code-per-glyph list. Run-length-encodes `codesByGlyph` (glyph 1's code, glyph 2's code, ...) into the fewest ranges that reproduce it: a run of consecutive codes collapses into one range with nLeft > 0, and any break (a gap, or an unmapped glyph's placeholder 0) starts a new one — so a caller supplying genuinely consecutive codes exercises the multi-code, nLeft > 0 span this format exists for, not just one range per glyph.
 function encodingFormat1(codesByGlyph: readonly number[]): number[] {
   const ranges: { first: number; nLeft: number }[] = [];
   for (const code of codesByGlyph) {
@@ -239,7 +239,7 @@ export function cffFontWithBuiltinEncoding(options: {
   ]);
 }
 
-// A complete-enough CFF program for exercising cff-bounds.ts's charstring interpreter directly: real header/Name/Top-DICT/String/Global-Subr INDEXes wrapped around hand-written CharStrings, with an optional Private DICT and Local Subrs INDEX. Unlike cffFontWithBuiltinEncoding's fixed one-byte `endchar` glyphs, every charstring here is caller-supplied, which is what lets a test drive execute()'s and executeEscaped()'s own interpreter limits and malformed-input paths directly -- none of which the vendored STIX Two Math font's own well-formed charstrings ever reach.
+// A complete-enough CFF program for exercising cff-bounds.ts's charstring interpreter directly: real header/Name/Top-DICT/String/Global-Subr INDEXes wrapped around hand-written CharStrings, with an optional Private DICT and Local Subrs INDEX. Unlike cffFontWithBuiltinEncoding's fixed one-byte `endchar` glyphs, every charstring here is caller-supplied, which is what lets a test drive execute()'s and executeEscaped()'s own interpreter limits and malformed-input paths directly — none of which the vendored STIX Two Math font's own well-formed charstrings ever reach.
 export function cffFontWithCharstrings(options: {
   readonly name: string;
   readonly charStrings: readonly (readonly number[])[];
@@ -251,7 +251,7 @@ export function cffFontWithCharstrings(options: {
   const globalSubrIndex = cffIndex(options.globalSubrs ?? []);
   const hasPrivate = options.localSubrs !== undefined;
 
-  // Every Top DICT operand below is the fixed-width 5-byte 32-bit form (dictInt32), so the Top DICT's own byte length -- and therefore topDictIndexSize -- depends only on which operators are present, never on the offset values those operators end up carrying. That is what lets every downstream offset be computed in one pass instead of iterating until a size stops changing.
+  // Every Top DICT operand below is the fixed-width 5-byte 32-bit form (dictInt32), so the Top DICT's own byte length — and therefore topDictIndexSize — depends only on which operators are present, never on the offset values those operators end up carrying. That is what lets every downstream offset be computed in one pass instead of iterating until a size stops changing.
   const topDictEntrySize = hasPrivate
     ? dictInt32(0).length + 1 + dictInt32(0).length * 2 + 1
     : dictInt32(0).length + 1;
@@ -266,9 +266,9 @@ export function cffFontWithCharstrings(options: {
     stringIndex.length +
     globalSubrIndex.length;
 
-  // A Private DICT holding only a Subrs operator (19), whose own offset is relative to the Private DICT's own start (spec Table 23) -- fixed at the Private DICT's own byte length, since the Local Subrs INDEX immediately follows it. The Private DICT itself starts right where the Global Subr INDEX ends.
+  // A Private DICT holding only a Subrs operator (19), whose own offset is relative to the Private DICT's own start (spec Table 23) — fixed at the Private DICT's own byte length, since the Local Subrs INDEX immediately follows it. The Private DICT itself starts right where the Global Subr INDEX ends.
   const privateDictBytes = [...dictInt32(6), 19];
-  // Narrowed directly on options.localSubrs itself, not on the separately-computed hasPrivate boolean above -- hasPrivate is already defined as this exact check, so a `?? []` fallback here could never actually fire; checking the real value lets TypeScript rule that branch out entirely instead of leaving an always-unreachable default in the code.
+  // Narrowed directly on options.localSubrs itself, not on the separately-computed hasPrivate boolean above — hasPrivate is already defined as this exact check, so a `?? []` fallback here could never actually fire; checking the real value lets TypeScript rule that branch out entirely instead of leaving an always-unreachable default in the code.
   const localSubrIndex =
     options.localSubrs === undefined ? [] : cffIndex(options.localSubrs);
   const privateSize = privateDictBytes.length;

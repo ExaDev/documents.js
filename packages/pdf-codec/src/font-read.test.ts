@@ -213,7 +213,7 @@ describe("createFontResolver: simple fonts", () => {
   });
 
   it("resolves a /Differences glyph name outside WinAnsi's own repertoire via the Symbol/ZapfDingbats glyph-name table, on an ordinary Latin font", () => {
-    // A ordinary Latin-family font with one code repurposed via /Differences for a single symbol character -- a common real-world pattern (an engineering document splicing an Ohm symbol into otherwise Latin body text) rather than a whole font switching character sets. Before this glyph-name table existed, "Omega" resolved to nothing (glyphNameToUnicode only knew WinAnsi's own glyph names), so this code fell through to the replacement character even though /Differences correctly named the glyph.
+    // A ordinary Latin-family font with one code repurposed via /Differences for a single symbol character — a common real-world pattern (an engineering document splicing an Ohm symbol into otherwise Latin body text) rather than a whole font switching character sets. Before this glyph-name table existed, "Omega" resolved to nothing (glyphNameToUnicode only knew WinAnsi's own glyph names), so this code fell through to the replacement character even though /Differences correctly named the glyph.
     const { sink, diagnostics } = collectDiagnostics();
     const encodingDict = pdfDict({
       Differences: pdfArray([pdfNum(87), pdfName("Omega")]),
@@ -229,7 +229,7 @@ describe("createFontResolver: simple fonts", () => {
       sink,
     });
     const font = resolve("F1", resources);
-    // The Adobe Glyph List maps the PostScript name "Omega" to U+2126 OHM SIGN, not U+03A9 GREEK CAPITAL LETTER OMEGA -- see encoding.ts's own header comment on SYMBOL_AND_ZAPFDINGBATS_GLYPH_UNICODE for why.
+    // The Adobe Glyph List maps the PostScript name "Omega" to U+2126 OHM SIGN, not U+03A9 GREEK CAPITAL LETTER OMEGA — see encoding.ts's own header comment on SYMBOL_AND_ZAPFDINGBATS_GLYPH_UNICODE for why.
     expect(font?.decodeToUnicode(new Uint8Array([87]))).toBe("Ω");
     expect(diagnostics.some((d) => d.code === "text/unmapped-encoding")).toBe(
       false,
@@ -271,7 +271,7 @@ describe("createFontResolver: simple fonts with a Symbol/ZapfDingbats built-in e
       sink,
     });
     const font = resolve("F1", resources);
-    // Code 0x57 in the Symbol font's own built-in encoding is glyph "Omega" (U+2126 OHM SIGN per the AGL) -- pre-fix, this code silently fell back to WinAnsiEncoding instead and produced "W" (0x57's WinAnsi glyph), with no diagnostic at all.
+    // Code 0x57 in the Symbol font's own built-in encoding is glyph "Omega" (U+2126 OHM SIGN per the AGL) — pre-fix, this code silently fell back to WinAnsiEncoding instead and produced "W" (0x57's WinAnsi glyph), with no diagnostic at all.
     expect(font?.decodeToUnicode(new Uint8Array([0x57]))).toBe("Ω");
     expect(diagnostics.some((d) => d.code === "text/unmapped-encoding")).toBe(
       false,
@@ -322,7 +322,7 @@ describe("createFontResolver: simple fonts with a Symbol/ZapfDingbats built-in e
       sink,
     });
     const font = resolve("F1", resources);
-    // Previously this fell back to WinAnsiEncoding and produced "W" -- a plausible but wrong letter with no diagnostic. This codec has no way to know this font's real built-in encoding without parsing its embedded program, so it now reports honest "unmapped" (the replacement character plus a diagnostic) instead of guessing.
+    // Previously this fell back to WinAnsiEncoding and produced "W" — a plausible but wrong letter with no diagnostic. This codec has no way to know this font's real built-in encoding without parsing its embedded program, so it now reports honest "unmapped" (the replacement character plus a diagnostic) instead of guessing.
     expect(font?.decodeToUnicode(new Uint8Array([0x57]))).toBe("�");
     expect(diagnostics.some((d) => d.code === "text/unmapped-encoding")).toBe(
       true,
@@ -331,7 +331,7 @@ describe("createFontResolver: simple fonts with a Symbol/ZapfDingbats built-in e
 
   it("still falls back to WinAnsi when /FontDescriptor explicitly clears the Symbolic flag", () => {
     const { sink } = collectDiagnostics();
-    const descriptor = pdfDict({ Flags: pdfNum(32) }); // Nonsymbolic bit (bit 6) only -- Symbolic bit (4) is unset
+    const descriptor = pdfDict({ Flags: pdfNum(32) }); // Nonsymbolic bit (bit 6) only — Symbolic bit (4) is unset
     const fontDict = pdfDict({
       Subtype: pdfName("TrueType"),
       BaseFont: pdfName("Arial"),
@@ -375,7 +375,7 @@ describe("createFontResolver: simple fonts with a Symbol/ZapfDingbats built-in e
   });
 });
 
-// A symbol-encoded font subset -- a handful of glyphs embedded specifically to draw Ω, µ, ± or ≤ at whatever codes the producing tool happened to pick -- carries its own built-in encoding inside the embedded font program and nowhere else. Reading it is the only way to know what code 0x57 actually draws in a font that is neither the standard-14 Symbol face nor covered by /ToUnicode or /Differences; guessing WinAnsi there yields "W", a plausible-looking wrong letter (ExaDev/documents.js#834).
+// A symbol-encoded font subset — a handful of glyphs embedded specifically to draw Ω, µ, ± or ≤ at whatever codes the producing tool happened to pick — carries its own built-in encoding inside the embedded font program and nowhere else. Reading it is the only way to know what code 0x57 actually draws in a font that is neither the standard-14 Symbol face nor covered by /ToUnicode or /Differences; guessing WinAnsi there yields "W", a plausible-looking wrong letter (ExaDev/documents.js#834).
 describe("createFontResolver: a font's own built-in encoding, read from its embedded program", () => {
   // Written as an escape rather than the character itself: U+2126 OHM SIGN and U+03A9 GREEK CAPITAL LETTER OMEGA are visually identical, and the Adobe Glyph List deliberately maps the glyph name "Omega" to the former.
   const OHM_SIGN = "Ω";
@@ -646,7 +646,7 @@ describe("createFontResolver: named base encodings", () => {
       sink,
     });
     const font = resolve("F1", fontWithBaseEncoding("MacRomanEncoding"));
-    // Code 0xBD is "Omega" in MacRomanEncoding and "onehalf" in WinAnsi -- the two disagree across most of the upper half. The expected character is U+2126 OHM SIGN, the Adobe Glyph List's own mapping for that name, not the visually identical U+03A9.
+    // Code 0xBD is "Omega" in MacRomanEncoding and "onehalf" in WinAnsi — the two disagree across most of the upper half. The expected character is U+2126 OHM SIGN, the Adobe Glyph List's own mapping for that name, not the visually identical U+03A9.
     expect(font?.decodeToUnicode(new Uint8Array([0xbd]))).toBe("Ω");
     expect(
       diagnostics.some((d) => d.code === "char/encoding-approximated"),
@@ -808,7 +808,7 @@ describe("createFontResolver: composite (Type0) fonts", () => {
 
   it("identifies a CID through the embedded program's own Unicode cmap when /ToUnicode is absent", () => {
     const { sink, diagnostics } = collectDiagnostics();
-    // Identity-H with the default /CIDToGIDMap makes a CID the embedded program's own glyph ID, so the program's Unicode cmap -- read backwards -- says what that glyph is, without guessing anything.
+    // Identity-H with the default /CIDToGIDMap makes a CID the embedded program's own glyph ID, so the program's Unicode cmap — read backwards — says what that glyph is, without guessing anything.
     const program = buildSfnt(
       new Map([
         [

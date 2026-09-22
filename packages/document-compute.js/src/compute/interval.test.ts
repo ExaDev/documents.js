@@ -85,7 +85,7 @@ describe("addIntervals / subtractIntervals", () => {
   });
 });
 
-describe("multiplyIntervals -- sign-case coverage", () => {
+describe("multiplyIntervals — sign-case coverage", () => {
   it("multiplies two positive intervals (corners at both maxima)", () => {
     expect(multiplyIntervals(interval(2, 3), interval(4, 5))).toEqual(
       interval(8, 15, {}),
@@ -98,7 +98,7 @@ describe("multiplyIntervals -- sign-case coverage", () => {
     );
   });
 
-  it("multiplies a straddling interval by a straddling interval -- the sign-flip case", () => {
+  it("multiplies a straddling interval by a straddling interval — the sign-flip case", () => {
     // x in [-2, 3], y in [-1, 4]: extremes are x=-2,y=4 (-8) and x=3,y=4 (12).
     expect(multiplyIntervals(interval(-2, 3), interval(-1, 4))).toEqual(
       interval(-8, 12, {}),
@@ -143,7 +143,7 @@ describe("divideIntervals", () => {
     expect(() => divideIntervals(interval(1, 2), interval(0, 1))).toThrow(
       DivisionByZeroError,
     );
-    // A divisor that only touches zero at its own upper bound (max === 0, not min) -- distinguishes b.max >= 0 from a mutated b.max > 0, which would wrongly let this divisor through undetected.
+    // A divisor that only touches zero at its own upper bound (max === 0, not min) — distinguishes b.max >= 0 from a mutated b.max > 0, which would wrongly let this divisor through undetected.
     expect(() => divideIntervals(interval(1, 2), interval(-2, 0))).toThrow(
       DivisionByZeroError,
     );

@@ -29,10 +29,10 @@ export interface DocxBody {
   appendParagraph(init?: ParagraphInit): DocxParagraph;
   appendTable(init: TableInit): DocxTable;
   appendPageBreak(): void;
-  // A bookmark's two halves as body-level siblings bracketing whatever is appended between the two calls -- the one construct shape that is expressible append-only, since WordprocessingML allows w:bookmarkStart/w:bookmarkEnd directly inside w:body around whole blocks. The id is the caller's to keep unique document-wide and to pair across the two halves; the name travels on the start half alone, exactly as a reader pairs them back.
+  // A bookmark's two halves as body-level siblings bracketing whatever is appended between the two calls — the one construct shape that is expressible append-only, since WordprocessingML allows w:bookmarkStart/w:bookmarkEnd directly inside w:body around whole blocks. The id is the caller's to keep unique document-wide and to pair across the two halves; the name travels on the start half alone, exactly as a reader pairs them back.
   appendBookmarkStart(id: number, name: string): void;
   appendBookmarkEnd(id: number): void;
-  // A content-control (SDT) region: every append between openContentControlRegion and closeRegion lands inside the control's own w:sdtContent rather than as a body sibling -- the block-flow spelling of an SDT, which Word itself writes as w:sdt > w:sdtPr + w:sdtContent around the content it governs. The descriptor drives w:sdtPr (w:id minted per document, w:tag/w:alias/w:lock, and the one type element each controlType maps to -- the exact inverse of ooxml.js's own reader, so a written control reads back as the same descriptor). Regions nest to arbitrary depth; the one field with no spelling here is columnCount-style geometry an SDT does not carry.
+  // A content-control (SDT) region: every append between openContentControlRegion and closeRegion lands inside the control's own w:sdtContent rather than as a body sibling — the block-flow spelling of an SDT, which Word itself writes as w:sdt > w:sdtPr + w:sdtContent around the content it governs. The descriptor drives w:sdtPr (w:id minted per document, w:tag/w:alias/w:lock, and the one type element each controlType maps to — the exact inverse of ooxml.js's own reader, so a written control reads back as the same descriptor). Regions nest to arbitrary depth; the one field with no spelling here is columnCount-style geometry an SDT does not carry.
   openContentControlRegion(descriptor: ContentControlDescriptor): void;
   // Opens a tracked-change region (w:ins/w:del/w:moveFrom/w:moveTo wrapping the blocks appended until the matching closeRegion). Answers false for a change kind with no block-level element (formatChange), which the caller treats as a refusal.
   openProvenanceRegion(descriptor: ProvenanceDescriptor): boolean;
@@ -59,7 +59,7 @@ function findBody(
   throw new Error(`${documentPartPath} has no w:body element`);
 }
 
-// w:sectPr, when it appears as a direct child of w:body (the document's final/only section), must be the LAST child -- every new top-level element is inserted immediately before it.
+// w:sectPr, when it appears as a direct child of w:body (the document's final/only section), must be the LAST child — every new top-level element is inserted immediately before it.
 function bodyInsertionPoint(body: XmlElement): number {
   const sectPrIndex = body.children.findIndex(
     (c) => c.type === "element" && c.tag === "w:sectPr",
@@ -78,7 +78,7 @@ function bodyElementIndicesByTag(body: XmlElement, tag: string): number[] {
 }
 
 class DocxBodyImpl implements DocxBody {
-  // Every open region's append target, innermost last: a content control's own w:sdtContent, or a tracked change's own w:ins/w:del/w:moveFrom/w:moveTo element (whose children are the wrapped blocks directly -- those elements have no separate content container). `deletion` names a region whose runs must spell their text w:delText rather than w:t when it closes, Word's own spelling for text inside a tracked deletion or move-from (ooxml.js's reader reads both identically, so the round trip holds either way; this is the real-consumer-correct spelling). Appends target the innermost open region's own children (plain push -- neither container has a w:sectPr to insert before) and fall back to the body's own insertion point when empty.
+  // Every open region's append target, innermost last: a content control's own w:sdtContent, or a tracked change's own w:ins/w:del/w:moveFrom/w:moveTo element (whose children are the wrapped blocks directly — those elements have no separate content container). `deletion` names a region whose runs must spell their text w:delText rather than w:t when it closes, Word's own spelling for text inside a tracked deletion or move-from (ooxml.js's reader reads both identically, so the round trip holds either way; this is the real-consumer-correct spelling). Appends target the innermost open region's own children (plain push — neither container has a w:sectPr to insert before) and fall back to the body's own insertion point when empty.
   private readonly openRegions: {
     container: XmlElement;
     deletion: boolean;
@@ -249,7 +249,7 @@ class DocxBodyImpl implements DocxBody {
   }
 
   openProvenanceRegion(descriptor: ProvenanceDescriptor): boolean {
-    // The block-flow spelling of a tracked change: the w:ins/w:del/w:moveFrom/w:moveTo element wrapping the extent's own blocks, the exact inverse ooxml.js's own reader recovers (readProvenanceDescriptor reads w:author/w:date back; collectFlowNodes recurses into the element and records its construct extent). formatChange has no block-level element at all -- its Word spellings (w:rPrChange/w:pPrChange) are property-layer children of runs and paragraph properties, so a block region for one would have nothing to write through; the caller treats false as a refusal.
+    // The block-flow spelling of a tracked change: the w:ins/w:del/w:moveFrom/w:moveTo element wrapping the extent's own blocks, the exact inverse ooxml.js's own reader recovers (readProvenanceDescriptor reads w:author/w:date back; collectFlowNodes recurses into the element and records its construct extent). formatChange has no block-level element at all — its Word spellings (w:rPrChange/w:pPrChange) are property-layer children of runs and paragraph properties, so a block region for one would have nothing to write through; the caller treats false as a refusal.
     const tag =
       descriptor.change === "insertion"
         ? "w:ins"
@@ -302,7 +302,7 @@ class DocxBodyImpl implements DocxBody {
   }
 }
 
-// Rewrites every w:t under a closed deletion region's subtree to w:delText, the spelling Word itself gives text inside a tracked deletion or move-from -- ooxml.js's own reader reads the two identically (readRunText accepts both), so this is real-consumer correctness rather than a round-trip requirement. Recursive over the whole region: a deletion's interior is deleted content throughout (a nested construct inside a deletion rides the same deletion), which is also exactly how the reader's carryDeletions walk treats it.
+// Rewrites every w:t under a closed deletion region's subtree to w:delText, the spelling Word itself gives text inside a tracked deletion or move-from — ooxml.js's own reader reads the two identically (readRunText accepts both), so this is real-consumer correctness rather than a round-trip requirement. Recursive over the whole region: a deletion's interior is deleted content throughout (a nested construct inside a deletion rides the same deletion), which is also exactly how the reader's carryDeletions walk treats it.
 function spellDeletedText(element: XmlElement): void {
   for (const child of element.children) {
     if (child.type !== "element") {
@@ -340,7 +340,7 @@ export class DocxEditor {
     this.body = new DocxBodyImpl(body, imageContext, this.pkg);
   }
 
-  // Reads/patches docProps/core.xml directly on the live package -- ExaDev/documents.js#933's own "editor.metadata = {...}" gap, the same live-view/patch-in-place pattern this ecosystem's set-metadata CLI command already gets through patchDocxMetadata (src/metadata/write.ts), now available on an already-open editor with no re-decode required. Only title/author/subject/keywords are ever written -- docProps/core.xml has no OOXML spelling for LayoutMetadata's other fields (producer, language, publisher, ...), so a setter value naming one of those silently writes nothing for it, exactly as readCoreProperties itself never populates them (see that function's own comment). title/author/subject can be CHANGED but not REMOVED once a document has one (patchCoreProperties' own documented limitation); keywords can be cleared to none via an empty array.
+  // Reads/patches docProps/core.xml directly on the live package — ExaDev/documents.js#933's own "editor.metadata = {...}" gap, the same live-view/patch-in-place pattern this ecosystem's set-metadata CLI command already gets through patchDocxMetadata (src/metadata/write.ts), now available on an already-open editor with no re-decode required. Only title/author/subject/keywords are ever written — docProps/core.xml has no OOXML spelling for LayoutMetadata's other fields (producer, language, publisher, ...), so a setter value naming one of those silently writes nothing for it, exactly as readCoreProperties itself never populates them (see that function's own comment). title/author/subject can be CHANGED but not REMOVED once a document has one (patchCoreProperties' own documented limitation); keywords can be cleared to none via an empty array.
   get metadata(): LayoutMetadata {
     return readCoreProperties(this.pkg);
   }
@@ -401,7 +401,7 @@ export interface CreateDocxOptions {
   readonly clock?: ClockPort;
 }
 
-// Creates a fresh docx with real docProps/core.xml creation/modification timestamps, matching every real document producer's own behaviour -- systemClock fires by default (options.clock overrides it, e.g. with fixedClock in a test), never behind an opt-in flag. See src/model/metadata.ts's resolveMetadataTimestamps for the exact precedence.
+// Creates a fresh docx with real docProps/core.xml creation/modification timestamps, matching every real document producer's own behaviour — systemClock fires by default (options.clock overrides it, e.g. with fixedClock in a test), never behind an opt-in flag. See src/model/metadata.ts's resolveMetadataTimestamps for the exact precedence.
 export function createDocx(options?: CreateDocxOptions): DocxEditor {
   const clock = options?.clock ?? systemClock;
   const metadata = resolveMetadataTimestamps({}, clock);

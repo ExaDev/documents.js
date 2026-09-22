@@ -2,7 +2,7 @@ import type { LayoutMetadata } from "document-schema.js";
 import { uint16At } from "../bytes/view";
 import { decodeWordString } from "../stream/characters";
 
-// -- Document metadata, per WPFF "Prefix Packets 0-32", Packet Type 18 (0x12), Extended Document Summary --
+// — Document metadata, per WPFF "Prefix Packets 0-32", Packet Type 18 (0x12), Extended Document Summary --
 //
 // WordPerfect keeps a document's metadata in a prefix packet rather than in the document area, as a flat list of tagged fields: "The extended summary data group occurs for up to 100 times, one for each field defined in the extended summary", each group being "[size] (byte length of data group.) [tag] (field ID of the extended summary field.) [type] (field data type) [name] x ? (null-terminated word string, optional.) [data] x ? (null-terminated word string or 10-byte date field.)".
 //
@@ -13,7 +13,7 @@ import { decodeWordString } from "../stream/characters";
 // "Packet Type 18 (0x12) Extended Document Summary".
 export const PACKET_TYPE_EXTENDED_DOCUMENT_SUMMARY = 0x12;
 
-// The predefined tags from the SDK's own "Valid predefined extended summary fields" table that the shared LayoutMetadata has a field for. WordPerfect's summary has no field called Title; "Descriptive Name" is the one it offers for the same purpose -- the name a user gives the document as distinct from its filename -- so that is what lands on `title`.
+// The predefined tags from the SDK's own "Valid predefined extended summary fields" table that the shared LayoutMetadata has a field for. WordPerfect's summary has no field called Title; "Descriptive Name" is the one it offers for the same purpose — the name a user gives the document as distinct from its filename — so that is what lands on `title`.
 const TAG_AUTHOR = 5; // "5 | Author | Single line"
 const TAG_CREATION_DATE = 14; // "14 | Creation Date | Date"
 const TAG_DESCRIPTIVE_NAME = 17; // "17 | Descriptive Name | Single line"
@@ -27,7 +27,7 @@ const TYPE_DATE = 0x04;
 // "[size] [tag] [type]", three shorts, before the name and data of every group.
 const GROUP_HEADER_SIZE = 6;
 
-// "10-Byte Date Structure: [year] <month> <day> <hour> <minute> <second> <day of week> (not implemented) <time zone> (not implemented) <unused>" -- a year short then eight bytes.
+// "10-Byte Date Structure: [year] <month> <day> <hour> <minute> <second> <day of week> (not implemented) <time zone> (not implemented) <unused>" — a year short then eight bytes.
 const DATE_FIELD_SIZE = 10;
 
 // "The extended summary data group occurs for up to 100 times". A packet claiming more groups than that is either malformed or not a summary packet at all, and the bound keeps a corrupted size field from turning the walk into an unbounded loop.
@@ -64,7 +64,7 @@ function readDateField(bytes: Uint8Array, offset: number): string | undefined {
   return `${pad(year, 4)}-${pad(month, 2)}-${pad(day, 2)}T${pad(hour, 2)}:${pad(minute, 2)}:${pad(second, 2)}`;
 }
 
-// A single-line Keywords field split into the shared schema's keyword array. The SDK gives the field one line and no separator vocabulary, so the comma every interface that shows this field uses is the reading -- and an entry that is only whitespace is dropped rather than kept as an empty keyword.
+// A single-line Keywords field split into the shared schema's keyword array. The SDK gives the field one line and no separator vocabulary, so the comma every interface that shows this field uses is the reading — and an entry that is only whitespace is dropped rather than kept as an empty keyword.
 function splitKeywords(value: string): string[] {
   return value
     .split(",")
@@ -85,7 +85,7 @@ export function readDocumentSummary(packet: Uint8Array): LayoutMetadata {
 
   let cursor = 0;
   for (let group = 0; group < MAX_SUMMARY_GROUPS; group += 1) {
-    // uint16At throws (via byteAt) rather than returning undefined for a read that runs past packet's own end -- caught here and treated exactly like the size check just below, which ends the walk at whatever metadata has already been collected, since a group's own header running past the packet is the same "framing has gone out of step" case that check already handles.
+    // uint16At throws (via byteAt) rather than returning undefined for a read that runs past packet's own end — caught here and treated exactly like the size check just below, which ends the walk at whatever metadata has already been collected, since a group's own header running past the packet is the same "framing has gone out of step" case that check already handles.
     let size: number;
     let tag: number;
     let type: number;

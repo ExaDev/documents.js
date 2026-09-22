@@ -95,7 +95,7 @@ async function runSetMetadata(
 
   try {
     const inputBytes = await readInput(input, { signal });
-    // setDocumentMetadata itself routes a docx/docx pair to patching docProps/core.xml directly on the decoded Package rather than rebuilding a fresh package from the ContentDocument -- the fast path that keeps comments, footnotes, header/footer parts, section header/footer references, and numbering (everything readDocxExtras/docx-extras covers) byte-faithful (ExaDev/documents.js#966). This command no longer needs to special-case docx itself: every source/target pair goes through the one entry point, which resolves internally to the lossless docx patch, the pdf direct patch, or the generic rebuild as appropriate.
+    // setDocumentMetadata itself routes a docx/docx pair to patching docProps/core.xml directly on the decoded Package rather than rebuilding a fresh package from the ContentDocument — the fast path that keeps comments, footnotes, header/footer parts, section header/footer references, and numbering (everything readDocxExtras/docx-extras covers) byte-faithful (ExaDev/documents.js#966). This command no longer needs to special-case docx itself: every source/target pair goes through the one entry point, which resolves internally to the lossless docx patch, the pdf direct patch, or the generic rebuild as appropriate.
     const bytes = setDocumentMetadata(
       source,
       target.format,
@@ -134,12 +134,12 @@ export function registerSetMetadataCommand(program: Command): void {
       [
         "",
         "Three write paths: a pdf source/target patches the metadata directly on the parsed PDF (writePdf), and a docx source/target",
-        "patches docProps/core.xml directly on the decoded package -- both with no layout engine or ContentDocument rebuild involved",
-        "at all, so everything else on the page (pdf) or in the package (docx -- comments, footnotes, headers/footers, numbering",
+        "patches docProps/core.xml directly on the decoded package — both with no layout engine or ContentDocument rebuild involved",
+        "at all, so everything else on the page (pdf) or in the package (docx — comments, footnotes, headers/footers, numbering",
         "definitions included) survives byte-faithful. Every other supported format (pptx, xlsx, odt, odp, ods, odg, markdown, rtf)",
         "rebuilds a fresh package from that format's own ContentDocument instead.",
         "",
-        "set-metadata does not convert format -- source and target must match. Run convert/from-package first, then",
+        "set-metadata does not convert format — source and target must match. Run convert/from-package first, then",
         "set-metadata on the result, if you need a different target format.",
       ].join("\n"),
     );

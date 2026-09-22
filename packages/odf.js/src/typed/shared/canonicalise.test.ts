@@ -19,7 +19,7 @@ import {
   canonicalTable,
 } from "./canonicalise";
 
-// This suite pins typed/shared/canonicalise.ts's own paragraph/table/metadata/image helpers directly against a literal expected value. Every odt/odp/odg/draw writer's own round-trip suite applies these SAME functions identically to both sides of its equality check (normalise(actual) vs. normalise(expected)), so a mutation confined to one of these helpers changes both sides in lockstep and is invisible to that comparison -- only a direct, one-sided assertion (as here) can observe it. See canonicalise.ts's own top-of-file note, and ods/write.test.ts's identical "canonical* helpers: direct unit coverage" section for the sibling ODS-specific case this mirrors.
+// This suite pins typed/shared/canonicalise.ts's own paragraph/table/metadata/image helpers directly against a literal expected value. Every odt/odp/odg/draw writer's own round-trip suite applies these SAME functions identically to both sides of its equality check (normalise(actual) vs. normalise(expected)), so a mutation confined to one of these helpers changes both sides in lockstep and is invisible to that comparison — only a direct, one-sided assertion (as here) can observe it. See canonicalise.ts's own top-of-file note, and ods/write.test.ts's identical "canonical* helpers: direct unit coverage" section for the sibling ODS-specific case this mirrors.
 
 const RUN: ContentRun = { text: "hello" };
 
@@ -30,7 +30,7 @@ function paragraph(
 }
 
 describe("canonicalRun", () => {
-  // toStrictEqual throughout this block, not toEqual: toEqual ignores an explicit undefined-valued property, so a mutant that turns "if (run.bold !== undefined)" into "if (true)" -- setting canonical.bold = undefined unconditionally instead of leaving the key absent -- would read as equal to the field-omitted expectation under toEqual and survive unnoticed. toStrictEqual treats an explicit `bold: undefined` key as genuinely different from the key being absent altogether.
+  // toStrictEqual throughout this block, not toEqual: toEqual ignores an explicit undefined-valued property, so a mutant that turns "if (run.bold !== undefined)" into "if (true)" — setting canonical.bold = undefined unconditionally instead of leaving the key absent — would read as equal to the field-omitted expectation under toEqual and survive unnoticed. toStrictEqual treats an explicit `bold: undefined` key as genuinely different from the key being absent altogether.
   it("keeps only text when no other field is stated", () => {
     expect(canonicalRun({ text: "plain" })).toStrictEqual({ text: "plain" });
   });
@@ -388,7 +388,7 @@ describe("canonicalCell", () => {
 });
 
 describe("canonicalTable", () => {
-  // Every non-anchor grid position carries its own marker colSpan: 1 -- a field the non-covered path (canonicalCell) always preserves and the covered path (canonicalCell's `if (covered) return { blocks: [] }` branch) always strips, regardless of what the source cell stated. This is what makes "genuinely covered" and "genuinely uncovered but otherwise empty" distinguishable in the result: an uncovered marked cell keeps { blocks: [], colSpan: 1 }, a covered one collapses to bare { blocks: [] }.
+  // Every non-anchor grid position carries its own marker colSpan: 1 — a field the non-covered path (canonicalCell) always preserves and the covered path (canonicalCell's `if (covered) return { blocks: [] }` branch) always strips, regardless of what the source cell stated. This is what makes "genuinely covered" and "genuinely uncovered but otherwise empty" distinguishable in the result: an uncovered marked cell keeps { blocks: [], colSpan: 1 }, a covered one collapses to bare { blocks: [] }.
   function tableWithSpan(colSpan: number, rowSpan: number): ContentTable {
     return {
       kind: "table",
@@ -469,7 +469,7 @@ describe("canonicalTable", () => {
   });
 
   it("a colSpan=1,rowSpan=1 cell (the default) covers no other grid position at all", () => {
-    // r !== rowIndex || c !== columnIndex must be false only for the anchor cell itself, so a 1x1 span marks nothing else covered -- every OTHER cell in the table keeps its own marker colSpan: 1, proving it was never forced through the covered branch.
+    // r !== rowIndex || c !== columnIndex must be false only for the anchor cell itself, so a 1x1 span marks nothing else covered — every OTHER cell in the table keeps its own marker colSpan: 1, proving it was never forced through the covered branch.
     const table = tableWithSpan(1, 1);
     const result = canonicalTable(table, freshListState());
     expect(result.rows[0]!.cells[0]).toMatchObject({ colSpan: 1, rowSpan: 1 });
@@ -494,9 +494,9 @@ describe("canonicalTable", () => {
     const result = canonicalTable(table, freshListState());
     // The anchor cell (row 0, col 0) keeps its own span fields (not covered).
     expect(result.rows[0]!.cells[0]).toMatchObject({ rowSpan: 2 });
-    // Row 1, col 0 is covered by the rowSpan=2 anchor -- its own marker colSpan: 1 is stripped by the covered branch, even though the SOURCE cell at that grid position stated one.
+    // Row 1, col 0 is covered by the rowSpan=2 anchor — its own marker colSpan: 1 is stripped by the covered branch, even though the SOURCE cell at that grid position stated one.
     expect(result.rows[1]!.cells[0]).toEqual({ blocks: [] });
-    // Row 1, col 1 is NOT covered -- the anchor's own colSpan is 1, so its reach into the rows below stays exactly one column wide, never one column further -- so its own marker colSpan: 1 survives untouched.
+    // Row 1, col 1 is NOT covered — the anchor's own colSpan is 1, so its reach into the rows below stays exactly one column wide, never one column further — so its own marker colSpan: 1 survives untouched.
     expect(result.rows[1]!.cells[1]).toEqual({ blocks: [], colSpan: 1 });
   });
 
@@ -504,9 +504,9 @@ describe("canonicalTable", () => {
     const table = tableWithSpan(2, 1);
     const result = canonicalTable(table, freshListState());
     expect(result.rows[0]!.cells[0]).toMatchObject({ colSpan: 2 });
-    // Column 1 of row 0 is covered by the colSpan=2 anchor -- its own marker colSpan: 1 is stripped.
+    // Column 1 of row 0 is covered by the colSpan=2 anchor — its own marker colSpan: 1 is stripped.
     expect(result.rows[0]!.cells[1]).toEqual({ blocks: [] });
-    // Column 2 of row 0 is NOT covered -- colSpan=2 reaches only one column beyond the anchor, not two -- so its own marker colSpan: 1 survives untouched.
+    // Column 2 of row 0 is NOT covered — colSpan=2 reaches only one column beyond the anchor, not two — so its own marker colSpan: 1 survives untouched.
     expect(result.rows[0]!.cells[2]).toEqual({ blocks: [], colSpan: 1 });
   });
 
@@ -544,7 +544,7 @@ describe("canonicalTable", () => {
   });
 
   it("closes the list plan after the whole table, so a sibling block after a nested table never inherits its trailing list run", () => {
-    // Simulates exactly the caller shape canonicalCell's own block map produces: a nested table followed by a sibling paragraph in the SAME enclosing cell, both threaded through one shared listState. The sibling deliberately reuses the SAME raw numId ("shared") the inner table's own last paragraph carried: the earlier version of this test used two distinct numIds ("inner" then "outer"), which mints a fresh run either way and can never distinguish "closed" from "left open" -- only a coinciding incoming numId can, since planListMembership only opens a genuinely new run when the incoming key differs from whatever is currently open.
+    // Simulates exactly the caller shape canonicalCell's own block map produces: a nested table followed by a sibling paragraph in the SAME enclosing cell, both threaded through one shared listState. The sibling deliberately reuses the SAME raw numId ("shared") the inner table's own last paragraph carried: the earlier version of this test used two distinct numIds ("inner" then "outer"), which mints a fresh run either way and can never distinguish "closed" from "left open" — only a coinciding incoming numId can, since planListMembership only opens a genuinely new run when the incoming key differs from whatever is currently open.
     const listState = freshListState();
     const nested: ContentTable = {
       kind: "table",
@@ -561,7 +561,7 @@ describe("canonicalTable", () => {
     const nestedNumId = (
       nestedResult.rows[0]!.cells[0]!.blocks[0] as ContentParagraph
     ).list?.numId;
-    // If canonicalTable failed to close the list plan on the way out, listState.openNumId would still read "shared" here -- so this next cell's own paragraph, carrying the identical raw "shared" numId, would be treated as CONTINUING the inner table's own run (planListMembership only mints a fresh canonical numId when the incoming key differs from the one still open) and canonicalise to the SAME numId the table's own paragraph got, despite the two having nothing to do with each other -- exactly the odp text-box "raw numIds happen to coincide" scenario this function's own top-of-file note names as the reason the boundary must be forced.
+    // If canonicalTable failed to close the list plan on the way out, listState.openNumId would still read "shared" here — so this next cell's own paragraph, carrying the identical raw "shared" numId, would be treated as CONTINUING the inner table's own run (planListMembership only mints a fresh canonical numId when the incoming key differs from the one still open) and canonicalise to the SAME numId the table's own paragraph got, despite the two having nothing to do with each other — exactly the odp text-box "raw numIds happen to coincide" scenario this function's own top-of-file note names as the reason the boundary must be forced.
     const after = canonicalCell(
       { blocks: [paragraph({ list: { numId: "shared", level: 0 } })] },
       false,
@@ -588,7 +588,7 @@ describe("canonicalMetadata", () => {
   });
 
   it("every field is genuinely absent, not defaulted, when the source states none", () => {
-    // toStrictEqual, not toEqual: toEqual ignores an explicit undefined-valued property, so a mutant that turns any single "if (metadata.X !== undefined)" guard into "if (true)" -- setting that one field to undefined unconditionally instead of leaving the key absent -- would still read as equal to {} under toEqual and survive unnoticed for every one of the six fields below.
+    // toStrictEqual, not toEqual: toEqual ignores an explicit undefined-valued property, so a mutant that turns any single "if (metadata.X !== undefined)" guard into "if (true)" — setting that one field to undefined unconditionally instead of leaving the key absent — would still read as equal to {} under toEqual and survive unnoticed for every one of the six fields below.
     expect(canonicalMetadata({})).toStrictEqual({});
   });
 
@@ -603,7 +603,7 @@ describe("canonicalMetadata", () => {
     expect(result.keywords).not.toBe(keywords);
   });
 
-  it("each field is independently optional -- one at a time", () => {
+  it("each field is independently optional — one at a time", () => {
     expect(canonicalMetadata({ title: "only title" })).toEqual({
       title: "only title",
     });

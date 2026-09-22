@@ -1,10 +1,10 @@
 import type { Attribute, XmlElement, XmlNode } from "../model/node";
 
-// Splitting OpenOffice.org 1.x's single <style:properties> into ODF's family of typed <style:*-properties> elements -- the one genuinely structural difference between the two style models, and the reason a namespace rename alone cannot make an .sxw readable by an ODF reader.
+// Splitting OpenOffice.org 1.x's single <style:properties> into ODF's family of typed <style:*-properties> elements — the one genuinely structural difference between the two style models, and the reason a namespace rename alone cannot make an .sxw readable by an ODF reader.
 //
 // In OpenOffice.org 1.x every style carries exactly one <style:properties>, holding paragraph, character, table, page and drawing formatting side by side with no separation at all. ODF replaced it with one element per property family (style:text-properties, style:paragraph-properties, style:table-cell-properties, ...), which is what every reader in this package looks for. Splitting is not a matter of prefix: the SAME attribute name is valid in several of those elements with a different meaning in each (fo:background-color is a character highlight in style:text-properties, paragraph shading in style:paragraph-properties, and a cell fill in style:table-cell-properties), so duplicating the whole attribute set into every element would silently invent formatting the document never carried.
 //
-// The algorithm is LibreOffice's own, from its OOo-to-OASIS transformer (xmloff/source/transform/StyleOOoTContext.cxx): each style family has an ORDERED list of candidate property families; each attribute goes to the first candidate whose vocabulary contains it; anything unrecognised goes to the first candidate in the list. That ordering is what resolves the ambiguous names -- a table-cell style tries table-cell before paragraph, so fo:background-color lands on the cell, while a paragraph style tries paragraph before text, so the same attribute lands on the paragraph.
+// The algorithm is LibreOffice's own, from its OOo-to-OASIS transformer (xmloff/source/transform/StyleOOoTContext.cxx): each style family has an ORDERED list of candidate property families; each attribute goes to the first candidate whose vocabulary contains it; anything unrecognised goes to the first candidate in the list. That ordering is what resolves the ambiguous names — a table-cell style tries table-cell before paragraph, so fo:background-color lands on the cell, while a paragraph style tries paragraph before text, so the same attribute lands on the paragraph.
 //
 // A consequence of the "unrecognised goes to the first candidate" rule is that only the LAST candidate in each list needs an exhaustive vocabulary, plus whatever names an earlier candidate must claim before a later one can steal them. That is why the tables below are not full copies of ODF's property vocabulary: TEXT_ATTRIBUTES is exhaustive because style:text-properties is last in every list it appears in, while TABLE_CELL_ATTRIBUTES and GRAPHIC_ATTRIBUTES list only the names they must win from PARAGRAPH_ATTRIBUTES. Everything else falls through to the correct element on its own.
 
@@ -41,7 +41,7 @@ const PROPERTIES_ELEMENT_TAG: Readonly<Record<Ooo1PropertyType, string>> = {
   chart: "style:chart-properties",
 };
 
-// Every element name style:properties can split INTO -- computed once from PROPERTIES_ELEMENT_TAG's own values rather than restated, so a fifteenth property family added there is recognised here for free. This is also the WRITE direction's own recognition set (see mergeStyleProperties below): no legitimate ODF element other than these fourteen carries this tag family, so testing membership in this set is a safe, context-free way to find "the typed properties children of a style container" without needing to know which container family produced them.
+// Every element name style:properties can split INTO — computed once from PROPERTIES_ELEMENT_TAG's own values rather than restated, so a fifteenth property family added there is recognised here for free. This is also the WRITE direction's own recognition set (see mergeStyleProperties below): no legitimate ODF element other than these fourteen carries this tag family, so testing membership in this set is a safe, context-free way to find "the typed properties children of a style container" without needing to know which container family produced them.
 const ALL_PROPERTIES_ELEMENT_TAGS: ReadonlySet<string> = new Set(
   Object.values(PROPERTIES_ELEMENT_TAG),
 );
@@ -162,7 +162,7 @@ const TEXT_ATTRIBUTES: ReadonlySet<string> = new Set([
   "style:use-window-font-color",
   "text:condition",
   "text:display",
-  // The two OpenOffice.org-only compound spellings, expanded into their ODF triples below rather than copied through -- listed here so the routing step files them under "text" before the expansion runs.
+  // The two OpenOffice.org-only compound spellings, expanded into their ODF triples below rather than copied through — listed here so the routing step files them under "text" before the expansion runs.
   "style:text-underline",
   "style:text-crossing-out",
 ]);
@@ -300,7 +300,7 @@ const ELEMENTS_BY_PROPERTY_TYPE: ReadonlyMap<
   ["graphic", new Set(["style:background-image"])],
 ]);
 
-// The property families a <style:properties> inside this container splits into, or undefined if the container is not one this module recognises -- in which case the caller leaves the element unsplit rather than guessing a family and filing real formatting under the wrong one.
+// The property families a <style:properties> inside this container splits into, or undefined if the container is not one this module recognises — in which case the caller leaves the element unsplit rather than guessing a family and filing real formatting under the wrong one.
 export function propertyTypesForContainer(
   container: XmlElement,
 ): readonly Ooo1PropertyType[] | undefined {
@@ -474,7 +474,7 @@ export function splitStyleProperties(
 
 // --- the write direction: ODF's family of typed style:*-properties elements -> one style:properties -----------------
 //
-// The exact inverse of splitStyleProperties above, and simpler than it in one genuine way: the split needs a container's own candidate family list to decide WHICH typed element an attribute becomes, but the merge needs no such list at all. ALL_PROPERTIES_ELEMENT_TAGS is a closed, unambiguous set -- no legitimate ODF element other than these fourteen ever carries this tag family, in any container -- so recognising "these are a style's typed properties children" is a context-free membership test, and merging them back into one style:properties needs nothing more than concatenating their attributes and children in encounter order. Order carries no ODF semantics (neither this package's own readers nor any real producer's own reader depends on attribute or child order), so it is not reconstructed to match whatever an original OpenOffice.org 1.x document might once have had.
+// The exact inverse of splitStyleProperties above, and simpler than it in one genuine way: the split needs a container's own candidate family list to decide WHICH typed element an attribute becomes, but the merge needs no such list at all. ALL_PROPERTIES_ELEMENT_TAGS is a closed, unambiguous set — no legitimate ODF element other than these fourteen ever carries this tag family, in any container — so recognising "these are a style's typed properties children" is a context-free membership test, and merging them back into one style:properties needs nothing more than concatenating their attributes and children in encounter order. Order carries no ODF semantics (neither this package's own readers nor any real producer's own reader depends on attribute or child order), so it is not reconstructed to match whatever an original OpenOffice.org 1.x document might once have had.
 export function mergeStyleProperties(children: readonly XmlNode[]): {
   readonly merged: XmlElement | undefined;
   readonly rest: XmlNode[];

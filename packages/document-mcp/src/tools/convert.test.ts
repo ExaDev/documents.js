@@ -24,7 +24,7 @@ import {
   ListDocumentConversionsOutputSchema,
 } from "document-operations";
 
-// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip -- not the tool callback in isolation -- so this proves the wiring: that convert_document and list_document_conversions are registered under those names, that convert_document dispatches to a real documents.js DocumentConverter (createLocalDocumentConverter), and that the resolved output/diagnostics/font-substitution data reaches the caller as structuredContent matching each tool's own declared outputSchema.
+// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip — not the tool callback in isolation — so this proves the wiring: that convert_document and list_document_conversions are registered under those names, that convert_document dispatches to a real documents.js DocumentConverter (createLocalDocumentConverter), and that the resolved output/diagnostics/font-substitution data reaches the caller as structuredContent matching each tool's own declared outputSchema.
 
 interface ConnectedPair {
   readonly client: Client;
@@ -92,7 +92,7 @@ describe("convert_document", () => {
     }
     expect(structured.output.bytesBase64.length).toBeGreaterThan(0);
 
-    // content mirrors structuredContent as JSON text -- the same "content is JSON.stringify(structuredContent)" convention every other tool in this package follows.
+    // content mirrors structuredContent as JSON text — the same "content is JSON.stringify(structuredContent)" convention every other tool in this package follows.
     const [block] = result.content;
     expect(block?.type).toBe("text");
     expect(
@@ -132,7 +132,7 @@ describe("convert_document", () => {
   });
 
   it("reports a structured font substitution when asked, for a family this package vendors a metric-compatible substitute for", async () => {
-    // 'Calibri' resolves through pdf-codec's vendored substitute path (Carlito, genuinely metric-compatible) whenever the source document does not itself embed a Calibri face -- reliably reason: 'vendored-substitute', unlike an arbitrary unknown family name, which resolves through the plain standard-14 fallback and fires no substitution event at all (see pdf-codec's own font-registry.ts: onSubstitution only fires for a matched-family-wrong-style face or a vendored substitute, never for the bare standard-14 fallback).
+    // 'Calibri' resolves through pdf-codec's vendored substitute path (Carlito, genuinely metric-compatible) whenever the source document does not itself embed a Calibri face — reliably reason: 'vendored-substitute', unlike an arbitrary unknown family name, which resolves through the plain standard-14 fallback and fires no substitution event at all (see pdf-codec's own font-registry.ts: onSubstitution only fires for a matched-family-wrong-style face or a vendored substitute, never for the bare standard-14 fallback).
     const editor = createDocx();
     const run = editor.body
       .appendParagraph()
@@ -163,7 +163,7 @@ describe("convert_document", () => {
           substitution.reason === "vendored-substitute",
       ),
     ).toBe(true);
-    // The diagnostics channel reports the same event too, regardless of onSubstitutionDiagnostics -- both channels fire together, never one in place of the other.
+    // The diagnostics channel reports the same event too, regardless of onSubstitutionDiagnostics — both channels fire together, never one in place of the other.
     expect(
       structured.diagnostics.some(
         (diagnostic) => diagnostic.code === "font/substituted",

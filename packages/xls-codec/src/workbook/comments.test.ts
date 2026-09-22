@@ -61,7 +61,7 @@ describe("readSheetComments", () => {
   });
 
   it("never associates a TxO following a non-Note Obj record with any comment", () => {
-    // ot 0x06 is Text -- an ordinary text box, not a comment. Its own TxO must not poison textByObjId under id 9, and no Note names id 9 anyway.
+    // ot 0x06 is Text — an ordinary text box, not a comment. Its own TxO must not poison textByObjId under id 9, and no Note names id 9 anyway.
     const comments = readComments(
       otherObjRecord(0x06, 9),
       ...noteTxoRecords("Just a text box"),
@@ -107,13 +107,13 @@ describe("readSheetComments", () => {
   });
 
   it("returns an empty map for a worksheet with no comment records at all", () => {
-    const ROW_RECORD_TYPE = 0x0208; // [MS-XLS] 2.4.221 -- an unrelated record type, never a Note/Obj/TxO
+    const ROW_RECORD_TYPE = 0x0208; // [MS-XLS] 2.4.221 — an unrelated record type, never a Note/Obj/TxO
     const comments = readComments(record(ROW_RECORD_TYPE, []));
     expect(comments.size).toBe(0);
   });
 
   it("throws rather than silently absorbing a TxO whose own cbFmla overruns the record data", () => {
-    // cchText 0 so the function returns right after skipping cbFmla -- isolating that one skip from cbRuns' own, tested separately below. cbFmla names 50 bytes to skip but none follow.
+    // cchText 0 so the function returns right after skipping cbFmla — isolating that one skip from cbRuns' own, tested separately below. cbFmla names 50 bytes to skip but none follow.
     const txoData = [
       ...u16(0), // grbit
       ...u16(0), // rot
@@ -121,7 +121,7 @@ describe("readSheetComments", () => {
       ...u16(0), // cchText
       ...u16(0), // cbRuns
       ...u16(0), // ifntEmpty
-      ...u16(50), // cbFmla -- claims 50 bytes that are never written
+      ...u16(50), // cbFmla — claims 50 bytes that are never written
     ];
     expect(() =>
       readComments(noteObjRecord(1), record(RECORD_TXO, txoData)),
@@ -135,10 +135,10 @@ describe("readSheetComments", () => {
       ...u16(0), // rot
       ...new Array<number>(6).fill(0), // reserved4 + reserved5
       ...u16(text.length), // cchText
-      ...u16(50), // cbRuns -- claims 50 bytes that are never written
+      ...u16(50), // cbRuns — claims 50 bytes that are never written
       ...u16(0), // ifntEmpty
       ...u16(0), // cbFmla
-      0x00, // XLUnicodeStringNoCch's own flags byte -- compressed (fHighByte clear)
+      0x00, // XLUnicodeStringNoCch's own flags byte — compressed (fHighByte clear)
       ...Array.from(text, (char) => char.codePointAt(0) ?? 0),
     ];
     expect(() =>
@@ -168,7 +168,7 @@ describe("readObjPictFmlaStorageId", () => {
   }
 
   it("finds FtPictFmla's own storage id, walking past FtCmo and an unrelated sub-record first", () => {
-    // An ODD-length unrelated payload (3 bytes, not the 2-byte-word-aligned count every real field here uses) is deliberate: a reader that failed to skip it would misread every following ft/cb pair off a shifted byte boundary rather than merely landing on the wrong sub-record, so the walk runs out of bytes and throws instead of coincidentally still finding 42 -- an even-length filler leaves the word alignment intact and can realign onto FtPictFmla by accident regardless of whether the skip actually ran.
+    // An ODD-length unrelated payload (3 bytes, not the 2-byte-word-aligned count every real field here uses) is deliberate: a reader that failed to skip it would misread every following ft/cb pair off a shifted byte boundary rather than merely landing on the wrong sub-record, so the walk runs out of bytes and throws instead of coincidentally still finding 42 — an even-length filler leaves the word alignment intact and can realign onto FtPictFmla by accident regardless of whether the skip actually ran.
     const unrelated = [...u16(0x1234), ...u16(3), 0xaa, 0xaa, 0xaa];
     const group = objGroup(unrelated, ftPictFmla(42));
 

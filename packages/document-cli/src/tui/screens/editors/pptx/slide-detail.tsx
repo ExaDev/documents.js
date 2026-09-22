@@ -35,7 +35,7 @@ export interface SlideDetailScreenProps {
   readonly screen: Extract<Screen, { kind: "slideDetail" }>;
 }
 
-// 'tableRows'/'tableColumns' are a two-step wizard rather than one combined field: this screen has no multi-field FieldWizard the way odg's page-detail.tsx does (see that file's own FieldWizard), and a table only ever needs these two small integers, so two sequential single-value TextField steps -- the same shape every other add-item flow in this screen already uses -- covers it without importing a heavier component for one caller. 'vector' is the fifth mode, odp-only (see the chooseKind handler below): it walks a real FieldWizard rather than its own bespoke sequence, since a vector's own field count/shape varies by kind (rect/ellipse/path share geometry+fill+stroke, line needs two endpoints instead) the same way odg's own page-detail.tsx add-item flow already does.
+// 'tableRows'/'tableColumns' are a two-step wizard rather than one combined field: this screen has no multi-field FieldWizard the way odg's page-detail.tsx does (see that file's own FieldWizard), and a table only ever needs these two small integers, so two sequential single-value TextField steps — the same shape every other add-item flow in this screen already uses — covers it without importing a heavier component for one caller. 'vector' is the fifth mode, odp-only (see the chooseKind handler below): it walks a real FieldWizard rather than its own bespoke sequence, since a vector's own field count/shape varies by kind (rect/ellipse/path share geometry+fill+stroke, line needs two endpoints instead) the same way odg's own page-detail.tsx add-item flow already does.
 type AddItemMode =
   | "closed"
   | "chooseKind"
@@ -45,7 +45,7 @@ type AddItemMode =
   | "tableColumns"
   | "vector";
 
-// odg's own vector vocabulary (OdgBoxVectorInit/OdgLineVectorInit/OdgPathVectorInit -- see actions.ts) reused verbatim for odp: OdpSlide.addVector takes the identical ContentVector shape OdgPage.addRect/etc build internally, so there is no odp-specific vector-kind vocabulary to define separately.
+// odg's own vector vocabulary (OdgBoxVectorInit/OdgLineVectorInit/OdgPathVectorInit — see actions.ts) reused verbatim for odp: OdpSlide.addVector takes the identical ContentVector shape OdgPage.addRect/etc build internally, so there is no odp-specific vector-kind vocabulary to define separately.
 type VectorKind = "rect" | "ellipse" | "line" | "path";
 
 const IMAGE_EXTENSION_TO_FORMAT: Readonly<Record<string, "png" | "jpeg">> = {
@@ -57,7 +57,7 @@ const IMAGE_EXTENSION_TO_FORMAT: Readonly<Record<string, "png" | "jpeg">> = {
 const DEFAULT_TABLE_ROWS = 2;
 const DEFAULT_TABLE_COLUMNS = 2;
 
-// Mirrors odg/page-detail.tsx's own GEOMETRY_FIELDS/FILL_FIELD/STROKE_FIELD exactly -- the same field shape a rect/ellipse/path vector needs regardless of which container (a drawing page, a slide) ends up hosting it.
+// Mirrors odg/page-detail.tsx's own GEOMETRY_FIELDS/FILL_FIELD/STROKE_FIELD exactly — the same field shape a rect/ellipse/path vector needs regardless of which container (a drawing page, a slide) ends up hosting it.
 const VECTOR_GEOMETRY_FIELDS: readonly FieldSpec[] = [
   { key: "xPt", label: "X (pt)", defaultValue: "40" },
   { key: "yPt", label: "Y (pt)", defaultValue: "40" },
@@ -108,7 +108,7 @@ function readVectorFrame(
   };
 }
 
-// Builds the real ADD_RECT/ADD_ELLIPSE/ADD_LINE/ADD_PATH action from the wizard's own collected field values -- the odp-slide counterpart of odg/page-detail.tsx's own applyAddKind, sharing the identical OdgBoxVectorInit/OdgLineVectorInit/OdgPathVectorInit shape (see this file's own VectorKind comment).
+// Builds the real ADD_RECT/ADD_ELLIPSE/ADD_LINE/ADD_PATH action from the wizard's own collected field values — the odp-slide counterpart of odg/page-detail.tsx's own applyAddKind, sharing the identical OdgBoxVectorInit/OdgLineVectorInit/OdgPathVectorInit shape (see this file's own VectorKind comment).
 function buildVectorAction(
   kind: VectorKind,
   slideIndex: number,
@@ -184,13 +184,13 @@ async function readImageForShape(path: string): Promise<{
   const format = imageFormatFromPath(path);
   if (format === undefined) {
     throw new Error(
-      `${path} does not look like a .png or .jpg/.jpeg file -- ADD_IMAGE only accepts those two formats`,
+      `${path} does not look like a .png or .jpg/.jpeg file — ADD_IMAGE only accepts those two formats`,
     );
   }
   return { format, bytes: new Uint8Array(await readFile(path)) };
 }
 
-// PptxSlide.shapes()/OdpSlide.shapes() never report a table graphicFrame/draw:frame at all -- it is invisible to that accessor by design (see documents.js's own doc comments) -- so a slide's own tables() need their own section in this screen's body list, separate from `shapes`, rather than being folded into the same array. `header` is skipped by the selectable-row-indices machinery below, mirroring paragraph-family.tsx's own ParagraphFamilyBodyList (which faces the identical "two separate enumeration accessors, no shared document-order index" problem for paragraphs/tables/lists).
+// PptxSlide.shapes()/OdpSlide.shapes() never report a table graphicFrame/draw:frame at all — it is invisible to that accessor by design (see documents.js's own doc comments) — so a slide's own tables() need their own section in this screen's body list, separate from `shapes`, rather than being folded into the same array. `header` is skipped by the selectable-row-indices machinery below, mirroring paragraph-family.tsx's own ParagraphFamilyBodyList (which faces the identical "two separate enumeration accessors, no shared document-order index" problem for paragraphs/tables/lists).
 interface ShapeRow {
   readonly kind: "shape";
   readonly index: number;
@@ -299,7 +299,7 @@ export function SlideDetailScreen(props: SlideDetailScreenProps): ReactElement {
     },
   });
 
-  // Only meaningful when `rows` is non-empty; ListView renders its own empty message before reading this prop when `rows` is empty, so -1 (a value no real row index can equal) is a safe "nothing to highlight" -- matching paragraph-family.tsx's own ParagraphFamilyBodyList convention exactly.
+  // Only meaningful when `rows` is non-empty; ListView renders its own empty message before reading this prop when `rows` is empty, so -1 (a value no real row index can equal) is a safe "nothing to highlight" — matching paragraph-family.tsx's own ParagraphFamilyBodyList convention exactly.
   const resolvedRowIndex = selectableRowIndices[selectedIndex];
   const listSelectedIndex = resolvedRowIndex ?? -1;
 
@@ -352,7 +352,7 @@ export function SlideDetailScreen(props: SlideDetailScreenProps): ReactElement {
     { isActive: !overlayOpen && addMode === "chooseKind" },
   );
 
-  // Notes editing dispatches SET_SLIDE_NOTES, which documents.js supports identically for pptx and odp (both PptxSlide and OdpSlide carry a real `.notes` getter/setter) -- so this key is available for either format, not gated to odp.
+  // Notes editing dispatches SET_SLIDE_NOTES, which documents.js supports identically for pptx and odp (both PptxSlide and OdpSlide carry a real `.notes` getter/setter) — so this key is available for either format, not gated to odp.
   useInput(
     (input) => {
       if (input === "n") {
@@ -415,18 +415,18 @@ export function SlideDetailScreen(props: SlideDetailScreenProps): ReactElement {
   return (
     <Box flexDirection="column">
       <Text bold>
-        Slide {slideIndex + 1} -- {shapes.length} shape
+        Slide {slideIndex + 1} — {shapes.length} shape
         {shapes.length === 1 ? "" : "s"}
       </Text>
       {slide === undefined ? (
         <Text color="yellow">
-          This slide no longer exists -- press Esc to go back
+          This slide no longer exists — press Esc to go back
         </Text>
       ) : (
         <ListView
           items={rows}
           selectedIndex={listSelectedIndex}
-          emptyMessage="No shapes yet -- press 'a' to add one"
+          emptyMessage="No shapes yet — press 'a' to add one"
           renderItem={(row, isSelected) => {
             if (row.kind === "tablesHeader") {
               return (

@@ -37,11 +37,11 @@ const OLE_OBJECT_REL =
 const PICTURE_GRAPHIC_URI =
   "http://schemas.openxmlformats.org/drawingml/2006/picture";
 
-// A genuine, minimal 1x1 transparent PNG -- real magic bytes, so sniffImageFormat actually recognises it, not a placeholder string.
+// A genuine, minimal 1x1 transparent PNG — real magic bytes, so sniffImageFormat actually recognises it, not a placeholder string.
 const TINY_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
-// wp:inline and wp:anchor share the identical wp:extent/wp:docPr/a:graphic/a:graphicData/pic:pic/pic:blipFill/a:blip shape -- only the outer container tag differs (and, for wp:anchor, the wp:positionH/wp:positionV elements this fixture doesn't set -- see the dedicated "wp:anchor floating image position" describe block below for those).
+// wp:inline and wp:anchor share the identical wp:extent/wp:docPr/a:graphic/a:graphicData/pic:pic/pic:blipFill/a:blip shape — only the outer container tag differs (and, for wp:anchor, the wp:positionH/wp:positionV elements this fixture doesn't set — see the dedicated "wp:anchor floating image position" describe block below for those).
 function drawingElement(
   containerTag: "wp:inline" | "wp:anchor",
   rId: string,
@@ -87,7 +87,7 @@ function asParagraph(block: ContentBlock | undefined): ContentParagraph {
   return block;
 }
 
-// The two construct-boundary markers have no sourcePath field at all (a boundary is not content), so reading one off an unnarrowed ContentBlock no longer type-checks -- this narrows past them for the assertions below, which only ever look at real content blocks.
+// The two construct-boundary markers have no sourcePath field at all (a boundary is not content), so reading one off an unnarrowed ContentBlock no longer type-checks — this narrows past them for the assertions below, which only ever look at real content blocks.
 function sourcePathOf(block: ContentBlock | undefined): string | undefined {
   if (
     block === undefined ||
@@ -387,7 +387,7 @@ describe("readDocxContent: style cascade", () => {
 
   it("resolves a theme font reference from the default style", () => {
     const doc = readDocxContent(buildFixturePackage());
-    // blocks: [0]=title [1]=pageBreak [2]=pageBreakPara [3]=hyperlinkPara [4]=the field's own constructStart [5]=fieldPara -- the field paragraph's run inherits Normal's asciiTheme reference (no style of its own).
+    // blocks: [0]=title [1]=pageBreak [2]=pageBreakPara [3]=hyperlinkPara [4]=the field's own constructStart [5]=fieldPara — the field paragraph's run inherits Normal's asciiTheme reference (no style of its own).
     const fieldPara = asParagraph(doc.sections[0]?.blocks[5]);
     expect(fieldPara.runs[0]?.fontFamily).toBe("Minor Font");
   });
@@ -661,7 +661,7 @@ describe("readDocxContent: verticalAlign and direction (w:vertAlign/w:rtl/w:bidi
   });
 
   it("reads a baseline vertAlign as the explicit override of an inherited position, stating nothing on the run", () => {
-    // The named character style supersedes its basedOn chain: the chain says superscript, the direct rPr turns it back off, and the resolved run carries no verticalAlign -- baseline, the schema's own spelling of the field's absence.
+    // The named character style supersedes its basedOn chain: the chain says superscript, the direct rPr turns it back off, and the resolved run carries no verticalAlign — baseline, the schema's own spelling of the field's absence.
     const styles = el("w:styles", {}, [
       el(
         "w:style",
@@ -1179,7 +1179,7 @@ describe("readDocxContent: legacy w:ffData form fields", () => {
     const paragraphRead = firstParagraph(
       readDocxContent(formFieldPackage(ffData, " FORMCHECKBOX ", "Yes")),
     );
-    // The form field is ONE construct -- a contentControl -- never a field construct beside it: the FORMCHECKBOX instruction is mechanically derivable from the control type, so emitting both would encode one occurrence twice.
+    // The form field is ONE construct — a contentControl — never a field construct beside it: the FORMCHECKBOX instruction is mechanically derivable from the control type, so emitting both would encode one occurrence twice.
     expect(paragraphRead.constructs).toEqual([
       {
         descriptor: {
@@ -1303,7 +1303,7 @@ describe("readDocxContent: images", () => {
     );
   });
 
-  it("reads a floating/anchored (wp:anchor) w:drawing as a real ContentImageBlock too, still placed in block flow at the point the w:drawing was encountered (floatPosition records the source's own anchored position separately -- see the dedicated describe block below; this fixture's own wp:anchor carries neither wp:positionH nor wp:positionV, so floatPosition stays absent here)", () => {
+  it("reads a floating/anchored (wp:anchor) w:drawing as a real ContentImageBlock too, still placed in block flow at the point the w:drawing was encountered (floatPosition records the source's own anchored position separately — see the dedicated describe block below; this fixture's own wp:anchor carries neither wp:positionH nor wp:positionV, so floatPosition stays absent here)", () => {
     const doc = readDocxContent(buildFixturePackage());
     const image = asImage(doc.sections[1]?.blocks[4]);
     expect(image.format).toBe("png");
@@ -1401,7 +1401,7 @@ describe("readDocxContent: lifted-image anchors (anchorRunIndex/anchorOffset)", 
       ]),
     ];
     const doc = readDocxContent(paragraphPackage(paragraph, parts));
-    // Runs as walked: [0] "See ", [1] "the proof" (hyperlink-wrapped), [2] the image's own empty run -- the anchor names run 1 at its full length.
+    // Runs as walked: [0] "See ", [1] "the proof" (hyperlink-wrapped), [2] the image's own empty run — the anchor names run 1 at its full length.
     const image = asImage(doc.sections[0]?.blocks[1]);
     expect(image.anchorRunIndex).toBe(1);
     expect(image.anchorOffset).toBe(9);
@@ -1421,7 +1421,7 @@ describe("readDocxContent: lifted-image anchors (anchorRunIndex/anchorOffset)", 
   });
 });
 
-// An inline OLE object's real-world spelling: a w:r carries a w:object whose w:dxaOrig/w:dyaOrig (twips) size it, whose v:shape > v:imagedata names the raster preview picture rendered in its place (a VML spelling this reader has no path for, so the preview contributes no image block), and whose o:OLEObject names the payload part through its own relationship. The payload relationship is parameterised so a test can point rIdOle at whatever part shape it needs (the ZIP-payload case targets the default embeddings/oleObject1.xlsx; the classic-OLE case retargets to a .bin; the linked case goes external) -- the fixture itself ships no embeddings part, so each test adds exactly the payload bytes it wants. extraRuns splices additional runs after the object run inside the same paragraph.
+// An inline OLE object's real-world spelling: a w:r carries a w:object whose w:dxaOrig/w:dyaOrig (twips) size it, whose v:shape > v:imagedata names the raster preview picture rendered in its place (a VML spelling this reader has no path for, so the preview contributes no image block), and whose o:OLEObject names the payload part through its own relationship. The payload relationship is parameterised so a test can point rIdOle at whatever part shape it needs (the ZIP-payload case targets the default embeddings/oleObject1.xlsx; the classic-OLE case retargets to a .bin; the linked case goes external) — the fixture itself ships no embeddings part, so each test adds exactly the payload bytes it wants. extraRuns splices additional runs after the object run inside the same paragraph.
 function oleObjectFixturePackage(
   oleRel: { target: string; external?: boolean },
   extraRuns: XmlElement[] = [],
@@ -1487,7 +1487,7 @@ describe("readDocxContent: embedded OLE objects", () => {
       base64: bytesToBase64(minimalXlsxBytes()),
     };
     const doc = readDocxContent(pkg);
-    // The paragraph contributes its own (run-text-empty) block, then the object's recovered content as a sibling -- the same lifting convention an inline image follows. The VML preview has no reader, so it adds no image block.
+    // The paragraph contributes its own (run-text-empty) block, then the object's recovered content as a sibling — the same lifting convention an inline image follows. The VML preview has no reader, so it adds no image block.
     expect(doc.sections[0]?.blocks).toHaveLength(2);
     const embedded = asEmbeddedObject(doc.sections[0]?.blocks[1]);
     expect(embedded.objectKind).toBe("spreadsheet");
@@ -1567,7 +1567,7 @@ describe("readDocxContent: embedded OLE objects", () => {
   });
 
   it("keeps a malformed compound-file .bin payload skipped, with no embedded block and no host-read failure", () => {
-    // rIdOle retargeted at a part whose bytes carry the OLE/CFB magic but no walkable structure -- the named CompoundFileFormatError this decode throws is a property of the embedded payload, degraded to nothing rather than failing the paragraph, section, or document around it (the #737 failure policy extended to the CFB gate).
+    // rIdOle retargeted at a part whose bytes carry the OLE/CFB magic but no walkable structure — the named CompoundFileFormatError this decode throws is a property of the embedded payload, degraded to nothing rather than failing the paragraph, section, or document around it (the #737 failure policy extended to the CFB gate).
     const pkg = oleObjectFixturePackage({
       target: "embeddings/oleObject1.bin",
     });
@@ -1589,7 +1589,7 @@ describe("readDocxContent: embedded OLE objects", () => {
   });
 
   it("skips an externally-linked OLE object (TargetMode External) without resolving its target", () => {
-    // A linked object's relationship target is a URI, not a package part -- the same part-lookup convention the image path applies leaves the paragraph as it was, and no ZIP detection ever runs against the link.
+    // A linked object's relationship target is a URI, not a package part — the same part-lookup convention the image path applies leaves the paragraph as it was, and no ZIP detection ever runs against the link.
     const pkg = oleObjectFixturePackage({
       target: "file:///C:/data/Book1.xlsx",
       external: true,
@@ -1599,7 +1599,7 @@ describe("readDocxContent: embedded OLE objects", () => {
   });
 
   it("skips a ZIP payload that is not a recognisable OOXML package without poisoning the host read", () => {
-    // A ZIP payload that fails to decode as one of the three OOXML flavours (here: a plain archive) is skipped exactly like a non-ZIP payload -- one bad embedded object can never fail the whole document read.
+    // A ZIP payload that fails to decode as one of the three OOXML flavours (here: a plain archive) is skipped exactly like a non-ZIP payload — one bad embedded object can never fail the whole document read.
     const pkg = oleObjectFixturePackage({ target: "embeddings/payload.zip" });
     pkg.parts["word/embeddings/payload.zip"] = {
       kind: "binary",
@@ -1632,7 +1632,7 @@ describe("readDocxContent: embedded OLE objects", () => {
   });
 });
 
-// Every element with the given tag anywhere in the node forest -- the write-side assertions below need to reach a w:object nested inside w:body > w:p > w:r, far below the part root.
+// Every element with the given tag anywhere in the node forest — the write-side assertions below need to reach a w:object nested inside w:body > w:p > w:r, far below the part root.
 function findAllElements(
   nodes: readonly XmlNode[],
   tag: string,
@@ -1825,7 +1825,7 @@ describe("embedded OLE objects: write-side round trip", () => {
   });
 
   it("round-trips a recovered presentation embed through an injected embedded-presentation serialiser", () => {
-    // The port (#742): ooxml.js has no PresentationML writer, but a caller one layer up does -- documents.js's buildPptxPackage -- and this package cannot depend on its own consumer. options.serialiseEmbeddedPresentation is the seam: the caller injects presentation-document -> pptx-bytes, and the writer serialises the embed exactly like an embedded workbook, into a real word/embeddings/oleObjectN.pptx part.
+    // The port (#742): ooxml.js has no PresentationML writer, but a caller one layer up does — documents.js's buildPptxPackage — and this package cannot depend on its own consumer. options.serialiseEmbeddedPresentation is the seam: the caller injects presentation-document -> pptx-bytes, and the writer serialises the embed exactly like an embedded workbook, into a real word/embeddings/oleObjectN.pptx part.
     const pkg = oleObjectFixturePackage({
       target: "embeddings/oleObject1.pptx",
     });
@@ -1858,7 +1858,7 @@ describe("embedded OLE objects: write-side round trip", () => {
       widthPt: 96,
       heightPt: 60,
     });
-    // The nested document is the genuinely decoded payload the serialiser produced -- minimalPptxBytes' one slide, its paragraph block intact.
+    // The nested document is the genuinely decoded payload the serialiser produced — minimalPptxBytes' one slide, its paragraph block intact.
     const slide =
       embedded.document.kind === "presentation"
         ? embedded.document.slides[0]
@@ -1895,7 +1895,7 @@ describe("embedded OLE objects: write-side round trip", () => {
   });
 
   it("refuses an embedded presentation document loudly rather than silently dropping the recovered sub-document", () => {
-    // ooxml.js has no pptx writer (PresentationML is read-only in this package), so a presentation embed -- which readDocxContent genuinely recovers -- has no bytes this writer can produce on its own. The reader's degrade-tier rule inverts at the write boundary: a builder asked for a document it cannot faithfully produce throws instead of writing a file that silently lost the embed. The injected serialiser is the remedy, and the previous test proves it; with none injected this throw is the documented boundary.
+    // ooxml.js has no pptx writer (PresentationML is read-only in this package), so a presentation embed — which readDocxContent genuinely recovers — has no bytes this writer can produce on its own. The reader's degrade-tier rule inverts at the write boundary: a builder asked for a document it cannot faithfully produce throws instead of writing a file that silently lost the embed. The injected serialiser is the remedy, and the previous test proves it; with none injected this throw is the documented boundary.
     const block: ContentEmbeddedObjectBlock = {
       kind: "embeddedObject",
       objectKind: "presentation",
@@ -1931,12 +1931,12 @@ describe("readDocxContent: malformed image geometry", () => {
       ],
     );
     const doc = readDocxContent(pkg);
-    // No embeddings part ships, so the object contributes nothing either -- the paragraph's own block is all that remains.
+    // No embeddings part ships, so the object contributes nothing either — the paragraph's own block is all that remains.
     expect(doc.sections[0]?.blocks).toHaveLength(1);
   });
 });
 
-// A wp:anchor whose wp:positionH/wp:positionV carry whatever position children the caller supplies -- everything else (extent, docPr, the picture chain, the relationship, the media part) is the identical minimal shape drawingElement builds above, just with the position elements spliced in.
+// A wp:anchor whose wp:positionH/wp:positionV carry whatever position children the caller supplies — everything else (extent, docPr, the picture chain, the relationship, the media part) is the identical minimal shape drawingElement builds above, just with the position elements spliced in.
 function anchoredImagePackage(
   positionH: XmlElement,
   positionV: XmlElement,
@@ -1987,7 +1987,7 @@ function anchoredImagePackage(
 }
 
 describe("readDocxContent: wp:anchor floating image position (ExaDev/documents.js#1087)", () => {
-  it("reads an offset-based position on both axes -- wp:posOffset, an EMU integer converted to points", () => {
+  it("reads an offset-based position on both axes — wp:posOffset, an EMU integer converted to points", () => {
     const pkg = anchoredImagePackage(
       el("wp:positionH", { relativeFrom: "page" }, [
         el("wp:posOffset", {}, [txt("914400")]), // 1in -> 72pt
@@ -2003,7 +2003,7 @@ describe("readDocxContent: wp:anchor floating image position (ExaDev/documents.j
     });
   });
 
-  it("reads an align-based position on both axes -- wp:align, a keyword", () => {
+  it("reads an align-based position on both axes — wp:align, a keyword", () => {
     const pkg = anchoredImagePackage(
       el("wp:positionH", { relativeFrom: "margin" }, [
         el("wp:align", {}, [txt("right")]),
@@ -2019,7 +2019,7 @@ describe("readDocxContent: wp:anchor floating image position (ExaDev/documents.j
     });
   });
 
-  it("reads one axis offset-based and the other align-based independently -- docx's own wp:positionH/wp:positionV choose per axis", () => {
+  it("reads one axis offset-based and the other align-based independently — docx's own wp:positionH/wp:positionV choose per axis", () => {
     const pkg = anchoredImagePackage(
       el("wp:positionH", { relativeFrom: "column" }, [
         el("wp:posOffset", {}, [txt("228600")]), // 0.25in -> 18pt
@@ -2226,7 +2226,7 @@ describe("readDocxContent: w:pBdr (direct paragraph border formatting)", () => {
     });
   });
 
-  it("has no w:start/w:end RTL-alias fallback, unlike w:tcBorders -- a paragraph carrying only those is read as having no left/right border", () => {
+  it("has no w:start/w:end RTL-alias fallback, unlike w:tcBorders — a paragraph carrying only those is read as having no left/right border", () => {
     const paragraph = el("w:p", {}, [
       el("w:pPr", {}, [
         el("w:pBdr", {}, [
@@ -2377,7 +2377,7 @@ describe("readDocxContent: a mid-run page-type w:br splits the paragraph", () =>
     ]);
   });
 
-  it("does not split on a w:br with no @w:type (textWrapping, the default) -- it still reads back as a literal newline", () => {
+  it("does not split on a w:br with no @w:type (textWrapping, the default) — it still reads back as a literal newline", () => {
     const paragraph = el("w:p", {}, [
       el("w:r", {}, [
         el("w:t", { "xml:space": "preserve" }, [txt("before")]),
@@ -2405,7 +2405,7 @@ describe("readDocxContent: a mid-run page-type w:br splits the paragraph", () =>
     expect(asParagraph(blocks[0]).runs[0]?.text).toBe("before\nafter");
   });
 
-  it("splits only on the FIRST page-type break in the paragraph -- a second one reads back as an ordinary newline in the after-half", () => {
+  it("splits only on the FIRST page-type break in the paragraph — a second one reads back as an ordinary newline in the after-half", () => {
     const paragraph = el("w:p", {}, [
       el("w:r", {}, [
         el("w:t", { "xml:space": "preserve" }, [txt("first")]),
@@ -2463,7 +2463,7 @@ describe("readDocxContent: a mid-run page-type w:br splits the paragraph", () =>
     expect(asParagraph(blocks[0]).constructs).toBeUndefined();
     const after = asParagraph(blocks[2]);
     expect(after.runs.map((r) => r.text)).toEqual(["after", "bookmarked"]);
-    // "bookmarked" is re-indexed run 1 in the after-half's own numbering (afterHalf itself occupies run 0), not run 0 -- the after-half's own run array is [afterHalf, ...original runs from pageBreak.runIndex+1 onward].
+    // "bookmarked" is re-indexed run 1 in the after-half's own numbering (afterHalf itself occupies run 0), not run 0 — the after-half's own run array is [afterHalf, ...original runs from pageBreak.runIndex+1 onward].
     expect(after.constructs).toEqual([
       {
         descriptor: { kind: "anchor", anchorType: "bookmark", name: "late" },
@@ -2705,7 +2705,7 @@ describe("readDocxContent: header/footer structure", () => {
       "word/header2.xml",
       "word/header9.xml",
     ]);
-    // The orphan joins no section's references -- sectionHeaderFooters keeps spelling exactly what the sections spell.
+    // The orphan joins no section's references — sectionHeaderFooters keeps spelling exactly what the sections spell.
     expect(doc.sectionHeaderFooters).toEqual([
       {
         header: { default: "word/header1.xml" },
@@ -3109,7 +3109,7 @@ describe("readDocxContent: a complex field spanning multiple paragraphs (the TOC
       kind: "field",
       instruction: " TOC ",
     });
-    // Every paragraph between begin and end -- including the begin/code/separate/end paragraphs' own, mostly-empty, paragraph blocks -- stays inside the marker pair; only the result paragraph carries real text.
+    // Every paragraph between begin and end — including the begin/code/separate/end paragraphs' own, mostly-empty, paragraph blocks — stays inside the marker pair; only the result paragraph carries real text.
     const resultParagraph = blocks.find(
       (block) =>
         block.kind === "paragraph" && block.runs[0]?.text === "Chapter 1 ... 1",
@@ -3759,7 +3759,7 @@ describe("readDocxContent: drawing geometry, alt text, and float-position edges"
     };
     const doc = readDocxContent(pkg);
     expect(doc.sections[0]?.blocks).toHaveLength(1);
-    // The object's own run still emits (empty text -- a w:object contributes no run text), but no embedded block follows it.
+    // The object's own run still emits (empty text — a w:object contributes no run text), but no embedded block follows it.
     expect(
       asParagraph(doc.sections[0]?.blocks[0]).runs.map((r) => r.text),
     ).toEqual(["", "after"]);
@@ -4055,7 +4055,7 @@ describe("readDocxContent: complex-field instruction accumulation", () => {
 });
 
 describe("readDocxContent: discovery-order tie-breaks between constructs sharing one extent range", () => {
-  // Several constructs can bracket the identical block range (two bookmarks around one paragraph, a bookmark around a content control, a content control around a tracked paragraph). Their emission order at the shared boundary is the source's own discovery order, carried by the walk's order counter -- these tests pin that order exactly, because a marker pair emitted in the wrong order decodes to the wrong nesting.
+  // Several constructs can bracket the identical block range (two bookmarks around one paragraph, a bookmark around a content control, a content control around a tracked paragraph). Their emission order at the shared boundary is the source's own discovery order, carried by the walk's order counter — these tests pin that order exactly, because a marker pair emitted in the wrong order decodes to the wrong nesting.
   function flowDoc(children: XmlElement[]): ReturnType<typeof readDocxContent> {
     const body = el("w:body", {}, [
       ...children,

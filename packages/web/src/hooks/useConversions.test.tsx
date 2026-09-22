@@ -25,7 +25,7 @@ describe("useConversions", () => {
     });
     expect(result.current.data).toEqual(pairs);
     expect(client.formats.listConversions).toHaveBeenCalledTimes(1);
-    // Pins the exact queryKey the hook registers under, not just that it eventually resolves data -- a mutated key would still let the query above succeed, but would cache the result under a different key from the one this asserts against.
+    // Pins the exact queryKey the hook registers under, not just that it eventually resolves data — a mutated key would still let the query above succeed, but would cache the result under a different key from the one this asserts against.
     expect(queryClient.getQueryData(["formats", "listConversions"])).toEqual(
       pairs,
     );
@@ -46,7 +46,7 @@ describe("useDocumentFormats", () => {
       expect(result.current.isSuccess).toBe(true);
     });
     expect(result.current.data).toEqual(["docx", "pdf"]);
-    // Pins the exact queryKey the hook registers under -- see the identical comment in the useConversions test above.
+    // Pins the exact queryKey the hook registers under — see the identical comment in the useConversions test above.
     expect(queryClient.getQueryData(["formats", "list"])).toEqual([
       "docx",
       "pdf",

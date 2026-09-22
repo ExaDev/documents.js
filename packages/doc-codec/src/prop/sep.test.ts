@@ -70,7 +70,7 @@ describe("applySectionSprms", () => {
   });
 
   it("falls through the switch's own default case for a section-family sprm this reader does not convert", () => {
-    // sgc bits 10-12 of 0x1000 decode to SGC.section (4), but the full value matches none of the SPRM_S_* opcodes this reader handles -- the one way to actually reach the switch's default case rather than the sgc guard above it.
+    // sgc bits 10-12 of 0x1000 decode to SGC.section (4), but the full value matches none of the SPRM_S_* opcodes this reader handles — the one way to actually reach the switch's default case rather than the sgc guard above it.
     const result = applySectionSprms([prl(0x1000, [0])], {
       pageWidthPt: 400,
     });
@@ -128,8 +128,8 @@ describe("readAllSectionProperties", () => {
     const view = new DataView(table.buffer);
     view.setUint32(0, 0, true); // aCp[0].
     view.setUint32(4, 0, true); // aCp[1] (ccpText).
-    view.setUint32(10, 0, true); // sed.fcSepx -- points at wordDocument offset 0.
-    view.setUint32(16, 0xffffffff, true); // sed.fcMpr -- ignored.
+    view.setUint32(10, 0, true); // sed.fcSepx — points at wordDocument offset 0.
+    view.setUint32(16, 0xffffffff, true); // sed.fcMpr — ignored.
 
     const wordDocument = new Uint8Array(4);
     new DataView(wordDocument.buffer).setUint16(0, 10, true); // Sepx.cb declares 10 bytes, but only 2 remain after it.
@@ -148,10 +148,10 @@ describe("readAllSectionProperties", () => {
     const view = new DataView(table.buffer);
     view.setUint32(0, 0, true); // aCp[0].
     view.setUint32(4, 0, true); // aCp[1] (ccpText).
-    view.setUint16(8, 0, true); // sed.fn -- ignored.
-    view.setUint32(10, 0, true); // sed.fcSepx -- points at wordDocument offset 0.
-    view.setUint16(14, 0, true); // sed.fnMpr -- ignored.
-    view.setUint32(16, 0xffffffff, true); // sed.fcMpr -- ignored.
+    view.setUint16(8, 0, true); // sed.fn — ignored.
+    view.setUint32(10, 0, true); // sed.fcSepx — points at wordDocument offset 0.
+    view.setUint16(14, 0, true); // sed.fnMpr — ignored.
+    view.setUint32(16, 0xffffffff, true); // sed.fcMpr — ignored.
 
     const wordDocument = new Uint8Array(6);
     const wordView = new DataView(wordDocument.buffer);

@@ -1,4 +1,4 @@
-// A hand-written reader for the Word Binary File Format ([MS-DOC], .doc) against the shared document-schema.js content pivot. The layers below are exported individually as well as through the top-level read, because a .doc's structures are addressed by offsets a consumer sometimes needs to inspect directly -- and because each one is independently testable against the specification's own field tables, which is how they were built.
+// A hand-written reader for the Word Binary File Format ([MS-DOC], .doc) against the shared document-schema.js content pivot. The layers below are exported individually as well as through the top-level read, because a .doc's structures are addressed by offsets a consumer sometimes needs to inspect directly — and because each one is independently testable against the specification's own field tables, which is how they were built.
 export * from "./errors";
 export * from "./bytes";
 // bytesToBase64/base64ToBytes were this package's own copy of the family-wide base64 helpers before byte-codec held one for everybody; they stay on this barrel because they have always been part of its published surface.

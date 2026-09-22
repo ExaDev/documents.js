@@ -11,7 +11,7 @@ import {
 } from "../test-support/escher";
 import { ESCHER_BLIP_JPEG_B, ESCHER_DGG_CONTAINER } from "./escher-constants";
 
-// A minimal but genuinely valid 1x1 PNG (a real signature, IHDR, IDAT, IEND chain) -- readBlipStore's own job is locating and slicing these bytes out of the surrounding Escher/BSE framing, not validating PNG structure, so a real image is what proves the slicing lands on the right byte offset rather than off by the header size.
+// A minimal but genuinely valid 1x1 PNG (a real signature, IHDR, IDAT, IEND chain) — readBlipStore's own job is locating and slicing these bytes out of the surrounding Escher/BSE framing, not validating PNG structure, so a real image is what proves the slicing lands on the right byte offset rather than off by the header size.
 const PNG_BYTES = [
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49,
   0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02,
@@ -122,7 +122,7 @@ describe("readBlipStore", () => {
   });
 
   it("skips every decoy root that is a container OR has the right recType but not both", () => {
-    // If the dgg-container predicate ever collapsed its own `kind === "container" && recType === DGG` into an OR, either decoy below would be mistaken for the real dgg container -- both come first, so a wrongly-permissive predicate would pick one of them and never reach the real one that actually holds the image.
+    // If the dgg-container predicate ever collapsed its own `kind === "container" && recType === DGG` into an OR, either decoy below would be mistaken for the real dgg container — both come first, so a wrongly-permissive predicate would pick one of them and never reach the real one that actually holds the image.
     const decoyContainer = escherContainer(0x1234, 0, []);
     const decoyAtom = escherAtom(ESCHER_DGG_CONTAINER, 0, []);
     const realDgg = escherContainer(ESCHER_DGG_CONTAINER, 0, [
@@ -159,7 +159,7 @@ describe("readBlipStore", () => {
   });
 
   it("skips exactly cbName's own nameData bytes before the embedded blip, distinguishing that skip from every other one", () => {
-    // Every fixed field before cbName carries its own distinct, nonzero marker byte(s): dropping any single one of the reader's cursor.skip calls shifts every later read, so cbName -- and therefore where the embedded blip actually starts -- would be read from the wrong offset and fail to decode as the real PNG below.
+    // Every fixed field before cbName carries its own distinct, nonzero marker byte(s): dropping any single one of the reader's cursor.skip calls shifts every later read, so cbName — and therefore where the embedded blip actually starts — would be read from the wrong offset and fail to decode as the real PNG below.
     const embedded = embeddedBlip(0xf01e, 0x6e0, PNG_BYTES);
     const nameData = [0xa1, 0xa2, 0xa3, 0xa4, 0xa5];
     const bse = [
@@ -214,7 +214,7 @@ describe("readBlipStore", () => {
   });
 
   it("still resolves an (empty) image at exactly the UID-plus-tag boundary, one byte above where it's refused", () => {
-    // Exactly 16 bytes of rgbUid plus the 1-byte tag, with no file bytes at all -- the boundary a `<` vs `<=` mutation on the header-size check would disagree about.
+    // Exactly 16 bytes of rgbUid plus the 1-byte tag, with no file bytes at all — the boundary a `<` vs `<=` mutation on the header-size check would disagree about.
     const blip = escherAtom(0xf01e, 0x6e0, new Array<number>(17).fill(0));
     const store = readBlipStore(drawingGroupBytes([bseEntry(blip)]));
 

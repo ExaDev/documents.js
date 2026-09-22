@@ -12,7 +12,7 @@ import {
   readOdfFormulaMathMl,
 } from "./read";
 
-// The math root below is copied, element-for-element, from a GENUINE LibreOffice 26.2 .odf's own content.xml -- built via a headless UNO Basic macro (private:factory/smath, Formula set to "f(x) = {x^2} over {2} + sqrt {x}", saved with the "math8" filter) and inspected directly after unzipping the result. It is deliberately NOT hand-simplified: the real fence/stretchy/form attributes on the parenthesis <mo> elements, the nested <mrow> wrapping, and the exact <semantics>/<annotation> shape are all real LibreOffice output, confirming both (a) a bare "math" root tag with a DEFAULT xmlns (not a "math:" prefix -- see read.ts's own top-of-file note) and (b) a real StarMath annotation nested two levels down (<math><semantics><annotation>).
+// The math root below is copied, element-for-element, from a GENUINE LibreOffice 26.2 .odf's own content.xml — built via a headless UNO Basic macro (private:factory/smath, Formula set to "f(x) = {x^2} over {2} + sqrt {x}", saved with the "math8" filter) and inspected directly after unzipping the result. It is deliberately NOT hand-simplified: the real fence/stretchy/form attributes on the parenthesis <mo> elements, the nested <mrow> wrapping, and the exact <semantics>/<annotation> shape are all real LibreOffice output, confirming both (a) a bare "math" root tag with a DEFAULT xmlns (not a "math:" prefix — see read.ts's own top-of-file note) and (b) a real StarMath annotation nested two levels down (<math><semantics><annotation>).
 function realFormulaMathRoot(): XmlElement {
   return el(
     "math",
@@ -100,7 +100,7 @@ describe("readOdfFormulaMathMl", () => {
     if (semantics?.type !== "element" || semantics.tag !== "semantics") {
       throw new Error("expected a semantics element as the sole mathml child");
     }
-    // Locate msup (superscript, x^2) and mfrac (fraction) and msqrt (square root) nested inside -- proving real, multi-level MathML structure survives the read, not just a flat single element.
+    // Locate msup (superscript, x^2) and mfrac (fraction) and msqrt (square root) nested inside — proving real, multi-level MathML structure survives the read, not just a flat single element.
     const json = JSON.stringify(semantics);
     expect(json).toContain('"tag":"msup"');
     expect(json).toContain('"tag":"mfrac"');
@@ -124,7 +124,7 @@ describe("readOdfFormulaMathMl", () => {
     expect(readOdfFormulaMathMl(pkg).metadata).toEqual({});
   });
 
-  it("leaves starMath undefined for plain presentation MathML with no semantics/annotation wrapper -- e.g. hand-authored or third-party-produced content.xml, never genuine LibreOffice-Math output (see read.ts's own top-of-file note)", () => {
+  it("leaves starMath undefined for plain presentation MathML with no semantics/annotation wrapper — e.g. hand-authored or third-party-produced content.xml, never genuine LibreOffice-Math output (see read.ts's own top-of-file note)", () => {
     const pkg: Package = {
       parts: {
         "content.xml": {
@@ -181,7 +181,7 @@ describe("readOdfFormulaMathMl", () => {
     expect(readOdfFormulaMathMl(pkg).starMath).toBeUndefined();
   });
 
-  // Real LibreOffice output -- both a standalone .odf and a Math object embedded inside a real .odt (verified via a headless UNO macro embedding a TextEmbeddedObject with Math's own CLSID) -- never wraps content.xml's math root in office:document-content; see read.ts's own top-of-file note. The two cases below are therefore purely defensive per this reader's own design brief, not verified against any real producer's output.
+  // Real LibreOffice output — both a standalone .odf and a Math object embedded inside a real .odt (verified via a headless UNO macro embedding a TextEmbeddedObject with Math's own CLSID) — never wraps content.xml's math root in office:document-content; see read.ts's own top-of-file note. The two cases below are therefore purely defensive per this reader's own design brief, not verified against any real producer's output.
 
   it("defensively finds a literal \"math:math\"-prefixed root at content.xml's own top level (never observed in real output, but matches ns.ts's own math: prefix convention)", () => {
     const pkg: Package = {

@@ -1,8 +1,8 @@
 // The block phase's per-line cursor: a thin, block-algorithm-shaped view over src/scan's own MarkdownScanCursor, constructed fresh for each source line.
 //
-// Why per line rather than one cursor over the whole document: CommonMark's tab rule is defined in terms of tab STOPS measured from the start of the line ("tabs behave as if they were replaced by spaces with a tab stop of 4 characters"), and the block algorithm consumes a line in column terms -- strip a blockquote's `>` and one following column, strip a list item's content indent, strip four columns for indented code -- with each strip able to land in the MIDDLE of a tab's own expansion. MarkdownScanCursor models exactly that (it advances one column at a time and only passes the tab character once every one of its columns is consumed), so a cursor per line, starting at column 0, is both the correct tab-stop origin and the correct unit of work.
+// Why per line rather than one cursor over the whole document: CommonMark's tab rule is defined in terms of tab STOPS measured from the start of the line ("tabs behave as if they were replaced by spaces with a tab stop of 4 characters"), and the block algorithm consumes a line in column terms — strip a blockquote's `>` and one following column, strip a list item's content indent, strip four columns for indented code — with each strip able to land in the MIDDLE of a tab's own expansion. MarkdownScanCursor models exactly that (it advances one column at a time and only passes the tab character once every one of its columns is consumed), so a cursor per line, starting at column 0, is both the correct tab-stop origin and the correct unit of work.
 //
-// What this adds on top of the scanner: the three derived quantities every continuation rule and block start is written against -- where the line's next non-space character is, how many columns of indentation precede it, and whether the line is blank -- plus `rest()`, the "what is left of this line, with a partially consumed tab's remaining columns materialised as real spaces" operation that turns a cursor position back into the text a leaf block stores.
+// What this adds on top of the scanner: the three derived quantities every continuation rule and block start is written against — where the line's next non-space character is, how many columns of indentation precede it, and whether the line is blank — plus `rest()`, the "what is left of this line, with a partially consumed tab's remaining columns materialised as real spaces" operation that turns a cursor position back into the text a leaf block stores.
 
 import type { MarkdownScanMark } from "../scan/scan";
 import { MarkdownScanCursor } from "../scan/scan";
@@ -77,7 +77,7 @@ export class LineCursor {
     this.cursor.reset(this.nextNonspaceMark);
   }
 
-  // Advances up to `columns` columns, stopping at end of line. A tab straddling the target is consumed only as far as needed, leaving its remaining columns for rest() to materialise -- which is exactly how `>\tfoo` puts three columns of indentation, not a whole tab, into the block quote's content.
+  // Advances up to `columns` columns, stopping at end of line. A tab straddling the target is consumed only as far as needed, leaving its remaining columns for rest() to materialise — which is exactly how `>\tfoo` puts three columns of indentation, not a whole tab, into the block quote's content.
   advance(columns: number): void {
     // No early exit at end of line: MarkdownScanCursor.next() is already a side-effect-free no-op once rawOffset reaches the source length (src/scan/scan.ts), so looping the remaining count down regardless produces the identical end state as returning early — an early-return branch here would be unobservable by any test, on purpose or not.
     for (let remaining = columns; remaining > 0; remaining -= 1) {
@@ -85,7 +85,7 @@ export class LineCursor {
     }
   }
 
-  // Consumes the whole remainder of the line -- what a block start that owns its entire line (an ATX heading, a thematic break, a setext underline) does once it has taken what it needs.
+  // Consumes the whole remainder of the line — what a block start that owns its entire line (an ATX heading, a thematic break, a setext underline) does once it has taken what it needs.
   advanceToEndOfLine(): void {
     while (this.cursor.next() !== undefined) {
       // Every column of the line is structure the block start has already accounted for; nothing here is content.
@@ -103,7 +103,7 @@ export class LineCursor {
     return this.text.slice(mark.rawOffset);
   }
 
-  // Everything from the line's next non-space character to the end of the line -- what every block-start matcher pattern-matches against.
+  // Everything from the line's next non-space character to the end of the line — what every block-start matcher pattern-matches against.
   restFromNextNonspace(): string {
     return this.text.slice(this.nextNonspaceMark.rawOffset);
   }

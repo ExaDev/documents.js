@@ -16,19 +16,19 @@ import {
 
 import type { BlockCursor } from "./cursor";
 
-// The colour, border/fill, and alignment vocabulary an XF record's trailing CellXF/StyleXF payload carries ([MS-XLS] 2.4.353), and the workbook-wide Palette record ([MS-XLS] 2.4.188) its icv fields resolve through. This is the one place the bit layout of that trailing payload's leading alignment word and its border/fill words is packed or unpacked -- workbook/globals.ts's readCellFormat unpacks it on read, biff/xf-writer.ts's writeCellXfRecord packs it on write, and both call into the same functions here rather than each carrying an independent copy of the layout.
+// The colour, border/fill, and alignment vocabulary an XF record's trailing CellXF/StyleXF payload carries ([MS-XLS] 2.4.353), and the workbook-wide Palette record ([MS-XLS] 2.4.188) its icv fields resolve through. This is the one place the bit layout of that trailing payload's leading alignment word and its border/fill words is packed or unpacked — workbook/globals.ts's readCellFormat unpacks it on read, biff/xf-writer.ts's writeCellXfRecord packs it on write, and both call into the same functions here rather than each carrying an independent copy of the layout.
 //
-// Deliberately still out of scope: per-cell fonts, matching ooxml.js's own xlsx reader -- this package has never modelled a per-cell font, and ContentSheetCell has no field for one.
+// Deliberately still out of scope: per-cell fonts, matching ooxml.js's own xlsx reader — this package has never modelled a per-cell font, and ContentSheetCell has no field for one.
 
 // --- FillPattern ([MS-XLS] "FillPattern" enumeration) ---
 
-/** FLSNULL: no fill pattern -- the cell's fill colour fields carry no meaning. */
+/** FLSNULL: no fill pattern — the cell's fill colour fields carry no meaning. */
 export const FILL_PATTERN_NONE = 0x00;
-/** FLSSOLID: a solid fill -- "If this value is 1 ... then only icvFore is rendered" ([MS-XLS] CellXF). */
+/** FLSSOLID: a solid fill — "If this value is 1 ... then only icvFore is rendered" ([MS-XLS] CellXF). */
 export const FILL_PATTERN_SOLID = 0x01;
 
 /**
- * Every other named FillPattern value ([MS-XLS]/[MS-XLSB] "FillPattern" enumeration, 0x02-0x12), mapped onto the ContentCellPatternType name document-schema.js's own ContentCellPatternTypeSchema gives that same ECMA-376 ST_PatternType token verbatim -- this is the identical vocabulary, values 0x02 (FLSMEDGRAY, "50% gray") through 0x12 (FLSGRAY0625, "6.25% gray") mapping onto ST_PatternType's mediumGray/darkGray/lightGray/darkHorizontal/darkVertical/darkDown/darkUp/darkGrid/darkTrellis/lightHorizontal/lightVertical/lightDown/lightUp/lightGrid/lightTrellis/gray125/gray0625 in that exact order (see ContentCellPatternTypeSchema's own top comment for the full citation). Unlike doc-codec's Ipat table, every value in this contiguous range names a real pattern -- there is no ipatNil/ipatPctNew*-style gap to skip.
+ * Every other named FillPattern value ([MS-XLS]/[MS-XLSB] "FillPattern" enumeration, 0x02-0x12), mapped onto the ContentCellPatternType name document-schema.js's own ContentCellPatternTypeSchema gives that same ECMA-376 ST_PatternType token verbatim — this is the identical vocabulary, values 0x02 (FLSMEDGRAY, "50% gray") through 0x12 (FLSGRAY0625, "6.25% gray") mapping onto ST_PatternType's mediumGray/darkGray/lightGray/darkHorizontal/darkVertical/darkDown/darkUp/darkGrid/darkTrellis/lightHorizontal/lightVertical/lightDown/lightUp/lightGrid/lightTrellis/gray125/gray0625 in that exact order (see ContentCellPatternTypeSchema's own top comment for the full citation). Unlike doc-codec's Ipat table, every value in this contiguous range names a real pattern — there is no ipatNil/ipatPctNew*-style gap to skip.
  */
 const FILL_PATTERN_TO_PATTERN_TYPE: Readonly<
   Record<number, ContentCellPatternType>
@@ -52,7 +52,7 @@ const FILL_PATTERN_TO_PATTERN_TYPE: Readonly<
   0x12: "gray0625",
 };
 
-/** The inverse of FILL_PATTERN_TO_PATTERN_TYPE, built from it rather than restated by hand so the two can never drift apart. Every ContentCellPatternType this package's own writer is ever asked to state has an entry, since the SpreadsheetML half of the shared vocabulary is exactly FILL_PATTERN_TO_PATTERN_TYPE's own value set -- the WordprocessingML-only members (the percentN family and the stripe/cross families ST_Shd names) are absent, FillPattern having no equivalent for them at all. */
+/** The inverse of FILL_PATTERN_TO_PATTERN_TYPE, built from it rather than restated by hand so the two can never drift apart. Every ContentCellPatternType this package's own writer is ever asked to state has an entry, since the SpreadsheetML half of the shared vocabulary is exactly FILL_PATTERN_TO_PATTERN_TYPE's own value set — the WordprocessingML-only members (the percentN family and the stripe/cross families ST_Shd names) are absent, FillPattern having no equivalent for them at all. */
 export const PATTERN_TYPE_TO_FILL_PATTERN: ReadonlyMap<
   ContentCellPatternType,
   number
@@ -72,12 +72,12 @@ const ALC_CENTER = 0x2;
 const ALC_RIGHT = 0x3;
 const ALC_JUSTIFY = 0x5;
 
-// VertAlign (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/1e9eb7d3-0cd8-42a3-af1e-f523105a5e93): ALCVTOP(0)/ALCVCTR(1)/ALCVBOT(2) are the three members the functions below map to or from -- ALCVBOT is the default this package's own schema documents for an absent verticalAlignment, matching xf-writer.ts's own VERT_ALIGN_BOTTOM. ALCVJUST(3)/ALCVDIST(4) are real VertAlign members with no ContentSheetCell.verticalAlignment counterpart: left unread, the identical policy ALCFILL/ALCCONTCTR/ALCDIST get above.
+// VertAlign (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/1e9eb7d3-0cd8-42a3-af1e-f523105a5e93): ALCVTOP(0)/ALCVCTR(1)/ALCVBOT(2) are the three members the functions below map to or from — ALCVBOT is the default this package's own schema documents for an absent verticalAlignment, matching xf-writer.ts's own VERT_ALIGN_BOTTOM. ALCVJUST(3)/ALCVDIST(4) are real VertAlign members with no ContentSheetCell.verticalAlignment counterpart: left unread, the identical policy ALCFILL/ALCCONTCTR/ALCDIST get above.
 const ALCV_TOP = 0x0;
 const ALCV_CENTER = 0x1;
 const ALCV_BOTTOM = 0x2;
 
-/** alc (a CellXF/StyleXF payload's word1, bits 0-2) -> ContentSheetCell.alignment, or undefined for ALCGEN (the value-kind default this field being absent already requests) and for the three HorizAlign members (ALCFILL/ALCCONTCTR/ALCDIST) Alignment has no member for -- matching ooxml.js's readHorizontalAlignment policy of only the four direct members surviving. */
+/** alc (a CellXF/StyleXF payload's word1, bits 0-2) -> ContentSheetCell.alignment, or undefined for ALCGEN (the value-kind default this field being absent already requests) and for the three HorizAlign members (ALCFILL/ALCCONTCTR/ALCDIST) Alignment has no member for — matching ooxml.js's readHorizontalAlignment policy of only the four direct members surviving. */
 export function resolveHorizontalAlignment(alc: number): Alignment | undefined {
   switch (alc) {
     case ALC_LEFT:
@@ -93,7 +93,7 @@ export function resolveHorizontalAlignment(alc: number): Alignment | undefined {
   }
 }
 
-/** ContentSheetCell.alignment -> the alc token to pack into word1 -- undefined maps to ALCGEN, the "use the value-kind default" token every genuinely unaligned cell already carried before this module modelled alignment at all. */
+/** ContentSheetCell.alignment -> the alc token to pack into word1 — undefined maps to ALCGEN, the "use the value-kind default" token every genuinely unaligned cell already carried before this module modelled alignment at all. */
 export function horizAlignTokenFor(alignment: Alignment | undefined): number {
   switch (alignment) {
     case "left":
@@ -109,7 +109,7 @@ export function horizAlignTokenFor(alignment: Alignment | undefined): number {
   }
 }
 
-/** alcV (word1, bits 4-6) -> ContentSheetCell.verticalAlignment, or undefined for ALCVBOT (the schema's own documented default for an absent verticalAlignment) and for the two VertAlign members (ALCVJUST/ALCVDIST) the schema has no member for -- matching ooxml.js's readVerticalAlignment policy. */
+/** alcV (word1, bits 4-6) -> ContentSheetCell.verticalAlignment, or undefined for ALCVBOT (the schema's own documented default for an absent verticalAlignment) and for the two VertAlign members (ALCVJUST/ALCVDIST) the schema has no member for — matching ooxml.js's readVerticalAlignment policy. */
 export function resolveVerticalAlignment(
   alcV: number,
 ): "top" | "middle" | "bottom" | undefined {
@@ -123,7 +123,7 @@ export function resolveVerticalAlignment(
   }
 }
 
-/** ContentSheetCell.verticalAlignment -> the alcV token to pack into word1 -- undefined (meaning 'bottom', the schema's own documented default) and the literal 'bottom' both map to ALCVBOT, exactly what an unaligned cell already carried before this module modelled alignment at all. */
+/** ContentSheetCell.verticalAlignment -> the alcV token to pack into word1 — undefined (meaning 'bottom', the schema's own documented default) and the literal 'bottom' both map to ALCVBOT, exactly what an unaligned cell already carried before this module modelled alignment at all. */
 export function vertAlignTokenFor(
   verticalAlignment: "top" | "middle" | "bottom" | undefined,
 ): number {
@@ -137,7 +137,7 @@ export function vertAlignTokenFor(
   }
 }
 
-/** The alignment fields word1's alc/alcV carry, read or write side alike -- undefined in either field means the value-kind default (horizontal) or ALCVBOT (vertical), the identical meaning ContentSheetCell.alignment/verticalAlignment being absent already carries. */
+/** The alignment fields word1's alc/alcV carry, read or write side alike — undefined in either field means the value-kind default (horizontal) or ALCVBOT (vertical), the identical meaning ContentSheetCell.alignment/verticalAlignment being absent already carries. */
 export interface XfAlignmentFields {
   readonly horizontal: Alignment | undefined;
   readonly vertical: "top" | "middle" | "bottom" | undefined;
@@ -172,7 +172,7 @@ function rgb255(r: number, g: number, b: number): Color {
   return { r: r / RGB_BYTE_MAX, g: g / RGB_BYTE_MAX, b: b / RGB_BYTE_MAX };
 }
 
-/** Icv values 0x00-0x07: the eight fixed built-in colour constants every BIFF8 reader recognises regardless of a Palette record. This package's own writer never emits one of these (IcvXF's own field documentation: "This value SHOULD NOT be ... less than or equal to 0x07" -- the default-palette table below duplicates all eight at icv 8-15, which is what this writer uses instead), but a real third-party file may still carry one, so the read side resolves them. */
+/** Icv values 0x00-0x07: the eight fixed built-in colour constants every BIFF8 reader recognises regardless of a Palette record. This package's own writer never emits one of these (IcvXF's own field documentation: "This value SHOULD NOT be ... less than or equal to 0x07" — the default-palette table below duplicates all eight at icv 8-15, which is what this writer uses instead), but a real third-party file may still carry one, so the read side resolves them. */
 const FIXED_COLOR_TABLE: readonly Color[] = [
   rgb255(0, 0, 0), // 0x00 Black
   rgb255(255, 255, 255), // 0x01 White
@@ -184,12 +184,12 @@ const FIXED_COLOR_TABLE: readonly Color[] = [
   rgb255(0, 255, 255), // 0x07 Cyan
 ];
 
-/** icv 8-63's own base offset: icv 8 is rgColor[0] of a Palette record (or the default table's own entry 0) -- [MS-XLS] "Icv"'s own colour-table layout. */
+/** icv 8-63's own base offset: icv 8 is rgColor[0] of a Palette record (or the default table's own entry 0) — [MS-XLS] "Icv"'s own colour-table layout. */
 export const PALETTE_BASE_ICV = 0x08;
 /** A Palette record's own fixed entry count ([MS-XLS] 2.4.188: "The value MUST be 56"). */
 export const PALETTE_ENTRY_COUNT = 56;
 
-/** The 56-entry default colour table icv 8-63 resolve through when no Palette record is present ([MS-XLS] "Icv"'s own default-red/green/blue columns), in icv order (index 0 = icv 8). Entries 0-7 duplicate the eight fixed colours above at their own icv+8 position -- the reason this package's writer allocates a fixed colour there rather than at icv 0-7 directly. */
+/** The 56-entry default colour table icv 8-63 resolve through when no Palette record is present ([MS-XLS] "Icv"'s own default-red/green/blue columns), in icv order (index 0 = icv 8). Entries 0-7 duplicate the eight fixed colours above at their own icv+8 position — the reason this package's writer allocates a fixed colour there rather than at icv 0-7 directly. */
 const DEFAULT_PALETTE_TABLE: readonly Color[] = [
   rgb255(0, 0, 0),
   rgb255(255, 255, 255),
@@ -260,13 +260,13 @@ export const DEFAULT_PALETTE_HEX_TO_ICV: ReadonlyMap<string, number> = new Map(
 /**
  * Resolves an icv colour-table index to a real colour, or undefined when the index names something this package cannot express as a fixed RGB value: 0x40/0x41 ("Automatic", a display-setting colour with no fixed literal), 0x48/0x4D-0x51/0x7FFF (chart/tooltip display colours, out of scope for a cell's own fill/border), or anything else outside the documented ranges.
  *
- * `palette`, when given, is the workbook's own Palette record contents (56 entries, icv 8 first); when undefined, icv 8-63 resolve through the fixed default table instead -- [MS-XLS] "Icv"'s own documented fallback for a file carrying no Palette record.
+ * `palette`, when given, is the workbook's own Palette record contents (56 entries, icv 8 first); when undefined, icv 8-63 resolve through the fixed default table instead — [MS-XLS] "Icv"'s own documented fallback for a file carrying no Palette record.
  */
 export function resolveIcvColor(
   icv: number,
   palette: readonly Color[] | undefined,
 ): Color | undefined {
-  // No range check here needs its own lower bound (a negative icv already reads as undefined through plain array indexing, never wrapping to the array's tail the way some languages do), and PALETTE_BASE_ICV is exactly FIXED_COLOR_TABLE.length, so reaching this line at all already proves icv is at least that value. The remaining upper bound is redundant the identical way: both DEFAULT_PALETTE_TABLE and a real Palette record ([MS-XLS] 2.4.188: "The value MUST be 56") are always exactly PALETTE_ENTRY_COUNT entries long, so an icv past that range already reads back undefined from the plain index lookup below, the same undefined this function's own contract documents for it -- there is no icv value an explicit upper-bound check would refuse that the lookup itself doesn't already refuse on its own.
+  // No range check here needs its own lower bound (a negative icv already reads as undefined through plain array indexing, never wrapping to the array's tail the way some languages do), and PALETTE_BASE_ICV is exactly FIXED_COLOR_TABLE.length, so reaching this line at all already proves icv is at least that value. The remaining upper bound is redundant the identical way: both DEFAULT_PALETTE_TABLE and a real Palette record ([MS-XLS] 2.4.188: "The value MUST be 56") are always exactly PALETTE_ENTRY_COUNT entries long, so an icv past that range already reads back undefined from the plain index lookup below, the same undefined this function's own contract documents for it — there is no icv value an explicit upper-bound check would refuse that the lookup itself doesn't already refuse on its own.
   if (icv < FIXED_COLOR_TABLE.length) {
     return FIXED_COLOR_TABLE[icv];
   }
@@ -280,7 +280,7 @@ interface Hsl {
   readonly l: number;
 }
 
-// Standard sRGB <-> HSL conversion (CSS Color Module Level 3 / W3C), operating on the gamma-encoded 0-1 components ColorSchema itself carries -- the same convention ooxml.js's own DrawingML shade/tint reading (typed/shared/color.ts) documents and cross-validates against Apache POI's RGB2HSL/HSL2RGB, reused here rather than re-derived since it's plain, format-agnostic colour maths.
+// Standard sRGB <-> HSL conversion (CSS Color Module Level 3 / W3C), operating on the gamma-encoded 0-1 components ColorSchema itself carries — the same convention ooxml.js's own DrawingML shade/tint reading (typed/shared/color.ts) documents and cross-validates against Apache POI's RGB2HSL/HSL2RGB, reused here rather than re-derived since it's plain, format-agnostic colour maths.
 function rgbToHsl(color: Color): Hsl {
   const { r, g, b } = color;
   const max = Math.max(r, g, b);
@@ -290,11 +290,11 @@ function rgbToHsl(color: Color): Hsl {
     return { h: 0, s: 0, l };
   }
   const d = max - min;
-  // The standard presentation of this formula branches on `l > 0.5` (denominator `2 - max - min` above that, `max + min` at or below it) -- but at l EXACTLY 0.5, max + min is 1 by definition (l is their average), making `2 - max - min` equal 1 too: the two branches' denominators coincide precisely where a `>` vs `>=` mutation would disagree on which branch to take. Dividing by `2 * Math.min(l, 1 - l)` instead is the same two denominators unified into one continuous expression -- l itself (doubled) below the midpoint, its own distance from 1 (doubled) above it -- with no boundary comparison left for a mutation to disagree with itself over.
+  // The standard presentation of this formula branches on `l > 0.5` (denominator `2 - max - min` above that, `max + min` at or below it) — but at l EXACTLY 0.5, max + min is 1 by definition (l is their average), making `2 - max - min` equal 1 too: the two branches' denominators coincide precisely where a `>` vs `>=` mutation would disagree on which branch to take. Dividing by `2 * Math.min(l, 1 - l)` instead is the same two denominators unified into one continuous expression — l itself (doubled) below the midpoint, its own distance from 1 (doubled) above it — with no boundary comparison left for a mutation to disagree with itself over.
   const s = d / (2 * Math.min(l, 1 - l));
   let h: number;
   if (max === r) {
-    // No `+ (g < b ? 6 : 0)` fixup for a negative result: hueToRgb below already normalises any hue it's given by exactly one full turn in either direction (`tt < 0` adds 1, `tt > 1` subtracts 1) before using it, so a hue this branch hands it already negative reaches the identical final component hueToRgb would have produced from that same hue plus a full 6-count turn -- the fixup and its absence are the same colour by hueToRgb's own construction, not merely close.
+    // No `+ (g < b ? 6 : 0)` fixup for a negative result: hueToRgb below already normalises any hue it's given by exactly one full turn in either direction (`tt < 0` adds 1, `tt > 1` subtracts 1) before using it, so a hue this branch hands it already negative reaches the identical final component hueToRgb would have produced from that same hue plus a full 6-count turn — the fixup and its absence are the same colour by hueToRgb's own construction, not merely close.
     h = (g - b) / d;
   } else if (max === g) {
     h = (b - r) / d + 2;
@@ -306,9 +306,9 @@ function rgbToHsl(color: Color): Hsl {
 
 function hslToRgb(hsl: Hsl): Color {
   const { h, s, l } = hsl;
-  // No dedicated s === 0 shortcut: whenever s is genuinely 0, q and p below both reduce to l regardless of which branch computes q (l*(1+0) and l+0-l*0 are both l), which makes q - p exactly 0 -- and every branch hueToRgb can take returns either p, q, or p + (q - p) * something, all of which collapse to l the instant q - p is 0. The achromatic result this shortcut would have returned is already what the general formula gives for s === 0, by construction, not merely as a close approximation.
+  // No dedicated s === 0 shortcut: whenever s is genuinely 0, q and p below both reduce to l regardless of which branch computes q (l*(1+0) and l+0-l*0 are both l), which makes q - p exactly 0 — and every branch hueToRgb can take returns either p, q, or p + (q - p) * something, all of which collapse to l the instant q - p is 0. The achromatic result this shortcut would have returned is already what the general formula gives for s === 0, by construction, not merely as a close approximation.
   const hueToRgb = (p: number, q: number, t: number): number => {
-    // Wraps into [0, 1) by exactly one turn, matching every real caller's own h +/- 1/3 offset (h itself is always in [0, 1)): (t + 1) % 1 alone is enough, since a leading `t % 1` before adding 1 would be redundant -- mod-1 addition distributes over the +1 regardless of whether t was reduced first, for any t at all, not merely the realistic range.
+    // Wraps into [0, 1) by exactly one turn, matching every real caller's own h +/- 1/3 offset (h itself is always in [0, 1)): (t + 1) % 1 alone is enough, since a leading `t % 1` before adding 1 would be redundant — mod-1 addition distributes over the +1 regardless of whether t was reduced first, for any t at all, not merely the realistic range.
     const tt = (t + 1) % 1;
     // The classic four-piece hueToRgb curve (ramp up over [0, 1/6), hold at q over [1/6, 1/2), ramp down over [1/2, 2/3), hold at p beyond) restated as one continuous trapezoid: each adjacent pair of pieces was chosen to meet exactly at its shared boundary, so a separate `<` comparison per piece could only ever disagree with itself about which of two identical values to return. Math.min(tt, 2/3 - tt) picks the up-ramp's height below the midpoint and the down-ramp's height above it (the same unification rgbToHsl's own `s` formula above uses for its `l > 0.5` boundary), and the outer clamp holds it at 0 or 1 everywhere the original's outer branches did.
     const trapezoid = Math.min(Math.max(6 * Math.min(tt, 2 / 3 - tt), 0), 1);
@@ -325,16 +325,16 @@ function hslToRgb(hsl: Hsl): Color {
 }
 
 /**
- * Applies Excel's own "TintAndShade" colour model to an already-resolved colour: a single -1.0..1.0 value shading a colour toward black (negative) or tinting it toward white (positive), the model CFColor's own numTint field ([MS-XLS] 2.4, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/fd8e679d-069f-486b-ab48-2382cc167305) carries -- distinct from DrawingML's own separate shade/tint elements (ooxml.js's typed/shared/color.ts), which apply in linear light rather than adjusting HSL lightness directly.
+ * Applies Excel's own "TintAndShade" colour model to an already-resolved colour: a single -1.0..1.0 value shading a colour toward black (negative) or tinting it toward white (positive), the model CFColor's own numTint field ([MS-XLS] 2.4, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/fd8e679d-069f-486b-ab48-2382cc167305) carries — distinct from DrawingML's own separate shade/tint elements (ooxml.js's typed/shared/color.ts), which apply in linear light rather than adjusting HSL lightness directly.
  *
- * The formula itself -- Lum' = Lum*(1+tint) for a negative tint, Lum' = Lum*(1-tint) + tint for a positive one -- is Microsoft's own documented Color.TintAndShade algorithm, cross-checked against Apache POI's XSSFColor#getTint/#setTint javadoc (a completely independent implementation carrying the identical formula) rather than trusted from memory alone.
+ * The formula itself — Lum' = Lum*(1+tint) for a negative tint, Lum' = Lum*(1-tint) + tint for a positive one — is Microsoft's own documented Color.TintAndShade algorithm, cross-checked against Apache POI's XSSFColor#getTint/#setTint javadoc (a completely independent implementation carrying the identical formula) rather than trusted from memory alone.
  */
 export function applyTint(color: Color, tint: number): Color {
   if (tint === 0) {
     return color;
   }
   const hsl = rgbToHsl(color);
-  // Math.sign, not a plain `tint < 0`: the guard above already returned for tint === 0, so a genuinely negative and a genuinely positive tint are the only two values reaching here -- `tint < 0` and `tint <= 0` would classify both identically (their only disagreement, at tint === 0, is already unreachable), where Math.sign's own -1/+1 split is a full complement over that two-value domain and so is not equivalent under a mutation the same way.
+  // Math.sign, not a plain `tint < 0`: the guard above already returned for tint === 0, so a genuinely negative and a genuinely positive tint are the only two values reaching here — `tint < 0` and `tint <= 0` would classify both identically (their only disagreement, at tint === 0, is already unreachable), where Math.sign's own -1/+1 split is a full complement over that two-value domain and so is not equivalent under a mutation the same way.
   const l =
     Math.sign(tint) === -1 ? hsl.l * (1 + tint) : hsl.l * (1 - tint) + tint;
   return hslToRgb({ ...hsl, l });
@@ -342,14 +342,14 @@ export function applyTint(color: Color, tint: number): Color {
 
 // --- Border style <-> ContentBorder mapping, one table shared by both directions ---
 
-// BIFF8's BorderStyle tokens name the same four weights xlsx's own CT_BorderStyle tokens do, at the same point widths, bucketed back from a widthPt the same way. That vocabulary is not this package's to own: it lives once in document-schema.js (BORDER_WIDTH_PT, borderWeightForWidthPt, dashedBorderWeightForWidthPt, imported above) and is imported by both this package and ooxml.js's typed/xlsx/styles.ts, so neither can drift from the other. What is BIFF8-specific -- which numeric token names a medium dashed stroke -- stays here, in BIFF_BORDER_STYLE and borderStyleTokenFor below.
+// BIFF8's BorderStyle tokens name the same four weights xlsx's own CT_BorderStyle tokens do, at the same point widths, bucketed back from a widthPt the same way. That vocabulary is not this package's to own: it lives once in document-schema.js (BORDER_WIDTH_PT, borderWeightForWidthPt, dashedBorderWeightForWidthPt, imported above) and is imported by both this package and ooxml.js's typed/xlsx/styles.ts, so neither can drift from the other. What is BIFF8-specific — which numeric token names a medium dashed stroke — stays here, in BIFF_BORDER_STYLE and borderStyleTokenFor below.
 
 interface BorderStyleMapping {
   readonly weight: BorderWeight;
   readonly pattern: ContentStrokeStyle;
 }
 
-/** Every BorderStyle token this reader resolves to a (weight, pattern) pair -- BORDER_STYLE_NONE has no entry, since "no border" is handled by the caller before consulting this table. The dash-family tokens (dashDot/dashDotDot and their medium/slant variants) collapse to 'dashed', the closest ContentStrokeStyle member, exactly as ooxml.js's own XLSX_BORDER_STYLE table does for the equivalent xlsx tokens. */
+/** Every BorderStyle token this reader resolves to a (weight, pattern) pair — BORDER_STYLE_NONE has no entry, since "no border" is handled by the caller before consulting this table. The dash-family tokens (dashDot/dashDotDot and their medium/slant variants) collapse to 'dashed', the closest ContentStrokeStyle member, exactly as ooxml.js's own XLSX_BORDER_STYLE table does for the equivalent xlsx tokens. */
 const BIFF_BORDER_STYLE: Readonly<Record<number, BorderStyleMapping>> = {
   [BORDER_STYLE_THIN]: { weight: "thin", pattern: "solid" },
   [BORDER_STYLE_MEDIUM]: { weight: "medium", pattern: "solid" },
@@ -377,7 +377,7 @@ export function resolveBorderEdge(
   edge: XfBorderEdge,
   palette: readonly Color[] | undefined,
 ): ContentBorder | undefined {
-  // No dedicated BORDER_STYLE_NONE check: BIFF_BORDER_STYLE deliberately has no entry for it ("BORDER_STYLE_NONE has no entry, since 'no border' is handled by the caller before consulting this table" -- the comment on that table, now also true of this lookup itself), so a style of 0 already falls out of the table lookup below as undefined, taking the identical path an unrecognised style does.
+  // No dedicated BORDER_STYLE_NONE check: BIFF_BORDER_STYLE deliberately has no entry for it ("BORDER_STYLE_NONE has no entry, since 'no border' is handled by the caller before consulting this table" — the comment on that table, now also true of this lookup itself), so a style of 0 already falls out of the table lookup below as undefined, taking the identical path an unrecognised style does.
   const resolved = BIFF_BORDER_STYLE[edge.style];
   if (resolved === undefined) {
     return undefined;
@@ -404,7 +404,7 @@ const SOLID_BORDER_STYLE: Readonly<Record<BorderWeight, number>> = {
   thick: BORDER_STYLE_THICK,
 };
 
-/** The inverse of resolveBorderEdge's style resolution: picks the BorderStyle token carrying a ContentBorder's own pattern at the closest named weight, bucketing a solid/dashed border's widthPt back to a weight through document-schema.js's own shared quantisation -- the same one resolveBorderEdge's widths came out of, and the same one ooxml.js's borderToXlsxStyle buckets xlsx's string tokens through. */
+/** The inverse of resolveBorderEdge's style resolution: picks the BorderStyle token carrying a ContentBorder's own pattern at the closest named weight, bucketing a solid/dashed border's widthPt back to a weight through document-schema.js's own shared quantisation — the same one resolveBorderEdge's widths came out of, and the same one ooxml.js's borderToXlsxStyle buckets xlsx's string tokens through. */
 export function borderStyleTokenFor(border: ContentBorder): number {
   switch (border.style) {
     case "double":
@@ -424,7 +424,7 @@ export function borderStyleTokenFor(border: ContentBorder): number {
 /**
  * Resolves a cell's own FillPattern/icvFore/icvBack triple to a real ContentCellFill (ExaDev/documents.js#951), or undefined for FLSNULL (no fill at all), for a reserved/unrecognised FillPattern value, or for FLSSOLID when its own icvFore does not resolve to a fixed RGB value (an "Automatic" or otherwise unmapped icv, which leaves nothing to state a solid fill's colour as).
  *
- * FLSSOLID resolves to a 'solid' fill of icvFore alone -- "If this value is 1 ... then only icvFore is rendered" ([MS-XLS] CellXF), so icvBack carries no meaning for it and is never consulted. Every other named FillPattern resolves to a real 'pattern' fill via FILL_PATTERN_TO_PATTERN_TYPE, carrying whichever of icvFore/icvBack resolves to a real colour (either may be an "Automatic" icv this package cannot express as a fixed RGB value, matching ContentCellFillSchema's own "a colour can defer instead of asserting" convention).
+ * FLSSOLID resolves to a 'solid' fill of icvFore alone — "If this value is 1 ... then only icvFore is rendered" ([MS-XLS] CellXF), so icvBack carries no meaning for it and is never consulted. Every other named FillPattern resolves to a real 'pattern' fill via FILL_PATTERN_TO_PATTERN_TYPE, carrying whichever of icvFore/icvBack resolves to a real colour (either may be an "Automatic" icv this package cannot express as a fixed RGB value, matching ContentCellFillSchema's own "a colour can defer instead of asserting" convention).
  */
 export function resolveFillBackground(
   fillPattern: number,
@@ -432,7 +432,7 @@ export function resolveFillBackground(
   backgroundIcv: number,
   palette: readonly Color[] | undefined,
 ): ContentCellFill | undefined {
-  // No dedicated FILL_PATTERN_NONE check: FILL_PATTERN_TO_PATTERN_TYPE starts at 0x02, so FLSNULL (0x00) already falls out of that table lookup below as undefined, the identical path a reserved/unrecognised fillPattern value already takes -- there's nothing FLSNULL needs distinguished from "not a named pattern" for.
+  // No dedicated FILL_PATTERN_NONE check: FILL_PATTERN_TO_PATTERN_TYPE starts at 0x02, so FLSNULL (0x00) already falls out of that table lookup below as undefined, the identical path a reserved/unrecognised fillPattern value already takes — there's nothing FLSNULL needs distinguished from "not a named pattern" for.
   if (fillPattern === FILL_PATTERN_SOLID) {
     const color = resolveIcvColor(foregroundIcv, palette);
     return color === undefined ? undefined : { kind: "solid", color };
@@ -453,7 +453,7 @@ export function resolveFillBackground(
 
 // --- The CellXF/StyleXF trailing payload's border/fill words, packed and unpacked in one place ---
 
-/** Every decoration field the trailing payload's word2/word3/word4 carry ([MS-XLS] 2.4.353's own CellXF/StyleXF "Data" field), read or write side alike: which fill pattern (if any) and its foreground/background colours, and each of the four sides' own border style plus colour. fillBackgroundIcv carries no meaning for a solid fill (icvFore alone is rendered) but is real for every other named pattern, where it is the colour the pattern's gaps show through. Diagonal borders (dgDiag/grbitDiag/icvDiag) are out of this package's scope -- ContentCellBordersSchema has no diagonal member -- and are always read as absent / always written as none. */
+/** Every decoration field the trailing payload's word2/word3/word4 carry ([MS-XLS] 2.4.353's own CellXF/StyleXF "Data" field), read or write side alike: which fill pattern (if any) and its foreground/background colours, and each of the four sides' own border style plus colour. fillBackgroundIcv carries no meaning for a solid fill (icvFore alone is rendered) but is real for every other named pattern, where it is the colour the pattern's gaps show through. Diagonal borders (dgDiag/grbitDiag/icvDiag) are out of this package's scope — ContentCellBordersSchema has no diagonal member — and are always read as absent / always written as none. */
 export interface XfDecorationFields {
   readonly fillPattern: number;
   readonly fillForegroundIcv: number;
@@ -466,7 +466,7 @@ export interface XfDecorationFields {
 
 const UNDECORATED_EDGE: XfBorderEdge = { style: BORDER_STYLE_NONE, icv: 0 };
 
-/** The fields a genuinely undecorated cell XF carries -- no fill, no borders -- matching exactly what xf-writer.ts wrote before this module existed (icvFore/icvBack at the "Automatic" special values, fls/dg all 0), so packXfDecorationWords() with no argument reproduces the identical bytes. */
+/** The fields a genuinely undecorated cell XF carries — no fill, no borders — matching exactly what xf-writer.ts wrote before this module existed (icvFore/icvBack at the "Automatic" special values, fls/dg all 0), so packXfDecorationWords() with no argument reproduces the identical bytes. */
 export const UNDECORATED_XF_FIELDS: XfDecorationFields = {
   fillPattern: FILL_PATTERN_NONE,
   fillForegroundIcv: ICV_AUTOMATIC_FOREGROUND,
@@ -477,7 +477,7 @@ export const UNDECORATED_XF_FIELDS: XfDecorationFields = {
   bottom: UNDECORATED_EDGE,
 };
 
-/** Unpacks word1 -- the CellXF/StyleXF trailing payload's leading word ([MS-XLS] 2.4.353's own field table, cited in full in xf-writer.ts's packAlignmentPrefix) -- into the two fields this package's schema can express: alc (bits 0-2) and alcV (bits 4-6). Every other field the word carries (fWrap, fJustLast, trot, cIndent, fShrinkToFit, iReadOrder, the fAtr* inheritance flags) has no ContentSheetCell counterpart and is not read. */
+/** Unpacks word1 — the CellXF/StyleXF trailing payload's leading word ([MS-XLS] 2.4.353's own field table, cited in full in xf-writer.ts's packAlignmentPrefix) — into the two fields this package's schema can express: alc (bits 0-2) and alcV (bits 4-6). Every other field the word carries (fWrap, fJustLast, trot, cIndent, fShrinkToFit, iReadOrder, the fAtr* inheritance flags) has no ContentSheetCell counterpart and is not read. */
 export function unpackXfAlignment(word1: number): XfAlignmentFields {
   const alc = word1 & 0x7;
   const alcV = (word1 >>> 4) & 0x7;
@@ -516,7 +516,7 @@ export function unpackXfDecoration(
 }
 
 /**
- * Packs XfDecorationFields back into the three raw words unpackXfDecoration reads -- the write-side mirror, and (with no argument) the exact bytes a genuinely undecorated XF always carried before this module existed: word2/word3 all zero (no borders, no fill pattern), word4 at the "Automatic" foreground/background pair. Diagonal fields (grbitDiag, dgDiag, icvDiag, fHasXFExt/reserved2) are always written as 0 -- this package's writer never emits a diagonal border.
+ * Packs XfDecorationFields back into the three raw words unpackXfDecoration reads — the write-side mirror, and (with no argument) the exact bytes a genuinely undecorated XF always carried before this module existed: word2/word3 all zero (no borders, no fill pattern), word4 at the "Automatic" foreground/background pair. Diagonal fields (grbitDiag, dgDiag, icvDiag, fHasXFExt/reserved2) are always written as 0 — this package's writer never emits a diagonal border.
  *
  * [MS-XLS] 2.4.353's own CellXF field table, the layout every bit position below is cited to: word2 = dgLeft(4) dgRight(4) dgTop(4) dgBottom(4) icvLeft(7) icvRight(7) grbitDiag(2); word3 = icvTop(7) icvBottom(7) icvDiag(7) dgDiag(4) fHasXFExt(1) fls(6); word4 = icvFore(7) icvBack(7) fsxButton(1) reserved3(1). https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/671c8577-901f-4215-9ebf-6f5890e5896d
  */
@@ -545,7 +545,7 @@ export function packXfDecorationWords(
     ((fHasXfExt & 0x1) << 25) |
     ((decoration.fillPattern & 0x3f) << 26);
 
-  // icvFore/icvBack are meaningless for FLSNULL (no fill at all) -- forcing both to their Automatic defaults there keeps a border-only decoration's fill word byte-identical to a genuinely undecorated one, matching what a real Excel-written cell with borders but no fill also carries. A solid fill states only icvFore ("If this value is 1, then only icvFore is rendered" -- [MS-XLS] CellXF), so icvBack stays Automatic for it too, exactly as this writer always emitted; every other named pattern states both, the colour its strokes are drawn in and the colour its gaps show through.
+  // icvFore/icvBack are meaningless for FLSNULL (no fill at all) — forcing both to their Automatic defaults there keeps a border-only decoration's fill word byte-identical to a genuinely undecorated one, matching what a real Excel-written cell with borders but no fill also carries. A solid fill states only icvFore ("If this value is 1, then only icvFore is rendered" — [MS-XLS] CellXF), so icvBack stays Automatic for it too, exactly as this writer always emitted; every other named pattern states both, the colour its strokes are drawn in and the colour its gaps show through.
   const icvFore =
     decoration.fillPattern === FILL_PATTERN_NONE
       ? ICV_AUTOMATIC_FOREGROUND
@@ -563,7 +563,7 @@ export function packXfDecorationWords(
 
 // --- LongRGB ([MS-XLS], a Palette record's own rgColor entry shape) ---
 
-/** LongRGB: red, green, blue, then a reserved byte that MUST be 0 -- one entry of a Palette record's rgColor array, or of the fixed-length buffer this package's own writer emits. */
+/** LongRGB: red, green, blue, then a reserved byte that MUST be 0 — one entry of a Palette record's rgColor array, or of the fixed-length buffer this package's own writer emits. */
 export function readLongRgbColor(cursor: BlockCursor): Color {
   const r = cursor.u8();
   const g = cursor.u8();
@@ -572,7 +572,7 @@ export function readLongRgbColor(cursor: BlockCursor): Color {
   return rgb255(r, g, b);
 }
 
-/** The inverse of readLongRgbColor: a colour's own red/green/blue/reserved bytes, rounded to the nearest byte (the same rounding colorToRgbHex applies) -- exact for any colour this package itself constructed via rgbHexToColor, which is what write.ts's own palette-colour interning does. */
+/** The inverse of readLongRgbColor: a colour's own red/green/blue/reserved bytes, rounded to the nearest byte (the same rounding colorToRgbHex applies) — exact for any colour this package itself constructed via rgbHexToColor, which is what write.ts's own palette-colour interning does. */
 export function longRgbBytesOf(
   color: Color,
 ): readonly [number, number, number, number] {

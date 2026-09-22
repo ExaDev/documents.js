@@ -17,7 +17,7 @@ export const Route = createRootRoute({
   component: RootLayout,
 });
 
-// 'auto' is Mantine's own name for "follow the OS preference" -- labelled "System" here since that's what every other app calls it. Order is the cycle order the header button steps through on each click.
+// 'auto' is Mantine's own name for "follow the OS preference" — labelled "System" here since that's what every other app calls it. Order is the cycle order the header button steps through on each click.
 const COLOR_SCHEME_OPTIONS = [
   { value: "light", label: "Light", icon: IconSun },
   { value: "dark", label: "Dark", icon: IconMoon },
@@ -26,7 +26,7 @@ const COLOR_SCHEME_OPTIONS = [
 
 type ColorSchemeOption = (typeof COLOR_SCHEME_OPTIONS)[number];
 
-// A computed index into a fixed-length array is `T | undefined` under noUncheckedIndexedAccess even when the arithmetic guarantees it's always in range (modulo COLOR_SCHEME_OPTIONS.length) -- this asserts that invariant explicitly rather than papering over it with a fallback option, which would silently substitute a different-but-valid choice if the arithmetic were ever wrong. Exported so __root.test.ts can drive the throw path directly with a genuinely out-of-range index, the only way to exercise it at all: RootLayout's own two call sites never produce one.
+// A computed index into a fixed-length array is `T | undefined` under noUncheckedIndexedAccess even when the arithmetic guarantees it's always in range (modulo COLOR_SCHEME_OPTIONS.length) — this asserts that invariant explicitly rather than papering over it with a fallback option, which would silently substitute a different-but-valid choice if the arithmetic were ever wrong. Exported so __root.test.ts can drive the throw path directly with a genuinely out-of-range index, the only way to exercise it at all: RootLayout's own two call sites never produce one.
 export function optionAt(index: number) {
   const option = COLOR_SCHEME_OPTIONS[index];
   if (option === undefined)
@@ -49,7 +49,7 @@ export function nextColorSchemeOption(currentValue: string) {
   return optionAt((Math.max(activeIndex, 0) + 1) % COLOR_SCHEME_OPTIONS.length);
 }
 
-// Factored out so a test can assert the exact wording without depending on Mantine's Tooltip actually opening -- its floating content mounts into a portal only once Floating UI's own hover/focus interaction completes, which jsdom (no real layout engine, no real pointer) does not reliably drive.
+// Factored out so a test can assert the exact wording without depending on Mantine's Tooltip actually opening — its floating content mounts into a portal only once Floating UI's own hover/focus interaction completes, which jsdom (no real layout engine, no real pointer) does not reliably drive.
 export function colorSchemeTooltipLabel(
   activeOption: ColorSchemeOption,
   nextOption: ColorSchemeOption,

@@ -4,7 +4,7 @@ import {
   type SiBaseDimension,
 } from "document-schema.js";
 
-// Dimension-vector arithmetic over document-schema.js's own DimensionVector (exponents over the seven SI base quantities, an omitted key meaning exponent zero -- see that package's src/math.ts). This module deliberately does not redefine the vector shape: it only adds the operations a units-typed evaluator needs over it (equality, multiply/divide by exponent add/subtract, scale for pow/sqrt) that document-schema.js has no reason to own, since it never evaluates anything.
+// Dimension-vector arithmetic over document-schema.js's own DimensionVector (exponents over the seven SI base quantities, an omitted key meaning exponent zero — see that package's src/math.ts). This module deliberately does not redefine the vector shape: it only adds the operations a units-typed evaluator needs over it (equality, multiply/divide by exponent add/subtract, scale for pow/sqrt) that document-schema.js has no reason to own, since it never evaluates anything.
 
 export function dimensionExponent(
   dimension: DimensionVector,
@@ -59,7 +59,7 @@ export function divideDimensions(
   return combine(a, b, (x, y) => x - y);
 }
 
-// Scales every exponent by k, used for pow (k = the exponent, always an integer once evaluate.ts has checked it) and sqrt (k = 1/2). DimensionVectorSchema requires integer exponents, so a scale that would land on a non-integer (an odd exponent under sqrt, a non-integer pow exponent applied to a dimensioned base) has no representable result -- callers must reject that case themselves before calling this with a fractional k, and this throws rather than silently rounding so a caller that forgets to check fails loudly instead of producing a wrong dimension.
+// Scales every exponent by k, used for pow (k = the exponent, always an integer once evaluate.ts has checked it) and sqrt (k = 1/2). DimensionVectorSchema requires integer exponents, so a scale that would land on a non-integer (an odd exponent under sqrt, a non-integer pow exponent applied to a dimensioned base) has no representable result — callers must reject that case themselves before calling this with a fractional k, and this throws rather than silently rounding so a caller that forgets to check fails loudly instead of producing a wrong dimension.
 export function scaleDimension(
   dimension: DimensionVector,
   k: number,

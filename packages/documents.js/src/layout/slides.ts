@@ -44,7 +44,7 @@ import type {
   LayoutText,
 } from "pdf-codec";
 
-// ContentDocument (the presentation variant) -> LayoutDocument: pptx's tractable layout direction. No pagination -- one slide is always exactly one PDF page (slide size maps directly to the page's own widthPt/heightPt) -- and no group-transform resolution either, since src/ooxml/pptx/read.ts already flattened every group into absolute shape positions at read time. What's left is genuinely just: wrap each shape's text within its own box (reusing the exact wrapRunsToWidth docx also uses), place images at their shape's frame, render table grids directly from explicit column widths/row heights, and apply the one deliberate Y-flip from OOXML's top-left/y-down space into PDF's bottom-left/y-up space.
+// ContentDocument (the presentation variant) -> LayoutDocument: pptx's tractable layout direction. No pagination — one slide is always exactly one PDF page (slide size maps directly to the page's own widthPt/heightPt) — and no group-transform resolution either, since src/ooxml/pptx/read.ts already flattened every group into absolute shape positions at read time. What's left is genuinely just: wrap each shape's text within its own box (reusing the exact wrapRunsToWidth docx also uses), place images at their shape's frame, render table grids directly from explicit column widths/row heights, and apply the one deliberate Y-flip from OOXML's top-left/y-down space into PDF's bottom-left/y-up space.
 
 export interface SlidesLayoutOptions {
   readonly measurer: TextMeasurer;
@@ -53,9 +53,9 @@ export interface SlidesLayoutOptions {
 
 export interface PresentationLayoutResult {
   readonly document: LayoutDocument;
-  // Every embedded formula actually rendered via src/mathml, already positioned in PDF page space -- see src/layout/engine.ts's own WordprocessingLayoutResult.formulas for why this can't travel through LayoutDocument.pages[].items itself.
+  // Every embedded formula actually rendered via src/mathml, already positioned in PDF page space — see src/layout/engine.ts's own WordprocessingLayoutResult.formulas for why this can't travel through LayoutDocument.pages[].items itself.
   readonly formulas: readonly PositionedFormula[];
-  // The DocumentTree's own pages array (each rendered page's size, indexed to match every content node's own frames[].pageIndex) -- the input `doc` argument itself comes back with frames stamped in place, which together with this array is the fused unified package a conversion reports through onDocument.
+  // The DocumentTree's own pages array (each rendered page's size, indexed to match every content node's own frames[].pageIndex) — the input `doc` argument itself comes back with frames stamped in place, which together with this array is the fused unified package a conversion reports through onDocument.
   readonly pages: readonly PageSize[];
 }
 
@@ -64,7 +64,7 @@ type PresentationContentDocument = Extract<
   { kind: "presentation" }
 >;
 
-// Threaded into convertShape (optionally -- see that function's own comment) so a formula-bearing shape can record its positioned result. The MathML itself comes from the block's own document (src/model/formula.ts's formulaOfBlock), so this carries only what a shape genuinely cannot know on its own: which page it is being laid out onto, and the shared accumulator to record into. `positioned` is mutated in place, the same "shared accumulator threaded through a layout pass" pattern src/layout/engine.ts's own `formulas` parameter uses.
+// Threaded into convertShape (optionally — see that function's own comment) so a formula-bearing shape can record its positioned result. The MathML itself comes from the block's own document (src/model/formula.ts's formulaOfBlock), so this carries only what a shape genuinely cannot know on its own: which page it is being laid out onto, and the shared accumulator to record into. `positioned` is mutated in place, the same "shared accumulator threaded through a layout pass" pattern src/layout/engine.ts's own `formulas` parameter uses.
 export interface ShapeFormulaContext {
   readonly pageIndex: number;
   readonly positioned: PositionedFormula[];
@@ -130,7 +130,7 @@ function layoutParagraph(
     const scaledLineHeightPt =
       naturalLineHeightPt * (paragraph.lineSpacing ?? 1) * spacingScale;
     const baselineYDown = cursorYDown + line.ascentPt;
-    // First-line indent shifts only where the first line starts, not its wrap point -- wrapRunsToWidth already computed every line at one fixed width, so retroactively narrowing line 0's width isn't possible without re-wrapping. A documented simplification, not a silent one.
+    // First-line indent shifts only where the first line starts, not its wrap point — wrapRunsToWidth already computed every line at one fixed width, so retroactively narrowing line 0's width isn't possible without re-wrapping. A documented simplification, not a silent one.
     const firstLineIndentPt =
       lineIndex === 0 ? (paragraph.indentFirstLinePt ?? 0) : 0;
     const alignOffsetPt = alignmentOffsetPt(
@@ -138,7 +138,7 @@ function layoutParagraph(
       paragraphWidthPt,
       line.widthPt,
     );
-    // Only a WRAPPED, non-final line of a justified paragraph gets its inter-word gaps stretched -- see src/layout/engine.ts's identical note on the same standard justification convention.
+    // Only a WRAPPED, non-final line of a justified paragraph gets its inter-word gaps stretched — see src/layout/engine.ts's identical note on the same standard justification convention.
     const justifyGapsPt =
       paragraph.alignment === "justify" && lineIndex < lines.length - 1
         ? justifyLineGapsPt(line, paragraphWidthPt, measurer)
@@ -207,7 +207,7 @@ function layoutParagraph(
   return cursorYDown;
 }
 
-// Renders a table's grid directly from its own explicit column widths and row heights (falling back to content-derived estimates only when a row's own height is missing) rather than proportionally estimating, since pptx tables -- unlike docx's -- already carry this geometry. Cell background rects are skipped entirely when the containing shape is rotated: LayoutRect has no rotation field of its own, and a misplaced (unrotated) rect would be a worse defect than a missing one for what is, in practice, a rare case.
+// Renders a table's grid directly from its own explicit column widths and row heights (falling back to content-derived estimates only when a row's own height is missing) rather than proportionally estimating, since pptx tables — unlike docx's — already carry this geometry. Cell background rects are skipped entirely when the containing shape is rotated: LayoutRect has no rotation field of its own, and a misplaced (unrotated) rect would be a worse defect than a missing one for what is, in practice, a rare case.
 function layoutTable(
   table: ContentTable,
   contentLeftXDown: number,
@@ -229,7 +229,7 @@ function layoutTable(
     for (const { cell, xOffsetPt, widthPt: cellWidthPt } of anchors) {
       const cellXDown = contentLeftXDown + xOffsetPt;
 
-      // The cell's own frame stamps the CELL node (PDF-space, unrotated -- the same no-rotation constraint the background rect below already obeys); the runs inside stamp their own frames through layoutParagraph below.
+      // The cell's own frame stamps the CELL node (PDF-space, unrotated — the same no-rotation constraint the background rect below already obeys); the runs inside stamp their own frames through layoutParagraph below.
       const cellFrame = flipY(
         {
           xPt: cellXDown,
@@ -242,7 +242,7 @@ function layoutTable(
       if (placement.layoutRotationDeg === undefined) {
         stampFrame(cell, pageIndex, cellFrame);
       }
-      // ContentTableCell has no sourcePath of its own (only ContentTable does -- see document-schema.js), so a per-cell background rect can only be attributed at the table's own granularity, not to the specific cell. A rect's own fill is one flat colour, so a 'pattern' fill (ExaDev/documents.js#951) renders as resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern PDF rendering has no primitive for -- and that resolution can itself come back undefined (an unresolvable theme/indexed colour, or the reserved gray125 pattern with no explicit colours), which is genuinely no fill rather than a reason to skip resolving at all, so the guard checks the RESOLVED colour, not merely whether the cell declared a background object.
+      // ContentTableCell has no sourcePath of its own (only ContentTable does — see document-schema.js), so a per-cell background rect can only be attributed at the table's own granularity, not to the specific cell. A rect's own fill is one flat colour, so a 'pattern' fill (ExaDev/documents.js#951) renders as resolveCellFillColor's own single representative colour rather than the genuine two-colour pattern PDF rendering has no primitive for — and that resolution can itself come back undefined (an unresolvable theme/indexed colour, or the reserved gray125 pattern with no explicit colours), which is genuinely no fill rather than a reason to skip resolving at all, so the guard checks the RESOLVED colour, not merely whether the cell declared a background object.
       const cellFill =
         cell.background === undefined
           ? undefined
@@ -283,7 +283,7 @@ function layoutTable(
   return cursorYDown;
 }
 
-// A formula shape's own embedded-object block (see src/odf/odp/read.ts's readOdpContent) is the shape's ONLY block -- odp's own detection replaces a formula-bearing shape's blocks outright rather than appending alongside other content, unlike odt's paragraph-flow case -- so this places the resolved MathBox directly at the shape's own frame, the same "one block, one position" treatment layoutImageFlow (src/layout/engine.ts) and this function's own image branch above already give an image block. Rotation is deliberately NOT applied to a formula shape (unlike text/image, both routed through `placement.place`): pdf-codec's write.ts's own formula content-stream emission has no rotated-CID-text path, only translation -- a real, tracked, bounded gap (position is correct; a rotated formula shape renders unrotated), not a silent one.
+// A formula shape's own embedded-object block (see src/odf/odp/read.ts's readOdpContent) is the shape's ONLY block — odp's own detection replaces a formula-bearing shape's blocks outright rather than appending alongside other content, unlike odt's paragraph-flow case — so this places the resolved MathBox directly at the shape's own frame, the same "one block, one position" treatment layoutImageFlow (src/layout/engine.ts) and this function's own image branch above already give an image block. Rotation is deliberately NOT applied to a formula shape (unlike text/image, both routed through `placement.place`): pdf-codec's write.ts's own formula content-stream emission has no rotated-CID-text path, only translation — a real, tracked, bounded gap (position is correct; a rotated formula shape renders unrotated), not a silent one.
 function layoutShapeFormula(
   block: ContentEmbeddedObjectBlock,
   flippedFrame: Box,
@@ -310,11 +310,11 @@ function layoutShapeFormula(
     yPt: flippedFrame.yPt,
     box,
   });
-  // The block's frame records where the formula was placed even though its glyphs render through the formulas side channel rather than as a LayoutItem -- see engine.ts's identical note on its own formula-flow stamp.
+  // The block's frame records where the formula was placed even though its glyphs render through the formulas side channel rather than as a LayoutItem — see engine.ts's identical note on its own formula-flow stamp.
   stampFrame(block, formulaContext.pageIndex, flippedFrame);
 }
 
-// Exported for reuse by src/layout/drawing.ts: a drawing page's own ContentShape entries (draw:frame text/table/image content, and unrecognised custom-shape presets salvaged as text -- see odf.js's typed/draw/shapes.ts) are the exact same ContentShapeSchema-typed value a slide's shapes are, so odg gets slide-quality paragraph flow, image placement, and table layout for free rather than a second, drifting copy of this function. `formulaContext` is optional and appended last precisely so drawing.ts's own existing 5-argument call site keeps compiling unchanged -- readOdgContent runs no embedded-formula detection pass of its own (src/odf/odg/read.ts), so a drawing page never carries a formula block for that call site to need one for, and convertDrawingToLayout has no PositionedFormula output to record one into either.
+// Exported for reuse by src/layout/drawing.ts: a drawing page's own ContentShape entries (draw:frame text/table/image content, and unrecognised custom-shape presets salvaged as text — see odf.js's typed/draw/shapes.ts) are the exact same ContentShapeSchema-typed value a slide's shapes are, so odg gets slide-quality paragraph flow, image placement, and table layout for free rather than a second, drifting copy of this function. `formulaContext` is optional and appended last precisely so drawing.ts's own existing 5-argument call site keeps compiling unchanged — readOdgContent runs no embedded-formula detection pass of its own (src/odf/odg/read.ts), so a drawing page never carries a formula block for that call site to need one for, and convertDrawingToLayout has no PositionedFormula output to record one into either.
 export function convertShape(
   shape: ContentShape,
   slideHeightPt: number,
@@ -325,7 +325,7 @@ export function convertShape(
   formulaContext?: ShapeFormulaContext,
 ): void {
   const flippedFrame = flipY(shape.frame, slideHeightPt);
-  // The shape's own placement, stamped on the shape node itself (PDF-space) -- a shape with no renderable content of its own (an empty text box) still records where it sat, and a consumer walking frames knows which page a shape belongs to without consulting any second tree.
+  // The shape's own placement, stamped on the shape node itself (PDF-space) — a shape with no renderable content of its own (an empty text box) still records where it sat, and a consumer walking frames knows which page a shape belongs to without consulting any second tree.
   stampFrame(shape, pageIndex, flippedFrame);
   const placement = shapePlacement(flippedFrame, shape.rotationDeg);
   const contentLeftXDown = shape.frame.xPt + shape.insetLeftPt;
@@ -394,7 +394,7 @@ export function convertShape(
     ) {
       layoutShapeFormula(block, flippedFrame, formulaContext);
     }
-    // 'pageBreak' blocks never occur in a pptx-sourced ContentDocument (only docx's reader emits them). Every other 'embeddedObject' objectKind (wordprocessing/presentation/spreadsheet/drawing), and a 'formula' block reached with no formulaContext, fall through unhandled -- present only for ContentBlock's type exhaustiveness. 'constructStart'/'constructEnd' fall through the same way, deliberately: a construct marker is a zero-width boundary sentinel with no content of its own to render, so skipping it here loses nothing -- the paragraphs it wraps are separate blocks in this same flow and lay out exactly as if the marker were not there.
+    // 'pageBreak' blocks never occur in a pptx-sourced ContentDocument (only docx's reader emits them). Every other 'embeddedObject' objectKind (wordprocessing/presentation/spreadsheet/drawing), and a 'formula' block reached with no formulaContext, fall through unhandled — present only for ContentBlock's type exhaustiveness. 'constructStart'/'constructEnd' fall through the same way, deliberately: a construct marker is a zero-width boundary sentinel with no content of its own to render, so skipping it here loses nothing — the paragraphs it wraps are separate blocks in this same flow and lay out exactly as if the marker were not there.
   }
 }
 
@@ -423,7 +423,7 @@ function convertSlide(
       formulaContext,
     );
   }
-  // Notes are carried as a private page-dictionary entry (LayoutPage.notes, see pdf/write.ts), never painted as visible content -- PDF has no native concept of hidden presenter notes, so this is purely a round-trip mechanism for this package's own pptxToPdf/pdfToPptx pair, not a real PDF feature.
+  // Notes are carried as a private page-dictionary entry (LayoutPage.notes, see pdf/write.ts), never painted as visible content — PDF has no native concept of hidden presenter notes, so this is purely a round-trip mechanism for this package's own pptxToPdf/pdfToPptx pair, not a real PDF feature.
   return {
     widthPt: slide.size.widthPt,
     heightPt: slide.size.heightPt,

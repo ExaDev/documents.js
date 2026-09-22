@@ -16,7 +16,7 @@ import { createServer } from "../server";
 import { buildOdtWithEmbeddedFont } from "../test-support/embedded-font-fixture";
 import { vendoredFontBytes } from "../test-support/font-fixture";
 
-// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip -- not the tool callbacks in isolation -- so this proves the wiring: that `fonts` and `describe_font_file` are registered under those names on the server createServer() returns, that `fonts` reads a real odt through documents.js's own extractSourceFontsForFormat, and that `describe_font_file` reads a real font file through documents.js's own describeFontFace.
+// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip — not the tool callbacks in isolation — so this proves the wiring: that `fonts` and `describe_font_file` are registered under those names on the server createServer() returns, that `fonts` reads a real odt through documents.js's own extractSourceFontsForFormat, and that `describe_font_file` reads a real font file through documents.js's own describeFontFace.
 
 interface ConnectedPair {
   readonly client: Client;
@@ -84,7 +84,7 @@ describe("fonts", () => {
       ],
     });
 
-    // content mirrors structuredContent as JSON text -- the same "content is JSON.stringify(structuredContent)" convention every other tool in this package follows.
+    // content mirrors structuredContent as JSON text — the same "content is JSON.stringify(structuredContent)" convention every other tool in this package follows.
     const [block] = result.content;
     if (block?.type !== "text") {
       throw new Error("expected a text content block");

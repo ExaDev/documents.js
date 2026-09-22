@@ -36,7 +36,7 @@ export const HEADING_TAGS: Record<
 > = { 1: "h1", 2: "h2", 3: "h3", 4: "h4", 5: "h5", 6: "h6" };
 
 export interface RenderRunsOptions {
-  // markdown-codec lowers `inline code` to a run carrying an explicit fontFamily -- the only markdown construct that sets one -- so for markdown-sourced content, any run with fontFamily is inline code. docx/odt runs commonly carry fontFamily as ordinary font specification, so this MUST be false for wordprocessing-sourced content unless every run in a non-default font would be falsely styled as inline code.
+  // markdown-codec lowers `inline code` to a run carrying an explicit fontFamily — the only markdown construct that sets one — so for markdown-sourced content, any run with fontFamily is inline code. docx/odt runs commonly carry fontFamily as ordinary font specification, so this MUST be false for wordprocessing-sourced content unless every run in a non-default font would be falsely styled as inline code.
   treatFontFamilyAsInlineCode?: boolean;
 }
 
@@ -112,12 +112,12 @@ export interface ListItemNode {
   readonly children: ListItemNode[];
 }
 
-// Reconstructs a nested list tree from a flat run of list-membership paragraphs via a level stack. The ordered-vs-bullet distinction is read per item from its numId's "ordered:"/"bullet:" prefix -- a convention every source now carries into ContentDocument by the time this runs: markdown-codec and odf.js's odt/odp list readers mint it natively (ODF's text:list-style resolves the kind at read time, ExaDev/documents.js's odf.js typed/shared/list.ts), and router.ts's normalizeDocxListKinds resolves docx's own opaque w:numId against NumberingDefinitions into the identical prefix before this ever runs. A membership with no numId, or one whose source genuinely never stated a kind, carries neither prefix and takes the neutral-marker path below rather than a guessed one.
+// Reconstructs a nested list tree from a flat run of list-membership paragraphs via a level stack. The ordered-vs-bullet distinction is read per item from its numId's "ordered:"/"bullet:" prefix — a convention every source now carries into ContentDocument by the time this runs: markdown-codec and odf.js's odt/odp list readers mint it natively (ODF's text:list-style resolves the kind at read time, ExaDev/documents.js's odf.js typed/shared/list.ts), and router.ts's normalizeDocxListKinds resolves docx's own opaque w:numId against NumberingDefinitions into the identical prefix before this ever runs. A membership with no numId, or one whose source genuinely never stated a kind, carries neither prefix and takes the neutral-marker path below rather than a guessed one.
 export function buildListForest(
   items: readonly ContentParagraph[],
 ): ListItemNode[] {
   const root: ListItemNode[] = [];
-  // No sentinel frame for the root: every real frame's own level is genuinely compared against incoming items, so an empty stack (rather than a stack seeded with a synthetic below-every-real-level entry) means "attach to root" -- the frame that IS on top, when there is one, is always a real item.
+  // No sentinel frame for the root: every real frame's own level is genuinely compared against incoming items, so an empty stack (rather than a stack seeded with a synthetic below-every-real-level entry) means "attach to root" — the frame that IS on top, when there is one, is always a real item.
   const stack: { level: number; children: ListItemNode[] }[] = [];
   for (const item of items) {
     const level = item.list?.level ?? 0;
@@ -166,8 +166,8 @@ export function collectBlockGroups(
 
 // --- Complete neutral block renderer (shared by WordProcessingPreview and SlidesPreview) ---
 
-// A page break rendered as a layout event, not document content -- distinct from the horizontal-rule styling above. Shared by the standalone "pageBreak" block kind (docx's own w:pageBreakBefore, spliced in as a preceding block by ooxml.js's reader) and by a paragraph's own pageBreakBefore/pageBreakAfter flags (ODF's fo:break-before/fo:break-after, which odf.js surfaces onto the paragraph itself rather than as a separate block -- see ContentParagraphSchema's own doc comment on why the two formats encode the identical concept two different ways).
-// Takes no key: both call sites below place this directly as a named JSX child (never inside an array/.map()), and React only requires a key to identify same-type siblings produced from an iterable -- a directly-written conditional child needs none.
+// A page break rendered as a layout event, not document content — distinct from the horizontal-rule styling above. Shared by the standalone "pageBreak" block kind (docx's own w:pageBreakBefore, spliced in as a preceding block by ooxml.js's reader) and by a paragraph's own pageBreakBefore/pageBreakAfter flags (ODF's fo:break-before/fo:break-after, which odf.js surfaces onto the paragraph itself rather than as a separate block — see ContentParagraphSchema's own doc comment on why the two formats encode the identical concept two different ways).
+// Takes no key: both call sites below place this directly as a named JSX child (never inside an array/.map()), and React only requires a key to identify same-type siblings produced from an iterable — a directly-written conditional child needs none.
 function renderPageBreak(): ReactNode {
   return (
     <div className={pageBreakStyle} role="separator">
@@ -176,7 +176,7 @@ function renderPageBreak(): ReactNode {
   );
 }
 
-// Human-readable labels for every ContentEmbeddedObjectKind, used as a placeholder for everything this preview does not lay out inline -- document-schema.js's own ContentEmbeddedObject doc comment states only 'formula' is expected to be laid out and rendered (handled via MathMlView below whenever its document actually carries one); the rest round-trip losslessly without ever being rendered, so a labelled placeholder is the correct treatment, not a missing feature. 'formula' stays in this map as the fallback label for the one case objectKind and document.kind can genuinely disagree -- nothing in the schema ties them together statically, so an objectKind of 'formula' whose document is not actually a formula document falls through to this map rather than crashing.
+// Human-readable labels for every ContentEmbeddedObjectKind, used as a placeholder for everything this preview does not lay out inline — document-schema.js's own ContentEmbeddedObject doc comment states only 'formula' is expected to be laid out and rendered (handled via MathMlView below whenever its document actually carries one); the rest round-trip losslessly without ever being rendered, so a labelled placeholder is the correct treatment, not a missing feature. 'formula' stays in this map as the fallback label for the one case objectKind and document.kind can genuinely disagree — nothing in the schema ties them together statically, so an objectKind of 'formula' whose document is not actually a formula document falls through to this map rather than crashing.
 const EMBEDDED_OBJECT_LABELS: Record<ContentEmbeddedObjectKind, string> = {
   formula: "Embedded formula",
   wordprocessing: "Embedded document",
@@ -214,11 +214,11 @@ function renderParagraphContent(block: ContentParagraph): ReactNode {
   return <p className={paragraphStyle}>{renderRuns(block.runs)}</p>;
 }
 
-// Renders blocks with heading detection (via the shared heading-{N} convention), no quote/code/hr specialisation, and neutral list markers. This is the full block-to-JSX pipeline for any non-markdown flowing content -- a wordprocessing section, a presentation shape's text body, etc. MarkdownPreview has its own pipeline with markdown-specific quote/code/hr and ordered/bullet list handling.
+// Renders blocks with heading detection (via the shared heading-{N} convention), no quote/code/hr specialisation, and neutral list markers. This is the full block-to-JSX pipeline for any non-markdown flowing content — a wordprocessing section, a presentation shape's text body, etc. MarkdownPreview has its own pipeline with markdown-specific quote/code/hr and ordered/bullet list handling.
 function renderBlockNeutral(block: ContentBlock): ReactNode {
   if (block.kind === "paragraph") {
     const content = renderParagraphContent(block);
-    // No early return for "neither flag set": rendering the Fragment unconditionally is already a no-op in that case (each `=== true &&` guard below renders nothing), so a separate short-circuiting branch would only ever produce byte-identical output to this one -- never a genuinely different one to test for.
+    // No early return for "neither flag set": rendering the Fragment unconditionally is already a no-op in that case (each `=== true &&` guard below renders nothing), so a separate short-circuiting branch would only ever produce byte-identical output to this one — never a genuinely different one to test for.
     return (
       <>
         {block.pageBreakBefore === true && renderPageBreak()}
@@ -248,7 +248,7 @@ function renderBlockNeutral(block: ContentBlock): ReactNode {
   return null;
 }
 
-// Groups siblings by ordered-vs-bullet (from the numId prefix buildListForest extracts) and renders <ol> for ordered groups, <ul> with a neutral marker for the rest. The neutral marker is the fallback for sources whose numId carries no prefix (undetermined kind) -- non-committal, never confidently wrong.
+// Groups siblings by ordered-vs-bullet (from the numId prefix buildListForest extracts) and renders <ol> for ordered groups, <ul> with a neutral marker for the rest. The neutral marker is the fallback for sources whose numId carries no prefix (undetermined kind) — non-committal, never confidently wrong.
 function renderListNodesNeutral(nodes: readonly ListItemNode[]): ReactNode {
   const groups: { ordered: boolean; nodes: ListItemNode[] }[] = [];
   for (const node of nodes) {

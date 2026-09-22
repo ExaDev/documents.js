@@ -1,8 +1,8 @@
-// Public barrel. May contain only re-export statements (enforced by local/no-side-effects-in-index, eslint.config.ts) -- nothing here can have a side effect at import time.
+// Public barrel. May contain only re-export statements (enforced by local/no-side-effects-in-index, eslint.config.ts) — nothing here can have a side effect at import time.
 //
 // src/test-support/* is deliberately not re-exported and is excluded from the build: the fixture builders there exist for this package's own unit suite.
 
-// The read pair, over document-schema.js's two encodings of one document: readWpd produces the tree-form DocumentTree, readWpdContent the flat ContentDocument every codec in the family exchanges. There is no write half -- see the README's Scope.
+// The read pair, over document-schema.js's two encodings of one document: readWpd produces the tree-form DocumentTree, readWpdContent the flat ContentDocument every codec in the family exchanges. There is no write half — see the README's Scope.
 export type { ReadWpdOptions } from "./read";
 export { readWpd, readWpdContent } from "./read";
 export { wpdContentCodec, WpdBytesSchema } from "./codec";
@@ -20,7 +20,7 @@ export {
   WpdWrongPasswordError,
 } from "./errors";
 
-// The container and stream layers, exported because a consumer inspecting a WordPerfect file -- a forensic tool, a migration audit, a reader for a construct this package does not yet lift into the shared schema -- needs the parsed prefix and the raw function stream, not only the document they fold into.
+// The container and stream layers, exported because a consumer inspecting a WordPerfect file — a forensic tool, a migration audit, a reader for a construct this package does not yet lift into the shared schema — needs the parsed prefix and the raw function stream, not only the document they fold into.
 export type { WpdDocumentContainer } from "./container/container";
 export {
   openWpdDocument,

@@ -99,7 +99,7 @@ describe("resolveDrawPageSize", () => {
   });
 
   it("does not resolve a nameless style:master-page when the page itself has no draw:master-page-name", () => {
-    // A style:master-page with no style:name at all would make attrValue(element, "style:name") itself resolve to undefined -- coincidentally equal to an undefined masterPageName -- if findMasterPageElement didn't short-circuit before ever reaching the search.
+    // A style:master-page with no style:name at all would make attrValue(element, "style:name") itself resolve to undefined — coincidentally equal to an undefined masterPageName — if findMasterPageElement didn't short-circuit before ever reaching the search.
     const pkg: Package = {
       parts: {
         "styles.xml": {

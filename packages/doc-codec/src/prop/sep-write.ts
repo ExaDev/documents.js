@@ -1,7 +1,7 @@
 import type { ContentSection } from "document-schema.js";
 import { DocFormatError } from "../errors";
 
-// The inverse of sep.ts's applySectionSprms: a ContentSection's pageSize/margins to a Sepx grpprl. Every margin is written in the positive, minimum-margin form of its YAS operand (see sep.ts's own marginFromYas comment) -- the same form the specification's own worked example uses, and the one a plain point value naturally maps to, since this writer has no header/footer geometry to grow a minimum margin against.
+// The inverse of sep.ts's applySectionSprms: a ContentSection's pageSize/margins to a Sepx grpprl. Every margin is written in the positive, minimum-margin form of its YAS operand (see sep.ts's own marginFromYas comment) — the same form the specification's own worked example uses, and the one a plain point value naturally maps to, since this writer has no header/footer geometry to grow a minimum margin against.
 
 /** sprmSXaPage / sprmSYaPage: unsigned 2-byte twips, each constrained to [MS-DOC]'s own [144, 31680] page-dimension range. */
 const SPRM_S_XA_PAGE = 0xb01f;
@@ -48,7 +48,7 @@ function uint16(
   return [value & 0xff, (value >> 8) & 0xff];
 }
 
-// Builds the Sepx grpprl for one section's page size and margins -- both required fields of ContentSection (document-schema.js), so this always emits all six sprms.
+// Builds the Sepx grpprl for one section's page size and margins — both required fields of ContentSection (document-schema.js), so this always emits all six sprms.
 export function encodeSectionGrpprl(
   section: Pick<ContentSection, "pageSize" | "margins">,
 ): number[] {
@@ -124,7 +124,7 @@ export function buildSepx(grpprl: readonly number[]): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
-/** PlcfSed for `startCps.length` sections, [MS-DOC] 2.9.269/2.8.26: `startCps` (each section's own PlcfSed.aCp[i], "the beginning of a range of text ... that constitutes a section") plus a trailing `ccpText` -- the "last CP does not begin a new section" terminator -- bracketing one 12-byte Sed per section, each naming where that section's own buildSepx bytes were placed in the WordDocument stream (`fcSepxList`, the same order as `startCps`) and whose fn/fnMpr/fcMpr fields carry the values [MS-DOC] states are ignored. A single-section document is simply the `startCps.length === 1` case. */
+/** PlcfSed for `startCps.length` sections, [MS-DOC] 2.9.269/2.8.26: `startCps` (each section's own PlcfSed.aCp[i], "the beginning of a range of text ... that constitutes a section") plus a trailing `ccpText` — the "last CP does not begin a new section" terminator — bracketing one 12-byte Sed per section, each naming where that section's own buildSepx bytes were placed in the WordDocument stream (`fcSepxList`, the same order as `startCps`) and whose fn/fnMpr/fcMpr fields carry the values [MS-DOC] states are ignored. A single-section document is simply the `startCps.length === 1` case. */
 export function buildPlcfSed(
   startCps: readonly number[],
   ccpText: number,
@@ -132,7 +132,7 @@ export function buildPlcfSed(
 ): Uint8Array<ArrayBuffer> {
   if (startCps.length !== fcSepxList.length) {
     throw new DocFormatError(
-      `internal defect: buildPlcfSed was given ${String(startCps.length)} section start CPs but ${String(fcSepxList.length)} Sepx offsets -- these must be the same length`,
+      `internal defect: buildPlcfSed was given ${String(startCps.length)} section start CPs but ${String(fcSepxList.length)} Sepx offsets — these must be the same length`,
     );
   }
   const keys = [...startCps, ccpText];
@@ -144,11 +144,11 @@ export function buildPlcfSed(
   });
   fcSepxList.forEach((fcSepx, index) => {
     const base = keyBytes + index * 12;
-    // sed.fn is always this constant 0 -- and `bytes` is a fresh, zero-initialised Uint8Array no earlier write in this loop ever touches at this offset, so there is nothing to actually write here; a real setUint16(base, 0) call would be a genuine no-op.
+    // sed.fn is always this constant 0 — and `bytes` is a fresh, zero-initialised Uint8Array no earlier write in this loop ever touches at this offset, so there is nothing to actually write here; a real setUint16(base, 0) call would be a genuine no-op.
     view.setUint32(base + 2, fcSepx, true); // sed.fcSepx.
-    view.setUint16(base + 6, 0); // sed.fnMpr -- ignored.
+    view.setUint16(base + 6, 0); // sed.fnMpr — ignored.
     // 0xffffffff's own four bytes are identical (0xff each), so fcMpr's own endianness is equally moot.
-    view.setUint32(base + 8, 0xffffffff); // sed.fcMpr -- ignored.
+    view.setUint32(base + 8, 0xffffffff); // sed.fcMpr — ignored.
   });
   return bytes;
 }

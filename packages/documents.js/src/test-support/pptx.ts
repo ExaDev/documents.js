@@ -1,7 +1,7 @@
 import type { Package } from "ooxml.js";
 import { decodePackage, zipPackage } from "ooxml.js";
 
-// Never imported by src/index.ts and never reaches dist/. See docx.ts's top-of-file comment -- the same reasoning applies here.
+// Never imported by src/index.ts and never reaches dist/. See docx.ts's top-of-file comment — the same reasoning applies here.
 
 function enc(s: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(s);
@@ -15,7 +15,7 @@ const ROOT_RELS_XML = enc(
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>',
 );
 
-// sldSz is 12192000 x 6858000 EMU -- PowerPoint's default 16:9 widescreen size (960 x 540 pt).
+// sldSz is 12192000 x 6858000 EMU — PowerPoint's default 16:9 widescreen size (960 x 540 pt).
 const PRESENTATION_XML = enc(
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/></p:presentation>',
 );
@@ -24,12 +24,12 @@ const PRESENTATION_RELS_XML = enc(
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>',
 );
 
-// One shape with an explicit xfrm (absolute EMU position/size) and one text run -- enough to exercise direct (non-inherited) geometry without needing a full placeholder/layout/master chain.
+// One shape with an explicit xfrm (absolute EMU position/size) and one text run — enough to exercise direct (non-inherited) geometry without needing a full placeholder/layout/master chain.
 const SLIDE1_XML = enc(
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:cSld><p:spTree><p:sp><p:spPr><a:xfrm><a:off x="914400" y="914400"/><a:ext cx="3657600" cy="914400"/></a:xfrm></p:spPr><p:txBody><a:p><a:r><a:t>Slide text</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>',
 );
 
-// The same deck with the presentation part at ppt/presentation2.xml, reachable only through the root officeDocument relationship (ExaDev/documents.js#1314). The slide's own Target stays relative to the presentation part's directory, exactly as a real producer writes it, so nothing about the slide part moves -- only the part naming the deck does.
+// The same deck with the presentation part at ppt/presentation2.xml, reachable only through the root officeDocument relationship (ExaDev/documents.js#1314). The slide's own Target stays relative to the presentation part's directory, exactly as a real producer writes it, so nothing about the slide part moves — only the part naming the deck does.
 const RENAMED_CONTENT_TYPES_XML = enc(
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation2.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/></Types>',
 );
@@ -70,7 +70,7 @@ export function minimalPptxBytes(): Uint8Array<ArrayBuffer> {
   return zipPackage(pptxParts());
 }
 
-// A single p:graphicFrame whose a:graphicData names the OLE graphic URI and carries a p:oleObj pointing its own r:id at a real embeddings part -- the real-world spelling a classic OLE compound- file embedding takes (mirroring ooxml.js's own oleFixturePackage, typed/pptx/read.test.ts, without the mc:AlternateContent Choice/Fallback double-spelling that names a VML preview picture this package has no reader for and documents.js's own splice pass, ExaDev/documents.js#921, does not need either). No display picture means the shape's own blocks start empty; the splice pass appends the recovered legacy embedding as this shape's only block.
+// A single p:graphicFrame whose a:graphicData names the OLE graphic URI and carries a p:oleObj pointing its own r:id at a real embeddings part — the real-world spelling a classic OLE compound- file embedding takes (mirroring ooxml.js's own oleFixturePackage, typed/pptx/read.test.ts, without the mc:AlternateContent Choice/Fallback double-spelling that names a VML preview picture this package has no reader for and documents.js's own splice pass, ExaDev/documents.js#921, does not need either). No display picture means the shape's own blocks start empty; the splice pass appends the recovered legacy embedding as this shape's only block.
 const LEGACY_OLE_CONTENT_TYPES_XML = enc(
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="bin" ContentType="application/vnd.openxmlformats-officedocument.oleObject"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/></Types>',
 );

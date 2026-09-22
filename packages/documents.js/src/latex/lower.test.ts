@@ -2,7 +2,7 @@ import type { MathExpression, MathSymbolEntry } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { latexToFormula, lowerLatex } from "./lower";
 
-// The lowering table: every construct whose reading is mechanical, pinned as an expected MathExpression tree. These cases double as the parse-node-shape pin for the temml version recorded in package.json -- a temml bump that reshapes a node the lowering consumes shows up here first, which is exactly when the bump's re-verification is meant to happen (see src/latex/temml.ts's own top-of-file comment).
+// The lowering table: every construct whose reading is mechanical, pinned as an expected MathExpression tree. These cases double as the parse-node-shape pin for the temml version recorded in package.json — a temml bump that reshapes a node the lowering consumes shows up here first, which is exactly when the bump's re-verification is meant to happen (see src/latex/temml.ts's own top-of-file comment).
 describe("lowerLatex mechanical rules", () => {
   interface Case {
     readonly latex: string;
@@ -114,7 +114,7 @@ describe("lowerLatex mechanical rules", () => {
       },
     },
     {
-      // ExaDev/documents.js#812: the worked-example-standard shape (a relation followed by an ungrouped arithmetic right-hand side) used to fold left-to-right in source order, treating "=" and "\times" as the same tier and producing multiply(eq(c,a), b) -- a tree with no sound mathematical reading, since multiplying an equation by a value is meaningless. Relations bind looser than arithmetic regardless of which side the arithmetic falls on.
+      // ExaDev/documents.js#812: the worked-example-standard shape (a relation followed by an ungrouped arithmetic right-hand side) used to fold left-to-right in source order, treating "=" and "\times" as the same tier and producing multiply(eq(c,a), b) — a tree with no sound mathematical reading, since multiplying an equation by a value is meaningless. Relations bind looser than arithmetic regardless of which side the arithmetic falls on.
       latex: "c = a \\times b",
       expected: {
         kind: "app",
@@ -133,7 +133,7 @@ describe("lowerLatex mechanical rules", () => {
       },
     },
     {
-      // Chained equality (ExaDev/documents.js#812): each relation's own operands still fold their arithmetic first (b \times c, not eq(a,b) reused as an operand to multiply), then the relations themselves fold left-to-right -- eq(eq(a, multiply(b,c)), d), not the multiply(eq(a,b),c) shape the single-tier fold used to produce.
+      // Chained equality (ExaDev/documents.js#812): each relation's own operands still fold their arithmetic first (b \times c, not eq(a,b) reused as an operand to multiply), then the relations themselves fold left-to-right — eq(eq(a, multiply(b,c)), d), not the multiply(eq(a,b),c) shape the single-tier fold used to produce.
       latex: "a = b \\times c = d",
       expected: {
         kind: "app",
@@ -177,7 +177,7 @@ describe("lowerLatex mechanical rules", () => {
       },
     },
     {
-      // A minus after a relation signs the FOLLOWING operand, the same unary reading as a leading minus -- found by the generated worked-example corpus, where every negative stated answer degraded its whole equality under the leading-only spelling.
+      // A minus after a relation signs the FOLLOWING operand, the same unary reading as a leading minus — found by the generated worked-example corpus, where every negative stated answer degraded its whole equality under the leading-only spelling.
       latex: "T = -0.36",
       expected: {
         kind: "app",
@@ -366,7 +366,7 @@ describe("lowerLatex mechanical rules", () => {
 
   it("sums nested in one term: the outer binder owns the inner binder and its summand", () => {
     const result = lowerLatex("\\sum_{i=1}^{n} \\sum_{j=1}^{m} i j + 1");
-    // The `i j` summand is juxtaposition and degrades inside the body -- the +1 still folds outside the binder, exactly the conventional precedence.
+    // The `i j` summand is juxtaposition and degrades inside the body — the +1 still folds outside the binder, exactly the conventional precedence.
     expect(result.expression).toEqual({
       kind: "app",
       operator: "math:add",
@@ -429,7 +429,7 @@ describe("lowerLatex mechanical rules", () => {
     expect(result.mintedSymbols).toEqual([]);
   });
 
-  it("a curated scripted glyph is one symbol -- exponentiation stands down for the table's judgement", () => {
+  it("a curated scripted glyph is one symbol — exponentiation stands down for the table's judgement", () => {
     const entries: readonly MathSymbolEntry[] = [
       { glyph: "x^2", scope: "document", id: "curated:square-symbol" },
     ];
@@ -449,7 +449,7 @@ describe("lowerLatex mechanical rules", () => {
   });
 });
 
-// The degradation table: context-starved and out-of-scope constructs stay visible data -- an `unparsed` node carrying the verbatim source plus a named diagnostic -- never a throw, never a silent guess.
+// The degradation table: context-starved and out-of-scope constructs stay visible data — an `unparsed` node carrying the verbatim source plus a named diagnostic — never a throw, never a silent guess.
 describe("lowerLatex degradations", () => {
   interface Case {
     readonly latex: string;
@@ -514,7 +514,7 @@ describe("lowerLatex degradations", () => {
     expect(result.expression).toEqual({ kind: "unparsed", latex: "a \\pm b" });
   });
 
-  it("a juxtaposition inside a larger relation degrades only the juxtaposed run -- the relation itself still lowers around it", () => {
+  it("a juxtaposition inside a larger relation degrades only the juxtaposed run — the relation itself still lowers around it", () => {
     const result = lowerLatex("E = mc^2");
     expect(result.expression).toEqual({
       kind: "app",
@@ -560,7 +560,7 @@ describe("latexToFormula", () => {
     expect(root?.type === "element" ? root.tag : undefined).toBe("math");
   });
 
-  it("a parse failure still carries the presentation verbatim with an empty MathML array -- the schema-anticipated state, never a throw", () => {
+  it("a parse failure still carries the presentation verbatim with an empty MathML array — the schema-anticipated state, never a throw", () => {
     const result = latexToFormula("\\notacommand");
     expect(result.formula.presentation).toEqual({ latex: "\\notacommand" });
     expect(result.formula.mathml).toEqual([]);

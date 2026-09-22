@@ -19,9 +19,9 @@ import {
   type Ooo1PropertyType,
 } from "./properties";
 
-// Rewrites an OpenOffice.org 1.x package into the ODF shape this package's own typed readers already understand -- the whole of this codec's OpenOffice.org 1.x support, and the reason readSxw/readSxc/readSxi/readSxd are three lines each rather than a second set of readers.
+// Rewrites an OpenOffice.org 1.x package into the ODF shape this package's own typed readers already understand — the whole of this codec's OpenOffice.org 1.x support, and the reason readSxw/readSxc/readSxi/readSxd are three lines each rather than a second set of readers.
 //
-// This mirrors what LibreOffice itself does with a .sxw: it does not have a second importer, it runs the document through a transformer (xmloff/source/transform/, the "xof" filter) that turns OpenOffice.org 1.x XML into ODF XML and feeds the result to the ordinary ODF importer. The transformation is genuinely a variant mapping and not a new parse: the two vocabularies share their document model, their element names for almost everything, and their attribute names for most things -- what differs is the namespace URIs, a list of renames, and a handful of real structural changes ODF made when OASIS standardised the format.
+// This mirrors what LibreOffice itself does with a .sxw: it does not have a second importer, it runs the document through a transformer (xmloff/source/transform/, the "xof" filter) that turns OpenOffice.org 1.x XML into ODF XML and feeds the result to the ordinary ODF importer. The transformation is genuinely a variant mapping and not a new parse: the two vocabularies share their document model, their element names for almost everything, and their attribute names for most things — what differs is the namespace URIs, a list of renames, and a handful of real structural changes ODF made when OASIS standardised the format.
 //
 // The differences implemented below, each verified against a genuine OpenOffice.org 1.x document (.sxw/.sxc/.sxi/.sxd written by OpenOffice.org 1.1 and 1.9) and cross-checked against LibreOffice's own OOo-to-OASIS action tables (xmloff/source/transform/OOo2Oasis.cxx and StyleOOoTContext.cxx):
 //   - Namespaces: every openoffice.org-minted URI becomes its OASIS successor, and fo:/svg: flip from the real W3C namespaces to OASIS's own "-compatible" mintings. See ./ns.ts.
@@ -30,7 +30,7 @@ import {
 //   - Frames: draw:image/draw:text-box/draw:object and their siblings are bare shapes in OpenOffice.org 1.x; ODF wraps each in a draw:frame that carries the position, size and anchoring.
 //   - Lists, notes, tabs and a list of individual renames (text:ordered-list/text:unordered-list to text:list, the footnote/endnote pair to the text:note family, text:tab-stop to text:tab, office:font-decls to office:font-face-decls, style:page-master to style:page-layout, ...).
 //   - Values: lengths written in "inch" become "in", a cell's table:value-* attributes become office:value-*, a style's own style:family="graphics" becomes ODF's singular "graphic", and the compound style:text-underline/style:text-crossing-out attributes become ODF's style/type/width triples.
-//   - The package itself: the manifest's namespace and its root media type become the OASIS ones, and the "mimetype" part ODF requires -- which OpenOffice.org 1.x packages do not have at all -- is synthesised.
+//   - The package itself: the manifest's namespace and its root media type become the OASIS ones, and the "mimetype" part ODF requires — which OpenOffice.org 1.x packages do not have at all — is synthesised.
 //
 // What this deliberately does NOT do is claim to be a general OpenOffice.org-to-ODF converter. It targets the shape this package's readers consume; a construct no reader looks at (chart plot-area geometry, the presentation animation elements, form control implementation names) is carried through with its names updated where the rename is known and otherwise left alone, which costs nothing and quarantines as residue exactly as an unknown ODF element would.
 
@@ -49,7 +49,7 @@ function isOdfNamespacePrefix(
   return Object.hasOwn(ODF_NAMESPACES, prefix);
 }
 
-// The genre element ODF's office:body takes for each office:class value OpenOffice.org 1.x could write. A master document ("text-global") is still an office:text body in ODF -- what makes it a master document is its media type and its text:section-source links, not a different genre element.
+// The genre element ODF's office:body takes for each office:class value OpenOffice.org 1.x could write. A master document ("text-global") is still an office:text body in ODF — what makes it a master document is its media type and its text:section-source links, not a different genre element.
 const GENRE_ELEMENT_BY_CLASS: ReadonlyMap<string, string> = new Map([
   ["text", "office:text"],
   ["text-global", "office:text"],
@@ -204,7 +204,7 @@ function carriesNoLength(attributeName: string): boolean {
   return attributeName.endsWith("name") || attributeName === "xlink:href";
 }
 
-// OpenOffice.org 1.x names the drawing style family "graphics"; ODF renamed it to the singular "graphic". Taken from LibreOffice's own transformer (xmloff/source/transform/StyleOOoTContext.cxx maps XML_GRAPHICS onto XML_FAMILY_TYPE_GRAPHIC on the way in and writes XML_GRAPHIC back out), and confirmed against LibreOffice 26.2 directly: a package whose graphic automatic styles say "graphic" imports with every one of them silently unbound, so each shape falls back to the consumer's own default fill and stroke -- the same silent-inherit failure mode a missing draw:style-name causes. Scoped by attribute name alone, which is exact: style:family appears on style:style and style:default-style and nowhere else in either vocabulary. Every other family name -- including "presentation", the drawing family's sibling on a slide -- is spelled identically on both sides.
+// OpenOffice.org 1.x names the drawing style family "graphics"; ODF renamed it to the singular "graphic". Taken from LibreOffice's own transformer (xmloff/source/transform/StyleOOoTContext.cxx maps XML_GRAPHICS onto XML_FAMILY_TYPE_GRAPHIC on the way in and writes XML_GRAPHIC back out), and confirmed against LibreOffice 26.2 directly: a package whose graphic automatic styles say "graphic" imports with every one of them silently unbound, so each shape falls back to the consumer's own default fill and stroke — the same silent-inherit failure mode a missing draw:style-name causes. Scoped by attribute name alone, which is exact: style:family appears on style:style and style:default-style and nowhere else in either vocabulary. Every other family name — including "presentation", the drawing family's sibling on a slide — is spelled identically on both sides.
 const OOO1_GRAPHIC_STYLE_FAMILY = "graphics";
 const ODF_GRAPHIC_STYLE_FAMILY = "graphic";
 
@@ -223,7 +223,7 @@ function normaliseAttributeValue(name: string, value: string): string {
 interface TransformContext {
   // Declared prefix to canonical prefix, for a document that bound the vocabularies to prefixes other than the conventional ones.
   readonly prefixes: ReadonlyMap<string, string>;
-  // The office:class the part's root element declared, if any -- what office:body's genre element is built from.
+  // The office:class the part's root element declared, if any — what office:body's genre element is built from.
   readonly documentClass: string | undefined;
   // Set only while transforming the children of a style container, naming the property families its style:properties splits into.
   readonly propertyTypes?: readonly Ooo1PropertyType[];
@@ -243,7 +243,7 @@ function renameQName(
     : `${canonical}:${qname.slice(colon + 1)}`;
 }
 
-// Rewrites one xmlns declaration: the prefix it binds becomes the canonical one, and an OpenOffice.org URI becomes its OASIS successor. A declaration binding something neither vocabulary owns (the ooo:/ooow:/oooc: extension namespaces OpenOffice.org 1.1 already wrote, xforms:, xsd:, xsi:) is left exactly as it is -- those URIs are identical in ODF.
+// Rewrites one xmlns declaration: the prefix it binds becomes the canonical one, and an OpenOffice.org URI becomes its OASIS successor. A declaration binding something neither vocabulary owns (the ooo:/ooow:/oooc: extension namespaces OpenOffice.org 1.1 already wrote, xforms:, xsd:, xsi:) is left exactly as it is — those URIs are identical in ODF.
 function transformNamespaceDeclaration(attribute: Attribute): Attribute {
   const canonical = CANONICAL_PREFIX_BY_URI.get(attribute.value);
   if (canonical === undefined || !isOdfNamespacePrefix(canonical)) {
@@ -255,7 +255,7 @@ function transformNamespaceDeclaration(attribute: Attribute): Attribute {
   };
 }
 
-// The document roots that carry office:class. ODF has no attribute for the genre at all -- office:body's own child element names it instead (see buildBody) -- so the attribute is dropped here rather than carried through to quarantine as residue that means nothing on the ODF side.
+// The document roots that carry office:class. ODF has no attribute for the genre at all — office:body's own child element names it instead (see buildBody) — so the attribute is dropped here rather than carried through to quarantine as residue that means nothing on the ODF side.
 const DOCUMENT_ROOT_ELEMENTS: ReadonlySet<string> = new Set([
   "office:document",
   "office:document-content",
@@ -424,7 +424,7 @@ function transformElement(
   const attributes = transformAttributes(source, renamedTag, context.prefixes);
   const childContext: TransformContext = {
     ...context,
-    // Whether this element classifies a style:properties directly inside it, and into which property families -- resolved from the already-transformed tag and attributes so the classification sees the same style:family value the output carries.
+    // Whether this element classifies a style:properties directly inside it, and into which property families — resolved from the already-transformed tag and attributes so the classification sees the same style:family value the output carries.
     propertyTypes: propertyTypesForContainer({
       ...source,
       tag: renamedTag,
@@ -601,7 +601,7 @@ function transformXmlPart(nodes: readonly XmlNode[]): XmlNode[] {
 const MANIFEST_PATH = "META-INF/manifest.xml";
 const MIMETYPE_PATH = "mimetype";
 
-// The media type the package's own manifest declares for its root entry, translated to the OASIS successor -- the one place an OpenOffice.org 1.x package records what kind of document it is.
+// The media type the package's own manifest declares for its root entry, translated to the OASIS successor — the one place an OpenOffice.org 1.x package records what kind of document it is.
 function odfMediaTypeOf(pkg: Package): string | undefined {
   const manifest = pkg.parts[MANIFEST_PATH];
   if (manifest?.kind !== "xml") {
@@ -696,18 +696,18 @@ export function transformOoo1Package(pkg: Package): Package {
 // =====================================================================================================================
 // THE REVERSE DIRECTION: an ODF-shaped Package -> genuine OpenOffice.org 1.x XML.
 //
-// The exact inverse of every rule above, reversing each rename/restructure by name against the same LibreOffice transformer source (xmloff/source/transform/OOo2Oasis.cxx, StyleOOoTContext.cxx) and OpenOffice.org DTD the forward direction is grounded against -- transformToOoo1Package is what typed/odt/write.ts's writeOdt or typed/ods/write.ts's writeOds produces run backwards through this module, and ../write.ts's writeSxw/writeSxc are what actually call it, one per ODF-native writer this package has. As with the forward direction's own module comment, this deliberately does NOT claim to be a general ODF-to-OpenOffice.org converter: it targets the shape this package's own typed writers (writeOdt, writeOds today) produce, not arbitrary real-world ODF. Every rule below is still a genuine, unconditional structural inverse of its forward counterpart, not a special case carved out for one writer's own output alone -- the narrowing is in what a real writer here can ever HAND it (no fidelity constructs, no embedded objects, no chart/presentation-only constructs), not in how faithfully each rule itself is reversed, and nothing in this module is odt- or ods-specific -- it is media-type-agnostic, which is exactly what let writeSxc reuse it with no changes of its own.
+// The exact inverse of every rule above, reversing each rename/restructure by name against the same LibreOffice transformer source (xmloff/source/transform/OOo2Oasis.cxx, StyleOOoTContext.cxx) and OpenOffice.org DTD the forward direction is grounded against — transformToOoo1Package is what typed/odt/write.ts's writeOdt or typed/ods/write.ts's writeOds produces run backwards through this module, and ../write.ts's writeSxw/writeSxc are what actually call it, one per ODF-native writer this package has. As with the forward direction's own module comment, this deliberately does NOT claim to be a general ODF-to-OpenOffice.org converter: it targets the shape this package's own typed writers (writeOdt, writeOds today) produce, not arbitrary real-world ODF. Every rule below is still a genuine, unconditional structural inverse of its forward counterpart, not a special case carved out for one writer's own output alone — the narrowing is in what a real writer here can ever HAND it (no fidelity constructs, no embedded objects, no chart/presentation-only constructs), not in how faithfully each rule itself is reversed, and nothing in this module is odt- or ods-specific — it is media-type-agnostic, which is exactly what let writeSxc reuse it with no changes of its own.
 //
 // Three rules need something the forward direction never did: PACKAGE-WIDE context.
 //   - The document's own office:class (buildBody's inverse) is derivable only from content.xml's own office:body --
 // styles.xml and meta.xml carry no genre information of their own, so their own office:class is filled in from content.xml's, exactly mirroring how a real OpenOffice.org 1.x package stamps the identical office:class on every one of a document's own parts.
 //   - A text:list's ordered-vs-bullet split (RENAMED_ELEMENTS' one many-to-one collapse this reverses) requires
-// resolving the list's own referenced text:list-style, which may live in EITHER content.xml or styles.xml -- typed/shared/list.ts's own resolveOdfListKind already does exactly this resolution for the read direction, so it is reused verbatim here rather than re-implemented, run against the ORIGINAL (pre-reverse-transform) package, since none of the elements/attributes that resolution inspects (text:list-style, text:level, text:list-level-style-number/-bullet, style:name) are renamed by this module in either direction.
+// resolving the list's own referenced text:list-style, which may live in EITHER content.xml or styles.xml — typed/shared/list.ts's own resolveOdfListKind already does exactly this resolution for the read direction, so it is reused verbatim here rather than re-implemented, run against the ORIGINAL (pre-reverse-transform) package, since none of the elements/attributes that resolution inspects (text:list-style, text:level, text:list-level-style-number/-bullet, style:name) are renamed by this module in either direction.
 //   - The package's own ODF media type (read off the "mimetype" part this reverse direction is about to delete)
 //     decides which OpenOffice.org 1.x media type the manifest's root entry gets rewritten to.
 // =====================================================================================================================
 
-// The genre element ODF's office:body takes for each office:class value, inverted: office:text -> "text" (never "text-global" -- the OTHER office:class value the forward direction's own GENRE_ELEMENT_BY_CLASS collapses onto office:text, naming a master document, which no writer in this package produces yet, so "text" is the only direction this inversion can honestly resolve).
+// The genre element ODF's office:body takes for each office:class value, inverted: office:text -> "text" (never "text-global" — the OTHER office:class value the forward direction's own GENRE_ELEMENT_BY_CLASS collapses onto office:text, naming a master document, which no writer in this package produces yet, so "text" is the only direction this inversion can honestly resolve).
 const CLASS_BY_GENRE_ELEMENT: ReadonlyMap<string, string> = new Map([
   ["office:text", "text"],
   ["office:spreadsheet", "spreadsheet"],
@@ -716,7 +716,7 @@ const CLASS_BY_GENRE_ELEMENT: ReadonlyMap<string, string> = new Map([
   ["office:chart", "chart"],
 ]);
 
-// The first child that is both an element and a recognised genre tag -- shared by reverseTransformElement's own office:body unwrap and documentClassOf below, the two places this package looks for office:body's genre child. A non-element child is never returned: CLASS_BY_GENRE_ELEMENT has no key for a non-element node's undefined tag, so the type check inside this one shared find() only ever needs proving once rather than twice.
+// The first child that is both an element and a recognised genre tag — shared by reverseTransformElement's own office:body unwrap and documentClassOf below, the two places this package looks for office:body's genre child. A non-element child is never returned: CLASS_BY_GENRE_ELEMENT has no key for a non-element node's undefined tag, so the type check inside this one shared find() only ever needs proving once rather than twice.
 function firstGenreElement(
   children: readonly XmlNode[],
 ): XmlElement | undefined {
@@ -726,7 +726,7 @@ function firstGenreElement(
   );
 }
 
-// Simple, unambiguous element renames reversed by a straight lookup -- every RENAMED_ELEMENTS target EXCEPT the three whose forward mapping is many-to-one (text:list, from text:ordered-list AND text:unordered-list; text:note-body and text:note-citation, each from a footnote/endnote pair), which cannot be inverted by name alone and are handled below through the same context (a resolved list kind, an enclosing note's own class) their forward siblings in NOTE_ELEMENTS already need for the identical reason.
+// Simple, unambiguous element renames reversed by a straight lookup — every RENAMED_ELEMENTS target EXCEPT the three whose forward mapping is many-to-one (text:list, from text:ordered-list AND text:unordered-list; text:note-body and text:note-citation, each from a footnote/endnote pair), which cannot be inverted by name alone and are handled below through the same context (a resolved list kind, an enclosing note's own class) their forward siblings in NOTE_ELEMENTS already need for the identical reason.
 const REVERSE_RENAMED_ELEMENTS: ReadonlyMap<string, string> = new Map([
   ["office:font-face-decls", "office:font-decls"],
   ["office:scripts", "office:script"],
@@ -740,7 +740,7 @@ const REVERSE_RENAMED_ELEMENTS: ReadonlyMap<string, string> = new Map([
   ["table:dependency", "table:dependence"],
 ]);
 
-// The text:note/text:note-ref/text:notes-configuration family's own reverse: each carries its own text:note-class attribute (added by the forward NOTE_ELEMENTS mapping), so -- unlike text:note-body/text:note-citation below -- this one needs no threaded context at all, just the element's own attribute. Defaults to "footnote" for a malformed/absent class, matching this package's general degrade-gracefully reading posture applied to writing. Only ever called (see reverseTransformElement below) with tag already narrowed to one of the three checked below, so the last of them needs no guard of its own -- by the time text:note and text:note-ref have both failed, tag can only be text:notes-configuration.
+// The text:note/text:note-ref/text:notes-configuration family's own reverse: each carries its own text:note-class attribute (added by the forward NOTE_ELEMENTS mapping), so — unlike text:note-body/text:note-citation below — this one needs no threaded context at all, just the element's own attribute. Defaults to "footnote" for a malformed/absent class, matching this package's general degrade-gracefully reading posture applied to writing. Only ever called (see reverseTransformElement below) with tag already narrowed to one of the three checked below, so the last of them needs no guard of its own — by the time text:note and text:note-ref have both failed, tag can only be text:notes-configuration.
 function reverseNoteTag(tag: string, noteClass: string | undefined): string {
   const isEndnote = noteClass === "endnote";
   if (tag === "text:note") {
@@ -754,7 +754,7 @@ function reverseNoteTag(tag: string, noteClass: string | undefined): string {
     : "text:footnotes-configuration";
 }
 
-// text:note-body and text:note-citation carry no note-class of their own in ODF -- only their ENCLOSING text:note does -- so reversing them needs the class threaded down through the recursion from the text:note that contains them (ReverseTransformContext.noteClass, set exactly once, the moment a text:note element is entered). Only ever called (see reverseTransformElement below) with tag already narrowed to one of the two checked below, so the second needs no guard of its own -- once text:note-body has failed, tag can only be text:note-citation.
+// text:note-body and text:note-citation carry no note-class of their own in ODF — only their ENCLOSING text:note does — so reversing them needs the class threaded down through the recursion from the text:note that contains them (ReverseTransformContext.noteClass, set exactly once, the moment a text:note element is entered). Only ever called (see reverseTransformElement below) with tag already narrowed to one of the two checked below, so the second needs no guard of its own — once text:note-body has failed, tag can only be text:note-citation.
 function reverseNoteBodyOrCitation(
   tag: string,
   noteClass: "footnote" | "endnote" | undefined,
@@ -766,12 +766,12 @@ function reverseNoteBodyOrCitation(
   return isEndnote ? "text:endnote-citation" : "text:footnote-citation";
 }
 
-// A length written in ODF's "in" unit, reversed to OpenOffice.org 1.x's own "inch" spelling -- the exact inverse of INCH_TOKEN above, matched the same way (a whole whitespace-delimited token, so a compound value like a border shorthand keeps its structure).
+// A length written in ODF's "in" unit, reversed to OpenOffice.org 1.x's own "inch" spelling — the exact inverse of INCH_TOKEN above, matched the same way (a whole whitespace-delimited token, so a compound value like a border shorthand keeps its structure).
 const PT_IN_TOKEN = /(^|\s)(-?(?:\d+(?:\.\d+)?|\.\d+))in(?=\s|$)/g;
 
 function reverseAttributeValue(name: string, value: string): string {
   if (name === "style:family") {
-    // normaliseAttributeValue's own inverse -- see its note for why the drawing family alone needs one, and what a real consumer does with a package that skips it.
+    // normaliseAttributeValue's own inverse — see its note for why the drawing family alone needs one, and what a real consumer does with a package that skips it.
     return value === ODF_GRAPHIC_STYLE_FAMILY
       ? OOO1_GRAPHIC_STYLE_FAMILY
       : value;
@@ -805,7 +805,7 @@ function reverseRewriteHref(tag: string, name: string, value: string): string {
   return value;
 }
 
-// RENAMED_ATTRIBUTES reversed by explicit name -- not an auto-inverted map, because one of its six entries (office:value-type) is ALSO independently produced by the element-scoped VALUE_ATTRIBUTE_LOCAL_NAMES rewrite below (from table:value-type/text:value-type), so a blind inversion would be ambiguous; the tag-scoped checks below resolve that ambiguity, mirroring renameAttributeFor's own tag-then-name dispatch structure exactly, just in the opposite order (the scoped checks run first here because they are the ones that can fire on a name the blanket reversal below would otherwise mis-resolve).
+// RENAMED_ATTRIBUTES reversed by explicit name — not an auto-inverted map, because one of its six entries (office:value-type) is ALSO independently produced by the element-scoped VALUE_ATTRIBUTE_LOCAL_NAMES rewrite below (from table:value-type/text:value-type), so a blind inversion would be ambiguous; the tag-scoped checks below resolve that ambiguity, mirroring renameAttributeFor's own tag-then-name dispatch structure exactly, just in the opposite order (the scoped checks run first here because they are the ones that can fire on a name the blanket reversal below would otherwise mis-resolve).
 function reverseRenamedAttributeName(
   tag: string,
   name: string,
@@ -860,7 +860,7 @@ function reverseAttributeNameFor(tag: string, name: string): string {
   return reverseRenamedAttributeName(tag, name) ?? name;
 }
 
-// The reverse of transformNamespaceDeclaration: an ODF (or already-OpenOffice.org) URI's canonical prefix decides the OpenOffice.org 1.x URI to bind it to. A prefix with no OpenOffice.org 1.x counterpart at all (smil:/anim:/xforms:/ db:/rpt:, ODF namespaces this format predates) is left exactly as it is -- the same "neither vocabulary owns this" case the forward direction's own comment describes, just approached from the other side.
+// The reverse of transformNamespaceDeclaration: an ODF (or already-OpenOffice.org) URI's canonical prefix decides the OpenOffice.org 1.x URI to bind it to. A prefix with no OpenOffice.org 1.x counterpart at all (smil:/anim:/xforms:/ db:/rpt:, ODF namespaces this format predates) is left exactly as it is — the same "neither vocabulary owns this" case the forward direction's own comment describes, just approached from the other side.
 function transformNamespaceDeclarationToOoo1(attribute: Attribute): Attribute {
   const canonical = CANONICAL_PREFIX_BY_URI.get(attribute.value);
   if (canonical === undefined || !isOoo1NamespacePrefix(canonical)) {
@@ -894,7 +894,7 @@ function reverseTransformAttributes(
   return out;
 }
 
-// Rewrites one <office:frame>'s draw:frame wrapper back to the bare shape OpenOffice.org 1.x wrote: buildFrame's exact inverse. Only fires when the frame's own children include one of FRAME_SHAPES -- a draw:frame wrapping anything else (a custom shape, a connector, any construct OpenOffice.org 1.x never wrapped this way at all) has no OpenOffice.org 1.x un-wrapped spelling and is left exactly as ODF wrote it. The frame's own attributes (all of which, on a well-formed draw:frame, are FRAME_ATTRIBUTES by construction -- that is the set's own definition) move onto the shape; the frame's other children (svg:title/svg:desc and the rest of FRAME_CHILD_ELEMENTS) become the shape's own trailing children, exactly where buildFrame took them from.
+// Rewrites one <office:frame>'s draw:frame wrapper back to the bare shape OpenOffice.org 1.x wrote: buildFrame's exact inverse. Only fires when the frame's own children include one of FRAME_SHAPES — a draw:frame wrapping anything else (a custom shape, a connector, any construct OpenOffice.org 1.x never wrapped this way at all) has no OpenOffice.org 1.x un-wrapped spelling and is left exactly as ODF wrote it. The frame's own attributes (all of which, on a well-formed draw:frame, are FRAME_ATTRIBUTES by construction — that is the set's own definition) move onto the shape; the frame's other children (svg:title/svg:desc and the rest of FRAME_CHILD_ELEMENTS) become the shape's own trailing children, exactly where buildFrame took them from.
 function unwrapFrame(
   frameAttributes: readonly Attribute[],
   frameChildren: readonly XmlNode[],
@@ -922,7 +922,7 @@ function unwrapFrame(
   );
 }
 
-// Raw (still XML-entity-encoded, per this package's processEntities:false model) text content of an element with only text-node children -- exactly what MOVED_TO_CHILD_ELEMENT's dc:creator/dc:date/meta:date-string children carry, and copied verbatim into an attribute value below since both sides of that move use the identical raw encoding convention (see xml/entities.ts's own top-of-file note).
+// Raw (still XML-entity-encoded, per this package's processEntities:false model) text content of an element with only text-node children — exactly what MOVED_TO_CHILD_ELEMENT's dc:creator/dc:date/meta:date-string children carry, and copied verbatim into an attribute value below since both sides of that move use the identical raw encoding convention (see xml/entities.ts's own top-of-file note).
 function elementRawText(el: XmlElement): string {
   let text = "";
   for (const child of el.children) {
@@ -961,7 +961,7 @@ function reverseMovedChildren(
   return { attributes, rest };
 }
 
-// meta:keywords was a wrapper ODF removed (see transformElement's own meta:keywords case); reversed here by re-wrapping every meta:keyword sibling office:meta carries into one meta:keywords element, positioned at the first keyword's own place among its siblings -- exactly the shape the forward direction unwraps. Safe to run unconditionally over any element's children (not scoped to office:meta specifically): meta:keyword has no legitimate ODF appearance anywhere else, so the check costs nothing when there is nothing to wrap.
+// meta:keywords was a wrapper ODF removed (see transformElement's own meta:keywords case); reversed here by re-wrapping every meta:keyword sibling office:meta carries into one meta:keywords element, positioned at the first keyword's own place among its siblings — exactly the shape the forward direction unwraps. Safe to run unconditionally over any element's children (not scoped to office:meta specifically): meta:keyword has no legitimate ODF appearance anywhere else, so the check costs nothing when there is nothing to wrap.
 function wrapMetaKeywords(nodes: readonly XmlNode[]): XmlNode[] {
   // No early return for an empty keywords list: the loop below already reproduces `nodes` unchanged in that case (every node fails the meta:keyword check below and is pushed through as-is), so a length-0 guard would only save the loop's own allocation, never change the result.
   const keywords = nodes.filter(
@@ -998,13 +998,13 @@ function finaliseReversedChildren(nodes: readonly XmlNode[]): XmlNode[] {
 interface ReverseTransformContext {
   // Declared-prefix -> canonical-prefix, computed once per part exactly as the forward direction's own transformXmlPart does (prefixRenames is direction-agnostic: it canonicalises whichever prefix a document bound a known URI to, regardless of which vocabulary that URI belongs to).
   readonly prefixes: ReadonlyMap<string, string>;
-  // The office:class value every DOCUMENT_ROOT_ELEMENTS root in this package gets stamped with, resolved once from content.xml's own genre element (see documentClassOf) and threaded into every part's own transform -- styles.xml and meta.xml carry no genre information of their own to derive it from.
+  // The office:class value every DOCUMENT_ROOT_ELEMENTS root in this package gets stamped with, resolved once from content.xml's own genre element (see documentClassOf) and threaded into every part's own transform — styles.xml and meta.xml carry no genre information of their own to derive it from.
   readonly documentClass: string | undefined;
   // The ORIGINAL, pre-reverse-transform package, threaded through for resolveOdfListKind's own cross-part style lookup alone (see this section's own top-of-file note on why list-kind resolution needs package-wide context).
   readonly pkg: Package;
   // Set only while transforming a text:note's own children, naming which note family text:note-body/text:note-citation (which carry no class of their own) belong to.
   readonly noteClass?: "footnote" | "endnote";
-  // The ordered/bullet kind resolved for the nearest enclosing text:list that DID carry a resolvable text:style-name, inherited by a nested text:list that -- like every nested list this package's own writeOdfList produces -- has no text:style-name of its own to resolve.
+  // The ordered/bullet kind resolved for the nearest enclosing text:list that DID carry a resolvable text:style-name, inherited by a nested text:list that — like every nested list this package's own writeOdfList produces — has no text:style-name of its own to resolve.
   readonly listKind?: "ordered" | "bullet";
 }
 
@@ -1044,7 +1044,7 @@ function reverseTransformElement(
     context.prefixes,
   );
 
-  // office:body's genre child (buildBody's own construction) unwraps: recursing into the GENRE element's children rather than office:body's own single child reproduces the flat body OpenOffice.org 1.x wrote. office:body itself needs no special-cased return below (unlike draw:frame, the note family, and the rest) -- REVERSE_RENAMED_ELEMENTS has no entry for it and it is not a DOCUMENT_ROOT_ELEMENTS member, so the generic tag/attribute handling at the bottom of this function already reproduces element("office:body", attributes, children) exactly.
+  // office:body's genre child (buildBody's own construction) unwraps: recursing into the GENRE element's children rather than office:body's own single child reproduces the flat body OpenOffice.org 1.x wrote. office:body itself needs no special-cased return below (unlike draw:frame, the note family, and the rest) — REVERSE_RENAMED_ELEMENTS has no entry for it and it is not a DOCUMENT_ROOT_ELEMENTS member, so the generic tag/attribute handling at the bottom of this function already reproduces element("office:body", attributes, children) exactly.
   const genreChild =
     renamedTag === "office:body"
       ? firstGenreElement(source.children)
@@ -1149,7 +1149,7 @@ function reverseTransformElement(
 
 const CONTENT_XML_PATH = "content.xml";
 
-// The office:class every part of this package will be stamped with, resolved from content.xml's own office:body: the genre element (office:text and its siblings) office:body's single child is, per buildBody's own construction. undefined when content.xml is missing or carries no recognisable genre -- a caller that hands this function something other than a genuine writeOdt/writeOds/writeOdp/writeOdg package gets an honestly undecorated result rather than a guessed office:class.
+// The office:class every part of this package will be stamped with, resolved from content.xml's own office:body: the genre element (office:text and its siblings) office:body's single child is, per buildBody's own construction. undefined when content.xml is missing or carries no recognisable genre — a caller that hands this function something other than a genuine writeOdt/writeOds/writeOdp/writeOdg package gets an honestly undecorated result rather than a guessed office:class.
 function documentClassOf(pkg: Package): string | undefined {
   const content = pkg.parts[CONTENT_XML_PATH];
   if (content?.kind !== "xml") {
@@ -1217,7 +1217,7 @@ function rewriteManifestToOoo1(
   });
 }
 
-// An ODF-shaped Package (the output of writeOdt/writeOdtContent, writeOds/writeOdsContent, writeOdp/writeOdpContent, or writeOdg/writeOdgContent) into genuine OpenOffice.org 1.x XML: the whole of this direction's own support for a real .sxw/.sxc/.sxi/.sxd writer, and the counterpart ../write.ts's writeSxw/writeSxc/writeSxi/writeSxd all call. A package whose "mimetype" part names an ODF media type with no OpenOffice.org 1.x predecessor (or one with no "mimetype" part at all -- already OpenOffice.org 1.x-shaped, or not a document this module can identify) is returned exactly as given, mirroring transformOoo1Package's own "not applicable, leave alone" stance on the read side.
+// An ODF-shaped Package (the output of writeOdt/writeOdtContent, writeOds/writeOdsContent, writeOdp/writeOdpContent, or writeOdg/writeOdgContent) into genuine OpenOffice.org 1.x XML: the whole of this direction's own support for a real .sxw/.sxc/.sxi/.sxd writer, and the counterpart ../write.ts's writeSxw/writeSxc/writeSxi/writeSxd all call. A package whose "mimetype" part names an ODF media type with no OpenOffice.org 1.x predecessor (or one with no "mimetype" part at all — already OpenOffice.org 1.x-shaped, or not a document this module can identify) is returned exactly as given, mirroring transformOoo1Package's own "not applicable, leave alone" stance on the read side.
 export function transformToOoo1Package(pkg: Package): Package {
   const odfMediaType = readMimetype(pkg);
   if (odfMediaType === undefined) {
@@ -1232,7 +1232,7 @@ export function transformToOoo1Package(pkg: Package): Package {
   const parts: Record<string, Part> = {};
   for (const [path, part] of Object.entries(pkg.parts)) {
     if (path === MIMETYPE_PATH) {
-      // OpenOffice.org 1.x packages have no "mimetype" part at all -- the manifest's own root entry, rewritten below, is the only record of the document's type (see ../ns.ts's own note on this asymmetry).
+      // OpenOffice.org 1.x packages have no "mimetype" part at all — the manifest's own root entry, rewritten below, is the only record of the document's type (see ../ns.ts's own note on this asymmetry).
       continue;
     }
     if (part.kind !== "xml") {

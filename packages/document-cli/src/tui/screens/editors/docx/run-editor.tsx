@@ -14,7 +14,7 @@ export interface RunTextEditorProps {
   readonly onCancel: () => void;
 }
 
-// The one piece of editing UI both the real run-editor screen below and table-cell-detail.tsx's own text edit reuse -- documents.js gives a table cell no per-run styling at all (see that screen's own comment), so both call sites reduce to the identical "edit one line of text, commit or cancel" shape, and this is that shape written once.
+// The one piece of editing UI both the real run-editor screen below and table-cell-detail.tsx's own text edit reuse — documents.js gives a table cell no per-run styling at all (see that screen's own comment), so both call sites reduce to the identical "edit one line of text, commit or cancel" shape, and this is that shape written once.
 export function RunTextEditor(props: RunTextEditorProps): ReactElement {
   const [value, setValue] = useState(props.initialText);
   return (

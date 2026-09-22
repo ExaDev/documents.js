@@ -12,7 +12,7 @@ import {
 
 describe("parseSvgTransform", () => {
   it("applies a transform list left to right, innermost function first", () => {
-    // translate(10,20) scale(2): scale applies to the point first, then the translate -- the SVG list order as function composition.
+    // translate(10,20) scale(2): scale applies to the point first, then the translate — the SVG list order as function composition.
     const total = parseSvgTransform("translate(10,20) scale(2)");
     expect(total).toBeDefined();
     expect(applyMatrix(total!, 1, 1)).toEqual({ x: 12, y: 22 });

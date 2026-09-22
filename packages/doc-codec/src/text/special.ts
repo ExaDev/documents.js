@@ -1,6 +1,6 @@
 // The characters that carry structure rather than glyphs in a .doc's logical text stream. Every value here is drawn from [MS-DOC]'s own text: the glossary defines the paragraph mark, end-of-cell mark and end-of-row mark; 2.6.1's sprmCFSpec entry enumerates the characters "that have a meaning that differs or displays differently than the underlying character"; 2.8.25's Fld defines the three field characters; and 2.4.4's section example states that a section's last character has the value 0x0C.
 //
-// Values that circulate as common knowledge but that this reader could not find stated in [MS-DOC] itself are deliberately absent -- 0x1E (non-breaking hyphen), 0x1F (optional hyphen) and 0xA0 (non-breaking space) among them. They pass through as ordinary characters rather than being given a meaning on the strength of a secondary source.
+// Values that circulate as common knowledge but that this reader could not find stated in [MS-DOC] itself are deliberately absent — 0x1E (non-breaking hyphen), 0x1F (optional hyphen) and 0xA0 (non-breaking space) among them. They pass through as ordinary characters rather than being given a meaning on the strength of a secondary source.
 
 /** "An entity in a document that is used to denote the end of a paragraph and has a Unicode character code of 13." */
 export const PARAGRAPH_MARK = 0x0d;
@@ -34,7 +34,7 @@ export function endsParagraph(code: number): boolean {
   return code === PARAGRAPH_MARK || code === CELL_MARK || code === SECTION_MARK;
 }
 
-// Anchor characters that stand in for content this reader does not yet convert -- a picture, a drawn object, a footnote or annotation reference. They are dropped from a run's text rather than emitted, because emitting them would put a U+0001 or U+0002 control character into the converted document's visible text, where every downstream format would render it as a replacement glyph or drop it silently. Dropping is the honest choice for a reader that does not yet carry the referenced object: the anchor conveys nothing on its own.
+// Anchor characters that stand in for content this reader does not yet convert — a picture, a drawn object, a footnote or annotation reference. They are dropped from a run's text rather than emitted, because emitting them would put a U+0001 or U+0002 control character into the converted document's visible text, where every downstream format would render it as a replacement glyph or drop it silently. Dropping is the honest choice for a reader that does not yet carry the referenced object: the anchor conveys nothing on its own.
 export function isAnchorOnly(code: number): boolean {
   return (
     code === INLINE_PICTURE ||

@@ -101,14 +101,14 @@ describe("transformOoo1Package: namespaces", () => {
     expect(out).toContain("<office:document-content");
     expect(out).toContain(`<text:p text:style-name="P1" tz="unchanged">`);
     expect(out).not.toContain("<t:p");
-    // office:class was resolved through the "o:" alias, not just the conventional literal -- proven by the genre wrapper it drives, not merely by the attribute renames above.
+    // office:class was resolved through the "o:" alias, not just the conventional literal — proven by the genre wrapper it drives, not merely by the attribute renames above.
     expect(out).toContain(`<office:body><office:text>`);
-    // "tz" carries no colon for renameQName to act on and must survive untouched -- chosen so that a broken "no colon" early-return would slice it down to "t" (a real prefix bound above to "text") and wrongly rewrite it to "text:tz".
+    // "tz" carries no colon for renameQName to act on and must survive untouched — chosen so that a broken "no colon" early-return would slice it down to "t" (a real prefix bound above to "text") and wrongly rewrite it to "text:tz".
     expect(out).toContain(`tz="unchanged"`);
   });
 
   it("never resolves office:class through a decoy prefix bound to something other than the office namespace", () => {
-    // "t" is bound to the text namespace, never office -- classAttributeName must stay undefined, so a decoy "t:class" attribute placed before the real office:class is never mistaken for it.
+    // "t" is bound to the text namespace, never office — classAttributeName must stay undefined, so a decoy "t:class" attribute placed before the real office:class is never mistaken for it.
     const out = transformWhole(
       `<office:document-content xmlns:t="http://openoffice.org/2000/text" office:version="1.0" t:class="spreadsheet" office:class="text"><office:body><t:p>hi</t:p></office:body></office:document-content>`,
     );
@@ -166,7 +166,7 @@ describe("transformOoo1Package: document structure", () => {
     ["presentation", "office:presentation"],
     ["drawing", "office:drawing"],
     ["chart", "office:chart"],
-    // A master document's body is still office:text in ODF -- the master-ness lives in the media type, not the genre element.
+    // A master document's body is still office:text in ODF — the master-ness lives in the media type, not the genre element.
     ["text-global", "office:text"],
   ])("maps office:class=%s onto <%s>", (documentClass, genre) => {
     const out = transformContent(`<text:p>hi</text:p>`, {
@@ -553,7 +553,7 @@ describe("transformOoo1Package: metadata and package parts", () => {
     expect(new TextDecoder().decode(base64ToBytes(mimetype.base64))).toBe(
       "application/vnd.oasis.opendocument.text",
     );
-    // The second, non-root entry's own media type is not a manifest concern of this rewrite -- it must survive untouched.
+    // The second, non-root entry's own media type is not a manifest concern of this rewrite — it must survive untouched.
     expect(xml).toContain(
       `manifest:media-type="text/xml" manifest:full-path="content.xml"`,
     );
@@ -693,7 +693,7 @@ describe("transformOoo1Package: metadata and package parts", () => {
 });
 
 // =====================================================================================================================
-// transformToOoo1Package: the reverse direction. Each test below pins one rule from transform.ts's own "REVERSE DIRECTION" section as a concrete XML shape, mirroring the forward suite's own convention above -- the write.ts round-trip suite (write.test.ts) is the strongest end-to-end evidence, but pinning each rule's own exact output here is what stops a future change from silently widening or narrowing what this direction actually reverses.
+// transformToOoo1Package: the reverse direction. Each test below pins one rule from transform.ts's own "REVERSE DIRECTION" section as a concrete XML shape, mirroring the forward suite's own convention above — the write.ts round-trip suite (write.test.ts) is the strongest end-to-end evidence, but pinning each rule's own exact output here is what stops a future change from silently widening or narrowing what this direction actually reverses.
 // =====================================================================================================================
 
 const ODF_XMLNS = [
@@ -710,7 +710,7 @@ const ODF_XMLNS = [
   `xmlns:svg="${ODF_NAMESPACES.svg}"`,
 ].join(" ");
 
-// An ODF content.xml, genre-wrapped exactly as writeOdt (and any real ODF producer) writes one, in a whole package carrying the "mimetype" part transformToOoo1Package gates on -- the ODF-side mirror of transformContent's own OOo1x-side helper above.
+// An ODF content.xml, genre-wrapped exactly as writeOdt (and any real ODF producer) writes one, in a whole package carrying the "mimetype" part transformToOoo1Package gates on — the ODF-side mirror of transformContent's own OOo1x-side helper above.
 function odfPackage(
   body: string,
   options?: {
@@ -788,7 +788,7 @@ describe("transformToOoo1Package: namespaces and package identity", () => {
     expect(manifestXml).toContain(
       `manifest:full-path="/" manifest:version="1.3" manifest:media-type="application/vnd.sun.xml.writer"`,
     );
-    // The second, non-root entry's own media type is not this rewrite's concern -- it must survive untouched.
+    // The second, non-root entry's own media type is not this rewrite's concern — it must survive untouched.
     expect(manifestXml).toContain(
       `manifest:full-path="content.xml" manifest:media-type="text/xml"`,
     );
@@ -857,7 +857,7 @@ describe("transformToOoo1Package: namespaces and package identity", () => {
     });
   });
 
-  it("leaves a package with no mimetype part -- already OpenOffice.org 1.x-shaped, or not a document this module can identify -- completely alone", () => {
+  it("leaves a package with no mimetype part — already OpenOffice.org 1.x-shaped, or not a document this module can identify — completely alone", () => {
     const pkg: Package = {
       parts: {
         "content.xml": {
@@ -1008,7 +1008,7 @@ describe("transformToOoo1Package: style:*-properties merging", () => {
     expect(out).toContain(`fo:keep-with-next="page"`);
   });
 
-  // The forward rename's own inverse, and the one this direction cannot skip: a real consumer resolves a shape's draw:style-name against the plural spelling alone, so an OpenOffice.org 1.x package whose graphic styles still say "graphic" imports with every fill and stroke silently unbound (confirmed against LibreOffice 26.2 -- see the package README's own .sxd verification section).
+  // The forward rename's own inverse, and the one this direction cannot skip: a real consumer resolves a shape's draw:style-name against the plural spelling alone, so an OpenOffice.org 1.x package whose graphic styles still say "graphic" imports with every fill and stroke silently unbound (confirmed against LibreOffice 26.2 — see the package README's own .sxd verification section).
   it("renames a drawing style's style:family back from graphic to graphics", () => {
     const out = automaticStylesReverse(
       `<style:style style:name="gr1" style:family="graphic"><style:graphic-properties draw:fill="solid" draw:fill-color="#ffcc00"/></style:style>`,
@@ -1296,7 +1296,7 @@ describe("transformToOoo1Package: lists", () => {
     writeMimetype(pkg, ODF_MEDIA_TYPES.odt);
     const out = reversePart(pkg, "content.xml");
     expect(out).toContain(`<text:unordered-list text:style-name="L1">`);
-    // The nested list, carrying no text:style-name of its own, still comes out as text:unordered-list -- inherited from its enclosing list, never left as the bare "text:list" ODF spelling.
+    // The nested list, carrying no text:style-name of its own, still comes out as text:unordered-list — inherited from its enclosing list, never left as the bare "text:list" ODF spelling.
     expect(out.match(/<text:unordered-list/g)).toHaveLength(2);
     expect(out).not.toContain("<text:list ");
     expect(out).not.toContain("<text:list>");

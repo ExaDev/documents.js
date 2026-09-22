@@ -19,7 +19,7 @@ import { spliceDocxEmbeddedObjects } from "./embedded-objects";
 import { docxMainPartPath } from "./parts";
 import { readDocxContent } from "./read";
 
-// readDocxContent is now a thin adapter over ooxml.js's own readDocxContent (the flat reader; the bare readDocx name reads the tree-form DocumentTree since ooxml.js 4.0.0): the WordprocessingML style cascade, theme resolution, and document-order section/block walking all live upstream in ooxml.js now, with their own test coverage there. These tests exercise only the wrapping this file is actually responsible for -- ContentDocument's discriminant/formatVersion, the metadata/sections passthrough -- not the OOXML semantics readDocx itself resolves.
+// readDocxContent is now a thin adapter over ooxml.js's own readDocxContent (the flat reader; the bare readDocx name reads the tree-form DocumentTree since ooxml.js 4.0.0): the WordprocessingML style cascade, theme resolution, and document-order section/block walking all live upstream in ooxml.js now, with their own test coverage there. These tests exercise only the wrapping this file is actually responsible for — ContentDocument's discriminant/formatVersion, the metadata/sections passthrough — not the OOXML semantics readDocx itself resolves.
 
 function docxPackageOfBody(bodyXml: string): Package {
   const xml = (source: string): Uint8Array<ArrayBuffer> =>
@@ -93,7 +93,7 @@ describe("readDocxContent", () => {
 
   it("spreads metadata from ooxml.js's readDocxContent, leaving LayoutMetadata's PDF-only producer field unset", () => {
     const doc = readDocxContent(minimalDocxPackage());
-    // The fixture package carries no docProps/core.xml, so every field is undefined -- confirming the mapping doesn't invent a value, not merely that it round-trips one.
+    // The fixture package carries no docProps/core.xml, so every field is undefined — confirming the mapping doesn't invent a value, not merely that it round-trips one.
     expect(doc.metadata).toEqual({});
     expect(doc.metadata.producer).toBeUndefined();
   });
@@ -265,7 +265,7 @@ describe("readDocxContent", () => {
     expect(plainSpliced?.blocks[1]).toBe(plain.sections[0]?.blocks[1]);
   });
 
-  // ExaDev/documents.js#921: a w:object whose payload is a classic OLE compound file holding native legacy streams (not a ZIP, and not a ZIP wrapped in the compound file's own "Package" stream) used to stay opaque -- ooxml.js's own readDocxContent has no reader for that shape at all, so the paragraph carrying the w:object recovered nothing. This second-pass splice (embedded-objects.ts's collectParagraphOleObjects/resolveLegacyOleObject) recovers it by trying doc-codec/xls-codec/ ppt-codec directly on the payload bytes.
+  // ExaDev/documents.js#921: a w:object whose payload is a classic OLE compound file holding native legacy streams (not a ZIP, and not a ZIP wrapped in the compound file's own "Package" stream) used to stay opaque — ooxml.js's own readDocxContent has no reader for that shape at all, so the paragraph carrying the w:object recovered nothing. This second-pass splice (embedded-objects.ts's collectParagraphOleObjects/resolveLegacyOleObject) recovers it by trying doc-codec/xls-codec/ ppt-codec directly on the payload bytes.
   it("recovers a classic-OLE-compound-file .xls embedding as an embeddedObject block, consuming its own now-empty paragraph", () => {
     const payload = writeXlsContent({
       kind: "spreadsheet",
@@ -298,7 +298,7 @@ describe("readDocxContent", () => {
     if (doc.kind !== "wordprocessing") {
       throw new Error("expected a wordprocessing document");
     }
-    // The w:object was the paragraph's own only content, so the recovered block replaces it rather than sitting alongside an empty paragraph -- the same consumption rule an equation-only or vector-only paragraph already gets.
+    // The w:object was the paragraph's own only content, so the recovered block replaces it rather than sitting alongside an empty paragraph — the same consumption rule an equation-only or vector-only paragraph already gets.
     expect(doc.sections[0]?.blocks).toHaveLength(1);
     const embedded = doc.sections[0]?.blocks[0];
     if (embedded?.kind !== "embeddedObject") {

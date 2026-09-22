@@ -42,7 +42,7 @@ export interface SectionInit {
   readonly breakType?: ContentSection["breakType"];
 }
 
-// One [MS-DOC] section: a live view over a ContentSection object inside the editor's own sections array. doc-codec's writer gives every section its own real page size and margins (see its write.ts top comment), so unlike MarkdownEditor -- which hard-scopes to sections[0] because a markdown document IS one section -- this editor surfaces every section, and each one's own geometry genuinely round-trips.
+// One [MS-DOC] section: a live view over a ContentSection object inside the editor's own sections array. doc-codec's writer gives every section its own real page size and margins (see its write.ts top comment), so unlike MarkdownEditor — which hard-scopes to sections[0] because a markdown document IS one section — this editor surfaces every section, and each one's own geometry genuinely round-trips.
 export class DocSection {
   private readonly container: ContentSection[];
   private readonly node: ContentSection;
@@ -91,7 +91,7 @@ export class DocSection {
     }
   }
 
-  // Direct top-level blocks only -- a paragraph inside a table cell is reached via DocTable, mirroring MarkdownBody.paragraphs' own direct-children-only scope (and DocxEditor/OdtEditor's, which those two cite).
+  // Direct top-level blocks only — a paragraph inside a table cell is reached via DocTable, mirroring MarkdownBody.paragraphs' own direct-children-only scope (and DocxEditor/OdtEditor's, which those two cite).
   paragraphs(): DocParagraph[] {
     return this.live()
       .blocks.filter(
@@ -123,7 +123,7 @@ export class DocSection {
   }
 
   remove(): void {
-    // [MS-DOC] requires at least one section -- writeDocContent throws on an empty sections array -- so removing the last section is refused here rather than deferred to the write.
+    // [MS-DOC] requires at least one section — writeDocContent throws on an empty sections array — so removing the last section is refused here rather than deferred to the write.
     if (this.container.length === 1) {
       throw new Error(
         "a doc document must carry at least one section; the last one cannot be removed",
@@ -137,7 +137,7 @@ export class DocSection {
   }
 }
 
-// The first section's own block-flow handle, mirroring MarkdownBody's shape exactly (paragraphs/appendParagraph/tables/appendTable) so every caller written against docx's or odt's or markdown's `.body` works unchanged -- the docx/odt/markdown family's one shared editor surface. Multiple sections remain reachable through sections()/appendSection(); body always views the FIRST one.
+// The first section's own block-flow handle, mirroring MarkdownBody's shape exactly (paragraphs/appendParagraph/tables/appendTable) so every caller written against docx's or odt's or markdown's `.body` works unchanged — the docx/odt/markdown family's one shared editor surface. Multiple sections remain reachable through sections()/appendSection(); body always views the FIRST one.
 export interface DocBody {
   paragraphs(): DocParagraph[];
   appendParagraph(init?: ParagraphInit): DocParagraph;
@@ -181,9 +181,9 @@ export interface CreateDocOptions {
   readonly margins?: Margins;
 }
 
-// A genuine live-view editor over a mutable in-memory ContentDocument, the doc sibling of MarkdownEditor (see src/edit/markdown/editor.ts): doc has no XmlElement tree the way docx/odt each do -- doc-codec's reader and writer both operate on the plain ContentDocument directly -- so there is nothing for a live view to hold a reference into except the ContentDocument object itself. Every DocSection/DocParagraph/DocRun/DocTable created from it holds a direct reference to the actual object living inside document.sections (or nested inside it), exactly mirroring how MarkdownParagraph/MarkdownRun hold a reference into markdown's own ContentDocument.
+// A genuine live-view editor over a mutable in-memory ContentDocument, the doc sibling of MarkdownEditor (see src/edit/markdown/editor.ts): doc has no XmlElement tree the way docx/odt each do — doc-codec's reader and writer both operate on the plain ContentDocument directly — so there is nothing for a live view to hold a reference into except the ContentDocument object itself. Every DocSection/DocParagraph/DocRun/DocTable created from it holds a direct reference to the actual object living inside document.sections (or nested inside it), exactly mirroring how MarkdownParagraph/MarkdownRun hold a reference into markdown's own ContentDocument.
 //
-// Saving is toBytes(): writeDocContent(this.document, options) -- the whole document, every section, not just the parts some accessor reached. The read-side extras readDocContent attaches beyond ContentDocument's own shape (numbering definitions, footnotes, endnotes, comments, header/footer stories -- see doc-codec's DocContent) are preserved on the in-memory object this editor holds but are not themselves editable here and do not survive a save: writeDocContent reads only the shared ContentDocument shape, the identical read-and-drop relationship readDocxContent's own extras have in the docx editor.
+// Saving is toBytes(): writeDocContent(this.document, options) — the whole document, every section, not just the parts some accessor reached. The read-side extras readDocContent attaches beyond ContentDocument's own shape (numbering definitions, footnotes, endnotes, comments, header/footer stories — see doc-codec's DocContent) are preserved on the in-memory object this editor holds but are not themselves editable here and do not survive a save: writeDocContent reads only the shared ContentDocument shape, the identical read-and-drop relationship readDocxContent's own extras have in the docx editor.
 export class DocEditor {
   readonly body: DocBody;
   private readonly document: WordprocessingDocument;
@@ -206,7 +206,7 @@ export class DocEditor {
     return this.document.metadata;
   }
 
-  // The patch-style MetadataOverrides setter every other editor's own metadata setter takes (docx/pptx/odt/odp/ods/odg/pdf -- see src/metadata/core-patch.ts): only the fields the caller names change, and the named fields round-trip through writeDocContent's own SummaryInformation stream.
+  // The patch-style MetadataOverrides setter every other editor's own metadata setter takes (docx/pptx/odt/odp/ods/odg/pdf — see src/metadata/core-patch.ts): only the fields the caller names change, and the named fields round-trip through writeDocContent's own SummaryInformation stream.
   set metadata(value: MetadataOverrides) {
     this.document.metadata = mergeMetadata(this.document.metadata, value);
   }
@@ -217,7 +217,7 @@ export class DocEditor {
     );
   }
 
-  // The first section's own paragraph/table accessors, forwarded through body for editor-shape parity with MarkdownEditor.paragraphs()/tables() -- the natural surface for the common single-section document.
+  // The first section's own paragraph/table accessors, forwarded through body for editor-shape parity with MarkdownEditor.paragraphs()/tables() — the natural surface for the common single-section document.
   paragraphs(): DocParagraph[] {
     return this.body.paragraphs();
   }
@@ -259,7 +259,7 @@ export function openDoc(
   return new DocEditor(readDocContent(bytes, password));
 }
 
-// Creates a fresh doc document with real metadata createdIso/modifiedIso timestamps -- mirrors createMarkdownEditor's own default-on clock behaviour exactly (src/edit/markdown/editor.ts), which itself mirrors createOdt's. The page default is US Letter rather than A4: that is [MS-DOC]'s own producer default (the page size a Word document with no explicit w:sectPr/w:pgSz carries), the identical default document-schema.js's own PAGE_SIZE_LETTER comment states for docx.
+// Creates a fresh doc document with real metadata createdIso/modifiedIso timestamps — mirrors createMarkdownEditor's own default-on clock behaviour exactly (src/edit/markdown/editor.ts), which itself mirrors createOdt's. The page default is US Letter rather than A4: that is [MS-DOC]'s own producer default (the page size a Word document with no explicit w:sectPr/w:pgSz carries), the identical default document-schema.js's own PAGE_SIZE_LETTER comment states for docx.
 export function createDoc(options: CreateDocOptions = {}): DocEditor {
   const clock = options.clock ?? systemClock;
   const document: ContentDocument = {

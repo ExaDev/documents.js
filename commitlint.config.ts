@@ -5,9 +5,9 @@ import releaseConfig from "./release-workspace.config";
 /**
  * Commit-message validation for the whole workspace. Commit messages are a property of the repository, not of a package, so this config lives at the root: every package carried an identical copy, and in one repository only one of those could ever have run.
  *
- * The allowed type list is derived from release-workspace.config.ts's own releaseRules rather than restated here, preserving the invariant every package's own config was built around: a conventional-commit type cannot trigger a release without also being accepted by commit-msg validation, or the reverse. That file is the canonical release configuration -- \@exadev/semantic-release-workspace reads it directly via `--config` -- so deriving from it means there is exactly one place a type gets added.
+ * The allowed type list is derived from release-workspace.config.ts's own releaseRules rather than restated here, preserving the invariant every package's own config was built around: a conventional-commit type cannot trigger a release without also being accepted by commit-msg validation, or the reverse. That file is the canonical release configuration — \@exadev/semantic-release-workspace reads it directly via `--config` — so deriving from it means there is exactly one place a type gets added.
  *
- * A plain import, not a JSON import: release-workspace.config.ts is itself a TypeScript module now, so there is no import-attribute inconsistency across loaders to guard against here the way a `.json` import would have -- commitlint's own TypeScript loader resolves this exactly as it resolves this file.
+ * A plain import, not a JSON import: release-workspace.config.ts is itself a TypeScript module now, so there is no import-attribute inconsistency across loaders to guard against here the way a `.json` import would have — commitlint's own TypeScript loader resolves this exactly as it resolves this file.
  */
 
 const RELEASE_CONFIG_FILE = "release-workspace.config.ts";
@@ -50,7 +50,7 @@ function releasableCommitTypes(): readonly string[] {
 const PACKAGES_DIR = "packages";
 
 /**
- * Every package directory name, which is also its npm name -- the scope a commit touching that package must use, so the scope decides which package's changelog the entry lands in. Read from the filesystem rather than listed here so adding a package needs no edit to this file, matching how the type list derives from the release config rather than restating it.
+ * Every package directory name, which is also its npm name — the scope a commit touching that package must use, so the scope decides which package's changelog the entry lands in. Read from the filesystem rather than listed here so adding a package needs no edit to this file, matching how the type list derives from the release config rather than restating it.
  */
 function packageScopes(): readonly string[] {
   const entries = readdirSync(new URL(PACKAGES_DIR, import.meta.url), {
@@ -72,7 +72,7 @@ function packageScopes(): readonly string[] {
  *
  * The first three are emitted by automation and must never be rejected: the release orchestrator writes `chore(release): <pkg>@<version>` and `chore(deps): bump <pkg> ...`, and Dependabot writes `build(deps)` / `build(deps-dev)` for npm and `ci(deps)` for actions. Rejecting any of those would fail the Commitlint job on commits no human can reword.
  *
- * The rest name the root-level tooling a change can actually target. Deliberately absent are the package-internal area names the pre-monorepo history is full of -- `docx`, `pptx`, `odb`, `layout`, `tui`, `typed` and the like. Those were meaningful when each package was its own repository and the scope had nothing else to say; here the scope is what routes an entry to a package's changelog, so a commit touching a package must name the package. Existing history keeps whatever it was written with, since commitlint only ever validates new commits.
+ * The rest name the root-level tooling a change can actually target. Deliberately absent are the package-internal area names the pre-monorepo history is full of — `docx`, `pptx`, `odb`, `layout`, `tui`, `typed` and the like. Those were meaningful when each package was its own repository and the scope had nothing else to say; here the scope is what routes an entry to a package's changelog, so a commit touching a package must name the package. Existing history keeps whatever it was written with, since commitlint only ever validates new commits.
  */
 const REPOSITORY_SCOPES = [
   "release",
@@ -97,7 +97,7 @@ export default {
   extends: ["@commitlint/config-conventional"],
   rules: {
     "type-enum": [2, "always", releasableCommitTypes()],
-    // header-max-length, subject-case, and subject-full-stop all ship enabled in @commitlint/config-conventional and are inherited as-is; scope-enum is the one it leaves unrestricted, so a typo'd or invented scope silently routed a changelog entry nowhere. An unscoped commit stays valid -- scope-emptiness is scope-empty's business, not this rule's -- so a repository-wide change needs no scope at all.
+    // header-max-length, subject-case, and subject-full-stop all ship enabled in @commitlint/config-conventional and are inherited as-is; scope-enum is the one it leaves unrestricted, so a typo'd or invented scope silently routed a changelog entry nowhere. An unscoped commit stays valid — scope-emptiness is scope-empty's business, not this rule's — so a repository-wide change needs no scope at all.
     "scope-enum": [2, "always", [...packageScopes(), ...REPOSITORY_SCOPES]],
   },
   // dependabot-auto-merge.yml lands Dependabot's rebase-merged commits on main verbatim, including its generated Bumps/Release notes/Changelog body, which routinely contains a markdown link line over the inherited body-max-line-length limit and cannot be reformatted by this repository. Skip linting entirely for those commits, identified by the "Signed-off-by: dependabot[bot]" trailer that fetch-metadata's auto-merge always appends, while leaving every rule fully enforced for human-authored commits. The orchestrator's own release and dependency-bump commits need no exemption: `chore(release): <pkg>@<version> [skip ci]` and `chore(deps): bump <pkg> to <range> in <dependent> [skip ci]` are both conventional, and their `[skip ci]` keeps CI from running on them at all.

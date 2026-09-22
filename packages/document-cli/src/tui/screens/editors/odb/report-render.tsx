@@ -8,7 +8,7 @@ import { useAppDispatch, useAppState } from "../../../state/context.js";
 import { anyOverlayOpen, currentScreen } from "../../../state/types.js";
 import { requireOdbDocument } from "./shared.js";
 
-// Which of the two fields currently owns the keyboard -- the identical two-field shape ExportOptionsScreen already uses, so the whole interaction ("type a path, press Enter twice") reads the same everywhere this TUI writes a file to disk.
+// Which of the two fields currently owns the keyboard — the identical two-field shape ExportOptionsScreen already uses, so the whole interaction ("type a path, press Enter twice") reads the same everywhere this TUI writes a file to disk.
 type Field = "destination" | "fonts";
 
 function defaultReportRenderDestination(
@@ -26,7 +26,7 @@ function parseFontFileField(value: string): readonly string[] {
     .filter((entry) => entry.length > 0);
 }
 
-// Reached with Enter from report-detail.tsx (odbReportDetail), for the report the user was already looking at. This screen owns only the destination-path and font-file prompts; rendering itself, the fonts it loads, and the diagnostics it reports are exactly what src/tui/format/render-odb-report.ts's renderOdbReportTo already does. Unlike every mutating editor screen, submitting here never touches state.openDocument or dispatches a mutation -- a rendered report is an independent output file, so the only dispatches on success are the same status/diagnostics/pop sequence ExportOptionsScreen already uses.
+// Reached with Enter from report-detail.tsx (odbReportDetail), for the report the user was already looking at. This screen owns only the destination-path and font-file prompts; rendering itself, the fonts it loads, and the diagnostics it reports are exactly what src/tui/format/render-odb-report.ts's renderOdbReportTo already does. Unlike every mutating editor screen, submitting here never touches state.openDocument or dispatches a mutation — a rendered report is an independent output file, so the only dispatches on success are the same status/diagnostics/pop sequence ExportOptionsScreen already uses.
 export function OdbReportRenderScreen(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();
@@ -103,7 +103,7 @@ export function OdbReportRenderScreen(): ReactElement {
         <TextField
           value={fontFiles}
           isFocused={isActive && field === "fonts"}
-          placeholder="optional .ttf/.otf paths, comma-separated -- pdf only"
+          placeholder="optional .ttf/.otf paths, comma-separated — pdf only"
           onChange={setFontFiles}
           onSubmit={submit}
           onCancel={cancel}

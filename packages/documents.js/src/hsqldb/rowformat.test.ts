@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { HsqldbDataCursor, readHsqldbColumnValue } from "./rowformat";
 
-// Isolated, synthetic-byte-sequence tests for readHsqldbColumnValue's own exactValue sidecar logic (document-schema.js's ContentCellValueSchema doc comment: "a producer should only set it when String(Number(exactValue)) would not round-trip back to exactValue exactly") -- hand-constructed against the exact documented byte shape (a 1-byte present-flag, then a big-endian int64 for BIGINT, or a length-prefixed two's-complement magnitude plus a big-endian scale for DECIMAL/NUMERIC), the same "isolated primitive, independent of the real-fixture end-to-end proof" convention src/firebird/reader.test.ts already uses for XdrReader. The real EMPLOYEES/DEPARTMENTS/ORDERS fixtures in src/hsqldb/cache.test.ts deliberately never carry a value beyond Number.MAX_SAFE_INTEGER (their own BIGINT column is documented as "near, but safely inside" it), so that boundary case is exercised here instead.
+// Isolated, synthetic-byte-sequence tests for readHsqldbColumnValue's own exactValue sidecar logic (document-schema.js's ContentCellValueSchema doc comment: "a producer should only set it when String(Number(exactValue)) would not round-trip back to exactValue exactly") — hand-constructed against the exact documented byte shape (a 1-byte present-flag, then a big-endian int64 for BIGINT, or a length-prefixed two's-complement magnitude plus a big-endian scale for DECIMAL/NUMERIC), the same "isolated primitive, independent of the real-fixture end-to-end proof" convention src/firebird/reader.test.ts already uses for XdrReader. The real EMPLOYEES/DEPARTMENTS/ORDERS fixtures in src/hsqldb/cache.test.ts deliberately never carry a value beyond Number.MAX_SAFE_INTEGER (their own BIGINT column is documented as "near, but safely inside" it), so that boundary case is exercised here instead.
 
 // BIGINT: present-flag(1) + 8-byte big-endian signed int64.
 function bigintCursor(value: bigint): HsqldbDataCursor {
@@ -21,7 +21,7 @@ function decimalCursor(unscaled: bigint, scale: number): HsqldbDataCursor {
     magnitude >>= 8n;
   } while (magnitude > 0n);
   if (isNegative) {
-    // Two's-complement negation across the byte array (java.math.BigInteger.toByteArray()'s own write-side convention -- see this module's own signedBigIntFromBytes for the read-side inverse).
+    // Two's-complement negation across the byte array (java.math.BigInteger.toByteArray()'s own write-side convention — see this module's own signedBigIntFromBytes for the read-side inverse).
     let carry = 1;
     for (let i = digits.length - 1; i >= 0; i--) {
       const inverted = (~digits[i]! & 0xff) + carry;
@@ -76,7 +76,7 @@ describe("readHsqldbColumnValue: exactValue sidecar for BIGINT", () => {
 
 describe("readHsqldbColumnValue: exactValue sidecar for DECIMAL/NUMERIC", () => {
   it("attaches a real exactValue for a scaled decimal with more significant digits than a double can carry", () => {
-    // unscaled=100000000000000001, scale=2 -> 1000000000000000.01 -- 18 significant digits, genuinely beyond double precision.
+    // unscaled=100000000000000001, scale=2 -> 1000000000000000.01 — 18 significant digits, genuinely beyond double precision.
     const cell = readHsqldbColumnValue(
       decimalCursor(100000000000000001n, 2),
       NUMERIC_TYPE_CODE,
@@ -95,7 +95,7 @@ describe("readHsqldbColumnValue: exactValue sidecar for DECIMAL/NUMERIC", () => 
     expect(cell).toEqual({ kind: "number", value: 125.5 });
   });
 
-  it("leaves exactValue unset for a whole-number-valued DECIMAL(10,2) cell -- trailing fractional zeros carry no extra precision", () => {
+  it("leaves exactValue unset for a whole-number-valued DECIMAL(10,2) cell — trailing fractional zeros carry no extra precision", () => {
     const cell = readHsqldbColumnValue(
       decimalCursor(25000n, 2),
       NUMERIC_TYPE_CODE,
@@ -112,7 +112,7 @@ describe("readHsqldbColumnValue: exactValue sidecar for DECIMAL/NUMERIC", () => 
   });
 });
 
-// present-flag(1) + 8-byte big-endian epoch-millis long -- DATE's own on-disk shape (see this module's own formatDate).
+// present-flag(1) + 8-byte big-endian epoch-millis long — DATE's own on-disk shape (see this module's own formatDate).
 function dateCursor(epochMillis: bigint): HsqldbDataCursor {
   const bytes = new Uint8Array(9);
   bytes[0] = 1;
@@ -123,8 +123,8 @@ function dateCursor(epochMillis: bigint): HsqldbDataCursor {
 const DATE_TYPE_CODE = 91;
 
 describe("readHsqldbColumnValue: DATE with no explicit timeZone", () => {
-  it("defers to the reading process's own local calendar, the same as Date's own local getters -- not UTC or any other fixed zone", () => {
-    // Deliberately doesn't pin process.env.TZ to a specific zone: the expected value is derived from `new Date(...)`'s own local getters for the identical instant, so the assertion holds whatever zone the process actually runs under, and never depends on a runtime TZ mutation being observed (which a worker_threads pool's own cached local-timezone resolution does not reliably do -- see src/hsqldb/cache.test.ts's own comment on why that suite passes timeZone explicitly instead).
+  it("defers to the reading process's own local calendar, the same as Date's own local getters — not UTC or any other fixed zone", () => {
+    // Deliberately doesn't pin process.env.TZ to a specific zone: the expected value is derived from `new Date(...)`'s own local getters for the identical instant, so the assertion holds whatever zone the process actually runs under, and never depends on a runtime TZ mutation being observed (which a worker_threads pool's own cached local-timezone resolution does not reliably do — see src/hsqldb/cache.test.ts's own comment on why that suite passes timeZone explicitly instead).
     const epochMillis = 1_700_000_000_000n;
     const cell = readHsqldbColumnValue(dateCursor(epochMillis), DATE_TYPE_CODE);
     const reference = new Date(Number(epochMillis));

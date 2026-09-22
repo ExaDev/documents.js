@@ -9,7 +9,7 @@ import { readRtfContent } from "./read";
 import { bytes } from "./test-support/bytes";
 import { writeRtf, writeRtfContent } from "./write";
 
-// Every code in RtfDiagnosticCodes is reachable from a real input, and this suite proves it by producing each one rather than by scanning the source for its name -- epub-codec's own diagnostics-coverage.test.ts precedent, and the stronger check of the two: a code whose emit site is unreachable (guarded by a condition that can never hold) would still pass a source scan.
+// Every code in RtfDiagnosticCodes is reachable from a real input, and this suite proves it by producing each one rather than by scanning the source for its name — epub-codec's own diagnostics-coverage.test.ts precedent, and the stronger check of the two: a code whose emit site is unreachable (guarded by a condition that can never hold) would still pass a source scan.
 //
 // The final assertion is what stops the table growing dead entries: it compares the set of codes this file actually observed against the whole table, so adding a code without a fixture fails here rather than sitting unreachable and unnoticed.
 
@@ -67,7 +67,7 @@ describe("every read-side diagnostic code is reachable", () => {
   });
 
   it("rtf/unsupported-codepage", () => {
-    // 42 is SYMBOL_CHARSET, which this package deliberately does not carry a table for -- its bytes are glyph indices into a font, not a character encoding at all. See codepage.ts's own header comment.
+    // 42 is SYMBOL_CHARSET, which this package deliberately does not carry a table for — its bytes are glyph indices into a font, not a character encoding at all. See codepage.ts's own header comment.
     expect(
       readCodes("{\\rtf1\\ansi\\ansicpg42\\pard \\'82\\'a0\\par}"),
     ).toContain(RtfDiagnosticCodes.UNSUPPORTED_CODEPAGE);
@@ -108,7 +108,7 @@ describe("every read-side diagnostic code is reachable", () => {
   });
 
   it("rtf/block-construct-extents-crossed", () => {
-    // Two bookmarks whose \bkmkend/\bkmkstart both land in the same paragraph produce genuinely crossing block extents (ExaDev/documents.js#1040) -- see read.test.ts's own "bookmarks" describe block for the full round-trip assertion.
+    // Two bookmarks whose \bkmkend/\bkmkstart both land in the same paragraph produce genuinely crossing block extents (ExaDev/documents.js#1040) — see read.test.ts's own "bookmarks" describe block for the full round-trip assertion.
     expect(
       readCodes(
         `${HEADER}\\trowd\\trleft0\\cellx4320\\pard\\intbl{\\*\\bkmkstart A}one\\par\\pard\\intbl two{\\*\\bkmkend A}{\\*\\bkmkstart B}three\\par\\pard\\intbl{\\*\\bkmkend B}four\\cell\\row\\pard x\\par}`,
@@ -137,7 +137,7 @@ describe("every read-side diagnostic code is reachable", () => {
   });
 
   it("rtf/form-field-keyword-lost", () => {
-    // A nested anonymous group closes with the instruction reading exactly "FORMTEXT" (matching via the word boundary at the end of the string read so far, opening the extent), then the outer \*\fldinst group appends "BOX" directly onto it with no separator -- once complete, "FORMTEXTBOX" no longer matches any form-field keyword's own \b boundary.
+    // A nested anonymous group closes with the instruction reading exactly "FORMTEXT" (matching via the word boundary at the end of the string read so far, opening the extent), then the outer \*\fldinst group appends "BOX" directly onto it with no separator — once complete, "FORMTEXTBOX" no longer matches any form-field keyword's own \b boundary.
     expect(
       readCodes(
         `${HEADER}\\pard {\\field{\\*\\fldinst{FORMTEXT}BOX}{\\fldrslt Y}}\\par}`,
@@ -146,7 +146,7 @@ describe("every read-side diagnostic code is reachable", () => {
   });
 
   it("rtf/embedded-object-unreadable", () => {
-    // \objdata's hex decodes to real bytes ("hello"), but they are not a compound file at all -- exactly the shape a real Word-authored OLESaveToStream payload this reader does not decode, or simply malformed \objdata, both take: this reader always tries its own JSON-envelope decode first, and degrades with this code for anything that is not that.
+    // \objdata's hex decodes to real bytes ("hello"), but they are not a compound file at all — exactly the shape a real Word-authored OLESaveToStream payload this reader does not decode, or simply malformed \objdata, both take: this reader always tries its own JSON-envelope decode first, and degrades with this code for anything that is not that.
     expect(
       readCodes(
         `${HEADER}\\pard{\\object\\objemb{\\*\\objdata 68656c6c6f}{\\result}}\\par}`,
@@ -188,7 +188,7 @@ describe("every write-side diagnostic code is reachable", () => {
         children: [{ kind: "paragraph", runs: [{ text: "body" }] }],
       },
     ];
-    // Each of the four package tables independently triggers the diagnostic -- hasPackageTables ORs all four, so a fixture setting only one at a time is the only way to prove each disjunct is actually load-bearing rather than merely reachable through definitions alone.
+    // Each of the four package tables independently triggers the diagnostic — hasPackageTables ORs all four, so a fixture setting only one at a time is the only way to prove each disjunct is actually load-bearing rather than merely reachable through definitions alone.
     for (const field of [
       "definitions",
       "layers",

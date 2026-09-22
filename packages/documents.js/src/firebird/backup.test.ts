@@ -12,7 +12,7 @@ import {
 } from "./backup";
 import { FirebirdCompositeRecordUnsupportedError } from "./data";
 
-// Tests against two genuinely LibreOffice-generated Firebird embedded-database backup streams (src/test-support/firebird.ts documents exactly how each was produced and verified) -- not hand-authored gbak bytes, since the whole value of this reader is that it decodes REAL output correctly, not output shaped to match this reader's own assumptions.
+// Tests against two genuinely LibreOffice-generated Firebird embedded-database backup streams (src/test-support/firebird.ts documents exactly how each was produced and verified) — not hand-authored gbak bytes, since the whole value of this reader is that it decodes REAL output correctly, not output shaped to match this reader's own assumptions.
 
 describe("readFirebirdBackup: the rich fixture (four EMPLOYEES rows, three DEPARTMENTS rows, deliberate NULLs)", () => {
   const bytes = base64ToBytes(RICH_FIXTURE_FBK_BASE64);
@@ -47,7 +47,7 @@ describe("readFirebirdBackup: the rich fixture (four EMPLOYEES rows, three DEPAR
     ]);
   });
 
-  // Row-by-row values, cross-checked field-by-field against a real LibreOffice SDBC SELECT * query run against this exact fixture (see src/test-support/firebird.ts's own doc comment) -- every value below matched that independent query exactly.
+  // Row-by-row values, cross-checked field-by-field against a real LibreOffice SDBC SELECT * query run against this exact fixture (see src/test-support/firebird.ts's own doc comment) — every value below matched that independent query exactly.
   it("decodes every EMPLOYEES row correctly, including NULLs, a negative DECIMAL, and an escaped apostrophe", () => {
     const { tables } = readFirebirdBackup(bytes);
     const employees = tables.find((table) => table.tableName === "EMPLOYEES");
@@ -160,7 +160,7 @@ describe("readFirebirdBackup: the rich fixture (four EMPLOYEES rows, three DEPAR
 });
 
 describe("readFirebirdBackup: format guards, never a silent wrong result", () => {
-  // rec_burp(0) + att_backup_format(2)=4-byte-int32 + att_end(0) + rec_end(10) -- the minimal valid-shaped stream this reader's own guards can reject on purpose.
+  // rec_burp(0) + att_backup_format(2)=4-byte-int32 + att_end(0) + rec_end(10) — the minimal valid-shaped stream this reader's own guards can reject on purpose.
   function minimalBurpStream(
     formatVersion: number,
     extraAttributes: number[] = [],
@@ -190,7 +190,7 @@ describe("readFirebirdBackup: format guards, never a silent wrong result", () =>
   });
 
   it("throws FirebirdBackupFormatError for a non-transportable (native binary) backup", () => {
-    // No att_backup_transportable attribute present at all -- mvol.cpp only ever writes it when true, so its absence IS "false" (see reader.ts's own Encoding 1 note).
+    // No att_backup_transportable attribute present at all — mvol.cpp only ever writes it when true, so its absence IS "false" (see reader.ts's own Encoding 1 note).
     expect(() =>
       readFirebirdBackup(minimalBurpStream(SUPPORTED_BACKUP_FORMAT_VERSION)),
     ).toThrow(FirebirdBackupFormatError);
@@ -209,7 +209,7 @@ describe("readFirebirdBackup: format guards, never a silent wrong result", () =>
   });
 
   it("throws FirebirdBackupFormatError when rec_burp has no att_backup_format attribute at all", () => {
-    // rec_burp(0) immediately followed by att_end(0) -- a leading record with an empty attribute list.
+    // rec_burp(0) immediately followed by att_end(0) — a leading record with an empty attribute list.
     const bytes = new Uint8Array([0, 0]);
     expect(() => readFirebirdBackup(bytes)).toThrow(FirebirdBackupFormatError);
     expect(() => readFirebirdBackup(bytes)).toThrow(
@@ -218,7 +218,7 @@ describe("readFirebirdBackup: format guards, never a silent wrong result", () =>
   });
 
   it("reports compressed:false when att_backup_compress is absent, not merely truthy-adjacent", () => {
-    // A fully valid, transportable, uncompressed rec_burp header -- no att_backup_compress attribute at all -- followed directly by rec_end, so nothing beyond the header is ever parsed.
+    // A fully valid, transportable, uncompressed rec_burp header — no att_backup_compress attribute at all — followed directly by rec_end, so nothing beyond the header is ever parsed.
     const bytes = minimalBurpStream(
       SUPPORTED_BACKUP_FORMAT_VERSION,
       [5, 4, 1, 0, 0, 0],
@@ -280,7 +280,7 @@ describe("readFirebirdBackup: format guards, never a silent wrong result", () =>
   });
 
   it("excludes a computed field from the reported columns, since gbak's own row writer never includes one either", () => {
-    // rec_burp header, then rec_relation("T") with two rec_field children -- "ID" (ordinary) and "CALC" (att_field_computed_flag=1) -- followed by rec_relation_end and rec_end.
+    // rec_burp header, then rec_relation("T") with two rec_field children — "ID" (ordinary) and "CALC" (att_field_computed_flag=1) — followed by rec_relation_end and rec_end.
     const transportableAttr = [5, 4, 1, 0, 0, 0];
     const BLR_LONG = 8;
     const idField = [
@@ -349,7 +349,7 @@ describe("readFirebirdBackup: format guards, never a silent wrong result", () =>
 describe("readFirebirdBackup: the odf.js original fixture (two empty tables, no row data at all)", () => {
   const bytes = base64ToBytes(ORIGINAL_FIXTURE_FBK_BASE64);
 
-  it("discovers both tables and their columns with zero rows -- a second, independently-generated real file", () => {
+  it("discovers both tables and their columns with zero rows — a second, independently-generated real file", () => {
     const { tables } = readFirebirdBackup(bytes);
     expect(tables).toEqual([
       {
@@ -375,7 +375,7 @@ describe("readFirebirdBackup: the odf.js original fixture (two empty tables, no 
 describe("readFirebirdBackup: the blob fixture (a text blob, a binary blob, and NULL blobs)", () => {
   const bytes = base64ToBytes(BLOB_FIXTURE_FBK_BASE64);
 
-  // Every expectation below matched LibreOffice's own SDBC SELECT * over this exact saved file, run in a separate process that reopened it fresh from disk -- see src/test-support/firebird.ts's own doc comment.
+  // Every expectation below matched LibreOffice's own SDBC SELECT * over this exact saved file, run in a separate process that reopened it fresh from disk — see src/test-support/firebird.ts's own doc comment.
   function blobTestRows() {
     const { tables } = readFirebirdBackup(bytes);
     const table = tables.find((entry) => entry.tableName === "BLOB_TEST");

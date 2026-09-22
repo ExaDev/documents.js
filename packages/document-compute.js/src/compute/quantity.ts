@@ -12,9 +12,9 @@ import {
   NumericDomainError,
 } from "./errors";
 
-// Arithmetic over document-schema.js's Quantity (the runtime result of evaluating a MathExpression -- a magnitude already resolved into SI-coherent base units plus its DimensionVector; the schema and type live in that package's src/math.ts beside MathExpression itself, so evaluation inputs are typed contracts like everything else). Quantity is deliberately not the same shape as that package's MathQty: MathQty is a document-authored *expression-tree leaf* (an exact value plus a unit-registry id, meaningless until resolved against a SymbolTable), while Quantity is this evaluator's *runtime result*, so every arithmetic rule below can compare/combine two Quantities by their dimension vectors directly, with no registry lookup in the loop.
+// Arithmetic over document-schema.js's Quantity (the runtime result of evaluating a MathExpression — a magnitude already resolved into SI-coherent base units plus its DimensionVector; the schema and type live in that package's src/math.ts beside MathExpression itself, so evaluation inputs are typed contracts like everything else). Quantity is deliberately not the same shape as that package's MathQty: MathQty is a document-authored *expression-tree leaf* (an exact value plus a unit-registry id, meaningless until resolved against a SymbolTable), while Quantity is this evaluator's *runtime result*, so every arithmetic rule below can compare/combine two Quantities by their dimension vectors directly, with no registry lookup in the loop.
 //
-// Quantity.magnitude is a plain JS number, not an ExactRational, per that schema's own field comment: sin/cos/sqrt results, and every solveFor root, have no exact rational representation in general, so holding every Quantity to bit-exactness would be false precision dressed up as rigour. Exactness is spent where it actually buys something instead -- unit-conversion factors, computed end to end in rational.ts's BigInt arithmetic and converted to a float exactly once, at the single boundary where a document-authored 'qty' leaf's value enters this evaluator (see evaluate.ts's evaluateQty). Ordinary arithmetic on a Quantity's magnitude from that point on is plain floating point, same as any other numeric evaluator -- see rational.ts's header comment for the conversion this boundary replaces.
+// Quantity.magnitude is a plain JS number, not an ExactRational, per that schema's own field comment: sin/cos/sqrt results, and every solveFor root, have no exact rational representation in general, so holding every Quantity to bit-exactness would be false precision dressed up as rigour. Exactness is spent where it actually buys something instead — unit-conversion factors, computed end to end in rational.ts's BigInt arithmetic and converted to a float exactly once, at the single boundary where a document-authored 'qty' leaf's value enters this evaluator (see evaluate.ts's evaluateQty). Ordinary arithmetic on a Quantity's magnitude from that point on is plain floating point, same as any other numeric evaluator — see rational.ts's header comment for the conversion this boundary replaces.
 
 export function quantity(
   magnitude: number,
@@ -41,7 +41,7 @@ export function subtractQuantities(a: Quantity, b: Quantity): Quantity {
   return quantity(a.magnitude - b.magnitude, a.dimension);
 }
 
-// Multiplication and division are always dimensionally defined -- unlike add/subtract, there is no compatibility check to fail, only the resulting dimension to compute (see dimensions.ts).
+// Multiplication and division are always dimensionally defined — unlike add/subtract, there is no compatibility check to fail, only the resulting dimension to compute (see dimensions.ts).
 export function multiplyQuantities(a: Quantity, b: Quantity): Quantity {
   return quantity(
     a.magnitude * b.magnitude,

@@ -5,7 +5,7 @@ import type * as DocumentsJs from "documents.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { EXIT_INPUT_ERROR, EXIT_SUCCESS } from "../runtime/exit-codes";
 
-// A dedicated file, isolated from metadata.test.ts's own real-fixture tests: mocking readDocumentMetadata here is file-wide, so it must never share a module with a test that needs the genuine implementation. Covers the two branches no real fixture reaches cleanly -- a document whose metadata reader returns no fields at all (a fresh createDocx() always stamps created/modified, so metadata.test.ts's own "omits every field" case can never exercise the truly-empty path), and the reader throwing (proving the [metadata] prefix, the non-verbose error formatting, and the exit-code mapping without needing a genuinely corrupt fixture).
+// A dedicated file, isolated from metadata.test.ts's own real-fixture tests: mocking readDocumentMetadata here is file-wide, so it must never share a module with a test that needs the genuine implementation. Covers the two branches no real fixture reaches cleanly — a document whose metadata reader returns no fields at all (a fresh createDocx() always stamps created/modified, so metadata.test.ts's own "omits every field" case can never exercise the truly-empty path), and the reader throwing (proving the [metadata] prefix, the non-verbose error formatting, and the exit-code mapping without needing a genuinely corrupt fixture).
 vi.mock("documents.js", async (importOriginal) => {
   const actual = await importOriginal<typeof DocumentsJs>();
   return {
@@ -66,7 +66,7 @@ describe("metadata command against a mocked reader", () => {
   beforeAll(async () => {
     workspace = await mkdtemp(join(tmpdir(), "document-cli-metadata-mock-"));
     inputPath = join(workspace, "fixture.docx");
-    // Content is irrelevant -- readDocumentMetadata is mocked below, so only readInput's own file-exists check ever touches these bytes.
+    // Content is irrelevant — readDocumentMetadata is mocked below, so only readInput's own file-exists check ever touches these bytes.
     await writeFile(inputPath, "irrelevant");
   });
 

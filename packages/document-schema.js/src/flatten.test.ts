@@ -85,7 +85,7 @@ describe("flattenTree style resolution", () => {
     ]);
   });
 
-  it("fills gaps only -- a property the node already carries survives whatever the entry says", () => {
+  it("fills gaps only — a property the node already carries survives whatever the entry says", () => {
     const pkg = wordprocessingPackage(
       [
         {
@@ -132,7 +132,7 @@ describe("flattenTree style resolution", () => {
     ]);
   });
 
-  it("leaves an unreferenced subtree's own objects untouched -- no chain, no copy", () => {
+  it("leaves an unreferenced subtree's own objects untouched — no chain, no copy", () => {
     const untouched = paragraph("no ref anywhere above me");
     const pkg = wordprocessingPackage([
       { node: { kind: "section", ...SECTION }, children: [untouched] },
@@ -227,7 +227,7 @@ describe("flattenTree cardinality guards", () => {
 
 describe("flattenTree envelope handling", () => {
   it("carries metadata and symbolTable back onto the flat document, and drops the tree-only pages array", () => {
-    // `pages` and the package tables have no spelling on a flat ContentDocument, so flatten states the envelope it can carry and nothing else -- factorStyles is what rides pages and definitions across a re-factoring.
+    // `pages` and the package tables have no spelling on a flat ContentDocument, so flatten states the envelope it can carry and nothing else — factorStyles is what rides pages and definitions across a re-factoring.
     const flat = flattenTree({
       kind: "wordprocessing",
       metadata: { title: "Envelope" },
@@ -328,7 +328,7 @@ describe("flattenTree envelope handling", () => {
   });
 
   it("returns the paragraph unchanged (same runs array reference) when the resolved entry has no run half", () => {
-    // applyEntry short-circuits on an undefined run half rather than re-mapping the runs array through a no-op transform -- the identity, not just the values, must survive.
+    // applyEntry short-circuits on an undefined run half rather than re-mapping the runs array through a no-op transform — the identity, not just the values, must survive.
     const original = paragraph("keeps its runs array");
     const pkg = wordprocessingPackage(
       [
@@ -377,7 +377,7 @@ describe("flattenTree envelope handling", () => {
 });
 
 describe("flattenTree's narrow group-kind guards only ever matter for a tree that violates its own type", () => {
-  // isHeadingGroup/isListGroup/isConstructGroup (unexported helpers) each narrow on their group's OWN node shape (headingLevel present, list present, or node.kind !== 'paragraph'). For any value that is genuinely SectionChild/ListChild-typed, TypeScript already guarantees these three conditions are mutually exclusive -- a HeadingGroupNode's anchor always carries headingLevel, a ListGroupNode's anchor always carries list, and a construct descriptor's kind is never 'paragraph'. The three tests below can only observe a wrong guard by handing flattenTree a tree that is NOT genuinely well-typed (a paragraph-anchored group carrying neither signal) -- exactly the "no re-validation, the parameter type already guarantees a real DocumentTree" contract this module's own top comment states flattenTree relies on, deliberately bypassed here with an explicit cast to prove the guard itself is still correct if that contract is ever violated.
+  // isHeadingGroup/isListGroup/isConstructGroup (unexported helpers) each narrow on their group's OWN node shape (headingLevel present, list present, or node.kind !== 'paragraph'). For any value that is genuinely SectionChild/ListChild-typed, TypeScript already guarantees these three conditions are mutually exclusive — a HeadingGroupNode's anchor always carries headingLevel, a ListGroupNode's anchor always carries list, and a construct descriptor's kind is never 'paragraph'. The three tests below can only observe a wrong guard by handing flattenTree a tree that is NOT genuinely well-typed (a paragraph-anchored group carrying neither signal) — exactly the "no re-validation, the parameter type already guarantees a real DocumentTree" contract this module's own top comment states flattenTree relies on, deliberately bypassed here with an explicit cast to prove the guard itself is still correct if that contract is ever violated.
   it("a construct group is never misread as a heading or list anchor", () => {
     const pkg: DocumentTree = {
       kind: "wordprocessing",
@@ -412,7 +412,7 @@ describe("flattenTree's narrow group-kind guards only ever matter for a tree tha
     const pkg = wordprocessingPackage([
       { node: { kind: "section", ...SECTION }, children: [illegalGroup] },
     ]);
-    // Real code: isHeadingGroup/isListGroup both false, isConstructGroup's own node.kind !== 'paragraph' check is also false (this node's kind IS 'paragraph'), so this group falls through every named branch and is pushed as the group object itself -- not wrapped as a construct, which is what a mutated isConstructGroup (unconditionally true past its node/children guard) would do instead.
+    // Real code: isHeadingGroup/isListGroup both false, isConstructGroup's own node.kind !== 'paragraph' check is also false (this node's kind IS 'paragraph'), so this group falls through every named branch and is pushed as the group object itself — not wrapped as a construct, which is what a mutated isConstructGroup (unconditionally true past its node/children guard) would do instead.
     expect(sectionBlocks(pkg)).toEqual([illegalGroup]);
   });
 });

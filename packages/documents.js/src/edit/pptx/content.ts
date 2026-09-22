@@ -37,7 +37,7 @@ import {
 import type { PptxSlide } from "./slide";
 import type { PptxTable, PptxTableCell } from "./table";
 
-// clock resolves content.metadata's own createdIso/modifiedIso the same way createPptx does (src/model/metadata.ts's resolveMetadataTimestamps) -- systemClock by default, never overwriting a createdIso/modifiedIso the source content already carried. onMathDiagnostic mirrors BuildDocxPackageOptions's own field exactly (src/edit/docx/content.ts) -- ExaDev/documents.js#563's write side now has the identical MathML -> OMML degrade-diagnostic channel docx already exposes. onDiagnostic (ExaDev/documents.js#1389) is this write path's own general degrade channel, kept separate from onMathDiagnostic's shared OMML-specific one; see diagnostics.ts's own module comment for why the two stay apart. It defaults to NOOP_PPTX_WRITE_DIAGNOSTIC_SINK, the same discard-everything default every sink in this family uses when a caller supplies none.
+// clock resolves content.metadata's own createdIso/modifiedIso the same way createPptx does (src/model/metadata.ts's resolveMetadataTimestamps) — systemClock by default, never overwriting a createdIso/modifiedIso the source content already carried. onMathDiagnostic mirrors BuildDocxPackageOptions's own field exactly (src/edit/docx/content.ts) — ExaDev/documents.js#563's write side now has the identical MathML -> OMML degrade-diagnostic channel docx already exposes. onDiagnostic (ExaDev/documents.js#1389) is this write path's own general degrade channel, kept separate from onMathDiagnostic's shared OMML-specific one; see diagnostics.ts's own module comment for why the two stay apart. It defaults to NOOP_PPTX_WRITE_DIAGNOSTIC_SINK, the same discard-everything default every sink in this family uses when a caller supplies none.
 export interface BuildPptxPackageOptions {
   readonly clock?: ClockPort;
   readonly onMathDiagnostic?: OmmlDiagnosticSink;
@@ -46,7 +46,7 @@ export interface BuildPptxPackageOptions {
 
 // ContentDocument -> a fresh pptx Package, the write-side counterpart to src/ooxml/pptx/read.ts's readPptxContent. Used by the PDF->pptx conversion path. Constructs its own package directly (createEmptyPptxPackage + PptxEditor) rather than calling createPptx(), mirroring buildDocxPackage's own identical reasoning (src/edit/docx/content.ts): createPptx() always starts metadata from {}, but this function needs the SOURCE content's own metadata to reach resolveMetadataTimestamps.
 //
-// One remaining gap, bounded and tracked rather than silent: every slide shares one deck-wide size (p:sldSz is presentation-level, not per-slide) -- taken from the first slide, since PDF-reconstructed pages that come from a single source document invariably share one page size in practice.
+// One remaining gap, bounded and tracked rather than silent: every slide shares one deck-wide size (p:sldSz is presentation-level, not per-slide) — taken from the first slide, since PDF-reconstructed pages that come from a single source document invariably share one page size in practice.
 export function buildPptxPackage(
   content: ContentDocument,
   options?: BuildPptxPackageOptions,
@@ -73,7 +73,7 @@ export function buildPptxPackage(
   return editor.toPackage();
 }
 
-// The wiring half of #742's port: ooxml.js's docx writer (buildDocxPackageFromContent/buildDocxPackage) accepts an injected presentation serialiser because the only pptx writer in the ecosystem -- this buildPptxPackage -- sits one layer above it, where a dependency would invert the family's layering. This value is that serialiser: pass it as BuildDocxContentOptions.serialiseEmbeddedPresentation and a docx whose embedded OLE object carries a presentation document (readDocxContent genuinely recovers one) round-trips through the pair instead of being refused, the nested deck re-serialised into a real word/embeddings/oleObjectN.pptx payload by the identical builder the pptx write path uses.
+// The wiring half of #742's port: ooxml.js's docx writer (buildDocxPackageFromContent/buildDocxPackage) accepts an injected presentation serialiser because the only pptx writer in the ecosystem — this buildPptxPackage — sits one layer above it, where a dependency would invert the family's layering. This value is that serialiser: pass it as BuildDocxContentOptions.serialiseEmbeddedPresentation and a docx whose embedded OLE object carries a presentation document (readDocxContent genuinely recovers one) round-trips through the pair instead of being refused, the nested deck re-serialised into a real word/embeddings/oleObjectN.pptx payload by the identical builder the pptx write path uses.
 export const embeddedPresentationSerialiser: EmbeddedPresentationSerialiser = (
   document,
 ) => encodePackage(buildPptxPackage(document));
@@ -84,7 +84,7 @@ function appendShape(
   options?: BuildPptxPackageOptions,
 ): void {
   const [onlyBlock] = shape.blocks;
-  // A shape carrying nothing but a recovered DRAWING (src/layout/reconstruct.ts's own vector recovery wraps one in a shape, since a slide has no other container for a block) becomes one real DrawingML autoshape per vector primitive on the slide's own shape tree -- NOT a single containing shape, since PresentationML positions every p:sp against the slide directly and has no "shape holding loose geometry" construct to nest them in. The vectors are translated by the wrapping shape's own frame origin, since that frame is where the embedded drawing sits on the slide.
+  // A shape carrying nothing but a recovered DRAWING (src/layout/reconstruct.ts's own vector recovery wraps one in a shape, since a slide has no other container for a block) becomes one real DrawingML autoshape per vector primitive on the slide's own shape tree — NOT a single containing shape, since PresentationML positions every p:sp against the slide directly and has no "shape holding loose geometry" construct to nest them in. The vectors are translated by the wrapping shape's own frame origin, since that frame is where the embedded drawing sits on the slide.
   if (
     shape.blocks.length === 1 &&
     onlyBlock?.kind === "embeddedObject" &&
@@ -95,7 +95,7 @@ function appendShape(
     }
     return;
   }
-  // A shape carrying a real embedded formula (ExaDev/documents.js#563) becomes a text box holding one real OOXML equation -- PptxShape.appendOfficeMath, the identical src/omml/write.ts translator buildDocxPackage already uses. A formula whose MathML produces no OMML content at all falls back to its own plain-text stand-in, mirroring buildDocxPackage's own appendEmbeddedObject narrowing exactly (src/edit/docx/content.ts).
+  // A shape carrying a real embedded formula (ExaDev/documents.js#563) becomes a text box holding one real OOXML equation — PptxShape.appendOfficeMath, the identical src/omml/write.ts translator buildDocxPackage already uses. A formula whose MathML produces no OMML content at all falls back to its own plain-text stand-in, mirroring buildDocxPackage's own appendEmbeddedObject narrowing exactly (src/edit/docx/content.ts).
   if (shape.blocks.length === 1 && onlyBlock?.kind === "embeddedObject") {
     const formula = formulaOfBlock(onlyBlock);
     if (formula !== undefined) {
@@ -119,7 +119,7 @@ function appendShape(
   if (shape.blocks.length === 1 && onlyBlock?.kind === "image") {
     if (onlyBlock.format === "svg") {
       throw new Error(
-        "buildPptxPackage: an image block in svg format has no OOXML blip this writer can produce (PresentationML's a:blip only references a raster part PowerPoint decodes directly -- png/jpeg/gif)",
+        "buildPptxPackage: an image block in svg format has no OOXML blip this writer can produce (PresentationML's a:blip only references a raster part PowerPoint decodes directly — png/jpeg/gif)",
       );
     }
     const imageShape = slide.addImage({
@@ -164,7 +164,7 @@ function appendShape(
   const paragraphs: DrawingParagraphInit[] = [];
   for (const block of shape.blocks) {
     if (block.kind !== "paragraph") {
-      continue; // a nested table or image mixed alongside other blocks inside a single text shape is out of scope -- neither PDF-reconstructed shapes nor a real pptx/odp slide shape mix kinds this way (see reconstruct.ts and the odp<->pptx table-in-shape fixture in bridges.test.ts)
+      continue; // a nested table or image mixed alongside other blocks inside a single text shape is out of scope — neither PDF-reconstructed shapes nor a real pptx/odp slide shape mix kinds this way (see reconstruct.ts and the odp<->pptx table-in-shape fixture in bridges.test.ts)
     }
     paragraphs.push(
       paragraphInitFromBlock(block, (url) => slide.registerHyperlink(url)),
@@ -177,7 +177,7 @@ function appendShape(
   if (shape.name !== undefined) {
     textBox.name = shape.name;
   }
-  // ContentShape's insets are required numbers (document-schema.js's ContentShapeSchema), so thread them unconditionally -- matching ooxml.js's own readPptxContent, which reads them back as defaults (91440/45720 EMU) when the source carried none. Setting them writes real lIns/tIns/rIns/bIns EMU attributes onto a:bodyPr.
+  // ContentShape's insets are required numbers (document-schema.js's ContentShapeSchema), so thread them unconditionally — matching ooxml.js's own readPptxContent, which reads them back as defaults (91440/45720 EMU) when the source carried none. Setting them writes real lIns/tIns/rIns/bIns EMU attributes onto a:bodyPr.
   textBox.insetLeftPt = shape.insetLeftPt;
   textBox.insetTopPt = shape.insetTopPt;
   textBox.insetRightPt = shape.insetRightPt;
@@ -185,7 +185,7 @@ function appendShape(
   textBox.setParagraphs(paragraphs);
 }
 
-// Threads a ContentParagraph's full decoration surface -- runs, alignment, and the spacing/indent fields DrawingParagraphInit now carries -- into a DrawingParagraphInit. Used by both appendShape (a text-box shape's own paragraphs) and populateCellParagraphs (a table cell's own paragraphs), so the two stay in sync rather than each repeating the field list.
+// Threads a ContentParagraph's full decoration surface — runs, alignment, and the spacing/indent fields DrawingParagraphInit now carries — into a DrawingParagraphInit. Used by both appendShape (a text-box shape's own paragraphs) and populateCellParagraphs (a table cell's own paragraphs), so the two stay in sync rather than each repeating the field list.
 function paragraphInitFromBlock(
   block: ContentParagraph,
   resolveHyperlinkRId?: (url: string) => string,
@@ -229,7 +229,7 @@ function populateCellParagraphs(
   cell.setParagraphs(paragraphs);
 }
 
-// A DrawingML table's own a:tr always carries exactly `columns` a:tc elements regardless of merges -- a covered position is a real a:tc marked hMerge/vMerge="1" (see table.ts's own PptxTableCell), never an omitted or replaced element -- and ContentTable's grid rule (ContentTableCell in document-schema.js) gives every row exactly one entry per grid column too, so an entry's array index is its a:tc's own column with no running-offset bookkeeping. walkTableGrid classifies each entry: an anchor carries its spans and its content, while a covered entry states which side of its region it lies on and carries only its own background and borders, since its content belongs to the anchor. A position the region reaches along its own row is marked hMerge and one it reaches from an earlier row is marked vMerge, both at once for the interior of a region wider and taller than one cell, as real PowerPoint output states it.
+// A DrawingML table's own a:tr always carries exactly `columns` a:tc elements regardless of merges — a covered position is a real a:tc marked hMerge/vMerge="1" (see table.ts's own PptxTableCell), never an omitted or replaced element — and ContentTable's grid rule (ContentTableCell in document-schema.js) gives every row exactly one entry per grid column too, so an entry's array index is its a:tc's own column with no running-offset bookkeeping. walkTableGrid classifies each entry: an anchor carries its spans and its content, while a covered entry states which side of its region it lies on and carries only its own background and borders, since its content belongs to the anchor. A position the region reaches along its own row is marked hMerge and one it reaches from an earlier row is marked vMerge, both at once for the interior of a region wider and taller than one cell, as real PowerPoint output states it.
 //
 // A row's own isHeader (ContentTableRow, ExaDev/documents.js#1390) is reported through onDiagnostic rather than written: DrawingML has no per-row header marker at all (see diagnostics.ts's own TABLE_HEADER_ROW_DROPPED comment), so the row's cells are written exactly like any other row and only the flag is dropped. Reported once per flagged row, before its cells are populated, matching ppt-codec's own writeIMsoArray precedent (src/drawing/shapes-write.ts) for the identical field.
 function populatePptxTable(

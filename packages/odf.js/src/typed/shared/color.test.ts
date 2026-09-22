@@ -19,15 +19,15 @@ describe("parseOdfColor", () => {
     expect(parseOdfColor("ff0000")).toBeUndefined();
   });
 
-  it("returns undefined for a 3-digit CSS shorthand -- ODF has no such shorthand", () => {
+  it("returns undefined for a 3-digit CSS shorthand — ODF has no such shorthand", () => {
     expect(parseOdfColor("#f00")).toBeUndefined();
   });
 
-  it("returns undefined for a CSS named colour -- ODF never uses one", () => {
+  it("returns undefined for a CSS named colour — ODF never uses one", () => {
     expect(parseOdfColor("red")).toBeUndefined();
   });
 
-  it("returns undefined for an rgb() function -- ODF never uses one", () => {
+  it("returns undefined for an rgb() function — ODF never uses one", () => {
     expect(parseOdfColor("rgb(255, 0, 0)")).toBeUndefined();
   });
 

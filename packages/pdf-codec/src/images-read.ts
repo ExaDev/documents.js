@@ -13,14 +13,14 @@ import type { PdfObjectResolver } from "./interpret";
 import type { PdfDict, PdfObject } from "./objects";
 import { asArray, asBool, asName, asNumber, dictGet } from "./objects";
 
-// Turns an Image XObject (or an inline image's dict+data) into bytes ready to store as a LayoutImageAsset. A DCTDecode (JPEG) image passes through completely undecoded -- its compressed bytes ARE the deliverable, exactly mirroring the write path's own lossless JPEG passthrough. Everything else is decoded to raw samples and re-encoded as PNG via byte-codec's own encodePng, since LayoutImageAsset only ever stores 'png' or 'jpeg' -- byte-codec's encodePng is this package's only PNG encoder: a caller's own imageId is a crc32 of the PNG bytes it originally supplied (see documents.js's registerImageBytes), so this module's re-encode of the same raster data must run through the identical function a caller would have used, not a second, independently-maintained copy that could silently diverge from it.
+// Turns an Image XObject (or an inline image's dict+data) into bytes ready to store as a LayoutImageAsset. A DCTDecode (JPEG) image passes through completely undecoded — its compressed bytes ARE the deliverable, exactly mirroring the write path's own lossless JPEG passthrough. Everything else is decoded to raw samples and re-encoded as PNG via byte-codec's own encodePng, since LayoutImageAsset only ever stores 'png' or 'jpeg' — byte-codec's encodePng is this package's only PNG encoder: a caller's own imageId is a crc32 of the PNG bytes it originally supplied (see documents.js's registerImageBytes), so this module's re-encode of the same raster data must run through the identical function a caller would have used, not a second, independently-maintained copy that could silently diverge from it.
 
 export interface ExtractedPdfImage {
   readonly format: "png" | "jpeg";
   readonly bytes: Uint8Array<ArrayBuffer>;
   readonly widthPx: number;
   readonly heightPx: number;
-  // The source's own compressed stream for a filter this package has no encoder for (JBIG2, JPEG 2000), carried beside the decoded canonical so a same-format writer re-embeds it verbatim instead of re-encoding the pixels -- the image-layer spelling of document-schema.js's ContentImageOriginal. globalsBytes is the decoded /JBIG2Globals segment stream a JBIG2 image declared (without it a symbol-dictionary stream cannot decode, so a verbatim re-embed must carry it). Never set for DCTDecode (the JPEG bytes ARE the deliverable) or Flate/CCITT (re-encoded losslessly).
+  // The source's own compressed stream for a filter this package has no encoder for (JBIG2, JPEG 2000), carried beside the decoded canonical so a same-format writer re-embeds it verbatim instead of re-encoding the pixels — the image-layer spelling of document-schema.js's ContentImageOriginal. globalsBytes is the decoded /JBIG2Globals segment stream a JBIG2 image declared (without it a symbol-dictionary stream cannot decode, so a verbatim re-embed must carry it). Never set for DCTDecode (the JPEG bytes ARE the deliverable) or Flate/CCITT (re-encoded losslessly).
   readonly original?: {
     readonly filter: "jbig2" | "jpeg2000";
     readonly bytes: Uint8Array<ArrayBuffer>;
@@ -46,7 +46,7 @@ function componentsOf(cs: ResolvedColorSpace): number {
   if (cs.kind === "cmyk") {
     return 4;
   }
-  return 3; // rgb, and indexed's own per-pixel sample count (handled separately -- this is only used for a resolved *base* space)
+  return 3; // rgb, and indexed's own per-pixel sample count (handled separately — this is only used for a resolved *base* space)
 }
 
 function resolveColorSpace(
@@ -120,7 +120,7 @@ function resolveColorSpace(
   };
 }
 
-// Unpacks sub-byte-depth samples (1/2/4-bit) into one array entry per sample, each row starting on its own byte boundary -- the same row-padding convention PNG's own IDAT payload uses. The 8-bit case is a fast path: already byte-aligned, one sample per byte.
+// Unpacks sub-byte-depth samples (1/2/4-bit) into one array entry per sample, each row starting on its own byte boundary — the same row-padding convention PNG's own IDAT payload uses. The 8-bit case is a fast path: already byte-aligned, one sample per byte.
 function unpackSamples(
   data: Uint8Array<ArrayBuffer>,
   width: number,
@@ -282,7 +282,7 @@ function readSoftMaskAlpha(
   }
   const decoded = decodeStream(smaskObj.raw, smaskObj.dict, sink);
   if (decoded.remainingFilter !== undefined) {
-    return undefined; // an encoded (e.g. DCT) soft mask is out of scope -- degrade to no alpha rather than guess
+    return undefined; // an encoded (e.g. DCT) soft mask is out of scope — degrade to no alpha rather than guess
   }
   const smaskWidth = asNumber(dictGet(smaskObj.dict, "Width")) ?? width;
   const smaskHeight = asNumber(dictGet(smaskObj.dict, "Height")) ?? height;
@@ -293,7 +293,7 @@ function readSoftMaskAlpha(
   return decoded.bytes.subarray(0, width * height);
 }
 
-// ISO 32000-1 7.4.9: for a JPXDecode image the codestream is authoritative about how many components there are and how deep their samples run, and /BitsPerComponent "shall not be present" at all. /ColorSpace is optional, and when it IS present it overrides whatever the JP2 boxes said -- which is the only reason the dictionary is consulted here rather than the codestream alone.
+// ISO 32000-1 7.4.9: for a JPXDecode image the codestream is authoritative about how many components there are and how deep their samples run, and /BitsPerComponent "shall not be present" at all. /ColorSpace is optional, and when it IS present it overrides whatever the JP2 boxes said — which is the only reason the dictionary is consulted here rather than the codestream alone.
 function jpeg2000ChannelKind(
   image: Jpeg2000Image,
   dict: PdfDict,
@@ -325,7 +325,7 @@ function jpeg2000ChannelKind(
   ) {
     return "rgb";
   }
-  // A bare codestream carries no colour specification of its own, so the component count is the only thing left to go on -- the same fallback every JPEG 2000 reader makes.
+  // A bare codestream carries no colour specification of its own, so the component count is the only thing left to go on — the same fallback every JPEG 2000 reader makes.
   return image.components.length >= 4
     ? "cmyk"
     : image.components.length >= 3
@@ -345,7 +345,7 @@ function readJpeg2000Image(
       onWarning: (message) => {
         sink({ code: "image/jpx-degraded", severity: "warning", message });
       },
-      // Mirrors readImageXObject's own /Width and /Height guard below (both the per-dimension PNG_MAX_DIMENSION ceiling and the PNG_MAX_PIXELS product ceiling): a JPXDecode codestream's SIZ marker is just as producer-controlled as a dictionary's /Width and /Height, and everything downstream -- the per-pixel colour-conversion loops below and encodePng itself -- is sized directly by image.width * image.height, so an oversized SIZ would otherwise reach encodePng's own throw uncaught, aborting the whole document parse instead of degrading to this function's usual "skip this image" diagnostic. Passed as decode options, rather than checked against decodeJpeg2000's return value, so an oversized canvas is rejected before decodeJpeg2000 allocates its own per-component sample planes for it, not after.
+      // Mirrors readImageXObject's own /Width and /Height guard below (both the per-dimension PNG_MAX_DIMENSION ceiling and the PNG_MAX_PIXELS product ceiling): a JPXDecode codestream's SIZ marker is just as producer-controlled as a dictionary's /Width and /Height, and everything downstream — the per-pixel colour-conversion loops below and encodePng itself — is sized directly by image.width * image.height, so an oversized SIZ would otherwise reach encodePng's own throw uncaught, aborting the whole document parse instead of degrading to this function's usual "skip this image" diagnostic. Passed as decode options, rather than checked against decodeJpeg2000's return value, so an oversized canvas is rejected before decodeJpeg2000 allocates its own per-component sample planes for it, not after.
       maxWidth: PNG_MAX_DIMENSION,
       maxHeight: PNG_MAX_DIMENSION,
       maxPixels: PNG_MAX_PIXELS,
@@ -446,7 +446,7 @@ export function readImageXObject(
     return undefined;
   }
 
-  // The resolver is threaded in here, and only here, because JBIG2Decode's own /JBIG2Globals DecodeParms entry is a stream that a producer essentially always writes as an indirect reference -- no other filter this codec implements has a parameter that needs dereferencing.
+  // The resolver is threaded in here, and only here, because JBIG2Decode's own /JBIG2Globals DecodeParms entry is a stream that a producer essentially always writes as an indirect reference — no other filter this codec implements has a parameter that needs dereferencing.
   const decoded = decodeStream(raw, dict, sink, (obj) => resolver.resolve(obj));
   const jbig2Original: ExtractedPdfImage["original"] =
     decoded.jbig2 === undefined
@@ -487,7 +487,7 @@ export function readImageXObject(
 
   const width = asNumber(dictGet(dict, "Width") ?? dictGet(dict, "W"));
   const height = asNumber(dictGet(dict, "Height") ?? dictGet(dict, "H"));
-  // Mirrors encodePng's own dimension guard exactly (both the per-dimension PNG_MAX_DIMENSION ceiling and the PNG_MAX_PIXELS product ceiling), rather than only the lower bound -- everything decoded past this point eventually reaches encodePng via buildRawImage's own width*height-sized allocation below, so a dict this guard lets through must already be a dimension pair encodePng is guaranteed to accept, or a malformed producer's out-of-range /Width or /Height would abort this document's entire parse instead of degrading to the diagnostic below.
+  // Mirrors encodePng's own dimension guard exactly (both the per-dimension PNG_MAX_DIMENSION ceiling and the PNG_MAX_PIXELS product ceiling), rather than only the lower bound — everything decoded past this point eventually reaches encodePng via buildRawImage's own width*height-sized allocation below, so a dict this guard lets through must already be a dimension pair encodePng is guaranteed to accept, or a malformed producer's out-of-range /Width or /Height would abort this document's entire parse instead of degrading to the diagnostic below.
   if (
     width === undefined ||
     height === undefined ||

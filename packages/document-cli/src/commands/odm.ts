@@ -37,7 +37,7 @@ interface OdmCliOptions extends ConversionCliFlags, FontCliFlags {
   readonly chapter: ReadonlyMap<string, string>;
 }
 
-// Accumulates repeated --chapter <href>=<file> flags into an href -> local-file-path map -- odmToPdf's own resolveSubDocument callback is synchronous (see OdmToPdfOptions in documents.js's .d.ts), so only the mapping is built here; the actual file read happens lazily inside createResolveSubDocument, once per href odmToPdf actually asks for.
+// Accumulates repeated --chapter <href>=<file> flags into an href -> local-file-path map — odmToPdf's own resolveSubDocument callback is synchronous (see OdmToPdfOptions in documents.js's .d.ts), so only the mapping is built here; the actual file read happens lazily inside createResolveSubDocument, once per href odmToPdf actually asks for.
 function collectChapterOverride(
   value: string,
   previous: ReadonlyMap<string, string>,
@@ -53,7 +53,7 @@ function collectChapterOverride(
   return next;
 }
 
-// odmToPdf's resolveSubDocument is deliberately synchronous (it is called from within a synchronous read pass, not awaited) -- checked first against the exact --chapter <href>=<file> overrides, then against --chapters-dir joined with the href's own basename, in that order, returning undefined (letting odmToPdf's own OdmUnresolvedSectionError collection do its job) when neither resolves.
+// odmToPdf's resolveSubDocument is deliberately synchronous (it is called from within a synchronous read pass, not awaited) — checked first against the exact --chapter <href>=<file> overrides, then against --chapters-dir joined with the href's own basename, in that order, returning undefined (letting odmToPdf's own OdmUnresolvedSectionError collection do its job) when neither resolves.
 function createResolveSubDocument(
   overrides: ReadonlyMap<string, string>,
   chaptersDir: string | undefined,
@@ -110,7 +110,7 @@ async function runOdmToPdf(
   });
   let diagnosticCount = 0;
 
-  // Routed to the structured live reporter under --report-font-substitutions and to the ordinary diagnostic stream otherwise, which is exactly the pair of channels documents.js's own DocumentConverter port gives every other <format>-to-pdf command -- odm-to-pdf calls odmToPdf directly rather than through that port, so the split is made here instead.
+  // Routed to the structured live reporter under --report-font-substitutions and to the ordinary diagnostic stream otherwise, which is exactly the pair of channels documents.js's own DocumentConverter port gives every other <format>-to-pdf command — odm-to-pdf calls odmToPdf directly rather than through that port, so the split is made here instead.
   const reportFontSubstitution =
     options.reportFontSubstitutions === true
       ? createFontSubstitutionReporter({

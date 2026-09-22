@@ -107,7 +107,7 @@ describe("styleFromBaseFontName", () => {
   });
 
   it("combines a name-based signal with flags rather than letting one override the other", () => {
-    // The name alone says bold; flags alone say italic -- both should be honoured.
+    // The name alone says bold; flags alone say italic — both should be honoured.
     expect(styleFromBaseFontName("Arial-Bold", { italicFlag: true })).toEqual({
       baseFamily: "Arial",
       bold: true,

@@ -12,7 +12,7 @@ import {
 
 // The write-side mirror of document/fonts.ts's readFontNames: one FontEntityAtom per document-wide typeface name, in the order a FontIndexRef indexes them by. [MS-PPT] FontCollectionContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/88da04bf-6838-4f87-9a87-adf067543837 [MS-PPT] FontEntityAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/b5946b70-2fbc-4f7b-a119-b31fcbeb1794
 
-// [MS-PPT] FontEntityAtom's fixed 64-byte lfFaceName field -- matches fonts.ts's own FACE_NAME_BYTES. A name longer than the field can hold (31 UTF-16 code units plus a terminating null) is truncated to fit, the same lossy edge the reader's own 64-byte read already imposes on the way back.
+// [MS-PPT] FontEntityAtom's fixed 64-byte lfFaceName field — matches fonts.ts's own FACE_NAME_BYTES. A name longer than the field can hold (31 UTF-16 code units plus a terminating null) is truncated to fit, the same lossy edge the reader's own 64-byte read already imposes on the way back.
 const FACE_NAME_FIELD_BYTES = 64;
 
 function writeFontEntityAtom(faceName: string): Uint8Array<ArrayBuffer> {
@@ -26,7 +26,7 @@ function writeFontEntityAtom(faceName: string): Uint8Array<ArrayBuffer> {
   );
 }
 
-// The document's Environment container holding its font collection, or undefined when no run in the document names a font family at all -- matching the reader's own tolerance of a missing Environment (readFontNames on an absent one already yields []).
+// The document's Environment container holding its font collection, or undefined when no run in the document names a font family at all — matching the reader's own tolerance of a missing Environment (readFontNames on an absent one already yields []).
 export function writeEnvironment(
   fontNames: readonly string[],
 ): Uint8Array<ArrayBuffer> | undefined {

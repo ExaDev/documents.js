@@ -56,7 +56,7 @@ function clxBytes(options: {
   return new Uint8Array(out);
 }
 
-// [MS-DOC] 2.9.6 "Example of a Clx" gives a complete Clx with real values: a 0x2D-byte Clx holding no Prc and one Pcdt whose PlcPcd has four CPs (0, 6, 0x0D, 0x0E) and three Pcds -- an uncompressed piece at fc 0x0C22 carrying "Hello ", a compressed piece at fc 0x0800 (so byte offset 0x400) carrying "World." and a paragraph mark, and a compressed piece at fc 0x080E (byte offset 0x407) carrying one further paragraph mark. Reproducing the published example is the strongest available check that this parser's arithmetic matches the specification's own.
+// [MS-DOC] 2.9.6 "Example of a Clx" gives a complete Clx with real values: a 0x2D-byte Clx holding no Prc and one Pcdt whose PlcPcd has four CPs (0, 6, 0x0D, 0x0E) and three Pcds — an uncompressed piece at fc 0x0C22 carrying "Hello ", a compressed piece at fc 0x0800 (so byte offset 0x400) carrying "World." and a paragraph mark, and a compressed piece at fc 0x080E (byte offset 0x407) carrying one further paragraph mark. Reproducing the published example is the strongest available check that this parser's arithmetic matches the specification's own.
 const SPEC_EXAMPLE = clxBytes({
   cps: [0x00000000, 0x00000006, 0x0000000d, 0x0000000e],
   pcds: [
@@ -163,7 +163,7 @@ describe("parseClx", () => {
   });
 
   it("accepts a Prc that consumes exactly every remaining byte, deferring to the next read's own out-of-bounds error rather than this Prc's own bounds guard", () => {
-    // cbGrpprl 1 plus the 3-byte header consumes all 4 bytes, landing cursor exactly on clx.length -- not past it, so this loop's own "runs past the end" guard must not fire here at all; the very next iteration's clxt read is what actually reports running out of bytes.
+    // cbGrpprl 1 plus the 3-byte header consumes all 4 bytes, landing cursor exactly on clx.length — not past it, so this loop's own "runs past the end" guard must not fire here at all; the very next iteration's clxt read is what actually reports running out of bytes.
     const bytes = new Uint8Array([0x01, 0x01, 0x00, 0xab]);
     expect(() => parseClx(bytes)).toThrow(
       /uint8 read of 1 bytes at offset 4 runs past the end of a 4-byte stream/,

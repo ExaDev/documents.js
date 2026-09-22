@@ -1,6 +1,6 @@
 import type { MathUnit, SymbolTable } from "document-schema.js";
 
-// A small SI unit registry for tests that need real dimensioned qty nodes (this package's own evaluate() resolves a MathQty's unit id against exactly this shape, SymbolTable.units) -- kilogram, metre, second, and the two derived units the worked-example harness's own physics fixtures need (metre-per-second-squared, newton). factorToSi is 1/1 for every base SI unit itself, matching MathUnitSchema's own convention that a coherent SI unit converts to itself with no scale.
+// A small SI unit registry for tests that need real dimensioned qty nodes (this package's own evaluate() resolves a MathQty's unit id against exactly this shape, SymbolTable.units) — kilogram, metre, second, and the two derived units the worked-example harness's own physics fixtures need (metre-per-second-squared, newton). factorToSi is 1/1 for every base SI unit itself, matching MathUnitSchema's own convention that a coherent SI unit converts to itself with no scale.
 const ONE = { numerator: "1", denominator: "1" };
 
 export const SI_KILOGRAM: MathUnit = {

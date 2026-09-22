@@ -3,9 +3,9 @@ import { rootElement } from "../xml/query";
 
 // The OpenOffice.org 1.x / StarOffice 6-7 XML vocabulary's own namespace URIs, keyed by the same conventional prefix ODF later kept. This is the pre-OASIS ancestor of ODF: OASIS based ODF 1.0 directly on "OpenOffice.org XML File Format 1.0", so the two vocabularies share most of their element and attribute names but none of their namespace URIs for anything OpenOffice.org itself minted.
 //
-// Every URI below was read out of a genuine OpenOffice.org 1.x document's own root-element xmlns declarations -- .sxw files written by OpenOffice.org 1.1/1.9, a .sxc, a .sxi written by OpenOffice.org 1.1.0, and a .sxd -- and cross-checked against LibreOffice's own OOo-namespace token table (xmloff/source/core/xmltoken.cxx, the XML_N_*_OOO entries) and the namespace map its OOo-to-OASIS transformer registers (xmloff/source/transform/OOo2Oasis.cxx). Two traps, both of which a plain reading of the prefix names would get wrong:
-// - `presentation:` is ".../2000/presentation", NOT ".../2001/presentation" -- OpenOffice.org's own retained DTD (xmloff/dtd/nmspace.mod) declares the 2001 form, but no real document uses it and LibreOffice's namespace table does not contain it at all. `config:` and `manifest:` genuinely are the 2001 ones.
-// - `fo:` and `svg:` are the REAL W3C XSL-FO and SVG namespaces here. It is ODF, not OpenOffice.org XML, that mints its own "xsl-fo-compatible"/"svg-compatible" URIs -- so these two are the pair most likely to be assumed identical between the formats when they are not (see ../ns.ts's own note on the OASIS side of the same pair).
+// Every URI below was read out of a genuine OpenOffice.org 1.x document's own root-element xmlns declarations — .sxw files written by OpenOffice.org 1.1/1.9, a .sxc, a .sxi written by OpenOffice.org 1.1.0, and a .sxd — and cross-checked against LibreOffice's own OOo-namespace token table (xmloff/source/core/xmltoken.cxx, the XML_N_*_OOO entries) and the namespace map its OOo-to-OASIS transformer registers (xmloff/source/transform/OOo2Oasis.cxx). Two traps, both of which a plain reading of the prefix names would get wrong:
+// - `presentation:` is ".../2000/presentation", NOT ".../2001/presentation" — OpenOffice.org's own retained DTD (xmloff/dtd/nmspace.mod) declares the 2001 form, but no real document uses it and LibreOffice's namespace table does not contain it at all. `config:` and `manifest:` genuinely are the 2001 ones.
+// - `fo:` and `svg:` are the REAL W3C XSL-FO and SVG namespaces here. It is ODF, not OpenOffice.org XML, that mints its own "xsl-fo-compatible"/"svg-compatible" URIs — so these two are the pair most likely to be assumed identical between the formats when they are not (see ../ns.ts's own note on the OASIS side of the same pair).
 export const OOO1_NAMESPACES = Object.freeze({
   office: "http://openoffice.org/2000/office",
   style: "http://openoffice.org/2000/style",
@@ -34,21 +34,21 @@ export const OOO1_NAMESPACES = Object.freeze({
 
 export type Ooo1NamespacePrefix = keyof typeof OOO1_NAMESPACES;
 
-// Whether a prefix names a namespace this vocabulary has at all -- e.g. "smil"/"anim"/"xforms"/"db"/"rpt", ODF namespaces with no OpenOffice.org 1.x predecessor, are not. Used by the writer direction (../transform.ts's transformToOoo1Package) to decide whether a declared ODF namespace has an OpenOffice.org 1.x URI to rewrite to, or must be left exactly as it is -- the reverse of isOdfNamespacePrefix's own role in the read direction.
+// Whether a prefix names a namespace this vocabulary has at all — e.g. "smil"/"anim"/"xforms"/"db"/"rpt", ODF namespaces with no OpenOffice.org 1.x predecessor, are not. Used by the writer direction (../transform.ts's transformToOoo1Package) to decide whether a declared ODF namespace has an OpenOffice.org 1.x URI to rewrite to, or must be left exactly as it is — the reverse of isOdfNamespacePrefix's own role in the read direction.
 export function isOoo1NamespacePrefix(
   prefix: string,
 ): prefix is Ooo1NamespacePrefix {
   return Object.hasOwn(OOO1_NAMESPACES, prefix);
 }
 
-// The subset of the table above that OpenOffice.org itself minted -- i.e. the URIs whose mere presence identifies a document as OpenOffice.org 1.x rather than ODF. The W3C/Dublin Core entries are deliberately excluded: an ODF document declares xlink:/dc:/math: identically, so seeing one proves nothing.
+// The subset of the table above that OpenOffice.org itself minted — i.e. the URIs whose mere presence identifies a document as OpenOffice.org 1.x rather than ODF. The W3C/Dublin Core entries are deliberately excluded: an ODF document declares xlink:/dc:/math: identically, so seeing one proves nothing.
 const OOO1_ONLY_NAMESPACE_URIS: ReadonlySet<string> = new Set(
   Object.values(OOO1_NAMESPACES).filter((uri) =>
     uri.startsWith("http://openoffice.org/"),
   ),
 );
 
-// MIME media types for every OpenOffice.org 1.x / StarOffice 6-7 file extension, verified against LibreOffice's own filter registry (the MediaType/Extensions properties of its writer_StarOffice_XML_Writer, calc_StarOffice_XML_Calc, impress_StarOffice_XML_Impress, draw_StarOffice_XML_Draw and template/global siblings) and against a real .sxw's and .sxi's own META-INF/manifest.xml root entry. Unlike ODF, an OpenOffice.org 1.x package carries NO "mimetype" part at all -- the manifest's "/" entry is the only place the document's own type is recorded.
+// MIME media types for every OpenOffice.org 1.x / StarOffice 6-7 file extension, verified against LibreOffice's own filter registry (the MediaType/Extensions properties of its writer_StarOffice_XML_Writer, calc_StarOffice_XML_Calc, impress_StarOffice_XML_Impress, draw_StarOffice_XML_Draw and template/global siblings) and against a real .sxw's and .sxi's own META-INF/manifest.xml root entry. Unlike ODF, an OpenOffice.org 1.x package carries NO "mimetype" part at all — the manifest's "/" entry is the only place the document's own type is recorded.
 export const OOO1_MEDIA_TYPES = Object.freeze({
   sxw: "application/vnd.sun.xml.writer",
   stw: "application/vnd.sun.xml.writer.template",
@@ -120,7 +120,7 @@ export function ooo1MediaTypeForOdfMediaType(
   return OOO1_MEDIA_TYPE_BY_ODF_MEDIA_TYPE.get(mediaType);
 }
 
-// Whether a package is an OpenOffice.org 1.x one rather than an ODF one, decided by the namespace URIs its own parts declare -- never by a file extension or a manifest media type, both of which a caller may not have and a renamed file will lie about. Any XML part whose root element declares an xmlns binding to one of the openoffice.org-minted URIs is proof: ODF declares none of them, and OpenOffice.org 1.x declares several on every part's root (content.xml, styles.xml, meta.xml, settings.xml and META-INF/manifest.xml all carry their own).
+// Whether a package is an OpenOffice.org 1.x one rather than an ODF one, decided by the namespace URIs its own parts declare — never by a file extension or a manifest media type, both of which a caller may not have and a renamed file will lie about. Any XML part whose root element declares an xmlns binding to one of the openoffice.org-minted URIs is proof: ODF declares none of them, and OpenOffice.org 1.x declares several on every part's root (content.xml, styles.xml, meta.xml, settings.xml and META-INF/manifest.xml all carry their own).
 export function isOoo1Package(pkg: Package): boolean {
   for (const part of Object.values(pkg.parts)) {
     if (part.kind !== "xml") {

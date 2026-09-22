@@ -12,7 +12,7 @@ const OS2_FS_SELECTION_BOLD = 0x0020;
 const HEAD_MAC_STYLE_BOLD = 0x0001;
 const HEAD_MAC_STYLE_ITALIC = 0x0002;
 
-// A minimal, hand-built 'name' table -- the same record layout font-tables.test.ts's own buildFontWithNameTable uses (clause 5.2.7), factored here to return the bare table bytes so it can be combined with other synthetic tables via buildSfnt below.
+// A minimal, hand-built 'name' table — the same record layout font-tables.test.ts's own buildFontWithNameTable uses (clause 5.2.7), factored here to return the bare table bytes so it can be combined with other synthetic tables via buildSfnt below.
 function buildNameTableBytes(
   records: readonly {
     platformId: number;
@@ -55,7 +55,7 @@ function buildNameTableBytes(
   return table;
 }
 
-// A Windows/Unicode nameID-1 family record, the one shape every test below needs -- built through buildNameTableBytes so a synthetic font's family always resolves the same way real vendored fonts do.
+// A Windows/Unicode nameID-1 family record, the one shape every test below needs — built through buildNameTableBytes so a synthetic font's family always resolves the same way real vendored fonts do.
 function buildFamilyNameTableBytes(family: string): Uint8Array<ArrayBuffer> {
   return buildNameTableBytes([
     { platformId: 3, encodingId: 1, nameId: 1, text: family },
@@ -80,7 +80,7 @@ function buildOs2TableBytes(fsSelection: number): Uint8Array<ArrayBuffer> {
   return table;
 }
 
-// A real sfnt table directory (clause 4) wrapping whichever synthetic tables a test needs, in insertion order -- the general-purpose counterpart to font-tables.test.ts's own single-table buildFontWithNameTable.
+// A real sfnt table directory (clause 4) wrapping whichever synthetic tables a test needs, in insertion order — the general-purpose counterpart to font-tables.test.ts's own single-table buildFontWithNameTable.
 function buildSfnt(
   tables: ReadonlyMap<string, Uint8Array<ArrayBuffer>>,
 ): Uint8Array<ArrayBuffer> {
@@ -189,7 +189,7 @@ describe("readFontFace style-bit precedence", () => {
       new Map([
         ["name", buildFamilyNameTableBytes("Disagreement")],
         ["head", buildHeadTableBytes(HEAD_MAC_STYLE_BOLD)], // head says bold
-        ["OS/2", buildOs2TableBytes(0)], // OS/2 says regular -- this is the one that must win
+        ["OS/2", buildOs2TableBytes(0)], // OS/2 says regular — this is the one that must win
       ]),
     );
     expect(readFontFace(font, "disagreement.ttf")).toEqual({
@@ -228,7 +228,7 @@ describe("readFontFace error handling", () => {
 
   it("throws FontFaceParseError, naming the source, for bytes that are not a recognised sfnt container at all", () => {
     const garbage = new Uint8Array([0x00, 0x01, 0x02, 0x03]);
-    // "not-a-font.bin" (the source label) also appears inside the TrueType Collection message below, so asserting it alone would not catch isTrueTypeCollection wrongly reporting every failure as a .ttc -- the generic wording is what actually distinguishes the two.
+    // "not-a-font.bin" (the source label) also appears inside the TrueType Collection message below, so asserting it alone would not catch isTrueTypeCollection wrongly reporting every failure as a .ttc — the generic wording is what actually distinguishes the two.
     expect(() => readFontFace(garbage, "not-a-font.bin")).toThrow(
       FontFaceParseError,
     );

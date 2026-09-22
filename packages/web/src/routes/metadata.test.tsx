@@ -29,7 +29,7 @@ vi.mock("../ui/notify", () => ({
   },
 }));
 
-// Stands in for the real FileUpload (already covered by its own dedicated test suite): MetadataPage's own logic -- inferring the format, calling readMetadata.mutate, seeding title/author, and saving overrides -- is what this file exercises.
+// Stands in for the real FileUpload (already covered by its own dedicated test suite): MetadataPage's own logic — inferring the format, calling readMetadata.mutate, seeding title/author, and saving overrides — is what this file exercises.
 let latestOnFile: ((file: OpenedFile) => void) | undefined;
 vi.mock("../ui/FileUpload", () => ({
   FileUpload: (props: { onFile: (file: OpenedFile) => void }) => {
@@ -70,7 +70,7 @@ function authorInput(container: HTMLElement) {
   return inputForLabel(container, "Author");
 }
 
-// React tracks an input's last-known value on the DOM node itself and skips its onChange dispatch when a plain `input.value = ...` assignment already matches what it already recorded -- going through the native setter (bypassing React's own patched one) keeps its tracked value stale, so the subsequent "input" event is seen as a real change.
+// React tracks an input's last-known value on the DOM node itself and skips its onChange dispatch when a plain `input.value = ...` assignment already matches what it already recorded — going through the native setter (bypassing React's own patched one) keeps its tracked value stale, so the subsequent "input" event is seen as a real change.
 function typeInto(input: HTMLInputElement, value: string) {
   act(() => {
     Object.getOwnPropertyDescriptor(

@@ -7,7 +7,7 @@ import { parseSfnt } from "./sfnt";
 import { buildCmapLookup } from "./cmap-table";
 import { carlitoRegularBytes } from "./test-support/fonts";
 
-// decodeGlyphOutline's differential oracle is the font's own declared per-glyph bounding box: for a simple glyph, glyf.ts's glyphInkBounds returns the header box the font itself states, while this module's decoded coordinates are walked out of the point arrays those two readings never share -- matching bounds therefore proves the flag/coordinate decoding end to end rather than comparing a parser against itself. For a composite, both walks resolve components, through different machinery (glyf.ts unions component boxes; this module places decoded component outlines), so agreement there pins the placement arithmetic (transform, offset, SCALED_COMPONENT_OFFSET precedence) against an independent implementation. The face under test is the real vendored Carlito regular -- genuine production outlines, quadratic-heavy, with composites for the accented repertoire.
+// decodeGlyphOutline's differential oracle is the font's own declared per-glyph bounding box: for a simple glyph, glyf.ts's glyphInkBounds returns the header box the font itself states, while this module's decoded coordinates are walked out of the point arrays those two readings never share — matching bounds therefore proves the flag/coordinate decoding end to end rather than comparing a parser against itself. For a composite, both walks resolve components, through different machinery (glyf.ts unions component boxes; this module places decoded component outlines), so agreement there pins the placement arithmetic (transform, offset, SCALED_COMPONENT_OFFSET precedence) against an independent implementation. The face under test is the real vendored Carlito regular — genuine production outlines, quadratic-heavy, with composites for the accented repertoire.
 
 function carlitoGlyf() {
   const sfnt = parseSfnt(carlitoRegularBytes());
@@ -168,7 +168,7 @@ function simpleGlyphBytes(
   ]);
 }
 
-// A GlyfTable double for exercising decodeGlyphOutline/decodeSimpleContours directly, entirely independent of any real font: `entries` supplies each simple glyph's own raw 'glyf' bytes (simpleGlyphBytes' output, or hand-truncated/corrupted for the malformed-input tests below), and `composites` supplies a composite glyph's own component records as plain objects, sidestepping the composite record's own byte format entirely -- decodeGlyphOutline reaches it only through this interface method, never by reading bytes itself.
+// A GlyfTable double for exercising decodeGlyphOutline/decodeSimpleContours directly, entirely independent of any real font: `entries` supplies each simple glyph's own raw 'glyf' bytes (simpleGlyphBytes' output, or hand-truncated/corrupted for the malformed-input tests below), and `composites` supplies a composite glyph's own component records as plain objects, sidestepping the composite record's own byte format entirely — decodeGlyphOutline reaches it only through this interface method, never by reading bytes itself.
 function fakeGlyfTable(options: {
   readonly entries?: ReadonlyMap<number, Uint8Array<ArrayBuffer>>;
   readonly composites?: ReadonlyMap<
@@ -211,7 +211,7 @@ function fakeGlyfTable(options: {
 // Every fixture below is hand-built specifically to reach a malformed-input or depth-limit path in decodeSimpleContours()/decodeOutline(): the vendored Carlito face above is a well-formed program from a real font toolchain, so none of these ever arise from walking it.
 describe("decodeGlyphOutline's simple-glyph and composite decoding, driven by a fake GlyfTable", () => {
   it("decodes a hand-built multi-contour simple glyph, proving the end-point-to-contour assignment directly", () => {
-    // Two contours: a 3-point triangle (points 0-2, endPt 2) and a 2-point line (points 3-4, endPt 4) -- exercises the pointIndex walk crossing a contour boundary, which every real-font test above only ever does incidentally.
+    // Two contours: a 3-point triangle (points 0-2, endPt 2) and a 2-point line (points 3-4, endPt 4) — exercises the pointIndex walk crossing a contour boundary, which every real-font test above only ever does incidentally.
     const bytes = simpleGlyphBytes(
       [2, 4],
       [
@@ -274,7 +274,7 @@ describe("decodeGlyphOutline's simple-glyph and composite decoding, driven by a 
       0, // header: 1 contour
       ...u16be(0), // endPts [0]: one point
       0,
-      0, // instructionLength, then nothing -- no flag byte follows
+      0, // instructionLength, then nothing — no flag byte follows
     ]);
     const glyf = fakeGlyfTable({ entries: new Map([[0, bytes]]) });
     expect(decodeGlyphOutline(glyf, 0)).toBeUndefined();
@@ -294,7 +294,7 @@ describe("decodeGlyphOutline's simple-glyph and composite decoding, driven by a 
       ...u16be(0),
       0,
       0,
-      FLAG_ON_CURVE | FLAG_REPEAT, // then nothing -- no repeat-count byte
+      FLAG_ON_CURVE | FLAG_REPEAT, // then nothing — no repeat-count byte
     ]);
     const glyf = fakeGlyfTable({ entries: new Map([[0, bytes]]) });
     expect(decodeGlyphOutline(glyf, 0)).toBeUndefined();
@@ -335,7 +335,7 @@ describe("decodeGlyphOutline's simple-glyph and composite decoding, driven by a 
       ...u16be(0),
       0,
       0,
-      FLAG_ON_CURVE | FLAG_X_SHORT, // then nothing -- no magnitude byte
+      FLAG_ON_CURVE | FLAG_X_SHORT, // then nothing — no magnitude byte
     ]);
     const glyf = fakeGlyfTable({ entries: new Map([[0, bytes]]) });
     expect(decodeGlyphOutline(glyf, 0)).toBeUndefined();
@@ -403,7 +403,7 @@ describe("decodeGlyphOutline's simple-glyph and composite decoding, driven by a 
   });
 
   it("applies the SCALED_COMPONENT_OFFSET transform to a component's own placement offset, not just its outline points", () => {
-    // No real vendored composite in this suite's own fonts ever sets SCALED_COMPONENT_OFFSET (bit 11, 0x0800) without also setting UNSCALED_COMPONENT_OFFSET (bit 12, 0x1000) -- Microsoft's own OpenType toolchain never emits that combination, only Apple's does -- so this is the one placement path only a hand-built fixture can reach at all. Component 0's own base point (10, 20), the transform [a,b,c,d] = [2,3,5,7], and offset arguments (6, 8) are all pairwise distinct so that swapping any single +/-/*// in the placement arithmetic below changes the result: dx = a*6 + c*8 = 52, dy = b*6 + d*8 = 74, and the final point is the transformed base point plus that SCALED offset, not the raw (6, 8) UNSCALED_COMPONENT_OFFSET would have placed it at.
+    // No real vendored composite in this suite's own fonts ever sets SCALED_COMPONENT_OFFSET (bit 11, 0x0800) without also setting UNSCALED_COMPONENT_OFFSET (bit 12, 0x1000) — Microsoft's own OpenType toolchain never emits that combination, only Apple's does — so this is the one placement path only a hand-built fixture can reach at all. Component 0's own base point (10, 20), the transform [a,b,c,d] = [2,3,5,7], and offset arguments (6, 8) are all pairwise distinct so that swapping any single +/-/*// in the placement arithmetic below changes the result: dx = a*6 + c*8 = 52, dy = b*6 + d*8 = 74, and the final point is the transformed base point plus that SCALED offset, not the raw (6, 8) UNSCALED_COMPONENT_OFFSET would have placed it at.
     const base = simpleGlyphBytes([0], [{ dx: 10, dy: 20, onCurve: true }]);
     const scaledOffsetComponent: CompositeComponent = {
       flags: 0x0800,
@@ -427,7 +427,7 @@ describe("decodeGlyphOutline's simple-glyph and composite decoding, driven by a 
   });
 
   it("refuses a composite chain recursing past the spec's own nesting limit", () => {
-    // Glyph 0 composites onto itself: every level is otherwise well-formed, so only the sheer recursion depth -- never a malformed record -- is what trips the limit.
+    // Glyph 0 composites onto itself: every level is otherwise well-formed, so only the sheer recursion depth — never a malformed record — is what trips the limit.
     const selfComposite: CompositeComponent = {
       flags: 0,
       glyphIndex: 0,

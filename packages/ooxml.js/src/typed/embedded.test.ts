@@ -19,7 +19,7 @@ import {
 import { el } from "../xml/fragment";
 import { packageFromEntries } from "../package-io/read";
 
-// Coverage for the shared embedded-object decode (src/typed/embedded.ts): nested-ZIP payload bytes -> flavour detection -> the matching typed reader -> the ContentEmbeddedObject payload (objectKind + a genuinely recovered nested ContentDocument). Fixtures come from src/test-support/embedded.ts -- real minimal OOXML packages zipped inline, because the pipeline under test unzips actual bytes (a hand-built Package value would skip the parse step entirely).
+// Coverage for the shared embedded-object decode (src/typed/embedded.ts): nested-ZIP payload bytes -> flavour detection -> the matching typed reader -> the ContentEmbeddedObject payload (objectKind + a genuinely recovered nested ContentDocument). Fixtures come from src/test-support/embedded.ts — real minimal OOXML packages zipped inline, because the pipeline under test unzips actual bytes (a hand-built Package value would skip the parse step entirely).
 
 const enc = (s: string): Uint8Array<ArrayBuffer> => new TextEncoder().encode(s);
 
@@ -66,7 +66,7 @@ describe("readEmbeddedOoxmlPayload", () => {
   });
 
   it("decodes an xlsx wrapped in a classic OLE compound-file Package stream (the .bin spelling)", () => {
-    // The legacy real-world shape: oleObject1.bin is a CFB compound file whose root storage carries the embedded file as an OLE-packaged 'Package' stream -- here a mini-stream-resident one, since a small embed lands below the 4096-byte cutoff. The recovery must see through both wrappings (compound file, then OLE packaging) to the ZIP and reuse the same nested-package decode the direct-ZIP spelling takes.
+    // The legacy real-world shape: oleObject1.bin is a CFB compound file whose root storage carries the embedded file as an OLE-packaged 'Package' stream — here a mini-stream-resident one, since a small embed lands below the 4096-byte cutoff. The recovery must see through both wrappings (compound file, then OLE packaging) to the ZIP and reuse the same nested-package decode the direct-ZIP spelling takes.
     const payload = readEmbeddedOoxmlPayload(oleObjectBin(minimalXlsxBytes()));
     expect(payload?.objectKind).toBe("spreadsheet");
     expect(payload?.document.kind).toBe("spreadsheet");
@@ -82,7 +82,7 @@ describe("readEmbeddedOoxmlPayload", () => {
   });
 
   it("finds the 'Package' stream by its own name among several, not merely the first stream the compound file's directory tree visits", () => {
-    // The directory's sibling tree is name-sorted (see archive-codec's own README), so "Decoy" -- alphabetically before "Package" -- is genuinely visited first; only a check against the stream's own path, not "whichever comes first", can tell them apart.
+    // The directory's sibling tree is name-sorted (see archive-codec's own README), so "Decoy" — alphabetically before "Package" — is genuinely visited first; only a check against the stream's own path, not "whichever comes first", can tell them apart.
     const packageBytes = writeOlePackage({
       label: "Book1.xlsx",
       sourcePath: "",
@@ -126,14 +126,14 @@ describe("readEmbeddedOoxmlPayload", () => {
   });
 
   it("returns undefined for bytes carrying neither the ZIP nor the compound-file magic at all", () => {
-    // Neither isZipArchive nor readCompoundFile's own magic check recognise this input -- the latter throws CompoundFileFormatError, which the surrounding catch degrades to undefined exactly like any other undecodable payload.
+    // Neither isZipArchive nor readCompoundFile's own magic check recognise this input — the latter throws CompoundFileFormatError, which the surrounding catch degrades to undefined exactly like any other undecodable payload.
     expect(readEmbeddedOoxmlPayload(enc("plain text, not an archive"))).toBe(
       undefined,
     );
   });
 
   it("returns undefined for a non-ZIP payload (the classic OLE compound file)", () => {
-    // The OLE/CFB magic bytes -- the legacy .bin spelling of an embedded object, which no reader in this ecosystem decodes.
+    // The OLE/CFB magic bytes — the legacy .bin spelling of an embedded object, which no reader in this ecosystem decodes.
     const bytes = new Uint8Array([
       0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0x01, 0x02, 0x03, 0x04,
     ]);
@@ -141,7 +141,7 @@ describe("readEmbeddedOoxmlPayload", () => {
   });
 
   it("returns undefined for a ZIP that is not a recognisable OOXML package (a plain archive, not a document)", () => {
-    // A "Package"-ProgID embed of a plain .zip: valid archive, none of the three OOXML entry parts. An embedded payload is second-order content -- the caller chose to open the host document, not this archive -- so an unrecognisable flavour is a degrade-tier non-event, never a thrown error that kills the host read.
+    // A "Package"-ProgID embed of a plain .zip: valid archive, none of the three OOXML entry parts. An embedded payload is second-order content — the caller chose to open the host document, not this archive — so an unrecognisable flavour is a degrade-tier non-event, never a thrown error that kills the host read.
     const bytes = zipPackage({
       "readme.txt": enc("just a file, not a document package"),
     });
@@ -149,13 +149,13 @@ describe("readEmbeddedOoxmlPayload", () => {
   });
 
   it("returns undefined for a corrupt ZIP payload (magic bytes present, structure truncated)", () => {
-    // A truncated archive passes the magic-byte gate (the gate is four bytes long and cannot see structural corruption), then fails inside the unzip itself -- the raw inflate failure must degrade exactly like an unrecognisable flavour rather than propagating out of the host read.
+    // A truncated archive passes the magic-byte gate (the gate is four bytes long and cannot see structural corruption), then fails inside the unzip itself — the raw inflate failure must degrade exactly like an unrecognisable flavour rather than propagating out of the host read.
     const truncated = minimalDocxBytes().slice(0, 30);
     expect(readEmbeddedOoxmlPayload(truncated)).toBeUndefined();
   });
 
   it("returns undefined for a docx payload whose document part carries no w:body", () => {
-    // The entry part exists and parses, but readDocxContent's own precondition (a w:body to walk) does not hold -- detection verifies that precondition before dispatching, so a malformed nested docx degrades instead of throwing from inside the nested read.
+    // The entry part exists and parses, but readDocxContent's own precondition (a w:body to walk) does not hold — detection verifies that precondition before dispatching, so a malformed nested docx degrades instead of throwing from inside the nested read.
     const bytes = zipPackage({
       "word/document.xml": enc(
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>',
@@ -165,7 +165,7 @@ describe("readEmbeddedOoxmlPayload", () => {
   });
 
   it("uses the genuine root-level part over a same-named entry nested inside a ZIP-within-the-payload, never letting the nested one overwrite it", () => {
-    // A nested archive's own entries are ancestors.length > 0 -- excluded from the flattened package the outer payload's own parts build from, exactly as the walk's own root-entry set is. A decoy nested zip carrying its own "xl/workbook.xml" must never be allowed to clobber the payload's genuine root-level one.
+    // A nested archive's own entries are ancestors.length > 0 — excluded from the flattened package the outer payload's own parts build from, exactly as the walk's own root-entry set is. A decoy nested zip carrying its own "xl/workbook.xml" must never be allowed to clobber the payload's genuine root-level one.
     const basePkg = unzipPackage(minimalXlsxBytes());
     const decoy = zipPackage({
       "xl/workbook.xml": enc("this is not a real workbook part at all"),
@@ -188,7 +188,7 @@ describe("readEmbeddedOoxmlPayload", () => {
   });
 
   it("returns undefined for a payload whose entries nest ZIPs beyond archive-codec's walk depth, even when its root is a valid xlsx", () => {
-    // The nested decode runs behind archive-codec's recursive-walk guards (a depth cap and one shared cumulative decompressed-bytes budget -- the bounded inflate this package's own fflate unzip has no equivalent of). This payload IS a valid xlsx at its root, but it also carries an entry that is a chain of ZIPs nested one level deeper than MAX_WALK_DEPTH -- the shape a decompression bomb's nesting leverage takes. A walk that hits a guard limit means the payload as a whole stands outside the guards' contract, so no embedded block is decoded from it at all; without the gateway the root flavour would decode fine and the deep chain would ride along as an inert binary part.
+    // The nested decode runs behind archive-codec's recursive-walk guards (a depth cap and one shared cumulative decompressed-bytes budget — the bounded inflate this package's own fflate unzip has no equivalent of). This payload IS a valid xlsx at its root, but it also carries an entry that is a chain of ZIPs nested one level deeper than MAX_WALK_DEPTH — the shape a decompression bomb's nesting leverage takes. A walk that hits a guard limit means the payload as a whole stands outside the guards' contract, so no embedded block is decoded from it at all; without the gateway the root flavour would decode fine and the deep chain would ride along as an inert binary part.
     let chain: Uint8Array<ArrayBuffer> = minimalXlsxBytes();
     for (let level = 0; level <= MAX_WALK_DEPTH; level++) {
       chain = zipPackage({ "nest.zip": chain });

@@ -76,7 +76,7 @@ describe("isTooNew", () => {
     expect(isTooNew(minutesAgo(90), now, windowMinutes)).toBe(false);
   });
 
-  // The unit itself: 60 means sixty minutes, so two days clears the window comfortably. Were the configured number read as days -- as the seven-day reference implementation this was ported from read its own -- a two-day-old package would still be sixty days short.
+  // The unit itself: 60 means sixty minutes, so two days clears the window comfortably. Were the configured number read as days — as the seven-day reference implementation this was ported from read its own — a two-day-old package would still be sixty days short.
   it("reads the configured number as minutes rather than days", () => {
     const twoDays = 2 * 24 * 60;
     expect(isTooNew(minutesAgo(twoDays), now, windowMinutes)).toBe(false);

@@ -139,7 +139,7 @@ describe("the shared paragraph screen family admits doc", () => {
   });
 });
 
-// openDocx/openOdt keep working unchanged beside the new openers -- a guard against the import reshuffle in open-document.ts accidentally dropping an existing opener.
+// openDocx/openOdt keep working unchanged beside the new openers — a guard against the import reshuffle in open-document.ts accidentally dropping an existing opener.
 describe("existing openers are untouched", () => {
   it("still opens a docx built by createDocx", async () => {
     const { createDocx } = await import("documents.js");

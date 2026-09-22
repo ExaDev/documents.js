@@ -104,7 +104,7 @@ describe("associateFigureCaptions", () => {
   });
 
   it("never attaches a caption to a non-image block, even one sitting directly beside a genuine Caption-styled paragraph", () => {
-    // A plain paragraph is never a figure -- it must be returned exactly as given, without ever entering the candidate-claiming logic a caption-styled neighbour would otherwise feed it.
+    // A plain paragraph is never a figure — it must be returned exactly as given, without ever entering the candidate-claiming logic a caption-styled neighbour would otherwise feed it.
     const blocks = [
       paragraph("Body text"),
       paragraph("Figure 1: X", "Caption"),

@@ -124,7 +124,7 @@ describe("buildFib", () => {
   });
 
   it("writes nFibBack as a real little-endian 0x00BF, even though this reader never consumes it", () => {
-    // parseFib never reads offset 12, so only a direct byte-level check (not a round trip through it) can tell a little-endian write from a big-endian one -- 0x00BF's own two bytes (0xBF, 0x00) differ under either order, unlike a value with a zero high byte and a zero low byte both.
+    // parseFib never reads offset 12, so only a direct byte-level check (not a round trip through it) can tell a little-endian write from a big-endian one — 0x00BF's own two bytes (0xBF, 0x00) differ under either order, unlike a value with a zero high byte and a zero low byte both.
     const bytes = buildFib(MINIMAL);
     expect(readUint16LE(bytes, 12)).toBe(0x00bf);
   });

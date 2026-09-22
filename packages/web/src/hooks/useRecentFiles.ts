@@ -5,10 +5,10 @@ import { db } from "../db/dexie";
 
 const RECENT_FILES_LIMIT = 20;
 
-// useLiveQuery's own deps array feeds a plain React useMemo internally (dexie-react-hooks' own useObservable): a module-scope constant, evaluated once at import time rather than a fresh literal on every call, so a mutation to its contents runs only during module load -- Stryker's own ignoreStatic setting already excludes exactly that class of mutant workspace-wide, rather than this file needing its own suppression. The querier below closes over no render-scoped value, so no dependency will ever legitimately change; a literal written inline here would still be correct, but only a stable reference this file itself controls -- not any single-element array's own particular contents -- is what useMemo's element-by-element comparison actually needs to keep re-subscribing from happening on every render.
+// useLiveQuery's own deps array feeds a plain React useMemo internally (dexie-react-hooks' own useObservable): a module-scope constant, evaluated once at import time rather than a fresh literal on every call, so a mutation to its contents runs only during module load — Stryker's own ignoreStatic setting already excludes exactly that class of mutant workspace-wide, rather than this file needing its own suppression. The querier below closes over no render-scoped value, so no dependency will ever legitimately change; a literal written inline here would still be correct, but only a stable reference this file itself controls — not any single-element array's own particular contents — is what useMemo's element-by-element comparison actually needs to keep re-subscribing from happening on every render.
 const NO_DEPS: never[] = [];
 
-// useLiveQuery re-runs (and every consumer re-renders) the instant any write lands in db.recentFiles -- no manual invalidation needed after recordRecentFile/removeRecentFile.
+// useLiveQuery re-runs (and every consumer re-renders) the instant any write lands in db.recentFiles — no manual invalidation needed after recordRecentFile/removeRecentFile.
 export function useRecentFiles() {
   return useLiveQuery(
     () =>
@@ -28,7 +28,7 @@ export interface RecentFileEntry {
   handle?: FileSystemFileHandle;
 }
 
-// Dexie types a record's own primary key as possibly undefined (a record that was never actually persisted), which bulkDelete's own number[] parameter can't accept -- exported so a test can drive the narrowing directly against a mixed array, since every record this module's own callers ever read back from the table already has a real assigned id.
+// Dexie types a record's own primary key as possibly undefined (a record that was never actually persisted), which bulkDelete's own number[] parameter can't accept — exported so a test can drive the narrowing directly against a mixed array, since every record this module's own callers ever read back from the table already has a real assigned id.
 export function definedIds(records: readonly { id?: number }[]): number[] {
   return records.map((record) => record.id).filter((id) => id !== undefined);
 }

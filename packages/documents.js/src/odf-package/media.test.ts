@@ -17,7 +17,7 @@ const JPEG_BYTES: Uint8Array<ArrayBuffer> = new Uint8Array([
   0xff, 0xd8, 0xff, 0xe0, 1, 2, 3,
 ]);
 
-// A minimal, real-shaped .odt-in-progress package: mimetype + content.xml, no manifest.xml yet -- the state a caller is in partway through building a document, once its document media type is established but before its first image is added.
+// A minimal, real-shaped .odt-in-progress package: mimetype + content.xml, no manifest.xml yet — the state a caller is in partway through building a document, once its document media type is established but before its first image is added.
 function baseOdtPackage(): Package {
   const pkg: Package = { parts: { "content.xml": { kind: "xml", nodes: [] } } };
   setDocumentMediaType(pkg, ODT_MEDIA_TYPE);
@@ -118,7 +118,7 @@ describe("nextPictureIndex", () => {
     expect(nextPictureIndex(pkg, "p.g")).toBe(1);
   });
 
-  // A "." in the extension must be escaped to a literal dot in the built pattern, not stripped out of it -- a part whose own name is missing the dot altogether ("image1.pg") must not match an extension of "p.g", which is exactly what stripping the special character instead of escaping it would let through.
+  // A "." in the extension must be escaped to a literal dot in the built pattern, not stripped out of it — a part whose own name is missing the dot altogether ("image1.pg") must not match an extension of "p.g", which is exactly what stripping the special character instead of escaping it would let through.
   it("does not let a regex-special character in the extension be silently dropped from the match", () => {
     const pkg: Package = {
       parts: { "Pictures/image1.pg": { kind: "binary", base64: "" } },
@@ -126,7 +126,7 @@ describe("nextPictureIndex", () => {
     expect(nextPictureIndex(pkg, "p.g")).toBe(1);
   });
 
-  // "Pictures0image5.png" is 9 characters ("Pictures0") ahead of a slice that -- once the leading "Pictures/" (also 9 characters) is stripped off a real Pictures/ path -- looks exactly like "image5.png". A path-prefix check that only LOOKED at whether the loop should skip a part, without actually gating the pattern match against it, would still slice this non-Pictures path at the same fixed offset and misread it as Pictures/image5.png -- this path is deliberately crafted so that coincidence is exercised, unlike a plain "Other/imageN.ext" path (whose own 9-character-in slice does not happen to spell a valid image filename).
+  // "Pictures0image5.png" is 9 characters ("Pictures0") ahead of a slice that — once the leading "Pictures/" (also 9 characters) is stripped off a real Pictures/ path — looks exactly like "image5.png". A path-prefix check that only LOOKED at whether the loop should skip a part, without actually gating the pattern match against it, would still slice this non-Pictures path at the same fixed offset and misread it as Pictures/image5.png — this path is deliberately crafted so that coincidence is exercised, unlike a plain "Other/imageN.ext" path (whose own 9-character-in slice does not happen to spell a valid image filename).
   it("ignores a same-named file outside Pictures/ even when slicing its path at the Pictures/ prefix length would coincidentally spell a valid image filename", () => {
     const pkg: Package = {
       parts: {

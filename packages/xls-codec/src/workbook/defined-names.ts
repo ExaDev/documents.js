@@ -12,11 +12,11 @@ import { writeXLUnicodeStringNoCch } from "../biff/string-writer";
 import { BiffWriteError } from "../biff/write-errors";
 import type { RecordGroup } from "../biff/substreams";
 
-// A workbook's own defined names, as the Lbl records ([MS-XLS] 2.4.150, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/d148e898-4504-4841-a793-ee85f3ea9eef) of its globals substream carry them -- one record per name, each scoped either to the whole workbook (itab 0) or to one sheet (a non-zero itab, a one-based index into the BoundSheet8 collection). The workbook/ half of the module: content.ts maps these onto document-schema.js's own document-level `names` array, translating that BoundSheet8 scope into the document's own sheets-array index.
+// A workbook's own defined names, as the Lbl records ([MS-XLS] 2.4.150, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/d148e898-4504-4841-a793-ee85f3ea9eef) of its globals substream carry them — one record per name, each scoped either to the whole workbook (itab 0) or to one sheet (a non-zero itab, a one-based index into the BoundSheet8 collection). The workbook/ half of the module: content.ts maps these onto document-schema.js's own document-level `names` array, translating that BoundSheet8 scope into the document's own sheets-array index.
 //
-// The read half lives here and the write half below in the same module, so the one record layout and the one built-in-name table have the one home -- the discipline print-names.ts already draws for the two built-in print names, which this module deliberately does NOT touch: _xlnm.Print_Area and _xlnm.Print_Titles are print-settings facts that print-names.ts reads onto ContentSheetPrintSettings and writes back from there, so surfacing them as document-level names too would state one fact twice and write one Lbl record twice.
+// The read half lives here and the write half below in the same module, so the one record layout and the one built-in-name table have the one home — the discipline print-names.ts already draws for the two built-in print names, which this module deliberately does NOT touch: _xlnm.Print_Area and _xlnm.Print_Titles are print-settings facts that print-names.ts reads onto ContentSheetPrintSettings and writes back from there, so surfacing them as document-level names too would state one fact twice and write one Lbl record twice.
 
-/** Lbl.grbit's fBuiltin bit -- field F of [MS-XLS] 2.4.150's own grbit layout. */
+/** Lbl.grbit's fBuiltin bit — field F of [MS-XLS] 2.4.150's own grbit layout. */
 const LBL_FLAG_BUILTIN = 0x0020;
 
 /** [MS-XLS] 2.4.150's own built-in name table: the index a built-in name's single-character Name field carries, and the name it spells. The `_xlnm.` prefix is ECMA-376's own reserved spelling for the identical names in an xlsx (the two print ones confirmed against real LibreOffice-written markup in ooxml.js's own fixture), so a built-in rides through the shared schema under the spelling every other member of this format family already uses for it. */
@@ -41,7 +41,7 @@ const BUILTIN_NAME_SPELLINGS: readonly string[] = [
 const BUILTIN_NAME_PRINT_AREA = 0x06;
 const BUILTIN_NAME_PRINT_TITLES = 0x07;
 
-/** The `_xlnm.` prefix ECMA-376 reserves for built-in defined names, which is also the spelling this package reads them under -- so a name carrying it on write resolves back through the built-in table below, and one the table does not know is refused rather than written as a user name Excel itself forbids the prefix for. */
+/** The `_xlnm.` prefix ECMA-376 reserves for built-in defined names, which is also the spelling this package reads them under — so a name carrying it on write resolves back through the built-in table below, and one the table does not know is refused rather than written as a user name Excel itself forbids the prefix for. */
 const XLNM_PREFIX = "_xlnm.";
 
 /** One defined name as an Lbl record states it, before content.ts translates its scope. */
@@ -54,7 +54,7 @@ export interface RawDefinedName {
 }
 
 /**
- * Reads every Lbl record in a globals substream into a defined name, or skips it: the two print built-ins (print-names.ts owns them), a built-in index past the table above (no spelling to give it), a name whose rgce resolves to no formula text (a construct outside parseFormulaText's vocabulary, or a stream too malformed to walk -- ContentDefinedNameSchema requires refersTo, and a fabricated placeholder is not formula text), and a record whose own bytes overrun (caught per record rather than letting one malformed Lbl abort every other name, the identical per-record boundary sheet.ts's resolveFormulaText draws for a malformed cell formula).
+ * Reads every Lbl record in a globals substream into a defined name, or skips it: the two print built-ins (print-names.ts owns them), a built-in index past the table above (no spelling to give it), a name whose rgce resolves to no formula text (a construct outside parseFormulaText's vocabulary, or a stream too malformed to walk — ContentDefinedNameSchema requires refersTo, and a fabricated placeholder is not formula text), and a record whose own bytes overrun (caught per record rather than letting one malformed Lbl abort every other name, the identical per-record boundary sheet.ts's resolveFormulaText draws for a malformed cell formula).
  */
 export function readDefinedNames(
   records: readonly RecordGroup[],
@@ -132,7 +132,7 @@ function readLblRecord(
 /** One Lbl record to write: the name (user-spelled, or a built-in index when the entry's name is an _xlnm spelling), the sheet it is scoped to, and the compiled token stream of what it refers to. */
 export interface DefinedNamePlanEntry {
   readonly name: string;
-  /** The built-in name index, when `name` is an _xlnm spelling this package knows -- undefined for a user-defined name. */
+  /** The built-in name index, when `name` is an _xlnm spelling this package knows — undefined for a user-defined name. */
   readonly builtinName: number | undefined;
   /** Zero-based position in the document's own sheets array; undefined for a workbook-scoped name. */
   readonly sheetIndex: number | undefined;
@@ -152,7 +152,7 @@ interface ReferenceCorner {
   readonly rowAbsolute: boolean;
 }
 
-/** A single A1-style corner, with or without its $ markers -- the identical shape biff/ptg.ts's own formatPoint produces, parsed back the other way. A `$` is honoured per coordinate rather than normalised away, because a relative coordinate in a defined name is genuine, retypeable formula semantics Excel re-interprets against the name's own scope, not a display detail. */
+/** A single A1-style corner, with or without its $ markers — the identical shape biff/ptg.ts's own formatPoint produces, parsed back the other way. A `$` is honoured per coordinate rather than normalised away, because a relative coordinate in a defined name is genuine, retypeable formula semantics Excel re-interprets against the name's own scope, not a display detail. */
 const REFERENCE_CORNER_RE = /^(\$?)([A-Za-z]{1,3})(\$?)([0-9]{1,5})$/;
 
 /** A full refersTo this writer can compile: one sheet-qualified corner or corner pair, nothing more. */
@@ -164,7 +164,7 @@ const CELL_REFERENCE_NAME_RE =
   /^\$?[A-Za-z]{1,3}\$?[0-9]{1,5}(:\$?[A-Za-z]{1,3}\$?[0-9]{1,5})?$/;
 
 /**
- * Narrows a regex capture group's `string | undefined` type -- every array index this project's own `noUncheckedIndexedAccess` sees this way, capturing groups included -- to the plain `string` it always genuinely holds once this module's own callers reach it. Both regexes below capture every one of their own groups unconditionally: none is wrapped in a group-level `?` (only the `$` markers' own inner content is optional, matching an empty string rather than leaving the surrounding group unmatched), and `String.prototype.split` always returns at least one element even for the empty string. So this function's own `undefined` branch is never reachable from any of this module's actual call sites -- exported so that fact is directly testable rather than trusted to a comment alone.
+ * Narrows a regex capture group's `string | undefined` type — every array index this project's own `noUncheckedIndexedAccess` sees this way, capturing groups included — to the plain `string` it always genuinely holds once this module's own callers reach it. Both regexes below capture every one of their own groups unconditionally: none is wrapped in a group-level `?` (only the `$` markers' own inner content is optional, matching an empty string rather than leaving the surrounding group unmatched), and `String.prototype.split` always returns at least one element even for the empty string. So this function's own `undefined` branch is never reachable from any of this module's actual call sites — exported so that fact is directly testable rather than trusted to a comment alone.
  */
 export function requiredCaptureGroup(group: string | undefined): string {
   if (group === undefined) {
@@ -197,11 +197,11 @@ function parseCorner(text: string): ReferenceCorner | undefined {
 const MAX_ROW_INDEX = 0xffff;
 const MAX_COLUMN_INDEX = 0x00ff;
 
-/** ColRelU's own relative bits ([MS-XLS] 2.5.198.105): bit 14 (0x4000) says the COLUMN coordinate is relative, bit 15 (0x8000) the ROW -- clear means absolute, exactly as biff/ptg.ts's pointFrom decodes them on read. */
+/** ColRelU's own relative bits ([MS-XLS] 2.5.198.105): bit 14 (0x4000) says the COLUMN coordinate is relative, bit 15 (0x8000) the ROW — clear means absolute, exactly as biff/ptg.ts's pointFrom decodes them on read. */
 const COLUMN_RELATIVE_BIT = 0x4000;
 const ROW_RELATIVE_BIT = 0x8000;
 
-/** PtgArea3d, reference class ([MS-XLS] 2.5.198.28): opcode 0x3b, the ixti, then an RgceArea -- the same token write-side print-names.ts builds for a print name's range, since a defined name has no other way to say which sheet its reference is on. */
+/** PtgArea3d, reference class ([MS-XLS] 2.5.198.28): opcode 0x3b, the ixti, then an RgceArea — the same token write-side print-names.ts builds for a print name's range, since a defined name has no other way to say which sheet its reference is on. */
 function writeArea3dToken(
   ixti: number,
   first: ReferenceCorner,
@@ -221,7 +221,7 @@ function writeArea3dToken(
     .build();
 }
 
-/** Strips the single-quote wrapping a sheet label carries when the sheet name is not a bare identifier, unescaping the doubled quote inside -- the inverse of biff/ptg.ts's quoteSheetLabel. A string must actually be quoted on both ends to unwrap; a bare name is taken verbatim. */
+/** Strips the single-quote wrapping a sheet label carries when the sheet name is not a bare identifier, unescaping the doubled quote inside — the inverse of biff/ptg.ts's quoteSheetLabel. A string must actually be quoted on both ends to unwrap; a bare name is taken verbatim. */
 function unquoteSheetLabel(label: string): string {
   if (label.startsWith("'") && label.endsWith("'") && label.length >= 2) {
     return label.slice(1, -1).replaceAll("''", "'");
@@ -232,7 +232,7 @@ function unquoteSheetLabel(label: string): string {
 /**
  * Compiles the document's defined names into the Lbl records the workbook stream carries.
  *
- * The refersTo vocabulary this writer can compile is exactly one sheet-qualified A1 reference -- `Sheet1!$A$1`, `Sheet1!$A$1:$B$2`, the sheet name quoted when it is not a bare identifier -- which is the shape every named range carries and the shape this package's own reader produces for one. A refersTo outside that vocabulary (a computed formula, a constant, an external-workbook reference) throws a BiffWriteError naming the construct rather than emitting a token stream this writer cannot prove round-trips, the identical refusal the cell-formula writer draws for the constructs outside its own vocabulary.
+ * The refersTo vocabulary this writer can compile is exactly one sheet-qualified A1 reference — `Sheet1!$A$1`, `Sheet1!$A$1:$B$2`, the sheet name quoted when it is not a bare identifier — which is the shape every named range carries and the shape this package's own reader produces for one. A refersTo outside that vocabulary (a computed formula, a constant, an external-workbook reference) throws a BiffWriteError naming the construct rather than emitting a token stream this writer cannot prove round-trips, the identical refusal the cell-formula writer draws for the constructs outside its own vocabulary.
  */
 export function definedNameEntriesFor(
   names: readonly ContentDefinedName[],
@@ -256,7 +256,7 @@ export function definedNameEntriesFor(
   });
 }
 
-/** Resolves an _xlnm spelling to its built-in index, refusing the two print built-ins (print-names.ts owns them -- a document stating its print area as a names entry is stating a fact the print settings already carry, and writing both would emit the same Lbl record twice) and any spelling the table does not know. */
+/** Resolves an _xlnm spelling to its built-in index, refusing the two print built-ins (print-names.ts owns them — a document stating its print area as a names entry is stating a fact the print settings already carry, and writing both would emit the same Lbl record twice) and any spelling the table does not know. */
 function builtinIndexOf(name: string): number {
   const index = BUILTIN_INDEX_BY_NAME.get(name);
   if (index === undefined) {
@@ -269,7 +269,7 @@ function builtinIndexOf(name: string): number {
     index === BUILTIN_NAME_PRINT_TITLES
   ) {
     throw new BiffWriteError(
-      `xls-codec cannot write the defined name ${JSON.stringify(name)}: the print built-ins are print-settings facts, stated through a sheet's printSettings (printRange/repeatRows/repeatColumns) rather than as document-level names -- writing both would emit the same Lbl record twice`,
+      `xls-codec cannot write the defined name ${JSON.stringify(name)}: the print built-ins are print-settings facts, stated through a sheet's printSettings (printRange/repeatRows/repeatColumns) rather than as document-level names — writing both would emit the same Lbl record twice`,
     );
   }
   return index;

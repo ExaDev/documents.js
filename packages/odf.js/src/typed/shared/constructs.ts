@@ -25,11 +25,11 @@ import {
 } from "../../xml/query";
 import { decodeOdfText, isOdfFieldElement } from "./text";
 
-// The ODF side of document-schema.js's fidelity construct vocabulary (its src/construct.ts): reading ODF's inline construct elements into ConstructDescriptor payloads and RunConstructExtent entries on the paragraph that carries them (typed/shared/paragraph.ts's run walk calls in here), plus the block-scope half of the same vocabulary the odt reader drives (typed/odt/read.ts -- divisions, index wrappers, forms, and the cross-paragraph marker pairs). One module owns both halves so the descriptor shapes and the scope rules the two readers must agree on stay stated once, the same discipline ooxml.js's own typed/docx/constructs.ts follows for WordprocessingML.
+// The ODF side of document-schema.js's fidelity construct vocabulary (its src/construct.ts): reading ODF's inline construct elements into ConstructDescriptor payloads and RunConstructExtent entries on the paragraph that carries them (typed/shared/paragraph.ts's run walk calls in here), plus the block-scope half of the same vocabulary the odt reader drives (typed/odt/read.ts — divisions, index wrappers, forms, and the cross-paragraph marker pairs). One module owns both halves so the descriptor shapes and the scope rules the two readers must agree on stay stated once, the same discipline ooxml.js's own typed/docx/constructs.ts follows for WordprocessingML.
 //
-// EXTENT SCOPE, the constraint that decides where each ODF construct lands: a construct covering a sub-sequence of ONE paragraph's runs is an entry on that paragraph's constructs field; a construct bracketing whole blocks is a constructStart/constructEnd marker pair in the block list. ODF spells its inline constructs exactly the way the run-level mechanism wants -- a field or a note is ONE element sitting at a position in the character flow -- so fields are run-level, always. ODF's range constructs (text:bookmark-start/-end, text:reference-mark-start/-end, text:change-start/-end, office:annotation/-end) are paired marker halves keyed by name or id: both halves inside one paragraph pair into a run extent; both halves at paragraph edges pair across blocks; everything else (one half interior, the other elsewhere) has no encoding and is dropped, mirroring the qualification ooxml.js applies to w:bookmarkStart/End for the identical reason -- document-schema.js's marker contract ratifies the straddling drop. The inline field tag set itself lives in text.ts beside the content-model predicates that share it.
+// EXTENT SCOPE, the constraint that decides where each ODF construct lands: a construct covering a sub-sequence of ONE paragraph's runs is an entry on that paragraph's constructs field; a construct bracketing whole blocks is a constructStart/constructEnd marker pair in the block list. ODF spells its inline constructs exactly the way the run-level mechanism wants — a field or a note is ONE element sitting at a position in the character flow — so fields are run-level, always. ODF's range constructs (text:bookmark-start/-end, text:reference-mark-start/-end, text:change-start/-end, office:annotation/-end) are paired marker halves keyed by name or id: both halves inside one paragraph pair into a run extent; both halves at paragraph edges pair across blocks; everything else (one half interior, the other elsewhere) has no encoding and is dropped, mirroring the qualification ooxml.js applies to w:bookmarkStart/End for the identical reason — document-schema.js's marker contract ratifies the straddling drop. The inline field tag set itself lives in text.ts beside the content-model predicates that share it.
 
-// A field's instruction is the producer's own field code: the element with its attributes, serialised -- the ODF counterpart of docx's w:instrText text. Children are deliberately stripped from the serialisation because they are the cached RESULT, which the descriptor carries separately as cachedResult; serialising them too would put one fact in two places inside the descriptor.
+// A field's instruction is the producer's own field code: the element with its attributes, serialised — the ODF counterpart of docx's w:instrText text. Children are deliberately stripped from the serialisation because they are the cached RESULT, which the descriptor carries separately as cachedResult; serialising them too would put one fact in two places inside the descriptor.
 export function odfFieldDescriptor(element: XmlElement): FieldDescriptor {
   const cachedResult = decodeOdfText(element);
   const descriptor: FieldDescriptor = {
@@ -57,7 +57,7 @@ export function odfResidue(
   return { format, xml: buildXml(elements) };
 }
 
-// The vendor-extension namespace prefixes this family's stated policy never chases (LibreOffice's loext:/calcext:/officeooo:/ooo:/oooc:/ooow:/formx:/field:/drawooo:/tableooo: and their kin): an element in one of them is producer-private vocabulary, quarantined as residue wherever a walk meets it rather than interpreted. Membership is by prefix, not full namespace URI, because the parser preserves prefixes verbatim and every one of these is prefix-stable across real producers; the list is the inventory's own, not a claim that it is closed -- an unknown prefix is simply not extension residue by this test and stays subject to each reader's own unknown-element handling.
+// The vendor-extension namespace prefixes this family's stated policy never chases (LibreOffice's loext:/calcext:/officeooo:/ooo:/oooc:/ooow:/formx:/field:/drawooo:/tableooo: and their kin): an element in one of them is producer-private vocabulary, quarantined as residue wherever a walk meets it rather than interpreted. Membership is by prefix, not full namespace URI, because the parser preserves prefixes verbatim and every one of these is prefix-stable across real producers; the list is the inventory's own, not a claim that it is closed — an unknown prefix is simply not extension residue by this test and stays subject to each reader's own unknown-element handling.
 const ODF_EXTENSION_NAMESPACE_PREFIXES: ReadonlySet<string> = new Set([
   "loext:",
   "calcext:",
@@ -77,7 +77,7 @@ export function isOdfExtensionElement(element: XmlElement): boolean {
   );
 }
 
-// The draw:page-level shape kinds no page reader maps today (the residue rows of ExaDev/documents.js#769): a 3D scene, the two line-with-semantics kinds a connector and a measure are, and the three embedded-foreign-content shapes. Each quarantines on the page it sits in rather than degrading to a generic shape it is not -- a connector is not a bare line (its endpoints glue to shapes), a measure is a line plus its dimension text, and applet/plugin/floating-frame are foreign-content containers.
+// The draw:page-level shape kinds no page reader maps today (the residue rows of ExaDev/documents.js#769): a 3D scene, the two line-with-semantics kinds a connector and a measure are, and the three embedded-foreign-content shapes. Each quarantines on the page it sits in rather than degrading to a generic shape it is not — a connector is not a bare line (its endpoints glue to shapes), a measure is a line plus its dimension text, and applet/plugin/floating-frame are foreign-content containers.
 export const ODF_UNMAPPED_SHAPE_TAGS: ReadonlySet<string> = new Set([
   "dr3d:scene",
   "draw:connector",
@@ -87,7 +87,7 @@ export const ODF_UNMAPPED_SHAPE_TAGS: ReadonlySet<string> = new Set([
   "draw:floating-frame",
 ]);
 
-// Collects the unmapped shape kinds and vendor-extension elements from a shape container the page walkers themselves walk -- a draw:page's own children, recursing into draw:g exactly as the walkers do and no further (a draw:frame's own content is read content, not a sibling shape). This mirrors the walkers' own recursion boundary deliberately, so precisely the elements the walkers contribute nothing for are the elements collected here: no more (a frame's inner shapes belong to the frame's read) and no less (a connector inside a nested group is still collected).
+// Collects the unmapped shape kinds and vendor-extension elements from a shape container the page walkers themselves walk — a draw:page's own children, recursing into draw:g exactly as the walkers do and no further (a draw:frame's own content is read content, not a sibling shape). This mirrors the walkers' own recursion boundary deliberately, so precisely the elements the walkers contribute nothing for are the elements collected here: no more (a frame's inner shapes belong to the frame's read) and no less (a connector inside a nested group is still collected).
 export function collectOdfUnmappedShapeResidue(
   children: readonly XmlNode[],
   out: XmlElement[],
@@ -107,7 +107,7 @@ export function collectOdfUnmappedShapeResidue(
   }
 }
 
-// The element a fact-carrying ATTRIBUTE quarantines onto: residue's shape is serialised elements, so an attribute no element owns rides a children-stripped copy of its own element carrying only the quarantined attributes -- the same children-stripped spell odfFieldDescriptor's instruction takes. A same-format writer re-emitting the fragment knows the element it re-serialises, so the tag needs no separate channel.
+// The element a fact-carrying ATTRIBUTE quarantines onto: residue's shape is serialised elements, so an attribute no element owns rides a children-stripped copy of its own element carrying only the quarantined attributes — the same children-stripped spell odfFieldDescriptor's instruction takes. A same-format writer re-emitting the fragment knows the element it re-serialises, so the tag needs no separate channel.
 export function odfAttributeElement(
   element: XmlElement,
   ...attributeNames: readonly string[]
@@ -121,7 +121,7 @@ export function odfAttributeElement(
   };
 }
 
-// Appends serialised elements to one key of a package-tier residue table, concatenating onto whatever the key already holds -- several occurrences of one tenant (two xforms models, a run of same-tagged extension elements) are one entry, exactly as odfResidue itself concatenates several elements into one value.
+// Appends serialised elements to one key of a package-tier residue table, concatenating onto whatever the key already holds — several occurrences of one tenant (two xforms models, a run of same-tagged extension elements) are one entry, exactly as odfResidue itself concatenates several elements into one value.
 export function addOdfPackageResidue(
   out: Record<string, SourceResidue>,
   key: string,
@@ -139,7 +139,7 @@ export function addOdfPackageResidue(
       : { format, xml: `${existing.xml}${addition}` };
 }
 
-// The parts a document reader consumes itself -- everything else XML-typed is a non-content part. Binary parts (media, thumbnails, ObjectReplacements previews) never quarantine: the residue channel carries text, and the lossless package tier already preserves those bytes byte-for-byte, which is the fidelity tier that owns them.
+// The parts a document reader consumes itself — everything else XML-typed is a non-content part. Binary parts (media, thumbnails, ObjectReplacements previews) never quarantine: the residue channel carries text, and the lossless package tier already preserves those bytes byte-for-byte, which is the fidelity tier that owns them.
 export const ODF_CONSUMED_PART_PATHS: ReadonlySet<string> = new Set([
   "content.xml",
   "styles.xml",
@@ -147,13 +147,13 @@ export const ODF_CONSUMED_PART_PATHS: ReadonlySet<string> = new Set([
   "META-INF/manifest.xml",
 ]);
 
-// An embedded sub-document's own parts -- the "Object N" directory convention every real producer's draw:object href actually names (confirmed against real LibreOffice output: "Object 1/content.xml", "Object 1/styles.xml", "Object 1/settings.xml" under a draw:object xlink:href="./Object 1"). Those parts are consumed by the embedded-object readers into their own whole ContentDocuments, so quarantining them too would put one sub-document in two channels at once. This helper cannot see hrefs, so it excludes the whole convention-shaped range rather than ever double-carrying a sub-document; the cost of a false exclusion is only a residue row the semantic channel already carries, while the cost of a false inclusion is the double-carry itself. Exported so the regex's own three boundary facts (must start with "Object ", must be only digits after it, must end there) can each be pinned directly -- a black-box test through collectOdfNonContentPartResidue/writeOdfPackageResidue could only ever observe "quarantined or not", which cannot distinguish a loosened anchor from the correct one.
+// An embedded sub-document's own parts — the "Object N" directory convention every real producer's draw:object href actually names (confirmed against real LibreOffice output: "Object 1/content.xml", "Object 1/styles.xml", "Object 1/settings.xml" under a draw:object xlink:href="./Object 1"). Those parts are consumed by the embedded-object readers into their own whole ContentDocuments, so quarantining them too would put one sub-document in two channels at once. This helper cannot see hrefs, so it excludes the whole convention-shaped range rather than ever double-carrying a sub-document; the cost of a false exclusion is only a residue row the semantic channel already carries, while the cost of a false inclusion is the double-carry itself. Exported so the regex's own three boundary facts (must start with "Object ", must be only digits after it, must end there) can each be pinned directly — a black-box test through collectOdfNonContentPartResidue/writeOdfPackageResidue could only ever observe "quarantined or not", which cannot distinguish a loosened anchor from the correct one.
 export function isEmbeddedObjectPart(path: string): boolean {
   const [firstSegment] = path.split("/");
   return firstSegment !== undefined && /^Object \d+$/.test(firstSegment);
 }
 
-// Every non-content XML part of the package, quarantined at the package tier keyed by its own part path -- the producer's own identifier for what the entry reconstructs. A reader splices the result into its document-level residue table, so a package whose only extra part is a settings.xml yields exactly source['settings.xml'].
+// Every non-content XML part of the package, quarantined at the package tier keyed by its own part path — the producer's own identifier for what the entry reconstructs. A reader splices the result into its document-level residue table, so a package whose only extra part is a settings.xml yields exactly source['settings.xml'].
 export function collectOdfNonContentPartResidue(
   pkg: Package,
   format: OdfResidueFormat,
@@ -176,7 +176,7 @@ export function collectOdfNonContentPartResidue(
   }
 }
 
-// Write-side mirror of collectOdfNonContentPartResidue: restores each quarantined non-content package part verbatim, at the exact part path it was read from, into a package being written. This is the ONE quarantine bucket a writer can safely restore -- a whole non-content part is never touched or interpreted by the writer either way, so re-emitting it carries no risk of contradicting content the writer just wrote, unlike a construct's own residue or a body-walk quarantine bucket (dde-links, xforms, a vendor-extension tag), which have no structural position a writer could safely reinsert them at against a document that may have been edited since it was read; those stay dropped, exactly as each writer's own scope note still states. Eligible entries are recognised by collectOdfNonContentPartResidue's own key convention: a real package part path, always ending ".xml", that is neither one of ODF_CONSUMED_PART_PATHS (a part this writer already creates itself) nor an embedded sub-document's own part -- which is exactly how that collector tells a part-path key apart from a semantic-bucket key on the way in. Only entries whose own `format` matches this writer's format are restored, per the quarantine contract's "a same-format writer may re-emit its own residue verbatim" (document-schema.js's source.ts): a residue value another format's reader produced is never this writer's to touch. Callers must re-sync the package's manifest afterwards (buildManifest derives its entries from pkg.parts, so a part added here needs no manifest bookkeeping of its own beyond that resync).
+// Write-side mirror of collectOdfNonContentPartResidue: restores each quarantined non-content package part verbatim, at the exact part path it was read from, into a package being written. This is the ONE quarantine bucket a writer can safely restore — a whole non-content part is never touched or interpreted by the writer either way, so re-emitting it carries no risk of contradicting content the writer just wrote, unlike a construct's own residue or a body-walk quarantine bucket (dde-links, xforms, a vendor-extension tag), which have no structural position a writer could safely reinsert them at against a document that may have been edited since it was read; those stay dropped, exactly as each writer's own scope note still states. Eligible entries are recognised by collectOdfNonContentPartResidue's own key convention: a real package part path, always ending ".xml", that is neither one of ODF_CONSUMED_PART_PATHS (a part this writer already creates itself) nor an embedded sub-document's own part — which is exactly how that collector tells a part-path key apart from a semantic-bucket key on the way in. Only entries whose own `format` matches this writer's format are restored, per the quarantine contract's "a same-format writer may re-emit its own residue verbatim" (document-schema.js's source.ts): a residue value another format's reader produced is never this writer's to touch. Callers must re-sync the package's manifest afterwards (buildManifest derives its entries from pkg.parts, so a part added here needs no manifest bookkeeping of its own beyond that resync).
 export function writeOdfPackageResidue(
   pkg: Package,
   format: OdfResidueFormat,
@@ -226,7 +226,7 @@ function readOdfBooleanAttribute(
   return raw === "false" ? false : undefined;
 }
 
-// A section's own style:style[family="section"] by name, across both style containers in both parts. 'section' is deliberately not a member of the style-interning layer's STYLE_FAMILIES (this package never writes one), so this is a direct container walk rather than cascade.ts's findStyleElement -- single-level with no parent-chain walk, matching table.ts's own convention for families whose real-world styles are standalone.
+// A section's own style:style[family="section"] by name, across both style containers in both parts. 'section' is deliberately not a member of the style-interning layer's STYLE_FAMILIES (this package never writes one), so this is a direct container walk rather than cascade.ts's findStyleElement — single-level with no parent-chain walk, matching table.ts's own convention for families whose real-world styles are standalone.
 function findSectionStyleElement(
   styleName: string,
   pkg: Package,
@@ -261,7 +261,7 @@ function findSectionStyleElement(
   return undefined;
 }
 
-// The column count a section's own flow uses -- style:section-properties/style:columns/@fo:column-count, a single-level lookup for the reason findSectionStyleElement states. Absent, unparseable, or non-positive counts read as no column fact rather than a guess.
+// The column count a section's own flow uses — style:section-properties/style:columns/@fo:column-count, a single-level lookup for the reason findSectionStyleElement states. Absent, unparseable, or non-positive counts read as no column fact rather than a guess.
 function readDivisionColumnCount(
   sectionElement: XmlElement,
   pkg: Package,
@@ -291,7 +291,7 @@ function readDivisionColumnCount(
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
-// One text:section element -> its DivisionDescriptor: name (text:name), protected (text:protected), the column count its own style sets over its flow, the external-chapter link when the section carries a text:section-source (`linked`), and that source's own text:filter-name -- an importer instruction with no cross-format meaning -- as residue (`source`), now that #743's rename of the landed `linked` field frees `source` for it.
+// One text:section element -> its DivisionDescriptor: name (text:name), protected (text:protected), the column count its own style sets over its flow, the external-chapter link when the section carries a text:section-source (`linked`), and that source's own text:filter-name — an importer instruction with no cross-format meaning — as residue (`source`), now that #743's rename of the landed `linked` field frees `source` for it.
 export function odfDivisionDescriptor(
   sectionElement: XmlElement,
   pkg: Package,
@@ -353,7 +353,7 @@ export function isOdfIndexWrapper(element: XmlElement): boolean {
   return ODF_INDEX_WRAPPER_TAGS.has(element.tag);
 }
 
-// The wrapper's own *-source child (text:table-of-content-source, text:alphabetical-index-source, ...) carries the index's build rules -- outline levels, sort keys, entry formatting references -- which have no cross-format meaning beyond "this is how the producer computed the cached body", so the whole element is quarantined in the descriptor's residue. text:name rides as the control's tag: the machine-readable identifier a producer addresses the wrapper by.
+// The wrapper's own *-source child (text:table-of-content-source, text:alphabetical-index-source, ...) carries the index's build rules — outline levels, sort keys, entry formatting references — which have no cross-format meaning beyond "this is how the producer computed the cached body", so the whole element is quarantined in the descriptor's residue. text:name rides as the control's tag: the machine-readable identifier a producer addresses the wrapper by.
 export function odfIndexControlDescriptor(
   wrapper: XmlElement,
 ): ContentControlDescriptor {
@@ -374,7 +374,7 @@ export function odfIndexControlDescriptor(
   return descriptor;
 }
 
-// One half of a paired marker construct encountered during a paragraph's run walk: bookmark halves pair by text:name, reference-mark range halves by their own text:name (a separate pairing family -- ODF keeps bookmark names and reference-mark names in separate namespaces, so one document may legally carry a bookmark and a reference-mark under the same name and each must pair only with its own spelling), tracked-change markers by text:change-id, annotations by office:name. `parent` is kept so the pairing can ask whether the half is a DIRECT child of the paragraph element (only a direct child can sit at a paragraph edge and qualify for block scope); a half nested inside a text:span or text:a is interior to the paragraph's run sequence by construction. `runPosition` is the count of runs the walk had emitted when it reached the half -- exactly what a RunConstructExtent's startRun/endRun names. `descriptor` is deferred so the payload is built only for a half that actually wins a pairing, and may resolve to undefined -- a tracked-change half whose text:change-id names no text:changed-region has no descriptor to carry, and both pairings below drop such a pair rather than emitting a marker shell with nothing inside it.
+// One half of a paired marker construct encountered during a paragraph's run walk: bookmark halves pair by text:name, reference-mark range halves by their own text:name (a separate pairing family — ODF keeps bookmark names and reference-mark names in separate namespaces, so one document may legally carry a bookmark and a reference-mark under the same name and each must pair only with its own spelling), tracked-change markers by text:change-id, annotations by office:name. `parent` is kept so the pairing can ask whether the half is a DIRECT child of the paragraph element (only a direct child can sit at a paragraph edge and qualify for block scope); a half nested inside a text:span or text:a is interior to the paragraph's run sequence by construction. `runPosition` is the count of runs the walk had emitted when it reached the half — exactly what a RunConstructExtent's startRun/endRun names. `descriptor` is deferred so the payload is built only for a half that actually wins a pairing, and may resolve to undefined — a tracked-change half whose text:change-id names no text:changed-region has no descriptor to carry, and both pairings below drop such a pair rather than emitting a marker shell with nothing inside it.
 export type OdfMarkerKind =
   "bookmark" | "referenceMark" | "change" | "annotation";
 
@@ -432,7 +432,7 @@ function edgePosition(
   return "trailing";
 }
 
-// The block index a block-scoped half opens or closes at: a leading half sits at its own paragraph's block position, a trailing one just past it (so a leading start with a trailing end in the same paragraph brackets exactly that paragraph), advanced past the lifted-frame blocks that physically precede the half in the paragraph's own child order -- a reader that lifts a paragraph's anchored frames to blocks after it passes that count, so a bookmark ending after a frame covers the frame's block while one ending before it does not. Undefined when the half is not block-scoped -- interior to the paragraph's run sequence, or nested inside a container element.
+// The block index a block-scoped half opens or closes at: a leading half sits at its own paragraph's block position, a trailing one just past it (so a leading start with a trailing end in the same paragraph brackets exactly that paragraph), advanced past the lifted-frame blocks that physically precede the half in the paragraph's own child order — a reader that lifts a paragraph's anchored frames to blocks after it passes that count, so a bookmark ending after a frame covers the frame's block while one ending before it does not. Undefined when the half is not block-scoped — interior to the paragraph's run sequence, or nested inside a container element.
 export function odfMarkerHalfEventIndex(
   half: OdfMarkerHalf,
   paragraphElement: XmlElement,
@@ -463,14 +463,14 @@ export function isOdfBlockScopedHalf(
   return odfMarkerHalfEventIndex(half, paragraphElement, 0) !== undefined;
 }
 
-// The document-level sink a paragraph's note and annotation reading reports definitions entries into, carrying the two deterministic ordinal counters that mint names for the constructs ODF leaves nameless (a note without text:id, an annotation without office:name -- both optional attributes in the schema even though every real producer writes them). One sink per document, threaded by reference, so minted names are unique across the whole body exactly the way list numIds are.
+// The document-level sink a paragraph's note and annotation reading reports definitions entries into, carrying the two deterministic ordinal counters that mint names for the constructs ODF leaves nameless (a note without text:id, an annotation without office:name — both optional attributes in the schema even though every real producer writes them). One sink per document, threaded by reference, so minted names are unique across the whole body exactly the way list numIds are.
 export interface OdfDefinitionsSink {
   readonly entries: Record<string, DefinitionEntry>;
   nextNoteOrdinal: number;
   nextAnnotationOrdinal: number;
 }
 
-// Pairs one paragraph's own marker halves by their key into run-level construct extents (document-schema.js's RunConstructExtent): a pair both of whose halves sit in THIS paragraph and are not both block-scoped becomes an entry on the paragraph's constructs field. A pair with both halves block-scoped is skipped -- that is the block-marker path's extent (the odt reader emits its constructStart/constructEnd pair, and one occurrence must never carry both encodings); a half whose partner sits in a different paragraph is never seen here at all, so the block reader alone decides its fate. Everything else mirrors the docx rules: exactly one start and one end per pairing family and key (grouped `kind key`, the identical discrimination resolveOdfMarkerEvents applies at block scope -- a bookmark and a reference-mark may share a name and must never pair across their families), and an end that does not precede its start. Crossing pairs need no special case -- run ranges are data, not brackets, so two extents that overlap are two entries. The returned `paired` set names the half ELEMENTS a completed pair consumed, so the caller can give an unpaired annotation start its point-anchor fallback without re-emitting a paired one.
+// Pairs one paragraph's own marker halves by their key into run-level construct extents (document-schema.js's RunConstructExtent): a pair both of whose halves sit in THIS paragraph and are not both block-scoped becomes an entry on the paragraph's constructs field. A pair with both halves block-scoped is skipped — that is the block-marker path's extent (the odt reader emits its constructStart/constructEnd pair, and one occurrence must never carry both encodings); a half whose partner sits in a different paragraph is never seen here at all, so the block reader alone decides its fate. Everything else mirrors the docx rules: exactly one start and one end per pairing family and key (grouped `kind key`, the identical discrimination resolveOdfMarkerEvents applies at block scope — a bookmark and a reference-mark may share a name and must never pair across their families), and an end that does not precede its start. Crossing pairs need no special case — run ranges are data, not brackets, so two extents that overlap are two entries. The returned `paired` set names the half ELEMENTS a completed pair consumed, so the caller can give an unpaired annotation start its point-anchor fallback without re-emitting a paired one.
 export function pairOdfMarkerHalves(
   halves: readonly OdfMarkerHalf[],
   paragraphElement: XmlElement,
@@ -543,7 +543,7 @@ function compareOdfExtents(
   );
 }
 
-// The flat form pairs markers as balanced brackets, so a crossing extent -- one that opens inside another and closes outside it -- has no encoding at all: bracket matching would re-pair the two into a nesting the source never had. Crossing pairs are dropped here, which is the drop document-schema.js ratifies for block-scoped crossings; within one paragraph, by contrast, crossing extents stay as two entries on the paragraph's constructs field, because run ranges are data rather than brackets. Wrapper elements (text:section, an index wrapper) nest by XML construction and can never cross; only the paired-marker families (bookmarks, tracked changes, annotations) can produce a crossing pair.
+// The flat form pairs markers as balanced brackets, so a crossing extent — one that opens inside another and closes outside it — has no encoding at all: bracket matching would re-pair the two into a nesting the source never had. Crossing pairs are dropped here, which is the drop document-schema.js ratifies for block-scoped crossings; within one paragraph, by contrast, crossing extents stay as two entries on the paragraph's constructs field, because run ranges are data rather than brackets. Wrapper elements (text:section, an index wrapper) nest by XML construction and can never cross; only the paired-marker families (bookmarks, tracked changes, annotations) can produce a crossing pair.
 function acceptProperlyNestedOdfExtents(
   extents: readonly OdfConstructExtent[],
 ): OdfConstructExtent[] {
@@ -572,7 +572,7 @@ export function insertOdfConstructMarkers(
   blocks: readonly ContentBlock[],
   extents: readonly OdfConstructExtent[],
 ): ContentBlock[] {
-  // No early return for an empty extents list: with nested/openingAt both empty, the loop below already reduces to "copy every defined block in order", which is exactly `[...blocks]` -- a dedicated guard was a redundant, behaviourally unobservable shortcut for the same result.
+  // No early return for an empty extents list: with nested/openingAt both empty, the loop below already reduces to "copy every defined block in order", which is exactly `[...blocks]` — a dedicated guard was a redundant, behaviourally unobservable shortcut for the same result.
   const nested = acceptProperlyNestedOdfExtents(extents);
   const openingAt = new Map<number, OdfConstructExtent[]>();
   for (const extent of nested) {
@@ -607,7 +607,7 @@ export function insertOdfConstructMarkers(
   return out;
 }
 
-// A marker half promoted to block scope: the block index it opens or closes at (a leading half at its own paragraph's position, a trailing one just past it, advanced past the lifted-frame blocks physically preceding the half -- mirroring how ooxml.js's bookmark events index a leading half at the paragraph and a trailing one at endIndex), whether it actually qualified, and the discovery order.
+// A marker half promoted to block scope: the block index it opens or closes at (a leading half at its own paragraph's position, a trailing one just past it, advanced past the lifted-frame blocks physically preceding the half — mirroring how ooxml.js's bookmark events index a leading half at the paragraph and a trailing one at endIndex), whether it actually qualified, and the discovery order.
 export interface OdfMarkerEvent {
   readonly kind: OdfMarkerKind;
   readonly side: "start" | "end";
@@ -619,7 +619,7 @@ export interface OdfMarkerEvent {
   readonly element: XmlElement;
 }
 
-// Pairs the flow's marker events by (kind, key) into block-scoped extents. A pair survives only when it has exactly one start and one end, both halves qualified (sat at a paragraph edge), a descriptor that resolves, and an end that does not precede its start. Everything else -- a half whose partner sits interior to some paragraph, a pair split across two block lists (inside a table cell and outside it), a dangling half -- has no block-scoped encoding and stays dropped, the same rules the docx flow applies to w:bookmarkStart/End for the same reasons. The returned `paired` set names the half ELEMENTS a completed pair consumed, for the same unpaired-annotation fallback the paragraph-level pairing reports.
+// Pairs the flow's marker events by (kind, key) into block-scoped extents. A pair survives only when it has exactly one start and one end, both halves qualified (sat at a paragraph edge), a descriptor that resolves, and an end that does not precede its start. Everything else — a half whose partner sits interior to some paragraph, a pair split across two block lists (inside a table cell and outside it), a dangling half — has no block-scoped encoding and stays dropped, the same rules the docx flow applies to w:bookmarkStart/End for the same reasons. The returned `paired` set names the half ELEMENTS a completed pair consumed, for the same unpaired-annotation fallback the paragraph-level pairing reports.
 export function resolveOdfMarkerEvents(events: readonly OdfMarkerEvent[]): {
   extents: OdfConstructExtent[];
   paired: Set<XmlElement>;
@@ -684,7 +684,7 @@ const ODF_PROVENANCE_CHANGE_BY_TAG: ReadonlyMap<
   ["text:format-change", "formatChange"],
 ]);
 
-// A region's own id: ODF 1.2 spells it xml:id, ODF 1.0 spelled it text:id, and both spellings exist in real files -- the version transition is a format fact, not a guess about which one producer output carries.
+// A region's own id: ODF 1.2 spells it xml:id, ODF 1.0 spelled it text:id, and both spellings exist in real files — the version transition is a format fact, not a guess about which one producer output carries.
 export function odfChangedRegionId(region: XmlElement): string | undefined {
   return attrValue(region, "xml:id") ?? attrValue(region, "text:id");
 }
@@ -740,7 +740,7 @@ const ODF_FIELD_MASTER_CONTAINERS: ReadonlyMap<string, string> = new Map([
   ["text:sequence-decls", "sequence"],
 ]);
 
-// The declaration attributes a definitions entry carries, keyed as the entry spells them. Values stay verbatim strings -- office:value-type names the interpretation, and coercing it here would freeze a typing the entry vocabulary has not settled. text:display-outline-level is the one integer (a sequence's outline association), parsed when it is one and carried as nothing when it is not.
+// The declaration attributes a definitions entry carries, keyed as the entry spells them. Values stay verbatim strings — office:value-type names the interpretation, and coercing it here would freeze a typing the entry vocabulary has not settled. text:display-outline-level is the one integer (a sequence's outline association), parsed when it is one and carried as nothing when it is not.
 function readOdfFieldMasterEntry(
   family: string,
   decl: XmlElement,
@@ -776,7 +776,7 @@ function readOdfFieldMasterEntry(
   return { key: `${family}:${name}`, entry };
 }
 
-// Collects every field-master declaration container, anywhere in the node tree, into the definitions table the package root carries: the declaration side of ODF's field system, the sibling of the run-level field instances paragraph.ts reads. Keys are namespaced per family (variable:total, user-field:rate, sequence:Table) because ODF style-like name uniqueness does not hold across the three families -- the same bare name may legally be declared twice in different families, and one definitions table is one key namespace.
+// Collects every field-master declaration container, anywhere in the node tree, into the definitions table the package root carries: the declaration side of ODF's field system, the sibling of the run-level field instances paragraph.ts reads. Keys are namespaced per family (variable:total, user-field:rate, sequence:Table) because ODF style-like name uniqueness does not hold across the three families — the same bare name may legally be declared twice in different families, and one definitions table is one key namespace.
 export function collectOdfFieldMasterDefinitions(
   nodes: readonly XmlNode[],
   out: Record<string, DefinitionEntry>,
@@ -798,7 +798,7 @@ export function collectOdfFieldMasterDefinitions(
 
 // --- data styles and font declarations ------------------------------------------------------------------------------
 
-// The number:* data-style family ODF attaches to cell and field styles: number formats are styles in ODF (office:automatic-styles residents referenced by style:data-style-name), and no harmonised number-format vocabulary exists yet, so each declared style reads as a definitions entry carrying its name and its element VERBATIM -- consumable by name, restorable by a same-format writer, and honest about carrying no interpretation of the format code.
+// The number:* data-style family ODF attaches to cell and field styles: number formats are styles in ODF (office:automatic-styles residents referenced by style:data-style-name), and no harmonised number-format vocabulary exists yet, so each declared style reads as a definitions entry carrying its name and its element VERBATIM — consumable by name, restorable by a same-format writer, and honest about carrying no interpretation of the format code.
 const ODF_DATA_STYLE_TAGS: ReadonlySet<string> = new Set([
   "number:boolean-style",
   "number:currency-style",
@@ -828,7 +828,7 @@ export function collectOdfDataStyleDefinitions(
   }
 }
 
-// office:font-face-decls/style:font-face -- font declarations are style definitions in ODF's own model, declared in EITHER part (content.xml and styles.xml each carry their own office:font-face-decls). The declaration's own name and family are structured; the generic and pitch classify for substitution and ride as plain strings.
+// office:font-face-decls/style:font-face — font declarations are style definitions in ODF's own model, declared in EITHER part (content.xml and styles.xml each carry their own office:font-face-decls). The declaration's own name and family are structured; the generic and pitch classify for substitution and ride as plain strings.
 export function collectOdfFontFaceDefinitions(
   nodes: readonly XmlNode[],
   out: Record<string, DefinitionEntry>,
@@ -858,7 +858,7 @@ export function collectOdfFontFaceDefinitions(
 
 // --- named expressions (ods) ----------------------------------------------------------------------------------------
 
-// A spreadsheet's table:named-expressions declarations into the definitions table: the spreadsheet sibling of field masters, and the natural shared target with xlsx's defined names. table:named-range carries a cell-range-address; table:named-expression carries an OpenFormula expression string -- both verbatim, with the base cell each declaration also states. Keys are namespaced per kind because a range and an expression may legally share a bare name.
+// A spreadsheet's table:named-expressions declarations into the definitions table: the spreadsheet sibling of field masters, and the natural shared target with xlsx's defined names. table:named-range carries a cell-range-address; table:named-expression carries an OpenFormula expression string — both verbatim, with the base cell each declaration also states. Keys are namespaced per kind because a range and an expression may legally share a bare name.
 export function collectOdfNamedExpressions(
   nodes: readonly XmlNode[],
   out: Record<string, DefinitionEntry>,
@@ -908,9 +908,9 @@ export function collectOdfNamedExpressions(
 
 // --- the write direction: constructs a writer actually spells back ---------------------------------------------
 //
-// Not every construct this module's read side recovers has a writer yet (ExaDev/documents.js#969): a division and an index wrapper are real WRAPPING elements, so their inverse is exactly "write the wrapping element around the extent's own blocks", stated here beside their own readers; a field and a bookmark are RUN-scoped (RunConstructExtent, document-schema.js's own src/content.ts), so their inverse lives in typed/shared/paragraph.ts instead, which owns the run-writing pipeline these need to splice into -- but the field/bookmark element builders below are shared by both scopes' writers (a run-scoped bookmark within one paragraph and a block-scoped one spanning several use the identical text:bookmark-start/-end spelling), so they live here with the rest of this module's element vocabulary rather than being duplicated. Every writer in this package deliberately never re-emits a construct's own quarantined residue (typed/odt/write.ts's own top-of-file note on why) -- the one narrow exception is odfIndexWrapperTag below, which reads a residue element's own TAG NAME as a structural discriminator (which of the seven index wrappers this control came from), never its content.
+// Not every construct this module's read side recovers has a writer yet (ExaDev/documents.js#969): a division and an index wrapper are real WRAPPING elements, so their inverse is exactly "write the wrapping element around the extent's own blocks", stated here beside their own readers; a field and a bookmark are RUN-scoped (RunConstructExtent, document-schema.js's own src/content.ts), so their inverse lives in typed/shared/paragraph.ts instead, which owns the run-writing pipeline these need to splice into — but the field/bookmark element builders below are shared by both scopes' writers (a run-scoped bookmark within one paragraph and a block-scoped one spanning several use the identical text:bookmark-start/-end spelling), so they live here with the rest of this module's element vocabulary rather than being duplicated. Every writer in this package deliberately never re-emits a construct's own quarantined residue (typed/odt/write.ts's own top-of-file note on why) — the one narrow exception is odfIndexWrapperTag below, which reads a residue element's own TAG NAME as a structural discriminator (which of the seven index wrappers this control came from), never its content.
 
-// Reconstructs the field element FieldDescriptor.instruction serialised (odfFieldDescriptor above): the producer's own element and its attributes, with no children -- parsing it back recovers the field's full identity losslessly, leaving only its cached-text children (the paragraph's own runs covering the field's extent) to be reattached by the caller.
+// Reconstructs the field element FieldDescriptor.instruction serialised (odfFieldDescriptor above): the producer's own element and its attributes, with no children — parsing it back recovers the field's full identity losslessly, leaving only its cached-text children (the paragraph's own runs covering the field's extent) to be reattached by the caller.
 export function parseOdfFieldInstruction(instruction: string): XmlElement {
   const [element] = parseXml(instruction).filter(
     (node): node is XmlElement => node.type === "element",
@@ -923,12 +923,12 @@ export function parseOdfFieldInstruction(instruction: string): XmlElement {
   return element;
 }
 
-// The exact string writing a field and reading it straight back produces -- buildXml's own serialisation is not always byte-identical to whatever a caller originally spelled (a self-closing "<tag/>" and an empty "<tag></tag>" carry the identical fact but are different strings), so a FieldDescriptor.instruction that did not already come from buildXml needs this same normalisation applied before it is compared against a round-tripped one.
+// The exact string writing a field and reading it straight back produces — buildXml's own serialisation is not always byte-identical to whatever a caller originally spelled (a self-closing "<tag/>" and an empty "<tag></tag>" carry the identical fact but are different strings), so a FieldDescriptor.instruction that did not already come from buildXml needs this same normalisation applied before it is compared against a round-tripped one.
 export function canonicalOdfFieldInstruction(instruction: string): string {
   return buildXml([{ ...parseOdfFieldInstruction(instruction), children: [] }]);
 }
 
-// The one canonical ConstructDescriptor a written-and-reread construct equals -- the construct-vocabulary sibling of typed/shared/canonicalise.ts's own canonicalParagraph/canonicalTable/canonicalImage, kept here instead because it is stated over document-schema.js's ConstructDescriptor union rather than this package's own content shapes, and both this module's read side (odfIndexControlDescriptor) and write side (writeOdfIndexWrapper, writeOdfDivision) already own the ODF-specific facts it restates. Only a 'field' or an index-typed 'contentControl' carry a serialised-XML string this writer's own round trip can reshape (canonicalOdfFieldInstruction above; an index wrapper's own bare *-source residue, written back by writeOdfIndexWrapper below); every other descriptor kind passes through unchanged.
+// The one canonical ConstructDescriptor a written-and-reread construct equals — the construct-vocabulary sibling of typed/shared/canonicalise.ts's own canonicalParagraph/canonicalTable/canonicalImage, kept here instead because it is stated over document-schema.js's ConstructDescriptor union rather than this package's own content shapes, and both this module's read side (odfIndexControlDescriptor) and write side (writeOdfIndexWrapper, writeOdfDivision) already own the ODF-specific facts it restates. Only a 'field' or an index-typed 'contentControl' carry a serialised-XML string this writer's own round trip can reshape (canonicalOdfFieldInstruction above; an index wrapper's own bare *-source residue, written back by writeOdfIndexWrapper below); every other descriptor kind passes through unchanged.
 export function canonicalOdfConstructDescriptor(
   descriptor: ConstructDescriptor,
 ): ConstructDescriptor {
@@ -979,7 +979,7 @@ export function writeOdfChangeEnd(id: string): XmlElement {
   return el("text:change-end", { "text:change-id": encodeXmlText(id) });
 }
 
-// The block-scope comment halves: office:annotation (the full comment element, body inline, keyed by office:name) splices onto the extent's first paragraph, office:annotation-end onto its last -- the pair the reader's annotation-half walk keys back through by the same name.
+// The block-scope comment halves: office:annotation (the full comment element, body inline, keyed by office:name) splices onto the extent's first paragraph, office:annotation-end onto its last — the pair the reader's annotation-half walk keys back through by the same name.
 export function writeOdfAnnotationHalf(
   descriptor: { readonly name: string },
   entry: DefinitionEntry,
@@ -1028,7 +1028,7 @@ export function writeOdfTrackedChanges(
         descriptor.change,
       );
       if (changeTag === undefined) {
-        // moveFrom/moveTo never mint a region (the caller's collector refuses them first), so this is unreachable -- stated as a throw rather than a guess so a future change kind fails loudly here.
+        // moveFrom/moveTo never mint a region (the caller's collector refuses them first), so this is unreachable — stated as a throw rather than a guess so a future change kind fails loudly here.
         throw new Error(
           `writeOdfTrackedChanges: change kind "${descriptor.change}" has no ODF region spelling`,
         );
@@ -1057,7 +1057,7 @@ export function writeOdfTrackedChanges(
   );
 }
 
-// Which run-level construct kind (if any) this package's odt writer knows how to spell back, and how: a field always writes from its own instruction; a bookmark anchor writes as a POINT (text:bookmark) when its extent covers no runs at all and a RANGE (text:bookmark-start/-end pair) otherwise -- the same point-vs-range split odfBookmarkAnchorDescriptor's own two call sites (a point mark, a paired range half) collapse into one indistinguishable descriptor shape for, disambiguated here the only way it still can be: by whether the extent itself is empty. Every other run-level construct (a footnote/endnote/comment anchor, a tracked-change provenance wrapper) has no writer yet -- see ExaDev/documents.js#969 -- and this returns undefined for those so a caller can refuse them by name rather than guess at a spelling.
+// Which run-level construct kind (if any) this package's odt writer knows how to spell back, and how: a field always writes from its own instruction; a bookmark anchor writes as a POINT (text:bookmark) when its extent covers no runs at all and a RANGE (text:bookmark-start/-end pair) otherwise — the same point-vs-range split odfBookmarkAnchorDescriptor's own two call sites (a point mark, a paired range half) collapse into one indistinguishable descriptor shape for, disambiguated here the only way it still can be: by whether the extent itself is empty. Every other run-level construct (a footnote/endnote/comment anchor, a tracked-change provenance wrapper) has no writer yet — see ExaDev/documents.js#969 — and this returns undefined for those so a caller can refuse them by name rather than guess at a spelling.
 export type OdfRunConstructWriteKind =
   | "field"
   | "bookmarkPoint"
@@ -1106,12 +1106,12 @@ export function odfRunConstructWriteKind(
 
 // --- divisions (text:section), write direction ---------------------------------------------------------------------
 
-// A division's own column-count style: the caller mints the style:style[family="section"] element and its own document-unique name (typed/odt/write.ts's own nextSectionStyle counter, mirroring nextTable/nextImage/nextListStyle), and this module only ever asks for the name back -- keeping the actual element construction and registration in the format writer that owns the document's own automatic-styles container, exactly as listStyleNameFor does for a list style.
+// A division's own column-count style: the caller mints the style:style[family="section"] element and its own document-unique name (typed/odt/write.ts's own nextSectionStyle counter, mirroring nextTable/nextImage/nextListStyle), and this module only ever asks for the name back — keeping the actual element construction and registration in the format writer that owns the document's own automatic-styles container, exactly as listStyleNameFor does for a list style.
 export interface OdfDivisionWriteContext {
   readonly mintSectionStyleName: (columnCount: number) => string;
 }
 
-// The inverse of odfDivisionDescriptor: wraps `children` (the construct's own extent, already written) in the text:section element the descriptor's structural fields state -- name, protected, the column-count style, and the external-chapter link. Per this writer's own residue policy, the descriptor's own quarantined residue (text:section-source's text:filter-name) is never re-emitted; only the structural facts document-schema.js's DivisionDescriptor actually names are written.
+// The inverse of odfDivisionDescriptor: wraps `children` (the construct's own extent, already written) in the text:section element the descriptor's structural fields state — name, protected, the column-count style, and the external-chapter link. Per this writer's own residue policy, the descriptor's own quarantined residue (text:section-source's text:filter-name) is never re-emitted; only the structural facts document-schema.js's DivisionDescriptor actually names are written.
 export function writeOdfDivision(
   descriptor: DivisionDescriptor,
   children: XmlNode[],
@@ -1147,7 +1147,7 @@ export function writeOdfDivision(
 
 // --- index/TOC wrappers, write direction ----------------------------------------------------------------------------
 
-// Which of the seven ODF_INDEX_WRAPPER_TAGS this control came from -- the one fact ContentControlDescriptor has nowhere else to state (controlType is the single, shared "index" member for all seven), recovered from the descriptor's own quarantined residue: odfIndexControlDescriptor above always sets it to the wrapper's own *-source child (mandatory in the ODF schema for every real index wrapper), so this reads that element's own TAG NAME back -- "text:table-of-content-source" strips to "text:table-of-content" -- as a structural discriminator, the one narrow exception to this package's "a construct's own residue is never re-emitted" policy (typed/odt/write.ts's own top-of-file note): the tag decides WHICH ELEMENT to write at all, which is identity, not content a possibly-edited document could have invalidated. Throws when no residue survives to name it (a hand-built descriptor with no source, or one from a different format's residue), since there is then no tag this function could pick without inventing a fact the caller never stated.
+// Which of the seven ODF_INDEX_WRAPPER_TAGS this control came from — the one fact ContentControlDescriptor has nowhere else to state (controlType is the single, shared "index" member for all seven), recovered from the descriptor's own quarantined residue: odfIndexControlDescriptor above always sets it to the wrapper's own *-source child (mandatory in the ODF schema for every real index wrapper), so this reads that element's own TAG NAME back — "text:table-of-content-source" strips to "text:table-of-content" — as a structural discriminator, the one narrow exception to this package's "a construct's own residue is never re-emitted" policy (typed/odt/write.ts's own top-of-file note): the tag decides WHICH ELEMENT to write at all, which is identity, not content a possibly-edited document could have invalidated. Throws when no residue survives to name it (a hand-built descriptor with no source, or one from a different format's residue), since there is then no tag this function could pick without inventing a fact the caller never stated.
 export function odfIndexWrapperTag(
   descriptor: ContentControlDescriptor,
 ): string {
@@ -1171,7 +1171,7 @@ export function odfIndexWrapperTag(
   );
 }
 
-// The inverse of odfIndexControlDescriptor: the wrapper element (odfIndexWrapperTag above) carrying text:name, a BARE *-source child, and wrapping `children` (the control's own cached extent) in a text:index-body -- exactly the shape isOdfIndexWrapper/odfIndexControlDescriptor read back. The *-source child is written empty rather than omitted: the ODF schema requires every real index wrapper to carry one (it states the index's own build rules -- outline levels, sort keys, entry formatting), so an instance with no *-source child at all would not merely be missing decoration, it would be incomplete ODF a real consumer may refuse to open. Its own CONTENT (the build rules themselves) is still never re-emitted, per this writer's residue policy -- only a bare, attribute-less instance of the required element, which is what keeps this wrapper valid AND keeps a second write of the same document able to recover the identical tag again (odfIndexWrapperTag reads the bare child back exactly as it would a fuller one).
+// The inverse of odfIndexControlDescriptor: the wrapper element (odfIndexWrapperTag above) carrying text:name, a BARE *-source child, and wrapping `children` (the control's own cached extent) in a text:index-body — exactly the shape isOdfIndexWrapper/odfIndexControlDescriptor read back. The *-source child is written empty rather than omitted: the ODF schema requires every real index wrapper to carry one (it states the index's own build rules — outline levels, sort keys, entry formatting), so an instance with no *-source child at all would not merely be missing decoration, it would be incomplete ODF a real consumer may refuse to open. Its own CONTENT (the build rules themselves) is still never re-emitted, per this writer's residue policy — only a bare, attribute-less instance of the required element, which is what keeps this wrapper valid AND keeps a second write of the same document able to recover the identical tag again (odfIndexWrapperTag reads the bare child back exactly as it would a fuller one).
 export function writeOdfIndexWrapper(
   descriptor: ContentControlDescriptor,
   children: XmlNode[],

@@ -2,15 +2,15 @@ import type { ContentCellValue } from "document-schema.js";
 
 // HEURISTIC CELL RE-TYPING: turning a spreadsheet cell's RENDERED text back into a typed value.
 //
-// READ THIS FIRST -- THIS IS PROBABILISTIC BEST-EFFORT RECOVERY, NOT A FIDELITY GUARANTEE. A rendered PDF genuinely never carries a spreadsheet cell's own typed value: a PDF page holds only the string the authoring application chose to print. Everything below is therefore inference from that string alone, and a string that looks exactly like a number may genuinely have BEEN a string in the source spreadsheet -- a part number, a version, a phone extension. Nothing in this module, or anywhere downstream of it, can tell those apart with certainty, and no amount of further heuristic would change that. Callers who need certainty must not use a PDF as their source; callers who need the printed form regardless of what was inferred always have it, because ContentSheetCell.displayText is a REQUIRED field carrying the rendered string verbatim, independent of value.kind (verified against document-schema.js's own ContentSheetCellSchema, and preserved through the write side by src/edit/ods/content.ts's appendCell, which assigns displayText AFTER value precisely so the value setter's own generic formatting cannot overwrite it).
+// READ THIS FIRST — THIS IS PROBABILISTIC BEST-EFFORT RECOVERY, NOT A FIDELITY GUARANTEE. A rendered PDF genuinely never carries a spreadsheet cell's own typed value: a PDF page holds only the string the authoring application chose to print. Everything below is therefore inference from that string alone, and a string that looks exactly like a number may genuinely have BEEN a string in the source spreadsheet — a part number, a version, a phone extension. Nothing in this module, or anywhere downstream of it, can tell those apart with certainty, and no amount of further heuristic would change that. Callers who need certainty must not use a PDF as their source; callers who need the printed form regardless of what was inferred always have it, because ContentSheetCell.displayText is a REQUIRED field carrying the rendered string verbatim, independent of value.kind (verified against document-schema.js's own ContentSheetCellSchema, and preserved through the write side by src/edit/ods/content.ts's appendCell, which assigns displayText AFTER value precisely so the value setter's own generic formatting cannot overwrite it).
 //
 // THE CONFIDENCE BAR: re-type only when the rendered string has exactly ONE defensible reading. That resolves to four concrete requirements, each of which exists because violating it produces a silently WRONG value rather than a merely unhelpful one:
-//   1. Lossless -- the decimal must be exactly representable as a JS number (checked by round-tripping it, not by a digit-count limit). This is what keeps a 19-digit barcode a string instead of a number ending in the wrong digits.
-//   2. Separator-unambiguous -- '.' is read as the decimal separator and ',' as the grouping separator, but a lone comma group ("1,234") is DECLINED, because the competing European reading of the identical string is 1.234, a thousandfold error. Two or more groups ("1,234,567"), or a group alongside a real decimal point ("1,234.50"), have no such competing reading and are accepted.
-//   3. No leading zeros -- "007" and "01.5" are declined. A spreadsheet never prints a numeric value with a leading zero, so a leading zero is positive evidence of an identifier.
-//   4. Role-unambiguous, for dates -- ISO ordering ("2024-01-15") or a named month ("15 Jan 2024") state which component is which. An all-numeric separated date ("01/02/2024") does not, and is declined regardless of whether one component happens to exceed 12 in that particular cell: resolving it per cell would type one column inconsistently, which is worse than typing none of it.
+//   1. Lossless — the decimal must be exactly representable as a JS number (checked by round-tripping it, not by a digit-count limit). This is what keeps a 19-digit barcode a string instead of a number ending in the wrong digits.
+//   2. Separator-unambiguous — '.' is read as the decimal separator and ',' as the grouping separator, but a lone comma group ("1,234") is DECLINED, because the competing European reading of the identical string is 1.234, a thousandfold error. Two or more groups ("1,234,567"), or a group alongside a real decimal point ("1,234.50"), have no such competing reading and are accepted.
+//   3. No leading zeros — "007" and "01.5" are declined. A spreadsheet never prints a numeric value with a leading zero, so a leading zero is positive evidence of an identifier.
+//   4. Role-unambiguous, for dates — ISO ordering ("2024-01-15") or a named month ("15 Jan 2024") state which component is which. An all-numeric separated date ("01/02/2024") does not, and is declined regardless of whether one component happens to exceed 12 in that particular cell: resolving it per cell would type one column inconsistently, which is worse than typing none of it.
 //
-// WHAT IS DELIBERATELY OUT OF SCOPE: 'time'/'dateTime' (their ODF wire representation is an xsd:duration, "PT14H30M00S", so recovering one means inventing a duration encoding on top of an already-probabilistic parse), 'error' (a rendered "#DIV/0!" is a real, valid string in a real spreadsheet too), and formulas (nothing about a rendered value implies one was computed). A cell matching none of the rules below simply stays a string with no diagnostic at all -- a decline is reported only for the specific, named ambiguity classes this module actively detects and refuses.
+// WHAT IS DELIBERATELY OUT OF SCOPE: 'time'/'dateTime' (their ODF wire representation is an xsd:duration, "PT14H30M00S", so recovering one means inventing a duration encoding on top of an already-probabilistic parse), 'error' (a rendered "#DIV/0!" is a real, valid string in a real spreadsheet too), and formulas (nothing about a rendered value implies one was computed). A cell matching none of the rules below simply stays a string with no diagnostic at all — a decline is reported only for the specific, named ambiguity classes this module actively detects and refuses.
 
 export type CellTypeRule =
   | "boolean-literal"
@@ -77,13 +77,13 @@ const MONTH_NAMES: ReadonlyMap<string, number> = new Map(
   ]),
 );
 
-// A spreadsheet renders a real boolean as exactly TRUE or FALSE (LibreOffice Calc and Excel both, absent a custom number format) -- so these two words, and only these two, are direct evidence of a boolean cell.
+// A spreadsheet renders a real boolean as exactly TRUE or FALSE (LibreOffice Calc and Excel both, absent a custom number format) — so these two words, and only these two, are direct evidence of a boolean cell.
 const BOOLEAN_LITERALS: ReadonlyMap<string, boolean> = new Map([
   ["true", true],
   ["false", false],
 ]);
 
-// "Yes"/"No" is the single most tempting false friend here, and is declined rather than accepted: no mainstream spreadsheet prints a boolean this way by default, so a "Yes" cell is far more likely to be genuine text (a survey answer, a status column) than a boolean. Declining it is the confidence bar being applied, not an omission -- and it is REPORTED, so a caller who knows their own source uses Yes/No booleans can act on it.
+// "Yes"/"No" is the single most tempting false friend here, and is declined rather than accepted: no mainstream spreadsheet prints a boolean this way by default, so a "Yes" cell is far more likely to be genuine text (a survey answer, a status column) than a boolean. Declining it is the confidence bar being applied, not an omission — and it is REPORTED, so a caller who knows their own source uses Yes/No booleans can act on it.
 const AMBIGUOUS_BOOLEAN_WORDS: ReadonlySet<string> = new Set([
   "yes",
   "no",
@@ -98,7 +98,7 @@ function normalizeWhitespace(text: string): string {
   return text.replace(/[\u00A0\u202F]/gu, " ").trim();
 }
 
-// The parsed number, but only when the decimal it came from survives the round trip exactly. Trailing fraction zeros are stripped from the canonical form first, since "42.50" and "42.5" are the same VALUE and only the former's own printed form differs -- that difference is displayText's job to preserve, not value's.
+// The parsed number, but only when the decimal it came from survives the round trip exactly. Trailing fraction zeros are stripped from the canonical form first, since "42.50" and "42.5" are the same VALUE and only the former's own printed form differs — that difference is displayText's job to preserve, not value's.
 function exactlyRepresentable(canonicalDecimal: string): number | undefined {
   const parsed = Number(canonicalDecimal);
   if (!Number.isFinite(parsed)) {
@@ -120,7 +120,7 @@ const PLAIN_NUMBER_PATTERN =
 const GROUPED_NUMBER_PATTERN =
   /^(?<sign>[-+])?(?<lead>\d{1,3})(?<groups>(?:,\d{3})+)(?:\.(?<fraction>\d+))?$/u;
 
-// Parses the bare numeric core of a cell (no currency symbol, no percent sign -- those are peeled off by their own rules before calling this). Returns a decline for the two ambiguity classes that LOOK like a valid number under this module's stated dot-decimal/comma-grouping convention but have a competing reading, and undefined for anything that simply is not numeric at all.
+// Parses the bare numeric core of a cell (no currency symbol, no percent sign — those are peeled off by their own rules before calling this). Returns a decline for the two ambiguity classes that LOOK like a valid number under this module's stated dot-decimal/comma-grouping convention but have a competing reading, and undefined for anything that simply is not numeric at all.
 function parseNumericLiteral(
   text: string,
 ): NumericLiteral | { readonly declined: CellTypeDeclineReason } | undefined {
@@ -130,7 +130,7 @@ function parseNumericLiteral(
     if (lead!.length > 1 && lead!.startsWith("0")) {
       return { declined: "leading-zero-digits" };
     }
-    // A single comma group with no decimal point ("1,234") reads as 1234 under this module's own convention and as 1.234 under the European one -- a thousandfold difference with nothing in the string to settle it. Two or more groups, or a group plus a real decimal point, cannot be read the European way at all and are accepted.
+    // A single comma group with no decimal point ("1,234") reads as 1234 under this module's own convention and as 1.234 under the European one — a thousandfold difference with nothing in the string to settle it. Two or more groups, or a group plus a real decimal point, cannot be read the European way at all and are accepted.
     const groupCount = groups!.length / 4;
     if (groupCount === 1 && fraction === undefined) {
       return { declined: "ambiguous-grouping-separator" };
@@ -193,7 +193,7 @@ function inferCurrency(text: string): CellTypeInferenceResult | undefined {
   };
 }
 
-// ODF (and therefore ContentCellValue) stores a percentage as the FRACTION -- office:value="0.15" renders as "15%", exactly as src/edit/ods/cell.ts's own setter writes it back (`${value.value * 100}%`). The recovered value is divided by 100 here for that reason, not left as the printed magnitude.
+// ODF (and therefore ContentCellValue) stores a percentage as the FRACTION — office:value="0.15" renders as "15%", exactly as src/edit/ods/cell.ts's own setter writes it back (`${value.value * 100}%`). The recovered value is divided by 100 here for that reason, not left as the printed magnitude.
 const PERCENT_HUNDREDTHS = 100;
 
 function inferPercentage(text: string): CellTypeInferenceResult | undefined {
@@ -219,10 +219,10 @@ function inferPercentage(text: string): CellTypeInferenceResult | undefined {
 }
 
 const ISO_DATE_PATTERN = /^(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})$/u;
-// "15 Jan 2024", "15 January 2024", "15-Jan-2024" -- day first, month named.
+// "15 Jan 2024", "15 January 2024", "15-Jan-2024" — day first, month named.
 const DAY_MONTH_YEAR_PATTERN =
   /^(?<day>\d{1,2})[\s-](?<month>[A-Za-z]{3,9})\.?[\s-](?<year>\d{4})$/u;
-// "Jan 15, 2024", "January 15 2024" -- month named first.
+// "Jan 15, 2024", "January 15 2024" — month named first.
 const MONTH_DAY_YEAR_PATTERN =
   /^(?<month>[A-Za-z]{3,9})\.?[\s-](?<day>\d{1,2}),?[\s-](?<year>\d{4})$/u;
 // Any all-numeric separated date: the ambiguity class this module refuses rather than guesses at.
@@ -317,7 +317,7 @@ function inferNumber(text: string): CellTypeInferenceResult | undefined {
   };
 }
 
-// The rendered string a spreadsheet cell was recovered from, re-read as a typed value where -- and only where -- exactly one reading is defensible. Returns undefined when the text is not number/date/boolean-shaped at all, which is the ordinary case for genuine text and needs no diagnostic. Order matters only in that each rule peels off its own distinguishing marker (currency symbol, percent sign) before the bare-number rule sees the remainder; the rules are otherwise disjoint.
+// The rendered string a spreadsheet cell was recovered from, re-read as a typed value where — and only where — exactly one reading is defensible. Returns undefined when the text is not number/date/boolean-shaped at all, which is the ordinary case for genuine text and needs no diagnostic. Order matters only in that each rule peels off its own distinguishing marker (currency symbol, percent sign) before the bare-number rule sees the remainder; the rules are otherwise disjoint.
 export function inferCellValue(
   displayText: string,
 ): CellTypeInferenceResult | undefined {

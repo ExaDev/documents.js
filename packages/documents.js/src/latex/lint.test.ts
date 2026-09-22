@@ -10,7 +10,7 @@ import { latexToFormula } from "./lower";
 import { lintMathCoherence } from "./lint";
 import { buildFormulaBlock } from "../model/formula";
 
-// The coherence lint's contract: re-parse, re-lower, compare -- and report divergence as a warning carrying the stored provenance, never as an automatic re-derivation (the schema's atomic pair-edit rule: the layers stay exactly as stored). These tests also pin that the lint WRITES nothing: every assertion re-reads the same package object after linting.
+// The coherence lint's contract: re-parse, re-lower, compare — and report divergence as a warning carrying the stored provenance, never as an automatic re-derivation (the schema's atomic pair-edit rule: the layers stay exactly as stored). These tests also pin that the lint WRITES nothing: every assertion re-reads the same package object after linting.
 
 function packageOf(blocks: readonly ContentBlock[]): DocumentTree {
   return assembleTree({
@@ -34,7 +34,7 @@ function mathBlockOf(latex: string): ContentBlock {
   );
 }
 
-// packageOf's own sibling for the tests below that need a symbolTable declared on the OUTER document itself -- packageOf never sets one, which is fine for every existing case above (none of them needs the outer table to be present AND different from an inner one) but wrong for these.
+// packageOf's own sibling for the tests below that need a symbolTable declared on the OUTER document itself — packageOf never sets one, which is fine for every existing case above (none of them needs the outer table to be present AND different from an inner one) but wrong for these.
 function packageWithSymbolTableOf(
   symbolTable: SymbolTable,
   blocks: readonly ContentBlock[],
@@ -62,7 +62,7 @@ describe("lintMathCoherence", () => {
   it("a deliberately edited content layer diverges: a warning carrying provenance, and the stored layers are untouched", () => {
     const block = mathBlockOf("E = mc^2");
     const pkg = packageOf([block]);
-    // Someone resolved the mc^2 juxtaposition by hand into an explicit multiplication -- a better reading, stored deliberately next to the unchanged presentation.
+    // Someone resolved the mc^2 juxtaposition by hand into an explicit multiplication — a better reading, stored deliberately next to the unchanged presentation.
     if (block.kind !== "embeddedObject" || block.document.kind !== "formula") {
       throw new Error("expected a formula block");
     }
@@ -127,8 +127,8 @@ describe("lintMathCoherence", () => {
     });
   });
 
-  it("a stored non-reduced rational still agrees with the reduced re-lowering -- value canonicalisation, not string equality", () => {
-    // '\frac{0.5}{2}' re-lowers the decimal to the reduced 1/2; the stored content spells the same value as an unreduced 2/4. Same expression, different spelling -- the lint compares cross-reduced values and stays silent.
+  it("a stored non-reduced rational still agrees with the reduced re-lowering — value canonicalisation, not string equality", () => {
+    // '\frac{0.5}{2}' re-lowers the decimal to the reduced 1/2; the stored content spells the same value as an unreduced 2/4. Same expression, different spelling — the lint compares cross-reduced values and stays silent.
     const block = mathBlockOf("\\frac{0.5}{2}");
     if (block.kind !== "embeddedObject" || block.document.kind !== "formula") {
       throw new Error("expected a formula block");
@@ -164,7 +164,7 @@ describe("lintMathCoherence", () => {
   });
 
   it("two divergent formulas in one document produce distinct detail strings, even though mathBlockOf stamps the identical sourcePath on both (ExaDev/documents.js#928 round-3/4 regression)", () => {
-    // Both formulas below are built through the same mathBlockOf helper, which hardcodes "test:lint" as every formula's sourcePath -- exactly the shape a real document can have too: this package's own src/markdown/math.ts stamps every display formula it lowers from a markdown source with the identical literal sourcePath "markdown:math-block" (and every inline formula with "markdown:math-inline"), so two sibling formulas in the one real-world format that populates sourcePath at all routinely share the exact value mathBlockOf hardcodes here. If the lint keyed its diagnostic locate string on sourcePath (or on the document's own kind as a shared fallback), these two formulas' diagnostics would be byte-identical except for the latex suffix's own natural difference -- the actual round-3 regression. Keying on the walk's own structural `locate` instead keeps them apart regardless of what sourcePath the source format did or didn't stamp.
+    // Both formulas below are built through the same mathBlockOf helper, which hardcodes "test:lint" as every formula's sourcePath — exactly the shape a real document can have too: this package's own src/markdown/math.ts stamps every display formula it lowers from a markdown source with the identical literal sourcePath "markdown:math-block" (and every inline formula with "markdown:math-inline"), so two sibling formulas in the one real-world format that populates sourcePath at all routinely share the exact value mathBlockOf hardcodes here. If the lint keyed its diagnostic locate string on sourcePath (or on the document's own kind as a shared fallback), these two formulas' diagnostics would be byte-identical except for the latex suffix's own natural difference — the actual round-3 regression. Keying on the walk's own structural `locate` instead keeps them apart regardless of what sourcePath the source format did or didn't stamp.
     const nested = mathBlockOf("c + d");
     const topLevel = mathBlockOf("a + b");
     const pkg = packageOf([
@@ -198,7 +198,7 @@ describe("lintMathCoherence", () => {
   });
 
   it("resolves a nested formula's symbols against its OWN embedding document's symbolTable, not the outer package's (ExaDev/documents.js#928 round-7 regression)", () => {
-    // The outer package declares no symbolTable at all; only the nested document curates glyph "U" -- as "symbols:voltage", an id that does NOT match the auto-mint scheme ("symbols:U") a table-less re-lowering would produce for an uncurated glyph. Re-lowering the nested formula against the wrong (outer) table would therefore mint a different symbol id for the same glyph and falsely report a coherence divergence for a formula that is actually perfectly coherent against its own document's table.
+    // The outer package declares no symbolTable at all; only the nested document curates glyph "U" — as "symbols:voltage", an id that does NOT match the auto-mint scheme ("symbols:U") a table-less re-lowering would produce for an uncurated glyph. Re-lowering the nested formula against the wrong (outer) table would therefore mint a different symbol id for the same glyph and falsely report a coherence divergence for a formula that is actually perfectly coherent against its own document's table.
     const curatedEntries = [
       { glyph: "U", scope: "document", id: "symbols:voltage" },
     ];
@@ -233,7 +233,7 @@ describe("lintMathCoherence", () => {
   });
 
   it("resolves a DIRECTLY embedded formula object's own symbolTable, not the enclosing document's (ExaDev/documents.js#928 round-8 regression)", () => {
-    // Round-7's regression required an intermediate non-formula document wrapping the formula; this is the plainer and more common real-world shape: a formula-kind embedded object sitting straight in the document's own block flow (exactly what buildFormulaBlock produces on every odt/odp/docx/markdown read), carrying its own symbolTable directly rather than nested one level deeper. Both tables curate the identical glyph "U" under different ids -- resolving against the wrong (enclosing) table mints the wrong symbol id and falsely reports a coherence divergence for a formula that is actually coherent against its own document.
+    // Round-7's regression required an intermediate non-formula document wrapping the formula; this is the plainer and more common real-world shape: a formula-kind embedded object sitting straight in the document's own block flow (exactly what buildFormulaBlock produces on every odt/odp/docx/markdown read), carrying its own symbolTable directly rather than nested one level deeper. Both tables curate the identical glyph "U" under different ids — resolving against the wrong (enclosing) table mints the wrong symbol id and falsely reports a coherence divergence for a formula that is actually coherent against its own document.
     const outerEntries = [
       { glyph: "U", scope: "document", id: "symbols:outer-voltage" },
     ];
@@ -249,7 +249,7 @@ describe("lintMathCoherence", () => {
       { xPt: 0, yPt: 0, widthPt: 0, heightPt: 22 },
       "test:lint",
     );
-    // block.document is statically known to be the 'formula'-kind ContentDocument buildFormulaBlock built -- no narrowing needed, unlike mathBlockOf's own callers elsewhere in this file, which declare a widened ContentBlock return type.
+    // block.document is statically known to be the 'formula'-kind ContentDocument buildFormulaBlock built — no narrowing needed, unlike mathBlockOf's own callers elsewhere in this file, which declare a widened ContentBlock return type.
     block.document.symbolTable = { symbols: ownEntries, units: [] };
     const pkg = packageWithSymbolTableOf({ symbols: outerEntries, units: [] }, [
       block,
@@ -258,7 +258,7 @@ describe("lintMathCoherence", () => {
   });
 
   it("falls back to the outer document's symbolTable when a NESTED non-formula document declares none of its own (ExaDev/documents.js#928 round-8, fallback direction 1 of 2)", () => {
-    // The nested wordprocessing document declares no symbolTable field at all -- collectDocumentFormulas' own outward-fallback design choice means the formula inside it should still resolve "U" against the OUTER document's curation, matching this formula's own stored content (built against that same outer table). Getting the fallback wrong (leaving the nested entry's table undefined instead of inheriting outward) would make the re-lowering mint an uncurated auto-symbol id instead, diverging from the stored content and producing a false warning.
+    // The nested wordprocessing document declares no symbolTable field at all — collectDocumentFormulas' own outward-fallback design choice means the formula inside it should still resolve "U" against the OUTER document's curation, matching this formula's own stored content (built against that same outer table). Getting the fallback wrong (leaving the nested entry's table undefined instead of inheriting outward) would make the re-lowering mint an uncurated auto-symbol id instead, diverging from the stored content and producing a false warning.
     const outerEntries = [
       { glyph: "U", scope: "document", id: "symbols:voltage" },
     ];
@@ -277,7 +277,7 @@ describe("lintMathCoherence", () => {
       document: {
         kind: "wordprocessing",
         metadata: {},
-        // Deliberately no symbolTable field here -- the fallback under test.
+        // Deliberately no symbolTable field here — the fallback under test.
         sections: [
           {
             pageSize: { widthPt: 595, heightPt: 842 },
@@ -295,7 +295,7 @@ describe("lintMathCoherence", () => {
   });
 
   it("falls back to the outer document's symbolTable when a DIRECTLY embedded formula object declares none of its own (ExaDev/documents.js#928 round-8, fallback direction 2 of 2)", () => {
-    // The ordinary case buildFormulaBlock produces on every real read: the formula-kind document carries no symbolTable of its own at all. The fix must not make this regress into an unconditionally-undefined table -- it should still fall back to the enclosing document's own curation, exactly as before the fix.
+    // The ordinary case buildFormulaBlock produces on every real read: the formula-kind document carries no symbolTable of its own at all. The fix must not make this regress into an unconditionally-undefined table — it should still fall back to the enclosing document's own curation, exactly as before the fix.
     const outerEntries = [
       { glyph: "U", scope: "document", id: "symbols:voltage" },
     ];

@@ -120,7 +120,7 @@ describe("readOleDescriptor", () => {
     ).toBeUndefined();
   });
 
-  // An OLE 1 descriptor with no payload at all: bytes.length lands exactly on payloadOffset, the one boundary where "shorter than" and "no room to spare" agree -- unlike the OLE 2 path, this one still answers a real, defined value from the fixed head alone, so it cannot be masked by a downstream empty-text fallback the way OLE 2 would be.
+  // An OLE 1 descriptor with no payload at all: bytes.length lands exactly on payloadOffset, the one boundary where "shorter than" and "no room to spare" agree — unlike the OLE 2 path, this one still answers a real, defined value from the fixed head alone, so it cannot be masked by a downstream empty-text fallback the way OLE 2 would be.
   it("reads an OLE 1 descriptor's object number even with zero payload bytes", () => {
     const descriptor = readOleDescriptor(
       descriptorPacket("WPWin6.0/OLE 1.0 Prefix Information Marker", 42, []),
@@ -178,7 +178,7 @@ describe("readGraphicsChildIds", () => {
   });
 
   it("reads a single child ID that exactly fills the packet, with no room to spare", () => {
-    // [count = 1] [child 7] -- four bytes total, exactly 2 + count * 2.
+    // [count = 1] [child 7] — four bytes total, exactly 2 + count * 2.
     expect(
       readGraphicsChildIds(
         packet(

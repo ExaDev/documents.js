@@ -13,7 +13,7 @@ import {
   type OdfTableWriteContext,
 } from "./table";
 
-// Grammar verified against a real LibreOffice-generated .odp: a presentation's own draw:frame-wrapped table uses table:table/table:table-column/table:table-row/table:table-cell/table:covered-table-cell, column width via table:table-column's own table:style-name -> a style:family="table-column" style:style's style:table-column-properties/@style:column-width, row height the analogous table:family="table-row"/style:table-row-properties/@style:row-height -- and, notably, a real saved table frame carries an EXTRA sibling draw:image (an .svm fallback preview) alongside table:table, which shapes.ts's own readDrawFrameContent (not this module) is responsible for not mistaking for the frame's real content.
+// Grammar verified against a real LibreOffice-generated .odp: a presentation's own draw:frame-wrapped table uses table:table/table:table-column/table:table-row/table:table-cell/table:covered-table-cell, column width via table:table-column's own table:style-name -> a style:family="table-column" style:style's style:table-column-properties/@style:column-width, row height the analogous table:family="table-row"/style:table-row-properties/@style:row-height — and, notably, a real saved table frame carries an EXTRA sibling draw:image (an .svm fallback preview) alongside table:table, which shapes.ts's own readDrawFrameContent (not this module) is responsible for not mistaking for the frame's real content.
 
 function contentPackage(
   automaticStyleChildren: XmlElement[] = [],
@@ -120,7 +120,7 @@ describe("readOdfTable: rows", () => {
     expect(readOdfTable(table, pkg).rows[0]?.heightPt).toBe(20);
   });
 
-  it('leaves heightPt undefined (not 0) when unresolvable -- unlike column width, a missing row height is genuinely "unspecified"', () => {
+  it('leaves heightPt undefined (not 0) when unresolvable — unlike column width, a missing row height is genuinely "unspecified"', () => {
     const table = el("table:table", {}, [
       el("table:table-row", {}, [cell("x")]),
     ]);
@@ -298,7 +298,7 @@ describe("readOdfTable: cell background", () => {
   });
 });
 
-describe("readOdfTable: cell borders (odt/odp -- single-level table:style-name -> table-cell family style, matching background's own established lookup)", () => {
+describe("readOdfTable: cell borders (odt/odp — single-level table:style-name -> table-cell family style, matching background's own established lookup)", () => {
   it("expands the fo:border shorthand onto all four edges", () => {
     const ce1 = cellBorderStyle("ce1", { "fo:border": "1pt solid #ff0000" });
     const table = el("table:table", {}, [
@@ -551,7 +551,7 @@ describe("readCellStyleDecoration", () => {
 });
 
 describe("writeOdfTable", () => {
-  // Returns the write context alongside the minted <style:style> elements, read back from the SAME automaticStyles element object registry.intern() pushes into -- the identical pattern styles/registry.test.ts's own automaticStylesOf establishes, rather than reaching into the registry's own private fields.
+  // Returns the write context alongside the minted <style:style> elements, read back from the SAME automaticStyles element object registry.intern() pushes into — the identical pattern styles/registry.test.ts's own automaticStylesOf establishes, rather than reaching into the registry's own private fields.
   function writeContext(): {
     context: OdfTableWriteContext;
     mintedStyles: () => XmlElement[];

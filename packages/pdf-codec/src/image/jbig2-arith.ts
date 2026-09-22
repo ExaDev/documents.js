@@ -2,7 +2,7 @@
 //
 // The MQ coder is a binary adaptive arithmetic coder shared verbatim with JPEG 2000 (ITU-T T.800 Annex C) and derived from the QM coder of JBIG1/JPEG. Every register name below (A, C, CT, BP) and every procedure name (INITDEC, DECODE, BYTEIN, MPS_EXCHANGE, LPS_EXCHANGE, RENORMD) is the specification's own, so each function body can be checked line for line against T.88 Figures E.15-E.20.
 
-// T.88 Table E.1: the probability estimation state machine. Each row is (Qe, NMPS, NLPS, SWITCH) -- the LPS sub-interval size, the next state after an MPS renormalisation, the next state after an LPS renormalisation, and whether that LPS transition also swaps which symbol is the MPS.
+// T.88 Table E.1: the probability estimation state machine. Each row is (Qe, NMPS, NLPS, SWITCH) — the LPS sub-interval size, the next state after an MPS renormalisation, the next state after an LPS renormalisation, and whether that LPS transition also swaps which symbol is the MPS.
 const QE_STATES: readonly (readonly [number, number, number, number])[] = [
   [0x5601, 1, 1, 1],
   [0x3401, 2, 6, 0],
@@ -58,7 +58,7 @@ const QE_NMPS = Uint8Array.from(QE_STATES, (row) => row[1]);
 const QE_NLPS = Uint8Array.from(QE_STATES, (row) => row[2]);
 const QE_SWITCH = Uint8Array.from(QE_STATES, (row) => row[3]);
 
-// One adaptive context per array entry, packing the T.88 pair (I, MPS) -- the state-machine index and which binary symbol is currently the more probable one -- into a single byte as (I << 1) | MPS. Every context starts at state 0 with MPS 0, which is exactly what a zero-filled array already means, so no explicit reset pass is needed.
+// One adaptive context per array entry, packing the T.88 pair (I, MPS) — the state-machine index and which binary symbol is currently the more probable one — into a single byte as (I << 1) | MPS. Every context starts at state 0 with MPS 0, which is exactly what a zero-filled array already means, so no explicit reset pass is needed.
 export type ArithContexts = Uint8Array<ArrayBuffer>;
 
 export function createArithContexts(contextBits: number): ArithContexts {

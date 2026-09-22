@@ -18,7 +18,7 @@ import {
   buildSingleSubstFormat2,
 } from "./sfnt";
 
-// Every assertion below reads the byte layout back with a raw DataView, deliberately never through this package's own sfnt readers -- the same independent-oracle discipline this file's own top-of-file comment states for the builders themselves. These tests exist to pin the arithmetic and branch choices inside sfnt.ts's fixture builders directly, since gsub-table.test.ts/gdef-table.test.ts only exercise them indirectly through a real reader, which can tolerate an off-by-one the reader itself doesn't notice.
+// Every assertion below reads the byte layout back with a raw DataView, deliberately never through this package's own sfnt readers — the same independent-oracle discipline this file's own top-of-file comment states for the builders themselves. These tests exist to pin the arithmetic and branch choices inside sfnt.ts's fixture builders directly, since gsub-table.test.ts/gdef-table.test.ts only exercise them indirectly through a real reader, which can tolerate an off-by-one the reader itself doesn't notice.
 
 function u16(bytes: Uint8Array, at: number): number {
   return new DataView(
@@ -84,7 +84,7 @@ describe("buildCmapTable / format 0", () => {
 
 describe("buildCmapTable / format 4", () => {
   it("sorts mappings given out of order and lays out end/start/idDelta arrays plus the terminator segment", () => {
-    // Deliberately inserted out of ascending order -- the builder must sort before laying anything out.
+    // Deliberately inserted out of ascending order — the builder must sort before laying anything out.
     const table = buildCmapTable([
       {
         platformId: 3,
@@ -341,7 +341,7 @@ describe("buildContextFormat1 / buildContextFormat2 (plain SequenceRule)", () =>
     expect(u16(subtable, ruleAt + 2)).toBe(2);
     expect(u16(subtable, ruleAt + 4)).toBe(3);
     expect(u16(subtable, ruleAt + 6)).toBe(1); // substCount
-    // Total rule byte length is exactly glyphCount-field + 2 inputs + substCount-field + 1 record -- proving nothing extra (backtrack/lookahead) was written.
+    // Total rule byte length is exactly glyphCount-field + 2 inputs + substCount-field + 1 record — proving nothing extra (backtrack/lookahead) was written.
     expect(subtable.length - ruleAt).toBe(2 + 2 * 2 + 2 + 1 * 4);
   });
 
@@ -523,7 +523,7 @@ describe("buildGsubTable", () => {
   });
 
   it("never writes a markFilteringSet slot for a lookup with no subtables at all", () => {
-    // A lookup with zero subtables leaves no trailing byte range for an eagerly-written markFilteringSet slot to be silently overwritten by afterwards (unlike every non-empty case, where the following subtable write clobbers it back) -- so a guard that fires unconditionally writes straight past the end of this lookup's own 6-byte header, which the reserved-width computation left with no extra room for.
+    // A lookup with zero subtables leaves no trailing byte range for an eagerly-written markFilteringSet slot to be silently overwritten by afterwards (unlike every non-empty case, where the following subtable write clobbers it back) — so a guard that fires unconditionally writes straight past the end of this lookup's own 6-byte header, which the reserved-width computation left with no extra room for.
     const table = buildGsubTable([], [{ type: 1, subtables: [] }]);
     const lookupListAt = u16(table, 8);
     const lookupAt = lookupListAt + u16(table, lookupListAt + 2);

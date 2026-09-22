@@ -5,7 +5,7 @@ import { HsqldbSqlEvaluationError } from "./errors";
 import { evaluateSelect } from "./evaluate";
 import { parseSelect } from "./parser";
 
-// One hand-built table covering every value shape this engine has to reason about: text, numeric, boolean, and date columns, with a deliberate NULL in each nullable one -- SALARY on Bob, ACTIVE on Dave, HIRED on Carol and Frank, DEPT on Erin and Frank (two rows, so GROUP BY's own "all NULLs are one group" rule has something to prove). The real-fixture end-to-end test lives in src/odb/sql/query.test.ts; this file is the semantics suite.
+// One hand-built table covering every value shape this engine has to reason about: text, numeric, boolean, and date columns, with a deliberate NULL in each nullable one — SALARY on Bob, ACTIVE on Dave, HIRED on Carol and Frank, DEPT on Erin and Frank (two rows, so GROUP BY's own "all NULLs are one group" rule has something to prove). The real-fixture end-to-end test lives in src/odb/sql/query.test.ts; this file is the semantics suite.
 const NULL_VALUE: ContentCellValue = { kind: "empty" };
 
 function text(value: string): ContentCellValue {
@@ -169,7 +169,7 @@ describe("evaluateSelect: three-valued NULL logic in WHERE", () => {
     expect(names("WHERE SALARY > 100 AND NAME = 'nobody'")).toEqual([]);
   });
 
-  it("answers IS NULL and IS NOT NULL definitively -- the only predicates here that can never be UNKNOWN", () => {
+  it("answers IS NULL and IS NOT NULL definitively — the only predicates here that can never be UNKNOWN", () => {
     expect(names("WHERE SALARY IS NULL")).toEqual(["Bob"]);
     expect(names("WHERE SALARY IS NOT NULL")).toEqual([
       "Alice",
@@ -435,7 +435,7 @@ describe("evaluateSelect: GROUP BY and aggregates", () => {
   });
 });
 
-// A second table sharing a column NAME with EMPLOYEES on purpose -- both the deliberate ambiguity trap (an unqualified reference to NAME after a JOIN) and the ordinary disambiguation path (EMPLOYEES.NAME vs DEPARTMENTS.NAME) need a real name collision to exercise, not two tables that happen never to clash. MARKETING has no matching employee at all, which is what proves INNER JOIN excludes an unmatched row on either side rather than padding it with NULLs.
+// A second table sharing a column NAME with EMPLOYEES on purpose — both the deliberate ambiguity trap (an unqualified reference to NAME after a JOIN) and the ordinary disambiguation path (EMPLOYEES.NAME vs DEPARTMENTS.NAME) need a real name collision to exercise, not two tables that happen never to clash. MARKETING has no matching employee at all, which is what proves INNER JOIN excludes an unmatched row on either side rather than padding it with NULLs.
 const DEPARTMENTS: HsqldbTable = {
   tableName: "DEPARTMENTS",
   columns: [
@@ -460,7 +460,7 @@ describe("evaluateSelect: JOIN", () => {
     const result = runJoin(
       "SELECT EMPLOYEES.NAME, DEPARTMENTS.NAME FROM EMPLOYEES JOIN DEPARTMENTS ON EMPLOYEES.DEPT = DEPARTMENTS.NAME ORDER BY EMPLOYEES.NAME",
     );
-    // Erin and Frank (DEPT is NULL) never match anything -- NULL = anything is UNKNOWN, never TRUE, exactly as in WHERE -- and Marketing (no employee in it) never appears either: this is INNER JOIN, not an outer join padding the unmatched side with NULLs.
+    // Erin and Frank (DEPT is NULL) never match anything — NULL = anything is UNKNOWN, never TRUE, exactly as in WHERE — and Marketing (no employee in it) never appears either: this is INNER JOIN, not an outer join padding the unmatched side with NULLs.
     expect(result.rows).toEqual([
       [text("Alice"), text("Sales")],
       [text("Bob"), text("Sales")],
@@ -551,7 +551,7 @@ describe("evaluateSelect: JOIN", () => {
     ).toThrow(/column "DEPT" not found|column "NAME" is ambiguous/);
   });
 
-  it("makes a self-join's own unqualified table name ambiguous rather than silently picking one occurrence -- there is no alias to tell the two apart", () => {
+  it("makes a self-join's own unqualified table name ambiguous rather than silently picking one occurrence — there is no alias to tell the two apart", () => {
     expect(() =>
       run(
         "SELECT EMPLOYEES.NAME FROM EMPLOYEES JOIN EMPLOYEES ON EMPLOYEES.DEPT = EMPLOYEES.DEPT",
@@ -564,7 +564,7 @@ describe("evaluateSelect: JOIN", () => {
     const result = runJoin(
       "SELECT EMPLOYEES.NAME, DEPARTMENTS.NAME FROM EMPLOYEES LEFT JOIN DEPARTMENTS ON EMPLOYEES.DEPT = DEPARTMENTS.NAME ORDER BY EMPLOYEES.NAME",
     );
-    // Erin and Frank (DEPT NULL) now survive, padded with NULL rather than dropped -- and Marketing still never appears, since a LEFT JOIN never keeps an unmatched row from the RIGHT side.
+    // Erin and Frank (DEPT NULL) now survive, padded with NULL rather than dropped — and Marketing still never appears, since a LEFT JOIN never keeps an unmatched row from the RIGHT side.
     expect(result.rows).toEqual([
       [text("Alice"), text("Sales")],
       [text("Bob"), text("Sales")],
@@ -579,7 +579,7 @@ describe("evaluateSelect: JOIN", () => {
     const result = runJoin(
       "SELECT EMPLOYEES.NAME, DEPARTMENTS.NAME FROM EMPLOYEES RIGHT JOIN DEPARTMENTS ON EMPLOYEES.DEPT = DEPARTMENTS.NAME ORDER BY DEPARTMENTS.NAME",
     );
-    // Marketing (no employee) now survives, padded with NULL -- and Erin/Frank never appear, since a RIGHT JOIN never keeps an unmatched row from the LEFT side.
+    // Marketing (no employee) now survives, padded with NULL — and Erin/Frank never appear, since a RIGHT JOIN never keeps an unmatched row from the LEFT side.
     expect(result.rows).toEqual([
       [text("Carol"), text("Eng")],
       [text("Dave"), text("Eng")],
@@ -656,7 +656,7 @@ describe("evaluateSelect: table aliases", () => {
   });
 });
 
-// A pair of tables purpose-built for NATURAL/USING: CUSTOMERS and ORDERS share exactly one column, CUSTOMER_ID, which is what both join forms match on. Initech has no order at all (an unmatched LEFT row); order 102's own CUSTOMER_ID is NULL (an orphan that never matches anything, on the identical three-valued-logic rule an ON clause already follows) -- between them these give every outer-join padding case something real to prove.
+// A pair of tables purpose-built for NATURAL/USING: CUSTOMERS and ORDERS share exactly one column, CUSTOMER_ID, which is what both join forms match on. Initech has no order at all (an unmatched LEFT row); order 102's own CUSTOMER_ID is NULL (an orphan that never matches anything, on the identical three-valued-logic rule an ON clause already follows) — between them these give every outer-join padding case something real to prove.
 const CUSTOMERS: HsqldbTable = {
   tableName: "CUSTOMERS",
   columns: [
@@ -849,8 +849,8 @@ describe("evaluateSelect: a derived table in FROM", () => {
     ).toEqual([[text("Carol")], [text("Dave")]]);
   });
 
-  it("never correlates with an enclosing query, even a correlated one -- a plain derived table always evaluates standalone, regardless of what it is nested inside", () => {
-    // The EXISTS wrapping this derived table is itself perfectly capable of correlation (see the "evaluateSelect: EXISTS" tests below) -- but the derived table nested inside it does not inherit that: its own inner SELECT references EMPLOYEES.DEPT, and EMPLOYEES is not a table this derived table's own FROM ever named, so it must fail exactly as it would with no enclosing EXISTS at all.
+  it("never correlates with an enclosing query, even a correlated one — a plain derived table always evaluates standalone, regardless of what it is nested inside", () => {
+    // The EXISTS wrapping this derived table is itself perfectly capable of correlation (see the "evaluateSelect: EXISTS" tests below) — but the derived table nested inside it does not inherit that: its own inner SELECT references EMPLOYEES.DEPT, and EMPLOYEES is not a table this derived table's own FROM ever named, so it must fail exactly as it would with no enclosing EXISTS at all.
     expect(() =>
       runJoin(
         "SELECT NAME FROM EMPLOYEES WHERE EXISTS (SELECT NAME FROM (SELECT NAME FROM DEPARTMENTS WHERE DEPARTMENTS.NAME = EMPLOYEES.DEPT) inner1)",
@@ -859,7 +859,7 @@ describe("evaluateSelect: a derived table in FROM", () => {
   });
 });
 
-// A dedicated table for the IN (SELECT ...)/EXISTS (SELECT ...) tests below -- several rows per DEPT, and target values chosen to overlap only some employees' own SALARY, so a correlated subquery's per-row re-evaluation and an uncorrelated one's single shared result set are both genuinely exercised rather than trivially matching everything or nothing.
+// A dedicated table for the IN (SELECT ...)/EXISTS (SELECT ...) tests below — several rows per DEPT, and target values chosen to overlap only some employees' own SALARY, so a correlated subquery's per-row re-evaluation and an uncorrelated one's single shared result set are both genuinely exercised rather than trivially matching everything or nothing.
 const REGIONAL_TARGETS: HsqldbTable = {
   tableName: "REGIONAL_TARGETS",
   columns: [
@@ -902,7 +902,7 @@ describe("evaluateSelect: IN (SELECT ...)", () => {
   });
 
   it("re-evaluates a correlated subquery per outer row, using that row's own values", () => {
-    // Erin and Frank have DEPT = NULL: REGIONAL_TARGETS.DEPT = NULL is UNKNOWN for every REGIONAL_TARGETS row, so their own correlated subquery produces zero rows and IN is FALSE (not UNKNOWN -- there is no NULL in an empty result set to make it UNKNOWN instead).
+    // Erin and Frank have DEPT = NULL: REGIONAL_TARGETS.DEPT = NULL is UNKNOWN for every REGIONAL_TARGETS row, so their own correlated subquery produces zero rows and IN is FALSE (not UNKNOWN — there is no NULL in an empty result set to make it UNKNOWN instead).
     expect(
       runSub(
         "SELECT NAME FROM EMPLOYEES WHERE SALARY IN (SELECT TARGET_SALARY FROM REGIONAL_TARGETS WHERE REGIONAL_TARGETS.DEPT = EMPLOYEES.DEPT) ORDER BY NAME",
@@ -923,7 +923,7 @@ describe("evaluateSelect: IN (SELECT ...)", () => {
 
 describe("evaluateSelect: EXISTS (SELECT ...)", () => {
   it("is true precisely when a correlated subquery produces at least one row", () => {
-    // The identical row set runJoin's own INNER JOIN test already proves matches -- EXISTS over a correlated subquery is the row-existence half of exactly the same join condition.
+    // The identical row set runJoin's own INNER JOIN test already proves matches — EXISTS over a correlated subquery is the row-existence half of exactly the same join condition.
     expect(
       runSub(
         "SELECT NAME FROM EMPLOYEES WHERE EXISTS (SELECT NAME FROM DEPARTMENTS WHERE DEPARTMENTS.NAME = EMPLOYEES.DEPT) ORDER BY NAME",
@@ -936,7 +936,7 @@ describe("evaluateSelect: EXISTS (SELECT ...)", () => {
     ]);
   });
 
-  it("negates with NOT EXISTS, parsed as an ordinary NOT wrapping the exists predicate -- never UNKNOWN even for a NULL-correlated row", () => {
+  it("negates with NOT EXISTS, parsed as an ordinary NOT wrapping the exists predicate — never UNKNOWN even for a NULL-correlated row", () => {
     expect(
       runSub(
         "SELECT NAME FROM EMPLOYEES WHERE NOT EXISTS (SELECT NAME FROM DEPARTMENTS WHERE DEPARTMENTS.NAME = EMPLOYEES.DEPT) ORDER BY NAME",
@@ -944,7 +944,7 @@ describe("evaluateSelect: EXISTS (SELECT ...)", () => {
     ).toEqual([[text("Erin")], [text("Frank")]]);
   });
 
-  it("ignores the subquery's own select list entirely -- only row existence matters", () => {
+  it("ignores the subquery's own select list entirely — only row existence matters", () => {
     expect(
       runSub(
         "SELECT NAME FROM EMPLOYEES WHERE EXISTS (SELECT BUDGET FROM DEPARTMENTS WHERE DEPARTMENTS.NAME = EMPLOYEES.DEPT) ORDER BY NAME",
@@ -958,7 +958,7 @@ describe("evaluateSelect: EXISTS (SELECT ...)", () => {
   });
 
   it("resolves a correlated reference through two nested subquery scopes, skipping an intermediate scope that does not itself declare the referenced table", () => {
-    // The middle EXISTS (over DEPARTMENTS) has nothing to do with DEPARTMENTS at all -- its own inner EXISTS references EMPLOYEES.DEPT, two scopes up, which the middle scope must pass through rather than resolve itself (DEPARTMENTS declares no DEPT column).
+    // The middle EXISTS (over DEPARTMENTS) has nothing to do with DEPARTMENTS at all — its own inner EXISTS references EMPLOYEES.DEPT, two scopes up, which the middle scope must pass through rather than resolve itself (DEPARTMENTS declares no DEPT column).
     expect(
       runSub(
         "SELECT NAME FROM EMPLOYEES WHERE EXISTS (SELECT NAME FROM DEPARTMENTS WHERE EXISTS (SELECT DEPT FROM REGIONAL_TARGETS WHERE REGIONAL_TARGETS.DEPT = EMPLOYEES.DEPT)) ORDER BY NAME",

@@ -1,12 +1,12 @@
-// -- Page furniture, per WPFF "D6 Header/Footer Functions" --
+// — Page furniture, per WPFF "D6 Header/Footer Functions" --
 //
-// The D6 group states a document's headers, footers, and watermarks. Each function names its body as the prefix ID of a General WP Text packet (type 0x08) -- the identical packet type a box's own text content rides -- and its non-deletable data is exactly two bytes, of which the first is the occurrence byte: bit 0 "does occur on odd pages", bit 1 "does occur on even pages" (bit 2 states a vertical-text watermark and bits 3/4 watermark display space, none of which the shared furniture model asks about).
+// The D6 group states a document's headers, footers, and watermarks. Each function names its body as the prefix ID of a General WP Text packet (type 0x08) — the identical packet type a box's own text content rides — and its non-deletable data is exactly two bytes, of which the first is the occurrence byte: bit 0 "does occur on odd pages", bit 1 "does occur on even pages" (bit 2 states a vertical-text watermark and bits 3/4 watermark display space, none of which the shared furniture model asks about).
 //
 // https://github.com/OneWingedShark/WordPerfect/blob/master/doc/SDK_Help/FileFormats/WPFF_D6-HeaderFooter.htm
 
 export const HEADER_FOOTER_GROUP = 0xd6;
 
-// The SDK's own subfunction table: "0 Header A, 1 Header B, 2 Footer A, 3 Footer B, 4 Watermark A, 5 Watermark B". The A/B pair is WordPerfect's own two-slot-per-kind mechanism -- a page shows Header A until a Header B supersedes it -- which the shared furniture vocabulary does not carry: a slot holds one flow, and a second function claiming a slot a first already fills is reported rather than silently overwritten.
+// The SDK's own subfunction table: "0 Header A, 1 Header B, 2 Footer A, 3 Footer B, 4 Watermark A, 5 Watermark B". The A/B pair is WordPerfect's own two-slot-per-kind mechanism — a page shows Header A until a Header B supersedes it — which the shared furniture vocabulary does not carry: a slot holds one flow, and a second function claiming a slot a first already fills is reported rather than silently overwritten.
 export const HEADER_A = 0x00;
 export const HEADER_B = 0x01;
 export const FOOTER_A = 0x02;
@@ -18,7 +18,7 @@ export const WATERMARK_B = 0x05;
 const OCCURS_ON_ODD = 1 << 0;
 const OCCURS_ON_EVEN = 1 << 1;
 
-// What one D6 function claims: which furniture kind it is, and which of the shared vocabulary's slots its occurrence bits narrow onto. Odd-only is the default slot (the ordinary single-header document states exactly that); even-only is the even slot; both parities is the default slot too, since a flow occurring on every page IS the default. A watermark claims through the identical narrowing -- it is page furniture with a parity, just not a header or a footer -- and lands in ContentSection.watermarks rather than the headers/footers pair. A function claiming neither parity is suppressed in its own file and claims nothing here.
+// What one D6 function claims: which furniture kind it is, and which of the shared vocabulary's slots its occurrence bits narrow onto. Odd-only is the default slot (the ordinary single-header document states exactly that); even-only is the even slot; both parities is the default slot too, since a flow occurring on every page IS the default. A watermark claims through the identical narrowing — it is page furniture with a parity, just not a header or a footer — and lands in ContentSection.watermarks rather than the headers/footers pair. A function claiming neither parity is suppressed in its own file and claims nothing here.
 export interface WpdFurnitureClaim {
   readonly kind: "header" | "footer" | "watermark";
   readonly slot: "default" | "even";

@@ -40,7 +40,7 @@ export interface MarkdownPreviewProps {
   error?: unknown;
 }
 
-// Renders a markdown-sourced ContentDocument natively as HTML instead of round-tripping it through the PDF pipeline the way PdfPreview does for every other format -- markdown isn't paginated, so a print-layout PDF is a poor fit for it, and it sidesteps documents.js's own markdownToPdf entirely (see ExaDev/documents#1). The paragraph styleId/list.numId values consumed here are the small convention src/rpc/router.ts's normalizeMarkdownStyling rewrites markdown-codec's own private ones into -- never the raw "Heading1"/"md1:ordered@1" strings themselves, so this component has no dependency on markdown-codec's internal string formats.
+// Renders a markdown-sourced ContentDocument natively as HTML instead of round-tripping it through the PDF pipeline the way PdfPreview does for every other format — markdown isn't paginated, so a print-layout PDF is a poor fit for it, and it sidesteps documents.js's own markdownToPdf entirely (see ExaDev/documents#1). The paragraph styleId/list.numId values consumed here are the small convention src/rpc/router.ts's normalizeMarkdownStyling rewrites markdown-codec's own private ones into — never the raw "Heading1"/"md1:ordered@1" strings themselves, so this component has no dependency on markdown-codec's internal string formats.
 export function MarkdownPreview({
   label,
   format,
@@ -84,7 +84,7 @@ export function MarkdownPreview({
   );
 }
 
-// markdown-codec lowers `inline code` to a run carrying an explicit fontFamily -- the only markdown construct that sets one -- so for markdown-sourced content, any run with fontFamily is inline code.
+// markdown-codec lowers `inline code` to a run carrying an explicit fontFamily — the only markdown construct that sets one — so for markdown-sourced content, any run with fontFamily is inline code.
 function renderRunsMd(runs: Parameters<typeof renderRuns>[0]): ReactNode {
   return renderRuns(runs, { treatFontFamilyAsInlineCode: true });
 }
@@ -143,7 +143,7 @@ function renderParagraph(paragraph: ContentParagraph): ReactNode {
   return <p className={paragraphStyle}>{renderRunsMd(paragraph.runs)}</p>;
 }
 
-// Groups consecutive same-type siblings into one <ul>/<ol> -- almost always exactly one group per call (a whole nesting level is normally uniformly ordered or bullet), but a genuine type change between adjacent siblings at the same level renders as two adjacent lists, matching how a browser would render the equivalent raw HTML.
+// Groups consecutive same-type siblings into one <ul>/<ol> — almost always exactly one group per call (a whole nesting level is normally uniformly ordered or bullet), but a genuine type change between adjacent siblings at the same level renders as two adjacent lists, matching how a browser would render the equivalent raw HTML.
 function renderListNodes(nodes: ReturnType<typeof buildListForest>): ReactNode {
   const groups: { ordered: boolean; nodes: typeof nodes }[] = [];
   for (const node of nodes) {

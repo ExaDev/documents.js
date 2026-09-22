@@ -3,7 +3,7 @@ import type { Package, Part } from "../../model/package";
 import { el, txt } from "../../xml/fragment";
 import { readXlsxContent } from "./content";
 
-// Cell-comment fixtures are synthetic el/txt packages (content.test.ts's own convention for markup its real fixtures never exercise): the comment parts' producers are genuinely varied -- Excel's legacy rich-run notes, openpyxl's plain-text notes, Excel 365's unprefixed [MS-XLSX] threads, older producers' prefixed dCreation/displayName vocabulary -- and LibreOffice, which authors the real fixtures, only ever writes the legacy spelling. Every package's worksheet part carries its own .rels naming the comment parts, the one and only address comments are ever resolved through.
+// Cell-comment fixtures are synthetic el/txt packages (content.test.ts's own convention for markup its real fixtures never exercise): the comment parts' producers are genuinely varied — Excel's legacy rich-run notes, openpyxl's plain-text notes, Excel 365's unprefixed [MS-XLSX] threads, older producers' prefixed dCreation/displayName vocabulary — and LibreOffice, which authors the real fixtures, only ever writes the legacy spelling. Every package's worksheet part carries its own .rels naming the comment parts, the one and only address comments are ever resolved through.
 
 const REL_WORKSHEET =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
@@ -93,7 +93,7 @@ function findCell(
   return cell;
 }
 
-describe("readXlsxContent: cell comments -- legacy notes (xl/comments{N}.xml, synthetic packages)", () => {
+describe("readXlsxContent: cell comments — legacy notes (xl/comments{N}.xml, synthetic packages)", () => {
   it("reads a legacy note through the sheet rels: rich-text runs concatenated, authorId resolved through the authors list, and an un-annotated sibling cell left with no comment field at all", () => {
     const cells = readCommentedCells(
       [
@@ -164,7 +164,7 @@ describe("readXlsxContent: cell comments -- legacy notes (xl/comments{N}.xml, sy
   });
 
   it("builds a legacy note's text strictly from its <t> runs, not the whole text element's own concatenated content", () => {
-    // "Ignored stray text" sits directly under <text>, outside any <r><t>; only "Kept" -- the content of the actual <t> run -- should survive. textContent(text) would concatenate both, so a correct result here proves the code walks <t> elements specifically rather than falling back to the whole subtree's text.
+    // "Ignored stray text" sits directly under <text>, outside any <r><t>; only "Kept" — the content of the actual <t> run — should survive. textContent(text) would concatenate both, so a correct result here proves the code walks <t> elements specifically rather than falling back to the whole subtree's text.
     const cells = readCommentedCells(
       [
         el("Relationship", {
@@ -266,7 +266,7 @@ describe("readXlsxContent: cell comments -- legacy notes (xl/comments{N}.xml, sy
     expect(findCell(cells, 0, 1).comment).toBeUndefined();
   });
 
-  it("materialises an empty cell for a note anchored to a cell the sheetData never wrote -- the same policy that keeps an <f>-only formula cell", () => {
+  it("materialises an empty cell for a note anchored to a cell the sheetData never wrote — the same policy that keeps an <f>-only formula cell", () => {
     const cells = readCommentedCells(
       [
         el("Relationship", {
@@ -300,9 +300,9 @@ describe("readXlsxContent: cell comments -- legacy notes (xl/comments{N}.xml, sy
   });
 });
 
-describe("readXlsxContent: cell comments -- threaded comments ([MS-XLSX], synthetic packages)", () => {
+describe("readXlsxContent: cell comments — threaded comments ([MS-XLSX], synthetic packages)", () => {
   it("reads an Excel-365 thread in Excel's unprefixed spelling: persons-part display names, dT carried verbatim, replies flattened in document order", () => {
-    // The persons part stores ids bare and lower case while the thread's personIds are braced and upper case -- the normalisation both sides of the lookup need to meet.
+    // The persons part stores ids bare and lower case while the thread's personIds are braced and upper case — the normalisation both sides of the lookup need to meet.
     const cells = readCommentedCells(
       [
         el("Relationship", {
@@ -437,7 +437,7 @@ describe("readXlsxContent: cell comments -- threaded comments ([MS-XLSX], synthe
     });
   });
 
-  it("reads a cell carrying BOTH a legacy note and a thread as the thread -- the strictly richer mechanism, and the one Excel 365 writes the legacy copy of every thread for down-level readers to see", () => {
+  it("reads a cell carrying BOTH a legacy note and a thread as the thread — the strictly richer mechanism, and the one Excel 365 writes the legacy copy of every thread for down-level readers to see", () => {
     const cells = readCommentedCells(
       [
         el("Relationship", {
@@ -495,7 +495,7 @@ describe("readXlsxContent: cell comments -- threaded comments ([MS-XLSX], synthe
     });
   });
 
-  it("decodes an XML entity in an inline displayName attribute, not just in <text> element content (regression: attr() returns the raw, still-encoded attribute value -- only textContent() decodes automatically -- so a name like this genuinely arrives as literal '&amp;' from a real parser and needs decodeEntities applied explicitly, exactly as resolveRelationships already does for a relationship Target)", () => {
+  it("decodes an XML entity in an inline displayName attribute, not just in <text> element content (regression: attr() returns the raw, still-encoded attribute value — only textContent() decodes automatically — so a name like this genuinely arrives as literal '&amp;' from a real parser and needs decodeEntities applied explicitly, exactly as resolveRelationships already does for a relationship Target)", () => {
     const cells = readCommentedCells(
       [
         el("Relationship", {
@@ -526,7 +526,7 @@ describe("readXlsxContent: cell comments -- threaded comments ([MS-XLSX], synthe
   });
 
   it("matches threadedComment children by local name only, ignoring a same-shaped sibling element with a different tag", () => {
-    // "note" carries a valid ref/text shape of its own -- if childrenWithLocalName matched on element type alone, it would be read as a second thread and wrongly attach a comment to B1.
+    // "note" carries a valid ref/text shape of its own — if childrenWithLocalName matched on element type alone, it would be read as a second thread and wrongly attach a comment to B1.
     const cells = readCommentedCells(
       [
         el("Relationship", {
@@ -672,7 +672,7 @@ describe("readXlsxContent: cell comments -- threaded comments ([MS-XLSX], synthe
   });
 });
 
-describe("readXlsxContent: cell comments -- part resolution and tolerance boundaries (synthetic packages)", () => {
+describe("readXlsxContent: cell comments — part resolution and tolerance boundaries (synthetic packages)", () => {
   it("resolves comment parts through the worksheet rels, never by part name: a canonical-looking xl/comments1.xml no rel points at stays unread", () => {
     const cells = readCommentedCells(
       [

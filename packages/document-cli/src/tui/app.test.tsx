@@ -10,7 +10,7 @@ import {
 import { App } from "./app.js";
 import { settle, waitForFrame } from "./test-support.js";
 
-// Exercises the real App/AppShell wiring end to end (not a per-screen harness that only routes the screens under test) -- opening a real docx fixture from disk via `startPath`, the same way `document-cli tui <path>` opens one, so this proves the actual global 'm' key handler in app.tsx's own AppShell (not a reimplementation of it) pushes the metadata screen and that it renders real values read from the open document.
+// Exercises the real App/AppShell wiring end to end (not a per-screen harness that only routes the screens under test) — opening a real docx fixture from disk via `startPath`, the same way `document-cli tui <path>` opens one, so this proves the actual global 'm' key handler in app.tsx's own AppShell (not a reimplementation of it) pushes the metadata screen and that it renders real values read from the open document.
 
 let workspace: string;
 let fixturePath: string;

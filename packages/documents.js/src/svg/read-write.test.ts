@@ -17,7 +17,7 @@ import {
   SvgUnsupportedEncodingError,
 } from "./text";
 
-// The read tests below want an identity root map -- width/height in pt equal to the viewBox extents -- so every user-unit coordinate lands in the page-point space unchanged and assertions read the SVG's own numbers back.
+// The read tests below want an identity root map — width/height in pt equal to the viewBox extents — so every user-unit coordinate lands in the page-point space unchanged and assertions read the SVG's own numbers back.
 const IDENTITY_ROOT =
   '<svg xmlns="http://www.w3.org/2000/svg" width="100pt" height="60pt" viewBox="0 0 100 60">';
 const svg = (inner: string, root = IDENTITY_ROOT): string =>
@@ -280,7 +280,7 @@ describe("readSvgContent root geometry", () => {
 });
 
 describe("readSvgContent paint", () => {
-  it("paints an absent fill black and an absent stroke not at all -- SVG's own defaults", () => {
+  it("paints an absent fill black and an absent stroke not at all — SVG's own defaults", () => {
     const vectors = readVectors(
       svg('<rect x="1" y="1" width="5" height="5"/>'),
     );
@@ -372,7 +372,7 @@ describe("readSvgContent transforms", () => {
   });
 
   it("honours a transform attribute on the shape element itself, not only on groups", () => {
-    // The write side emits rotation exactly this way -- a transform directly on the rect -- so the reader must apply an element's own transform for its own output to round trip. The rotation comes back through atan2, so 30 degrees carries double-precision dust, not the literal 30.
+    // The write side emits rotation exactly this way — a transform directly on the rect — so the reader must apply an element's own transform for its own output to round trip. The rotation comes back through atan2, so 30 degrees carries double-precision dust, not the literal 30.
     const vectors = readVectors(
       svg(
         '<rect x="10" y="20" width="30" height="10" transform="rotate(30 25 25)"/>',
@@ -409,7 +409,7 @@ describe("readSvgContent diagnostics", () => {
       diagnostics,
     );
     const codes = diagnostics.map((diagnostic) => diagnostic.code);
-    // A defs block and its gradient definition paint nothing by design -- only the element that references the gradient fires gradient-unsupported, exactly once.
+    // A defs block and its gradient definition paint nothing by design — only the element that references the gradient fires gradient-unsupported, exactly once.
     expect(
       codes.filter((code) => code === "svg/gradient-unsupported"),
     ).toHaveLength(1);
@@ -479,7 +479,7 @@ describe("buildSvgText", () => {
     expect(text).toContain(
       '<rect x="10" y="20" width="30" height="40" fill="#ff0000"/>',
     );
-    // An ellipse without a fill writes fill="none", since an absent fill paints nothing rather than SVG's black default -- which would change the drawing's appearance.
+    // An ellipse without a fill writes fill="none", since an absent fill paints nothing rather than SVG's black default — which would change the drawing's appearance.
     expect(text).toContain(
       '<ellipse cx="25" cy="40" rx="15" ry="20" fill="none"/>',
     );

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readGuid, writeGuid } from "./wire";
 
-// Direct coverage for readGuid/writeGuid (src/oleps/wire.ts), isolated from ./read.ts and ./write.ts: those two only ever call writeGuid immediately before overwriting the very next field (Offset0), so a writer that wrote one byte past its own 16-byte Data4 region would have that overwrite silently erased by the following legitimate write -- never observable through a full writePropertySetStream/readPropertySetStream round trip. Passing writeGuid a DataView sized to exactly the GUID's own 16 bytes makes that off-by-one byte write land outside the view entirely, where DataView's own bounds check throws rather than silently clobbering an unrelated byte.
+// Direct coverage for readGuid/writeGuid (src/oleps/wire.ts), isolated from ./read.ts and ./write.ts: those two only ever call writeGuid immediately before overwriting the very next field (Offset0), so a writer that wrote one byte past its own 16-byte Data4 region would have that overwrite silently erased by the following legitimate write — never observable through a full writePropertySetStream/readPropertySetStream round trip. Passing writeGuid a DataView sized to exactly the GUID's own 16 bytes makes that off-by-one byte write land outside the view entirely, where DataView's own bounds check throws rather than silently clobbering an unrelated byte.
 
 describe("writeGuid / readGuid", () => {
   it("round-trips a GUID with a distinct byte in every position", () => {

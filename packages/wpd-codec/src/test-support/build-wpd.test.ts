@@ -8,7 +8,7 @@ import {
   variableFunction,
 } from "./build-wpd";
 
-// Direct unit coverage of the synthetic-file builder itself: read.test.ts, read-structure.test.ts, and every stream-level test file consume buildWpdFile/variableFunction/eolFunction constantly, but always for the resulting document behaviour, never for the builder's own byte layout -- so a wrong offset or a dropped default here could quietly build a still-plausible file (as several Stryker survivors on this file showed).
+// Direct unit coverage of the synthetic-file builder itself: read.test.ts, read-structure.test.ts, and every stream-level test file consume buildWpdFile/variableFunction/eolFunction constantly, but always for the resulting document behaviour, never for the builder's own byte layout — so a wrong offset or a dropped default here could quietly build a still-plausible file (as several Stryker survivors on this file showed).
 describe("buildWpdFile", () => {
   it("stamps a file header whose file size names the buffer's own true length", () => {
     const documentArea = [1, 2, 3, 4, 5];
@@ -20,7 +20,7 @@ describe("buildWpdFile", () => {
 
   it("stamps the extended header's documented reserved long as 5", () => {
     const bytes = buildWpdFile([1, 2, 3]);
-    // Offset 16: "the documented reserved long at the head of the extended header". readFileHeader does not surface this field (the reader ignores everything but the file size), so it is read back directly here -- the only way to observe the builder actually wrote it.
+    // Offset 16: "the documented reserved long at the head of the extended header". readFileHeader does not surface this field (the reader ignores everything but the file size), so it is read back directly here — the only way to observe the builder actually wrote it.
     expect(uint32At(bytes, 16)).toBe(5);
   });
 });

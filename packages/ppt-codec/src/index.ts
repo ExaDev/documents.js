@@ -1,4 +1,4 @@
-// The PowerPoint 97-2003 binary file format ([MS-PPT]) reader and writer for the documents.js family: the compound-file stream layer, the record-tree walk over the PowerPoint Document stream, and the mapping of slide text and geometry onto document-schema.js's shared presentation content model. Worker-isomorphic -- no node:*, no Buffer -- so the same code runs under Node and inside a Cloudflare Workers isolate.
+// The PowerPoint 97-2003 binary file format ([MS-PPT]) reader and writer for the documents.js family: the compound-file stream layer, the record-tree walk over the PowerPoint Document stream, and the mapping of slide text and geometry onto document-schema.js's shared presentation content model. Worker-isomorphic — no node:*, no Buffer — so the same code runs under Node and inside a Cloudflare Workers isolate.
 // bytesToBase64/base64ToBytes were this package's own copy of the family-wide base64 helpers before byte-codec held one for everybody; they stay on this barrel because they have always been part of its published surface.
 export { base64ToBytes, bytesToBase64 } from "byte-codec";
 export * from "./content";

@@ -13,21 +13,21 @@ export default tseslint.config(
       "@typescript-eslint/strict-boolean-expressions",
       "@typescript-eslint/switch-exhaustiveness-check",
     ],
-    // Off: with noUncheckedIndexedAccess on, every indexed read is typed as possibly-undefined, so this rule fires on array and byte-buffer indexing whose bound the surrounding code has already established -- a loop condition, a prior length check, or a fixture the test itself just built. None of the sites here is a value that can actually be absent. Tracked for a per-package decision on whether any of them is genuine; see the burn-down epic.
+    // Off: with noUncheckedIndexedAccess on, every indexed read is typed as possibly-undefined, so this rule fires on array and byte-buffer indexing whose bound the surrounding code has already established — a loop condition, a prior length check, or a fixture the test itself just built. None of the sites here is a value that can actually be absent. Tracked for a per-package decision on whether any of them is genuine; see the burn-down epic.
     nonNullAssertion: "off",
-    // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why -- this package's own TUI state reducers and rendering helpers genuinely mutate several array/object parameters in place. Tracked for burn-down.
+    // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why — this package's own TUI state reducers and rendering helpers genuinely mutate several array/object parameters in place. Tracked for burn-down.
     preferReadonlyParams: "off",
     // One program covering src and the config files alike, so there is no second tsconfig to route anything to.
     projects: ["./tsconfig.json"],
     // Runs under Node as a published binary, so Worker isomorphism does not apply.
     isomorphic: false,
-    // dist-sea/ is this package's own SEA (single-executable application) bundle output -- a multi-megabyte, fully-dependency-inlined .cjs file (see tsdown.sea.shared.ts), not source.
+    // dist-sea/ is this package's own SEA (single-executable application) bundle output — a multi-megabyte, fully-dependency-inlined .cjs file (see tsdown.sea.shared.ts), not source.
     additionalIgnores: ["dist-sea"],
   }),
   {
-    // barrel-policy describes a library: one barrel at src/index.ts, named in the exports map, and re-exports nowhere else. That is right for this package's published surface and stays enforced there. src/tui/ is not that -- it is an Ink application with a screen router, whose deliberate convention is one `<format>/index.tsx` module per document format re-exporting every screen kind for that format, including the format-agnostic screens that physically live under docx/. The router imports one consistent module per format instead of reaching into each screen file, which is the point.
+    // barrel-policy describes a library: one barrel at src/index.ts, named in the exports map, and re-exports nowhere else. That is right for this package's published surface and stays enforced there. src/tui/ is not that — it is an Ink application with a screen router, whose deliberate convention is one `<format>/index.tsx` module per document format re-exporting every screen kind for that format, including the format-agnostic screens that physically live under docx/. The router imports one consistent module per format instead of reaching into each screen file, which is the point.
     //
-    // No mode fits: 'single' reports 28, 'siblings' 42 (it additionally rejects every cross-format re-export, which is exactly the hub's purpose), 'banned' 34. The conflict is with the rule's subject matter rather than with a fixable authoring choice, so the subtree is exempt rather than the rule weakened for the package -- mirroring how the web UI exempts its TanStack Router routes.
+    // No mode fits: 'single' reports 28, 'siblings' 42 (it additionally rejects every cross-format re-export, which is exactly the hub's purpose), 'banned' 34. The conflict is with the rule's subject matter rather than with a fixable authoring choice, so the subtree is exempt rather than the rule weakened for the package — mirroring how the web UI exempts its TanStack Router routes.
     files: ["src/tui/**"],
     rules: { "exadev/barrel-policy": "off" },
   },

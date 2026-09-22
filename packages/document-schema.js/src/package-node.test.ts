@@ -64,7 +64,7 @@ function embeddedObject(): ContentEmbeddedObject {
   };
 }
 
-// A wordprocessing section group exercising every section-child position at once: a heading group with a nested deeper heading, a list group two levels deep, and bare block leaves (a paragraph, a table, an image, a page break) -- plus a style ref on the outer heading, the one place a ref may legally sit.
+// A wordprocessing section group exercising every section-child position at once: a heading group with a nested deeper heading, a list group two levels deep, and bare block leaves (a paragraph, a table, an image, a page break) — plus a style ref on the outer heading, the one place a ref may legally sit.
 function sectionGroup(): SectionGroupNode {
   const heading: HeadingGroupNode = {
     node: { kind: "paragraph", headingLevel: 1, runs: [run("Heading")] },
@@ -296,7 +296,7 @@ describe("construct groups wrap block extents wherever block flow runs", () => {
     expect(SectionGroupSchema.safeParse(section).success).toBe(true);
   });
 
-  it("accepts a docx TOC field whose cached result is the extent it contains -- the kind's extent-as-containment shape", () => {
+  it("accepts a docx TOC field whose cached result is the extent it contains — the kind's extent-as-containment shape", () => {
     const field: SectionConstructGroupNode = {
       node: { kind: "field", instruction: 'TOC \\o "1-3" \\h' },
       children: [
@@ -336,7 +336,7 @@ describe("construct groups wrap block extents wherever block flow runs", () => {
     expect(SectionGroupSchema.safeParse(section).success).toBe(true);
   });
 
-  it("accepts nested constructs -- a tracked deletion inside a content control inside a division", () => {
+  it("accepts nested constructs — a tracked deletion inside a content control inside a division", () => {
     const division: SectionConstructGroupNode = {
       node: {
         kind: "division",
@@ -446,9 +446,9 @@ describe("construct groups wrap block extents wherever block flow runs", () => {
   });
 });
 
-// Pins the ordering invariant in package-node.ts's group guards: each tests its own node payload before walking its children, so at most one arm of a child predicate ever descends. Were a guard to walk first and reject on the node afterwards, every arm would pay for the whole subtree before failing and validating one tree would cost (arms per flow) to the power of its depth -- at the depth below, that is 3^30 predicate calls, so this test fails by timing out rather than by assertion if the order is ever reversed.
+// Pins the ordering invariant in package-node.ts's group guards: each tests its own node payload before walking its children, so at most one arm of a child predicate ever descends. Were a guard to walk first and reject on the node afterwards, every arm would pay for the whole subtree before failing and validating one tree would cost (arms per flow) to the power of its depth — at the depth below, that is 3^30 predicate calls, so this test fails by timing out rather than by assertion if the order is ever reversed.
 describe("validating a deeply nested tree stays linear in its size", () => {
-  // Thirty construct groups deep, with the only thing that decides the verdict sitting at the very bottom -- the case that forces the whole subtree to be walked before any answer is possible.
+  // Thirty construct groups deep, with the only thing that decides the verdict sitting at the very bottom — the case that forces the whole subtree to be walked before any answer is possible.
   function nestConstructs(depth: number, innermostLeaf: unknown): unknown {
     let node: unknown = {
       node: { kind: "division", name: "innermost" },
@@ -483,7 +483,7 @@ describe("validating a deeply nested tree stays linear in its size", () => {
 });
 
 describe("construct groups reject the positions and shapes they are not legal in", () => {
-  it("rejects a heading group inside a shape-scoped construct -- a shape's flow carries no heading hierarchy", () => {
+  it("rejects a heading group inside a shape-scoped construct — a shape's flow carries no heading hierarchy", () => {
     const broken = {
       node: { kind: "contentControl", controlType: "richText" },
       children: [
@@ -497,7 +497,7 @@ describe("construct groups reject the positions and shapes they are not legal in
     expect(SectionConstructGroupSchema.safeParse(broken).success).toBe(true);
   });
 
-  it("rejects a construct group as a direct child of a slide, a sheet, or a drawing page -- those hold containers and leaves, not block flow", () => {
+  it("rejects a construct group as a direct child of a slide, a sheet, or a drawing page — those hold containers and leaves, not block flow", () => {
     const construct = {
       node: { kind: "anchor", anchorType: "bookmark", name: "b1" },
       children: [],
@@ -520,7 +520,7 @@ describe("construct groups reject the positions and shapes they are not legal in
     ).toBe(false);
   });
 
-  it("rejects a malformed descriptor at the node position -- an unknown control type does not become a bare wrapper", () => {
+  it("rejects a malformed descriptor at the node position — an unknown control type does not become a bare wrapper", () => {
     const broken = {
       node: { kind: "contentControl", controlType: "w:sdt" },
       children: [],
@@ -538,7 +538,7 @@ describe("construct groups reject the positions and shapes they are not legal in
     expect(SectionConstructGroupSchema.safeParse(broken).success).toBe(false);
   });
 
-  it("rejects a construct descriptor posed as a bare leaf -- a descriptor is a node payload, never a block", () => {
+  it("rejects a construct descriptor posed as a bare leaf — a descriptor is a node payload, never a block", () => {
     expect(
       isTreeLeaf({ kind: "anchor", anchorType: "bookmark", name: "b1" }),
     ).toBe(false);
@@ -619,7 +619,7 @@ describe("construct boundary markers are not tree leaves", () => {
     }
   });
 
-  it("rejects a marker inside a construct extent too -- a construct group is where the pair would have been promoted to", () => {
+  it("rejects a marker inside a construct extent too — a construct group is where the pair would have been promoted to", () => {
     expect(
       SectionConstructGroupSchema.safeParse({
         node: { kind: "division", name: "Chapter1" },
@@ -685,12 +685,12 @@ describe("the package tree rejects near-misses", () => {
     expect(SectionGroupSchema.safeParse(broken).success).toBe(false);
   });
 
-  it("rejects a raw flat container posed as a descriptor -- a section node missing its kind tag", () => {
+  it("rejects a raw flat container posed as a descriptor — a section node missing its kind tag", () => {
     const broken = { node: { pageSize: PAGE, margins: MARGINS }, children: [] };
     expect(SectionGroupSchema.safeParse(broken).success).toBe(false);
   });
 
-  it("rejects a shape descriptor still carrying its blocks -- the omitted array is banned, not merely absent", () => {
+  it("rejects a shape descriptor still carrying its blocks — the omitted array is banned, not merely absent", () => {
     const broken = {
       node: {
         frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
@@ -705,7 +705,7 @@ describe("the package tree rejects near-misses", () => {
     expect(ShapeGroupSchema.safeParse(broken).success).toBe(false);
   });
 
-  it("rejects a slide group with a paragraph leaf child -- a slide holds shape groups only", () => {
+  it("rejects a slide group with a paragraph leaf child — a slide holds shape groups only", () => {
     const slide = slideGroup();
     const broken = {
       ...slide,
@@ -717,7 +717,7 @@ describe("the package tree rejects near-misses", () => {
     expect(SlideGroupSchema.safeParse(broken).success).toBe(false);
   });
 
-  it("rejects a sheet group with a block-flow child -- a sheet holds images and embedded documents only", () => {
+  it("rejects a sheet group with a block-flow child — a sheet holds images and embedded documents only", () => {
     const sheet = sheetGroup();
     const broken = {
       ...sheet,
@@ -729,7 +729,7 @@ describe("the package tree rejects near-misses", () => {
     expect(SheetGroupSchema.safeParse(broken).success).toBe(false);
   });
 
-  it("rejects a heading group under a list group -- heading never appears below a list", () => {
+  it("rejects a heading group under a list group — heading never appears below a list", () => {
     const broken = {
       node: { kind: "paragraph", list: { level: 0 }, runs: [run("Item")] },
       children: [
@@ -773,7 +773,7 @@ describe("the package tree rejects near-misses", () => {
     expect(SectionGroupSchema.safeParse(broken).success).toBe(false);
   });
 
-  it("rejects a style ref on a bare leaf at a child position, in every leaf family -- refs sit on group wrappers only, so a leaf-position ref fails loudly instead of parsing inert", () => {
+  it("rejects a style ref on a bare leaf at a child position, in every leaf family — refs sit on group wrappers only, so a leaf-position ref fails loudly instead of parsing inert", () => {
     const section = sectionGroup();
     const withLeafRef = {
       ...section,
@@ -879,7 +879,7 @@ describe("a group wrapper's own `node` must be a plain, non-null, non-array reco
 });
 
 describe("every group guard rejects a wrapper VALUE that isn't itself a plain record, before ever reading its own .node", () => {
-  // Each guard's own top-level isRecord(value) check runs before value.node is ever read -- for null/undefined specifically, skipping straight to `value.node` would throw a TypeError rather than return false, so this is the one guard clause a malformed non-object input actually depends on for a clean `false` rather than a crash. A node-only test (the describe block above) can never reach this: SectionDescriptorSchema.safeParse(value.node) already requires value.node to be a real object to succeed at all, so by the time isGroupWrapper's own isRecord(value.node) check would run, value.node is already guaranteed to satisfy it.
+  // Each guard's own top-level isRecord(value) check runs before value.node is ever read — for null/undefined specifically, skipping straight to `value.node` would throw a TypeError rather than return false, so this is the one guard clause a malformed non-object input actually depends on for a clean `false` rather than a crash. A node-only test (the describe block above) can never reach this: SectionDescriptorSchema.safeParse(value.node) already requires value.node to be a real object to succeed at all, so by the time isGroupWrapper's own isRecord(value.node) check would run, value.node is already guaranteed to satisfy it.
   it("rejects null and undefined without throwing", () => {
     expect(() => SectionGroupSchema.safeParse(null)).not.toThrow();
     expect(SectionGroupSchema.safeParse(null).success).toBe(false);

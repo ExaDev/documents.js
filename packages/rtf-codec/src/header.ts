@@ -2,9 +2,9 @@
 //
 // <header> is \rtf1 \fbidis? <character set> <from>? <deffont> <deflang> <fonttbl>? <filetbl>? <colortbl>? <stylesheet>? <stylerestrictions>? <listtables>? <revtbl>? <rsidtable>? <mathprops>? <generator>? (RTF 1.9.1, "Header"). Each table is its own grammar rather than a variation on one, which is why this module is a parser per table rather than a single generic one.
 //
-// It is read in its own pass over the whole token stream, ahead of the body pass in src/read.ts, rather than inline with the body. The specification does require a property to "be defined before being referenced" -- "The font table must precede any reference to a font", "The style sheet must occur before any style usage" -- so an inline single pass would in principle work on conforming input. A separate pass is used anyway for two reasons: it makes the body reader's own state machine carry no header-table cases at all (the tables are already resolved by the time it starts), and it makes the reader correct on the real-world producer that emits a table late, which the specification's own "RTF readers should be robust enough to handle some minor variations" invites. The cost is one extra linear walk.
+// It is read in its own pass over the whole token stream, ahead of the body pass in src/read.ts, rather than inline with the body. The specification does require a property to "be defined before being referenced" — "The font table must precede any reference to a font", "The style sheet must occur before any style usage" — so an inline single pass would in principle work on conforming input. A separate pass is used anyway for two reasons: it makes the body reader's own state machine carry no header-table cases at all (the tables are already resolved by the time it starts), and it makes the reader correct on the real-world producer that emits a table late, which the specification's own "RTF readers should be robust enough to handle some minor variations" invites. The cost is one extra linear walk.
 //
-// What each table is read FOR is narrower than what each table CONTAINS, deliberately: this is a reader targeting ContentDocument, not a general RTF object model. The font table is read for face names and per-font code pages, because a run's bytes decode through its font's page; the colour table for RGB, because a run's colour is an index into it; the style sheet for style names and heading levels, because ContentParagraph carries styleId and headingLevel; the list tables for each list's own level number formats, because a paragraph's \lsN alone cannot say whether its list is bulleted or numbered. Everything else each table carries -- PANOSE data, embedded font payloads, theme colour references, key codes, level text templates -- is read past. Those omissions are listed in the package README rather than each being commented here.
+// What each table is read FOR is narrower than what each table CONTAINS, deliberately: this is a reader targeting ContentDocument, not a general RTF object model. The font table is read for face names and per-font code pages, because a run's bytes decode through its font's page; the colour table for RGB, because a run's colour is an index into it; the style sheet for style names and heading levels, because ContentParagraph carries styleId and headingLevel; the list tables for each list's own level number formats, because a paragraph's \lsN alone cannot say whether its list is bulleted or numbered. Everything else each table carries — PANOSE data, embedded font payloads, theme colour references, key codes, level text templates — is read past. Those omissions are listed in the package README rather than each being commented here.
 
 import type { Color } from "document-schema.js";
 import type { LayoutMetadata } from "document-schema.js";
@@ -30,7 +30,7 @@ import {
 
 const RGB_MAX = 255;
 
-// The \fontfamily production's own eight keywords, minus their \f prefix -- the value carried through to a font entry so a consumer can substitute sensibly when the exact face is unavailable, which is the whole reason the spec gives for the family existing ("RTF also supports font families so that applications can attempt to intelligently choose fonts if the exact font is not present on the reading system").
+// The \fontfamily production's own eight keywords, minus their \f prefix — the value carried through to a font entry so a consumer can substitute sensibly when the exact face is unavailable, which is the whole reason the spec gives for the family existing ("RTF also supports font families so that applications can attempt to intelligently choose fonts if the exact font is not present on the reading system").
 const FONT_FAMILIES: ReadonlySet<string> = new Set([
   "fnil",
   "froman",
@@ -100,7 +100,7 @@ export interface RtfHeader {
   // Indexed by the \cfN/\cbN value. Index 0 is the "auto" colour the table's own leading semicolon states, which has no RGB and so is undefined rather than black.
   readonly colors: readonly (Color | undefined)[];
   readonly styles: ReadonlyMap<number, RtfStyleEntry>;
-  // Keyed by \lsN -- the list override index a paragraph actually carries -- with the indirection through \listoverride's \listidN to the \list already resolved, so a body reader never sees the two tables separately.
+  // Keyed by \lsN — the list override index a paragraph actually carries — with the indirection through \listoverride's \listidN to the \list already resolved, so a body reader never sees the two tables separately.
   readonly lists: ReadonlyMap<number, RtfListEntry>;
   // The \*\revtbl authors, in table order, which \revauthN and its siblings index into.
   readonly revisionAuthors: readonly string[];
@@ -145,12 +145,12 @@ interface MutablePageGeometry {
   marginBottomTwips: number;
 }
 
-// Shared by every group-skipping loop below: caps a jump target (typically matchingGroupEnd's result, possibly itself already capped to some enclosing boundary for a sub-parser's own use) at boundary - 1, so the loop's own +1 step afterwards always lands at exactly `boundary`, never past it, even for a malformed or unclosed nested group whose real close would otherwise land at or beyond it. This is what lets each of those loops compare its index against the boundary with !== instead of <: an off-by-one mutation of !== (=== in place of it) stops the loop from running at all instead of surviving unobserved, whereas < has an off-by-one variant (<=) that only ever reprocesses the boundary's own already-inert groupEnd token -- see readFontInfo's own loop for that fuller reasoning.
+// Shared by every group-skipping loop below: caps a jump target (typically matchingGroupEnd's result, possibly itself already capped to some enclosing boundary for a sub-parser's own use) at boundary - 1, so the loop's own +1 step afterwards always lands at exactly `boundary`, never past it, even for a malformed or unclosed nested group whose real close would otherwise land at or beyond it. This is what lets each of those loops compare its index against the boundary with !== instead of <: an off-by-one mutation of !== (=== in place of it) stops the loop from running at all instead of surviving unobserved, whereas < has an off-by-one variant (<=) that only ever reprocesses the boundary's own already-inert groupEnd token — see readFontInfo's own loop for that fuller reasoning.
 function capBeforeBoundary(jumpTarget: number, boundary: number): number {
   return Math.min(jumpTarget, boundary - 1);
 }
 
-// Collects a destination's own plain text -- the shape every leaf text production in the header shares (a font's <fontname>, a style's <stylename>, an \info field's value). Control words inside are skipped rather than interpreted, and a nested group is skipped whole: the {\*\falt ...} alternate-name subgroup inside a <fontinfo> is exactly why, since its text is a different font's name and folding it into the face name would corrupt every entry carrying one.
+// Collects a destination's own plain text — the shape every leaf text production in the header shares (a font's <fontname>, a style's <stylename>, an \info field's value). Control words inside are skipped rather than interpreted, and a nested group is skipped whole: the {\*\falt ...} alternate-name subgroup inside a <fontinfo> is exactly why, since its text is a different font's name and folding it into the face name would corrupt every entry carrying one.
 function collectPlainText(
   tokens: readonly RtfToken[],
   start: number,
@@ -165,7 +165,7 @@ function collectPlainText(
     out += decodeCodepageBytes(Uint8Array.from(pending), codepage, sink);
     pending.length = 0;
   };
-  // A nested group's own jump is clamped to (at most) end - 1: index then always lands at end exactly, whether by the ordinary +1 step or by this jump, and never skips past it even for an unclosed nested group -- so !== is exactly equivalent to < here, and unlike <, an off-by-one mutation of it (=== in place of !==) stops the loop from running at all instead of surviving unobserved. See readFontInfo's own identical loop for the full reasoning.
+  // A nested group's own jump is clamped to (at most) end - 1: index then always lands at end exactly, whether by the ordinary +1 step or by this jump, and never skips past it even for an unclosed nested group — so !== is exactly equivalent to < here, and unlike <, an off-by-one mutation of it (=== in place of !==) stops the loop from running at all instead of surviving unobserved. See readFontInfo's own identical loop for the full reasoning.
   for (let index = start; index !== end; index += 1) {
     const token = tokens[index];
     if (token === undefined) break;
@@ -206,7 +206,7 @@ function parseFontTable(
   // The grammar admits a <fontinfo> either braced or bare: '{' \fonttbl (<fontinfo> | ('{' <fontinfo> '}'))+ '}'. Both are handled by treating each brace-delimited child as one entry and, when there is no brace at all, the remaining span as a single entry.
   let index = contentStart;
   let sawBracedEntry = false;
-  // index either advances by exactly 1 or jumps past one entry's own close, clamped to end - 1 so the advance always lands at index === end at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  // index either advances by exactly 1 or jumps past one entry's own close, clamped to end - 1 so the advance always lands at index === end at most — !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
   while (index !== end) {
     const token = tokens[index];
     if (token?.kind !== "groupStart") {
@@ -216,7 +216,7 @@ function parseFontTable(
     sawBracedEntry = true;
     const entryEnd = Math.min(matchingGroupEnd(tokens, index), end);
     readFontInfo(tokens, index + 1, entryEnd, documentCodepage, fonts, sink);
-    // Landing exactly on the entry's own close (never past it, via the same end - 1 clamp every other loop here uses) rather than one past it: the closing brace itself is not a groupStart, so the loop's own top-of-body advance handles stepping past it on the very next iteration -- no separate +1 needed or safe to mutate away.
+    // Landing exactly on the entry's own close (never past it, via the same end - 1 clamp every other loop here uses) rather than one past it: the closing brace itself is not a groupStart, so the loop's own top-of-body advance handles stepping past it on the very next iteration — no separate +1 needed or safe to mutate away.
     index = capBeforeBoundary(entryEnd, end);
   }
   if (!sawBracedEntry) {
@@ -236,7 +236,7 @@ function readFontInfo(
   let family: string | undefined;
   let charsetPage: number | undefined;
   let explicitPage: number | undefined;
-  // No nameStart tracking to skip past these descriptor control words before collecting the font's own name: collectPlainText already silently skips every controlWord token it doesn't specifically handle (only "u" and a nested group get real treatment), so scanning the whole [start, end) range for the name below already ignores \f, \froman/\fswiss/etc, \fcharsetN, \cpgN, \fprqN, and \fbias on its own, with nothing left for a separate start-of-name offset to add. \fprq/\fbias carry no field this reader records at all, so that branch is gone entirely rather than kept only to compute an offset nothing needs. index increments by exactly 1 every iteration and never jumps (unlike parseFontTable's own loop, which lands on matchingGroupEnd's result), so !== is exactly equivalent to < here, and unlike <, an off-by-one mutation of it (=== in place of !==) stops the loop from running at all instead of surviving unobserved -- group.ts's own matchingGroupEnd loop states the identical reasoning.
+  // No nameStart tracking to skip past these descriptor control words before collecting the font's own name: collectPlainText already silently skips every controlWord token it doesn't specifically handle (only "u" and a nested group get real treatment), so scanning the whole [start, end) range for the name below already ignores \f, \froman/\fswiss/etc, \fcharsetN, \cpgN, \fprqN, and \fbias on its own, with nothing left for a separate start-of-name offset to add. \fprq/\fbias carry no field this reader records at all, so that branch is gone entirely rather than kept only to compute an offset nothing needs. index increments by exactly 1 every iteration and never jumps (unlike parseFontTable's own loop, which lands on matchingGroupEnd's result), so !== is exactly equivalent to < here, and unlike <, an off-by-one mutation of it (=== in place of !==) stops the loop from running at all instead of surviving unobserved — group.ts's own matchingGroupEnd loop states the identical reasoning.
   for (let index = start; index !== end; index += 1) {
     const token = tokens[index];
     if (token === undefined) break;
@@ -279,7 +279,7 @@ function parseColorTable(
   end: number,
   colors: (Color | undefined)[],
 ): void {
-  // <colordef> is '\redN? & \greenN? & \blueN? ";"' -- the semicolon is the entry terminator, and an entry with no components at all (the table's own leading ";") is the auto colour.
+  // <colordef> is '\redN? & \greenN? & \blueN? ";"' — the semicolon is the entry terminator, and an entry with no components at all (the table's own leading ";") is the auto colour.
   let red: number | undefined;
   let green: number | undefined;
   let blue: number | undefined;
@@ -297,7 +297,7 @@ function parseColorTable(
     green = undefined;
     blue = undefined;
   };
-  // index increments by exactly 1 every iteration with no jump, so !== is exactly equivalent to < here -- see readFontInfo's own identical loop for the full reasoning.
+  // index increments by exactly 1 every iteration with no jump, so !== is exactly equivalent to < here — see readFontInfo's own identical loop for the full reasoning.
   for (let index = contentStart; index !== end; index += 1) {
     const token = tokens[index];
     if (token === undefined) break;
@@ -325,7 +325,7 @@ function parseStyleSheet(
   styles: Map<number, RtfStyleEntry>,
   sink: RtfDiagnosticSink,
 ): void {
-  // index either advances by exactly 1 or jumps to one entry's own close, clamped to end - 1 so the +1 above always lands at index === end at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  // index either advances by exactly 1 or jumps to one entry's own close, clamped to end - 1 so the +1 above always lands at index === end at most — !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
   for (let index = contentStart; index !== end; index += 1) {
     const token = tokens[index];
     if (token?.kind !== "groupStart") {
@@ -353,8 +353,8 @@ function readStyle(
   // "For <style>, both <styledef> and <stylename> are optional; the default is paragraph style 0."
   let handle = 0;
   let outlineLevel: number | undefined;
-  // The loop below still needs its own groupStart skip, scoping \sN/\outlinelevelN to this style entry's own top level rather than misreading one from inside a nested destination -- but no nameStart tracking alongside it: collectPlainText below already silently skips every controlWord token it doesn't specifically handle, and fully skips a nested group on its own the same way this loop does, so scanning the whole [head.contentStart, end) range for the name ignores \sN/\outlinelevelN and any nested group without a separate start-of-name offset to compute.
-  // A nested group's own jump is clamped to end - 1, so the +1 below always lands at index === end at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  // The loop below still needs its own groupStart skip, scoping \sN/\outlinelevelN to this style entry's own top level rather than misreading one from inside a nested destination — but no nameStart tracking alongside it: collectPlainText below already silently skips every controlWord token it doesn't specifically handle, and fully skips a nested group on its own the same way this loop does, so scanning the whole [head.contentStart, end) range for the name ignores \sN/\outlinelevelN and any nested group without a separate start-of-name offset to compute.
+  // A nested group's own jump is clamped to end - 1, so the +1 below always lands at index === end at most — !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
   for (let index = start + 1; index !== end; index += 1) {
     const token = tokens[index];
     if (token === undefined) break;
@@ -396,7 +396,7 @@ function parseListTable(
   end: number,
   listsById: Map<number, RtfListEntry>,
 ): void {
-  // index either advances by exactly 1 or jumps to one entry's own close, clamped to end - 1 so the +1 above always lands at index === end at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  // index either advances by exactly 1 or jumps to one entry's own close, clamped to end - 1 so the +1 above always lands at index === end at most — !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
   for (let index = contentStart; index !== end; index += 1) {
     const token = tokens[index];
     if (token?.kind !== "groupStart") {
@@ -420,7 +420,7 @@ function readListDefinition(
 ): number | undefined {
   const levels: RtfListLevel[] = [];
   let listId: number | undefined;
-  // A nested group's own jump is clamped to end - 1, so the +1 below always lands at index === end at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  // A nested group's own jump is clamped to end - 1, so the +1 below always lands at index === end at most — !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
   for (let index = start + 1; index !== end; index += 1) {
     const token = tokens[index];
     if (token === undefined) break;
@@ -454,7 +454,7 @@ function readListLevel(
 ): RtfListLevel {
   let numberFormat = 0;
   let startAt = 1;
-  // A nested group's own jump is clamped to end - 1, so the +1 below always lands at index === end at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  // A nested group's own jump is clamped to end - 1, so the +1 below always lands at index === end at most — !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
   for (let index = start + 1; index !== end; index += 1) {
     const token = tokens[index];
     if (token === undefined) break;
@@ -476,14 +476,14 @@ function readListLevel(
 
 // "Each list override contains the \listidN of one of the lists in the List table" and its own \lsN, "The (1-based) index of this \listoverride in the \listoverride table", which paragraphs actually carry. Resolving the indirection here means the body reader deals in \lsN alone.
 //
-// <listoverride> is `'{' \listoverride & \listidN & \listoverridecountN & \lsN <lfolevel>? '}'`, where \listoverridecountN is the "Number of list override levels within this list override (0, 1 or 9)" -- so an override is not merely a pointer at a list: it may restate that list's levels. The <lfolevel> groups are read positionally, the i-th overriding level i, because nothing inside one names the level it applies to.
+// <listoverride> is `'{' \listoverride & \listidN & \listoverridecountN & \lsN <lfolevel>? '}'`, where \listoverridecountN is the "Number of list override levels within this list override (0, 1 or 9)" — so an override is not merely a pointer at a list: it may restate that list's levels. The <lfolevel> groups are read positionally, the i-th overriding level i, because nothing inside one names the level it applies to.
 function parseListOverrideTable(
   tokens: readonly RtfToken[],
   contentStart: number,
   end: number,
   overrides: Map<number, RtfListOverride>,
 ): void {
-  // index either advances by exactly 1 or jumps to one entry's own close, clamped to end - 1 so the +1 above always lands at index === end at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  // index either advances by exactly 1 or jumps to one entry's own close, clamped to end - 1 so the +1 above always lands at index === end at most — !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
   for (let index = contentStart; index !== end; index += 1) {
     const token = tokens[index];
     if (token?.kind !== "groupStart") {
@@ -529,7 +529,7 @@ function readLevelOverride(
 ): RtfListLevelOverride {
   let level: RtfListLevel | undefined;
   let startAt: number | undefined;
-  // A nested group's own jump is clamped to end - 1, so the +1 below always lands at index === end at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  // A nested group's own jump is clamped to end - 1, so the +1 below always lands at index === end at most — !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
   for (let index = start + 1; index !== end; index += 1) {
     const token = tokens[index];
     if (token === undefined) break;
@@ -549,7 +549,7 @@ function readLevelOverride(
       startAt = token.param;
     }
   }
-  // Every consumer (applyListOverride below) reads .level/.startAt by value, never by key presence, so an object that always carries both keys (one or both possibly undefined) is exactly as usable as one that omits an absent field -- and, unlike the conditional-spread it replaces, has no AST node for a boundary mutation to hide behind unobserved.
+  // Every consumer (applyListOverride below) reads .level/.startAt by value, never by key presence, so an object that always carries both keys (one or both possibly undefined) is exactly as usable as one that omits an absent field — and, unlike the conditional-spread it replaces, has no AST node for a boundary mutation to hide behind unobserved.
   return { level, startAt };
 }
 
@@ -572,9 +572,9 @@ function applyListOverride(
   return { levels };
 }
 
-// "\*\revtbl -- This group consists of subgroups that each identify the author of a revision in the document, as in {Author1;}" (RTF 1.9.1, "Revision Marks"). Read in table order, because \revauthN and its siblings are each "Index into revision table. The content of the Nth group in the revision table is considered to be the author of that revision."
+// "\*\revtbl — This group consists of subgroups that each identify the author of a revision in the document, as in {Author1;}" (RTF 1.9.1, "Revision Marks"). Read in table order, because \revauthN and its siblings are each "Index into revision table. The content of the Nth group in the revision table is considered to be the author of that revision."
 //
-// The index is read 0-based. The spec's own "Nth group" wording does not say which base it means, and neither source consulted settles it -- but the table's conventional first entry is the "Unknown" placeholder that no real \revauthN names, which only sits at an index a document reaches under the 0-based reading. An index naming no entry produces no author at all rather than a wrong one (see src/constructs.ts), so the failure mode of the ambiguity is an absent name, never a misattributed change.
+// The index is read 0-based. The spec's own "Nth group" wording does not say which base it means, and neither source consulted settles it — but the table's conventional first entry is the "Unknown" placeholder that no real \revauthN names, which only sits at an index a document reaches under the 0-based reading. An index naming no entry produces no author at all rather than a wrong one (see src/constructs.ts), so the failure mode of the ambiguity is an absent name, never a misattributed change.
 //
 // A revision conflict is stored as one group of the form "CurrentAuthor\'00\'<length>PreviousAuthor\'00 PreviousRevisionTime". Only the leading current author is taken: everything from the first NUL onward is the conflict's own encoded history, which no ProvenanceDescriptor field carries.
 function parseRevisionTable(
@@ -585,14 +585,14 @@ function parseRevisionTable(
   authors: string[],
   sink: RtfDiagnosticSink,
 ): void {
-  // index either advances by exactly 1 or jumps to one entry's own close, clamped to end - 1 so the +1 above always lands at index === end at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  // index either advances by exactly 1 or jumps to one entry's own close, clamped to end - 1 so the +1 above always lands at index === end at most — !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
   for (let index = contentStart; index !== end; index += 1) {
     if (tokens[index]?.kind !== "groupStart") {
       continue;
     }
     const entryEnd = Math.min(matchingGroupEnd(tokens, index), end);
     const value = collectPlainText(tokens, index + 1, entryEnd, codepage, sink);
-    // The conflict form separates its parts with a literal NUL byte (\'00), never whitespace: an author name contains spaces routinely, so splitting on anything else would truncate "A. Reviewer" to "A.". indexOf + slice, rather than split()[0], because a split's result is guaranteed non-empty (there is always at least one part), a guarantee noUncheckedIndexedAccess's blanket string[0] -> string|undefined typing can't see -- indexOf/slice give back a definite string with no dead fallback needed to satisfy the type checker.
+    // The conflict form separates its parts with a literal NUL byte (\'00), never whitespace: an author name contains spaces routinely, so splitting on anything else would truncate "A. Reviewer" to "A.". indexOf + slice, rather than split()[0], because a split's result is guaranteed non-empty (there is always at least one part), a guarantee noUncheckedIndexedAccess's blanket string[0] -> string|undefined typing can't see — indexOf/slice give back a definite string with no dead fallback needed to satisfy the type checker.
     const nulIndex = value.indexOf("\u0000");
     const currentAuthor = nulIndex === -1 ? value : value.slice(0, nulIndex);
     authors.push(currentAuthor.trim());
@@ -614,7 +614,7 @@ function parseInfoGroup(
     keywords?: string[];
     creator?: string;
   } = {};
-  // index either advances by exactly 1 or jumps to one field's own close, clamped to end - 1 so the +1 above always lands at index === end at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  // index either advances by exactly 1 or jumps to one field's own close, clamped to end - 1 so the +1 above always lands at index === end at most — !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
   for (let index = contentStart; index !== end; index += 1) {
     const token = tokens[index];
     if (token?.kind !== "groupStart") {
@@ -661,7 +661,7 @@ export function readRtfHeader(
     marginBottomTwips: DEFAULT_MARGIN_BOTTOM_TWIPS,
   };
   let metadata: LayoutMetadata = {};
-  // The whole-document scope of the four RTF states text direction at, held separately from `metadata` because the tables sweep below REPLACES that object wholesale when it finds an {\info ...} group -- a direction read here in the properties sweep and folded in immediately would be silently dropped by that replacement. Applied to the returned metadata once both sweeps are done.
+  // The whole-document scope of the four RTF states text direction at, held separately from `metadata` because the tables sweep below REPLACES that object wholesale when it finds an {\info ...} group — a direction read here in the properties sweep and folded in immediately would be silently dropped by that replacement. Applied to the returned metadata once both sweeps are done.
   let direction: TextDirection | undefined;
   let codepage = DEFAULT_CODEPAGE;
   let defaultFontIndex: number | undefined;
@@ -669,7 +669,7 @@ export function readRtfHeader(
 
   // Document properties first, in their own sweep of the file group's top level: the character set keyword and \ansicpgN both precede the tables, and the font table's own entries decode through whichever page they name. The tables are then read in a second sweep, so a header that violates the stated ordering still reads.
   const fileGroupEnd = matchingGroupEnd(tokens, 0);
-  // A nested group's own jump is clamped to fileGroupEnd - 1, so the +1 below always lands at index === fileGroupEnd at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  // A nested group's own jump is clamped to fileGroupEnd - 1, so the +1 below always lands at index === fileGroupEnd at most — !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
   for (let index = 0; index !== fileGroupEnd; index += 1) {
     const token = tokens[index];
     if (token?.kind === "groupStart" && index > 0) {
@@ -684,7 +684,7 @@ export function readRtfHeader(
       codepage = charsetPage;
       continue;
     }
-    // The document-level bidirectional pair (RTF 1.9.1, "Bidirectional Controls" under "Document Formatting Properties"): "\rtldoc This document will be formatted to have Arabic-style pagination" / "\ltrdoc This document will have English-style pagination (the default)". Bare on-words, handled before the parameter gate below for exactly that reason; last stated wins, matching how the body reader treats the run- and paragraph-level pairs. (\rtlsect/\ltrsect are deliberately NOT read: they state a section's own column SNAKING direction -- "This section will snake (newspaper style) columns from right to left" -- a page-layout fact ContentSection carries no field for, not the text-direction scope LayoutMetadata.direction names.)
+    // The document-level bidirectional pair (RTF 1.9.1, "Bidirectional Controls" under "Document Formatting Properties"): "\rtldoc This document will be formatted to have Arabic-style pagination" / "\ltrdoc This document will have English-style pagination (the default)". Bare on-words, handled before the parameter gate below for exactly that reason; last stated wins, matching how the body reader treats the run- and paragraph-level pairs. (\rtlsect/\ltrsect are deliberately NOT read: they state a section's own column SNAKING direction — "This section will snake (newspaper style) columns from right to left" — a page-layout fact ContentSection carries no field for, not the text-direction scope LayoutMetadata.direction names.)
     if (token.name === "rtldoc") {
       direction = "rtl";
       continue;
@@ -721,11 +721,11 @@ export function readRtfHeader(
       case "margb":
         page.marginBottomTwips = token.param;
         break;
-      // No default case: an unrecognized control word's own param is simply not one this reader tracks, which a switch with no matching case and no default already does on its own -- a terminal `default: break;` here would be dead code, since nothing follows the switch to fall through to.
+      // No default case: an unrecognized control word's own param is simply not one this reader tracks, which a switch with no matching case and no default already does on its own — a terminal `default: break;` here would be dead code, since nothing follows the switch to fall through to.
     }
   }
 
-  // index either advances by exactly 1 or jumps to one group's own close, clamped to fileGroupEnd - 1 so the +1 above always lands at index === fileGroupEnd at most -- !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
+  // index either advances by exactly 1 or jumps to one group's own close, clamped to fileGroupEnd - 1 so the +1 above always lands at index === fileGroupEnd at most — !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
   for (let index = 1; index !== fileGroupEnd; index += 1) {
     const token = tokens[index];
     if (token?.kind !== "groupStart") {
@@ -813,7 +813,7 @@ export function readRtfHeader(
     lists,
     revisionAuthors,
     page,
-    // A LayoutMetadata consumer reads .direction by value, never by key presence, so always carrying the key (possibly undefined) is exactly as usable as omitting it when absent -- and has no boundary-comparison AST node left to survive unobserved.
+    // A LayoutMetadata consumer reads .direction by value, never by key presence, so always carrying the key (possibly undefined) is exactly as usable as omitting it when absent — and has no boundary-comparison AST node left to survive unobserved.
     metadata: { ...metadata, direction },
     bodyStartIndex,
   };

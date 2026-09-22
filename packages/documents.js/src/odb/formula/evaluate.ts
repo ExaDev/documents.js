@@ -10,23 +10,23 @@ import { RptFormulaEvaluationError } from "./errors";
 import type { RptFormula, RptReference } from "./parser";
 import { parseRptFormula } from "./parser";
 
-// Runs a LibreOffice Report Builder report's own rpt formulas over a real result set -- the SqlResultSet src/odb/sql/ produces from a .odb's own saved query, or any equivalently-shaped set of named columns and rows. It resolves group breaks, opens and closes each group instance, and evaluates every band's formulas at that band's own scope, producing a flat band-instance stream a renderer can lay out. It renders nothing itself: no pages, no geometry, no styles.
+// Runs a LibreOffice Report Builder report's own rpt formulas over a real result set — the SqlResultSet src/odb/sql/ produces from a .odb's own saved query, or any equivalently-shaped set of named columns and rows. It resolves group breaks, opens and closes each group instance, and evaluates every band's formulas at that band's own scope, producing a flat band-instance stream a renderer can lay out. It renders nothing itself: no pages, no geometry, no styles.
 //
 // THE SCOPING RULE, which is the whole substance of this module.
 //
-// A report's groups are strictly nested: group 0 is the outermost, group 1 sits inside it, and the detail band sits inside the innermost. An aggregate is scoped to the band it appears in -- a SUM in group 1's footer totals only the rows of the group-1 instance that footer is closing, a SUM in group 0's footer totals that whole outer instance, and a SUM in the report footer totals every row. That much is uncontroversial. The part that is easy to get subtly wrong is when a group instance ENDS:
+// A report's groups are strictly nested: group 0 is the outermost, group 1 sits inside it, and the detail band sits inside the innermost. An aggregate is scoped to the band it appears in — a SUM in group 1's footer totals only the rows of the group-1 instance that footer is closing, a SUM in group 0's footer totals that whole outer instance, and a SUM in the report footer totals every row. That much is uncontroversial. The part that is easy to get subtly wrong is when a group instance ENDS:
 //
 //     a group at level L starts a new instance at a row when its own group-expression breaks, OR when ANY ENCLOSING GROUP BREAKS
 //
-// The second half is what a naive implementation misses, and the checked-in fixture demonstrates exactly why it matters. Its inner group breaks on rpt:HASCHANGED("LEFT_QUARTER"), i.e. on the quarter changing. Between the rows (North, Q2) and (South, Q2) the quarter does NOT change -- so the inner group-expression is false there -- yet the region does, and a "Q2" subtotal spanning North's Q2 rows and South's Q2 rows would be a total no reader ever asked for. Every enclosing break therefore cascades inward, unconditionally. Stated as the recurrence this module implements: breaks[row][0] = ownBreak(0, row); breaks[row][L] = breaks[row][L - 1] || ownBreak(L, row); with every level breaking at row 0. That makes breaks[row] monotone across levels -- once true it stays true -- which is what lets the emission loop below find the outermost broken level and treat everything deeper as broken too.
+// The second half is what a naive implementation misses, and the checked-in fixture demonstrates exactly why it matters. Its inner group breaks on rpt:HASCHANGED("LEFT_QUARTER"), i.e. on the quarter changing. Between the rows (North, Q2) and (South, Q2) the quarter does NOT change — so the inner group-expression is false there — yet the region does, and a "Q2" subtotal spanning North's Q2 rows and South's Q2 rows would be a total no reader ever asked for. Every enclosing break therefore cascades inward, unconditionally. Stated as the recurrence this module implements: breaks[row][0] = ownBreak(0, row); breaks[row][L] = breaks[row][L - 1] || ownBreak(L, row); with every level breaking at row 0. That makes breaks[row] monotone across levels — once true it stays true — which is what lets the emission loop below find the outermost broken level and treat everything deeper as broken too.
 //
-// The cascade lives HERE and not in HASCHANGED. rpt:HASCHANGED(X) is implemented exactly as its name says -- X's value differs from its value on the immediately preceding row (and is true on the first row, which has no predecessor) -- with no knowledge of groups at all. Conflating the two would make HASCHANGED report true for the inner group's own expression at a row where the quarter genuinely had not changed, which is a different and wrong claim about the data. The nesting rule is a property of report structure; HASCHANGED is a property of a column. Both are tested separately.
+// The cascade lives HERE and not in HASCHANGED. rpt:HASCHANGED(X) is implemented exactly as its name says — X's value differs from its value on the immediately preceding row (and is true on the first row, which has no predecessor) — with no knowledge of groups at all. Conflating the two would make HASCHANGED report true for the inner group's own expression at a row where the quarter genuinely had not changed, which is a different and wrong claim about the data. The nesting rule is a property of report structure; HASCHANGED is a property of a column. Both are tested separately.
 //
 // AGGREGATES ARE COMPUTED OVER A ROW RANGE, NOT ACCUMULATED ROW BY ROW. The result set is already fully in memory (readOdbTables materialises every row long before this runs), so group boundaries are computed in a first pass and each aggregate is then evaluated over its own instance's complete row range. This removes an ambiguity a streaming accumulator would otherwise force a choice about: a SUM in a group HEADER is the true total for the group about to be printed, not a running total that happens to include only the first row. Report Builder itself pre-passes for the same reason.
 //
 // A GROUP EXPRESSION MAY NOT DEPEND ON AN AGGREGATE, and this is checked up front rather than discovered mid-run. Group expressions decide the very instance boundaries an aggregate's row range is defined by, so a group expression reading an aggregate is genuinely circular; rather than pick one of the several plausible resolutions, this engine throws RptFormulaEvaluationError naming the dependency. The check is static (it walks the named-function reference graph before touching a row) so that an empty result set cannot make a circular report look like it succeeded.
 //
-// PAGE HEADERS AND PAGE FOOTERS ARE DELIBERATELY NOT PART OF THIS MODEL. Which rows land on which page is a layout decision this engine has no basis for making, so RptReportDefinition carries no page bands and runRptReport emits none; see src/odb/formula/definition.ts, which drops them explicitly rather than silently. In the real fixture both page bands carry only fixed-content labels and no rpt formula at all, so nothing evaluable is being skipped. A renderer that HAS decided its own page boundaries evaluates those bands itself, through evaluateRptBandOutsideData at the foot of this module -- the narrow entry point that exists precisely so deciding where pages fall stays the renderer's job while evaluating a formula stays this module's.
+// PAGE HEADERS AND PAGE FOOTERS ARE DELIBERATELY NOT PART OF THIS MODEL. Which rows land on which page is a layout decision this engine has no basis for making, so RptReportDefinition carries no page bands and runRptReport emits none; see src/odb/formula/definition.ts, which drops them explicitly rather than silently. In the real fixture both page bands carry only fixed-content labels and no rpt formula at all, so nothing evaluable is being skipped. A renderer that HAS decided its own page boundaries evaluates those bands itself, through evaluateRptBandOutsideData at the foot of this module — the narrow entry point that exists precisely so deciding where pages fall stays the renderer's job while evaluating a formula stays this module's.
 
 export type RptBandKind =
   | "report-header"
@@ -46,12 +46,12 @@ export interface RptNamedFunctionDefinition {
 }
 
 export interface RptBandDefinition {
-  // One entry per band element in document order, holding that element's own rpt:formula, or undefined for an element that has none (a rpt:fixed-content label). Positional rather than keyed because real Report Builder output names every control in a band "Formatted field", so element names are not unique enough to key on -- see src/odb/formula/definition.ts.
+  // One entry per band element in document order, holding that element's own rpt:formula, or undefined for an element that has none (a rpt:fixed-content label). Positional rather than keyed because real Report Builder output names every control in a band "Formatted field", so element names are not unique enough to key on — see src/odb/formula/definition.ts.
   readonly formulas: readonly (string | undefined)[];
 }
 
 export interface RptGroupDefinition {
-  // The rpt:group-expression attribute's own formula text. Must evaluate to a boolean, which is what rpt:HASCHANGED(...) -- the only expression real Report Builder writes here -- produces; see resolveOwnBreak below for why a non-boolean is refused rather than reinterpreted.
+  // The rpt:group-expression attribute's own formula text. Must evaluate to a boolean, which is what rpt:HASCHANGED(...) — the only expression real Report Builder writes here — produces; see resolveOwnBreak below for why a non-boolean is refused rather than reinterpreted.
   readonly groupExpression: string;
   // Named rpt:function definitions declared on this group. An aggregate among them is scoped to this group level, matching where it was declared.
   readonly functions: readonly RptNamedFunctionDefinition[];
@@ -73,7 +73,7 @@ export interface RptBandInstance {
   readonly kind: RptBandKind;
   // The group level this band belongs to, for 'group-header'/'group-footer' only.
   readonly groupLevel: number | undefined;
-  // The result-set row this instance was emitted against: the row itself for 'detail', the group instance's first row for 'group-header' and its last row for 'group-footer'. Undefined for the report header and footer, which belong to no row -- a per-row formula there therefore throws rather than silently reading an arbitrary row.
+  // The result-set row this instance was emitted against: the row itself for 'detail', the group instance's first row for 'group-header' and its last row for 'group-footer'. Undefined for the report header and footer, which belong to no row — a per-row formula there therefore throws rather than silently reading an arbitrary row.
   readonly rowIndex: number | undefined;
   // One value per entry in the band definition's own `formulas`, in the same order; undefined wherever that entry was undefined.
   readonly values: readonly (ContentCellValue | undefined)[];
@@ -115,7 +115,7 @@ function fail(message: string, formula: string): never {
   throw new RptFormulaEvaluationError(message, formula);
 }
 
-// Resolution follows src/odb/sql/evaluate.ts's own unquoted-identifier rule: an exact match wins, otherwise a unique case-insensitive match, otherwise a failure naming what was available. The two reference spellings do not differ here -- see src/odb/formula/parser.ts on why [NAME] and "NAME" are one concept -- so there is no case-sensitive variant of this rule to apply. Generic over what is being matched so a function match yields the function itself rather than a name needing a second lookup.
+// Resolution follows src/odb/sql/evaluate.ts's own unquoted-identifier rule: an exact match wins, otherwise a unique case-insensitive match, otherwise a failure naming what was available. The two reference spellings do not differ here — see src/odb/formula/parser.ts on why [NAME] and "NAME" are one concept — so there is no case-sensitive variant of this rule to apply. Generic over what is being matched so a function match yields the function itself rather than a name needing a second lookup.
 function matchNamed<T>(
   candidates: readonly T[],
   nameOf: (candidate: T) => string,
@@ -151,7 +151,7 @@ class PreparedReport {
   readonly groupExpressions: readonly RptFormula[];
   readonly bands: PreparedBands;
   readonly columnNames: readonly string[];
-  // A reference resolves to the same column or function on every row, so resolution is memoised by the AST node's own identity -- the same reason src/odb/sql/evaluate.ts's ColumnResolver memoises, and it matters more here because an aggregate resolves its reference once per row of its range.
+  // A reference resolves to the same column or function on every row, so resolution is memoised by the AST node's own identity — the same reason src/odb/sql/evaluate.ts's ColumnResolver memoises, and it matters more here because an aggregate resolves its reference once per row of its range.
   private readonly resolutions = new Map<RptReference, ResolvedReference>();
 
   constructor(
@@ -200,7 +200,7 @@ class PreparedReport {
     }
   }
 
-  // A group expression decides the instance boundaries an aggregate's own row range is defined by, so an aggregate anywhere in its reference graph is circular. Walked statically, before any row is read -- see this module's top-of-file comment.
+  // A group expression decides the instance boundaries an aggregate's own row range is defined by, so an aggregate anywhere in its reference graph is circular. Walked statically, before any row is read — see this module's top-of-file comment.
   private rejectAggregateDependency(
     formula: RptFormula,
     expression: RptFormula,
@@ -208,7 +208,7 @@ class PreparedReport {
   ): void {
     if (formula.kind === "aggregate") {
       fail(
-        `a group expression cannot depend on the aggregate rpt:${formula.aggregate}(${formula.reference.name}) -- an aggregate's own rows are defined by the very group boundaries this expression decides`,
+        `a group expression cannot depend on the aggregate rpt:${formula.aggregate}(${formula.reference.name}) — an aggregate's own rows are defined by the very group boundaries this expression decides`,
         expression.text,
       );
     }
@@ -233,7 +233,7 @@ class PreparedReport {
     );
   }
 
-  // A reference names either a declared rpt:function or a result-set column. A name that matches both is genuinely ambiguous -- nothing in the format says which wins -- so it throws rather than one silently shadowing the other, the same choice src/odb/sql/evaluate.ts makes for an ambiguous case-insensitive column match.
+  // A reference names either a declared rpt:function or a result-set column. A name that matches both is genuinely ambiguous — nothing in the format says which wins — so it throws rather than one silently shadowing the other, the same choice src/odb/sql/evaluate.ts makes for an ambiguous case-insensitive column match.
   resolveReference(
     reference: RptReference,
     formula: string,
@@ -254,7 +254,7 @@ class PreparedReport {
     );
     if (functionMatches.length + columnMatches.length > 1) {
       fail(
-        `reference "${reference.name}" is ambiguous -- it matches ${[...functionMatches.map((match) => `rpt:function ${match.name}`), ...columnMatches.map((match) => `column ${match}`)].join(", ")}`,
+        `reference "${reference.name}" is ambiguous — it matches ${[...functionMatches.map((match) => `rpt:function ${match.name}`), ...columnMatches.map((match) => `column ${match}`)].join(", ")}`,
         formula,
       );
     }
@@ -279,7 +279,7 @@ class PreparedReport {
     }
     if (columnName === undefined) {
       fail(
-        `reference "${reference.name}" names neither a declared rpt:function nor a column of the report's own data -- functions: ${this.namedFunctions.size === 0 ? "(none)" : [...this.namedFunctions.keys()].join(", ")}; columns: ${this.columnNames.length === 0 ? "(none)" : this.columnNames.join(", ")}`,
+        `reference "${reference.name}" names neither a declared rpt:function nor a column of the report's own data — functions: ${this.namedFunctions.size === 0 ? "(none)" : [...this.namedFunctions.keys()].join(", ")}; columns: ${this.columnNames.length === 0 ? "(none)" : this.columnNames.join(", ")}`,
         formula,
       );
     }
@@ -321,7 +321,7 @@ class RunState {
     return this.openInstances[level];
   }
 
-  // Called only after the level's own footer has been emitted -- that footer's aggregates read this very range, so closing first would leave them with no rows to total.
+  // Called only after the level's own footer has been emitted — that footer's aggregates read this very range, so closing first would leave them with no rows to total.
   close(level: number): void {
     this.openInstances[level] = undefined;
   }
@@ -351,9 +351,9 @@ function textOf(
   }
   const key = cellComparisonKey(value);
   if (key?.valueClass !== "text") {
-    // A report's own number formatting lives in the band cell's style, which this engine does not read, so rendering a number to text here would mean inventing a format -- exactly the silently-wrong-value failure this engine refuses.
+    // A report's own number formatting lives in the band cell's style, which this engine does not read, so rendering a number to text here would mean inventing a format — exactly the silently-wrong-value failure this engine refuses.
     fail(
-      `${what} requires a text value, but found a ${value.kind} value -- this engine does not format a number or a boolean into text, since a report's own number format lives in its band styles rather than in the formula`,
+      `${what} requires a text value, but found a ${value.kind} value — this engine does not format a number or a boolean into text, since a report's own number format lives in its band styles rather than in the formula`,
       formula,
     );
   }
@@ -413,7 +413,7 @@ class FormulaEvaluator {
           visiting,
         );
         const text = textOf(value, formula.text, "rpt:LEFT");
-        // LEFT counts characters, so the prefix is taken over code points rather than UTF-16 code units -- identical for the fixture's own ASCII quarters, and correct rather than splitting a surrogate pair for anything outside the basic plane.
+        // LEFT counts characters, so the prefix is taken over code points rather than UTF-16 code units — identical for the fixture's own ASCII quarters, and correct rather than splitting a surrogate pair for anything outside the basic plane.
         return text === undefined
           ? CELL_NULL
           : {
@@ -452,7 +452,7 @@ class FormulaEvaluator {
     return rowIndex;
   }
 
-  // A reference is either a column of the report's own data or a declared rpt:function. A named function is evaluated in the scope it was DECLARED in, never the scope of the band that referenced it -- an aggregate declared on a group belongs to that group, exactly as if it had been written into that group's own band.
+  // A reference is either a column of the report's own data or a declared rpt:function. A named function is evaluated in the scope it was DECLARED in, never the scope of the band that referenced it — an aggregate declared on a group belongs to that group, exactly as if it had been written into that group's own band.
   private referenceValue(
     reference: RptReference,
     rowIndex: number,
@@ -489,7 +489,7 @@ function resolveOwnBreak(value: ContentCellValue, formula: string): boolean {
   return value.value;
 }
 
-// Pass one's result: for every row and group level, whether a new instance of that level starts at that row. Built by the recurrence stated in this module's top-of-file comment, with the enclosing-break cascade making each row's flags monotone across levels. Wrapping the table in a class keeps the one place that indexes it -- and therefore the one place that has to account for an out-of-range index -- from being spread across the emission loop.
+// Pass one's result: for every row and group level, whether a new instance of that level starts at that row. Built by the recurrence stated in this module's top-of-file comment, with the enclosing-break cascade making each row's flags monotone across levels. Wrapping the table in a class keeps the one place that indexes it — and therefore the one place that has to account for an out-of-range index — from being spread across the emission loop.
 class GroupBreaks {
   private readonly rows: readonly (readonly boolean[])[];
 
@@ -561,7 +561,7 @@ function detailScope(groupCount: number): RptScope {
     : { kind: "group", level: groupCount - 1 };
 }
 
-// Runs a report definition over a result set, producing the band instances a renderer lays out, in print order: the report header, then for each row the group headers that open at it, the detail band, and the group footers that close after it, and finally the report footer. Page headers and footers are deliberately absent -- see this module's top-of-file comment.
+// Runs a report definition over a result set, producing the band instances a renderer lays out, in print order: the report header, then for each row the group headers that open at it, the detail band, and the group footers that close after it, and finally the report footer. Page headers and footers are deliberately absent — see this module's top-of-file comment.
 export function runRptReport(
   definition: RptReportDefinition,
   resultSet: SqlResultSet,
@@ -651,9 +651,9 @@ export function runRptReport(
   return { bands };
 }
 
-// Evaluates one band that prints OUTSIDE the data -- belonging to no row, at report scope -- against the same definition (and therefore the same named rpt:functions) a full run would use. The page header and page footer are the real callers: this engine models no pages at all, so a renderer that has decided its own page boundaries evaluates those two bands itself.
+// Evaluates one band that prints OUTSIDE the data — belonging to no row, at report scope — against the same definition (and therefore the same named rpt:functions) a full run would use. The page header and page footer are the real callers: this engine models no pages at all, so a renderer that has decided its own page boundaries evaluates those two bands itself.
 //
-// Report scope is the right scope for them, and not an approximation, under exactly one condition: the renderer has resolved the whole report onto a SINGLE logical page. A page's own rows are then every row, so a page band's aggregate covers precisely the rows the report footer's would. Under a real multi-page model it would not be, and this function would be the wrong tool -- which is why it names the property it assumes rather than presenting itself as generic page-band evaluation.
+// Report scope is the right scope for them, and not an approximation, under exactly one condition: the renderer has resolved the whole report onto a SINGLE logical page. A page's own rows are then every row, so a page band's aggregate covers precisely the rows the report footer's would. Under a real multi-page model it would not be, and this function would be the wrong tool — which is why it names the property it assumes rather than presenting itself as generic page-band evaluation.
 //
 // Nothing needs special-casing for the two ways a page band can hold something this scope cannot answer, because both already fail correctly by construction: a per-row formula (field:[X], rpt:HASCHANGED, rpt:LEFT) throws for belonging to no row, exactly as it does in the report header, and rpt:PAGENUMBER or any other genuinely page-dependent function throws from the parser as an unsupported function. Neither is silently rendered as a blank or a plausible-looking wrong value.
 export function evaluateRptBandOutsideData(

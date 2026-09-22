@@ -30,7 +30,7 @@ describe("inferFormatFromExtension", () => {
   });
 
   it("returns undefined for a bare filename that happens to spell a recognised extension, since there is no dot at all", () => {
-    // Distinguishes the dotIndex < 0 case from an equivalent-looking mutant that only skips the early return for a genuinely unrecognised tail: without a dot, the whole filename ("docx") is itself what a mutated fallthrough would look up, and "docx" IS a recognised extension -- so this fails loudly under that mutant rather than coincidentally returning undefined either way.
+    // Distinguishes the dotIndex < 0 case from an equivalent-looking mutant that only skips the early return for a genuinely unrecognised tail: without a dot, the whole filename ("docx") is itself what a mutated fallthrough would look up, and "docx" IS a recognised extension — so this fails loudly under that mutant rather than coincidentally returning undefined either way.
     expect(inferFormatFromExtension("docx")).toBeUndefined();
   });
 

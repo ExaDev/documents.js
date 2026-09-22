@@ -14,7 +14,7 @@ import {
   carlitoRegularBytes,
 } from "./test-support/fonts";
 
-// Every design-unit value asserted below was read straight out of the real vendored .ttf files by a standalone Node script walking the sfnt table directory with a bare DataView -- not by this package's own parsers -- and the glyph-space value beside it is that number times 1000/unitsPerEm, computed by hand. So these are external cross-checks of the scaling, not this module's output asserted against itself.
+// Every design-unit value asserted below was read straight out of the real vendored .ttf files by a standalone Node script walking the sfnt table directory with a bare DataView — not by this package's own parsers — and the glyph-space value beside it is that number times 1000/unitsPerEm, computed by hand. So these are external cross-checks of the scaling, not this module's output asserted against itself.
 //
 // The two vendored families are chosen deliberately as a matched pair for exactly this: Carlito is drawn on a 2048-unit em, so every conversion is a real 0.48828125 scaling, while Caladea is drawn on a 1000-unit em, so every conversion is the identity. A bug that skipped the scale entirely would pass every Caladea assertion here and fail every Carlito one.
 const CARLITO_UNITS_PER_EM = 2048;
@@ -108,7 +108,7 @@ describe("loadEmbeddedFace metrics on Caladea, a 1000-unit-per-em face", () => {
 
 describe("serif classification from the face own PANOSE declaration", () => {
   it("calls Caladea a serif design and Carlito a sans one, from what each font declares rather than its name", () => {
-    // Caladea declares PANOSE 2,4 (Latin text, square cove) and Carlito 2,15 (Latin text, rounded sans) -- both read out of the real files with a bare DataView. Deriving the flag from these means a source-embedded face this package has never heard of is classified by the same rule.
+    // Caladea declares PANOSE 2,4 (Latin text, square cove) and Carlito 2,15 (Latin text, rounded sans) — both read out of the real files with a bare DataView. Deriving the flag from these means a source-embedded face this package has never heard of is classified by the same rule.
     expect(load(caladeaRegularBytes()).face.metrics.serif).toBe(true);
     expect(load(caladeaItalicBytes()).face.metrics.serif).toBe(true);
     expect(load(carlitoRegularBytes()).face.metrics.serif).toBe(false);
@@ -166,7 +166,7 @@ describe("loadEmbeddedFace caching and refusal", () => {
     expect(face).toBeDefined();
     expect(face!.metrics.xHeightGlyphSpace).toBeUndefined(); // nothing left in the font declares it, so nothing is written for it
     expect(face!.metrics.serif).toBe(false); // no PANOSE to classify by, so no serif claim is made
-    // Carlito's 'H' (glyph 15) has yMax 1314 design units, read from the real file's own glyf entry with a bare DataView -- the same number its 'OS/2' sCapHeight declares. That agreement is the point: the measurement recovers the cap height the font itself states, rather than merely producing some plausible value.
+    // Carlito's 'H' (glyph 15) has yMax 1314 design units, read from the real file's own glyf entry with a bare DataView — the same number its 'OS/2' sCapHeight declares. That agreement is the point: the measurement recovers the cap height the font itself states, rather than merely producing some plausible value.
     expect(face!.metrics.capHeightGlyphSpace).toBe(
       scaled(1314, CARLITO_UNITS_PER_EM),
     );
@@ -196,7 +196,7 @@ describe("encodeForShowEmbedded", () => {
 
   it("handles a supplementary-plane character as one code point, not two surrogate halves", () => {
     const { face } = load(carlitoRegularBytes());
-    // U+1D400 (mathematical bold capital A) is a single code point Carlito has no glyph for -- two UTF-16 code units in a JS string, but one character, one CID, and one substitution.
+    // U+1D400 (mathematical bold capital A) is a single code point Carlito has no glyph for — two UTF-16 code units in a JS string, but one character, one CID, and one substitution.
     const shown = encodeForShowEmbedded("\u{1D400}", face);
     expect(shown.codes.length).toBe(2);
     expect(shown.substitutions).toEqual([{ from: "\u{1D400}" }]);
@@ -218,7 +218,7 @@ describe("encodeForShowEmbedded", () => {
     const { face } = load(carlitoRegularBytes());
     const text = "Hello, wörld!";
     const shown = encodeForShowEmbedded(text, face);
-    // Re-deriving the width from the emitted CIDs -- i.e. from exactly the bytes a Tj/TJ operand would carry -- and from the face's own adjustment between each adjacent pair of them reproduces the reported width. Nothing measures a string by a route the drawing path does not take.
+    // Re-deriving the width from the emitted CIDs — i.e. from exactly the bytes a Tj/TJ operand would carry — and from the face's own adjustment between each adjacent pair of them reproduces the reported width. Nothing measures a string by a route the drawing path does not take.
     let widthFromCodes = 0;
     let previousGlyphId: number | undefined;
     for (let i = 0; i + 1 < shown.codes.length; i += 2) {
@@ -234,7 +234,7 @@ describe("encodeForShowEmbedded", () => {
   });
 });
 
-// Every design-unit adjustment asserted below is the value the real vendored font declares, already cross-checked against fontTools and HarfBuzz where gpos-table.ts was written (see gpos-table.test.ts's own note) -- what these tests add is that the value survives the em conversion and reaches the run's own measurement. The two families are the same matched pair the metrics tests above use, for the same reason: Carlito's 2048-unit em makes every adjustment a real fractional scaling, while Caladea's 1000-unit em makes the glyph-space number and the font's own design-unit number the same digits, so a bug that scaled kerning by the wrong em (or not at all) fails one family and passes the other.
+// Every design-unit adjustment asserted below is the value the real vendored font declares, already cross-checked against fontTools and HarfBuzz where gpos-table.ts was written (see gpos-table.test.ts's own note) — what these tests add is that the value survives the em conversion and reaches the run's own measurement. The two families are the same matched pair the metrics tests above use, for the same reason: Carlito's 2048-unit em makes every adjustment a real fractional scaling, while Caladea's 1000-unit em makes the glyph-space number and the font's own design-unit number the same digits, so a bug that scaled kerning by the wrong em (or not at all) fails one family and passes the other.
 //
 // 'AVATAR' is chosen for what it forces rather than for reading nicely: four adjacent pairs the font genuinely kerns (AV, VA, AT, TA), a glyph repeated three times so a per-pair lookup cannot be mistaken for a per-glyph one, and a final pair (AR) the font's own coverage includes but adjusts by nothing.
 describe("pair kerning", () => {
@@ -327,7 +327,7 @@ describe("pair kerning", () => {
   it("leaves a run with no kerned pair completely alone", () => {
     const { face } = load(carlitoRegularBytes());
     const shown = encodeForShowEmbedded("Hi", face);
-    // Carlito carries plenty of kerning; it simply says nothing about this pair. So there is nothing to split the run at, and the width is the bare advance sum -- which is what keeps the common case emitting the same single Tj string it always did.
+    // Carlito carries plenty of kerning; it simply says nothing about this pair. So there is nothing to split the run at, and the width is the bare advance sum — which is what keeps the common case emitting the same single Tj string it always did.
     expect(shown.kerns).toEqual([]);
     expect(shown.width1000).toBe(
       face.glyphSpaceWidth(glyphOf(face, "H")) +
@@ -352,7 +352,7 @@ describe("collectEmbeddedGlyphs", () => {
   });
 
   it("maps a ligature glyph to the whole character run it consumed", () => {
-    // 'office' shapes its 'ffi' to Carlito's own ligature glyph 76 through the face's GSUB, and that glyph's ToUnicode text is the three characters it replaced -- the mapping a copy/paste needs to recover 'office' from a page that draws four glyphs.
+    // 'office' shapes its 'ffi' to Carlito's own ligature glyph 76 through the face's GSUB, and that glyph's ToUnicode text is the three characters it replaced — the mapping a copy/paste needs to recover 'office' from a page that draws four glyphs.
     const { face } = load(carlitoRegularBytes());
     const used = collectEmbeddedGlyphs(["office"], face);
     expect(used.get(76)).toEqual([0x66, 0x66, 0x69]);
@@ -365,7 +365,7 @@ describe("collectEmbeddedGlyphs", () => {
   });
 });
 
-// Repointing a table record past the end of the file makes parseSfnt drop that one table, exactly as it would for a genuinely truncated font -- the same technique sfnt-subset.test.ts uses to build its own missing-table cases.
+// Repointing a table record past the end of the file makes parseSfnt drop that one table, exactly as it would for a genuinely truncated font — the same technique sfnt-subset.test.ts uses to build its own missing-table cases.
 function tableRecordOffset(
   bytes: Uint8Array<ArrayBuffer>,
   tag: string,
@@ -403,7 +403,7 @@ function truncateTable(
   );
 }
 
-// Overwrites one big-endian uint16 field inside a table's own body, at `tableOffset` bytes from where that table's data starts (not from the record itself) -- for patching a single declared field (a metric count, a flag) without disturbing the rest of a real vendored table.
+// Overwrites one big-endian uint16 field inside a table's own body, at `tableOffset` bytes from where that table's data starts (not from the record itself) — for patching a single declared field (a metric count, a flag) without disturbing the rest of a real vendored table.
 function patchU16InTable(
   bytes: Uint8Array<ArrayBuffer>,
   tag: string,

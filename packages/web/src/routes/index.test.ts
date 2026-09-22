@@ -10,7 +10,7 @@ describe("the / route", () => {
     }
     let thrown: unknown;
     try {
-      // TanStack Router's own beforeLoad context type is large and mostly irrelevant here -- this route's beforeLoad reads none of it, it unconditionally throws a redirect.
+      // TanStack Router's own beforeLoad context type is large and mostly irrelevant here — this route's beforeLoad reads none of it, it unconditionally throws a redirect.
       (beforeLoad as (context: unknown) => void)(undefined);
     } catch (error) {
       thrown = error;

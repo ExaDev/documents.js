@@ -100,7 +100,7 @@ describe("buildDocxPackage precedence: an already-timestamped ContentDocument is
   });
 });
 
-// A real docProps/core.xml part, hand-built directly from XmlElement/XmlNode literals -- not via addCoreProperties or createDocx -- so this fixture simulates a genuinely pre-existing document authored by something other than this package, carrying an old, known createdIso this package never wrote.
+// A real docProps/core.xml part, hand-built directly from XmlElement/XmlNode literals — not via addCoreProperties or createDocx — so this fixture simulates a genuinely pre-existing document authored by something other than this package, carrying an old, known createdIso this package never wrote.
 function docxPackageWithHandBuiltCoreProperties(
   createdIso: string,
   modifiedIso: string,
@@ -158,7 +158,7 @@ describe("buildDocxPackage never clobbers a real pre-existing document's own cre
     expect(original.metadata.createdIso).toBe(OLD_CREATED_ISO);
     expect(original.metadata.modifiedIso).toBe(OLD_MODIFIED_ISO);
 
-    // A much later clock -- if resolveMetadataTimestamps' precedence were wired in wrong, this would stamp "now" over the real, old creation date.
+    // A much later clock — if resolveMetadataTimestamps' precedence were wired in wrong, this would stamp "now" over the real, old creation date.
     const laterClock = fixedClock(new Date("2026-12-25T00:00:00.000Z"));
     const rebuiltPackage = buildDocxPackage(original, { clock: laterClock });
     const rebuilt = readDocxContent(rebuiltPackage);
@@ -168,7 +168,7 @@ describe("buildDocxPackage never clobbers a real pre-existing document's own cre
   });
 });
 
-// The ODF-side counterpart to the docx test above -- a hand-built odt Package (content.xml + a hand-authored meta.xml, neither written by this package's own writer) carrying a known old meta:creation-date/dc:date, proving buildOdtPackage's identical precedence wiring on the ODF ecosystem too. readFirstMasterPageGeometry (odf.js) tolerates a missing styles.xml by falling back to A4 defaults, so this fixture omits it entirely -- content.xml and meta.xml are all readOdtContent needs.
+// The ODF-side counterpart to the docx test above — a hand-built odt Package (content.xml + a hand-authored meta.xml, neither written by this package's own writer) carrying a known old meta:creation-date/dc:date, proving buildOdtPackage's identical precedence wiring on the ODF ecosystem too. readFirstMasterPageGeometry (odf.js) tolerates a missing styles.xml by falling back to A4 defaults, so this fixture omits it entirely — content.xml and meta.xml are all readOdtContent needs.
 function odtPackageWithHandBuiltMeta(
   createdIso: string,
   modifiedIso: string,

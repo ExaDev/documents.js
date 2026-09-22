@@ -41,7 +41,7 @@ export function registerDocxExtrasCommand(program: Command): void {
   program
     .command("docx-extras <input>")
     .description(
-      "print a docx's own comments, footnotes, headers, footers, and numbering definitions -- data readDocxContent's ContentDocument cannot carry",
+      "print a docx's own comments, footnotes, headers, footers, and numbering definitions — data readDocxContent's ContentDocument cannot carry",
     )
     .option(
       "--json",

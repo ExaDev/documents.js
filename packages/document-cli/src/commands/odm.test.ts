@@ -45,10 +45,10 @@ async function runCli(args: readonly string[]): Promise<CapturedRun> {
       return true;
     });
   try {
-    // program.ts's own exitOverride sets process.exitCode BEFORE rethrowing a commander-level parse failure (an unknown option, or -- as here -- a custom coerce function's own InvalidArgumentError), so the rejection itself carries nothing this suite needs beyond the exit code already recorded on process.exitCode; every other command action already resolves normally with process.exitCode set the identical way.
+    // program.ts's own exitOverride sets process.exitCode BEFORE rethrowing a commander-level parse failure (an unknown option, or — as here — a custom coerce function's own InvalidArgumentError), so the rejection itself carries nothing this suite needs beyond the exit code already recorded on process.exitCode; every other command action already resolves normally with process.exitCode set the identical way.
     await createProgram().parseAsync(["node", "document-cli", ...args]);
   } catch {
-    // Swallowed deliberately -- see the comment above.
+    // Swallowed deliberately — see the comment above.
   } finally {
     stdoutSpy.mockRestore();
     stderrSpy.mockRestore();

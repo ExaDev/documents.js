@@ -13,7 +13,7 @@ import {
   writeContainer,
 } from "./write";
 
-// Direct tests of the byte primitives every writer module in this package composes records from -- exercised indirectly by every other writer's own test suite, but pinned here exactly so a boundary in one of these shared helpers (the loop bound utf16le/asciiBytes write up to, the byte count concatBytes lays out) is checked against its own exact output rather than only through a downstream reader's tolerant round trip.
+// Direct tests of the byte primitives every writer module in this package composes records from — exercised indirectly by every other writer's own test suite, but pinned here exactly so a boundary in one of these shared helpers (the loop bound utf16le/asciiBytes write up to, the byte count concatBytes lays out) is checked against its own exact output rather than only through a downstream reader's tolerant round trip.
 
 describe("concatBytes", () => {
   it("lays out several parts back to back with no gap or overlap", () => {

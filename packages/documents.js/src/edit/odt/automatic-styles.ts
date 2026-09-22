@@ -4,7 +4,7 @@ import { el } from "../../xml/fragment";
 
 export const CONTENT_PART_PATH = "content.xml";
 
-// odf.js's own StyleRegistry (src/styles/registry.ts) privately finds-or-creates office:automatic-styles as part of StyleRegistry.forPart, but does not export that helper on its own -- this is a minimal, behaviour-matching reimplementation (the identical insertion-order rule: before office:body/office:master-styles/office:settings, whichever comes first, else appended) scoped to the handful of ODF style constructs StyleRegistry's own StyleProperties schema cannot express at all: table-column width (style:table-column-properties/@style:column-width), list-level bullet definitions (text:list-style), and a paragraph's page-break-before (style:paragraph-properties/@fo:break-before). See this module's own callers (table.ts, list.ts, editor.ts) for each.
+// odf.js's own StyleRegistry (src/styles/registry.ts) privately finds-or-creates office:automatic-styles as part of StyleRegistry.forPart, but does not export that helper on its own — this is a minimal, behaviour-matching reimplementation (the identical insertion-order rule: before office:body/office:master-styles/office:settings, whichever comes first, else appended) scoped to the handful of ODF style constructs StyleRegistry's own StyleProperties schema cannot express at all: table-column width (style:table-column-properties/@style:column-width), list-level bullet definitions (text:list-style), and a paragraph's page-break-before (style:paragraph-properties/@fo:break-before). See this module's own callers (table.ts, list.ts, editor.ts) for each.
 export function ensureAutomaticStyles(pkg: Package): XmlElement {
   const part = pkg.parts[CONTENT_PART_PATH];
   if (part?.kind !== "xml") {
@@ -40,7 +40,7 @@ export function ensureAutomaticStyles(pkg: Package): XmlElement {
   return created;
 }
 
-// Scans `automaticStyles` for the highest existing `${prefix}N` name (on an element with the given tag) and returns one past it -- mirrors src/edit/pptx/slide.ts's own nextIdIn ("scan for the highest existing id, never guess"), adapted from PowerPoint's numeric shape ids to ODF's string-named styles. Never mutates or removes anything it finds; the caller is responsible for actually appending the newly-named element, keeping this in line with StyleRegistry.intern's own append-only contract (see props.ts).
+// Scans `automaticStyles` for the highest existing `${prefix}N` name (on an element with the given tag) and returns one past it — mirrors src/edit/pptx/slide.ts's own nextIdIn ("scan for the highest existing id, never guess"), adapted from PowerPoint's numeric shape ids to ODF's string-named styles. Never mutates or removes anything it finds; the caller is responsible for actually appending the newly-named element, keeping this in line with StyleRegistry.intern's own append-only contract (see props.ts).
 export function nextStyleName(
   automaticStyles: XmlElement,
   tag: string,
@@ -64,7 +64,7 @@ export function nextStyleName(
   return `${prefix}${max + 1}`;
 }
 
-// A single, shared, idempotently-created paragraph style carrying fo:break-before="page". ODF has no inline "hard page break" content element the way WordprocessingML's w:br/@w:type="page" is (see docx's own DocxBody.appendPageBreak, src/edit/docx/editor.ts) -- a manual page break is exclusively a paragraph-style property, so OdtBody.appendPageBreak (editor.ts) inserts an empty paragraph pointed at this style. Reused across every call (looked up by its fixed name, never re-minted) since there is exactly one way to want "a page break here" -- unlike table-column widths or list bullet styles, there is no varying property set that would ever need a second, differently-fingerprinted entry.
+// A single, shared, idempotently-created paragraph style carrying fo:break-before="page". ODF has no inline "hard page break" content element the way WordprocessingML's w:br/@w:type="page" is (see docx's own DocxBody.appendPageBreak, src/edit/docx/editor.ts) — a manual page break is exclusively a paragraph-style property, so OdtBody.appendPageBreak (editor.ts) inserts an empty paragraph pointed at this style. Reused across every call (looked up by its fixed name, never re-minted) since there is exactly one way to want "a page break here" — unlike table-column widths or list bullet styles, there is no varying property set that would ever need a second, differently-fingerprinted entry.
 const PAGE_BREAK_STYLE_NAME = "OdtPageBreak";
 
 export function ensurePageBreakStyleName(pkg: Package): string {

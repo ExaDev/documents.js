@@ -1,7 +1,7 @@
 import type { ContentDocument, ContentSheet } from "document-schema.js";
 import { DEFAULT_CSV_DELIMITER, quoteCsvField } from "./records";
 
-// The csv write half: a spreadsheet ContentDocument -> RFC 4180 text, emitting each cell's displayText (the cell's own printed form, independent of value.kind -- a currency cell writes "£42.50", not its numeric value). The sheet-selection contract mirrors src/odb/csv.ts's own odbToCsv table selection exactly: a named sheet must exist, a multi-sheet document requires a name, and a lone sheet is selected by default -- csv has no representation for a second sheet, so writing one is a caller decision, never a silent truncation.
+// The csv write half: a spreadsheet ContentDocument -> RFC 4180 text, emitting each cell's displayText (the cell's own printed form, independent of value.kind — a currency cell writes "£42.50", not its numeric value). The sheet-selection contract mirrors src/odb/csv.ts's own odbToCsv table selection exactly: a named sheet must exist, a multi-sheet document requires a name, and a lone sheet is selected by default — csv has no representation for a second sheet, so writing one is a caller decision, never a silent truncation.
 
 export class CsvUnsupportedDocumentKindError extends Error {
   readonly kind: ContentDocument["kind"];
@@ -20,7 +20,7 @@ export class CsvSheetNotSpecifiedError extends Error {
 
   constructor(availableSheets: readonly string[]) {
     super(
-      `buildCsvText: this document has more than one sheet (${availableSheets.join(", ")}) -- pass { sheet: '<name>' } to select one`,
+      `buildCsvText: this document has more than one sheet (${availableSheets.join(", ")}) — pass { sheet: '<name>' } to select one`,
     );
     this.name = "CsvSheetNotSpecifiedError";
     this.availableSheets = availableSheets;
@@ -33,7 +33,7 @@ export class CsvSheetNotFoundError extends Error {
 
   constructor(sheet: string, availableSheets: readonly string[]) {
     super(
-      `buildCsvText: sheet "${sheet}" not found -- available sheet(s): ${availableSheets.length === 0 ? "(none)" : availableSheets.join(", ")}`,
+      `buildCsvText: sheet "${sheet}" not found — available sheet(s): ${availableSheets.length === 0 ? "(none)" : availableSheets.join(", ")}`,
     );
     this.name = "CsvSheetNotFoundError";
     this.sheet = sheet;
@@ -42,7 +42,7 @@ export class CsvSheetNotFoundError extends Error {
 }
 
 export interface BuildCsvTextOptions {
-  // The single-character field delimiter to write with -- ',' (DEFAULT_CSV_DELIMITER) for csv, '\t' (records.ts's TSV_DELIMITER) for TSV.
+  // The single-character field delimiter to write with — ',' (DEFAULT_CSV_DELIMITER) for csv, '\t' (records.ts's TSV_DELIMITER) for TSV.
   readonly delimiter?: string;
   // Selects which sheet of a multi-sheet document is written. Optional only when the document has exactly one sheet.
   readonly sheet?: string;

@@ -14,7 +14,7 @@ import {
   newDrawingCounters,
 } from "./drawings-write";
 
-// This module has no round-trip read side of its own to lean on for coverage (unlike most of this package's write-side modules): typed/xlsx/drawings.ts's own reader never inspects an OOXML element's exact tag/attribute spelling, only its structural shape, so a content.test.ts round trip through readXlsxContent(buildXlsxPackageFromContent(x)) cannot tell "xdr:pic" from "xdr:foo" apart. Every constant here -- namespace URIs, element/attribute names, the fixed axis IDs -- is therefore asserted directly against buildSheetDrawing's own output, which is the only way any of them are ever actually exercised.
+// This module has no round-trip read side of its own to lean on for coverage (unlike most of this package's write-side modules): typed/xlsx/drawings.ts's own reader never inspects an OOXML element's exact tag/attribute spelling, only its structural shape, so a content.test.ts round trip through readXlsxContent(buildXlsxPackageFromContent(x)) cannot tell "xdr:pic" from "xdr:foo" apart. Every constant here — namespace URIs, element/attribute names, the fixed axis IDs — is therefore asserted directly against buildSheetDrawing's own output, which is the only way any of them are ever actually exercised.
 
 const PRINT_SETTINGS: ContentSheet["printSettings"] = {
   pageSize: { widthPt: 612, heightPt: 792 },
@@ -116,7 +116,7 @@ describe("buildSheetDrawing: undefined for a sheet with neither images nor embed
 });
 
 describe("buildSheetDrawing: one image and one chart, every element and attribute exactly", () => {
-  // Computed fresh inside beforeEach, not once at describe-body level: Stryker's own per-test coverage instrumentation attributes a line's execution to whichever test is "currently running" at the moment it executes, and a describe body runs during test COLLECTION, before any it() has started -- a call made there is invisible to that attribution, so Stryker silently falls back to running some OTHER, less precise test against a mutant on this line instead of this file's own (confirmed directly: an L62 mutant survived under a real scoped run despite this exact assertion catching it when applied by hand, until this call moved into beforeEach).
+  // Computed fresh inside beforeEach, not once at describe-body level: Stryker's own per-test coverage instrumentation attributes a line's execution to whichever test is "currently running" at the moment it executes, and a describe body runs during test COLLECTION, before any it() has started — a call made there is invisible to that attribution, so Stryker silently falls back to running some OTHER, less precise test against a mutant on this line instead of this file's own (confirmed directly: an L62 mutant survived under a real scoped run despite this exact assertion catching it when applied by hand, until this call moved into beforeEach).
   let result: NonNullable<ReturnType<typeof buildSheetDrawing>>;
   beforeEach(() => {
     const built = buildSheetDrawing(
@@ -420,7 +420,7 @@ describe("buildSheetDrawing: chartSeriesFromDocument's own sparse-cell fallback"
       sheets: [
         {
           name: "Data",
-          // No (0,1) series-name cell at all, and no (1,1) value cell -- both genuinely absent from the sparse array, the same shape chartCells leaves for a missing point. (2,1) forces maxColumn to 1 so a series column genuinely exists to read the missing (0,1)/(1,1) cells back through.
+          // No (0,1) series-name cell at all, and no (1,1) value cell — both genuinely absent from the sparse array, the same shape chartCells leaves for a missing point. (2,1) forces maxColumn to 1 so a series column genuinely exists to read the missing (0,1)/(1,1) cells back through.
           cells: [
             {
               row: 1,
@@ -635,7 +635,7 @@ describe("buildSheetDrawing: object-id and relationship-id counters advance forw
     });
   });
 
-  it("assigns cNvPr id 2 then 3 to two charts in document order -- the object-id counter advances for charts too, not just images", () => {
+  it("assigns cNvPr id 2 then 3 to two charts in document order — the object-id counter advances for charts too, not just images", () => {
     const result = buildSheetDrawing(
       sheet({
         embeddedObjects: [chartObject(), chartObject({ anchorColumn: 5 })],

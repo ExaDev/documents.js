@@ -49,7 +49,7 @@ import {
   xlsxToOds,
 } from "./convert";
 
-// The dedicated round-trip suite for the six PDF-bypassing cross-format bridges (convert.ts's own "Six cross-format bridges" section) -- exercised via both directions and both starting points for each of the three pairs (odt<->docx, odp<->pptx, ods<->xlsx), per the project's own explicit "we should also have .odt <-> .docx roundtrip tests and similar for the other types" requirement. Real-file, real-LibreOffice verification (independently-produced odt/odp/ods opened through the bridge and back into LibreOffice) is a separate, manual, non-CI-gated step -- see this repo's own README Fidelity section and test:corpus precedent for why that class of check deliberately never runs inside `pnpm test`.
+// The dedicated round-trip suite for the six PDF-bypassing cross-format bridges (convert.ts's own "Six cross-format bridges" section) — exercised via both directions and both starting points for each of the three pairs (odt<->docx, odp<->pptx, ods<->xlsx), per the project's own explicit "we should also have .odt <-> .docx roundtrip tests and similar for the other types" requirement. Real-file, real-LibreOffice verification (independently-produced odt/odp/ods opened through the bridge and back into LibreOffice) is a separate, manual, non-CI-gated step — see this repo's own README Fidelity section and test:corpus precedent for why that class of check deliberately never runs inside `pnpm test`.
 
 function docxContentOf(bytes: Uint8Array<ArrayBuffer>) {
   const content = readDocxContent(decodeOoxmlPackage(bytes));
@@ -101,7 +101,7 @@ function xlsxContentOf(bytes: Uint8Array<ArrayBuffer>) {
 
 // --- odt <-> docx ----------------------------------------------------------------------------------------------
 
-// Multiple paragraphs, a styleId string (Heading1), a bold+italic+coloured run, a two-level list, and a 2x2 table -- the content shapes the task explicitly names.
+// Multiple paragraphs, a styleId string (Heading1), a bold+italic+coloured run, a two-level list, and a 2x2 table — the content shapes the task explicitly names.
 function buildRichDocx(): Uint8Array<ArrayBuffer> {
   const editor = createDocx();
   editor.body
@@ -195,7 +195,7 @@ function paragraphTexts(content: ReturnType<typeof docxContentOf>): string[] {
 }
 
 describe("onDocument (DocumentTree side channel)", () => {
-  // A bridge never runs a layout engine (see convert.ts's own DocumentBridgeOptions comment), so its DocumentTree always carries content only, with no pages array and no node frames -- unlike the PDF-pivot conversions, which populate both (see convert.test.ts's own docxToPdf onDocument test).
+  // A bridge never runs a layout engine (see convert.ts's own DocumentBridgeOptions comment), so its DocumentTree always carries content only, with no pages array and no node frames — unlike the PDF-pivot conversions, which populate both (see convert.test.ts's own docxToPdf onDocument test).
   it("calls onDocument with content populated and pages left undefined", () => {
     let captured: DocumentTree | undefined;
     const docxBytes = odtToDocx(minimalOdtBytes(), {
@@ -213,7 +213,7 @@ describe("onDocument (DocumentTree side channel)", () => {
   });
 });
 
-// Regression guard for the newly-composed xlsx<->PDF pair (convert.ts's own xlsxToPdf/pdfToXlsx, built by composing the ods<->xlsx bridge with the ods<->pdf layout edge): confirms that adding that composed route did NOT change docxToOdt/odtToDocx or pptxToOdp/odpToPptx to route through a PDF pivot instead of their own existing direct bridge functions. convertWordprocessingToLayout (src/layout/engine.ts) and convertPresentationToLayout (src/layout/slides.ts) are the one and only entry points every PDF-pivot conversion in this file (docxToPdf/odtToPdf/pptxToPdf/odpToPdf, and their reverses via reconstructWordprocessing/reconstructPresentation) must pass through to reach a LayoutDocument at all -- so spying on them and asserting zero calls during a bridge conversion is a direct, mechanical proof that no PDF pivot ran, not an inference from timing or byte size.
+// Regression guard for the newly-composed xlsx<->PDF pair (convert.ts's own xlsxToPdf/pdfToXlsx, built by composing the ods<->xlsx bridge with the ods<->pdf layout edge): confirms that adding that composed route did NOT change docxToOdt/odtToDocx or pptxToOdp/odpToPptx to route through a PDF pivot instead of their own existing direct bridge functions. convertWordprocessingToLayout (src/layout/engine.ts) and convertPresentationToLayout (src/layout/slides.ts) are the one and only entry points every PDF-pivot conversion in this file (docxToPdf/odtToPdf/pptxToPdf/odpToPdf, and their reverses via reconstructWordprocessing/reconstructPresentation) must pass through to reach a LayoutDocument at all — so spying on them and asserting zero calls during a bridge conversion is a direct, mechanical proof that no PDF pivot ran, not an inference from timing or byte size.
 describe("docxToOdt/odtToDocx and pptxToOdp/odpToPptx never invoke the layout engine (no PDF-pivot regression)", () => {
   it("docxToOdt does not call convertWordprocessingToLayout or convertPresentationToLayout", () => {
     const engineSpy = vi.spyOn(engineModule, "convertWordprocessingToLayout");
@@ -290,7 +290,7 @@ describe("odt <-> docx: docx -> odt -> docx", () => {
     expect(styledRun?.color?.g).toBeCloseTo(0, 5);
     expect(styledRun?.color?.b).toBeCloseTo(0, 5);
 
-    // List membership: four consecutive list paragraphs at blocks[3..6], levels 0,0,1,0 -- the exact shape appendListRun (src/edit/odt/content.ts) is built to reconstruct from odt's structural text:list/text:list-item tree.
+    // List membership: four consecutive list paragraphs at blocks[3..6], levels 0,0,1,0 — the exact shape appendListRun (src/edit/odt/content.ts) is built to reconstruct from odt's structural text:list/text:list-item tree.
     const listBlocks = roundTripped.sections[0]!.blocks.slice(3, 7);
     const listLevels = listBlocks.map((b) =>
       b.kind === "paragraph" ? b.list?.level : undefined,
@@ -392,7 +392,7 @@ describe("odt <-> docx: odt -> docx -> odt", () => {
 
 // --- odp <-> pptx ------------------------------------------------------------------------------------------------
 
-// Two slides, a styled run, and speaker notes on slide 1 only -- the content shapes the task explicitly names, including notes.
+// Two slides, a styled run, and speaker notes on slide 1 only — the content shapes the task explicitly names, including notes.
 function buildRichPptx(): Uint8Array<ArrayBuffer> {
   const editor = createPptx();
   const slide1 = editor.addSlide();
@@ -551,14 +551,14 @@ describe("odp <-> pptx: shape rotation", () => {
   });
 });
 
-// minimalOdpBytes() (test-support/odp.ts) carries a rotated frame, a grouped pair of shapes, an image, and a TABLE SHAPE (a draw:frame whose content is a table:table directly, not inside a text box) -- the same real-shape variety odf.js's own readOdpContent fixture verified against genuine LibreOffice 26.2 output. buildOdpPackage/buildPptxPackage's own appendShape (src/edit/odp/content.ts, src/edit/pptx/content.ts) now writes a table block into a real table:table/a:tbl shape via OdpSlide.addTable/PptxSlide.addTable, so the table shape's own content survives this bridge exactly like every other shape kind on this fixture.
+// minimalOdpBytes() (test-support/odp.ts) carries a rotated frame, a grouped pair of shapes, an image, and a TABLE SHAPE (a draw:frame whose content is a table:table directly, not inside a text box) — the same real-shape variety odf.js's own readOdpContent fixture verified against genuine LibreOffice 26.2 output. buildOdpPackage/buildPptxPackage's own appendShape (src/edit/odp/content.ts, src/edit/pptx/content.ts) now writes a table block into a real table:table/a:tbl shape via OdpSlide.addTable/PptxSlide.addTable, so the table shape's own content survives this bridge exactly like every other shape kind on this fixture.
 describe("odp <-> pptx: a table shape survives odpToPptx", () => {
   it("carries the rotated title, the grouped shapes, the image, the notes, and the table shape's own cell content through odpToPptx", () => {
     const pptxBytes = odpToPptx(minimalOdpBytes());
     const content = pptxContentOf(pptxBytes);
     expect(content.slides).toHaveLength(2);
 
-    // Slide 1: rotated title + two grouped shapes + notes all survive -- none of these are the table-in-shape case.
+    // Slide 1: rotated title + two grouped shapes + notes all survive — none of these are the table-in-shape case.
     const slide1Texts = content.slides[0]!.shapes.map((_, index) =>
       slideText(content.slides[0]!, index),
     );
@@ -598,9 +598,9 @@ describe("odp <-> pptx: a table shape survives odpToPptx", () => {
 
 // --- ods <-> xlsx ------------------------------------------------------------------------------------------------
 //
-// The least mature of the three bridges -- ooxml.js's flat xlsx writer (buildXlsxPackageFromContent since ooxml.js 4.0.0) was brand-new when this section was written -- so this section is deliberately the most scrutinised: every ContentCellValue kind ODS can actually produce, a merged range, a formula carried verbatim, and column widths checked against a stated numeric tolerance rather than exact equality.
+// The least mature of the three bridges — ooxml.js's flat xlsx writer (buildXlsxPackageFromContent since ooxml.js 4.0.0) was brand-new when this section was written — so this section is deliberately the most scrutinised: every ContentCellValue kind ODS can actually produce, a merged range, a formula carried verbatim, and column widths checked against a stated numeric tolerance rather than exact equality.
 //
-// COLUMN WIDTH TOLERANCE: 1pt. ptToColumnWidthChars (ooxml.js's src/typed/xlsx/units.ts) is a best-effort ALGEBRAIC inverse of columnWidthCharsToPt's own two Math.trunc() pixel-grid roundings -- that module's own doc comment says as much: "not guaranteed exact for every x". The underlying grid is 96 pixels/inch, so one truncated pixel is 1/96in = 0.75pt; empirically walking columnWidthCharsToPt(ptToColumnWidthChars(x).toFixed(2)) across a wide range of realistic column widths (1..400pt, quarter-point steps) never exceeds 0.75pt of drift. 1pt is used as the assertion tolerance -- comfortably above the observed 0.75pt maximum (so the test isn't flaky against a legitimate off-by-one-pixel rounding), while still tight enough to catch a genuine regression (a wrong unit, a dropped conversion, a swapped axis would all produce errors far larger than 1pt).
+// COLUMN WIDTH TOLERANCE: 1pt. ptToColumnWidthChars (ooxml.js's src/typed/xlsx/units.ts) is a best-effort ALGEBRAIC inverse of columnWidthCharsToPt's own two Math.trunc() pixel-grid roundings — that module's own doc comment says as much: "not guaranteed exact for every x". The underlying grid is 96 pixels/inch, so one truncated pixel is 1/96in = 0.75pt; empirically walking columnWidthCharsToPt(ptToColumnWidthChars(x).toFixed(2)) across a wide range of realistic column widths (1..400pt, quarter-point steps) never exceeds 0.75pt of drift. 1pt is used as the assertion tolerance — comfortably above the observed 0.75pt maximum (so the test isn't flaky against a legitimate off-by-one-pixel rounding), while still tight enough to catch a genuine regression (a wrong unit, a dropped conversion, a swapped axis would all produce errors far larger than 1pt).
 const COLUMN_WIDTH_TOLERANCE_PT = 1;
 
 function cellAt(
@@ -616,7 +616,7 @@ describe("ods <-> xlsx: ods -> xlsx (one hop, the character-width-unit conversio
     const original = odsContentOf(richOdsBytes());
     const originalSheet = original.sheets[0]!;
 
-    // The source ODS fixture's own header row and every cell's rendered displayText: buildRichFixturePackage (test-support/ods.ts) writes a distinct text:p run for every cell alongside its office:value, and none of it is exercised by any assertion below (those check only the CONVERTED xlsx side's `.value`) -- so a header cell silently losing its label, or a cell's displayText silently losing its rendered text, would go undetected without checking the source fixture directly.
+    // The source ODS fixture's own header row and every cell's rendered displayText: buildRichFixturePackage (test-support/ods.ts) writes a distinct text:p run for every cell alongside its office:value, and none of it is exercised by any assertion below (those check only the CONVERTED xlsx side's `.value`) — so a header cell silently losing its label, or a cell's displayText silently losing its rendered text, would go undetected without checking the source fixture directly.
     expect(cellAt(originalSheet, 0, 0)?.displayText).toBe("Name");
     expect(cellAt(originalSheet, 0, 1)?.displayText).toBe("Amount");
     expect(cellAt(originalSheet, 0, 2)?.displayText).toBe("Active");
@@ -656,7 +656,7 @@ describe("ods <-> xlsx: ods -> xlsx (one hop, the character-width-unit conversio
       value: true,
     });
 
-    // ooxml.js's xlsx writer/readXlsxContent (2.6.1+) now carry a full xlsx number-format engine: a percentage cell writes a real "0%"-family numFmt and reads back as genuine 'percentage', and a currency cell writes a real "[$USD]#,##0.00"-family numFmt (the ISO currency code embedded in the format code itself, not a separate cell attribute -- xlsx has no dedicated currency cell type) and reads back as genuine 'currency' with that code recovered. Both are a real fidelity improvement over the previous "downgrades to plain number" behaviour -- the semantic kind now survives, not just the numeric value.
+    // ooxml.js's xlsx writer/readXlsxContent (2.6.1+) now carry a full xlsx number-format engine: a percentage cell writes a real "0%"-family numFmt and reads back as genuine 'percentage', and a currency cell writes a real "[$USD]#,##0.00"-family numFmt (the ISO currency code embedded in the format code itself, not a separate cell attribute — xlsx has no dedicated currency cell type) and reads back as genuine 'currency' with that code recovered. Both are a real fidelity improvement over the previous "downgrades to plain number" behaviour — the semantic kind now survives, not just the numeric value.
     expect(cellAt(sheet, 2, 0)?.value).toEqual({
       kind: "percentage",
       value: 0.15,
@@ -666,19 +666,19 @@ describe("ods <-> xlsx: ods -> xlsx (one hop, the character-width-unit conversio
       value: 9.99,
       currency: "USD",
     });
-    // The same number-format engine now reads a date-only numFmt back as genuine 'date' rather than the previous catch-all 'dateTime' -- xlsx still has only the one combined date/time serial wire type, but the reader can now tell a date-only format code from one that also carries a time component.
+    // The same number-format engine now reads a date-only numFmt back as genuine 'date' rather than the previous catch-all 'dateTime' — xlsx still has only the one combined date/time serial wire type, but the reader can now tell a date-only format code from one that also carries a time component.
     expect(cellAt(sheet, 2, 2)?.value).toEqual({
       kind: "date",
       value: "2026-01-15",
     });
 
-    // A source ODS 'time' cell has no numeric serial to write at all -- its own ContentCellValue carries an ISO-8601 duration STRING ("PT14H30M00S"), not a fractional-day number, so the xlsx writer cannot express it as an xlsx date/time serial and writes it as a plain string cell instead. The value string still survives byte-for-byte, just honestly labelled as text rather than mislabelled as a date/time.
+    // A source ODS 'time' cell has no numeric serial to write at all — its own ContentCellValue carries an ISO-8601 duration STRING ("PT14H30M00S"), not a fractional-day number, so the xlsx writer cannot express it as an xlsx date/time serial and writes it as a plain string cell instead. The value string still survives byte-for-byte, just honestly labelled as text rather than mislabelled as a date/time.
     expect(cellAt(sheet, 3, 0)?.value).toEqual({
       kind: "string",
       value: "PT14H30M00S",
     });
 
-    // Formula: written verbatim into <f>, never parsed, translated, or evaluated -- the exact OpenFormula-syntax string ODS carried survives byte-for-byte, even though it is not valid Excel A1 syntax (a real Excel opening this file would show a formula error; this bridge makes no claim about cross-application formula semantics, only about byte preservation).
+    // Formula: written verbatim into <f>, never parsed, translated, or evaluated — the exact OpenFormula-syntax string ODS carried survives byte-for-byte, even though it is not valid Excel A1 syntax (a real Excel opening this file would show a formula error; this bridge makes no claim about cross-application formula semantics, only about byte preservation).
     const formulaCell = cellAt(sheet, 3, 1);
     expect(formulaCell?.formula).toBe("of:=[.B2]*2");
     expect(formulaCell?.value).toEqual({ kind: "number", value: 85 });
@@ -688,7 +688,7 @@ describe("ods <-> xlsx: ods -> xlsx (one hop, the character-width-unit conversio
     expect(mergedCell?.colSpan).toBe(2);
     expect(mergedCell?.value).toEqual({ kind: "string", value: "Merged Cell" });
 
-    // Column widths: within COLUMN_WIDTH_TOLERANCE_PT of the source ODS's own widths (3cm/4cm/2cm), not exact equality -- see this describe block's own top comment for why.
+    // Column widths: within COLUMN_WIDTH_TOLERANCE_PT of the source ODS's own widths (3cm/4cm/2cm), not exact equality — see this describe block's own top comment for why.
     expect(sheet.columns).toHaveLength(3);
     originalSheet.columns.forEach((originalColumn, index) => {
       const xlsxColumn = sheet.columns.find((c) => c.index === index);
@@ -740,7 +740,7 @@ describe("ods <-> xlsx: ods -> xlsx -> ods (double hop, starting from ods)", () 
     const roundTrippedBytes = xlsxToOds(xlsxBytes);
     const sheet = odsContentOf(roundTrippedBytes).sheets[0]!;
 
-    // Percentage/currency: both the VALUE and the semantic kind now survive the full double hop -- ooxml.js's number-format engine (see the one-hop describe block above) recovers 'percentage'/'currency' on the first hop, and buildOdsPackage's own OdsCell.value setter writes whatever kind it is given back out on the second, so nothing is lost in either direction any more.
+    // Percentage/currency: both the VALUE and the semantic kind now survive the full double hop — ooxml.js's number-format engine (see the one-hop describe block above) recovers 'percentage'/'currency' on the first hop, and buildOdsPackage's own OdsCell.value setter writes whatever kind it is given back out on the second, so nothing is lost in either direction any more.
     expect(cellAt(sheet, 2, 0)?.value).toEqual({
       kind: "percentage",
       value: 0.15,
@@ -751,13 +751,13 @@ describe("ods <-> xlsx: ods -> xlsx -> ods (double hop, starting from ods)", () 
       currency: "USD",
     });
 
-    // Time: collapses into a plain 'string' on the first hop (xlsx has no serial representation for an ISO-8601 duration, see the one-hop describe block above) and STAYS 'string' on the second, since buildOdsPackage's own OdsCell.value setter writes whatever kind it is given -- there is no way back to 'time' once the first hop has already thrown that distinction away.
+    // Time: collapses into a plain 'string' on the first hop (xlsx has no serial representation for an ISO-8601 duration, see the one-hop describe block above) and STAYS 'string' on the second, since buildOdsPackage's own OdsCell.value setter writes whatever kind it is given — there is no way back to 'time' once the first hop has already thrown that distinction away.
     expect(cellAt(sheet, 3, 0)?.value).toEqual({
       kind: "string",
       value: "PT14H30M00S",
     });
 
-    // Column widths: buildOdsPackage (src/edit/ods/content.ts) now writes ContentSheetColumn.widthPt for real via OdsSheet.setColumnWidth (src/edit/ods/column-row.ts) -- a fix made while composing xlsxToPdf, since an unstyled column previously read back at widthPt 0 there too, and src/layout/sheets.ts's own resolveAxis treats that explicit zero as authoritative rather than falling back to a default (see column-row.ts's own top-of-file note). The tolerance here is COLUMN_WIDTH_TOLERANCE_PT stacked twice, not once -- this is a genuine double hop through the SAME lossy xlsx character-width-unit conversion the one-hop test above already documents (ods pt -> xlsx character-width units on the first hop, xlsx character-width units -> ods pt again on the second), so the accumulated drift can be up to twice the one-hop test's own single-hop bound.
+    // Column widths: buildOdsPackage (src/edit/ods/content.ts) now writes ContentSheetColumn.widthPt for real via OdsSheet.setColumnWidth (src/edit/ods/column-row.ts) — a fix made while composing xlsxToPdf, since an unstyled column previously read back at widthPt 0 there too, and src/layout/sheets.ts's own resolveAxis treats that explicit zero as authoritative rather than falling back to a default (see column-row.ts's own top-of-file note). The tolerance here is COLUMN_WIDTH_TOLERANCE_PT stacked twice, not once — this is a genuine double hop through the SAME lossy xlsx character-width-unit conversion the one-hop test above already documents (ods pt -> xlsx character-width units on the first hop, xlsx character-width units -> ods pt again on the second), so the accumulated drift can be up to twice the one-hop test's own single-hop bound.
     expect(sheet.columns).toHaveLength(3);
     originalSheet.columns.forEach((originalColumn, index) => {
       const roundTrippedColumn = sheet.columns.find((c) => c.index === index);
@@ -778,7 +778,7 @@ describe("ods <-> xlsx: ods -> xlsx -> ods (double hop, starting from ods)", () 
   });
 });
 
-// A genuinely independent xlsx starting point -- built directly via ooxml.js's own buildXlsxPackageFromContent + encodePackage, NOT via odsToXlsx -- so this describe block's own round trip doesn't merely re-exercise odsToXlsx's own output. Includes an 'error' cell, the one ContentCellValue kind ODS structurally cannot ever produce on read (OdsCell.value's own getter, src/edit/ods/cell.ts: "Reading it back can never reproduce kind:'error' -- no writer ... can put that value-type on the wire -- and that is a property of the format, not a gap in this editor"), since xlsx's own t="e" cell type is a genuine ECMA-376 wire format ODS has no equivalent for.
+// A genuinely independent xlsx starting point — built directly via ooxml.js's own buildXlsxPackageFromContent + encodePackage, NOT via odsToXlsx — so this describe block's own round trip doesn't merely re-exercise odsToXlsx's own output. Includes an 'error' cell, the one ContentCellValue kind ODS structurally cannot ever produce on read (OdsCell.value's own getter, src/edit/ods/cell.ts: "Reading it back can never reproduce kind:'error' — no writer ... can put that value-type on the wire — and that is a property of the format, not a gap in this editor"), since xlsx's own t="e" cell type is a genuine ECMA-376 wire format ODS has no equivalent for.
 function buildXlsxNativeContentDocument(): ContentDocument {
   return {
     kind: "spreadsheet",
@@ -840,7 +840,7 @@ describe("ods <-> xlsx: xlsx -> ods -> xlsx (double hop, starting from a genuine
       value: "plain text",
     });
 
-    // ODS has no 'error' value-type on the wire at all (see this describe block's own top comment) -- OdsCell.value's own write-side choice for 'error' is to write it as a genuine, non-empty office:string-value carrying the error's own text, so the round trip through ods turns the ORIGINAL xlsx error cell into a plain string cell carrying the identical text. The message survives; the 'error' semantic does not.
+    // ODS has no 'error' value-type on the wire at all (see this describe block's own top comment) — OdsCell.value's own write-side choice for 'error' is to write it as a genuine, non-empty office:string-value carrying the error's own text, so the round trip through ods turns the ORIGINAL xlsx error cell into a plain string cell carrying the identical text. The message survives; the 'error' semantic does not.
     expect(cellAt(sheet, 0, 0)?.value).toEqual({
       kind: "string",
       value: "#DIV/0!",
@@ -859,7 +859,7 @@ describe("ods <-> xlsx: xlsx -> ods -> xlsx (double hop, starting from a genuine
 
 // --- markdown <-> docx, markdown <-> odt --------------------------------------------------------------------------
 //
-// markdownToDocx/docxToMarkdown and markdownToOdt/odtToMarkdown are hand-written bridge functions -- the composition engine's pathfinder (resolveCompositionPlan in composition.ts) routes them as same-variant bridge hops, and convertDocument's bridge executor runs the identical decode/read/build/encode sequence these functions already hard-code.
+// markdownToDocx/docxToMarkdown and markdownToOdt/odtToMarkdown are hand-written bridge functions — the composition engine's pathfinder (resolveCompositionPlan in composition.ts) routes them as same-variant bridge hops, and convertDocument's bridge executor runs the identical decode/read/build/encode sequence these functions already hard-code.
 
 describe("markdownToDocx/docxToMarkdown and markdownToOdt/odtToMarkdown never invoke the layout engine (no PDF-pivot regression)", () => {
   it("markdownToDocx does not call convertWordprocessingToLayout", () => {
@@ -971,7 +971,7 @@ describe("markdown <-> odt: markdown -> odt -> markdown", () => {
     );
   });
 
-  // The odt bytes themselves carry the heading as real ODF structure -- a text:h element with text:outline-level and the Heading_20_1 style spelling -- so a consumer outside this package (LibreOffice's outline, TOC fields, any ODF toolkit) sees a heading, not a plain paragraph styled with a name nothing resolves. The styleId-only assertions above pass even when the heading is written as a text:p carrying the synthetic "Heading1" string verbatim; this one cannot.
+  // The odt bytes themselves carry the heading as real ODF structure — a text:h element with text:outline-level and the Heading_20_1 style spelling — so a consumer outside this package (LibreOffice's outline, TOC fields, any ODF toolkit) sees a heading, not a plain paragraph styled with a name nothing resolves. The styleId-only assertions above pass even when the heading is written as a text:p carrying the synthetic "Heading1" string verbatim; this one cannot.
   it("writes the markdown heading as a real text:h in the odt bytes, with outline level and the ODF style spelling", () => {
     const odtBytes = markdownToOdt(encodeMarkdownText(richMarkdownText()));
     const pkg = decodeOdfPackage(odtBytes);
@@ -1002,7 +1002,7 @@ describe("markdown <-> odt: markdown -> odt -> markdown", () => {
   });
 });
 
-// docxToMarkdown/odtToMarkdown starting from a rich, editor-built docx/odt -- proving text, bold+italic styling, and list membership survive the ContentDocument -> markdown direction too, not just markdown -> ContentDocument.
+// docxToMarkdown/odtToMarkdown starting from a rich, editor-built docx/odt — proving text, bold+italic styling, and list membership survive the ContentDocument -> markdown direction too, not just markdown -> ContentDocument.
 describe("docx <-> markdown: docx -> markdown -> docx", () => {
   it("carries text, bold/italic styling, and list membership through both hops", () => {
     const originalBytes = buildRichDocx();
@@ -1025,12 +1025,12 @@ describe("docx <-> markdown: docx -> markdown -> docx", () => {
     expect(styledRun?.bold).toBe(true);
     expect(styledRun?.italic).toBe(true);
     expect(styledRun?.strike).toBe(true);
-    // Colour has no markdown source construct at all -- the docxToMarkdown hop drops it, matching writeMarkdownContent's own documented CommonMark-vocabulary narrowing.
+    // Colour has no markdown source construct at all — the docxToMarkdown hop drops it, matching writeMarkdownContent's own documented CommonMark-vocabulary narrowing.
     expect(styledRun?.color).toBeUndefined();
   });
 });
 
-// Cross-variant content bridges: wordprocessing <-> presentation (docx <-> pptx, odt <-> odp). Unlike the same-variant bridges above (direct ContentDocument copy), these cross a variant boundary via a semantic transform (src/convert/variant-bridges.ts) -- a flow document's blocks are split into slides, and a deck's blocks are concatenated into a flow. Both directions are approximations, but the blocks themselves (paragraphs, run styling, tables, images) survive intact.
+// Cross-variant content bridges: wordprocessing <-> presentation (docx <-> pptx, odt <-> odp). Unlike the same-variant bridges above (direct ContentDocument copy), these cross a variant boundary via a semantic transform (src/convert/variant-bridges.ts) — a flow document's blocks are split into slides, and a deck's blocks are concatenated into a flow. Both directions are approximations, but the blocks themselves (paragraphs, run styling, tables, images) survive intact.
 describe("cross-variant bridge: docx <-> pptx", () => {
   it("splits a docx with headings into slides, and concatenates back", () => {
     const editor = createDocx();

@@ -8,7 +8,7 @@ import { useAppDispatch, useAppState } from "../../../state/context.js";
 import { anyOverlayOpen, type XlsOpenDocument } from "../../../state/types.js";
 import { OdsCellEditor } from "../ods/cell-detail.js";
 
-// The xls root screens, the sparse-model counterpart of the ods sheet list/grid pair. Everything here reads the live editor fresh on every render (the live-view rule in state/types.ts): XlsEditor's sheets()/cells() are plain array walks over the ContentDocument, so -- unlike ods, whose OdsSheet.cell() display-read has a repeated-run materialisation hazard its own grid carefully routes around through readOdsContent -- a xls grid read is exactly a lookup in the sparse cells array and needs no such detour.
+// The xls root screens, the sparse-model counterpart of the ods sheet list/grid pair. Everything here reads the live editor fresh on every render (the live-view rule in state/types.ts): XlsEditor's sheets()/cells() are plain array walks over the ContentDocument, so — unlike ods, whose OdsSheet.cell() display-read has a repeated-run materialisation hazard its own grid carefully routes around through readOdsContent — a xls grid read is exactly a lookup in the sparse cells array and needs no such detour.
 
 function xlsDocument(state: ReturnType<typeof useAppState>): XlsOpenDocument {
   const doc = state.openDocument;
@@ -84,7 +84,7 @@ export function XlsSheetListScreen(): ReactElement {
       <ListView
         items={rows}
         selectedIndex={selectedIndex}
-        emptyMessage="This workbook has no sheets yet -- press 'a' to add one."
+        emptyMessage="This workbook has no sheets yet — press 'a' to add one."
         renderItem={(row, isSelected) => (
           <Text color={selectedColor(isSelected)} inverse={isSelected}>
             {row.name}
@@ -112,7 +112,7 @@ export function XlsSheetListScreen(): ReactElement {
   );
 }
 
-// Column letters the way a spreadsheet states them (A, B, ... AA), for the cursor address readout -- the identical convention the ods grid's own address line uses.
+// Column letters the way a spreadsheet states them (A, B, ... AA), for the cursor address readout — the identical convention the ods grid's own address line uses.
 function columnLetters(column: number): string {
   let value = column;
   let letters = "";
@@ -147,7 +147,7 @@ export function XlsSpreadsheetGridScreen(props: {
   const editing = editSession !== undefined;
   const sheet = doc.editor.sheets()[props.sheetIndex];
 
-  // Cursor movement and editing, raw useInput the way the ods grid itself drives its cursor (a deliberate override of the linear-list convention -- see its own comment); every handler is a no-op when the addressed sheet does not exist, so hook order stays identical across renders.
+  // Cursor movement and editing, raw useInput the way the ods grid itself drives its cursor (a deliberate override of the linear-list convention — see its own comment); every handler is a no-op when the addressed sheet does not exist, so hook order stays identical across renders.
   useInput(
     (input, key) => {
       if (sheet === undefined) {
@@ -222,7 +222,7 @@ export function XlsSpreadsheetGridScreen(props: {
     return (
       <Box flexDirection="column">
         <Text bold>
-          {sheet.name} -- non-empty cells ({entries.length}) -- 't' back to grid
+          {sheet.name} — non-empty cells ({entries.length}) — 't' back to grid
         </Text>
         {entries.length === 0 ? (
           <Text dimColor>No cells carry a value yet.</Text>

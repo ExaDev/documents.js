@@ -6,7 +6,7 @@ import {
 } from '../../src';
 import type { ContentDocument } from 'document-schema.js';
 
-// Proves epub-codec's surface executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. Every path here -- the OCF ZIP layer, XML parse/build (fast-xml-parser), XHTML read/write, OPF/nav read/write, and the base64/image-dimension codecs -- is deliberately Node-free; if any touched node:fs/Buffer/process/node:crypto the workerd isolate would throw rather than these passing. This is the runtime complement to the static no-restricted-imports guard eslint.config.ts enforces.
+// Proves epub-codec's surface executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. Every path here — the OCF ZIP layer, XML parse/build (fast-xml-parser), XHTML read/write, OPF/nav read/write, and the base64/image-dimension codecs — is deliberately Node-free; if any touched node:fs/Buffer/process/node:crypto the workerd isolate would throw rather than these passing. This is the runtime complement to the static no-restricted-imports guard eslint.config.ts enforces.
 describe('epub-codec under the Cloudflare Workers runtime', () => {
   it('writes and reads back a real EPUB 3 zip end to end', () => {
     const document: ContentDocument = {

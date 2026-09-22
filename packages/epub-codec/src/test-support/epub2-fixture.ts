@@ -1,7 +1,7 @@
 import { EPUB_MIME_TYPE } from "../format";
 import { zipPackage } from "../zip";
 
-// A hand-authored, real EPUB 2 fixture -- built directly via zipPackage from literal XML strings, never through this package's own writer (which only ever writes EPUB 3, per ExaDev/documents.js#801's own explicit scope: EPUB 2 is read-only). Covers the two EPUB 2-specific constructs this package's own hand-authored corpus needs: NCX navigation (no EPUB 3 nav document at all) and the linked-anchor footnote idiom (a plain <a href="#id"> reference/target pair, with no epub:type vocabulary to name the relationship -- recognised here via the class="footnote" convention src/xhtml/footnote.ts documents).
+// A hand-authored, real EPUB 2 fixture — built directly via zipPackage from literal XML strings, never through this package's own writer (which only ever writes EPUB 3, per ExaDev/documents.js#801's own explicit scope: EPUB 2 is read-only). Covers the two EPUB 2-specific constructs this package's own hand-authored corpus needs: NCX navigation (no EPUB 3 nav document at all) and the linked-anchor footnote idiom (a plain <a href="#id"> reference/target pair, with no epub:type vocabulary to name the relationship — recognised here via the class="footnote" convention src/xhtml/footnote.ts documents).
 
 const CONTAINER_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
@@ -44,7 +44,7 @@ const TOC_NCX = `<?xml version="1.0" encoding="UTF-8"?>
 </ncx>
 `;
 
-// The EPUB 2 linked-anchor footnote idiom: the reference site carries no epub:type at all (that vocabulary didn't exist yet), just an ordinary <a href="#note1">; the target is a plain <p id="note1"> elsewhere in the same document. Real producers vary in exactly which element carries a "footnote"-naming class -- this fixture puts it on the reference, matching src/xhtml/footnote.test.ts's own primary case.
+// The EPUB 2 linked-anchor footnote idiom: the reference site carries no epub:type at all (that vocabulary didn't exist yet), just an ordinary <a href="#note1">; the target is a plain <p id="note1"> elsewhere in the same document. Real producers vary in exactly which element carries a "footnote"-naming class — this fixture puts it on the reference, matching src/xhtml/footnote.test.ts's own primary case.
 const CHAPTER1_XHTML = `<?xml version="1.0" encoding="UTF-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head><title>Chapter One</title></head>

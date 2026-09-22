@@ -15,7 +15,7 @@ import {
 } from "../../test-support/document-tree";
 import { readOds, readOdsContent } from "./read";
 
-// This suite reads real, unmodified LibreOffice 26.2-generated .ods fixtures (src/typed/ods/fixtures/*.ods, built via a headless UNO Basic macro driving the SAME UNO calls the Calc UI itself uses -- Format > Columns > Width, Format > Rows > Height, Format > Print Areas, Format > Page Style's Sheet tab -- never hand-edited afterwards) rather than programmatically reconstructing the expected XML shapes, mirroring readOdtContent's own established convention: this reader's own design brief is explicit that print-settings attribute names and the repeat-row/repeat-column mechanism must each be proven against genuine producer output, not just this package's own idea of what that output looks like. A handful of narrow scope-boundary/hazard-proof tests at the end use small, synthetic, hand-built packages instead (via el/txt), since a genuinely million-row repeat isn't something worth shipping as a binary fixture when the exact real repeat count is already established (typed/shared/a1.test.ts, citing a real LibreOffice-shipped .ots template).
+// This suite reads real, unmodified LibreOffice 26.2-generated .ods fixtures (src/typed/ods/fixtures/*.ods, built via a headless UNO Basic macro driving the SAME UNO calls the Calc UI itself uses — Format > Columns > Width, Format > Rows > Height, Format > Print Areas, Format > Page Style's Sheet tab — never hand-edited afterwards) rather than programmatically reconstructing the expected XML shapes, mirroring readOdtContent's own established convention: this reader's own design brief is explicit that print-settings attribute names and the repeat-row/repeat-column mechanism must each be proven against genuine producer output, not just this package's own idea of what that output looks like. A handful of narrow scope-boundary/hazard-proof tests at the end use small, synthetic, hand-built packages instead (via el/txt), since a genuinely million-row repeat isn't something worth shipping as a binary fixture when the exact real repeat count is already established (typed/shared/a1.test.ts, citing a real LibreOffice-shipped .ots template).
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 
@@ -47,7 +47,7 @@ describe("readOdsContent: kitchen-sink.ods (real LibreOffice output)", () => {
   });
 
   it("reads document metadata via meta.xml", () => {
-    expect(metadata.title).toBeUndefined(); // this fixture's own meta.xml was never touched by the build macro -- no title was ever set.
+    expect(metadata.title).toBeUndefined(); // this fixture's own meta.xml was never touched by the build macro — no title was ever set.
   });
 
   describe("column widths and hidden columns (real style:table-column-properties, real table:visibility)", () => {
@@ -107,11 +107,11 @@ describe("readOdsContent: kitchen-sink.ods (real LibreOffice output)", () => {
       return cell;
     };
 
-    it('reads a plain string cell (office:value-type="string", no office:string-value -- the cell\'s own text:p content is the value)', () => {
+    it('reads a plain string cell (office:value-type="string", no office:string-value — the cell\'s own text:p content is the value)', () => {
       expect(cellAt(0).value).toEqual({ kind: "string", value: "Acme Corp" });
     });
 
-    it('translates office:value-type="float" to kind "number" (NOT "float" -- ContentCellValueSchema has no "float" member)', () => {
+    it('translates office:value-type="float" to kind "number" (NOT "float" — ContentCellValueSchema has no "float" member)', () => {
       expect(cellAt(1).value).toEqual({ kind: "number", value: 1234.56 });
     });
 
@@ -145,7 +145,7 @@ describe("readOdsContent: kitchen-sink.ods (real LibreOffice output)", () => {
       expect(formulaCell.value).toEqual({ kind: "number", value: 1276.56 });
     });
 
-    it('reads a genuine formula-error cell (=1/0) as kind "string" with an empty office:string-value -- ODF itself has no "error" value-type -- while still carrying the real #DIV/0! text as displayText', () => {
+    it('reads a genuine formula-error cell (=1/0) as kind "string" with an empty office:string-value — ODF itself has no "error" value-type — while still carrying the real #DIV/0! text as displayText', () => {
       const errorCell = cellAt(8);
       expect(errorCell.formula).toBe("of:=1/0");
       expect(errorCell.value).toEqual({ kind: "string", value: "" });
@@ -165,7 +165,7 @@ describe("readOdsContent: kitchen-sink.ods (real LibreOffice output)", () => {
       });
     });
 
-    it('emits nothing at all for the covered positions (B6, A7, B7) -- no placeholder cell object, matching the repeat-hazard\'s "skip empty" rule', () => {
+    it('emits nothing at all for the covered positions (B6, A7, B7) — no placeholder cell object, matching the repeat-hazard\'s "skip empty" rule', () => {
       expect(
         data.cells.find((cell) => cell.row === 5 && cell.column === 1),
       ).toBeUndefined();
@@ -227,7 +227,7 @@ describe("readOdsContent: kitchen-sink.ods (real LibreOffice output)", () => {
       expect(summary.printSettings.scalePercent).toBeUndefined();
     });
 
-    it("reads repeat rows/columns from the REAL table:table-header-rows/table:table-header-columns wrapper elements -- not a named range", () => {
+    it("reads repeat rows/columns from the REAL table:table-header-rows/table:table-header-columns wrapper elements — not a named range", () => {
       expect(data.printSettings.repeatRows).toEqual({ start: 0, end: 0 });
       expect(data.printSettings.repeatColumns).toEqual({ start: 0, end: 0 });
     });
@@ -306,18 +306,18 @@ describe("readOdsContent: minimal.ods (real LibreOffice output, default/unmodifi
   });
 });
 
-// sheet-anchors.ods was built via a Java UNO client against a headless LibreOffice 26.2 (the same "drive the calls the UI itself makes" technique the other fixtures use -- LibreOffice's own bundled Python cannot be launched directly on macOS 26, which kills it with a code-signing Launch Constraint Violation, and command-line `macro:///` dispatch never fired at all in this sandbox, so the Java UNO bridge shipped in LibreOffice's own Resources/java was used instead). Three real anchored drawings, saved with the calc8 filter and never hand-edited afterwards:
+// sheet-anchors.ods was built via a Java UNO client against a headless LibreOffice 26.2 (the same "drive the calls the UI itself makes" technique the other fixtures use — LibreOffice's own bundled Python cannot be launched directly on macOS 26, which kills it with a code-signing Launch Constraint Violation, and command-line `macro:///` dispatch never fired at all in this sandbox, so the Java UNO bridge shipped in LibreOffice's own Resources/java was used instead). Three real anchored drawings, saved with the calc8 filter and never hand-edited afterwards:
 //   - an 8x8 PNG anchored TO CELL C5 (column index 2, row index 4), sized 3cm x 2cm, positioned 0.5cm/0.3cm past its anchor cell's own top-left, with a real UNO Title and Description set (svg:title/svg:desc);
 //   - a LibreOffice Draw document embedded as an OLE object anchored TO CELL B8 (column index 1, row index 7), sized 4cm x 3cm, offset 0.2cm/0.1cm, containing one real orange rectangle;
 //   - the same PNG anchored TO PAGE at an absolute 7cm/0.9cm, sized 1.5cm x 1cm.
-describe("readOdsContent: sheet-anchors.ods (real LibreOffice output -- anchored images and an embedded object)", () => {
+describe("readOdsContent: sheet-anchors.ods (real LibreOffice output — anchored images and an embedded object)", () => {
   const { sheets } = readOdsContent(loadFixture("sheet-anchors.ods"));
   const sheet = sheets[0];
   if (sheet === undefined) {
     throw new Error("expected at least one sheet");
   }
 
-  it("reads both anchored images -- the page-anchored one (table:shapes, first in document order) then the cell-anchored one", () => {
+  it("reads both anchored images — the page-anchored one (table:shapes, first in document order) then the cell-anchored one", () => {
     expect(sheet.images).toHaveLength(2);
     expect(sheet.images.map((image) => image.format)).toEqual(["png", "png"]);
   });
@@ -352,7 +352,7 @@ describe("readOdsContent: sheet-anchors.ods (real LibreOffice output -- anchored
     expect(pageAnchored?.altText).toBeUndefined();
   });
 
-  it("reads the embedded OLE object as a real, fully-read drawing ContentDocument -- not a placeholder, and not its ObjectReplacements preview image", () => {
+  it("reads the embedded OLE object as a real, fully-read drawing ContentDocument — not a placeholder, and not its ObjectReplacements preview image", () => {
     expect(sheet.embeddedObjects).toHaveLength(1);
     const embedded = sheet.embeddedObjects?.[0];
     expect(embedded?.objectKind).toBe("drawing");
@@ -411,8 +411,8 @@ describe("readOdsContent: sheet-anchors.ods (real LibreOffice output -- anchored
   });
 });
 
-// sheet-formula.ods was built the same way as sheet-anchors.ods above (a Java UNO client against a headless LibreOffice 26.2, saved with the calc8 filter, never hand-edited afterwards): a one-sheet Calc document named "Formulas" carrying two ordinary cells and ONE real LibreOffice Math object -- a com.sun.star.drawing.OLE2Shape with Math's own CLSID 078B7ABA-54FC-457F-8551-6147E776A997, its Formula property set to the StarMath expression "f(x) = {x^2} over {2} + sqrt {x}", anchored TO CELL C4 (column index 2, row index 3) at a 0.4cm/0.2cm cell-relative offset. Its saved shape confirms, on a genuinely produced file, everything typed/draw/embedded.ts's formula path is built on: the frame is an ordinary draw:frame with a draw:object href of "./Object 1" plus the usual ObjectReplacements preview sibling, the outer manifest declares "Object 1/" as application/vnd.oasis.opendocument.formula, and that sub-document's own content.xml is a BARE <math> root with no office:body (and, notably, no meta.xml part of its own at all).
-describe("readOdsContent: sheet-formula.ods (real LibreOffice output -- a Math object anchored to a cell)", () => {
+// sheet-formula.ods was built the same way as sheet-anchors.ods above (a Java UNO client against a headless LibreOffice 26.2, saved with the calc8 filter, never hand-edited afterwards): a one-sheet Calc document named "Formulas" carrying two ordinary cells and ONE real LibreOffice Math object — a com.sun.star.drawing.OLE2Shape with Math's own CLSID 078B7ABA-54FC-457F-8551-6147E776A997, its Formula property set to the StarMath expression "f(x) = {x^2} over {2} + sqrt {x}", anchored TO CELL C4 (column index 2, row index 3) at a 0.4cm/0.2cm cell-relative offset. Its saved shape confirms, on a genuinely produced file, everything typed/draw/embedded.ts's formula path is built on: the frame is an ordinary draw:frame with a draw:object href of "./Object 1" plus the usual ObjectReplacements preview sibling, the outer manifest declares "Object 1/" as application/vnd.oasis.opendocument.formula, and that sub-document's own content.xml is a BARE <math> root with no office:body (and, notably, no meta.xml part of its own at all).
+describe("readOdsContent: sheet-formula.ods (real LibreOffice output — a Math object anchored to a cell)", () => {
   const { sheets } = readOdsContent(loadFixture("sheet-formula.ods"));
   const sheet = sheets[0];
   if (sheet === undefined) {
@@ -426,7 +426,7 @@ describe("readOdsContent: sheet-formula.ods (real LibreOffice output -- a Math o
     expect(sheet.embeddedObjects?.[0]?.document.kind).toBe("formula");
   });
 
-  it("carries the formula's real MathML through, with its own StarMath annotation -- the same payload readOdfFormulaContent produces for a standalone .odf", () => {
+  it("carries the formula's real MathML through, with its own StarMath annotation — the same payload readOdfFormulaContent produces for a standalone .odf", () => {
     const document = sheet.embeddedObjects?.[0]?.document;
     if (document?.kind !== "formula") {
       throw new Error("expected a formula ContentDocument");
@@ -480,8 +480,8 @@ describe("readOdsContent: sheet-formula.ods (real LibreOffice output -- a Math o
   });
 });
 
-describe("readOdsContent: anchored drawings (synthetic packages -- the scope boundaries and group flattening real LibreOffice output does not exercise)", () => {
-  // Only the PNG magic-byte signature matters to sniffImageFormat -- the rest is arbitrary filler, matching typed/draw/shapes.test.ts's own convention.
+describe("readOdsContent: anchored drawings (synthetic packages — the scope boundaries and group flattening real LibreOffice output does not exercise)", () => {
+  // Only the PNG magic-byte signature matters to sniffImageFormat — the rest is arbitrary filler, matching typed/draw/shapes.test.ts's own convention.
   const pngBase64 = bytesToBase64(
     new Uint8Array([
       0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0,
@@ -551,7 +551,7 @@ describe("readOdsContent: anchored drawings (synthetic packages -- the scope bou
     });
   });
 
-  it("reads an embedded Writer document (a wordprocessing OLE object) through the shared dispatch, its sections intact -- the ods->odt half of the symmetric embedding edge", () => {
+  it("reads an embedded Writer document (a wordprocessing OLE object) through the shared dispatch, its sections intact — the ods->odt half of the symmetric embedding edge", () => {
     const objectFrame = el("draw:frame", frameBox, [
       el("draw:object", { "xlink:href": "./Object 1" }),
     ]);
@@ -581,7 +581,7 @@ describe("readOdsContent: anchored drawings (synthetic packages -- the scope bou
     });
   });
 
-  it("skips a frame ContentSheet has nowhere to carry -- a floating text box (no `shapes` array) and a bare vector primitive (no `vectors` array)", () => {
+  it("skips a frame ContentSheet has nowhere to carry — a floating text box (no `shapes` array) and a bare vector primitive (no `vectors` array)", () => {
     const textBox = el("draw:frame", frameBox, [
       el("draw:text-box", {}, [el("text:p", {}, [txt("floating")])]),
     ]);
@@ -618,8 +618,8 @@ describe("readOdsContent: anchored drawings (synthetic packages -- the scope bou
   });
 });
 
-describe("readOdsContent: repeat-count hazards (synthetic packages -- proving this reader never materializes a huge repeated run, real confirmed counts from typed/shared/a1.test.ts)", () => {
-  // A real LibreOffice-shipped .ots template's own trailing empty rows carry table:number-rows-repeated="1016575" (confirmed in typed/shared/a1.test.ts, from /Applications/LibreOffice.app/Contents/Resources/template/common/wizard/styles/*.ots) -- reused here verbatim rather than re-deriving a fresh huge fixture, since the real count is already established ground truth.
+describe("readOdsContent: repeat-count hazards (synthetic packages — proving this reader never materializes a huge repeated run, real confirmed counts from typed/shared/a1.test.ts)", () => {
+  // A real LibreOffice-shipped .ots template's own trailing empty rows carry table:number-rows-repeated="1016575" (confirmed in typed/shared/a1.test.ts, from /Applications/LibreOffice.app/Contents/Resources/template/common/wizard/styles/*.ots) — reused here verbatim rather than re-deriving a fresh huge fixture, since the real count is already established ground truth.
   const HUGE_ROW_REPEAT = 1016575;
   const HUGE_COLUMN_REPEAT = 1024; // a1.test.ts's own "real trailing-repeated-cell block" example.
 
@@ -689,7 +689,7 @@ describe("readOdsContent: repeat-count hazards (synthetic packages -- proving th
   });
 });
 
-describe("readOdsContent: error and fallback paths (synthetic packages -- not something real LibreOffice output can exercise)", () => {
+describe("readOdsContent: error and fallback paths (synthetic packages — not something real LibreOffice output can exercise)", () => {
   it("reads an empty sheets array for a package with no content.xml at all", () => {
     const result = readOdsContent({ parts: {} });
     expect(result.sheets).toEqual([]);
@@ -831,7 +831,7 @@ describe("readOdsContent: residue rows", () => {
     );
   });
 
-  it("never quarantines an embedded sub-document's own parts -- sheet-formula.ods's Math object rides the semantic channel alone", () => {
+  it("never quarantines an embedded sub-document's own parts — sheet-formula.ods's Math object rides the semantic channel alone", () => {
     const { source } = readOdsContent(loadFixture("sheet-formula.ods"));
     expect(
       Object.keys(source ?? {}).every((key) => !key.startsWith("Object ")),
@@ -848,7 +848,7 @@ describe("readOdsContent: residue rows", () => {
     expect(source?.["loext:some-extension"]?.xml).toContain("<loext:child");
   });
 
-  // Real LibreOffice Calc output writes calcext:conditional-formats as the last child of each table:table, never as a child of office:spreadsheet -- the placement the conditional-format.ods fixture below pins.
+  // Real LibreOffice Calc output writes calcext:conditional-formats as the last child of each table:table, never as a child of office:spreadsheet — the placement the conditional-format.ods fixture below pins.
   it("quarantines a vendor-extension element inside a table:table, keyed by its own tag, concatenating same-tag occurrences across tables", () => {
     const pkg = spreadsheetPackage([
       el("table:table", { "table:name": "Sheet1" }, [
@@ -879,7 +879,7 @@ describe("readOdsContent: residue rows", () => {
   });
 });
 
-describe("readOdsContent: named expressions (synthetic packages -- the declarations real fixture output leaves empty)", () => {
+describe("readOdsContent: named expressions (synthetic packages — the declarations real fixture output leaves empty)", () => {
   function namedExpressionsPackage(named: XmlElement): Package {
     return {
       parts: {
@@ -966,7 +966,7 @@ describe("readOdsContent: named expressions (synthetic packages -- the declarati
   });
 });
 
-describe('readOdsContent: cell background/borders/alignment/verticalAlignment (synthetic packages -- the real cascade, including a genuine style:parent-style-name chain matching kitchen-sink.ods\'s own real ce1..ce5 -> "Default" -> table-cell family default-style shape)', () => {
+describe('readOdsContent: cell background/borders/alignment/verticalAlignment (synthetic packages — the real cascade, including a genuine style:parent-style-name chain matching kitchen-sink.ods\'s own real ce1..ce5 -> "Default" -> table-cell family default-style shape)', () => {
   interface TableCellStyleOptions {
     cellProperties?: Record<string, string>;
     paragraphProperties?: Record<string, string>;
@@ -1182,7 +1182,7 @@ describe('readOdsContent: cell background/borders/alignment/verticalAlignment (s
     expect(sheets[0]?.cells[0]?.alignment).toBe("center");
   });
 
-  it("leaves alignment undefined for a cell whose style sets no fo:text-align at all -- the value-kind default stays in effect elsewhere, this reader never fabricates one", () => {
+  it("leaves alignment undefined for a cell whose style sets no fo:text-align at all — the value-kind default stays in effect elsewhere, this reader never fabricates one", () => {
     const ce1 = tableCellStyle("ce1", {
       cellProperties: { "fo:background-color": "#ff0000" },
     });
@@ -1195,7 +1195,7 @@ describe('readOdsContent: cell background/borders/alignment/verticalAlignment (s
     expect(sheets[0]?.cells[0]?.alignment).toBeUndefined();
   });
 
-  it("resolves background through the FULL resolveStyleElementChain cascade -- a family default-style contributes a background the cell's own specific style never overrides", () => {
+  it("resolves background through the FULL resolveStyleElementChain cascade — a family default-style contributes a background the cell's own specific style never overrides", () => {
     const defaultStyle = tableCellDefaultStyle({
       cellProperties: { "fo:background-color": "#00ff00" },
     });
@@ -1215,7 +1215,7 @@ describe('readOdsContent: cell background/borders/alignment/verticalAlignment (s
     expect(sheets[0]?.cells[0]?.verticalAlignment).toBe("top");
   });
 
-  it("lets a style:parent-style-name chain contribute a background that the cell's own specific style then overrides -- later (more specific) always wins, matching kitchen-sink.ods's own real ce1..ce5 -> \"Default\" chain shape", () => {
+  it("lets a style:parent-style-name chain contribute a background that the cell's own specific style then overrides — later (more specific) always wins, matching kitchen-sink.ods's own real ce1..ce5 -> \"Default\" chain shape", () => {
     const parent = tableCellStyle("Parent", {
       cellProperties: { "fo:background-color": "#ff0000" },
     });
@@ -1262,7 +1262,7 @@ describe("readOds: the package-native reader over the same real fixtures", () =>
     expect(documentPackage.kind).toBe("spreadsheet");
     expect(documentPackage.metadata).toEqual(content.metadata);
     expect(documentPackage.children).toHaveLength(content.sheets.length);
-    // The round trip compares against the flat projection (metadata + sheets): the definitions and package-tier residue tables are tree-only, so flattenTree drops them off readOds's own root -- the fixture's own residue rows are pinned in the residue describe below.
+    // The round trip compares against the flat projection (metadata + sheets): the definitions and package-tier residue tables are tree-only, so flattenTree drops them off readOds's own root — the fixture's own residue rows are pinned in the residue describe below.
     assertPackageRoundTrip(documentPackage, {
       kind: "spreadsheet",
       metadata: content.metadata,
@@ -1301,7 +1301,7 @@ describe("readOds: the package-native reader over the same real fixtures", () =>
     const images = contentSheet.images;
     const embedded = contentSheet.embeddedObjects ?? [];
     expect(images.length + embedded.length).toBeGreaterThan(0);
-    // Images first, then embedded objects -- the fixed order flatten's own partition reverses.
+    // Images first, then embedded objects — the fixed order flatten's own partition reverses.
     expect(sheet.children).toEqual([...images, ...embedded]);
     assertPackageRoundTrip(documentPackage, {
       kind: "spreadsheet",
@@ -1603,7 +1603,7 @@ describe("readOdsContent: data validation (ExaDev/documents.js#925, synthetic pa
   });
 });
 
-describe("readOdsContent: conditional formatting wiring (ExaDev/documents.js#1075, synthetic packages) -- conditional-format.test.ts covers the reading logic itself in full; this block proves readOdsContent actually calls it and routes the two outcomes correctly, not just that the reader function works in isolation", () => {
+describe("readOdsContent: conditional formatting wiring (ExaDev/documents.js#1075, synthetic packages) — conditional-format.test.ts covers the reading logic itself in full; this block proves readOdsContent actually calls it and routes the two outcomes correctly, not just that the reader function works in isolation", () => {
   function conditionalFormatsPackage(table: XmlElement): Package {
     return {
       parts: {
@@ -1672,7 +1672,7 @@ describe("readOdsContent: conditional formatting wiring (ExaDev/documents.js#107
 describe("readOdsContent: conditional-format.ods (real LibreOffice output)", () => {
   const { sheets } = readOdsContent(loadFixture("conditional-format.ods"));
 
-  it("promotes the fixture's own >3 cellIs rule, with no style field at all -- its apply-style-name references the built-in 'Default' table-cell style, which is genuinely empty (no fo:color/fo:background-color of its own, and the table-cell family default-style carries only text-properties), so there is nothing observable to report", () => {
+  it("promotes the fixture's own >3 cellIs rule, with no style field at all — its apply-style-name references the built-in 'Default' table-cell style, which is genuinely empty (no fo:color/fo:background-color of its own, and the table-cell family default-style carries only text-properties), so there is nothing observable to report", () => {
     expect(sheets[0]?.conditionalFormats).toEqual([
       {
         type: "cellIs",

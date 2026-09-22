@@ -53,7 +53,7 @@ describe("openWpdDocument", () => {
     expect(container.documentAreaEnd).toBe(GENERIC_HEADER_SIZE);
   });
 
-  // Only a stream nested under PerfectOffice_OBJECTS/ belongs in oleObjectStreams, keyed by the part of its path after that prefix -- a sibling top-level stream (here, a made-up SummaryInformation stream no test elsewhere carries alongside PerfectOffice_MAIN) must be excluded entirely, not merely mis-keyed.
+  // Only a stream nested under PerfectOffice_OBJECTS/ belongs in oleObjectStreams, keyed by the part of its path after that prefix — a sibling top-level stream (here, a made-up SummaryInformation stream no test elsewhere carries alongside PerfectOffice_MAIN) must be excluded entirely, not merely mis-keyed.
   it("collects only the streams nested under PerfectOffice_OBJECTS, keyed by their name within it", () => {
     const objectBytes = new Uint8Array([1, 2, 3]);
     const compound = writeCompoundFile([

@@ -1,6 +1,6 @@
-// Smoke test: the built dist/ artifact loads and works under both ESM and CJS. Run only via `pnpm test:smoke` (tsdown, then vitest scoped to this file by vitest.config.ts's "smoke" project) -- never part of the default `pnpm test` file set, since it requires a fresh build to mean anything.
+// Smoke test: the built dist/ artifact loads and works under both ESM and CJS. Run only via `pnpm test:smoke` (tsdown, then vitest scoped to this file by vitest.config.ts's "smoke" project) — never part of the default `pnpm test` file set, since it requires a fresh build to mean anything.
 //
-// This follows markdown-codec's and pdf-codec's own smoke.test.mjs shape: a representative slice of the public surface checked for presence in both builds, then real read -> write -> reparse assertions run against each build independently, proving the built artifact itself (not just the source under vitest's own transform) round-trips real RTF. Both encodings are exercised -- the tree-form readRtf/writeRtf/rtfCodec trio over document-schema.js's DocumentTree, and the flat readRtfContent/writeRtfContent/rtfContentCodec trio over its ContentDocument -- because the tree pair pulls document-schema.js's own assembleTree/flattenTree into the bundle, and a dual-build failure confined to that dependency would be invisible to a flat-only check.
+// This follows markdown-codec's and pdf-codec's own smoke.test.mjs shape: a representative slice of the public surface checked for presence in both builds, then real read -> write -> reparse assertions run against each build independently, proving the built artifact itself (not just the source under vitest's own transform) round-trips real RTF. Both encodings are exercised — the tree-form readRtf/writeRtf/rtfCodec trio over document-schema.js's DocumentTree, and the flat readRtfContent/writeRtfContent/rtfContentCodec trio over its ContentDocument — because the tree pair pulls document-schema.js's own assembleTree/flattenTree into the bundle, and a dual-build failure confined to that dependency would be invisible to a flat-only check.
 import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 import * as esm from "../dist/index.js";
@@ -8,7 +8,7 @@ import * as esm from "../dist/index.js";
 const require = createRequire(import.meta.url);
 const cjs = require("../dist/index.cjs");
 
-// A representative slice of the public surface, not an exhaustive list -- enough to catch a genuinely broken dual build without duplicating src/index.ts's own export list here. Error classes are real invocable functions at runtime (typeof === 'function'), so they're checked here alongside ordinary functions rather than in OBJECTS below.
+// A representative slice of the public surface, not an exhaustive list — enough to catch a genuinely broken dual build without duplicating src/index.ts's own export list here. Error classes are real invocable functions at runtime (typeof === 'function'), so they're checked here alongside ordinary functions rather than in OBJECTS below.
 const FUNCTIONS = [
   "readRtf",
   "writeRtf",

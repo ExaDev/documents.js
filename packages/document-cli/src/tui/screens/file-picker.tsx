@@ -79,7 +79,7 @@ function titleFor(purpose: "open" | "saveAs" | "exportTarget"): string {
 export function FilePickerScreen(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();
-  // The router in app.tsx only ever mounts this component while the top of the stack is a filePicker screen -- see currentScreen's own doc comment for the same reasoning applied to an empty stack.
+  // The router in app.tsx only ever mounts this component while the top of the stack is a filePicker screen — see currentScreen's own doc comment for the same reasoning applied to an empty stack.
   const screen = currentScreen(state);
   if (screen.kind !== "filePicker") {
     throw new Error(
@@ -226,7 +226,7 @@ export function FilePickerScreen(): ReactElement {
   return (
     <Box flexDirection="column">
       <Text bold>
-        {titleFor(purpose)} -- {currentDir}
+        {titleFor(purpose)} — {currentDir}
       </Text>
       {listError === undefined ? undefined : (
         <Text color="red">{listError}</Text>

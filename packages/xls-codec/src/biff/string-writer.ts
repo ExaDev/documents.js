@@ -1,9 +1,9 @@
 import { RecordBuilder } from "./builder";
 import { BiffWriteError } from "./write-errors";
 
-// The write-side mirror of biff/strings.ts: BIFF8's three string shapes, encoded rather than decoded. Unlike the reader, this writer never has to handle a Continue boundary -- every string this package writes fits inside one record's own 8224-byte data ceiling, checked by biff/record-writer.ts's writeRecord once the field is assembled, so there is no fHighByte-per-boundary case to get right here.
+// The write-side mirror of biff/strings.ts: BIFF8's three string shapes, encoded rather than decoded. Unlike the reader, this writer never has to handle a Continue boundary — every string this package writes fits inside one record's own 8224-byte data ceiling, checked by biff/record-writer.ts's writeRecord once the field is assembled, so there is no fHighByte-per-boundary case to get right here.
 //
-// cch counts UTF-16 code units, exactly as the reader documents: an astral character occupies two units, each written as its own 16-bit value in the uncompressed encoding. A string is written compressed (one byte per unit, fHighByte clear) when every unit fits in a low byte, and uncompressed (two bytes per unit, fHighByte set) otherwise -- the same choice a real producer makes, and the smaller of the two whenever it is legal.
+// cch counts UTF-16 code units, exactly as the reader documents: an astral character occupies two units, each written as its own 16-bit value in the uncompressed encoding. A string is written compressed (one byte per unit, fHighByte clear) when every unit fits in a low byte, and uncompressed (two bytes per unit, fHighByte set) otherwise — the same choice a real producer makes, and the smaller of the two whenever it is legal.
 
 /** Bit 0 of a string's flags byte: set when each character occupies a full two-byte UTF-16 code unit ([MS-XLS] 2.5.293/2.5.294/2.5.240's own fHighByte). */
 const FLAG_HIGH_BYTE = 0x01;
@@ -19,7 +19,7 @@ interface EncodedCharacters {
   readonly units: Uint8Array<ArrayBuffer>;
 }
 
-/** Whether every UTF-16 code unit in `text` fits in a single byte -- the compressed-encoding eligibility test, checked per code UNIT rather than per code point so an astral character (whose two surrogate units are each above 0xFF) is correctly ruled ineligible. */
+/** Whether every UTF-16 code unit in `text` fits in a single byte — the compressed-encoding eligibility test, checked per code UNIT rather than per code point so an astral character (whose two surrogate units are each above 0xFF) is correctly ruled ineligible. */
 function encodeCharacters(text: string): EncodedCharacters {
   const needsHighByte = Array.from({ length: text.length }, (_, index) =>
     text.charCodeAt(index),
@@ -36,7 +36,7 @@ function encodeCharacters(text: string): EncodedCharacters {
   return { highByte: needsHighByte, units: builder.build() };
 }
 
-/** `max` is always at least MAX_SHORT_STRING_LENGTH (255) across this module's own three call sites below, so `text` is always well past 40 characters by the time this throws at all -- there is no shorter-text case left to choose between embedding it whole or truncating it, only the one this always takes. */
+/** `max` is always at least MAX_SHORT_STRING_LENGTH (255) across this module's own three call sites below, so `text` is always well past 40 characters by the time this throws at all — there is no shorter-text case left to choose between embedding it whole or truncating it, only the one this always takes. */
 function checkedLength(text: string, max: number, shape: string): number {
   if (text.length > max) {
     throw new BiffWriteError(
@@ -74,7 +74,7 @@ export function writeShortXLUnicodeString(
     .build();
 }
 
-/** An XLUnicodeStringNoCch ([MS-XLS] 2.5.296): a flags byte then the characters, with no character-count field of its own -- the containing structure states the count separately (a TxO record's own cchText, for the comment/text-box text a Continue record following it carries). */
+/** An XLUnicodeStringNoCch ([MS-XLS] 2.5.296): a flags byte then the characters, with no character-count field of its own — the containing structure states the count separately (a TxO record's own cchText, for the comment/text-box text a Continue record following it carries). */
 export function writeXLUnicodeStringNoCch(
   text: string,
 ): Uint8Array<ArrayBuffer> {
@@ -88,7 +88,7 @@ export function writeXLUnicodeStringNoCch(
 /**
  * An XLUnicodeRichExtendedString ([MS-XLS] 2.5.293): the SST's own element shape.
  *
- * Always written with no formatting runs and no phonetic payload -- this package reads a shared string's text only (see biff/strings.ts's own readRichExtendedString), so there is never run or phonetic data to re-emit. The rich/extended flag bits are left clear accordingly.
+ * Always written with no formatting runs and no phonetic payload — this package reads a shared string's text only (see biff/strings.ts's own readRichExtendedString), so there is never run or phonetic data to re-emit. The rich/extended flag bits are left clear accordingly.
  */
 export function writeRichExtendedString(text: string): Uint8Array<ArrayBuffer> {
   const cch = checkedLength(

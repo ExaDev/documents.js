@@ -6,9 +6,9 @@ import { recoverFromFormatError } from "../biff/records";
 import { recordByteLength, type RecordGroup } from "../biff/substreams";
 import { RECORD_CF } from "../biff/record-types";
 
-// CondFmt ([MS-XLS] 2.4.56) marks the start of 1-3 CF ([MS-XLS] 2.4.42) records sharing one cell-range list -- the binary equivalent of ODF's calcext:conditional-format wrapping several rule children, and xlsx's own conditionalFormatting wrapping several cfRule children (ExaDev/documents.js#758). Base BIFF8 (Excel 97) conditional formatting has exactly two rule shapes, both handled here: a comparison ("Cell Value Is") condition and a formula condition. Every richer rule type Excel 2007+ added -- top10, aboveAverage, colour scale, data bar, icon set, duplicate/unique values, text/date conditions -- has no representation in the base CF record at all; it rides a CF12 record instead, or, for a rule Excel keeps expressible as a legacy formula condition for pre-2007 readers (the containsText family), a CFEx extension record glued to this CondFmt's own CF children by nID (conditional-format-ex.ts).
+// CondFmt ([MS-XLS] 2.4.56) marks the start of 1-3 CF ([MS-XLS] 2.4.42) records sharing one cell-range list — the binary equivalent of ODF's calcext:conditional-format wrapping several rule children, and xlsx's own conditionalFormatting wrapping several cfRule children (ExaDev/documents.js#758). Base BIFF8 (Excel 97) conditional formatting has exactly two rule shapes, both handled here: a comparison ("Cell Value Is") condition and a formula condition. Every richer rule type Excel 2007+ added — top10, aboveAverage, colour scale, data bar, icon set, duplicate/unique values, text/date conditions — has no representation in the base CF record at all; it rides a CF12 record instead, or, for a rule Excel keeps expressible as a legacy formula condition for pre-2007 readers (the containsText family), a CFEx extension record glued to this CondFmt's own CF children by nID (conditional-format-ex.ts).
 //
-// A CF record's own layout is a real, precisely published Microsoft spec (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/d6dcadf2-7e07-4f7d-a60a-0f643780225d), not a producer convention transcribed from source the way ODF's calcext:condition needed: ct (condition type: 0x01 comparison, 0x02 formula -- the latter has no closed-form structure to promote, the same 'expression' boundary xlsx's own cfRule reading and this package's data-validation.ts both already draw), cp (the comparison operator when ct is 0x01), cce1/cce2 (byte lengths of the two formula operands), a DXFN structure naming the rule's own resulting font-colour/fill-background override, then the two CFParsedFormulaNoCCE operands themselves -- the identical Ptg token grammar a cell's own Formula record carries, read with the same parseFormulaText this reader already uses there.
+// A CF record's own layout is a real, precisely published Microsoft spec (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/d6dcadf2-7e07-4f7d-a60a-0f643780225d), not a producer convention transcribed from source the way ODF's calcext:condition needed: ct (condition type: 0x01 comparison, 0x02 formula — the latter has no closed-form structure to promote, the same 'expression' boundary xlsx's own cfRule reading and this package's data-validation.ts both already draw), cp (the comparison operator when ct is 0x01), cce1/cce2 (byte lengths of the two formula operands), a DXFN structure naming the rule's own resulting font-colour/fill-background override, then the two CFParsedFormulaNoCCE operands themselves — the identical Ptg token grammar a cell's own Formula record carries, read with the same parseFormulaText this reader already uses there.
 
 const CP_TO_OPERATOR: ReadonlyMap<number, SheetRuleOperator> = new Map([
   [0x01, "between"],
@@ -40,18 +40,18 @@ export interface RawConditionalFormat {
   readonly ranges: ContentSheetRange[];
 }
 
-// DXFN's own leading flags span 6 bytes ([MS-XLS] 2.4.97's own field table -- https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/a1141f1d-f607-45ef-b8dd-4a1f2b27b4f9): a 4-byte word (bits 0-31, LSB first) ending in ibitAtrNum(25)/ibitAtrFnt(26)/ibitAtrAlc(27)/ibitAtrBdr(28)/ibitAtrPat(29), each saying whether that optional sub-structure is present, followed by a 2-byte word whose own bit 0 is fIfmtUser. Cross-checked against Apache POI's own real, interoperability-tested CFRuleBase#readFormatOptions (a completely independent implementation), which reads the identical 4+2=6 byte header before its own font/border/pattern blocks -- confirming this field-table reading, not just trusting the prose alone.
+// DXFN's own leading flags span 6 bytes ([MS-XLS] 2.4.97's own field table — https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/a1141f1d-f607-45ef-b8dd-4a1f2b27b4f9): a 4-byte word (bits 0-31, LSB first) ending in ibitAtrNum(25)/ibitAtrFnt(26)/ibitAtrAlc(27)/ibitAtrBdr(28)/ibitAtrPat(29), each saying whether that optional sub-structure is present, followed by a 2-byte word whose own bit 0 is fIfmtUser. Cross-checked against Apache POI's own real, interoperability-tested CFRuleBase#readFormatOptions (a completely independent implementation), which reads the identical 4+2=6 byte header before its own font/border/pattern blocks — confirming this field-table reading, not just trusting the prose alone.
 //
-// dxfnum (when ibitAtrNum) comes first and is skipped, never read: this reader has no use for a conditional format's own number-format override. Its own length is unambiguous ONLY in the DXFNumIFmt form (ibitAtrNum but not fIfmtUser -- a fixed 2 bytes); the DXFNumUsr form (fIfmtUser set, a user format-code string) states its own total size in a leading cb field, but [MS-XLS]'s own prose for cb ("specifies the size of this structure") does not settle whether cb counts itself, and no second real-world implementation was found to confirm it either way. Rather than guess and risk silently misaligning every field that follows (dxffntd, dxfpat -- exactly the style data this function exists to extract), a CF whose dxf carries a DXFNumUsr degrades to no style at all: an honest "we don't have one" beats a wrong colour, the same "narrow rather than guess" boundary this package's own data-validation.ts and odf.js's conditional-format.ts already draw elsewhere.
+// dxfnum (when ibitAtrNum) comes first and is skipped, never read: this reader has no use for a conditional format's own number-format override. Its own length is unambiguous ONLY in the DXFNumIFmt form (ibitAtrNum but not fIfmtUser — a fixed 2 bytes); the DXFNumUsr form (fIfmtUser set, a user format-code string) states its own total size in a leading cb field, but [MS-XLS]'s own prose for cb ("specifies the size of this structure") does not settle whether cb counts itself, and no second real-world implementation was found to confirm it either way. Rather than guess and risk silently misaligning every field that follows (dxffntd, dxfpat — exactly the style data this function exists to extract), a CF whose dxf carries a DXFNumUsr degrades to no style at all: an honest "we don't have one" beats a wrong colour, the same "narrow rather than guess" boundary this package's own data-validation.ts and odf.js's conditional-format.ts already draw elsewhere.
 const DXFFNTD_LENGTH = 122; // cchFont(1) + [stFontName+unused1, always 63 bytes combined] + Stxp(16) + icvFore(4) + reserved(4) + tsNinch(4) + fSssNinch(4) + fUlsNinch(4) + fBlsNinch(4) + unused2(4) + ich(4) + cch(4) + iFnt(2)
 const DXFFNTD_ICV_FORE_OFFSET = 64 + 16; // past the 64-byte font-name block and the 16-byte Stxp
-const DXF_DEFAULT_FOREGROUND_TEXT_COLOR = 32767; // DXFFntD.icvFore's own documented "use the default foreground text colour" sentinel -- not a real override
+const DXF_DEFAULT_FOREGROUND_TEXT_COLOR = 32767; // DXFFntD.icvFore's own documented "use the default foreground text colour" sentinel — not a real override
 
 // Exported for reuse by conditional-format-12.ts: DXFN12 ([MS-XLS] 2.4) is a cbDxf-prefixed wrapper around this exact same DXFN payload, so a CF12 ct 0x05 filter rule's style (the one CF12 rule shape [MS-XLS] does not force cbDxf to zero for) resolves through the identical font/fill extraction a base CF record's style already does.
 export function parseDxfStyle(
   dxfBytes: Uint8Array<ArrayBuffer>,
 ): RawConditionalFormatStyle | undefined {
-  // No explicit length guard: an empty (or too-short-for-its-own-header) dxfBytes runs straight into the try block below and throws BiffFormatError on its first cursor read, landing in the catch at the bottom exactly like any other malformed dxf -- a dedicated early return here would only ever produce the identical undefined this catch already produces.
+  // No explicit length guard: an empty (or too-short-for-its-own-header) dxfBytes runs straight into the try block below and throws BiffFormatError on its first cursor read, landing in the catch at the bottom exactly like any other malformed dxf — a dedicated early return here would only ever produce the identical undefined this catch already produces.
   try {
     const cursor = new BlockCursor([dxfBytes]);
     const flags1 = cursor.u32();
@@ -65,7 +65,7 @@ export function parseDxfStyle(
 
     if (hasNum) {
       if (fIfmtUser) {
-        return undefined; // DXFNumUsr -- ambiguous length, see top-of-file note
+        return undefined; // DXFNumUsr — ambiguous length, see top-of-file note
       }
       cursor.skip(2); // DXFNumIFmt: unused(1 byte) + ifmt(1 byte)
     }
@@ -85,15 +85,15 @@ export function parseDxfStyle(
     }
 
     if (hasAlc) {
-      cursor.skip(8); // DXFALC, not modelled -- ContentSheetConditionalFormatStyleSchema has no alignment field
+      cursor.skip(8); // DXFALC, not modelled — ContentSheetConditionalFormatStyleSchema has no alignment field
     }
     if (hasBdr) {
-      cursor.skip(8); // DXFBdr, not modelled -- the schema's own top comment limits style to font colour and fill background
+      cursor.skip(8); // DXFBdr, not modelled — the schema's own top comment limits style to font colour and fill background
     }
 
     let fill: RawConditionalFormatFill | undefined;
     if (hasPat) {
-      // DXFPat ([MS-XLS] 2.4.97's own nested structure): unused1(10 bits) fls(6) icvForeground(7) icvBackground(7) unused2(2), LSB first -- the identical bit-packing XF's own CellXF fill fields use (biff/xf-colors.ts's resolveFillBackground/resolveIcvColor), so resolution is deferred to content.ts the same way a regular cell's own fill already is.
+      // DXFPat ([MS-XLS] 2.4.97's own nested structure): unused1(10 bits) fls(6) icvForeground(7) icvBackground(7) unused2(2), LSB first — the identical bit-packing XF's own CellXF fill fields use (biff/xf-colors.ts's resolveFillBackground/resolveIcvColor), so resolution is deferred to content.ts the same way a regular cell's own fill already is.
       const patWord = cursor.u32();
       fill = {
         fillPattern: (patWord >>> 10) & 0x3f,
@@ -112,7 +112,7 @@ export function parseDxfStyle(
   }
 }
 
-/** A CF record's own operand, in its rawest usable form -- the pieces conditional-format-ex.ts needs to resolve a CFEx that extends this specific CF (by icf, a positional index into a CondFmt's own CF children), independent of whether readCf below can promote this CF into a 'cellIs' rule at all. A ct 0x02 formula condition, exactly the kind readCf itself never promotes, is the one CFEx actually cares about (see conditional-format-ex.ts's own top comment for why). */
+/** A CF record's own operand, in its rawest usable form — the pieces conditional-format-ex.ts needs to resolve a CFEx that extends this specific CF (by icf, a positional index into a CondFmt's own CF children), independent of whether readCf below can promote this CF into a 'cellIs' rule at all. A ct 0x02 formula condition, exactly the kind readCf itself never promotes, is the one CFEx actually cares about (see conditional-format-ex.ts's own top comment for why). */
 export interface RawCfOperand {
   readonly ct: number;
   readonly cp: number;
@@ -157,7 +157,7 @@ function readCf(
   }
   const { ct, cp, dxfBytes, rgce1, rgce2 } = parsed;
   if (ct === 0x02) {
-    // A formula condition has no closed-form structure to promote without a general formula engine -- the same 'expression' boundary drawn everywhere else this shared schema is populated. (A containsText-family formula condition specifically is instead reached through conditional-format-ex.ts's own readCfEx, which knows the closed shape CFExTextTemplateParams.ctp tells it to expect.)
+    // A formula condition has no closed-form structure to promote without a general formula engine — the same 'expression' boundary drawn everywhere else this shared schema is populated. (A containsText-family formula condition specifically is instead reached through conditional-format-ex.ts's own readCfEx, which knows the closed shape CFExTextTemplateParams.ctp tells it to expect.)
     return undefined;
   }
   const operator = CP_TO_OPERATOR.get(cp);
@@ -165,13 +165,13 @@ function readCf(
     return undefined;
   }
   try {
-    // No explicit rgce1.length===0 guard: a comparison condition always compares against something, and a zero-length first operand is a malformed record rather than a legitimate empty rule -- but parseFormulaText already returns undefined for an empty rgce (its own token loop never runs, so its stack never reaches the one-operand shape a result requires), which the formula1===undefined check right below already degrades to absent. A dedicated early return here would only ever produce that identical undefined.
+    // No explicit rgce1.length===0 guard: a comparison condition always compares against something, and a zero-length first operand is a malformed record rather than a legitimate empty rule — but parseFormulaText already returns undefined for an empty rgce (its own token loop never runs, so its stack never reaches the one-operand shape a result requires), which the formula1===undefined check right below already degrades to absent. A dedicated early return here would only ever produce that identical undefined.
     const formula1 = parseFormulaText(rgce1, formulaSheets);
     if (formula1 === undefined) {
-      // ContentSheetConditionalFormatSchema's own 'cellIs' variant requires formula1 -- a Ptg stream this reader cannot render as text (an unsupported token, or no tokens at all) leaves nothing valid to promote, so the whole rule degrades to absent rather than a fabricated placeholder.
+      // ContentSheetConditionalFormatSchema's own 'cellIs' variant requires formula1 — a Ptg stream this reader cannot render as text (an unsupported token, or no tokens at all) leaves nothing valid to promote, so the whole rule degrades to absent rather than a fabricated placeholder.
       return undefined;
     }
-    // rgce2 gets the identical treatment: parseFormulaText(rgce2, ...) already returns undefined for an absent second operand, so a length>0 guard ahead of the call would only ever choose between calling it and getting undefined back, or not calling it and supplying undefined directly -- the same result either way.
+    // rgce2 gets the identical treatment: parseFormulaText(rgce2, ...) already returns undefined for an absent second operand, so a length>0 guard ahead of the call would only ever choose between calling it and getting undefined back, or not calling it and supplying undefined directly — the same result either way.
     const formula2 = parseFormulaText(rgce2, formulaSheets);
 
     return {
@@ -191,11 +191,11 @@ export interface CondFmtGroupResult {
   readonly formats: RawConditionalFormat[];
   /** How many records (the CondFmt itself plus every CF it claimed) the caller should advance past, regardless of how many rules actually promoted. */
   readonly recordsConsumed: number;
-  /** CondFmt's own nID ([MS-XLS] 2.5.56's own CondFmtStructure) -- the identifier a later CFEx record's own nID field cross-references to extend one specific CF child of this group (conditional-format-ex.ts). 0 on a malformed group, alongside an empty rawCfs -- a real CFEx can legitimately name nID 0, but never resolves anything through an empty rawCfs, so the two degraded groups can never be confused for one another by a lookup. */
+  /** CondFmt's own nID ([MS-XLS] 2.5.56's own CondFmtStructure) — the identifier a later CFEx record's own nID field cross-references to extend one specific CF child of this group (conditional-format-ex.ts). 0 on a malformed group, alongside an empty rawCfs — a real CFEx can legitimately name nID 0, but never resolves anything through an empty rawCfs, so the two degraded groups can never be confused for one another by a lookup. */
   readonly nID: number;
   /** This group's own shared ranges, exposed independently of `formats` since a CFEx-promoted rule needs them too and a CF this reader could not promote into `formats` still shares them. */
   readonly ranges: ContentSheetRange[];
-  /** Every one of this group's CF children, in declared (icf) order, each parsed to its raw operand or undefined for one this reader could not even parse -- CFExNonCF12's own icf field indexes into exactly this collection, regardless of which entries readCf itself went on to promote into `formats`. */
+  /** Every one of this group's CF children, in declared (icf) order, each parsed to its raw operand or undefined for one this reader could not even parse — CFExNonCF12's own icf field indexes into exactly this collection, regardless of which entries readCf itself went on to promote into `formats`. */
   readonly rawCfs: readonly (RawCfOperand | undefined)[];
 }
 
@@ -207,7 +207,7 @@ const DEGRADED_CONDFMT_GROUP: CondFmtGroupResult = {
   rawCfs: [],
 };
 
-// Reads one CondFmt and the ccf CF records immediately following it ([MS-XLS] 2.1.7.20.6's own worksheet-substream ABNF places them contiguously, the same "wrapper then its own children" shape MergeCells' own single-record simplicity doesn't need but DV's own sibling records never required either -- this is the one BIFF8 construct in this reader that spans more than one record). A CF this reader cannot promote (a formula condition, an unrecognised cp) is simply omitted from `formats` rather than degrading the whole group -- the other rules in the same CondFmt, and every other CondFmt on the sheet, are unaffected. records[startIndex] MUST already be RECORD_CONDFMT; a malformed group (a declared ccf running past the end of the record array, or a non-CF record where a CF was expected) degrades the WHOLE group to no formats and no rawCfs, consuming only the CondFmt record itself so the caller's own walk can still make sense of whatever follows.
+// Reads one CondFmt and the ccf CF records immediately following it ([MS-XLS] 2.1.7.20.6's own worksheet-substream ABNF places them contiguously, the same "wrapper then its own children" shape MergeCells' own single-record simplicity doesn't need but DV's own sibling records never required either — this is the one BIFF8 construct in this reader that spans more than one record). A CF this reader cannot promote (a formula condition, an unrecognised cp) is simply omitted from `formats` rather than degrading the whole group — the other rules in the same CondFmt, and every other CondFmt on the sheet, are unaffected. records[startIndex] MUST already be RECORD_CONDFMT; a malformed group (a declared ccf running past the end of the record array, or a non-CF record where a CF was expected) degrades the WHOLE group to no formats and no rawCfs, consuming only the CondFmt record itself so the caller's own walk can still make sense of whatever follows.
 export function readCondFmtGroup(
   records: readonly RecordGroup[],
   startIndex: number,
@@ -222,7 +222,7 @@ export function readCondFmtGroup(
     const ccf = cursor.u16();
     const fToughRecalcAndNID = cursor.u16(); // A - fToughRecalc(1 bit, unused) + nID(15 bits), [MS-XLS] 2.5.56
     const nID = (fToughRecalcAndNID >>> 1) & 0x7fff;
-    cursor.skip(8); // refBound (Ref8U) -- a bounding superset of sqref, redundant for this reader's purposes
+    cursor.skip(8); // refBound (Ref8U) — a bounding superset of sqref, redundant for this reader's purposes
     const crefCount = cursor.u16();
     const ranges: ContentSheetRange[] = [];
     for (let index = 0; index < crefCount; index += 1) {

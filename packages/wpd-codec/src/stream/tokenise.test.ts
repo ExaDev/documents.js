@@ -24,7 +24,7 @@ describe("tokeniseDocumentArea", () => {
     ]);
   });
 
-  // The SDK's own worked example of a fixed-length function, verbatim: "can't" encoded as can<240 (0xF0)><28 (0x1C)><4 (0x04)><240 (0xF0)>t -- character number 28 of WP character set 4.
+  // The SDK's own worked example of a fixed-length function, verbatim: "can't" encoded as can<240 (0xF0)><28 (0x1C)><4 (0x04)><240 (0xF0)>t — character number 28 of WP character set 4.
   it("reads the SDK's Extended Character example, gates included", () => {
     const bytes = Uint8Array.from([
       0x63, 0x61, 0x6e, 0xf0, 0x1c, 0x04, 0xf0, 0x74,
@@ -136,7 +136,7 @@ describe("tokeniseDocumentArea", () => {
   });
 
   it("rejects a variable-length function whose end gate does not match its begin gate", () => {
-    // Size 10 (the minimum), no prefix IDs, no non-deletable data, trailing size 10 (agrees) -- but the final gate byte (0xD4) does not match the opening group (0xD3).
+    // Size 10 (the minimum), no prefix IDs, no non-deletable data, trailing size 10 (agrees) — but the final gate byte (0xD4) does not match the opening group (0xD3).
     const bytes = Uint8Array.from([
       0xd3, 0x05, 10, 0, 0x00, 0x00, 0x00, 10, 0, 0xd4,
     ]);

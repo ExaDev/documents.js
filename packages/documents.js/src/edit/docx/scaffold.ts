@@ -24,7 +24,7 @@ export interface CreateEmptyDocxPackageOptions {
   readonly metadata?: LayoutMetadata;
 }
 
-// Builds a minimal but valid, openable docx package from nothing: [Content_Types].xml, the root relationship to word/document.xml, an empty body with a default US-Letter section, and a styles part with just the mandatory default Normal paragraph style. A caller passing no options gets byte-for-byte the same package as before docProps/core.xml support existed -- options.metadata is purely additive: only when it is supplied does a real docProps/core.xml part get written at all (see src/opc/core-properties.ts's addCoreProperties).
+// Builds a minimal but valid, openable docx package from nothing: [Content_Types].xml, the root relationship to word/document.xml, an empty body with a default US-Letter section, and a styles part with just the mandatory default Normal paragraph style. A caller passing no options gets byte-for-byte the same package as before docProps/core.xml support existed — options.metadata is purely additive: only when it is supplied does a real docProps/core.xml part get written at all (see src/opc/core-properties.ts's addCoreProperties).
 export function createEmptyDocxPackage(
   options?: CreateEmptyDocxPackageOptions,
 ): Package {

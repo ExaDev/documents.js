@@ -116,7 +116,7 @@ function cellText(cell: ContentTableCell): string {
     .join("");
 }
 
-// The grid as a consumer indexing by column actually sees it: one string per grid position, an anchor's own text at its anchor position and the empty string at every position it covers. This is the value every format is held to, and it is the whole point of the rule -- two readers agreeing here is exactly what "the same merged table has one shape whatever it came from" means.
+// The grid as a consumer indexing by column actually sees it: one string per grid position, an anchor's own text at its anchor position and the empty string at every position it covers. This is the value every format is held to, and it is the whole point of the rule — two readers agreeing here is exactly what "the same merged table has one shape whatever it came from" means.
 function gridText(table: ContentTable): string[][] {
   return table.rows.map((row) => row.cells.map(cellText));
 }
@@ -131,7 +131,7 @@ function spanShape(table: ContentTable): string[][] {
   );
 }
 
-// A table every format can hold: three grid columns, a header merging the first two, and a vertically merged cell below it. Its own shape is the rule's worked example -- the header row has THREE entries for two visible cells, which is the exact thing a consumer written for the sparse convention got wrong (ExaDev/documents.js#1316's own "Region,Revenue,," report, pinned as its own case below).
+// A table every format can hold: three grid columns, a header merging the first two, and a vertically merged cell below it. Its own shape is the rule's worked example — the header row has THREE entries for two visible cells, which is the exact thing a consumer written for the sparse convention got wrong (ExaDev/documents.js#1316's own "Region,Revenue,," report, pinned as its own case below).
 function mergedTable(): ContentTable {
   return tableOf([
     [textCell("Region", { colSpan: 2 }), coveredCell(), textCell("Revenue")],
@@ -165,7 +165,7 @@ interface FormatCase {
   readonly coveredContent: "refuses" | "keeps";
 }
 
-// Why a registry format is not exercised here. A spreadsheet or drawing format has no ContentTable to round-trip at all -- a sheet's merges live on ContentSheetCell, a separate sparse model the grid rule deliberately does not govern -- and a read-only format has no writer to round-trip through.
+// Why a registry format is not exercised here. A spreadsheet or drawing format has no ContentTable to round-trip at all — a sheet's merges live on ContentSheetCell, a separate sparse model the grid rule deliberately does not govern — and a read-only format has no writer to round-trip through.
 const EXCLUDED: Readonly<Partial<Record<DocumentFormat, string>>> = {
   ods: "spreadsheet: merges live on ContentSheetCell, not ContentTable",
   xls: "spreadsheet: merges live on ContentSheetCell, not ContentTable",
@@ -345,7 +345,7 @@ function coveredContentTable(): ContentTable {
   return tableOf([[textCell("Region", { colSpan: 2 }), textCell("stray")]]);
 }
 
-// A table whose header rows are neither only-leading nor contiguous: row 0 is a header, row 1 is not, row 2 is a header again. Nothing in THE HEADER RULE (ContentTableRow in document-schema.js) constrains where a flag may sit, and this is the shape that separates a format genuinely carrying the fact per row from one that only ever treats its first row as a header -- docx and RTF state it directly on the row, ODF derives one table:table-header-rows wrapper per run of them, and GFM, which can state only a single leading header row, renders the whole table through its own HTML fallback rather than dropping the flag.
+// A table whose header rows are neither only-leading nor contiguous: row 0 is a header, row 1 is not, row 2 is a header again. Nothing in THE HEADER RULE (ContentTableRow in document-schema.js) constrains where a flag may sit, and this is the shape that separates a format genuinely carrying the fact per row from one that only ever treats its first row as a header — docx and RTF state it directly on the row, ODF derives one table:table-header-rows wrapper per run of them, and GFM, which can state only a single leading header row, renders the whole table through its own HTML fallback rather than dropping the flag.
 function headerTable(): ContentTable {
   const table = tableOf([
     [textCell("Region"), textCell("Revenue")],

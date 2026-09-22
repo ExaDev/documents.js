@@ -8,7 +8,7 @@ import type { XmlElement } from "../../model/node";
 import { attrValue } from "../../xml/query";
 import { parseOdfLength } from "./units";
 
-// ODF-specific geometry PARSING: turning the unit-suffixed length strings two different kinds of real ODF elements carry into document-schema.js's own PageSize/Margins/Box shapes (never redeclared locally -- see color.ts's own note on this package's established rule). Both element shapes below were confirmed against real LibreOffice 26.2 output: a page-layout's own fo:page-width/height + fo:margin-* (style:page-layout-properties, a child of style:page-layout in styles.xml's office:automatic-styles, referenced by a style:master-page's style:page-layout-name) and a positioned drawing element's own svg:x/y/width/height (a draw:frame/draw:custom-shape/etc.'s direct attributes, e.g. a Writer image or text frame) -- see this module's own test suite for the exact fixtures.
+// ODF-specific geometry PARSING: turning the unit-suffixed length strings two different kinds of real ODF elements carry into document-schema.js's own PageSize/Margins/Box shapes (never redeclared locally — see color.ts's own note on this package's established rule). Both element shapes below were confirmed against real LibreOffice 26.2 output: a page-layout's own fo:page-width/height + fo:margin-* (style:page-layout-properties, a child of style:page-layout in styles.xml's office:automatic-styles, referenced by a style:master-page's style:page-layout-name) and a positioned drawing element's own svg:x/y/width/height (a draw:frame/draw:custom-shape/etc.'s direct attributes, e.g. a Writer image or text frame) — see this module's own test suite for the exact fixtures.
 
 // Parses a style:page-layout-properties element's fo:page-width/fo:page-height into a PageSize (points). Real LibreOffice output always sets both together; either being absent or unparseable is treated as "no page size to report" (undefined) rather than a partial PageSize with one dimension silently defaulted to zero, which would be actively wrong rather than merely incomplete.
 export function parsePageSize(
@@ -27,7 +27,7 @@ export function parsePageSize(
   return { widthPt, heightPt };
 }
 
-// Parses a style:page-layout-properties element's fo:margin-top/right/bottom/left into a Margins (points). All four are required together for the same reason parsePageSize requires both its dimensions together -- a Margins with one side silently defaulted to zero would misrepresent the page, not merely omit information.
+// Parses a style:page-layout-properties element's fo:margin-top/right/bottom/left into a Margins (points). All four are required together for the same reason parsePageSize requires both its dimensions together — a Margins with one side silently defaulted to zero would misrepresent the page, not merely omit information.
 export function parseMargins(
   pageLayoutProperties: XmlElement,
 ): Margins | undefined {
@@ -58,7 +58,7 @@ export function parseMargins(
   return { topPt, rightPt, bottomPt, leftPt };
 }
 
-// Parses a positioned drawing element's own svg:x/svg:y/svg:width/svg:height (its top-left corner and size) into a Box (points) -- e.g. a real Writer image/text frame: `<draw:frame svg:x="..." svg:y="..." svg:width="..." svg:height="...">`. Unlike style:page-layout-properties (page-level: size and margins, no position of its own), any individually positioned drawing element carries all four of these directly on itself, with no separate margins concept.
+// Parses a positioned drawing element's own svg:x/svg:y/svg:width/svg:height (its top-left corner and size) into a Box (points) — e.g. a real Writer image/text frame: `<draw:frame svg:x="..." svg:y="..." svg:width="..." svg:height="...">`. Unlike style:page-layout-properties (page-level: size and margins, no position of its own), any individually positioned drawing element carries all four of these directly on itself, with no separate margins concept.
 export function parseBox(element: XmlElement): Box | undefined {
   const xValue = attrValue(element, "svg:x");
   const yValue = attrValue(element, "svg:y");
@@ -87,7 +87,7 @@ export function parseBox(element: XmlElement): Box | undefined {
   return { xPt, yPt, widthPt, heightPt };
 }
 
-// draw:line is the one drawing shape that carries no svg:x/y/width/height box at all -- its geometry is a plain pair of endpoints, svg:x1/svg:y1/svg:x2/svg:y2 directly on the element (confirmed against real LibreOffice 26.2 .odg output; see typed/shared/path.ts's own top-of-file note on the verification method used for this same fixture). Unlike parseBox's four-required-together contract, each endpoint is read as its own pair -- there is no meaningful "partial line" fallback either way, so any one of the four being absent or unparseable is still, correctly, "no resolvable geometry" (undefined).
+// draw:line is the one drawing shape that carries no svg:x/y/width/height box at all — its geometry is a plain pair of endpoints, svg:x1/svg:y1/svg:x2/svg:y2 directly on the element (confirmed against real LibreOffice 26.2 .odg output; see typed/shared/path.ts's own top-of-file note on the verification method used for this same fixture). Unlike parseBox's four-required-together contract, each endpoint is read as its own pair — there is no meaningful "partial line" fallback either way, so any one of the four being absent or unparseable is still, correctly, "no resolvable geometry" (undefined).
 export function parseLinePoints(
   element: XmlElement,
 ): { from: ContentPathPoint; to: ContentPathPoint } | undefined {

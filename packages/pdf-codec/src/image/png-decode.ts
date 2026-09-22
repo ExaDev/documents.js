@@ -107,7 +107,7 @@ function filterBpp(bitDepth: number, channels: number): number {
   return Math.max(1, Math.ceil((bitDepth * channels) / 8));
 }
 
-// Unpacks one already-unfiltered scanline into one number per sample (raw, unscaled -- 0..2^bitDepth-1 for bit depths under 16, or the 16-bit value's high byte for bitDepth 16, per this decoder's documented 16-bit handling: reduce every depth down to an 8-bit-equivalent raw sample here, and scale to a full 0..255 display range later only for grayscale, where sub-8-bit depths need it).
+// Unpacks one already-unfiltered scanline into one number per sample (raw, unscaled — 0..2^bitDepth-1 for bit depths under 16, or the 16-bit value's high byte for bitDepth 16, per this decoder's documented 16-bit handling: reduce every depth down to an 8-bit-equivalent raw sample here, and scale to a full 0..255 display range later only for grayscale, where sub-8-bit depths need it).
 function unpackRow(
   rowBytes: Uint8Array<ArrayBuffer>,
   width: number,
@@ -184,7 +184,7 @@ export function decodePng(
   if (idatChunks.length === 0) {
     throw new Error("PNG file has no IDAT chunks");
   }
-  // Every IDAT chunk must be concatenated before inflating -- multi-IDAT files are routine (Office emits them), and inflating only the first chunk is the single most common PNG-decoder bug.
+  // Every IDAT chunk must be concatenated before inflating — multi-IDAT files are routine (Office emits them), and inflating only the first chunk is the single most common PNG-decoder bug.
   const compressed = concatBytes(idatChunks);
   const { bytes: inflated, recovered } = inflateTolerant(compressed);
   if (recovered && options.onWarning !== undefined) {

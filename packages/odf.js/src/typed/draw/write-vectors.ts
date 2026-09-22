@@ -17,24 +17,24 @@ import {
   type DrawShapeWriteState,
 } from "./write-shapes";
 
-// The write-side mirror of typed/draw/shapes.ts's own vector-primitive readers (readDrawRectVector, readDrawEllipseVector, readDrawLineVector, readDrawPathVector): one ContentVector -> the draw:rect / draw:ellipse / draw:line / draw:path element those functions read back. It sits beside write-shapes.ts rather than inside it for the reason that module's own writeDrawShapes note already states: a ContentShape carries no vector vocabulary at all, so a page's vectors are produced ALONGSIDE its frames, never through them -- and only ContentDrawPage has a `vectors` array to produce them from, so today's one caller is typed/odg/write.ts. The split follows the read side exactly, where walkDrawShapes (odp) and walkDrawPageContent (odg) live in one module precisely because they share the frame half and differ only in the vector half.
+// The write-side mirror of typed/draw/shapes.ts's own vector-primitive readers (readDrawRectVector, readDrawEllipseVector, readDrawLineVector, readDrawPathVector): one ContentVector -> the draw:rect / draw:ellipse / draw:line / draw:path element those functions read back. It sits beside write-shapes.ts rather than inside it for the reason that module's own writeDrawShapes note already states: a ContentShape carries no vector vocabulary at all, so a page's vectors are produced ALONGSIDE its frames, never through them — and only ContentDrawPage has a `vectors` array to produce them from, so today's one caller is typed/odg/write.ts. The split follows the read side exactly, where walkDrawShapes (odp) and walkDrawPageContent (odg) live in one module precisely because they share the frame half and differ only in the vector half.
 //
 // EVERY ATTRIBUTE NAME BELOW IS THE READ SIDE'S OWN, not an SVG-informed guess: readOdfFillAndStroke (typed/draw/shapes.ts) reads draw:fill / draw:fill-color / svg:fill-rule / draw:stroke / svg:stroke-color / svg:stroke-width off a graphic-family style's style:graphic-properties, and that module's own top-of-file note records verifying each of them against real LibreOffice 26.2 .odg output. This module writes exactly those six and nothing else, so the pair is a genuine inverse rather than two independently plausible spellings that happen to agree on the common cases.
 //
-// WHY EVERY VECTOR CARRIES A draw:style-name, even one with neither fill nor stroke: ODF's "no direct formatting" rule means the ABSENCE of a fill declaration does not mean "no fill" to a real consumer -- it means "inherit", and a consumer's own default graphic style supplies one (LibreOffice's built-in "standard" graphic style fills with a solid colour, so a rect written with no draw:fill at all renders filled rather than empty). draw:fill="none" / draw:stroke="none" are the format's own way of saying no fill / no stroke, confirmed on the read side against a real rectangle whose UNO FillStyle/LineStyle were set to NONE, and are what this module writes whenever the ContentVector states neither. write-shapes.ts's own shapeGraphicStyleName states the identical fill="none"/stroke="none" for a draw:frame too, for the same reason -- a frame's own insets stay conditional (readFrameInsets defaults to zero when no style says otherwise), but the paint half of the style is unconditional on both sides of this module boundary now.
+// WHY EVERY VECTOR CARRIES A draw:style-name, even one with neither fill nor stroke: ODF's "no direct formatting" rule means the ABSENCE of a fill declaration does not mean "no fill" to a real consumer — it means "inherit", and a consumer's own default graphic style supplies one (LibreOffice's built-in "standard" graphic style fills with a solid colour, so a rect written with no draw:fill at all renders filled rather than empty). draw:fill="none" / draw:stroke="none" are the format's own way of saying no fill / no stroke, confirmed on the read side against a real rectangle whose UNO FillStyle/LineStyle were set to NONE, and are what this module writes whenever the ContentVector states neither. write-shapes.ts's own shapeGraphicStyleName states the identical fill="none"/stroke="none" for a draw:frame too, for the same reason — a frame's own insets stay conditional (readFrameInsets defaults to zero when no style says otherwise), but the paint half of the style is unconditional on both sides of this module boundary now.
 //
-// WHAT THIS MODULE REFUSES rather than approximating, each by name (the same stance every writer in this package takes -- a document that silently lost content is worse than one this writer declined to produce):
+// WHAT THIS MODULE REFUSES rather than approximating, each by name (the same stance every writer in this package takes — a document that silently lost content is worse than one this writer declined to produce):
 // - a 'dotted' or 'double' stroke style. ODF's draw:stroke is enumerated to exactly none/solid/dash (confirmed against the OASIS schema, and recorded on the read side): there is no dotted value at the attribute level, and ODF's vector-stroke model has no double-line concept at all. Rounding either onto "solid" or "dash" would silently change what the document renders as.
-// - a stroke whose widthPt is not positive. ContentStrokeSchema declares z.number().positive(), and the reader requires svg:stroke-width > 0 before it builds a stroke at all -- so a zero or negative width writes an attribute that reads back as no stroke whatsoever, which for a 'line' vector (whose stroke is required, an invisible line having nothing to paint) drops the whole element.
+// - a stroke whose widthPt is not positive. ContentStrokeSchema declares z.number().positive(), and the reader requires svg:stroke-width > 0 before it builds a stroke at all — so a zero or negative width writes an attribute that reads back as no stroke whatsoever, which for a 'line' vector (whose stroke is required, an invisible line having nothing to paint) drops the whole element.
 // - a 'path' with no subpaths, or whose frame has a non-positive width or height. Both are elements this package's own reader discards outright rather than reading back smaller: parseOdfPathData returns no subpaths for an empty svg:d and readDrawPathVector then returns undefined, and parseOdfViewBox rejects a zero or negative extent (its scale factor would be a division by zero), which does the same.
 
 function unsupportedVector(what: string): Error {
   return new Error(
-    `writeDrawVector: a vector carries ${what}, which ODF has no spelling for -- refusing rather than producing a document that silently lost it or renders differently. See ExaDev/documents.js for the tracked follow-up.`,
+    `writeDrawVector: a vector carries ${what}, which ODF has no spelling for — refusing rather than producing a document that silently lost it or renders differently. See ExaDev/documents.js for the tracked follow-up.`,
   );
 }
 
-// ContentStroke.style -> draw:stroke's own enumerated value. An absent style means 'solid' (ContentStrokeStyleSchema's own documented convention), which is exactly what the reader gives back for draw:stroke="solid" -- so the absence is canonicalised to the value rather than to a missing attribute, and normaliseOdgContent states that.
+// ContentStroke.style -> draw:stroke's own enumerated value. An absent style means 'solid' (ContentStrokeStyleSchema's own documented convention), which is exactly what the reader gives back for draw:stroke="solid" — so the absence is canonicalised to the value rather than to a missing attribute, and normaliseOdgContent states that.
 function odfStrokeMode(style: ContentStrokeStyle | undefined): string {
   if (style === undefined || style === "solid") {
     return "solid";
@@ -43,7 +43,7 @@ function odfStrokeMode(style: ContentStrokeStyle | undefined): string {
     return "dash";
   }
   throw unsupportedVector(
-    `a '${style}' stroke style (draw:stroke is enumerated to exactly none/solid/dash -- ODF's vector-stroke model has no dotted or double spelling)`,
+    `a '${style}' stroke style (draw:stroke is enumerated to exactly none/solid/dash — ODF's vector-stroke model has no dotted or double spelling)`,
   );
 }
 
@@ -88,7 +88,7 @@ function vectorGraphicStyleName(
   });
 }
 
-// Resolves to the RESOLVED paint order -- odfZIndexOf's own value when the vector states one ODF can spell, the caller-supplied documentIndex otherwise -- and always emits draw:z-index, matching write-shapes.ts's own writeDrawFrame (see that function's and odfZIndexOf's own notes for why an item with no attribute at all reads back wrong on a real consumer whenever a sibling on the same page does carry one).
+// Resolves to the RESOLVED paint order — odfZIndexOf's own value when the vector states one ODF can spell, the caller-supplied documentIndex otherwise — and always emits draw:z-index, matching write-shapes.ts's own writeDrawFrame (see that function's and odfZIndexOf's own notes for why an item with no attribute at all reads back wrong on a real consumer whenever a sibling on the same page does carry one).
 function zIndexAttrs(
   paintOrder: number | undefined,
   documentIndex: number,
@@ -97,9 +97,9 @@ function zIndexAttrs(
   return { "draw:z-index": String(zIndex) };
 }
 
-// One ContentVector -> its own draw: element. Geometry for the three boxed variants goes through write-shapes.ts's own frameGeometryAttrs unchanged, because the reader resolves a draw:rect/draw:ellipse/draw:path through the very same resolveOdfShapeGeometry it resolves a draw:frame through (typed/draw/shapes.ts's resolveVectorGeometry) -- so their inverse is one function, not two that must be kept in step.
+// One ContentVector -> its own draw: element. Geometry for the three boxed variants goes through write-shapes.ts's own frameGeometryAttrs unchanged, because the reader resolves a draw:rect/draw:ellipse/draw:path through the very same resolveOdfShapeGeometry it resolves a draw:frame through (typed/draw/shapes.ts's resolveVectorGeometry) — so their inverse is one function, not two that must be kept in step.
 //
-// A 'line' is the one variant with no box at all: ODF spells it as four endpoint coordinates (svg:x1/y1/x2/y2, read by typed/shared/geometry.ts's parseLinePoints), and ContentVectorSchema deliberately gives the line variant no rotationDeg field for the matching reason its own comment states -- a line's rotation is already fully expressed by where its two endpoints are.
+// A 'line' is the one variant with no box at all: ODF spells it as four endpoint coordinates (svg:x1/y1/x2/y2, read by typed/shared/geometry.ts's parseLinePoints), and ContentVectorSchema deliberately gives the line variant no rotationDeg field for the matching reason its own comment states — a line's rotation is already fully expressed by where its two endpoints are.
 //
 // draw:ellipse is written for every 'ellipse' vector, including a circular one. Real LibreOffice writes draw:circle when width and height happen to be equal (a distinct element the OASIS schema defines for exactly that case, with an identical attribute shape); the reader maps both onto the one 'ellipse' variant, so writing the general spelling round-trips a circle correctly and spares this writer a special case that carries no information.
 export function writeDrawVector(
@@ -161,7 +161,7 @@ export function writeDrawVector(
   });
 }
 
-// A whole page's own vector primitives, in array order -- the vector counterpart to write-shapes.ts's writeDrawShapes, and the second half of what typed/odg/write.ts places inside one draw:page. `baseIndex` is the page's shapes.length: a page's document-encounter order runs its shapes array first and its vectors array second (typed/odg/write.ts's own note), so a vector's own encounter index is baseIndex plus its position in this array -- the identical arithmetic canonicalDrawVector's own caller already applies.
+// A whole page's own vector primitives, in array order — the vector counterpart to write-shapes.ts's writeDrawShapes, and the second half of what typed/odg/write.ts places inside one draw:page. `baseIndex` is the page's shapes.length: a page's document-encounter order runs its shapes array first and its vectors array second (typed/odg/write.ts's own note), so a vector's own encounter index is baseIndex plus its position in this array — the identical arithmetic canonicalDrawVector's own caller already applies.
 export function writeDrawVectors(
   vectors: readonly ContentVector[],
   state: DrawShapeWriteState,
@@ -178,11 +178,11 @@ export function writeDrawVectors(
 //
 // WHAT IT RESTATES rather than passing through:
 // - a COLOUR is quantised to ODF's own six-hex-digit text:color datatype (typed/shared/canonicalise.ts's canonicalColor states that once for the whole package), so a fill or stroke colour component that is not a whole 1/255 step comes back rounded.
-// - an ABSENT stroke style becomes 'solid'. ContentStrokeStyleSchema already documents absence to mean solid, and this writer spells that as draw:stroke="solid", which the reader reads back as an explicit style -- the same collapse typed/odt/write.ts's own canonical form already applies to a table cell's absent border style.
+// - an ABSENT stroke style becomes 'solid'. ContentStrokeStyleSchema already documents absence to mean solid, and this writer spells that as draw:stroke="solid", which the reader reads back as an explicit style — the same collapse typed/odt/write.ts's own canonical form already applies to a table cell's absent border style.
 // - rotationDeg === 0 collapses to absent, exactly as it does for a shape: resolveOdfShapeGeometry's read side treats a net rotation of exactly zero as undefined, and frameGeometryAttrs writes no transform for it.
-// - paintOrder is always present on the way back (walkDrawPageContent stamps every vector it reads), taking the caller-supplied documentIndex whenever ODF cannot spell the input's own value -- see canonicalDrawShape's own PAINT ORDER note, which states the identical rule for a shape, and typed/odg/write.ts for what a drawing page's own encounter indices actually are. zIndexAttrs above writes that same resolved value as draw:z-index unconditionally, so this canonical form and the written file can never disagree about a page whose items only partly state an ODF-spellable paintOrder.
+// - paintOrder is always present on the way back (walkDrawPageContent stamps every vector it reads), taking the caller-supplied documentIndex whenever ODF cannot spell the input's own value — see canonicalDrawShape's own PAINT ORDER note, which states the identical rule for a shape, and typed/odg/write.ts for what a drawing page's own encounter indices actually are. zIndexAttrs above writes that same resolved value as draw:z-index unconditionally, so this canonical form and the written file can never disagree about a page whose items only partly state an ODF-spellable paintOrder.
 //
-// THE THREE FIELDS IT DROPS, each named rather than left silent: `sourcePath` (a reader's own diagnostic path, which a writer has no document to have read from), `source` (quarantined residue, opaque text belonging to whichever format produced it -- re-emitting it into a different document would be actively wrong rather than merely incomplete), and `frames` (a layout pass's own rendered-position record, which a writer running before any layout pass has none of). The identical three every other canonical form in this package drops, for the identical reasons.
+// THE THREE FIELDS IT DROPS, each named rather than left silent: `sourcePath` (a reader's own diagnostic path, which a writer has no document to have read from), `source` (quarantined residue, opaque text belonging to whichever format produced it — re-emitting it into a different document would be actively wrong rather than merely incomplete), and `frames` (a layout pass's own rendered-position record, which a writer running before any layout pass has none of). The identical three every other canonical form in this package drops, for the identical reasons.
 //
 // NOTHING ELSE IS DROPPED: rect and ellipse declare frame/rotationDeg/fill/stroke/paintOrder and nothing more; line declares from/to/stroke/paintOrder; path adds subpaths and fillRule. Every one of them is carried above, which is why this list names three fields rather than the "and whatever else" a partial statement would need.
 //
@@ -201,7 +201,7 @@ export function canonicalDrawVector(
       paintOrder,
     };
   }
-  // rotationDeg === 0 collapses to absent, and an absent fill/stroke stays absent rather than becoming an explicit undefined -- both spelled as a conditional spread rather than a post-construction assignment so each variant is built as its own union member, with no widened intermediate for a later assignment to be checked against.
+  // rotationDeg === 0 collapses to absent, and an absent fill/stroke stays absent rather than becoming an explicit undefined — both spelled as a conditional spread rather than a post-construction assignment so each variant is built as its own union member, with no widened intermediate for a later assignment to be checked against.
   const paint = {
     ...(vector.rotationDeg !== undefined && vector.rotationDeg !== 0
       ? { rotationDeg: vector.rotationDeg }

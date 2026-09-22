@@ -11,9 +11,9 @@ export interface RunInit {
   readonly fontFamily?: string;
 }
 
-// A live view over a ContentRun object living inside a DocParagraph's own runs array -- the identical live-view contract MarkdownRun applies over the same node shape (see markdown's run.ts): doc has no XmlElement tree to hold a reference into either (doc-codec reads and writes the plain ContentDocument directly), so this holds the ContentRun object itself and mutates its properties in place. As long as the object is never replaced wholesale in its container array (only its own properties are assigned), the reference stays live.
+// A live view over a ContentRun object living inside a DocParagraph's own runs array — the identical live-view contract MarkdownRun applies over the same node shape (see markdown's run.ts): doc has no XmlElement tree to hold a reference into either (doc-codec reads and writes the plain ContentDocument directly), so this holds the ContentRun object itself and mutates its properties in place. As long as the object is never replaced wholesale in its container array (only its own properties are assigned), the reference stays live.
 //
-// The exposed property set is exactly the set doc-codec's own writer encodes as direct character-exception sprms (src/prop/chp-write.ts: bold, italic, underline, strike, sizePt, color, fontFamily) -- every one of those round-trips through writeDocContent and back through readDocContent. MarkdownRun's own hyperlink/code setters have no counterpart here because [MS-DOC]'s own writer support does not exist for them: writeDocContent states no hyperlinks or fields at all (see its own top comment), and a code-span monospace view over fontFamily would imply a markdown semantics doc never had. The property sets are nevertheless near-identical to DocxRun/OdtRun's own rich subset for the same reason: doc-codec's writer genuinely encodes all seven.
+// The exposed property set is exactly the set doc-codec's own writer encodes as direct character-exception sprms (src/prop/chp-write.ts: bold, italic, underline, strike, sizePt, color, fontFamily) — every one of those round-trips through writeDocContent and back through readDocContent. MarkdownRun's own hyperlink/code setters have no counterpart here because [MS-DOC]'s own writer support does not exist for them: writeDocContent states no hyperlinks or fields at all (see its own top comment), and a code-span monospace view over fontFamily would imply a markdown semantics doc never had. The property sets are nevertheless near-identical to DocxRun/OdtRun's own rich subset for the same reason: doc-codec's writer genuinely encodes all seven.
 export class DocRun {
   private readonly container: ContentRun[];
   private readonly node: ContentRun;
@@ -142,7 +142,7 @@ export class DocRun {
   }
 }
 
-// Builds a fresh ContentRun from scratch (not a live view -- for constructing new runs to append or insert, whose properties are then read back through DocRun once inserted into a paragraph's runs array). Mirrors markdown's run.ts buildRun: applies init's properties by constructing a throwaway DocRun over the new node and driving it through the exact same setters every later mutation uses.
+// Builds a fresh ContentRun from scratch (not a live view — for constructing new runs to append or insert, whose properties are then read back through DocRun once inserted into a paragraph's runs array). Mirrors markdown's run.ts buildRun: applies init's properties by constructing a throwaway DocRun over the new node and driving it through the exact same setters every later mutation uses.
 export function buildRun(init: RunInit = {}): ContentRun {
   const node: ContentRun = { text: init.text ?? "" };
   const run = new DocRun([], node);

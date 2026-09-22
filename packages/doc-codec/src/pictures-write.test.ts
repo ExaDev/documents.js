@@ -85,7 +85,7 @@ describe("buildInlinePicture", () => {
 });
 
 describe("buildInlinePicture's own raw byte layout", () => {
-  // Layout constants mirrored from pictures-write.ts's own PICF_SIZE (68) and record-header size (8, recVer/recInstance (2) + recType (2) + recLen (4)) -- readInlinePicture never validates the shape container's own header content (it skips the whole record by its own recLen), so only a direct byte-level read of `data`, not a round trip through the reader, can tell these two record headers apart.
+  // Layout constants mirrored from pictures-write.ts's own PICF_SIZE (68) and record-header size (8, recVer/recInstance (2) + recType (2) + recLen (4)) — readInlinePicture never validates the shape container's own header content (it skips the whole record by its own recLen), so only a direct byte-level read of `data`, not a round trip through the reader, can tell these two record headers apart.
   const PICF_SIZE = 68;
   const RECORD_HEADER_SIZE = 8;
 
@@ -114,14 +114,14 @@ describe("buildInlinePicture's own raw byte layout", () => {
   });
 
   it("writes MFPF.mm's own MM_SHAPE value (0x0064) little-endian, not big-endian", () => {
-    // readInlinePicture only branches on mm to decide whether to skip a MM_SHAPEFILE-only filename pair, and this writer never emits MM_SHAPEFILE, so a byte-order mistake here changes nothing a round trip through the reader could observe -- only a direct read of the raw bytes can tell 0x0064 from its own byte-swapped 0x6400.
+    // readInlinePicture only branches on mm to decide whether to skip a MM_SHAPEFILE-only filename pair, and this writer never emits MM_SHAPEFILE, so a byte-order mistake here changes nothing a round trip through the reader could observe — only a direct read of the raw bytes can tell 0x0064 from its own byte-swapped 0x6400.
     const { data } = buildInlinePicture(image());
     const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
     expect(view.getUint16(6, true)).toBe(0x0064);
   });
 
   it("writes widthPt's own twips value little-endian, not big-endian", () => {
-    // 72pt = 1440 twips = 0x05a0 -- byte-asymmetric, so a reversed byte order changes the read-back value rather than merely its sign or magnitude by coincidence. PICF_DXA_GOAL_OFFSET is 28.
+    // 72pt = 1440 twips = 0x05a0 — byte-asymmetric, so a reversed byte order changes the read-back value rather than merely its sign or magnitude by coincidence. PICF_DXA_GOAL_OFFSET is 28.
     const { data } = buildInlinePicture(image({ widthPt: 72, heightPt: 36 }));
     const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
     expect(view.getUint8(28)).toBe(0xa0);

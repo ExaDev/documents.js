@@ -41,7 +41,7 @@ describe("MarkdownTable appendTable / appendRow / cell.text", () => {
     const paragraph = cell.appendParagraph({ text: "Second" });
     expect(cell.paragraphs()).toHaveLength(2);
     expect(paragraph.text).toBe("Second");
-    // Two paragraphs joined with a real newline, not concatenated bare -- the first is the cell's own untouched default (empty text), the second is "Second".
+    // Two paragraphs joined with a real newline, not concatenated bare — the first is the cell's own untouched default (empty text), the second is "Second".
     expect(cell.text).toBe("\nSecond");
   });
 

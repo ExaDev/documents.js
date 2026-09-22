@@ -24,9 +24,9 @@ import {
 import type { ShapeAnchor } from "../drawing/shapes";
 import { writeEmbeddedObjectPackage } from "./embedded-object";
 
-// The write side of workbook/drawing.ts: one MS-ODRAW container per sheet carrying shapes (the MsoDrawing record pair), the workbook-wide drawing group (the MsoDrawingGroup stream workbook/globals-writer.ts emits ahead of the SST), and the Obj records pairing each Escher shape with what it holds -- a picture resolving into the workbook's Blip Store, or an embedded OLE object whose bytes live in an MBD Embedding Storage ([MS-XLS] 2.1.7, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/b406ade0-fb1c-4512-bff2-b576fdfff545) as a Package stream wrapping this package's own JSON payload (workbook/embedded-object.ts).
+// The write side of workbook/drawing.ts: one MS-ODRAW container per sheet carrying shapes (the MsoDrawing record pair), the workbook-wide drawing group (the MsoDrawingGroup stream workbook/globals-writer.ts emits ahead of the SST), and the Obj records pairing each Escher shape with what it holds — a picture resolving into the workbook's Blip Store, or an embedded OLE object whose bytes live in an MBD Embedding Storage ([MS-XLS] 2.1.7, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/b406ade0-fb1c-4512-bff2-b576fdfff545) as a Package stream wrapping this package's own JSON payload (workbook/embedded-object.ts).
 //
-// A 'chart' embedded object is refused by name rather than approximated: writing one means embedding a genuine BIFF8 chart substream -- the whole [MS-XLS] chart grammar a flattened series/category table would have to drive, with series data links resolving back to real cells -- which is a chart engine of its own, not a container to place a table in. The other five objectKinds all embed through the one OLE mechanism.
+// A 'chart' embedded object is refused by name rather than approximated: writing one means embedding a genuine BIFF8 chart substream — the whole [MS-XLS] chart grammar a flattened series/category table would have to drive, with series data links resolving back to real cells — which is a chart engine of its own, not a container to place a table in. The other five objectKinds all embed through the one OLE mechanism.
 
 /** The sheet-grid geometry an anchor resolves against and inverts into, the write-side mirror of workbook/drawing.ts's own SheetGridGeometry: declared column widths/row heights with the same Excel "Normal" defaults beneath, so a shape written from a given placement reads back at the identical placement. Derived from the same constants (units.ts) the reader's own geometry uses, so the two cannot disagree about what an undeclared cell sizes. */
 export class WriterGridGeometry {
@@ -57,7 +57,7 @@ export class WriterGridGeometry {
     return this.rowHeights.get(index) ?? DEFAULT_ROW_HEIGHT_PT;
   }
 
-  /** The absolute x of a column's own left edge -- the cumulative width of every column before it, the identical accumulation the reader's own geometry walks back down. */
+  /** The absolute x of a column's own left edge — the cumulative width of every column before it, the identical accumulation the reader's own geometry walks back down. */
   xPt(column: number): number {
     let x = 0;
     for (let index = 0; index < column; index += 1) {
@@ -74,7 +74,7 @@ export class WriterGridGeometry {
     return y;
   }
 
-  /** Locates an absolute x as a column plus a 1/1024ths-of-that-column fraction, the pair OfficeArtClientAnchorSheet's own left/right corners state. A point beyond the grid's own last column clamps to that column's far edge: the grid has no column 256 to name, and a shape whose extent runs that far past the grid loses only the overflow, where refusing the workbook would lose the cells too -- the same trade a print range past the grid already draws (print-names.ts's clampToGrid). */
+  /** Locates an absolute x as a column plus a 1/1024ths-of-that-column fraction, the pair OfficeArtClientAnchorSheet's own left/right corners state. A point beyond the grid's own last column clamps to that column's far edge: the grid has no column 256 to name, and a shape whose extent runs that far past the grid loses only the overflow, where refusing the workbook would lose the cells too — the same trade a print range past the grid already draws (print-names.ts's clampToGrid). */
   locateX(x: number): { readonly column: number; readonly fraction: number } {
     let left = 0;
     for (let column = 0; column < 0xff; column += 1) {
@@ -176,10 +176,10 @@ export function anchorOf(
 
 // --- The Obj records ([MS-XLS] 2.4.181, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/dd34df60-8250-40a9-83a3-911476a31ea7) ---
 
-/** [MS-XLS] 2.5.213's own ot table: the Picture type both a plain image and an embedded OLE object carry -- an OLE object IS hosted through the picture machinery (its FtPictFmla naming the Embedding Storage its data lives in), which is exactly how the Embedding Storage page itself states the pairing ("cmo.ot equal to 8, pictFlags.fPrstm equal to 0, and pictFlags.fDde equal to 0"). */
+/** [MS-XLS] 2.5.213's own ot table: the Picture type both a plain image and an embedded OLE object carry — an OLE object IS hosted through the picture machinery (its FtPictFmla naming the Embedding Storage its data lives in), which is exactly how the Embedding Storage page itself states the pairing ("cmo.ot equal to 8, pictFlags.fPrstm equal to 0, and pictFlags.fDde equal to 0"). */
 const OBJECT_TYPE_PICTURE = 0x0008;
 
-/** FtCmo ([MS-XLS] 2.5.92, 22 bytes): ft 0x15, cb 0x12, the object type and id, then grbit and three unused dwords all written zero -- the identical shape comment-writer.ts writes for a Note, restated here with the object type as a parameter rather than shared across the two direction modules. */
+/** FtCmo ([MS-XLS] 2.5.92, 22 bytes): ft 0x15, cb 0x12, the object type and id, then grbit and three unused dwords all written zero — the identical shape comment-writer.ts writes for a Note, restated here with the object type as a parameter rather than shared across the two direction modules. */
 export function writeFtCmo(ot: number, id: number): Uint8Array<ArrayBuffer> {
   return new RecordBuilder()
     .u16(0x0015)
@@ -193,12 +193,12 @@ export function writeFtCmo(ot: number, id: number): Uint8Array<ArrayBuffer> {
     .build();
 }
 
-/** FtCf ([MS-XLS] 2.5.142, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/fc5bb3ce-8e35-4393-b22f-9cf54062a3a4): the clipboard format of the picture this object shows. 0xFFFF names "an unspecified format that is neither an enhanced metafile nor a bitmap" -- honest for a shape whose visible rendering is the blip the Escher layer itself carries and for an OLE object this writer has no preview metafile for. */
+/** FtCf ([MS-XLS] 2.5.142, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/fc5bb3ce-8e35-4393-b22f-9cf54062a3a4): the clipboard format of the picture this object shows. 0xFFFF names "an unspecified format that is neither an enhanced metafile nor a bitmap" — honest for a shape whose visible rendering is the blip the Escher layer itself carries and for an OLE object this writer has no preview metafile for. */
 export function writeFtCf(): Uint8Array<ArrayBuffer> {
   return new RecordBuilder().u16(0x0007).u16(0x0002).u16(0xffff).build();
 }
 
-/** FtPioGrbit ([MS-XLS] 2.5.151, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/8eee0b3d-9d27-4294-85fc-a66ae8a361c9): a plain picture states fAutoPict (aspect preserved across views); an OLE embedding states no bits at all -- fPrstm and fDde stay clear, the pair the Embedding Storage page requires for storage-based object data. */
+/** FtPioGrbit ([MS-XLS] 2.5.151, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/8eee0b3d-9d27-4294-85fc-a66ae8a361c9): a plain picture states fAutoPict (aspect preserved across views); an OLE embedding states no bits at all — fPrstm and fDde stay clear, the pair the Embedding Storage page requires for storage-based object data. */
 export function writeFtPioGrbit(autoPict: boolean): Uint8Array<ArrayBuffer> {
   return new RecordBuilder()
     .u16(0x0008)
@@ -207,13 +207,13 @@ export function writeFtPioGrbit(autoPict: boolean): Uint8Array<ArrayBuffer> {
     .build();
 }
 
-/** The PtgTbl token byte an embedded object's ObjectParsedFormula carries ([MS-XLS] 2.5.198.92: ptg 0x02, class none) -- the spelling that tells a reader this picture's data lives in an Embedding Storage rather than a linked range. */
+/** The PtgTbl token byte an embedded object's ObjectParsedFormula carries ([MS-XLS] 2.5.198.92: ptg 0x02, class none) — the spelling that tells a reader this picture's data lives in an Embedding Storage rather than a linked range. */
 const PTG_TBL = 0x02;
 
-/** The class name stated in an embedding's PictFmlaEmbedInfo: "Package" is what a genuine OLE Package embed carries, so a real OLE-aware consumer that cannot decode this package's own JSON payload still sees a recognisable, accurate class rather than an invented one -- the identical choice rtf-codec's own ObjectHeader makes for the same payload shape. */
+/** The class name stated in an embedding's PictFmlaEmbedInfo: "Package" is what a genuine OLE Package embed carries, so a real OLE-aware consumer that cannot decode this package's own JSON payload still sees a recognisable, accurate class rather than an invented one — the identical choice rtf-codec's own ObjectHeader makes for the same payload shape. */
 const EMBED_CLASS_NAME = "Package";
 
-/** FtPictFmla ([MS-XLS] 2.5.150, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/00f89d32-67b0-408e-9eaf-f4fecbddb089) for an embedded OLE object: the ObjFmla (cbFmla counting the ObjectParsedFormula, the PictFmlaEmbedInfo, and the padding -- even, per [MS-XLS] 2.5.187's own cbFmla rule), then lPosInCtlStm, the storage id the Embedding Storage's own MBD name is the eight-hex-digit spelling of. The ObjectParsedFormula is the one shape [MS-XLS] pins for an embedding: cce 5, rgce one PtgTbl followed by four undefined bytes. */
+/** FtPictFmla ([MS-XLS] 2.5.150, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/00f89d32-67b0-408e-9eaf-f4fecbddb089) for an embedded OLE object: the ObjFmla (cbFmla counting the ObjectParsedFormula, the PictFmlaEmbedInfo, and the padding — even, per [MS-XLS] 2.5.187's own cbFmla rule), then lPosInCtlStm, the storage id the Embedding Storage's own MBD name is the eight-hex-digit spelling of. The ObjectParsedFormula is the one shape [MS-XLS] pins for an embedding: cce 5, rgce one PtgTbl followed by four undefined bytes. */
 export function writeFtPictFmla(storageId: number): Uint8Array<ArrayBuffer> {
   const formula = new RecordBuilder()
     .u16(5) // ObjectParsedFormula.cce
@@ -230,17 +230,17 @@ export function writeFtPictFmla(storageId: number): Uint8Array<ArrayBuffer> {
     .build();
   const fmlaBytes = new RecordBuilder().bytes(formula).bytes(embedInfo).build();
   const data = new RecordBuilder()
-    .u16(fmlaBytes.length) // cbFmla -- even, as [MS-XLS] requires
+    .u16(fmlaBytes.length) // cbFmla — even, as [MS-XLS] requires
     .bytes(fmlaBytes)
     .u32(storageId) // lPosInCtlStm
     .build();
   return new RecordBuilder().u16(0x0009).u16(data.length).bytes(data).build();
 }
 
-/** The trailing four reserved bytes every Obj not naming a list-box/dropdown object carries ([MS-XLS] 2.4.181's own reserved field: MUST be 0) -- the ftEnd marker a real sub-record walk terminates on. */
+/** The trailing four reserved bytes every Obj not naming a list-box/dropdown object carries ([MS-XLS] 2.4.181's own reserved field: MUST be 0) — the ftEnd marker a real sub-record walk terminates on. */
 const OBJ_RESERVED_END = new Uint8Array(4);
 
-/** One picture shape's Obj record: FtCmo (ot Picture), FtCf, FtPioGrbit, and the trailing reserved field. No FtPictFmla -- the image's bytes live in the workbook's Blip Store, which the shape's own pib property names, leaving the Obj record itself nothing to locate. */
+/** One picture shape's Obj record: FtCmo (ot Picture), FtCf, FtPioGrbit, and the trailing reserved field. No FtPictFmla — the image's bytes live in the workbook's Blip Store, which the shape's own pib property names, leaving the Obj record itself nothing to locate. */
 export function writePictureObjRecord(
   objectId: number,
 ): Uint8Array<ArrayBuffer> {
@@ -255,7 +255,7 @@ export function writePictureObjRecord(
   );
 }
 
-/** One embedded OLE object's Obj record: FtCmo (ot Picture), FtCf, FtPioGrbit (no bits -- storage-based, per the Embedding Storage page's own fPrstm/fDde requirement), the FtPictFmla naming the storage, and the trailing reserved field. */
+/** One embedded OLE object's Obj record: FtCmo (ot Picture), FtCf, FtPioGrbit (no bits — storage-based, per the Embedding Storage page's own fPrstm/fDde requirement), the FtPictFmla naming the storage, and the trailing reserved field. */
 export function writeEmbeddedObjRecord(
   objectId: number,
   storageId: number,
@@ -283,7 +283,7 @@ export function bytesFromBase64(base64: string): Uint8Array<ArrayBuffer> {
       values[char.charCodeAt(0)] = index;
     });
   const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
-  // Trailing padding is sliced off up front rather than skipped inside the loop below: skipping it there was genuinely unobservable regardless, since `out`'s own length is already sized to exactly the real decoded bytes, so any value a padding character contributed could only ever land at or past that length -- a Uint8Array write past its own end is a silent no-op, never a real byte the caller could see. padding is always 0, 1, or 2, so slicing zero characters off when there is no padding at all is just the original string back -- no separate unpadded branch is needed.
+  // Trailing padding is sliced off up front rather than skipped inside the loop below: skipping it there was genuinely unobservable regardless, since `out`'s own length is already sized to exactly the real decoded bytes, so any value a padding character contributed could only ever land at or past that length — a Uint8Array write past its own end is a silent no-op, never a real byte the caller could see. padding is always 0, 1, or 2, so slicing zero characters off when there is no padding at all is just the original string back — no separate unpadded branch is needed.
   const data = base64.slice(0, base64.length - padding);
   const out = new Uint8Array((base64.length / 4) * 3 - padding);
   let buffer = 0;
@@ -307,7 +307,7 @@ export function bytesFromBase64(base64: string): Uint8Array<ArrayBuffer> {
   return out;
 }
 
-/** One sheet's own drawing records, positioned into the worksheet substream's OBJECTS section by sheet-writer.ts. Empty arrays when the sheet carries no shapes at all -- a sheet with nothing to draw writes no MsoDrawing and no Obj, staying as minimal as it always was. */
+/** One sheet's own drawing records, positioned into the worksheet substream's OBJECTS section by sheet-writer.ts. Empty arrays when the sheet carries no shapes at all — a sheet with nothing to draw writes no MsoDrawing and no Obj, staying as minimal as it always was. */
 export interface SheetDrawingWrite {
   readonly msoDrawingRecords: readonly Uint8Array<ArrayBuffer>[];
   readonly objRecords: readonly Uint8Array<ArrayBuffer>[];
@@ -324,18 +324,18 @@ export interface DrawingWritePlan {
 }
 
 /**
- * Builds every sheet's drawing and the workbook-wide state around it, in one pass over the document before any record is written -- the same workbook-wide-passes shape write.ts's own format, colour, font, and string tables take.
+ * Builds every sheet's drawing and the workbook-wide state around it, in one pass over the document before any record is written — the same workbook-wide-passes shape write.ts's own format, colour, font, and string tables take.
  *
- * Images dedupe through the Blip Store: two placements of the same bytes share one BSE, whose cRef counts the references. Embedded objects (every objectKind but 'chart', which is refused by name) each get their own MBD Embedding Storage named by a storage id this plan assigns sequentially from 1, its FtPictFmla carrying the id and the outer compound file carrying the storage. Shape ids allocate from 1024 across the whole workbook -- Excel's own convention for the first drawing group -- patriarch first, then each sheet's real shapes in document order, so the Escher stream's shape order and the Obj records' order pair 1:1 the way the reader's own positional correlation expects.
+ * Images dedupe through the Blip Store: two placements of the same bytes share one BSE, whose cRef counts the references. Embedded objects (every objectKind but 'chart', which is refused by name) each get their own MBD Embedding Storage named by a storage id this plan assigns sequentially from 1, its FtPictFmla carrying the id and the outer compound file carrying the storage. Shape ids allocate from 1024 across the whole workbook — Excel's own convention for the first drawing group — patriarch first, then each sheet's real shapes in document order, so the Escher stream's shape order and the Obj records' order pair 1:1 the way the reader's own positional correlation expects.
  */
-/** A StoredBlip whose own referenceCount this plan is still free to increment -- StoredBlip's own field is readonly for escher-writer.ts's callers, since nothing downstream of writeDrawingGroupBytes should mutate a finished plan, but this function is what counts the references in the first place. */
+/** A StoredBlip whose own referenceCount this plan is still free to increment — StoredBlip's own field is readonly for escher-writer.ts's callers, since nothing downstream of writeDrawingGroupBytes should mutate a finished plan, but this function is what counts the references in the first place. */
 type MutableStoredBlip = { -readonly [K in keyof StoredBlip]: StoredBlip[K] };
 
 export function buildDrawingWritePlan(
   sheets: readonly ContentSheet[],
 ): DrawingWritePlan {
   const blips: MutableStoredBlip[] = [];
-  // Keyed by base64 rather than by index: resolving a repeat directly to the same blip object this map already holds means a dedup lookup can never land on an index the `blips` array itself doesn't recognise -- there is no index arithmetic here for such a lookup to disagree with in the first place.
+  // Keyed by base64 rather than by index: resolving a repeat directly to the same blip object this map already holds means a dedup lookup can never land on an index the `blips` array itself doesn't recognise — there is no index arithmetic here for such a lookup to disagree with in the first place.
   const blipsByBase64 = new Map<
     string,
     { readonly index: number; readonly blip: MutableStoredBlip }
@@ -364,7 +364,7 @@ export function buildDrawingWritePlan(
     return index;
   };
 
-  // Storage ids are assigned workbook-wide from 1, and the MBD storage name is the id's own eight-uppercase-hex-digit spelling -- the format the Embedding Storage page states and every real producer (and this package's own reader) spells it back as.
+  // Storage ids are assigned workbook-wide from 1, and the MBD storage name is the id's own eight-uppercase-hex-digit spelling — the format the Embedding Storage page states and every real producer (and this package's own reader) spells it back as.
   let nextStorageId = 1;
   const storageIdOf = (): number => {
     const id = nextStorageId;
@@ -399,7 +399,7 @@ export function buildDrawingWritePlan(
     for (const embedded of sheet.embeddedObjects ?? []) {
       if (embedded.objectKind === "chart") {
         throw new BiffWriteError(
-          "xls-codec cannot write a 'chart' embedded object: embedding one means writing a genuine BIFF8 chart substream -- the whole [MS-XLS] chart grammar its series data links drive -- which is a chart engine of its own rather than a container for the flattened series table the schema carries",
+          "xls-codec cannot write a 'chart' embedded object: embedding one means writing a genuine BIFF8 chart substream — the whole [MS-XLS] chart grammar its series data links drive — which is a chart engine of its own rather than a container for the flattened series table the schema carries",
         );
       }
       const storageId = storageIdOf();
@@ -433,7 +433,7 @@ export function buildDrawingWritePlan(
     nextDrawingId += 1;
     nextSpid += entries.length + 1; // this sheet's patriarch took one id too
     sheetDrawings.push({
-      // MsoDrawing's own data concatenates across its Continue chain ([MS-XLS] 2.4.180 and the MSODRAWING production), so a drawing larger than one record's 8224-byte ceiling is chained rather than refused -- the one record family whose size real image bytes make routinely exceed the ceiling.
+      // MsoDrawing's own data concatenates across its Continue chain ([MS-XLS] 2.4.180 and the MSODRAWING production), so a drawing larger than one record's 8224-byte ceiling is chained rather than refused — the one record family whose size real image bytes make routinely exceed the ceiling.
       msoDrawingRecords: writeRecordChain(RECORD_MSODRAWING, escherBytes),
       objRecords,
     });

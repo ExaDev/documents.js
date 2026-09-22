@@ -150,7 +150,7 @@ describe("openPdfDocument: encryption", () => {
     expect(diagnostics).toEqual([]);
   });
 
-  // A file's own /Encrypt dictionary is stored unencrypted (ISO 32000-1 7.6.1), so it must be fetched with decryption still off -- a bug here would corrupt /O and /U and make every supported file look password-protected.
+  // A file's own /Encrypt dictionary is stored unencrypted (ISO 32000-1 7.6.1), so it must be fetched with decryption still off — a bug here would corrupt /O and /U and make every supported file look password-protected.
   it("reads the /Encrypt dictionary itself without trying to decrypt it", () => {
     const { sink } = collectDiagnostics();
     const doc = openPdfDocument(aes256EmptyUserPasswordPdf(), sink);

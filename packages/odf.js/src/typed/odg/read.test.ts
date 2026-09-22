@@ -8,7 +8,7 @@ import {
 } from "../../test-support/document-tree";
 import { readOdg, readOdgContent } from "./read";
 
-// A full, real-shape .odg fixture assembled from XML shapes verified against genuine LibreOffice 26.2 output (a StarBasic macro run headlessly against the LibreOffice UNO API to construct actual draw:rect/ellipse/line/path/custom-shape geometry, then the resulting content.xml inspected directly -- NOT hand-authored guesses; see typed/shared/path.ts's own top-of-file note for the full verification method), matching this package's other typed-reader tests' established convention of building packages programmatically from ground-truth-verified shapes rather than loading a committed binary fixture (mirroring readOdpContent's own read.test.ts).
+// A full, real-shape .odg fixture assembled from XML shapes verified against genuine LibreOffice 26.2 output (a StarBasic macro run headlessly against the LibreOffice UNO API to construct actual draw:rect/ellipse/line/path/custom-shape geometry, then the resulting content.xml inspected directly — NOT hand-authored guesses; see typed/shared/path.ts's own top-of-file note for the full verification method), matching this package's other typed-reader tests' established convention of building packages programmatically from ground-truth-verified shapes rather than loading a committed binary fixture (mirroring readOdpContent's own read.test.ts).
 
 function stylesXml(): Package["parts"][string] {
   return {
@@ -44,7 +44,7 @@ function graphicStyle(
 }
 
 function buildFixturePackage(): Package {
-  // Page 1: a real mix of vector primitives, in the exact document order a genuine LibreOffice .odg round trip produced (Ellipse1 was moved to the BACK and Rect1 to the FRONT via the UNO ZOrder property before saving -- LibreOffice's own writer represents that purely via THIS document order, with no draw:z-index attribute at all; see shapes.test.ts's own dedicated draw:z-index tests for the explicit-attribute-override case).
+  // Page 1: a real mix of vector primitives, in the exact document order a genuine LibreOffice .odg round trip produced (Ellipse1 was moved to the BACK and Rect1 to the FRONT via the UNO ZOrder property before saving — LibreOffice's own writer represents that purely via THIS document order, with no draw:z-index attribute at all; see shapes.test.ts's own dedicated draw:z-index tests for the explicit-attribute-override case).
   const ellipse = el(
     "draw:ellipse",
     {
@@ -369,7 +369,7 @@ describe("readOdg: the package-native reader over the same fixture", () => {
 
     expect(documentPackage.kind).toBe("drawing");
     expect(documentPackage.metadata).toEqual(content.metadata);
-    // One draw-page group per authored ContentDrawPage. These are the document's OWN pages, not the package envelope's rendered `pages` array -- which stays absent, since no layout pass has run.
+    // One draw-page group per authored ContentDrawPage. These are the document's OWN pages, not the package envelope's rendered `pages` array — which stays absent, since no layout pass has run.
     expect(documentPackage.children).toHaveLength(content.pages.length);
     expect(documentPackage.pages).toBeUndefined();
     assertPackageRoundTrip(documentPackage, { kind: "drawing", ...content });
@@ -386,7 +386,7 @@ describe("readOdg: the package-native reader over the same fixture", () => {
     }
     expect(firstPage.node.kind).toBe("drawPage");
     expect(firstPage.node.size).toEqual(firstContentPage.size);
-    // A shape is a container and becomes its own group; a vector is a textless primitive with no inner structure and stays a leaf, after every shape group -- so the page's children are the two arrays concatenated in that order.
+    // A shape is a container and becomes its own group; a vector is a textless primitive with no inner structure and stays a leaf, after every shape group — so the page's children are the two arrays concatenated in that order.
     expect(firstPage.children).toHaveLength(
       firstContentPage.shapes.length + firstContentPage.vectors.length,
     );
@@ -395,7 +395,7 @@ describe("readOdg: the package-native reader over the same fixture", () => {
     );
     expect(firstContentPage.vectors.length).toBeGreaterThan(0);
 
-    // The first page alone has zero shapes, so the assertions above would hold even if shape-group assembly were dropped entirely -- the second page is the fixture's only page with a shape on it, so the "shapes as groups" half of this test's own name is actually exercised here.
+    // The first page alone has zero shapes, so the assertions above would hold even if shape-group assembly were dropped entirely — the second page is the fixture's only page with a shape on it, so the "shapes as groups" half of this test's own name is actually exercised here.
     const secondPage = documentPackage.children[1];
     const secondContentPage = content.pages[1];
     if (secondPage === undefined || secondContentPage === undefined) {

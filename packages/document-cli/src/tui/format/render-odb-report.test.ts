@@ -113,7 +113,7 @@ describe("renderOdbReportTo", () => {
   });
 
   it("genuinely threads the given report name through rather than dropping it, which the sole declared report would silently absorb as a default for any name including an unknown one", async () => {
-    // FORM_AND_REPORT_ODB_PATH declares exactly one report ("SalesByRegion"). If { report: options.reportName } lost its `report` field entirely (rather than merely being given the wrong value), readOdbReportContent would still succeed by defaulting to that sole report -- so an empty reportName, which cannot coincide with any real report name, is the input that specifically proves the field survives the call rather than being dropped.
+    // FORM_AND_REPORT_ODB_PATH declares exactly one report ("SalesByRegion"). If { report: options.reportName } lost its `report` field entirely (rather than merely being given the wrong value), readOdbReportContent would still succeed by defaulting to that sole report — so an empty reportName, which cannot coincide with any real report name, is the input that specifically proves the field survives the call rather than being dropped.
     await expect(
       renderOdbReportTo(doc, join(workspace, "never-written-4.docx"), {
         reportName: "",
@@ -122,7 +122,7 @@ describe("renderOdbReportTo", () => {
     ).rejects.toThrow();
   });
 
-  it("threads the given signal into loadProvidedFonts specifically -- isolated from the pdf render's own separate abort check by targeting docx, which never reaches toPdfOptions at all", async () => {
+  it("threads the given signal into loadProvidedFonts specifically — isolated from the pdf render's own separate abort check by targeting docx, which never reaches toPdfOptions at all", async () => {
     const fontPath = join(workspace, "aborted-font-docx.ttf");
     await writeFile(fontPath, fixtureCalibriFontBytes());
     const output = join(workspace, "never-written-docx.docx");

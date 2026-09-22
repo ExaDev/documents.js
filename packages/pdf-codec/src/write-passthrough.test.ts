@@ -15,7 +15,7 @@ import {
 import type { PdfObject } from "./objects";
 import { asDict, pdfDict, pdfName, pdfNum, pdfStream } from "./objects";
 
-// The write side's verbatim passthrough of a no-encoder filter's original stream: an asset carrying `original` (which only the read side of a JBIG2/JPX source mints) must re-embed those bytes under their own filter rather than re-encoding the decoded pixels through Flate or Group 4, so a pdf-to-pdf round trip pays zero generation loss for exactly the two filters this package cannot re-encode. Each test builds the asset the way the reader really does -- through readImageXObject over the fixture, so the decoded canonical and the original come from one genuine extraction rather than a hand-assembled pair -- then writes, re-reads, and checks both halves: the written bytes carry the original stream (and the /JBIG2Globals object a symbol-dictionary stream needs), and the re-read image decodes back to the same pixels.
+// The write side's verbatim passthrough of a no-encoder filter's original stream: an asset carrying `original` (which only the read side of a JBIG2/JPX source mints) must re-embed those bytes under their own filter rather than re-encoding the decoded pixels through Flate or Group 4, so a pdf-to-pdf round trip pays zero generation loss for exactly the two filters this package cannot re-encode. Each test builds the asset the way the reader really does — through readImageXObject over the fixture, so the decoded canonical and the original come from one genuine extraction rather than a hand-assembled pair — then writes, re-reads, and checks both halves: the written bytes carry the original stream (and the /JBIG2Globals object a symbol-dictionary stream needs), and the re-read image decodes back to the same pixels.
 
 function emptySink(): void {
   // The fixtures decode cleanly; a diagnostic here is a test bug worth seeing as a failure.
@@ -164,7 +164,7 @@ function docWithImage(asset: LayoutImageAsset): LayoutDocument {
   };
 }
 
-// Contiguous subsequence search over raw bytes -- the verbatim claim is that the source's own compressed stream appears inside the written file, not merely that some JBIG2-looking bytes do.
+// Contiguous subsequence search over raw bytes — the verbatim claim is that the source's own compressed stream appears inside the written file, not merely that some JBIG2-looking bytes do.
 function containsSubsequence(
   haystack: Uint8Array,
   needle: Uint8Array,
@@ -257,7 +257,7 @@ describe("writePdf: verbatim passthrough of no-encoder image filters", () => {
     expect(text).toContain("/Type /XObject");
     expect(text).toContain("/Subtype /Image");
     expect(text).toContain("/JPXDecode");
-    // Unlike JBIG2 (always 1-bit /DeviceGray), a JPX codestream states its own component count and sample depth -- neither /ColorSpace nor /BitsPerComponent is written for it.
+    // Unlike JBIG2 (always 1-bit /DeviceGray), a JPX codestream states its own component count and sample depth — neither /ColorSpace nor /BitsPerComponent is written for it.
     expect(text).not.toContain("/ColorSpace");
     expect(text).not.toContain("/BitsPerComponent");
     expect(

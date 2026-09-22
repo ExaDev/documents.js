@@ -10,13 +10,13 @@ import type { PdfDict, PdfObject } from "./objects";
 import { asArray, asName, asNumber, dictGet } from "./objects";
 import { decodePdfString } from "./pdf-text";
 
-// Document-level navigation reading (#721's core cluster): named destinations (ISO 32000-1 12.3.2 -- the old-style catalog /Dests dictionary AND the /Names /Dests name tree, one table for both), and the /Outlines bookmark tree (12.3.3). Everything resolves to a destination NAME, because that is the cross-format key downstream consumers target: a link construct's internal arm and an outline entry both name a row of the destinations table, never a bare page index -- a direct destination array names nothing, so the registry mints a stable `destN` for it.
+// Document-level navigation reading (#721's core cluster): named destinations (ISO 32000-1 12.3.2 — the old-style catalog /Dests dictionary AND the /Names /Dests name tree, one table for both), and the /Outlines bookmark tree (12.3.3). Everything resolves to a destination NAME, because that is the cross-format key downstream consumers target: a link construct's internal arm and an outline entry both name a row of the destinations table, never a bare page index — a direct destination array names nothing, so the registry mints a stable `destN` for it.
 
 export type PageIndexLookup = (
   obj: PdfObject | undefined,
 ) => number | undefined;
 
-// A destination array's coordinates after the view type name -- `null` (and any non-numeric malformation) surfaces as an absent field, never as 0, which would assert a position the file did not state.
+// A destination array's coordinates after the view type name — `null` (and any non-numeric malformation) surfaces as an absent field, never as 0, which would assert a position the file did not state.
 function coordinateAt(
   arr: readonly PdfObject[],
   index: number,
@@ -166,7 +166,7 @@ export function createDestinationRegistry(
     byName.set(name, entry);
   };
 
-  // The old-style dictionary (PDF 1.1, still widely emitted): name -> destination array, as direct dict entries. No duplicate-name check here (unlike the name-tree walk below): destsDict.entries is a Map, whose own key uniqueness already guarantees every `name` this loop sees is distinct -- a dictionary literal's own duplicate keys, if the source bytes had any, were already collapsed to last-wins by the parser that built this Map, long before this function ever sees it.
+  // The old-style dictionary (PDF 1.1, still widely emitted): name -> destination array, as direct dict entries. No duplicate-name check here (unlike the name-tree walk below): destsDict.entries is a Map, whose own key uniqueness already guarantees every `name` this loop sees is distinct — a dictionary literal's own duplicate keys, if the source bytes had any, were already collapsed to last-wins by the parser that built this Map, long before this function ever sees it.
   const destsDict = resolver.resolveDict(dictGet(catalog, "Dests"));
   if (destsDict !== undefined) {
     for (const [name, value] of destsDict.entries) {
@@ -236,7 +236,7 @@ export function createDestinationRegistry(
   };
 }
 
-// The bookmark tree: /First sibling chains through /Next, children through another /First. Titles decode as ordinary PDF strings; an item's destination is its /Dest or its /A /GoTo /D action, interned through the same registry a link annotation uses. The visited set spans the whole walk -- a /Next chain that loops back would otherwise recurse forever.
+// The bookmark tree: /First sibling chains through /Next, children through another /First. Titles decode as ordinary PDF strings; an item's destination is its /Dest or its /A /GoTo /D action, interned through the same registry a link annotation uses. The visited set spans the whole walk — a /Next chain that loops back would otherwise recurse forever.
 export function readOutline(
   catalog: PdfDict,
   registry: DestinationRegistry,

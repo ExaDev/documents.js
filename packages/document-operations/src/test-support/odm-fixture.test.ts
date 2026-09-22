@@ -2,7 +2,7 @@ import { unzipPackage } from "odf.js";
 import { describe, expect, it } from "vitest";
 import { chapterOdtBytes, odmBytes } from "./odm-fixture";
 
-// odmBytes's own two-or-more-section concatenation is not observable through odmToPdfOperation itself: odf.js's readOdm (typed/odm/read.ts) walks office:text's own children looking for element nodes whose tag is "text:section", explicitly skipping any non-element child -- so a stray text node landing between two sections (a broken join separator, say) is silently ignored by every real reader in the family. These tests instead pin the exact bytes odmBytes/chapterOdtBytes build, the one place that concatenation is actually checkable at all.
+// odmBytes's own two-or-more-section concatenation is not observable through odmToPdfOperation itself: odf.js's readOdm (typed/odm/read.ts) walks office:text's own children looking for element nodes whose tag is "text:section", explicitly skipping any non-element child — so a stray text node landing between two sections (a broken join separator, say) is silently ignored by every real reader in the family. These tests instead pin the exact bytes odmBytes/chapterOdtBytes build, the one place that concatenation is actually checkable at all.
 function decodeXmlPart(bytes: Uint8Array<ArrayBuffer>, path: string): string {
   const parts = unzipPackage(bytes);
   const part = parts[path];

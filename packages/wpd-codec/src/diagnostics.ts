@@ -1,4 +1,4 @@
-// The reader's non-fatal channel, mirroring markdown-codec's and epub-codec's own diagnostic sinks. Anything that would make the reader silently lose information is reported here rather than swallowed: a character this package holds no mapping for, a prefix ID naming a packet the file does not carry, a table whose structure is flattened into paragraphs. Structural nonconformance is not a diagnostic -- that throws (src/errors.ts).
+// The reader's non-fatal channel, mirroring markdown-codec's and epub-codec's own diagnostic sinks. Anything that would make the reader silently lose information is reported here rather than swallowed: a character this package holds no mapping for, a prefix ID naming a packet the file does not carry, a table whose structure is flattened into paragraphs. Structural nonconformance is not a diagnostic — that throws (src/errors.ts).
 
 export interface WpdDiagnostic {
   readonly code: string;
@@ -10,7 +10,7 @@ export type WpdDiagnosticSink = (diagnostic: WpdDiagnostic) => void;
 export const WpdDiagnosticCodes = {
   // A (character set, character number) pair outside the tables this package can state from a primary source. The character is rendered as U+FFFD so it stays visible in the output rather than vanishing.
   UnmappedCharacter: "wpd/unmapped-character",
-  // A function named a prefix ID no index in this file carries -- legitimate after an edit deleted the packet, and it costs formatting rather than content.
+  // A function named a prefix ID no index in this file carries — legitimate after an edit deleted the packet, and it costs formatting rather than content.
   MissingPrefixPacket: "wpd/missing-prefix-packet",
   // A cell or row boundary appeared with no table definition open, so there is no grid to place it in. Its text still becomes a paragraph, in reading order.
   TableFlattened: "wpd/table-flattened",
@@ -34,25 +34,25 @@ export const WpdDiagnosticCodes = {
   NoteDropped: "wpd/note-dropped",
   // A note's On/Off reference pair straddled a paragraph boundary, which the run-scoped anchor cannot express.
   NoteSpansParagraphs: "wpd/note-spans-paragraphs",
-  // A second header, footer, or watermark function claims a slot a first already filled (WordPerfect's own A/B two-slot-per-kind mechanism, a shape the shared one-flow-per-slot vocabulary does not carry), or a function's body packet could not be resolved or read. A header, footer, or watermark with a resolvable body is NOT dropped -- it lands in ContentSection.headers/footers/watermarks.
+  // A second header, footer, or watermark function claims a slot a first already filled (WordPerfect's own A/B two-slot-per-kind mechanism, a shape the shared one-flow-per-slot vocabulary does not carry), or a function's body packet could not be resolved or read. A header, footer, or watermark with a resolvable body is NOT dropped — it lands in ContentSection.headers/footers/watermarks.
   HeaderFooterDropped: "wpd/header-footer-dropped",
-  // The document embeds a native OLE object -- an OLE server's own stream rather than a nested document package, the identical boundary ooxml.js draws for a classic OLE1 payload. Its bytes ARE recovered (from the compound wrapper's PerfectOffice_OBJECTS storage for an OLE 2 object, or the descriptor packet's own trailing bytes for an OLE 1 one), but the flat ContentDocument has no field for opaque binary bytes, so readWpd is the read that carries them (an attachments-table entry, the same split note bodies take); readWpdContent reports the object here.
+  // The document embeds a native OLE object — an OLE server's own stream rather than a nested document package, the identical boundary ooxml.js draws for a classic OLE1 payload. Its bytes ARE recovered (from the compound wrapper's PerfectOffice_OBJECTS storage for an OLE 2 object, or the descriptor packet's own trailing bytes for an OLE 1 one), but the flat ContentDocument has no field for opaque binary bytes, so readWpd is the read that carries them (an attachments-table entry, the same split note bodies take); readWpdContent reports the object here.
   OleObjectDropped: "wpd/ole-object-dropped",
   // The document contains a cross-reference. Its displayed text survives as ordinary text; the reference's own target binding does not.
   CrossReferenceFlattened: "wpd/cross-reference-flattened",
-  // The document contains merge codes -- a form-letter template's field placeholders. They contribute no text and are passed over.
+  // The document contains merge codes — a form-letter template's field placeholders. They contribute no text and are passed over.
   MergeCodeDropped: "wpd/merge-code-dropped",
-  // A table cell carries a New Cell Formula embedded subfunction whose tokenised formula this reader could not decode with confidence -- an undocumented "+" shortcut, a code the SDK itself only assumes the meaning of, or a temp-function reference this reader cannot confirm the shape of without a real file. The cell's displayed text is unaffected; only its formula is unavailable.
+  // A table cell carries a New Cell Formula embedded subfunction whose tokenised formula this reader could not decode with confidence — an undocumented "+" shortcut, a code the SDK itself only assumes the meaning of, or a temp-function reference this reader cannot confirm the shape of without a real file. The cell's displayed text is unaffected; only its formula is unavailable.
   TableFormulaUnresolved: "wpd/table-formula-unresolved",
-  // A chain of styles resolving one another's own packets (type 0x30) ran deeper than this reader will follow -- a bound against a corrupt or adversarial file, since a well-formed document's own styles never reference themselves in a cycle.
+  // A chain of styles resolving one another's own packets (type 0x30) ran deeper than this reader will follow — a bound against a corrupt or adversarial file, since a well-formed document's own styles never reference themselves in a cycle.
   StyleResolutionDepthExceeded: "wpd/style-resolution-depth-exceeded",
   // A FIELD merge code's own On/Off pair straddled a paragraph boundary, which the run-scoped field construct (confined to one paragraph's own runs) cannot express. The field's own text still reads as ordinary paragraph text; only the field tag is unavailable.
   MergeFieldSpansParagraphs: "wpd/merge-field-spans-paragraphs",
-  // A box's own function-level override names real content, but this reader could not read it -- the content prefix ID resolves to a packet type this reader does not decode (an image's Graphics Filename packet, an OLE object, a content type this reader has no text-block reader for), or resolves to no packet at all.
+  // A box's own function-level override names real content, but this reader could not read it — the content prefix ID resolves to a packet type this reader does not decode (an image's Graphics Filename packet, an OLE object, a content type this reader has no text-block reader for), or resolves to no packet at all.
   BoxContentUnresolved: "wpd/box-content-unresolved",
-  // A WPG vector graphic this reader did not fully decode: either a partial decode (the message names the record types the walk skipped -- see src/stream/wpg.ts's own scope statement for the layered subset that does decode) or a graphic recognised and refused whole (a WPG 1.0-major file whose record vocabulary predates the framed WPG 2.x stream, an encrypted graphic, or a record stream with no walkable Start WPG record).
+  // A WPG vector graphic this reader did not fully decode: either a partial decode (the message names the record types the walk skipped — see src/stream/wpg.ts's own scope statement for the layered subset that does decode) or a graphic recognised and refused whole (a WPG 1.0-major file whose record vocabulary predates the framed WPG 2.x stream, an encrypted graphic, or a record stream with no walkable Start WPG record).
   WpgRecordsUndecoded: "wpd/wpg-records-undecoded",
-  // A box's own content resolved to real, readable text, but its function-level override states no width and height this reader can trust -- a box relying on its template's own inherited geometry, which this reader does not resolve. The box's content is not lifted without a frame to place it in.
+  // A box's own content resolved to real, readable text, but its function-level override states no width and height this reader can trust — a box relying on its template's own inherited geometry, which this reader does not resolve. The box's content is not lifted without a frame to place it in.
   BoxFrameUnresolved: "wpd/box-frame-unresolved",
 } as const;
 

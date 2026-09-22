@@ -6,11 +6,11 @@ import { buildDoc, type DocParagraphSpec } from "../test-support/doc";
 import { CELL_MARK } from "../text/special";
 import { BORDERS_TO_APPLY, SHD_SIZE } from "./decoration";
 
-// Every writeDocContent table test in write.test.ts reads back bytes this package's own writer produced -- a round trip proves the reader and writer agree with each other, not that either agrees with [MS-DOC] itself. These tests hand-assemble the sgc-5 (table) grpprl bytes straight from the specification's own field tables, independently of tap-write.ts's construction logic, so they exercise table/read.ts and table/tap.ts against bytes this package never wrote.
+// Every writeDocContent table test in write.test.ts reads back bytes this package's own writer produced — a round trip proves the reader and writer agree with each other, not that either agrees with [MS-DOC] itself. These tests hand-assemble the sgc-5 (table) grpprl bytes straight from the specification's own field tables, independently of tap-write.ts's construction logic, so they exercise table/read.ts and table/tap.ts against bytes this package never wrote.
 
-/** sprmPFInTable (0x2416), Bool8 true -- every table paragraph carries it. */
+/** sprmPFInTable (0x2416), Bool8 true — every table paragraph carries it. */
 const SPRM_P_F_IN_TABLE = [0x16, 0x24, 0x01];
-/** sprmPFTtp (0x2417), Bool8 true -- marks a cell mark as a row's own terminating mark. */
+/** sprmPFTtp (0x2417), Bool8 true — marks a cell mark as a row's own terminating mark. */
 const SPRM_P_F_TTP = [0x17, 0x24, 0x01];
 
 function le16(value: number): number[] {
@@ -20,7 +20,7 @@ function le16(value: number): number[] {
 /** A single Brc80MayBeNil field's own no-border sentinel, [MS-DOC] 2.9.18: all four bytes set. */
 const NIL_BRC80 = new Array<number>(4).fill(0xff);
 
-// TC80, [MS-DOC] 2.9.313: tcgrf (2 bytes -- horzMerge in bits 0-1, vertMerge in bits 5-6, per TCGRF 2.9.317) + wWidth (2, unused by this reader) + four Brc80 border fields (4 bytes each). Each defaults to Brc80MayBeNil ("no border", all bits set) unless `borders` names a real Brc80 for that side -- used by the sprmTTableBorders precedence tests below, where one cell's own TC80 states a real border that must win over the row-level cascade.
+// TC80, [MS-DOC] 2.9.313: tcgrf (2 bytes — horzMerge in bits 0-1, vertMerge in bits 5-6, per TCGRF 2.9.317) + wWidth (2, unused by this reader) + four Brc80 border fields (4 bytes each). Each defaults to Brc80MayBeNil ("no border", all bits set) unless `borders` names a real Brc80 for that side — used by the sprmTTableBorders precedence tests below, where one cell's own TC80 states a real border that must win over the row-level cascade.
 function tc80(
   horzMerge: number,
   vertMerge: number,
@@ -43,7 +43,7 @@ function tc80(
   ];
 }
 
-// sprmTDefTable, [MS-DOC] 2.6.3 (0xD608): TDefTableOperand's own cb (2 bytes -- "the number of bytes used by the remainder of this structure, incremented by 1"), NumberOfColumns, rgdxaCenter (NumberOfColumns + 1 signed 2-byte boundaries), then one TC80 per column.
+// sprmTDefTable, [MS-DOC] 2.6.3 (0xD608): TDefTableOperand's own cb (2 bytes — "the number of bytes used by the remainder of this structure, incremented by 1"), NumberOfColumns, rgdxaCenter (NumberOfColumns + 1 signed 2-byte boundaries), then one TC80 per column.
 function sprmTDefTable(
   columnBoundariesTwips: readonly number[],
   cells: readonly {
@@ -68,7 +68,7 @@ function sprmTDefTable(
   return [0x08, 0xd6, ...le16(cb), ...remainder];
 }
 
-// sprmTMerge, [MS-DOC] 2.6.3 (0x5624): an ItcFirstLim range naming the physical cells to horizontally merge, the first becoming the anchor -- a spec-conformant mechanism this reader still honours for a genuine third-party producer's row, even though this package's own writer states a horizontal merge purely through a merged row's own narrower, wider physical cells instead (see tap.ts's own note and ExaDev/documents.js#895).
+// sprmTMerge, [MS-DOC] 2.6.3 (0x5624): an ItcFirstLim range naming the physical cells to horizontally merge, the first becoming the anchor — a spec-conformant mechanism this reader still honours for a genuine third-party producer's row, even though this package's own writer states a horizontal merge purely through a merged row's own narrower, wider physical cells instead (see tap.ts's own note and ExaDev/documents.js#895).
 function sprmTMerge(itcFirst: number, itcLim: number): number[] {
   return [0x24, 0x56, itcFirst, itcLim];
 }
@@ -78,12 +78,12 @@ function sprmPItap(depth: number): number[] {
   return [0x49, 0x66, depth & 0xff, 0, 0, 0];
 }
 
-/** sprmPFInnerTableCell (0x244b), Bool8 true -- a nested table's own cell-ending paragraph mark. */
+/** sprmPFInnerTableCell (0x244b), Bool8 true — a nested table's own cell-ending paragraph mark. */
 const sprmPFInnerTableCell = [0x4b, 0x24, 0x01];
-/** sprmPFInnerTtp (0x244c), Bool8 true -- a nested table's own row-ending paragraph mark. */
+/** sprmPFInnerTtp (0x244c), Bool8 true — a nested table's own row-ending paragraph mark. */
 const sprmPFInnerTtp = [0x4c, 0x24, 0x01];
 
-// sprmTVertMerge, [MS-DOC] 2.6.3 (0xD62B): a VertMergeOperand naming one cell (itc) and its own VerticalMergeFlag -- the incremental per-cell mechanism for a vertical merge, the vertical analogue of sprmTMerge.
+// sprmTVertMerge, [MS-DOC] 2.6.3 (0xD62B): a VertMergeOperand naming one cell (itc) and its own VerticalMergeFlag — the incremental per-cell mechanism for a vertical merge, the vertical analogue of sprmTMerge.
 function sprmTVertMerge(itc: number, vertMergeFlags: number): number[] {
   return [0x2b, 0xd6, 0x02, itc, vertMergeFlags];
 }
@@ -93,7 +93,7 @@ function brc80(dptLineWidthEighths: number, ico: number): number[] {
   return [dptLineWidthEighths, 0x01, ico, 0x00];
 }
 
-/** A Brc field's own eight bytes, [MS-DOC] 2.9.16: an exact COLORREF (r, g, b, fAuto -- 2.9.43), dptLineWidth, brcType (BRC_TYPE_SINGLE throughout), then a zeroed reserved word. */
+/** A Brc field's own eight bytes, [MS-DOC] 2.9.16: an exact COLORREF (r, g, b, fAuto — 2.9.43), dptLineWidth, brcType (BRC_TYPE_SINGLE throughout), then a zeroed reserved word. */
 function brc(
   rgb: readonly [number, number, number],
   dptLineWidthEighths: number,
@@ -101,10 +101,10 @@ function brc(
   return [rgb[0], rgb[1], rgb[2], 0x00, dptLineWidthEighths, 0x01, 0x00, 0x00];
 }
 
-/** A BrcMayBeNil field's own no-border sentinel, [MS-DOC] 2.9.20: the last four bytes -- dptLineWidth/brcType/reserved -- all set (the cv COLORREF ahead of them is not part of the sentinel, so it is left zeroed here). */
+/** A BrcMayBeNil field's own no-border sentinel, [MS-DOC] 2.9.20: the last four bytes — dptLineWidth/brcType/reserved — all set (the cv COLORREF ahead of them is not part of the sentinel, so it is left zeroed here). */
 const NIL_BRC = [0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff];
 
-// sprmTSetBrc, [MS-DOC] 2.6.3 (0xD62F): a TableBrcOperand ([MS-DOC] 2.9.305) -- cb (1 byte, MUST be 11), an ItcFirstLim (itcFirst, itcLim), a bordersToApply bitmask, then a single BrcMayBeNil applied to every side the mask names.
+// sprmTSetBrc, [MS-DOC] 2.6.3 (0xD62F): a TableBrcOperand ([MS-DOC] 2.9.305) — cb (1 byte, MUST be 11), an ItcFirstLim (itcFirst, itcLim), a bordersToApply bitmask, then a single BrcMayBeNil applied to every side the mask names.
 function sprmTSetBrc(
   itcFirst: number,
   itcLim: number,
@@ -115,7 +115,7 @@ function sprmTSetBrc(
   return [0x2f, 0xd6, remainder.length, ...remainder];
 }
 
-// sprmTSetBrc80, [MS-DOC] 2.6.3 (0xD620): the Word 97-era sibling of sprmTSetBrc, a TableBrc80Operand ([MS-DOC] 2.9.304) -- the identical cb/ItcFirstLim/bordersToApply header (cb MUST be 7 here, one byte narrower than sprmTSetBrc's own 11 because a Brc80MayBeNil is four bytes against Brc's eight), then a single Brc80MayBeNil applied to every side the mask names.
+// sprmTSetBrc80, [MS-DOC] 2.6.3 (0xD620): the Word 97-era sibling of sprmTSetBrc, a TableBrc80Operand ([MS-DOC] 2.9.304) — the identical cb/ItcFirstLim/bordersToApply header (cb MUST be 7 here, one byte narrower than sprmTSetBrc's own 11 because a Brc80MayBeNil is four bytes against Brc's eight), then a single Brc80MayBeNil applied to every side the mask names.
 function sprmTSetBrc80(
   itcFirst: number,
   itcLim: number,
@@ -135,7 +135,7 @@ interface TableBordersSides {
   readonly insideVertical?: readonly number[];
 }
 
-// sprmTTableBorders, [MS-DOC] 2.6.3 (0xD613): a TableBordersOperand ([MS-DOC] 2.9.302) -- cb (1 byte, MUST be 0x30) then six real 8-byte Brc fields in brcTop/brcLeft/brcBottom/brcRight/brcHorizontalInside/brcVerticalInside order, a side defaulting to NIL_BRC ("no border") when the caller does not name it.
+// sprmTTableBorders, [MS-DOC] 2.6.3 (0xD613): a TableBordersOperand ([MS-DOC] 2.9.302) — cb (1 byte, MUST be 0x30) then six real 8-byte Brc fields in brcTop/brcLeft/brcBottom/brcRight/brcHorizontalInside/brcVerticalInside order, a side defaulting to NIL_BRC ("no border") when the caller does not name it.
 function sprmTTableBorders(sides: TableBordersSides): number[] {
   const remainder = [
     ...(sides.top ?? NIL_BRC),
@@ -148,7 +148,7 @@ function sprmTTableBorders(sides: TableBordersSides): number[] {
   return [0x13, 0xd6, remainder.length, ...remainder];
 }
 
-// sprmTTableBorders80, [MS-DOC] 2.6.3 (0xD605): the Word 97-era TableBordersOperand80 ([MS-DOC] 2.9.303) -- the same six-field layout as sprmTTableBorders, but each field a 4-byte Brc80MayBeNil rather than an 8-byte Brc.
+// sprmTTableBorders80, [MS-DOC] 2.6.3 (0xD605): the Word 97-era TableBordersOperand80 ([MS-DOC] 2.9.303) — the same six-field layout as sprmTTableBorders, but each field a 4-byte Brc80MayBeNil rather than an 8-byte Brc.
 function sprmTTableBorders80(sides: TableBordersSides): number[] {
   const remainder = [
     ...(sides.top ?? NIL_BRC80),
@@ -166,7 +166,7 @@ function shdBackground(rgb: readonly [number, number, number]): number[] {
   return [0x00, 0x00, 0x00, 0xff, rgb[0], rgb[1], rgb[2], 0x00, 0x00, 0x00];
 }
 
-// sprmTSetShdTable, [MS-DOC] 2.6.3 (0xD660): a SHDOperand ([MS-DOC] 2.9.249) -- cb (1 byte, MUST be 10) then one Shd (10 bytes) applied to every cell in the row.
+// sprmTSetShdTable, [MS-DOC] 2.6.3 (0xD660): a SHDOperand ([MS-DOC] 2.9.249) — cb (1 byte, MUST be 10) then one Shd (10 bytes) applied to every cell in the row.
 function sprmTSetShdTable(shd: readonly number[]): number[] {
   return [0x60, 0xd6, shd.length, ...shd];
 }
@@ -197,7 +197,7 @@ function cellText(
 
 describe("readDocContent tables, from hand-assembled bytes", () => {
   it("reads a row's sprmTDefTable column layout and a horizontal merge stated purely through sprmTMerge", () => {
-    // Three columns, none merged by TC80.tcgrf itself -- the merge across columns 0-1 comes entirely from the row mark's own sprmTMerge, folded on top per tap.ts's documented precedence.
+    // Three columns, none merged by TC80.tcgrf itself — the merge across columns 0-1 comes entirely from the row mark's own sprmTMerge, folded on top per tap.ts's documented precedence.
     const boundaries = [0, 1000, 2000, 3000];
     const unmerged = { horzMerge: 0, vertMerge: 0 };
     const rowGrpprl = [
@@ -359,7 +359,7 @@ describe("readDocContent tables, from hand-assembled bytes", () => {
   });
 
   it("recurses into a table nested inside a table cell, at the depth sprmPItap and sprmPFInnerTableCell/sprmPFInnerTtp state", () => {
-    // [MS-DOC] 2.4.3: at depth 1, a cell mark is a real 0x0007 character; at depth 2, the identical role is played by an ordinary paragraph mark (0x000D) carrying sprmPFInnerTableCell (a cell boundary) or sprmPFInnerTtp (the row's own terminating mark) instead -- so every nested paragraph below defaults to the ordinary PARAGRAPH_MARK (buildDoc's own default) rather than setting `mark` at all.
+    // [MS-DOC] 2.4.3: at depth 1, a cell mark is a real 0x0007 character; at depth 2, the identical role is played by an ordinary paragraph mark (0x000D) carrying sprmPFInnerTableCell (a cell boundary) or sprmPFInnerTtp (the row's own terminating mark) instead — so every nested paragraph below defaults to the ordinary PARAGRAPH_MARK (buildDoc's own default) rather than setting `mark` at all.
     const nestedBoundaries = [0, 1000, 2000];
     const nestedUnmerged = { horzMerge: 0, vertMerge: 0 };
     const nestedRowGrpprl = [
@@ -413,7 +413,7 @@ describe("readDocContent tables, from hand-assembled bytes", () => {
     expect(cellText(nested.rows[0]?.cells[1])).toBe("N2");
   });
 
-  // A row-ending mark with no direct sprmTDefTable is a real producer's own legal choice (sprmPTableProps' indirect TAP, per the README's own scope note) that this reader does not follow -- degrading the run back to flat paragraphs rather than refusing the whole document, exactly as an indirect Papx elsewhere in this package already degrades a paragraph's own properties rather than failing its read.
+  // A row-ending mark with no direct sprmTDefTable is a real producer's own legal choice (sprmPTableProps' indirect TAP, per the README's own scope note) that this reader does not follow — degrading the run back to flat paragraphs rather than refusing the whole document, exactly as an indirect Papx elsewhere in this package already degrades a paragraph's own properties rather than failing its read.
   it("degrades to flat paragraphs, rather than refusing the whole document, when a row's own terminating mark carries no sprmTDefTable", () => {
     const document = readDocContent(
       buildDoc({
@@ -493,7 +493,7 @@ describe("readDocContent tables, from hand-assembled bytes", () => {
     ).toThrow(DocFormatError);
   });
 
-  // The genuine third-party encoding ExaDev/documents.js#895 fixed: two rows with no TCGRF.horzMerge/sprmTMerge signal anywhere, but each declaring its own, differently-shaped rgdxaCenter -- row one's own narrower, wider physical cell states a horizontal merge purely as a real per-row column layout, exactly as a genuine LibreOffice-authored .doc does (see the README's own third-party verification finding). This exercises table/read.ts's own column-grid union directly, independently of write.ts's round trips against this package's own writer.
+  // The genuine third-party encoding ExaDev/documents.js#895 fixed: two rows with no TCGRF.horzMerge/sprmTMerge signal anywhere, but each declaring its own, differently-shaped rgdxaCenter — row one's own narrower, wider physical cell states a horizontal merge purely as a real per-row column layout, exactly as a genuine LibreOffice-authored .doc does (see the README's own third-party verification finding). This exercises table/read.ts's own column-grid union directly, independently of write.ts's round trips against this package's own writer.
   it("reconstructs colSpan from a row's own narrower, wider physical cells against a second row's fuller column layout, with no merge flag anywhere", () => {
     const unmerged = { horzMerge: 0, vertMerge: 0 };
     const rowOneGrpprl = [
@@ -548,7 +548,7 @@ describe("readDocContent tables, from hand-assembled bytes", () => {
   });
 
   it("finds a legacy TCGRF.horzMerge anchor's own right edge even when it is not the row's last physical cell", () => {
-    // Three physical cells: a plain column, an anchor, and a legacy continuation of that anchor -- so the anchor (physical index 1) is the row's real rightmost cell, even though a further physical cell (the continuation) follows it.
+    // Three physical cells: a plain column, an anchor, and a legacy continuation of that anchor — so the anchor (physical index 1) is the row's real rightmost cell, even though a further physical cell (the continuation) follows it.
     const plain = { horzMerge: 0, vertMerge: 0 };
     const anchor = { horzMerge: 2, vertMerge: 0 };
     const continuation = { horzMerge: 1, vertMerge: 0 };
@@ -651,7 +651,7 @@ describe("readDocContent tables, from hand-assembled bytes", () => {
   });
 });
 
-// ExaDev/documents.js#945: a table decorated only through the row/table-level cascade -- sprmTTableBorders/sprmTTableBorders80, and sprmTSetShdTable for background -- used to read with no cell borders at all, since neither was read before. These tests hand-assemble that cascade the same way every other sprm in this file is exercised, independently of tap-write.ts (which never emits it).
+// ExaDev/documents.js#945: a table decorated only through the row/table-level cascade — sprmTTableBorders/sprmTTableBorders80, and sprmTSetShdTable for background — used to read with no cell borders at all, since neither was read before. These tests hand-assemble that cascade the same way every other sprm in this file is exercised, independently of tap-write.ts (which never emits it).
 describe("readDocContent tables, row/table-level border cascade (sprmTTableBorders, ExaDev/documents.js#945)", () => {
   const TOP: ContentBorder = { color: { r: 1, g: 0, b: 0 }, widthPt: 1 };
   const LEFT: ContentBorder = { color: { r: 0, g: 0, b: 1 }, widthPt: 0.5 };
@@ -743,7 +743,7 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
 
   it("lets a cell's own explicit TC80 border take precedence over the row-level cascade, regardless of which comes first in the grpprl", () => {
     const unmerged = { horzMerge: 0, vertMerge: 0 };
-    const explicitTop = brc80(4, 0x02); // 0.5pt solid blue, TC80's own palette-indexed spelling -- deliberately a different colour and width from tableBordersSprm's own brcTop, so a leaked cascade value is unmistakable.
+    const explicitTop = brc80(4, 0x02); // 0.5pt solid blue, TC80's own palette-indexed spelling — deliberately a different colour and width from tableBordersSprm's own brcTop, so a leaked cascade value is unmistakable.
     const rowGrpprl = [
       ...SPRM_P_F_IN_TABLE,
       ...SPRM_P_F_TTP,
@@ -856,7 +856,7 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
       ...SPRM_P_F_TTP,
       ...sprmTDefTable([0, 1000, 2000], [unmerged, unmerged]),
       ...sprmTSetShdTable(shdBackground([0xff, 0xff, 0x00])),
-      // sprmTDefTableShd (0xD612): a single-entry rgShd naming only cell 0 -- "cells past its end keep whatever an earlier sprm left them" (tap.ts's own applyShdArray note), so cell 1's own whole-table yellow survives untouched while cell 0's is overridden.
+      // sprmTDefTableShd (0xD612): a single-entry rgShd naming only cell 0 — "cells past its end keep whatever an earlier sprm left them" (tap.ts's own applyShdArray note), so cell 1's own whole-table yellow survives untouched while cell 0's is overridden.
       ...[0x12, 0xd6, SHD_SIZE, ...shdBackground([0x00, 0xff, 0x00])],
     ];
     const document = readDocContent(
@@ -887,7 +887,7 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
     });
   });
 
-  // ExaDev/documents.js#945, round-1 review: a cell's own sprmTSetBrc explicitly clearing a side (a NilBrc) must never be refilled by the row-level cascade -- applyBrcToCell's own clearedSides is what makes this distinguishable from a side the cell simply never mentioned, since TC80's own Brc80 fields cannot state the difference on their own. A 1x2 row, every one of sprmTTableBorders's six sides red, plus sprmTSetBrc(itcFirst 0, itcLim 1, bordersToApply 0x01 [top], NilBrc) naming only cell 0's own top side.
+  // ExaDev/documents.js#945, round-1 review: a cell's own sprmTSetBrc explicitly clearing a side (a NilBrc) must never be refilled by the row-level cascade — applyBrcToCell's own clearedSides is what makes this distinguishable from a side the cell simply never mentioned, since TC80's own Brc80 fields cannot state the difference on their own. A 1x2 row, every one of sprmTTableBorders's six sides red, plus sprmTSetBrc(itcFirst 0, itcLim 1, bordersToApply 0x01 [top], NilBrc) naming only cell 0's own top side.
   it("does not refill a cell's own top border after sprmTSetBrc explicitly clears it to a NilBrc", () => {
     const RED: ContentBorder = { color: { r: 1, g: 0, b: 0 }, widthPt: 1 };
     const redSide = brc([0xff, 0x00, 0x00], 8);
@@ -925,7 +925,7 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
       }),
     );
     const cells = tableBlock(document).rows[0]?.cells ?? [];
-    // Cell 0's own sprmTSetBrc states "no top border" explicitly -- the row's own red cascade must never refill it, even though this is both the table's first and last row (so an unfixed cascade would otherwise supply rowBorders.top here).
+    // Cell 0's own sprmTSetBrc states "no top border" explicitly — the row's own red cascade must never refill it, even though this is both the table's first and last row (so an unfixed cascade would otherwise supply rowBorders.top here).
     expect(cells[0]?.borders?.top).toBeUndefined();
     expect(cells[0]?.borders).toEqual({ left: RED, right: RED, bottom: RED });
     // Cell 1 never mentions its own top side at all, so it still inherits the row's cascade there.
@@ -937,7 +937,7 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
     });
   });
 
-  // ExaDev/documents.js#945, round-5: sprmTSetBrc80 (0xD620), the Word 97-era sibling of sprmTSetBrc, was not read at all -- the SPRM_T_* constants in tap.ts covered up to 0xD62F but skipped 0xD620 entirely, so a genuine Word-97-era NilBrc80 clear never reached applyBrcToCell and clearedSides never recorded it. The identical 1x2/all-red-cascade setup as the sprmTSetBrc test immediately above, but stating the top-side clear through sprmTSetBrc80's own palette-indexed Brc80MayBeNil instead of sprmTSetBrc's exact-colour BrcMayBeNil.
+  // ExaDev/documents.js#945, round-5: sprmTSetBrc80 (0xD620), the Word 97-era sibling of sprmTSetBrc, was not read at all — the SPRM_T_* constants in tap.ts covered up to 0xD62F but skipped 0xD620 entirely, so a genuine Word-97-era NilBrc80 clear never reached applyBrcToCell and clearedSides never recorded it. The identical 1x2/all-red-cascade setup as the sprmTSetBrc test immediately above, but stating the top-side clear through sprmTSetBrc80's own palette-indexed Brc80MayBeNil instead of sprmTSetBrc's exact-colour BrcMayBeNil.
   it("does not refill a cell's own top border after sprmTSetBrc80 explicitly clears it to a NilBrc80", () => {
     const RED: ContentBorder = { color: { r: 1, g: 0, b: 0 }, widthPt: 1 };
     const redSide = brc([0xff, 0x00, 0x00], 8);
@@ -975,7 +975,7 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
       }),
     );
     const cells = tableBlock(document).rows[0]?.cells ?? [];
-    // Cell 0's own sprmTSetBrc80 states "no top border" explicitly -- the row's own red cascade must never refill it, exactly like the sprmTSetBrc case above.
+    // Cell 0's own sprmTSetBrc80 states "no top border" explicitly — the row's own red cascade must never refill it, exactly like the sprmTSetBrc case above.
     expect(cells[0]?.borders?.top).toBeUndefined();
     expect(cells[0]?.borders).toEqual({ left: RED, right: RED, bottom: RED });
     // Cell 1 never mentions its own top side at all, so it still inherits the row's cascade there.
@@ -1026,7 +1026,7 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
       }),
     );
     const cells = tableBlock(document).rows[0]?.cells ?? [];
-    // Cell 0's own sprmTSetBrc80 states a real blue top border -- the row's own red cascade must never overwrite it, even though nothing in TC80 itself states a top border for this cell.
+    // Cell 0's own sprmTSetBrc80 states a real blue top border — the row's own red cascade must never overwrite it, even though nothing in TC80 itself states a top border for this cell.
     expect(cells[0]?.borders).toEqual({
       top: BLUE,
       left: RED,
@@ -1042,8 +1042,8 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
     });
   });
 
-  it("gives a vertically merged anchor the table's real bottom border when its own merge chain -- not the anchor's own physical row -- reaches the table's last row", () => {
-    // Column 0 is vertically merged across all three rows (restart in row 0, continuation in rows 1 and 2); column 1 is plain in every row, purely to give the table a real second column. Every row states the identical six-side cascade, so brcBottom only ever reaches a cell whose own visual bottom edge is genuinely the table's last row -- which, for the anchor, is row 2, not the anchor's own row 0.
+  it("gives a vertically merged anchor the table's real bottom border when its own merge chain — not the anchor's own physical row — reaches the table's last row", () => {
+    // Column 0 is vertically merged across all three rows (restart in row 0, continuation in rows 1 and 2); column 1 is plain in every row, purely to give the table a real second column. Every row states the identical six-side cascade, so brcBottom only ever reaches a cell whose own visual bottom edge is genuinely the table's last row — which, for the anchor, is row 2, not the anchor's own row 0.
     const restart = { horzMerge: 0, vertMerge: 3 }; // VerticalMergeFlag.fvmRestart.
     const continuation = { horzMerge: 0, vertMerge: 1 }; // fvmMerge.
     const plain = { horzMerge: 0, vertMerge: 0 };
@@ -1103,14 +1103,14 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
     // The merge structure itself: a 3-row rowSpan, anchored in row 0.
     expect(anchor?.rowSpan).toBe(3);
     expect(cellText(anchor)).toBe("top");
-    // The anchor's own row (0) is not the table's last row, so its top edge is still the ordinary first-row border -- unaffected by this fix. Its bottom edge, though, IS the table's real bottom edge, because the merge chain it anchors reaches row 2 -- the table's actual last row -- even though row 0 itself is not that row. Before this fix, a merge anchor sitting in a non-final row always got the row cascade's insideHorizontal on its bottom side instead.
+    // The anchor's own row (0) is not the table's last row, so its top edge is still the ordinary first-row border — unaffected by this fix. Its bottom edge, though, IS the table's real bottom edge, because the merge chain it anchors reaches row 2 — the table's actual last row — even though row 0 itself is not that row. Before this fix, a merge anchor sitting in a non-final row always got the row cascade's insideHorizontal on its bottom side instead.
     expect(anchor?.borders).toEqual({
       top: TOP,
       left: LEFT,
       right: INSIDE_V,
       bottom: BOTTOM,
     });
-    // The continuation cell physically sitting in the table's last row carries no decoration of its own -- the shared schema's own convention for a vertical-merge continuation -- so the table's real bottom border is carried by the anchor above, not duplicated here.
+    // The continuation cell physically sitting in the table's last row carries no decoration of its own — the shared schema's own convention for a vertical-merge continuation — so the table's real bottom border is carried by the anchor above, not duplicated here.
     expect(block.rows[2]?.cells[0]?.blocks).toEqual([]);
     // The plain, unmerged column still cascades ordinarily: row 2 is genuinely its own last row too.
     expect(block.rows[2]?.cells[1]?.borders).toEqual({
@@ -1122,7 +1122,7 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
   });
 
   it("resolves a vertMerge anchor's real bottom edge by the table's shared grid position, not a raw physical-cell index, when the table's last row states genuinely different boundaries", () => {
-    // Three grid columns (colX, col0, the vertMerge target); row 0 states all three as separate physical cells, so the target sits at physical index 2. Row 1 -- the table's own last row -- merges colX+col0 into one genuinely wider physical cell instead (LibreOffice's own encoding, ExaDev/documents.js#895: no TCGRF.horzMerge flag, just wider boundaries), which shifts the target's own continuation down to physical index 1 there. A cascade that matched rows by raw physical-cell index rather than shared-grid position would look at row 1's own (nonexistent) index 2 and never see the continuation's own vertMerge flag at all -- exactly the divergence between array position and grid position cellReachesTableBottom's own note describes. The target's own bottom edge must still resolve to the table's real bcBottom, because its continuation reaches row 1 by grid position regardless of row 1's differently-shaped boundary array.
+    // Three grid columns (colX, col0, the vertMerge target); row 0 states all three as separate physical cells, so the target sits at physical index 2. Row 1 — the table's own last row — merges colX+col0 into one genuinely wider physical cell instead (LibreOffice's own encoding, ExaDev/documents.js#895: no TCGRF.horzMerge flag, just wider boundaries), which shifts the target's own continuation down to physical index 1 there. A cascade that matched rows by raw physical-cell index rather than shared-grid position would look at row 1's own (nonexistent) index 2 and never see the continuation's own vertMerge flag at all — exactly the divergence between array position and grid position cellReachesTableBottom's own note describes. The target's own bottom edge must still resolve to the table's real bcBottom, because its continuation reaches row 1 by grid position regardless of row 1's differently-shaped boundary array.
     const restart = { horzMerge: 0, vertMerge: 3 }; // VerticalMergeFlag.fvmRestart.
     const continuation = { horzMerge: 0, vertMerge: 1 }; // fvmMerge.
     const plain = { horzMerge: 0, vertMerge: 0 };
@@ -1132,7 +1132,7 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
       ...sprmTDefTable([0, 1000, 2000, 3000], [plain, plain, restart]),
       ...tableBordersSprm,
     ];
-    // Row 1's own rgdxaCenter has only two columns: [0, 2000] replaces colX's and col0's own separate [0, 1000, 2000] boundaries with one merged span, while the vertMerge target keeps its own width unchanged. Row 1 -- the table's own real last row -- states the identical tableBordersSprm too: this test is about grid-position resolution for the vertMerge chain, not about which row's own operand brcBottom is read from (a genuinely different bottom value per row is exercised by its own dedicated test below), so both rows agree here.
+    // Row 1's own rgdxaCenter has only two columns: [0, 2000] replaces colX's and col0's own separate [0, 1000, 2000] boundaries with one merged span, while the vertMerge target keeps its own width unchanged. Row 1 — the table's own real last row — states the identical tableBordersSprm too: this test is about grid-position resolution for the vertMerge chain, not about which row's own operand brcBottom is read from (a genuinely different bottom value per row is exercised by its own dedicated test below), so both rows agree here.
     const rowOneGrpprl = [
       ...SPRM_P_F_IN_TABLE,
       ...SPRM_P_F_TTP,
@@ -1164,7 +1164,7 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
     );
     const block = tableBlock(document);
     expect(block.rows).toHaveLength(2);
-    // The shared grid still reconstructs three columns even though row 1's own array only ever states two -- the merged cell's own boundaries cover two of the canonical grid's segments at once.
+    // The shared grid still reconstructs three columns even though row 1's own array only ever states two — the merged cell's own boundaries cover two of the canonical grid's segments at once.
     expect(block.columnWidthsPt).toHaveLength(3);
     expect(block.rows[0]?.cells).toHaveLength(3);
     expect(block.rows[1]?.cells).toHaveLength(3);
@@ -1173,7 +1173,7 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
     expect(cellText(mergedCell)).toBe("merged");
     const anchor = block.rows[0]?.cells[2];
     expect(cellText(anchor)).toBe("anchor");
-    // The core assertion: despite sitting at physical index 2 in row 0 and physical index 1 in row 1, the anchor's own continuation is still matched by grid position, giving a 2-row rowSpan and the table's real bcBottom on its own bottom edge -- not the row cascade's insideHorizontal, which is what a raw physical-index match would have produced the moment it looked at row 1's own nonexistent cell 2.
+    // The core assertion: despite sitting at physical index 2 in row 0 and physical index 1 in row 1, the anchor's own continuation is still matched by grid position, giving a 2-row rowSpan and the table's real bcBottom on its own bottom edge — not the row cascade's insideHorizontal, which is what a raw physical-index match would have produced the moment it looked at row 1's own nonexistent cell 2.
     expect(anchor?.rowSpan).toBe(2);
     expect(anchor?.borders).toEqual({
       top: TOP,
@@ -1186,7 +1186,7 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
   });
 
   it("gives a vertically merged anchor the table's real LAST ROW's own brcBottom, not its own row's, when the two rows state genuinely different bottom borders", () => {
-    // [MS-DOC] 2.9.302's own field text: a row's brcBottom "specifies the bottom border of the row, if it is the last row in the table" -- so when the anchor's own row (0) and the table's real last row (2) state genuinely DIFFERENT bottom borders, the anchor must read row 2's value, never its own row's. Column 0 is vertically merged across all three rows; column 1 is plain, purely to confirm the identical row-2 value reaches a genuinely ordinary cell too.
+    // [MS-DOC] 2.9.302's own field text: a row's brcBottom "specifies the bottom border of the row, if it is the last row in the table" — so when the anchor's own row (0) and the table's real last row (2) state genuinely DIFFERENT bottom borders, the anchor must read row 2's value, never its own row's. Column 0 is vertically merged across all three rows; column 1 is plain, purely to confirm the identical row-2 value reaches a genuinely ordinary cell too.
     const restart = { horzMerge: 0, vertMerge: 3 }; // VerticalMergeFlag.fvmRestart.
     const continuation = { horzMerge: 0, vertMerge: 1 }; // fvmMerge.
     const plain = { horzMerge: 0, vertMerge: 0 };
@@ -1205,7 +1205,7 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
       ...sprmTDefTable(boundaries, [restart, plain]),
       ...sprmTTableBorders({ bottom: brc([0xff, 0x00, 0x00], 16) }),
     ];
-    // The middle row states no sprmTTableBorders of its own at all -- it is neither the anchor's own row nor the table's real last row, so nothing should ever read a bottom border from it.
+    // The middle row states no sprmTTableBorders of its own at all — it is neither the anchor's own row nor the table's real last row, so nothing should ever read a bottom border from it.
     const rowTwoGrpprl = [
       ...SPRM_P_F_IN_TABLE,
       ...SPRM_P_F_TTP,
@@ -1252,15 +1252,15 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
     expect(block.rows).toHaveLength(3);
     const anchor = block.rows[0]?.cells[0];
     expect(anchor?.rowSpan).toBe(3);
-    // The core assertion: the anchor's own bottom border is the table's real last row's own brcBottom (blue), not its own row's (red) -- before this fix, a merge anchor always inherited its own row's bottom border, which [MS-DOC] 2.9.302's own text never licenses for a row that is not genuinely the table's last.
+    // The core assertion: the anchor's own bottom border is the table's real last row's own brcBottom (blue), not its own row's (red) — before this fix, a merge anchor always inherited its own row's bottom border, which [MS-DOC] 2.9.302's own text never licenses for a row that is not genuinely the table's last.
     expect(anchor?.borders?.bottom).toEqual(TABLE_BOTTOM);
     expect(anchor?.borders?.bottom).not.toEqual(ANCHOR_ROW_BOTTOM);
-    // The plain, unmerged column's own cell in the table's real last row agrees exactly -- both cells' visual bottom edge is genuinely the table's own bottom edge, so both must carry the identical value.
+    // The plain, unmerged column's own cell in the table's real last row agrees exactly — both cells' visual bottom edge is genuinely the table's own bottom edge, so both must carry the identical value.
     expect(block.rows[2]?.cells[1]?.borders?.bottom).toEqual(TABLE_BOTTOM);
   });
 
   it("gives a NON-merged cell in a ragged table's earlier row the table's real bottom border when no later row covers its column at all", () => {
-    // Row 0 states three columns (A, B, C); row 1 -- the table's own real last row -- is genuinely narrower and states only two (A, B), never mentioning C at all. Nothing this reader can find sits beneath row 0's own column C, so its visual bottom edge IS the table's real bottom edge in that column, even though row 0 is not the table's last physical row and column C is not part of any vertical merge.
+    // Row 0 states three columns (A, B, C); row 1 — the table's own real last row — is genuinely narrower and states only two (A, B), never mentioning C at all. Nothing this reader can find sits beneath row 0's own column C, so its visual bottom edge IS the table's real bottom edge in that column, even though row 0 is not the table's last physical row and column C is not part of any vertical merge.
     const plain = { horzMerge: 0, vertMerge: 0 };
     const rowZeroGrpprl = [
       ...SPRM_P_F_IN_TABLE,
@@ -1313,7 +1313,7 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
     const columnB = block.rows[0]?.cells[1];
     const columnC = block.rows[0]?.cells[2];
     expect(cellText(columnC)).toBe("c0");
-    // Columns A and B are covered by row 1 immediately below, so their own bottom edge is still an ordinary interior one -- unaffected by this fix.
+    // Columns A and B are covered by row 1 immediately below, so their own bottom edge is still an ordinary interior one — unaffected by this fix.
     expect(columnA?.borders?.bottom).toEqual(INSIDE_H);
     expect(columnB?.borders?.bottom).toEqual(INSIDE_H);
     // The core assertion: column C's own bottom edge is the table's real bcBottom, not insideHorizontal, because row 1 never states a cell reaching that far right at all.
@@ -1326,7 +1326,7 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
   });
 
   it("still gives a vertMerge anchor the table's real bottom border when its own chain ends before a later, ragged row drops its column", () => {
-    // ExaDev/documents.js#945's own follow-up bug: the ragged-table path above only ever checked coverage starting from the ANCHOR's own row, so a merge chain's own continuation in the very next row always counted as "coverage" and permanently blocked this path for any merged cell. Column 0 is plain throughout; column 1 is vertically merged across rows 0-1, then row 2 -- the table's own real last row -- drops column 1 entirely, exactly as the plain-cell ragged test above drops its own last column. Nothing this reader can find sits beneath the merge chain's own last row (row 1) in column 1, so the anchor's visual bottom edge IS the table's real bottom edge there, even though the anchor's own chain never reaches row 2 at all.
+    // ExaDev/documents.js#945's own follow-up bug: the ragged-table path above only ever checked coverage starting from the ANCHOR's own row, so a merge chain's own continuation in the very next row always counted as "coverage" and permanently blocked this path for any merged cell. Column 0 is plain throughout; column 1 is vertically merged across rows 0-1, then row 2 — the table's own real last row — drops column 1 entirely, exactly as the plain-cell ragged test above drops its own last column. Nothing this reader can find sits beneath the merge chain's own last row (row 1) in column 1, so the anchor's visual bottom edge IS the table's real bottom edge there, even though the anchor's own chain never reaches row 2 at all.
     const restart = { horzMerge: 0, vertMerge: 3 }; // VerticalMergeFlag.fvmRestart.
     const continuation = { horzMerge: 0, vertMerge: 1 }; // fvmMerge.
     const plain = { horzMerge: 0, vertMerge: 0 };
@@ -1377,7 +1377,7 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
     const anchor = block.rows[0]?.cells[1];
     expect(cellText(anchor)).toBe("anchor");
     expect(anchor?.rowSpan).toBe(2);
-    // The core assertion: before this fix, row 1's own continuation cell always counted as "coverage" for column 1 when checked from the anchor's own row (0), permanently blocking this path for a merged cell -- the anchor's bottom edge came back as insideHorizontal instead of the table's real bcBottom.
+    // The core assertion: before this fix, row 1's own continuation cell always counted as "coverage" for column 1 when checked from the anchor's own row (0), permanently blocking this path for a merged cell — the anchor's bottom edge came back as insideHorizontal instead of the table's real bcBottom.
     expect(anchor?.borders).toEqual({
       top: TOP,
       left: INSIDE_V,
@@ -1391,7 +1391,7 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
   });
 
   it("does not treat an earlier row's cell as reaching the table's bottom when a later row states a column starting further right, not just a narrower one ending sooner", () => {
-    // Row 0 has two ordinary columns, [0,1000) and [1000,2000). Row 1 (the table's real last row) states only [1000,2000) -- missing its FIRST column rather than its last, so column 0 has nothing beneath it in row 1 even though row 1's own single cell's startGridIndex (1) is strictly greater than column 0's own gridIndex (0), not merely equal-or-past a shorter row's end.
+    // Row 0 has two ordinary columns, [0,1000) and [1000,2000). Row 1 (the table's real last row) states only [1000,2000) — missing its FIRST column rather than its last, so column 0 has nothing beneath it in row 1 even though row 1's own single cell's startGridIndex (1) is strictly greater than column 0's own gridIndex (0), not merely equal-or-past a shorter row's end.
     const unmerged = { horzMerge: 0, vertMerge: 0 };
     const rowZeroGrpprl = [
       ...SPRM_P_F_IN_TABLE,
@@ -1422,7 +1422,7 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
   });
 
   it("gives a zero-width cell a colSpan of exactly 1 for later-row coverage purposes, not 0", () => {
-    // Row 0 states two ordinary columns, [0,1000) and [1000,2000). Row 1 (the real last row) states THREE physical cells over the identical two boundaries, [0,1000) and a genuine zero-width [1000,1000) -- [MS-DOC] 2.9.321 permits rgdxaCenter to repeat a boundary. If the zero-width cell's own colSpan were computed as 0 rather than the documented fallback of 1, row 1 would appear to leave column 1 uncovered, and row 0's own column-1 cell would incorrectly read as reaching the table's real bottom edge instead of the ordinary interior border.
+    // Row 0 states two ordinary columns, [0,1000) and [1000,2000). Row 1 (the real last row) states THREE physical cells over the identical two boundaries, [0,1000) and a genuine zero-width [1000,1000) — [MS-DOC] 2.9.321 permits rgdxaCenter to repeat a boundary. If the zero-width cell's own colSpan were computed as 0 rather than the documented fallback of 1, row 1 would appear to leave column 1 uncovered, and row 0's own column-1 cell would incorrectly read as reaching the table's real bottom edge instead of the ordinary interior border.
     const unmerged = { horzMerge: 0, vertMerge: 0 };
     const rowZeroGrpprl = [
       ...SPRM_P_F_IN_TABLE,
@@ -1453,7 +1453,7 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
   });
 
   it("gives a vertically merged anchor its own real rowSpan even when the anchor is not the table's first row", () => {
-    // Anchor at row 1 (not row 0), continuing into row 2 -- distinguishes lastRowInChain - rowIndex + 1 from lastRowInChain + rowIndex + 1, which agree only when rowIndex is 0.
+    // Anchor at row 1 (not row 0), continuing into row 2 — distinguishes lastRowInChain - rowIndex + 1 from lastRowInChain + rowIndex + 1, which agree only when rowIndex is 0.
     const restart = { horzMerge: 0, vertMerge: 3 };
     const continuation = { horzMerge: 0, vertMerge: 1 };
     const plain = { horzMerge: 0, vertMerge: 0 };
@@ -1536,10 +1536,10 @@ describe("readDocContent tables, row/table-level border cascade (sprmTTableBorde
   });
 });
 
-// The tolerance the reconstruction snaps boundaries within is one point, and ContentTable.columnWidthsPt is stated in points, so every expectation below is written in points and every drift is written as a fraction of one -- restated here from the point's own definition rather than imported from table/read.ts, so the two agree only if both are right.
+// The tolerance the reconstruction snaps boundaries within is one point, and ContentTable.columnWidthsPt is stated in points, so every expectation below is written in points and every drift is written as a fraction of one — restated here from the point's own definition rather than imported from table/read.ts, so the two agree only if both are right.
 const TWIPS_PER_POINT = 20;
 
-// The exact rgdxaCenter a real LibreOffice 26.2.5.2-authored three-column table states, taken from a 2.5cm/3.1cm/4.7cm .fodt converted with `soffice --headless --convert-to doc` -- widths deliberately chosen not to land on whole twips, and still byte-identical in every one of that table's rows. That is why no LibreOffice-derived fixture in this package ever exercises per-row drift: LibreOffice rounds a table's columns to twips once for the whole table, not once per row (ExaDev/documents.js#898).
+// The exact rgdxaCenter a real LibreOffice 26.2.5.2-authored three-column table states, taken from a 2.5cm/3.1cm/4.7cm .fodt converted with `soffice --headless --convert-to doc` — widths deliberately chosen not to land on whole twips, and still byte-identical in every one of that table's rows. That is why no LibreOffice-derived fixture in this package ever exercises per-row drift: LibreOffice rounds a table's columns to twips once for the whole table, not once per row (ExaDev/documents.js#898).
 const LIBREOFFICE_ROW_BOUNDARIES = [0, 2338, 5238, 9638];
 /** The same table's columns in points, the shape a reconstruction that recognises its rows as sharing one grid produces: 2338/20, 2900/20, 4400/20. */
 const LIBREOFFICE_COLUMN_WIDTHS_PT = [116.9, 145, 220];
@@ -1547,7 +1547,7 @@ const LIBREOFFICE_COLUMN_WIDTHS_PT = [116.9, 145, 220];
 const MIDDLE_COLUMN_WIDTH_TWIPS = 2900;
 /** The boundary between that table's first and second columns: the single int16 the tolerance sweep patched inside a real LibreOffice-authored file's second row, and the one a row merging those two columns omits from its own array entirely. */
 const INTERIOR_BOUNDARY_INDEX = 1;
-/** Word's own default for an unindented table's first rgdxaCenter entry, confirmed against LibreOffice's WW8 importer source (a named -108 constant, "Word sets the first nCenter value to -108 when no indent is used") -- plausibly the format's own 108-twip default cell margin, sprmTCellPaddingDefault ([MS-DOC] 2.6.3), compensated for, though neither source states that link outright (see the README's own identical hedge). Also the size of the real-world one-row leading indent the mode-2 case below uses. */
+/** Word's own default for an unindented table's first rgdxaCenter entry, confirmed against LibreOffice's WW8 importer source (a named -108 constant, "Word sets the first nCenter value to -108 when no indent is used") — plausibly the format's own 108-twip default cell margin, sprmTCellPaddingDefault ([MS-DOC] 2.6.3), compensated for, though neither source states that link outright (see the README's own identical hedge). Also the size of the real-world one-row leading indent the mode-2 case below uses. */
 const WORD_DEFAULT_CELL_MARGIN_TWIPS = 108;
 
 function withBoundaryShifted(
@@ -1560,7 +1560,7 @@ function withBoundaryShifted(
   );
 }
 
-// Builds a whole table's paragraph sequence from nothing but each row's own rgdxaCenter array and its cells' text. No cell carries a TC80.tcgrf merge flag and no sprmTMerge or sprmTVertMerge is written, so any colSpan that comes back was reconstructed purely by comparing these boundary arrays against each other -- which is exactly what the column-grid union does, and the only thing these tests are about.
+// Builds a whole table's paragraph sequence from nothing but each row's own rgdxaCenter array and its cells' text. No cell carries a TC80.tcgrf merge flag and no sprmTMerge or sprmTVertMerge is written, so any colSpan that comes back was reconstructed purely by comparing these boundary arrays against each other — which is exactly what the column-grid union does, and the only thing these tests are about.
 function tableParagraphs(
   rows: readonly {
     boundariesTwips: readonly number[];
@@ -1606,7 +1606,7 @@ function colSpansPerRow(
   return block.rows.map((row) => row.cells.map((cell) => cell.colSpan));
 }
 
-// [MS-DOC] 2.6.3 states a table's column layout per row, and 2.9.321's rgdxaCenter is a plain array of twip offsets from the page margin with no coarser quantum defined anywhere -- so two rows meaning the identical grid may legally disagree by a twip or two, and reconstructing the shared grid from them needs a tolerance rather than exact integer equality (ExaDev/documents.js#898). The threshold is one point, matching what a real, independent [MS-DOC] implementation applies to the identical per-row-boundaries-to-shared-grid problem: LibreOffice's `#define COLFUZZY 20` twips (sw/source/filter/inc/wrtswtbl.hxx), applied by its own ODF export -- the point at which its per-row table model is projected onto one shared grid, not its .doc importer, which preserves per-row drift untouched -- whose changeover was confirmed empirically at exactly 20/21 by round-tripping a single patched int16 through LibreOffice 26.2.5.2's own .doc import followed by that ODF export.
+// [MS-DOC] 2.6.3 states a table's column layout per row, and 2.9.321's rgdxaCenter is a plain array of twip offsets from the page margin with no coarser quantum defined anywhere — so two rows meaning the identical grid may legally disagree by a twip or two, and reconstructing the shared grid from them needs a tolerance rather than exact integer equality (ExaDev/documents.js#898). The threshold is one point, matching what a real, independent [MS-DOC] implementation applies to the identical per-row-boundaries-to-shared-grid problem: LibreOffice's `#define COLFUZZY 20` twips (sw/source/filter/inc/wrtswtbl.hxx), applied by its own ODF export — the point at which its per-row table model is projected onto one shared grid, not its .doc importer, which preserves per-row drift untouched — whose changeover was confirmed empirically at exactly 20/21 by round-tripping a single patched int16 through LibreOffice 26.2.5.2's own .doc import followed by that ODF export.
 describe("readDocContent table column grids, from hand-assembled rgdxaCenter arrays", () => {
   it("reads rows stating the identical LibreOffice-authored boundary array as one shared three-column grid", () => {
     const block = readTableFromRowBoundaries([
@@ -1681,7 +1681,7 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
     ]);
   });
 
-  // One twip past the tolerance the rows genuinely do describe different grids, and the reconstruction says so rather than absorbing the difference: the sliver between the two boundaries becomes its own column, with each row's first cell spanning whichever pair of segments its own boundaries cover. This is the same shape LibreOffice's own importer produces from the identical bytes at the identical threshold -- the tolerance moves where the split happens, it does not remove the split.
+  // One twip past the tolerance the rows genuinely do describe different grids, and the reconstruction says so rather than absorbing the difference: the sliver between the two boundaries becomes its own column, with each row's first cell spanning whichever pair of segments its own boundaries cover. This is the same shape LibreOffice's own importer produces from the identical bytes at the identical threshold — the tolerance moves where the split happens, it does not remove the split.
   it("keeps a boundary drifting one point and one twip as its own column, matching where LibreOffice's own importer splits", () => {
     const block = readTableFromRowBoundaries([
       {
@@ -1704,7 +1704,7 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
     ]);
   });
 
-  // Word writes -108 rather than 0 as an unindented table's first rgdxaCenter entry (LibreOffice's own WW8 importer carries the fact as a named comment in ww8par2.cxx's CalcDefaults), compensating for [MS-DOC]'s own 108-twip default cell margin. Every row states it, so the rows still describe one grid -- and the indent itself has nowhere to land, since ContentTable carries only rows and columnWidthsPt (see the README's own note).
+  // Word writes -108 rather than 0 as an unindented table's first rgdxaCenter entry (LibreOffice's own WW8 importer carries the fact as a named comment in ww8par2.cxx's CalcDefaults), compensating for [MS-DOC]'s own 108-twip default cell margin. Every row states it, so the rows still describe one grid — and the indent itself has nowhere to land, since ContentTable carries only rows and columnWidthsPt (see the README's own note).
   it("reads rows sharing Word's own -108 leading offset as one grid, carrying the column widths and dropping the offset", () => {
     const wordUnindented = LIBREOFFICE_ROW_BOUNDARIES.map(
       (boundary) => boundary - WORD_DEFAULT_CELL_MARGIN_TWIPS,
@@ -1720,7 +1720,7 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
     ]);
   });
 
-  // A leading indent that only ONE row carries is not drift and is not absorbed: sprmTWidthBefore ([MS-DOC] 2.6.3) makes a per-row leading indent a first-class construct, and rgdxaCenter's own first entry is "the horizontal position of the logical left edge of the table, as indented from the logical left page margin" (2.9.321) -- so rows disagreeing about it genuinely occupy different horizontal extents. The reconstructed grid honestly carries the extra boundary, with the rows that begin further left spanning both segments. LibreOffice 26.2.5.2 reads the identical bytes into the identical shape: four columns, a table:number-columns-spanned="2" anchor and a real table:covered-table-cell on those rows.
+  // A leading indent that only ONE row carries is not drift and is not absorbed: sprmTWidthBefore ([MS-DOC] 2.6.3) makes a per-row leading indent a first-class construct, and rgdxaCenter's own first entry is "the horizontal position of the logical left edge of the table, as indented from the logical left page margin" (2.9.321) — so rows disagreeing about it genuinely occupy different horizontal extents. The reconstructed grid honestly carries the extra boundary, with the rows that begin further left spanning both segments. LibreOffice 26.2.5.2 reads the identical bytes into the identical shape: four columns, a table:number-columns-spanned="2" anchor and a real table:covered-table-cell on those rows.
   it("keeps a leading indent only one row states as a real boundary, spanning it on the rows that begin further left", () => {
     const block = readTableFromRowBoundaries([
       {
@@ -1773,7 +1773,7 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
     expect(cellText(block.rows[0]?.cells[0])).toBe("merged");
   });
 
-  // rgdxaCenter's entries "MUST be in non-decreasing order" ([MS-DOC] 2.9.321) -- equal adjacent entries, and so a genuine zero-width physical cell, are explicitly legal. Such a cell covers no segment of the reconstructed grid, and a dense row holds one entry per grid column, so it has no entry of its own: its content moves into the cell beside it rather than being dropped.
+  // rgdxaCenter's entries "MUST be in non-decreasing order" ([MS-DOC] 2.9.321) — equal adjacent entries, and so a genuine zero-width physical cell, are explicitly legal. Such a cell covers no segment of the reconstructed grid, and a dense row holds one entry per grid column, so it has no entry of its own: its content moves into the cell beside it rather than being dropped.
   it("moves a legal zero-width physical cell's content into the preceding cell rather than giving it a grid column of its own", () => {
     // The same table's array with its third boundary pulled back onto its second, collapsing the middle column to nothing: 0, 2338, 2338, 9638.
     const block = readTableFromRowBoundaries([
@@ -1820,7 +1820,7 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
     expect(block.rows[0]?.cells.map((cell) => cellText(cell))).toEqual(["z"]);
   });
 
-  // The clamp effectiveColumnBoundaryTolerance exists for: this writer has no equivalent of LibreOffice's own MINLAY minimum-cell-width widening, so nothing stops a real producer's rgdxaCenter from stating a column genuinely narrower than the tolerance's own one-point default -- and a single row's own adjacent boundaries are never ambiguous about how many columns that row states, whatever the gap between them. A single-row table with no cross-row drift at all isolates this: if the tolerance folded a real narrow column into its neighbour here, that would be exactly the same defect the drift tolerance exists to fix, applied to the wrong pair of boundaries.
+  // The clamp effectiveColumnBoundaryTolerance exists for: this writer has no equivalent of LibreOffice's own MINLAY minimum-cell-width widening, so nothing stops a real producer's rgdxaCenter from stating a column genuinely narrower than the tolerance's own one-point default — and a single row's own adjacent boundaries are never ambiguous about how many columns that row states, whatever the gap between them. A single-row table with no cross-row drift at all isolates this: if the tolerance folded a real narrow column into its neighbour here, that would be exactly the same defect the drift tolerance exists to fix, applied to the wrong pair of boundaries.
   it("keeps a genuinely narrow column intact rather than folding it into its neighbour", () => {
     const block = readTableFromRowBoundaries([
       {
@@ -1845,7 +1845,7 @@ describe("readDocContent table column grids, from hand-assembled rgdxaCenter arr
   });
 
   it("narrows the drift tolerance to below a real column any row in the same table states, rather than the fixed one-point default", () => {
-    // Row 1 states a genuine 10-twip column (0.5pt) between 1000 and 1010, so the table-wide tolerance clamps to 9 twips -- one less than that gap. Row 2's own boundary at 1025 is 15 twips from row 1's 1010, further than the clamped 9-twip tolerance but within the un-clamped one-point (20-twip) default: without the clamp this boundary would fold into 1010 and silently widen the real narrow column into whatever gap it shares with 1025. With it, 1025 stays its own boundary.
+    // Row 1 states a genuine 10-twip column (0.5pt) between 1000 and 1010, so the table-wide tolerance clamps to 9 twips — one less than that gap. Row 2's own boundary at 1025 is 15 twips from row 1's 1010, further than the clamped 9-twip tolerance but within the un-clamped one-point (20-twip) default: without the clamp this boundary would fold into 1010 and silently widen the real narrow column into whatever gap it shares with 1025. With it, 1025 stays its own boundary.
     const block = readTableFromRowBoundaries([
       { boundariesTwips: [0, 1000, 1010, 3000], cells: ["a", "b", "c"] },
       { boundariesTwips: [0, 1025, 3000], cells: ["a", "b"] },

@@ -1,4 +1,4 @@
-// AST-level tests for the inline phase. These assert the NODE SHAPE parseInlines produces, which the CommonMark conformance suite (src/conformance.test.ts) cannot: that suite compares rendered HTML, so it is blind to everything the AST records for the write side's benefit but HTML discards -- which of `*`/`_` an emphasis was written with, an entity's original source spelling, an autolink's email flag. It is also where GFM's own extensions are covered, since the CommonMark corpus by definition does not test them.
+// AST-level tests for the inline phase. These assert the NODE SHAPE parseInlines produces, which the CommonMark conformance suite (src/conformance.test.ts) cannot: that suite compares rendered HTML, so it is blind to everything the AST records for the write side's benefit but HTML discards — which of `*`/`_` an emphasis was written with, an entity's original source spelling, an autolink's email flag. It is also where GFM's own extensions are covered, since the CommonMark corpus by definition does not test them.
 
 import { describe, expect, it } from "vitest";
 import type { MarkdownInlineNode } from "../ast/ast";
@@ -88,12 +88,12 @@ describe("inline math (ExaDev/markdown-codec#53)", () => {
     expect(parse("\\(\\)")).toEqual([{ type: "mathInline", literal: "" }]);
   });
 
-  it("does not recognise single-dollar $...$ or bare $$ as math -- only \\( \\)", () => {
+  it("does not recognise single-dollar $...$ or bare $$ as math — only \\( \\)", () => {
     expect(parse("$x^2$")).toEqual([{ type: "text", value: "$x^2$" }]);
     expect(parse("$$x^2$$")).toEqual([{ type: "text", value: "$$x^2$$" }]);
   });
 
-  it("does not recognise \\( \\) inside a code span -- the span is sliced verbatim, never re-dispatched", () => {
+  it("does not recognise \\( \\) inside a code span — the span is sliced verbatim, never re-dispatched", () => {
     expect(parse("`\\(x\\)`")).toEqual([
       { type: "codeSpan", literal: "\\(x\\)" },
     ]);

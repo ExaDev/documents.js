@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { bytesToBase64, createDocx } from "documents.js";
 import type * as DocumentOperationsModule from "document-operations";
 
-// Three things this file needs a patched document-operations registry for, none reachable through the real operations alone: proving the REST layer actually forwards a request-scoped AbortSignal into `run()`'s own context (rather than an empty options object), proving that signal genuinely aborts when the client disconnects, and exercising odb_render_report's OdbReportNotSpecifiedError mapping (the one real .odb fixture this repo checks in declares exactly one report, so that branch is otherwise unreachable through a real file -- see server.test.ts's own comment on the same limitation).
+// Three things this file needs a patched document-operations registry for, none reachable through the real operations alone: proving the REST layer actually forwards a request-scoped AbortSignal into `run()`'s own context (rather than an empty options object), proving that signal genuinely aborts when the client disconnects, and exercising odb_render_report's OdbReportNotSpecifiedError mapping (the one real .odb fixture this repo checks in declares exactly one report, so that branch is otherwise unreachable through a real file — see server.test.ts's own comment on the same limitation).
 const signalState = vi.hoisted(() => ({
   presenceHasSignal: undefined as boolean | undefined,
   abortOperationStarted: false,
@@ -38,7 +38,7 @@ vi.mock("document-operations", async (importOriginal) => {
           signalState.aborted = true;
           resolve({ aborted: true });
         });
-        // Set only once the listener above is actually attached, so the test can wait for this before it aborts the client request -- otherwise the client-side abort could race ahead of the server ever registering interest in it.
+        // Set only once the listener above is actually attached, so the test can wait for this before it aborts the client request — otherwise the client-side abort could race ahead of the server ever registering interest in it.
         signalState.abortOperationStarted = true;
       }),
   };

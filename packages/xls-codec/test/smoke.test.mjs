@@ -1,4 +1,4 @@
-// Smoke test: the built dist/ artifact loads and works under both ESM and CJS, and every module the exports map's `./*` wildcard advertises genuinely exists in dist. Run only via `pnpm test:smoke` (turbo's _build builds dist first) -- never part of the default `pnpm test` file set, since it requires a fresh build to mean anything. The deep-import half matters because publint and attw both pass a wildcard whose targets are missing: dist actually serving the advertised subpaths is provable only by loading them.
+// Smoke test: the built dist/ artifact loads and works under both ESM and CJS, and every module the exports map's `./*` wildcard advertises genuinely exists in dist. Run only via `pnpm test:smoke` (turbo's _build builds dist first) — never part of the default `pnpm test` file set, since it requires a fresh build to mean anything. The deep-import half matters because publint and attw both pass a wildcard whose targets are missing: dist actually serving the advertised subpaths is provable only by loading them.
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import * as esm from '../dist/index.js';
@@ -65,7 +65,7 @@ describe('dist/ barrel exports are present in both builds', () => {
   }
 });
 
-// The architecture section of this package's README names each of these as a module, and package.json's `./*` wildcard maps them onto ./dist/*.js -- so each must exist in dist in both module systems and export its own surface.
+// The architecture section of this package's README names each of these as a module, and package.json's `./*` wildcard maps them onto ./dist/*.js — so each must exist in dist in both module systems and export its own surface.
 describe('dist/ deep imports resolve for every advertised module, in both builds', () => {
   const DEEP_MODULES = [
     { path: '../dist/biff/records.js', exports: ['readRecords', 'BiffFormatError'] },

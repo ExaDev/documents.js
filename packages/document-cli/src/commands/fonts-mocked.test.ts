@@ -5,7 +5,7 @@ import type * as DocumentsJs from "documents.js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { EXIT_SUCCESS } from "../runtime/exit-codes";
 
-// A dedicated file, isolated from fonts.test.ts's own real-fixture tests: mocking extractSourceFontsForFormat here is file-wide, so it must never share a module with a test that needs the genuine implementation. Covers the human-readable report's own style-suffix rendering -- bold, italic, both, and neither -- which no real embedded-font fixture in fonts.test.ts carries (every fixture there embeds a plain regular face), plus the unrecognised-extension branch fonts.ts's own runFonts short-circuits on before ever reaching the extractor at all.
+// A dedicated file, isolated from fonts.test.ts's own real-fixture tests: mocking extractSourceFontsForFormat here is file-wide, so it must never share a module with a test that needs the genuine implementation. Covers the human-readable report's own style-suffix rendering — bold, italic, both, and neither — which no real embedded-font fixture in fonts.test.ts carries (every fixture there embeds a plain regular face), plus the unrecognised-extension branch fonts.ts's own runFonts short-circuits on before ever reaching the extractor at all.
 vi.mock("documents.js", async (importOriginal) => {
   const actual = await importOriginal<typeof DocumentsJs>();
   return {
@@ -61,7 +61,7 @@ describe("fonts command against a mocked extractor", () => {
   beforeAll(async () => {
     workspace = await mkdtemp(join(tmpdir(), "document-cli-fonts-mock-"));
     inputPath = join(workspace, "fixture.docx");
-    // Content is irrelevant -- extractSourceFontsForFormat is mocked below, so only readInput's own file-exists check ever touches these bytes.
+    // Content is irrelevant — extractSourceFontsForFormat is mocked below, so only readInput's own file-exists check ever touches these bytes.
     await writeFile(inputPath, "irrelevant");
   });
 
@@ -81,7 +81,7 @@ describe("fonts command against a mocked extractor", () => {
     ]);
 
     const { stdout } = await runFontsCommand(inputPath);
-    expect(stdout).toBe("Example (bold) -- 3 bytes\n");
+    expect(stdout).toBe("Example (bold) — 3 bytes\n");
   });
 
   it("suffixes an italic-only face with '(italic)'", async () => {
@@ -96,7 +96,7 @@ describe("fonts command against a mocked extractor", () => {
     ]);
 
     const { stdout } = await runFontsCommand(inputPath);
-    expect(stdout).toBe("Example (italic) -- 5 bytes\n");
+    expect(stdout).toBe("Example (italic) — 5 bytes\n");
   });
 
   it("joins both styles with a space when a face is bold and italic", async () => {
@@ -106,7 +106,7 @@ describe("fonts command against a mocked extractor", () => {
     ]);
 
     const { stdout } = await runFontsCommand(inputPath);
-    expect(stdout).toBe("Example (bold italic) -- 7 bytes\n");
+    expect(stdout).toBe("Example (bold italic) — 7 bytes\n");
   });
 
   it("omits the parenthetical suffix entirely for a plain regular face, not a blank pair", async () => {
@@ -121,7 +121,7 @@ describe("fonts command against a mocked extractor", () => {
     ]);
 
     const { stdout } = await runFontsCommand(inputPath);
-    expect(stdout).toBe("Example -- 2 bytes\n");
+    expect(stdout).toBe("Example — 2 bytes\n");
     expect(stdout).not.toContain("(");
   });
 

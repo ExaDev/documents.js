@@ -16,7 +16,7 @@ import { mergeByPaintOrder } from "../model/paint-order";
 import type { SvgDiagnosticSink } from "./diagnostics";
 import { encodeXmlText } from "odf.js";
 
-// The svg write half: a drawing ContentDocument -> SVG text, the inverse of src/svg/read.ts. One user unit is written as one point (root width/height carry explicit pt units and viewBox is the identical 1:1 "0 0 W H" via buildSvgViewBox), so every ContentVector coordinate -- itself page-point space in the drawing variant's y-down convention -- lands in the output unchanged: no rescaling arithmetic on write, and readSvgContent parses the same numbers back. Vectors render as the six shape primitives; ContentShapes (draw:frame text/image/table content) have no SVG vector representation in this scope and are skipped under svg/shape-unsupported, never silently dropped.
+// The svg write half: a drawing ContentDocument -> SVG text, the inverse of src/svg/read.ts. One user unit is written as one point (root width/height carry explicit pt units and viewBox is the identical 1:1 "0 0 W H" via buildSvgViewBox), so every ContentVector coordinate — itself page-point space in the drawing variant's y-down convention — lands in the output unchanged: no rescaling arithmetic on write, and readSvgContent parses the same numbers back. Vectors render as the six shape primitives; ContentShapes (draw:frame text/image/table content) have no SVG vector representation in this scope and are skipped under svg/shape-unsupported, never silently dropped.
 
 export class SvgUnsupportedDocumentKindError extends Error {
   readonly kind: ContentDocument["kind"];
@@ -30,13 +30,13 @@ export class SvgUnsupportedDocumentKindError extends Error {
   }
 }
 
-// svg has no second page, so writing a multi-page source is a caller decision, never a silent truncation -- the identical contract buildCsvText holds for sheets, carried by page INDEX here because drawing pages are anonymous (a sheet has a name; a page does not).
+// svg has no second page, so writing a multi-page source is a caller decision, never a silent truncation — the identical contract buildCsvText holds for sheets, carried by page INDEX here because drawing pages are anonymous (a sheet has a name; a page does not).
 export class SvgMultiPageNotSpecifiedError extends Error {
   readonly pageCount: number;
 
   constructor(pageCount: number) {
     super(
-      `buildSvgText: this document has more than one page (${pageCount}) -- pass { page: <index> } to select one`,
+      `buildSvgText: this document has more than one page (${pageCount}) — pass { page: <index> } to select one`,
     );
     this.name = "SvgMultiPageNotSpecifiedError";
     this.pageCount = pageCount;
@@ -49,7 +49,7 @@ export class SvgPageNotFoundError extends Error {
 
   constructor(page: number, pageCount: number) {
     super(
-      `buildSvgText: page index ${page} not found -- the document has ${pageCount} page(s)`,
+      `buildSvgText: page index ${page} not found — the document has ${pageCount} page(s)`,
     );
     this.name = "SvgPageNotFoundError";
     this.page = page;
@@ -57,7 +57,7 @@ export class SvgPageNotFoundError extends Error {
   }
 }
 
-// Named BuildSvgTextOptions rather than SvgWriteOptions because convert.ts declares its own SvgWriteOptions as the ergonomic intersection type the named svg-targeted conversions expose -- the identical split csv holds between BuildCsvTextOptions and CsvWriteOptions, so the two layers never collide on this package's export surface.
+// Named BuildSvgTextOptions rather than SvgWriteOptions because convert.ts declares its own SvgWriteOptions as the ergonomic intersection type the named svg-targeted conversions expose — the identical split csv holds between BuildCsvTextOptions and CsvWriteOptions, so the two layers never collide on this package's export surface.
 export interface BuildSvgTextOptions {
   // Selects which page of a multi-page document is written. Optional only when the document has exactly one page.
   readonly page?: number;
@@ -84,11 +84,11 @@ function selectPage(
   return pages[0]!;
 }
 
-// The two dash patterns map onto the two stroke styles this ecosystem's writers share: "6 4" and "1 3" are the same constants src/edit/odg's own graphic writer uses, in user units -- here 1pt each, so a written dashed/dotted stroke round-trips at the same visual weight the ODF writers produce. A dotted pattern additionally needs round linecaps, or the dashes render as hairline rectangles rather than dots.
+// The two dash patterns map onto the two stroke styles this ecosystem's writers share: "6 4" and "1 3" are the same constants src/edit/odg's own graphic writer uses, in user units — here 1pt each, so a written dashed/dotted stroke round-trips at the same visual weight the ODF writers produce. A dotted pattern additionally needs round linecaps, or the dashes render as hairline rectangles rather than dots.
 const DASHED_PATTERN = "6 4";
 const DOTTED_PATTERN = "1 3";
 
-// colorToRgbHex returns the bare six-digit hex (no '#'), which is not a colour any CSS/SVG parser accepts -- the '#' is this format's own spelling of the value.
+// colorToRgbHex returns the bare six-digit hex (no '#'), which is not a colour any CSS/SVG parser accepts — the '#' is this format's own spelling of the value.
 function svgColor(fill: Color): string {
   return `#${colorToRgbHex(fill)}`;
 }
@@ -112,7 +112,7 @@ function strokeAttr(
   } else if (stroke.style === "dotted") {
     attrs += ` stroke-dasharray="${DOTTED_PATTERN}" stroke-linecap="round"`;
   } else if (stroke.style === "double") {
-    // SVG strokes are single -- the schema's 'double' style has no construct to map onto, so it writes solid under a diagnostic rather than being silently flattened.
+    // SVG strokes are single — the schema's 'double' style has no construct to map onto, so it writes solid under a diagnostic rather than being silently flattened.
     sink?.({
       code: "svg/stroke-style-unsupported",
       detail: `${vector.sourcePath ?? vector.kind}: stroke style 'double' written as solid`,
@@ -121,7 +121,7 @@ function strokeAttr(
   return attrs;
 }
 
-// ContentVector.rotationDeg is clockwise-on-screen in the drawing variant's y-down space, which is exactly SVG's own rotate() convention -- so the transform is a direct transcription about the frame's own centre, the same centre src/layout/drawing.ts rotates about on the render side.
+// ContentVector.rotationDeg is clockwise-on-screen in the drawing variant's y-down space, which is exactly SVG's own rotate() convention — so the transform is a direct transcription about the frame's own centre, the same centre src/layout/drawing.ts rotates about on the render side.
 function rotationAttr(
   rotationDeg: number | undefined,
   frame: {

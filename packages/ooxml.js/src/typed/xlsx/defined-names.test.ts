@@ -454,7 +454,7 @@ describe("buildPrintAreaValue", () => {
   });
 
   it("writes a genuine multi-letter column reference beyond Z", () => {
-    // Column index 26 is "AA" -- a single-letter column would not distinguish a regex/loop that stops after one character.
+    // Column index 26 is "AA" — a single-letter column would not distinguish a regex/loop that stops after one character.
     expect(
       buildPrintAreaValue("Sheet1", {
         startRow: 0,

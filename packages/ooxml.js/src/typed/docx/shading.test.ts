@@ -3,7 +3,7 @@ import type { XmlElement } from "../../model/node";
 import { el } from "../../xml/fragment";
 import { buildCellShading, readCellShading } from "./shading";
 
-// The w:shd <-> ContentCellFill vocabulary on its own (ExaDev/documents.js#951), at the level typed/docx/read.ts and typed/docx/write.ts actually exchange it -- write.test.ts's own round trips cover what a whole document does with a cell's shading; this file covers the ST_Shd tokens directly, including ones a real producer may state that this package's own writer never emits automatically (w:val absent, "nil", an unrecognised token).
+// The w:shd <-> ContentCellFill vocabulary on its own (ExaDev/documents.js#951), at the level typed/docx/read.ts and typed/docx/write.ts actually exchange it — write.test.ts's own round trips cover what a whole document does with a cell's shading; this file covers the ST_Shd tokens directly, including ones a real producer may state that this package's own writer never emits automatically (w:val absent, "nil", an unrecognised token).
 
 function tcPr(shd: XmlElement | undefined): XmlElement {
   return el("w:tcPr", {}, shd === undefined ? [] : [shd]);
@@ -153,7 +153,7 @@ describe("buildCellShading", () => {
   });
 
   it("throws naming the actual unrecognised kind for a fill outside the 'solid'/'pattern' discriminated union entirely", () => {
-    // ContentCellFillSchema only ever produces 'solid' or 'pattern' through normal validated input -- this exercises the writer's own defensive default branch directly, past the type system, for a value shaped like neither.
+    // ContentCellFillSchema only ever produces 'solid' or 'pattern' through normal validated input — this exercises the writer's own defensive default branch directly, past the type system, for a value shaped like neither.
     expect(() =>
       buildCellShading({ kind: "gradient" } as unknown as Parameters<
         typeof buildCellShading

@@ -7,7 +7,7 @@ import type {
   ContentCellValue,
 } from "document-schema.js";
 
-// The mechanical plain rendering of a value: what the value setter derives displayText from, so a cell created or re-valued through this editor always satisfies the schema's own displayText-is-required rule without the caller supplying a rendered string. Deliberately not a number-format engine -- a cell whose display needs a producer format or locale symbols gets its displayText set explicitly afterwards, and the numberFormatCode setter carries the pattern alongside.
+// The mechanical plain rendering of a value: what the value setter derives displayText from, so a cell created or re-valued through this editor always satisfies the schema's own displayText-is-required rule without the caller supplying a rendered string. Deliberately not a number-format engine — a cell whose display needs a producer format or locale symbols gets its displayText set explicitly afterwards, and the numberFormatCode setter carries the pattern alongside.
 export function displayTextOfValue(value: ContentCellValue): string {
   switch (value.kind) {
     case "empty":
@@ -23,9 +23,9 @@ export function displayTextOfValue(value: ContentCellValue): string {
   }
 }
 
-// A live view over one ContentSheetCell object inside a sheet's own sparse cells array -- the same plain-ContentDocument live-view contract DocEditor/MarkdownEditor apply (there is no XmlElement tree under a .xls: xls-codec reads and writes the ContentDocument directly). Setting value re-derives displayText through displayTextOfValue unless the caller overrides displayText afterwards -- the schema requires a display string on every cell that exists, and a value whose rendering was left stale would be a silent lie to every consumer that renders from displayText.
+// A live view over one ContentSheetCell object inside a sheet's own sparse cells array — the same plain-ContentDocument live-view contract DocEditor/MarkdownEditor apply (there is no XmlElement tree under a .xls: xls-codec reads and writes the ContentDocument directly). Setting value re-derives displayText through displayTextOfValue unless the caller overrides displayText afterwards — the schema requires a display string on every cell that exists, and a value whose rendering was left stale would be a silent lie to every consumer that renders from displayText.
 //
-// formula is deliberately getter-only: xls-codec's writer has no formula write path at all (see that package's own README scope -- formulas are a read-only gap), so a formula setter here would build content the very next toBytes() drops.
+// formula is deliberately getter-only: xls-codec's writer has no formula write path at all (see that package's own README scope — formulas are a read-only gap), so a formula setter here would build content the very next toBytes() drops.
 export class XlsCell {
   private readonly container: ContentSheetCell[];
   private readonly node: ContentSheetCell;
@@ -67,7 +67,7 @@ export class XlsCell {
     return this.live().displayText;
   }
 
-  // The explicit rendering override -- set this AFTER value when a cell's display needs more than the mechanical plain rendering (a currency symbol, a locale grouping, a producer number format).
+  // The explicit rendering override — set this AFTER value when a cell's display needs more than the mechanical plain rendering (a currency symbol, a locale grouping, a producer number format).
   set displayText(text: string) {
     this.live().displayText = text;
   }

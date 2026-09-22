@@ -123,7 +123,7 @@ describe("resolveCompositionPlan route verification", () => {
   });
 });
 
-// --- Tests for the newly-exposed high-value cross-variant pairs (wordprocessing <-> presentation transform): these were unreachable through the former DIRECT_EDGES list (only docx<->pptx and odt<->odp were registered) but the pathfinder routes every wordprocessing-format <-> presentation-format pair through the same transform. Each test converts real fixture bytes through convertDocument and decodes the output to assert REAL content survived -- not merely that the output is a non-empty ZIP, which a degraded/empty package would still satisfy. ---
+// --- Tests for the newly-exposed high-value cross-variant pairs (wordprocessing <-> presentation transform): these were unreachable through the former DIRECT_EDGES list (only docx<->pptx and odt<->odp were registered) but the pathfinder routes every wordprocessing-format <-> presentation-format pair through the same transform. Each test converts real fixture bytes through convertDocument and decodes the output to assert REAL content survived — not merely that the output is a non-empty ZIP, which a degraded/empty package would still satisfy. ---
 
 function isZip(bytes: Uint8Array<ArrayBuffer>): boolean {
   return bytes.length >= 2 && bytes[0] === 0x50 && bytes[1] === 0x4b;

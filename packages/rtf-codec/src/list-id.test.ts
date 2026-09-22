@@ -27,7 +27,7 @@ describe("mintRtfListNumId", () => {
   });
 
   it("never mints a start suffix for a bullet, even when a start is given", () => {
-    // A bullet has no numbering start at all -- start is only ever an ordered-list fact, so passing one for a bullet must not surface it.
+    // A bullet has no numbering start at all — start is only ever an ordered-list fact, so passing one for a bullet must not surface it.
     expect(
       mintRtfListNumId({
         listOverrideIndex: 3,
@@ -44,7 +44,7 @@ describe("parseRtfListNumId", () => {
   });
 
   it("returns undefined if the index capture somehow comes back absent from an otherwise-successful match", () => {
-    // NUMID_PATTERN's own (\d+) capture group is required, so a real match can never actually omit it -- but the code still guards it explicitly (TypeScript types every regex match index as possibly undefined, since the type system has no way to encode "always present for a required group"). Forcing the impossible case here proves that guard is real and not merely decorative.
+    // NUMID_PATTERN's own (\d+) capture group is required, so a real match can never actually omit it — but the code still guards it explicitly (TypeScript types every regex match index as possibly undefined, since the type system has no way to encode "always present for a required group"). Forcing the impossible case here proves that guard is real and not merely decorative.
     vi.spyOn(RegExp.prototype, "exec").mockImplementationOnce(function (
       this: RegExp,
       value: string,

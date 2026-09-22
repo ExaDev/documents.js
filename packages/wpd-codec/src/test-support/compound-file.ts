@@ -1,6 +1,6 @@
 // A minimal [MS-CFB] compound file carrying exactly one root-level stream, for exercising the WP7-and-later container path against archive-codec's real reader rather than a stub.
 //
-// Deliberately narrow: WordPerfect's wrapper puts the document in one root-level stream named PerfectOffice_MAIN, so one stream is the whole shape this package's tests need. archive-codec has a general fixture builder of its own, but its src/test-support is excluded from the published dist (as this one is), so it is not importable from here -- and reproducing 380 lines of general storage-tree, DIFAT, and multi-sector machinery to place one stream at the root would be the larger thing, not the smaller one.
+// Deliberately narrow: WordPerfect's wrapper puts the document in one root-level stream named PerfectOffice_MAIN, so one stream is the whole shape this package's tests need. archive-codec has a general fixture builder of its own, but its src/test-support is excluded from the published dist (as this one is), so it is not importable from here — and reproducing 380 lines of general storage-tree, DIFAT, and multi-sector machinery to place one stream at the root would be the larger thing, not the smaller one.
 //
 // Version 3 geometry throughout: 512-byte sectors, 64-byte mini sectors, the 4096-byte mini-stream cutoff, and the DIFAT entirely inside the header's 109-entry array. Sector N begins at file offset (N + 1) * 512, since the 512-byte header occupies the region before sector 0.
 
@@ -25,7 +25,7 @@ function writeChain(table: Uint32Array, start: number, count: number): void {
   });
 }
 
-// The fields every directory entry carries regardless of its own name: object type, sibling/child links (this fixture's two entries are unrelated siblings, so both left and right stay NOSTREAM's own 0xFF fill), child id, start sector, and size. Name and name-length are deliberately NOT written here: archive-codec's own reader (src/cfb/read.ts) only validates and reads an entry's name/nameLength once the directory tree walk reaches it via root.child, and the root entry itself (id 0) is read directly as entries[0] without ever entering that walk -- "its own name is the 'Root Entry' convention and nothing depends on it" -- so the root is the one caller with no real name value to write, and every non-root caller writes its own name separately, after this.
+// The fields every directory entry carries regardless of its own name: object type, sibling/child links (this fixture's two entries are unrelated siblings, so both left and right stay NOSTREAM's own 0xFF fill), child id, start sector, and size. Name and name-length are deliberately NOT written here: archive-codec's own reader (src/cfb/read.ts) only validates and reads an entry's name/nameLength once the directory tree walk reaches it via root.child, and the root entry itself (id 0) is read directly as entries[0] without ever entering that walk — "its own name is the 'Root Entry' convention and nothing depends on it" — so the root is the one caller with no real name value to write, and every non-root caller writes its own name separately, after this.
 function writeDirectoryEntryFields(
   directory: Uint8Array,
   id: number,
@@ -75,7 +75,7 @@ export function compoundFileWithStream(
 ): Uint8Array<ArrayBuffer> {
   const inMiniStream = stream.length < MINI_STREAM_CUTOFF;
 
-  // The mini stream area's own declared pool size, per [MS-CFB]'s own mini-sector granularity: archive-codec's reader (src/cfb/read.ts) carves each entry's own mini-sectors out of a pool bounded by exactly this many bytes (the root entry's own `size` field), so it must be rounded up to a whole number of 64-byte mini sectors even though the real stream data inside it is shorter -- a pool declared only as large as the raw stream would undercount the mini-sector chain by one whenever the stream's own length is not itself a multiple of MINI_SECTOR_SIZE.
+  // The mini stream area's own declared pool size, per [MS-CFB]'s own mini-sector granularity: archive-codec's reader (src/cfb/read.ts) carves each entry's own mini-sectors out of a pool bounded by exactly this many bytes (the root entry's own `size` field), so it must be rounded up to a whole number of 64-byte mini sectors even though the real stream data inside it is shorter — a pool declared only as large as the raw stream would undercount the mini-sector chain by one whenever the stream's own length is not itself a multiple of MINI_SECTOR_SIZE.
   const miniStreamPoolSize = inMiniStream
     ? sectorsFor(stream.length, MINI_SECTOR_SIZE) * MINI_SECTOR_SIZE
     : 0;
@@ -155,7 +155,7 @@ export function compoundFileWithStream(
   };
   putSector(0, new Uint8Array(fat.buffer));
   putSector(fatSectorCount, directory);
-  // Written unconditionally at bigStreamStart, in the mini-stream case too: bigStreamSectorCount is 0 whenever inMiniStream, which makes bigStreamStart and miniStreamStart the very same region start (the cumulative region-size walk above never advances between them), and file's own backing buffer starts fully zeroed, so writing the raw, unpadded stream there lands on exactly the same bytes a separately zero-padded copy would have -- the trailing pad bytes miniStreamPoolSize declares are already zero either way.
+  // Written unconditionally at bigStreamStart, in the mini-stream case too: bigStreamSectorCount is 0 whenever inMiniStream, which makes bigStreamStart and miniStreamStart the very same region start (the cumulative region-size walk above never advances between them), and file's own backing buffer starts fully zeroed, so writing the raw, unpadded stream there lands on exactly the same bytes a separately zero-padded copy would have — the trailing pad bytes miniStreamPoolSize declares are already zero either way.
   putSector(bigStreamStart, stream);
   if (inMiniStream) {
     const miniSectorCount = sectorsFor(stream.length, MINI_SECTOR_SIZE);

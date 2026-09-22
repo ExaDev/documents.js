@@ -195,7 +195,7 @@ describe("applyParagraphSprms", () => {
   });
 
   it("falls through the switch's own default case for a paragraph-family sprm this reader does not convert", () => {
-    // sgc bits 10-12 of 0x0400 decode to SGC.paragraph (1), but the full value matches none of the SPRM_P_* opcodes this reader handles -- the one way to actually reach the switch's default case rather than the sgc guard above it.
+    // sgc bits 10-12 of 0x0400 decode to SGC.paragraph (1), but the full value matches none of the SPRM_P_* opcodes this reader handles — the one way to actually reach the switch's default case rather than the sgc guard above it.
     const result = applyParagraphSprms([prl(0x0400, [0])], { istd: 4 });
     expect(result.istd).toBe(4);
   });

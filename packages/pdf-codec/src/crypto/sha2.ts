@@ -1,4 +1,4 @@
-// SHA-256/384/512 (FIPS 180-4), hand-written for the same portability reason as md5.ts: ISO 32000-2's revision-6 password algorithms (2.A and the hardened hash 2.B) name all three by number, and a `node:crypto` import would break this package's `platform: 'neutral'` build and its fully client-side downstream consumer. WebCrypto's `crypto.subtle.digest` does offer SHA-2, but only asynchronously -- this codec's read path has no `await` point anywhere in it.
+// SHA-256/384/512 (FIPS 180-4), hand-written for the same portability reason as md5.ts: ISO 32000-2's revision-6 password algorithms (2.A and the hardened hash 2.B) name all three by number, and a `node:crypto` import would break this package's `platform: 'neutral'` build and its fully client-side downstream consumer. WebCrypto's `crypto.subtle.digest` does offer SHA-2, but only asynchronously — this codec's read path has no `await` point anywhere in it.
 //
 // SHA-384/512 work on 64-bit words held as a pair of 32-bit halves, because a 64-bit BigInt operation allocates and is slow in the one place these hashes are hot: Algorithm 2.B runs at least 64 rounds, and every round hashes an AES ciphertext of 64 repetitions of its input, so opening or writing one AES-256 file is thousands of kilobytes hashed. A BigInt version of the same construction is kept in sha2.test.ts as the reference this one is checked against, together with Node's own hashes. The round constants and initial states below stay BigInt literals, the form FIPS 180-4 prints them in, and are split into halves once at load.
 
@@ -8,7 +8,7 @@ const SHA512_BLOCK_BYTES = 128;
 const SHA512_ROUNDS = 80;
 const WORDS_PER_BLOCK = 16;
 
-// FIPS 180-4 4.2.3: the first 64 bits of the fractional parts of the cube roots of the first 80 primes. Written out rather than derived at load time because deriving them needs exact integer cube roots to 64 bits of precision -- IEEE-754 doubles carry only 53, so a Math.cbrt-based derivation would be silently wrong in the low word. Published specification constants, not magic numbers; sha2.test.ts checks the resulting hashes against FIPS 180-4's own example vectors.
+// FIPS 180-4 4.2.3: the first 64 bits of the fractional parts of the cube roots of the first 80 primes. Written out rather than derived at load time because deriving them needs exact integer cube roots to 64 bits of precision — IEEE-754 doubles carry only 53, so a Math.cbrt-based derivation would be silently wrong in the low word. Published specification constants, not magic numbers; sha2.test.ts checks the resulting hashes against FIPS 180-4's own example vectors.
 const K512 = [
   0x428a2f98d728ae22n,
   0x7137449123ef65cdn,
@@ -104,7 +104,7 @@ const H512 = [
   0x5be0cd19137e2179n,
 ];
 
-// FIPS 180-4 5.3.4: the same quantity for the *ninth through sixteenth* primes -- SHA-384 differs from SHA-512 only in this initial state and in truncating the output.
+// FIPS 180-4 5.3.4: the same quantity for the *ninth through sixteenth* primes — SHA-384 differs from SHA-512 only in this initial state and in truncating the output.
 const H384 = [
   0xcbbb9d5dc1059ed8n,
   0x629a292a367cd507n,
@@ -116,7 +116,7 @@ const H384 = [
   0x47b5481dbefa4fa4n,
 ];
 
-// FIPS 180-4 4.2.2 and 5.3.3 define SHA-256's round constants and initial state as the first *32* bits of the very same fractional parts SHA-512 takes 64 bits of -- so both are the high word of the tables above rather than a second transcription that could drift out of step with them.
+// FIPS 180-4 4.2.2 and 5.3.3 define SHA-256's round constants and initial state as the first *32* bits of the very same fractional parts SHA-512 takes 64 bits of — so both are the high word of the tables above rather than a second transcription that could drift out of step with them.
 const K256 = Uint32Array.from(K512.slice(0, SHA256_ROUNDS), (k) =>
   Number(k >> 32n),
 );
@@ -138,7 +138,7 @@ function padBigEndian(
   const padded = new Uint8Array(paddedLength);
   padded.set(bytes);
   padded[bytes.length] = 0x80;
-  // No early exit once bitLength reaches 0: `padded` is already zero-filled, so writing `0 % 256` into the remaining length-field bytes is a no-op, and a message's bit length only ever needs a handful of these `lengthBytes` slots (a JS number's own 2^53 precision ceiling needs at most 7 bytes to represent, well inside SHA-256's 8 and SHA-512's 16) -- realistically never enough real iterations for a `&& bitLength > 0` guard to be the thing that stops this loop, which is exactly the kind of unobservable boundary an equivalent mutant lives in.
+  // No early exit once bitLength reaches 0: `padded` is already zero-filled, so writing `0 % 256` into the remaining length-field bytes is a no-op, and a message's bit length only ever needs a handful of these `lengthBytes` slots (a JS number's own 2^53 precision ceiling needs at most 7 bytes to represent, well inside SHA-256's 8 and SHA-512's 16) — realistically never enough real iterations for a `&& bitLength > 0` guard to be the thing that stops this loop, which is exactly the kind of unobservable boundary an equivalent mutant lives in.
   let bitLength = bytes.length * 8;
   for (let i = 0; i < lengthBytes; i++) {
     padded[paddedLength - 1 - i] = bitLength % 256;
@@ -158,7 +158,7 @@ export function sha256(
   const state = Uint32Array.from(H256);
   const w = new Uint32Array(SHA256_ROUNDS);
   for (let offset = 0; offset < padded.length; offset += SHA256_BLOCK_BYTES) {
-    // Fills w's first WORDS_PER_BLOCK entries via Uint32Array.set + Array.from's own length argument rather than a counted for-loop: an off-by-one bound on a Uint32Array like `w` would write one entry past its own fixed length, which a typed array silently drops -- an equivalent mutant no test could ever observe.
+    // Fills w's first WORDS_PER_BLOCK entries via Uint32Array.set + Array.from's own length argument rather than a counted for-loop: an off-by-one bound on a Uint32Array like `w` would write one entry past its own fixed length, which a typed array silently drops — an equivalent mutant no test could ever observe.
     w.set(
       Array.from({ length: WORDS_PER_BLOCK }, (_, t) => {
         const at = offset + t * 4;
@@ -171,7 +171,7 @@ export function sha256(
         );
       }),
     );
-    // Array.from's own length argument is SHA256_ROUNDS itself (the full word count, not an arithmetic offset from it), with the already-filled first WORDS_PER_BLOCK entries skipped inside the mapfn -- a subtraction expressing the remaining count here would size a Uint32Array write that a wrong length silently drops (equally unobservable in either direction), whereas mutating this skip condition instead corrupts w[16] onward and is caught by every hash test below.
+    // Array.from's own length argument is SHA256_ROUNDS itself (the full word count, not an arithmetic offset from it), with the already-filled first WORDS_PER_BLOCK entries skipped inside the mapfn — a subtraction expressing the remaining count here would size a Uint32Array write that a wrong length silently drops (equally unobservable in either direction), whereas mutating this skip condition instead corrupts w[16] onward and is caught by every hash test below.
     Array.from({ length: SHA256_ROUNDS }, (_, t) => {
       if (t < WORDS_PER_BLOCK) {
         return; // already filled directly from the block's own bytes above

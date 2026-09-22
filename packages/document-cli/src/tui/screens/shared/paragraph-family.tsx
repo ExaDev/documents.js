@@ -51,7 +51,7 @@ import {
   truncatePreview,
 } from "./text.js";
 
-// docx, odt and markdown share one paragraph/run/table model closely enough (see documents.js's own README: "readDocxContent and readOdtContent both produce the identical wordprocessing-variant ContentDocument shape", and readMarkdownContent is the third format sharing that same pivot) that DocxParagraph/OdtParagraph/MarkdownParagraph and DocxRun/OdtRun/MarkdownRun are structurally interchangeable for every screen in this family -- the union types below let every helper and screen here take whichever the open document actually is without a branch, mirroring state/reducer.ts's own `WordprocessingOpenDocument` narrowing (not exported from there, so restated here for this screen family's own use). MarkdownRun/MarkdownParagraph are a genuinely narrower shape than DocxRun/DocxParagraph's own (no underline/colour/fontFamily/sizePt on a run, no alignment on a paragraph) -- see `supportsRunStyleExtras` below for how call sites that need those fields narrow the union down. doc joined this family when documents.js gained its DocEditor: DocParagraph/DocRun/DocTable hold direct references into the same wordprocessing ContentDocument pivot, and DocRun/DocParagraph carry the full docx/odt styling field set (underline, colour, fontFamily, sizePt, alignment) because doc-codec's writer genuinely round-trips all of them.
+// docx, odt and markdown share one paragraph/run/table model closely enough (see documents.js's own README: "readDocxContent and readOdtContent both produce the identical wordprocessing-variant ContentDocument shape", and readMarkdownContent is the third format sharing that same pivot) that DocxParagraph/OdtParagraph/MarkdownParagraph and DocxRun/OdtRun/MarkdownRun are structurally interchangeable for every screen in this family — the union types below let every helper and screen here take whichever the open document actually is without a branch, mirroring state/reducer.ts's own `WordprocessingOpenDocument` narrowing (not exported from there, so restated here for this screen family's own use). MarkdownRun/MarkdownParagraph are a genuinely narrower shape than DocxRun/DocxParagraph's own (no underline/colour/fontFamily/sizePt on a run, no alignment on a paragraph) — see `supportsRunStyleExtras` below for how call sites that need those fields narrow the union down. doc joined this family when documents.js gained its DocEditor: DocParagraph/DocRun/DocTable hold direct references into the same wordprocessing ContentDocument pivot, and DocRun/DocParagraph carry the full docx/odt styling field set (underline, colour, fontFamily, sizePt, alignment) because doc-codec's writer genuinely round-trips all of them.
 export type ParagraphFamilyOpenDocument =
   DocxOpenDocument | OdtOpenDocument | MarkdownOpenDocument | DocOpenDocument;
 export type ParagraphFamilyLiveParagraph =
@@ -62,7 +62,7 @@ export type ParagraphFamilyLiveTable =
 export type ParagraphFamilyLiveTableCell =
   DocxTableCell | OdtTableCell | MarkdownTableCell | DocTableCell;
 
-// The subset of ParagraphFamilyLiveRun that genuinely carries underline/colour/fontFamily/sizePt -- MarkdownRun has none of the four (it carries bold/italic/strike/hyperlink/code instead), while DocxRun/OdtRun/DocRun all do. `'underline' in run` is a real TypeScript `in`-narrowing check (not a cast): true for exactly the three run classes that declare that getter.
+// The subset of ParagraphFamilyLiveRun that genuinely carries underline/colour/fontFamily/sizePt — MarkdownRun has none of the four (it carries bold/italic/strike/hyperlink/code instead), while DocxRun/OdtRun/DocRun all do. `'underline' in run` is a real TypeScript `in`-narrowing check (not a cast): true for exactly the three run classes that declare that getter.
 export type ParagraphFamilyStyledRun = DocxRun | OdtRun | DocRun;
 
 export function supportsRunStyleExtras(
@@ -99,7 +99,7 @@ export function liveTableAt(
   return doc.editor.tables()[tableIndex];
 }
 
-// The read-only shape the body list needs for a preview -- deliberately a small structural subset of DocxRun/OdtRun/MarkdownRun (no colour/fontFamily/sizePt: those matter once you are inside a single paragraph, not for a one-line list row) so that `doc.editor.paragraphs()`/`doc.editor.tables()` can be handed to the adapter factory below completely unwrapped -- DocxParagraph, OdtParagraph, and MarkdownParagraph all already satisfy these interfaces structurally. `underline`/`alignment` are genuinely optional keys, not merely `| undefined`-valued ones: MarkdownRun/MarkdownParagraph have no such property AT ALL (not even one reading `undefined`), so the key itself has to be absent-capable for a markdown paragraph's own `runs()`/`.alignment` to satisfy these interfaces without a wrapping adapter.
+// The read-only shape the body list needs for a preview — deliberately a small structural subset of DocxRun/OdtRun/MarkdownRun (no colour/fontFamily/sizePt: those matter once you are inside a single paragraph, not for a one-line list row) so that `doc.editor.paragraphs()`/`doc.editor.tables()` can be handed to the adapter factory below completely unwrapped — DocxParagraph, OdtParagraph, and MarkdownParagraph all already satisfy these interfaces structurally. `underline`/`alignment` are genuinely optional keys, not merely `| undefined`-valued ones: MarkdownRun/MarkdownParagraph have no such property AT ALL (not even one reading `undefined`), so the key itself has to be absent-capable for a markdown paragraph's own `runs()`/`.alignment` to satisfy these interfaces without a wrapping adapter.
 export interface ParagraphFamilyRun {
   readonly text: string;
   readonly bold: boolean;
@@ -120,7 +120,7 @@ export interface ParagraphFamilyTable {
   gridColumnCount(): number;
 }
 
-// odt keeps lists as a genuinely separate tree (OdtList/OdtListItem, reached via OdtEditor.lists()) rather than docx's flat per-paragraph list membership -- so this is the one adapter member docx's own factory call simply omits. It only ever carries an item count, not each item's own text (OdtListItem.text is real, but reading it here as well would mean this summary-row adapter fetching every item of every list just to render one row per list -- screens/editors/odt/list-editor.tsx reads each item's real text directly, once a list is actually opened).
+// odt keeps lists as a genuinely separate tree (OdtList/OdtListItem, reached via OdtEditor.lists()) rather than docx's flat per-paragraph list membership — so this is the one adapter member docx's own factory call simply omits. It only ever carries an item count, not each item's own text (OdtListItem.text is real, but reading it here as well would mean this summary-row adapter fetching every item of every list just to render one row per list — screens/editors/odt/list-editor.tsx reads each item's real text directly, once a list is actually opened).
 export interface ParagraphFamilyList {
   readonly itemCount: number;
 }
@@ -141,7 +141,7 @@ export interface ParagraphFamilyAdapterOptions {
   readonly dispatch: Dispatch<Action>;
 }
 
-// APPEND_PARAGRAPH is already format-agnostic in the reducer (it resolves the open docx/odt document itself), so the adapter's own `appendParagraph` never needs to touch `editor` at all -- it is identical for both formats and lives here once rather than being reimplemented per format.
+// APPEND_PARAGRAPH is already format-agnostic in the reducer (it resolves the open docx/odt document itself), so the adapter's own `appendParagraph` never needs to touch `editor` at all — it is identical for both formats and lives here once rather than being reimplemented per format.
 export function createParagraphFamilyAdapter(
   options: ParagraphFamilyAdapterOptions,
 ): ParagraphFamilyAdapter {
@@ -161,7 +161,7 @@ export function createParagraphFamilyAdapter(
   };
 }
 
-// keybindings/use-navigation-input.ts's own local `useState` resets to 0 on every remount, so a screen popped and pushed again does not yet resume from a previously recorded cursor -- that would need the shared hook itself to accept an initial index, which is outside this screen family's own file scope. This wrapper still records every change into `state.selection` as the foundation's own convention asks screens to (state/types.ts's `SelectionState` doc comment), so the intent is captured even though nothing reads it back into this hook yet.
+// keybindings/use-navigation-input.ts's own local `useState` resets to 0 on every remount, so a screen popped and pushed again does not yet resume from a previously recorded cursor — that would need the shared hook itself to accept an initial index, which is outside this screen family's own file scope. This wrapper still records every change into `state.selection` as the foundation's own convention asks screens to (state/types.ts's `SelectionState` doc comment), so the intent is captured even though nothing reads it back into this hook yet.
 export function usePersistedSelection(
   selectionKey: string,
   options: NavigationInputOptions,
@@ -230,7 +230,7 @@ interface ListRow {
 }
 type BodyRow = HeaderRow | ParagraphRow | TableRow | ListRow;
 
-// 'T' opens a 2-step rows/columns wizard (mirroring pptx/odp's own slide-detail.tsx add-table wizard exactly), then an optional third "merge cells now?" prompt whose "yes" branch collects a merge rectangle (start row, start column, row span, column span) BEFORE a single APPEND_TABLE dispatch -- carried on that action's own `merge` field so the reducer builds the table and merges it in one mutate() pass, rather than needing a second MERGE_TABLE_CELLS dispatch that would have to already know the freshly-appended table's own index.
+// 'T' opens a 2-step rows/columns wizard (mirroring pptx/odp's own slide-detail.tsx add-table wizard exactly), then an optional third "merge cells now?" prompt whose "yes" branch collects a merge rectangle (start row, start column, row span, column span) BEFORE a single APPEND_TABLE dispatch — carried on that action's own `merge` field so the reducer builds the table and merges it in one mutate() pass, rather than needing a second MERGE_TABLE_CELLS dispatch that would have to already know the freshly-appended table's own index.
 type TableWizardStep =
   | "closed"
   | "rows"
@@ -244,7 +244,7 @@ type TableWizardStep =
 const DEFAULT_TABLE_ROWS = 2;
 const DEFAULT_TABLE_COLUMNS = 2;
 
-// odt's OdtBody.appendFormula needs a frame to position the embedded formula's own draw:frame -- mirroring odg/page-detail.tsx's own GEOMETRY_FIELDS shape, with smaller defaults sized for a single inline formula rather than a whole drawing shape.
+// odt's OdtBody.appendFormula needs a frame to position the embedded formula's own draw:frame — mirroring odg/page-detail.tsx's own GEOMETRY_FIELDS shape, with smaller defaults sized for a single inline formula rather than a whole drawing shape.
 const FORMULA_FRAME_FIELDS: readonly FieldSpec[] = [
   { key: "xPt", label: "X (pt)", defaultValue: "40" },
   { key: "yPt", label: "Y (pt)", defaultValue: "40" },
@@ -263,7 +263,7 @@ function readFormulaFrame(
   };
 }
 
-// documents.js gives docx/odt editors two (or, for odt, three) SEPARATE enumeration accessors (paragraphs(), tables(), and odt's own lists()) with no shared document-order index between them at all -- there is no way to recover whether paragraph 3 came before or after table 1 in the real file. True interleaving is consequently not achievable from the public API; this renders two (or three) clearly-labelled sections instead, each in its own accessor's own order, which is the honest alternative the brief allows for.
+// documents.js gives docx/odt editors two (or, for odt, three) SEPARATE enumeration accessors (paragraphs(), tables(), and odt's own lists()) with no shared document-order index between them at all — there is no way to recover whether paragraph 3 came before or after table 1 in the real file. True interleaving is consequently not achievable from the public API; this renders two (or three) clearly-labelled sections instead, each in its own accessor's own order, which is the honest alternative the brief allows for.
 export function ParagraphFamilyBodyList(props: {
   readonly adapter: ParagraphFamilyAdapter;
 }): ReactElement {
@@ -349,7 +349,7 @@ export function ParagraphFamilyBodyList(props: {
   const [wizardRowSpan, setWizardRowSpan] = useState(1);
   const wizardOpen = tableWizard !== "closed";
 
-  // odt-only, body-scoped formula insertion (OdtBody.appendFormula has no paragraph-scoped counterpart at all -- see paragraph-detail.tsx's own docx-only 'm' handler for the paragraph-scoped path docx uses instead). Two steps rather than one: FormulaPicker resolves the mathml first (preset or raw), then a FieldWizard collects the frame appendFormula needs to position the resulting draw:frame.
+  // odt-only, body-scoped formula insertion (OdtBody.appendFormula has no paragraph-scoped counterpart at all — see paragraph-detail.tsx's own docx-only 'm' handler for the paragraph-scoped path docx uses instead). Two steps rather than one: FormulaPicker resolves the mathml first (preset or raw), then a FieldWizard collects the frame appendFormula needs to position the resulting draw:frame.
   const [formulaFlow, setFormulaFlow] = useState<
     "closed" | "picking" | "frame"
   >("closed");
@@ -362,7 +362,7 @@ export function ParagraphFamilyBodyList(props: {
     setTableWizard("closed");
   };
 
-  // The reducer's own APPEND_TABLE case builds and (when `merge` is given) merges the table in one mutate() pass -- `tables.length` computed BEFORE dispatch is the freshly-appended table's own index, the same "impure reducer, capture the index first" convention `onAppend` below already uses for a freshly-appended paragraph.
+  // The reducer's own APPEND_TABLE case builds and (when `merge` is given) merges the table in one mutate() pass — `tables.length` computed BEFORE dispatch is the freshly-appended table's own index, the same "impure reducer, capture the index first" convention `onAppend` below already uses for a freshly-appended paragraph.
   const commitAppendTable = (
     merge:
       | {
@@ -387,7 +387,7 @@ export function ParagraphFamilyBodyList(props: {
     });
   };
 
-  // 'T' opens the wizard -- a separate useInput from the shared navigation hook below, matching odb/table-list.tsx's own 'f'/'r' split and docx/index.tsx's own 'x' handling: active only while nothing else (an overlay, the wizard itself) already owns the keyboard.
+  // 'T' opens the wizard — a separate useInput from the shared navigation hook below, matching odb/table-list.tsx's own 'f'/'r' split and docx/index.tsx's own 'x' handling: active only while nothing else (an overlay, the wizard itself) already owns the keyboard.
   useInput(
     (input) => {
       if (input === "T") {
@@ -398,7 +398,7 @@ export function ParagraphFamilyBodyList(props: {
     { isActive: !anyOverlayOpen(state) && !wizardOpen && !formulaFlowOpen },
   );
 
-  // 'L' creates a brand-new, empty odt list (OdtBody.appendList()) and drills straight into it -- capital, matching 'T' beside it, and gated to the odt adapter exactly as the 'm' formula handler below is: docx has no equivalent "create a list from nothing" action (see actions.ts's own ADD_LIST doc comment). The new list's own index is `adapter.lists().length` computed BEFORE the dispatch runs, the same "impure reducer, capture the index first" convention `onAppend` below already uses for a freshly-appended paragraph.
+  // 'L' creates a brand-new, empty odt list (OdtBody.appendList()) and drills straight into it — capital, matching 'T' beside it, and gated to the odt adapter exactly as the 'm' formula handler below is: docx has no equivalent "create a list from nothing" action (see actions.ts's own ADD_LIST doc comment). The new list's own index is `adapter.lists().length` computed BEFORE the dispatch runs, the same "impure reducer, capture the index first" convention `onAppend` below already uses for a freshly-appended paragraph.
   useInput(
     (input) => {
       if (input === "L" && adapter.lists !== undefined) {
@@ -413,7 +413,7 @@ export function ParagraphFamilyBodyList(props: {
     { isActive: !anyOverlayOpen(state) && !wizardOpen && !formulaFlowOpen },
   );
 
-  // 'm' opens the formula flow -- odt only. docx's own formula insertion is paragraph-scoped (see paragraph-detail.tsx's own 'm' handler there), so this body-list screen exposes the key only when the open document is odt; a docx document simply has no body-level formula action to bind it to.
+  // 'm' opens the formula flow — odt only. docx's own formula insertion is paragraph-scoped (see paragraph-detail.tsx's own 'm' handler there), so this body-list screen exposes the key only when the open document is odt; a docx document simply has no body-level formula action to bind it to.
   useInput(
     (input) => {
       if (input === "m" && adapter.formatLabel === "odt") {
@@ -423,7 +423,7 @@ export function ParagraphFamilyBodyList(props: {
     { isActive: !anyOverlayOpen(state) && !wizardOpen && !formulaFlowOpen },
   );
 
-  // The merge-prompt step is a single-key y/N prompt, not a TextField -- 'y' proceeds to the merge-rectangle picker, 'n'/Enter (the default "no") appends the table unmerged straight away.
+  // The merge-prompt step is a single-key y/N prompt, not a TextField — 'y' proceeds to the merge-rectangle picker, 'n'/Enter (the default "no") appends the table unmerged straight away.
   useInput(
     (input, key) => {
       if (key.escape) {
@@ -453,7 +453,7 @@ export function ParagraphFamilyBodyList(props: {
     setTableWizard("mergePrompt");
   };
 
-  // Every merge-rectangle field is clamped to the just-chosen table's own dimensions (`wizardRows`/`wizardColumns`), so a merge built here can never itself throw the out-of-range error MERGE_TABLE_CELLS' own reducer case guards against -- the clamp is the UI's own responsibility, the reducer's own try/catch is the backstop for every OTHER caller of that action.
+  // Every merge-rectangle field is clamped to the just-chosen table's own dimensions (`wizardRows`/`wizardColumns`), so a merge built here can never itself throw the out-of-range error MERGE_TABLE_CELLS' own reducer case guards against — the clamp is the UI's own responsibility, the reducer's own try/catch is the backstop for every OTHER caller of that action.
   const submitWizardMergeStartRow = (raw: string): void => {
     setWizardStartRow(
       Math.min(parseNonNegativeIntField(raw, 0), Math.max(0, wizardRows - 1)),
@@ -543,7 +543,7 @@ export function ParagraphFamilyBodyList(props: {
     },
   );
 
-  // Only meaningful when `rows` is non-empty (there is always at least one selectable row whenever a header is present); when `rows` is empty ListView renders its own empty message before ever reading this prop, so -1 -- a value no real row index can ever equal -- is a safe, self-documenting "nothing to highlight" rather than a guessed 0.
+  // Only meaningful when `rows` is non-empty (there is always at least one selectable row whenever a header is present); when `rows` is empty ListView renders its own empty message before ever reading this prop, so -1 — a value no real row index can ever equal — is a safe, self-documenting "nothing to highlight" rather than a guessed 0.
   const resolvedRowIndex = selectableRowIndices[selectedIndex];
   const listSelectedIndex = resolvedRowIndex ?? -1;
 
@@ -553,7 +553,7 @@ export function ParagraphFamilyBodyList(props: {
       <ListView
         items={rows}
         selectedIndex={listSelectedIndex}
-        emptyMessage="No paragraphs or tables yet -- press 'a' to append a paragraph."
+        emptyMessage="No paragraphs or tables yet — press 'a' to append a paragraph."
         renderItem={(row, isSelected) => {
           if (row.kind === "header") {
             return (

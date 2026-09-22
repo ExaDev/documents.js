@@ -65,7 +65,7 @@ import type {
 } from "./types.js";
 import { isEditableDocument } from "./types.js";
 
-// A real, minimal PNG -- the signature bytes plus a few arbitrary trailing ones, matching docx/paragraph-detail.test.tsx's own fixture. ADD_SHEET_IMAGE only stores/embeds these bytes and declares the media part's type from the caller's own explicit `format`, so a genuine decodable pixel grid is not needed to prove the round trip.
+// A real, minimal PNG — the signature bytes plus a few arbitrary trailing ones, matching docx/paragraph-detail.test.tsx's own fixture. ADD_SHEET_IMAGE only stores/embeds these bytes and declares the media part's type from the caller's own explicit `format`, so a genuine decodable pixel grid is not needed to prove the round trip.
 const PNG_BYTES = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4,
 ]);
@@ -271,7 +271,7 @@ function openXlsxDocument(
   });
 }
 
-// A minimal document for each of UNDO's own read-only formats: odb carries no layout/bytes at all (see OdbOpenDocument's own doc comment), the other six share the identical read-only-preview shape XlsxOpenDocument above already builds, populated through a real PdfEditor rather than a hand-authored LayoutDocument literal -- these tests only exercise UNDO's own per-format branch, never the layout content itself.
+// A minimal document for each of UNDO's own read-only formats: odb carries no layout/bytes at all (see OdbOpenDocument's own doc comment), the other six share the identical read-only-preview shape XlsxOpenDocument above already builds, populated through a real PdfEditor rather than a hand-authored LayoutDocument literal — these tests only exercise UNDO's own per-format branch, never the layout content itself.
 function readOnlyOpenDocument(
   format: "odb" | "xlsx" | "csv" | "svg" | "rtf" | "wpd" | "epub",
 ):
@@ -307,7 +307,7 @@ function markdownDocument(state: AppState): MarkdownOpenDocument {
   return doc;
 }
 
-// A MarkdownOpenDocument seeded from real source text (as opposed to CREATE_DOCUMENT's fresh, empty one -- see the "creates a new markdown document" test below) via OPEN_FILE_SUCCESS, the same action openDocumentAtPath's own real caller dispatches, with a genuine live-view MarkdownEditor built via openMarkdown -- the same one open-document.ts's own markdown branch builds.
+// A MarkdownOpenDocument seeded from real source text (as opposed to CREATE_DOCUMENT's fresh, empty one — see the "creates a new markdown document" test below) via OPEN_FILE_SUCCESS, the same action openDocumentAtPath's own real caller dispatches, with a genuine live-view MarkdownEditor built via openMarkdown — the same one open-document.ts's own markdown branch builds.
 function openMarkdownDocument(
   source: string,
   path = "/tmp/notes.md",
@@ -442,7 +442,7 @@ describe("appReducer SAVE_SUCCESS", () => {
     expect(result.hasUnsavedChanges).toBe(false);
   });
 
-  // documentWithPath's own read-only-preview branches (xlsx/csv/svg/rtf) are otherwise never reached by any other action -- SAVE_AS on one of these formats is the only path that dispatches SAVE_SUCCESS against them, so this proves the layout/bytes pair survives the rewrite untouched alongside the new path.
+  // documentWithPath's own read-only-preview branches (xlsx/csv/svg/rtf) are otherwise never reached by any other action — SAVE_AS on one of these formats is the only path that dispatches SAVE_SUCCESS against them, so this proves the layout/bytes pair survives the rewrite untouched alongside the new path.
   it("updates a read-only preview document's own path while keeping its layout and bytes untouched", () => {
     const bytes = xlsxTestBytes();
     const layout = readPdf(xlsxToPdf(bytes));
@@ -729,7 +729,7 @@ describe("appReducer docx mutations", () => {
     });
     expect(bolded.hasUnsavedChanges).toBe(true);
     expect(bolded).not.toBe(state);
-    // The live view means the run object captured before the action already reflects the mutation -- there is no new object to re-read.
+    // The live view means the run object captured before the action already reflects the mutation — there is no new object to re-read.
     expect(run.bold).toBe(true);
 
     const unbolded = appReducer(bolded, {
@@ -794,7 +794,7 @@ describe("appReducer docx mutations", () => {
     expect(warned.hasUnsavedChanges).toBe(false);
   });
 
-  // withRun's own wrongDocument path -- distinct from withStyledRun's (exercised elsewhere against markdown), since SET_RUN_TEXT/TOGGLE_RUN_BOLD/TOGGLE_RUN_ITALIC resolve through the wider wordprocessingDocument union, not styledWordprocessingDocument.
+  // withRun's own wrongDocument path — distinct from withStyledRun's (exercised elsewhere against markdown), since SET_RUN_TEXT/TOGGLE_RUN_BOLD/TOGGLE_RUN_ITALIC resolve through the wider wordprocessingDocument union, not styledWordprocessingDocument.
   it("warns rather than mutating when SET_RUN_TEXT targets a non-wordprocessing document", () => {
     const state = appReducer(createInitialState(), {
       type: "CREATE_DOCUMENT",
@@ -855,7 +855,7 @@ describe("appReducer docx mutations", () => {
     expect(result.openDocument).toBe(state.openDocument);
   });
 
-  // TOGGLE_RUN_UNDERLINE and SET_RUN_COLOR have no real, positive test anywhere else -- the markdown describe below only exercises their wrongDocument branch.
+  // TOGGLE_RUN_UNDERLINE and SET_RUN_COLOR have no real, positive test anywhere else — the markdown describe below only exercises their wrongDocument branch.
   it("toggles a real run's underline and sets its colour through the live editor", () => {
     const state = applyAll([
       { type: "CREATE_DOCUMENT", format: "docx" },
@@ -891,7 +891,7 @@ describe("appReducer docx mutations", () => {
     expect(run.color).toStrictEqual({ r: 1, g: 0, b: 0 });
   });
 
-  // SET_PARAGRAPH_ALIGNMENT has no positive test anywhere else -- the markdown describe block only ever exercises its wrongDocument branch (MarkdownParagraph has no alignment field at all).
+  // SET_PARAGRAPH_ALIGNMENT has no positive test anywhere else — the markdown describe block only ever exercises its wrongDocument branch (MarkdownParagraph has no alignment field at all).
   it("sets a real paragraph's alignment through the live editor", () => {
     const state = applyAll([
       { type: "CREATE_DOCUMENT", format: "docx" },
@@ -932,7 +932,7 @@ describe("appReducer docx mutations", () => {
     expect(result.openDocument).toBe(state.openDocument);
   });
 
-  // APPEND_RUN's own wrongDocument/no-paragraph paths -- every other use of APPEND_RUN in this file is setup for a further action, never a direct assertion on its own warning paths.
+  // APPEND_RUN's own wrongDocument/no-paragraph paths — every other use of APPEND_RUN in this file is setup for a further action, never a direct assertion on its own warning paths.
   it("warns rather than mutating when APPEND_RUN targets a non-wordprocessing document", () => {
     const state = appReducer(createInitialState(), {
       type: "CREATE_DOCUMENT",
@@ -1046,7 +1046,7 @@ describe("appReducer APPEND_TABLE and MERGE_TABLE_CELLS on docx/odt", () => {
       merge: { startRow: 0, startColumn: 0, rowSpan: 2, colSpan: 2 },
     });
     expect(withTable.hasUnsavedChanges).toBe(true);
-    // A docx table genuinely supports merging, unlike markdown's own -- this must not carry the "unsupported" warning markdown's APPEND_TABLE+merge gets below.
+    // A docx table genuinely supports merging, unlike markdown's own — this must not carry the "unsupported" warning markdown's APPEND_TABLE+merge gets below.
     expect(withTable.status?.severity).not.toBe("warning");
 
     const content = readDocxContent(docxDocument(withTable).editor.toPackage());
@@ -1093,7 +1093,7 @@ describe("appReducer APPEND_TABLE and MERGE_TABLE_CELLS on docx/odt", () => {
     const anchor = tableBlock.rows[0]?.cells[0];
     expect(anchor?.colSpan).toBe(2);
     expect(anchor?.rowSpan).toBe(2);
-    // ODF always writes one real (possibly covered) cell per grid position, unlike docx -- row 0 still has all 3 columns.
+    // ODF always writes one real (possibly covered) cell per grid position, unlike docx — row 0 still has all 3 columns.
     expect(tableBlock.rows[0]?.cells).toHaveLength(3);
   });
 
@@ -1522,7 +1522,7 @@ describe("appReducer SET_LIST_ITEM_TEXT on odt", () => {
 });
 
 describe("appReducer ADD_LIST_ITEM on docx", () => {
-  // docx (and markdown) have no separate "list" object the way odt does -- list membership is flat per-paragraph metadata, so ADD_LIST_ITEM's own docx/markdown branch appends a brand-new paragraph and copies the anchor paragraph's own ContentListMembership onto it, rather than extending an OdtList (the odt branch this file's own "ADD_LIST on odt"/"INDENT_LIST_ITEM on odt" describe blocks already cover).
+  // docx (and markdown) have no separate "list" object the way odt does — list membership is flat per-paragraph metadata, so ADD_LIST_ITEM's own docx/markdown branch appends a brand-new paragraph and copies the anchor paragraph's own ContentListMembership onto it, rather than extending an OdtList (the odt branch this file's own "ADD_LIST on odt"/"INDENT_LIST_ITEM on odt" describe blocks already cover).
   it("appends a new paragraph copying the anchor paragraph's own list membership", () => {
     const created = appReducer(createInitialState(), {
       type: "CREATE_DOCUMENT",
@@ -1599,7 +1599,7 @@ describe("appReducer ADD_LIST_ITEM on docx", () => {
     );
   });
 
-  // odt's own ADD_LIST_ITEM branch is genuinely separate code from the docx/markdown branch tested above (a real OdtList.addItem(), not a flat paragraph-copy) -- despite the docx describe block's own comment claiming the sibling ADD_LIST/INDENT_LIST_ITEM tests already cover it, neither of those ever dispatches ADD_LIST_ITEM itself.
+  // odt's own ADD_LIST_ITEM branch is genuinely separate code from the docx/markdown branch tested above (a real OdtList.addItem(), not a flat paragraph-copy) — despite the docx describe block's own comment claiming the sibling ADD_LIST/INDENT_LIST_ITEM tests already cover it, neither of those ever dispatches ADD_LIST_ITEM itself.
   it("appends a real item to an existing odt list", () => {
     const editor = createOdt();
     editor.body.appendList().addItem().appendParagraph({ text: "first" });
@@ -1644,12 +1644,12 @@ describe("appReducer ADD_LIST on odt", () => {
     const doc = odtDocument(withList);
     expect(doc.editor.lists()).toHaveLength(1);
 
-    // Round-trips through re-decoding the package as a completely fresh document, not just the live in-memory object -- proving OdtBody.appendList() wrote a real, empty text:list, exactly the shape the listEditor screen's own 'a' (ADD_LIST_ITEM) then extends.
+    // Round-trips through re-decoding the package as a completely fresh document, not just the live in-memory object — proving OdtBody.appendList() wrote a real, empty text:list, exactly the shape the listEditor screen's own 'a' (ADD_LIST_ITEM) then extends.
     const reopened = openOdt(doc.editor.toBytes());
     expect(reopened.lists()).toHaveLength(1);
     expect(reopened.lists()[0]?.items()).toHaveLength(0);
 
-    // A second ADD_LIST appends a second list rather than replacing the first -- the new list's own index (adapter.lists().length computed before dispatch, per paragraph-family.tsx's own 'L' handler) is what a caller navigates the freshly pushed listEditor screen to.
+    // A second ADD_LIST appends a second list rather than replacing the first — the new list's own index (adapter.lists().length computed before dispatch, per paragraph-family.tsx's own 'L' handler) is what a caller navigates the freshly pushed listEditor screen to.
     const withSecondList = appReducer(withList, { type: "ADD_LIST" });
     expect(odtDocument(withSecondList).editor.lists()).toHaveLength(2);
   });
@@ -1804,7 +1804,7 @@ describe("appReducer ods mutations", () => {
     expect(sheet.cell(2, 3).value).toEqual({ kind: "string", value: "Total" });
   });
 
-  // withSheet's own wrongDocument path -- every other withSheet test (SET_CELL_VALUE, SET_SHEET_PRINT_SETTINGS) only exercises the "no sheet at that index" branch against an already-open spreadsheet, never the "not a spreadsheet at all" branch.
+  // withSheet's own wrongDocument path — every other withSheet test (SET_CELL_VALUE, SET_SHEET_PRINT_SETTINGS) only exercises the "no sheet at that index" branch against an already-open spreadsheet, never the "not a spreadsheet at all" branch.
   it("warns rather than crashing when SET_CELL_VALUE targets a non-spreadsheet document", () => {
     const created = appReducer(createInitialState(), {
       type: "CREATE_DOCUMENT",
@@ -1854,12 +1854,12 @@ describe("appReducer SET_CELL_FORMULA on ods", () => {
         `expected a spreadsheet ContentDocument, got ${content.kind}`,
       );
     }
-    // createOds() already seeds a default 'Sheet1' at index 0 -- ADD_SHEET appends 'Data' after it, so the sheet under test sits at `sheetIndex`, not index 0.
+    // createOds() already seeds a default 'Sheet1' at index 0 — ADD_SHEET appends 'Data' after it, so the sheet under test sits at `sheetIndex`, not index 0.
     const cell = content.sheets[sheetIndex]?.cells.find(
       (candidate) => candidate.row === 0 && candidate.column === 0,
     );
     expect(cell?.formula).toBe("of:=1+41");
-    // The formula coexists with the cell's own typed value -- setting one never clobbers the other.
+    // The formula coexists with the cell's own typed value — setting one never clobbers the other.
     expect(cell?.value).toEqual({ kind: "number", value: 42 });
 
     // A subsequent undefined formula clears it back out, again without touching the typed value.
@@ -1921,7 +1921,7 @@ describe("appReducer SET_CELL_FORMULA on ods", () => {
 
 describe("appReducer ADD_SHEET_IMAGE on ods", () => {
   it("adds a real floating image, positioned by resolving the anchor cell against the sheet's own explicit column widths/row heights, verified through readOdsContent", () => {
-    // Explicit widths/heights for every column/row strictly before the anchor, set through the live editor BEFORE the image is added -- matching OdsSheet.addImage's own doc comment ("Call this AFTER any setColumnWidth/setColumnHidden/setRowHeight/setRowHidden calls this sheet needs") -- so the expected absolute position asserted below is derived from values this test itself set, never from OdsSheet.addImage's own internal default-size fallback.
+    // Explicit widths/heights for every column/row strictly before the anchor, set through the live editor BEFORE the image is added — matching OdsSheet.addImage's own doc comment ("Call this AFTER any setColumnWidth/setColumnHidden/setRowHeight/setRowHidden calls this sheet needs") — so the expected absolute position asserted below is derived from values this test itself set, never from OdsSheet.addImage's own internal default-size fallback.
     const editor = createOds();
     const sheet = editor.addSheet("Data");
     const columnWidthsPt = [30, 40, 50];
@@ -1956,12 +1956,12 @@ describe("appReducer ADD_SHEET_IMAGE on ods", () => {
         `expected a spreadsheet ContentDocument, got ${content.kind}`,
       );
     }
-    // createOds() already seeds a default 'Sheet1' at index 0 -- addSheet('Data') appends a second sheet after it, so the sheet under test sits at `sheetIndex`, not index 0.
+    // createOds() already seeds a default 'Sheet1' at index 0 — addSheet('Data') appends a second sheet after it, so the sheet under test sits at `sheetIndex`, not index 0.
     const image = content.sheets[sheetIndex]?.images[0];
     if (image === undefined) {
       throw new Error("expected a real image on the added sheet");
     }
-    // A spreadsheet's own table:shapes container (the direct parent of every floating image, always table:table's own first child) carries no per-cell anchor at all -- its svg:x/svg:y is always sheet-absolute -- so odf.js's own reader always reports anchorRow/anchorColumn 0 with that absolute position carried through as the offset (see odf.js's own typed/ods/read.ts top-of-file note: "cell (0,0)'s own top-left IS the sheet origin, so the two coordinate systems coincide exactly there"). This is a genuine, documented ODF format limitation, not a round-trip bug -- the WRITE side still resolved the given anchor correctly against the sheet's real column/row sizing, which is exactly what the derived offset values below prove.
+    // A spreadsheet's own table:shapes container (the direct parent of every floating image, always table:table's own first child) carries no per-cell anchor at all — its svg:x/svg:y is always sheet-absolute — so odf.js's own reader always reports anchorRow/anchorColumn 0 with that absolute position carried through as the offset (see odf.js's own typed/ods/read.ts top-of-file note: "cell (0,0)'s own top-left IS the sheet origin, so the two coordinate systems coincide exactly there"). This is a genuine, documented ODF format limitation, not a round-trip bug — the WRITE side still resolved the given anchor correctly against the sheet's real column/row sizing, which is exactly what the derived offset values below prove.
     expect(image.anchorRow).toBe(0);
     expect(image.anchorColumn).toBe(0);
     expect(image.offsetXPt).toBe(
@@ -1973,7 +1973,7 @@ describe("appReducer ADD_SHEET_IMAGE on ods", () => {
     expect(image.format).toBe("png");
     expect(image.widthPt).toBe(80);
     expect(image.heightPt).toBe(40);
-    // altText does NOT round-trip here -- confirmed directly against the installed documents.js: OdsSheet.addImage's own write path (src/edit/ods/floating.ts's insertSheetImage) never writes a floating image's svg:title/svg:desc at all, even though odf.js's own reader (readDrawFrame, which every OTHER image-insertion path in this codebase already reads altText through) fully supports reading them back. A real, confirmed write-side gap in the installed documents.js dependency, not a bug in this action/reducer -- ADD_SHEET_IMAGE still forwards the caller's altText through to OdsSheet.addImage unconditionally (the field is a genuine, schema-valid ContentSheetImage member), so a future documents.js release that starts writing it needs no change on this side at all.
+    // altText does NOT round-trip here — confirmed directly against the installed documents.js: OdsSheet.addImage's own write path (src/edit/ods/floating.ts's insertSheetImage) never writes a floating image's svg:title/svg:desc at all, even though odf.js's own reader (readDrawFrame, which every OTHER image-insertion path in this codebase already reads altText through) fully supports reading them back. A real, confirmed write-side gap in the installed documents.js dependency, not a bug in this action/reducer — ADD_SHEET_IMAGE still forwards the caller's altText through to OdsSheet.addImage unconditionally (the field is a genuine, schema-valid ContentSheetImage member), so a future documents.js release that starts writing it needs no change on this side at all.
     expect(image.altText).toBeUndefined();
   });
 
@@ -2086,7 +2086,7 @@ describe("appReducer MERGE_CELLS on ods", () => {
     });
     expect(result.status?.severity).toBe("warning");
     expect(result.status?.text).toContain("rowSpan");
-    // hasUnsavedChanges is unchanged from before this dispatch (ADD_SHEET already set it true) -- the guarded merge neither adds a further change nor resets it.
+    // hasUnsavedChanges is unchanged from before this dispatch (ADD_SHEET already set it true) — the guarded merge neither adds a further change nor resets it.
     expect(result.hasUnsavedChanges).toBe(created.hasUnsavedChanges);
   });
 
@@ -2179,7 +2179,7 @@ describe("appReducer markdown mutations", () => {
     ).toBe(true);
   });
 
-  // MarkdownRun/MarkdownParagraph genuinely have no underline/colour/font-family/font-size/alignment field at all -- these four actions are narrowed to docx/odt only in the reducer (styledWordprocessingDocument/withStyledRun), so dispatching one against a markdown document reports why rather than throwing or silently doing nothing.
+  // MarkdownRun/MarkdownParagraph genuinely have no underline/colour/font-family/font-size/alignment field at all — these four actions are narrowed to docx/odt only in the reducer (styledWordprocessingDocument/withStyledRun), so dispatching one against a markdown document reports why rather than throwing or silently doing nothing.
   it("warns rather than mutating for run/paragraph styling fields markdown has no counterpart for at all", () => {
     const opened = openMarkdownDocument("Intro");
 
@@ -2243,7 +2243,7 @@ describe("appReducer markdown mutations", () => {
     );
   });
 
-  // GFM tables have no cell-merge concept at all -- MarkdownTable has no mergeCells -- so a merge requested alongside table creation still creates the (unmerged) table and reports why the merge didn't happen, rather than silently dropping the merge or refusing to create the table.
+  // GFM tables have no cell-merge concept at all — MarkdownTable has no mergeCells — so a merge requested alongside table creation still creates the (unmerged) table and reports why the merge didn't happen, rather than silently dropping the merge or refusing to create the table.
   it("creates a real markdown table via the shared APPEND_TABLE action, and declines a requested merge with a warning", () => {
     const opened = openMarkdownDocument("Intro");
     const created = appReducer(opened, {
@@ -2277,7 +2277,7 @@ describe("appReducer markdown mutations", () => {
 });
 
 describe("appReducer doc (legacy Word) mutations", () => {
-  // wordprocessingDocument's own format union admits doc alongside docx/odt/markdown -- covered here specifically because every other member is already exercised elsewhere by name, and a mutant collapsing this one arm of the union would only ever be caught by a doc-format dispatch.
+  // wordprocessingDocument's own format union admits doc alongside docx/odt/markdown — covered here specifically because every other member is already exercised elsewhere by name, and a mutant collapsing this one arm of the union would only ever be caught by a doc-format dispatch.
   it("appends a paragraph through the same generic action docx/odt/markdown already share", () => {
     const opened = openDocDocument(createDoc().toBytes());
     const before = docDocument(opened).editor.paragraphs().length;
@@ -2291,7 +2291,7 @@ describe("appReducer doc (legacy Word) mutations", () => {
     expect(docDocument(appended).editor.paragraphs()).toHaveLength(before + 1);
   });
 
-  // styledWordprocessingDocument's own format union admits doc alongside docx/odt (never markdown, which has no such fields at all -- see the markdown describe block above) -- covered here for the identical reason: doc is the one arm nothing else in this file dispatches through this specific function.
+  // styledWordprocessingDocument's own format union admits doc alongside docx/odt (never markdown, which has no such fields at all — see the markdown describe block above) — covered here for the identical reason: doc is the one arm nothing else in this file dispatches through this specific function.
   it("toggles bold on a run through the same generic action docx/odt already share", () => {
     const withRun = applyAll(
       [
@@ -2318,7 +2318,7 @@ describe("appReducer doc (legacy Word) mutations", () => {
 });
 
 describe("appReducer undo", () => {
-  // Proves undo generalises to markdown's own live-view MarkdownEditor with zero markdown-specific reducer code beyond toUndoSnapshot's own byte<->text branch -- the same encodeMarkdownText/decodeMarkdownText round trip through the shared undo stack every other mutating action already uses.
+  // Proves undo generalises to markdown's own live-view MarkdownEditor with zero markdown-specific reducer code beyond toUndoSnapshot's own byte<->text branch — the same encodeMarkdownText/decodeMarkdownText round trip through the shared undo stack every other mutating action already uses.
   it("restores a markdown document to its paragraphs before the last edit", () => {
     const opened = openMarkdownDocument("One\n\nTwo");
     const edited = appReducer(opened, {
@@ -2398,7 +2398,7 @@ describe("appReducer undo", () => {
     }
     expect(state.undoStack).toHaveLength(20);
 
-    // Undoing 20 times empties the capped stack exactly -- proving the retained entries are the 20 MOST RECENT snapshots (the tail), not an arbitrary 20, since undoing keeps peeling paragraphs off the end down to a stable, non-empty prefix rather than running out early or restoring past the true starting point.
+    // Undoing 20 times empties the capped stack exactly — proving the retained entries are the 20 MOST RECENT snapshots (the tail), not an arbitrary 20, since undoing keeps peeling paragraphs off the end down to a stable, non-empty prefix rather than running out early or restoring past the true starting point.
     for (let i = 0; i < 20; i++) {
       state = appReducer(state, { type: "UNDO" });
     }
@@ -2413,7 +2413,7 @@ describe("appReducer undo", () => {
     );
   });
 
-  // reopenEditable's own switch has one case per EditableOpenDocument format -- docx and pdf are already exercised by the undo tests above, so this covers every remaining branch (pptx/odt/odp/ods/odg/doc/xls/ppt) the same way: mutate via SET_METADATA (the one action every editable format's own editor.metadata setter accepts identically), then undo, and prove the format survived the reopen and a genuinely fresh editor replaced the mutated one.
+  // reopenEditable's own switch has one case per EditableOpenDocument format — docx and pdf are already exercised by the undo tests above, so this covers every remaining branch (pptx/odt/odp/ods/odg/doc/xls/ppt) the same way: mutate via SET_METADATA (the one action every editable format's own editor.metadata setter accepts identically), then undo, and prove the format survived the reopen and a genuinely fresh editor replaced the mutated one.
   it.each([
     ["pptx", () => openPptxDocument(createPptx().toBytes())],
     ["odt", () => openOdtDocument(createOdt().toBytes())],
@@ -2490,7 +2490,7 @@ describe("appReducer ADD_SLIDE_TABLE", () => {
     });
     expect(withTable.hasUnsavedChanges).toBe(true);
 
-    // PptxSlide.shapes() never returns a table graphicFrame at all (documents.js's own shapes() walk only matches p:sp/p:pic), so the only way to observe the table this reducer just added is the same read-only pivot readPptxContent already uses -- proving the mutation reached the real package, not just that the action was accepted.
+    // PptxSlide.shapes() never returns a table graphicFrame at all (documents.js's own shapes() walk only matches p:sp/p:pic), so the only way to observe the table this reducer just added is the same read-only pivot readPptxContent already uses — proving the mutation reached the real package, not just that the action was accepted.
     const content = readPptxContent(pptxDocument(withTable).editor.toPackage());
     if (content.kind !== "presentation") {
       throw new Error(
@@ -2799,7 +2799,7 @@ describe("appReducer MERGE_SLIDE_TABLE_CELLS", () => {
     if (tableBlock?.kind !== "table") {
       throw new Error(`expected a table block, got ${tableBlock?.kind}`);
     }
-    // The anchor carries the real merge attributes; every other cell in the rectangle reads back with no blocks at all (hMerge/vMerge covered), matching readTableCell's own short-circuit -- see ooxml.js's own typed/pptx/read.js.
+    // The anchor carries the real merge attributes; every other cell in the rectangle reads back with no blocks at all (hMerge/vMerge covered), matching readTableCell's own short-circuit — see ooxml.js's own typed/pptx/read.js.
     expect(tableBlock.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(tableBlock.rows[0]?.cells[0]?.rowSpan).toBe(2);
     expect(tableBlock.rows[0]?.cells[1]?.blocks).toEqual([]);
@@ -2907,7 +2907,7 @@ describe("appReducer MERGE_SLIDE_TABLE_CELLS", () => {
     expect(result.status?.text).toContain("pptx or odp");
   });
 
-  // wrongDocument's own "actual" half names the real open format when there is one (covered just above), but falls back to the literal words "no document" when state.openDocument is undefined -- distinct from any real format string, so it must come from its own ternary branch rather than always compute an actual format.
+  // wrongDocument's own "actual" half names the real open format when there is one (covered just above), but falls back to the literal words "no document" when state.openDocument is undefined — distinct from any real format string, so it must come from its own ternary branch rather than always compute an actual format.
   it("says 'no document' rather than a format name when nothing is open at all", () => {
     const result = appReducer(createInitialState(), {
       type: "MERGE_SLIDE_TABLE_CELLS",
@@ -2954,7 +2954,7 @@ describe("appReducer MERGE_SLIDE_TABLE_CELLS", () => {
       });
       expect(result.status?.severity).toBe("warning");
       expect(result.status?.text).toContain("positive integers");
-      // Rejected outright, before any cell was ever touched -- the same open document object survives untouched, not a partially-applied merge.
+      // Rejected outright, before any cell was ever touched — the same open document object survives untouched, not a partially-applied merge.
       expect(result.openDocument).toBe(withTable.openDocument);
     }
   });
@@ -2985,7 +2985,7 @@ describe("appReducer MERGE_SLIDE_TABLE_CELLS", () => {
     expect(result.openDocument).toBe(withTable.openDocument);
   });
 
-  // mergePptxTableCells's own row/column bounds checks compare with a strict `>`, not `>=` -- a merge landing exactly on the table's own last row/column is valid, not an overrun. rowSpan=1/colSpan=1 here also proves the "must be positive integers" guard rejects only BELOW 1, not AT 1.
+  // mergePptxTableCells's own row/column bounds checks compare with a strict `>`, not `>=` — a merge landing exactly on the table's own last row/column is valid, not an overrun. rowSpan=1/colSpan=1 here also proves the "must be positive integers" guard rejects only BELOW 1, not AT 1.
   it("accepts a 1x1 merge landing exactly on the table's own last row and column", () => {
     const editor = createPptx();
     editor.addSlide();
@@ -3011,7 +3011,7 @@ describe("appReducer MERGE_SLIDE_TABLE_CELLS", () => {
     expect(result.hasUnsavedChanges).toBe(true);
   });
 
-  // startRow=2/rowSpan=2 on a 3-row table overruns by exactly one row -- distinguishes the real check from a mutant that flips `+` to `-` (2-2=0, which would never exceed 3 and would fall through to a table access that is merely undefined rather than out of range) or drops the whole guard block outright, both of which would surface a DIFFERENT warning than this one.
+  // startRow=2/rowSpan=2 on a 3-row table overruns by exactly one row — distinguishes the real check from a mutant that flips `+` to `-` (2-2=0, which would never exceed 3 and would fall through to a table access that is merely undefined rather than out of range) or drops the whole guard block outright, both of which would surface a DIFFERENT warning than this one.
   it("names the exact rowSpan/startRow/row-count in the row-overrun message", () => {
     const editor = createPptx();
     editor.addSlide();
@@ -3176,7 +3176,7 @@ describe("appReducer SET_SHAPE_ROTATION on pptx", () => {
     expect(result.status?.text).toBe("There is no shape 5 on slide 0");
   });
 
-  // withShape's own missing-shape message says "page" for odg specifically, "slide" for every other shape-host format -- the pptx test above only ever exercises the "slide" branch of that ternary.
+  // withShape's own missing-shape message says "page" for odg specifically, "slide" for every other shape-host format — the pptx test above only ever exercises the "slide" branch of that ternary.
   it("warns with 'page' rather than 'slide' when the missing shape is on an odg page", () => {
     const editor = createOdg();
     editor.addPage();
@@ -3192,7 +3192,7 @@ describe("appReducer SET_SHAPE_ROTATION on pptx", () => {
     expect(result.status?.text).toBe("There is no shape 3 on page 0");
   });
 
-  // SET_SHAPE_TEXT above resolves through withWideShape, a DIFFERENT function from withShape (used only by SET_SHAPE_ROTATION) -- each has its own copy of the identical "page"/"slide" ternary, so covering one says nothing about the other.
+  // SET_SHAPE_TEXT above resolves through withWideShape, a DIFFERENT function from withShape (used only by SET_SHAPE_ROTATION) — each has its own copy of the identical "page"/"slide" ternary, so covering one says nothing about the other.
   it("warns with 'page' rather than 'slide' when SET_SHAPE_ROTATION targets a missing shape on an odg page", () => {
     const editor = createOdg();
     editor.addPage();
@@ -3208,7 +3208,7 @@ describe("appReducer SET_SHAPE_ROTATION on pptx", () => {
     expect(result.status?.text).toBe("There is no shape 3 on page 0");
   });
 
-  // withShape's own wrongDocument path (used only by SET_SHAPE_ROTATION) -- distinct from withWideShape's own copy below, which SET_SHAPE_TEXT/SET_SHAPE_FRAME resolve through instead.
+  // withShape's own wrongDocument path (used only by SET_SHAPE_ROTATION) — distinct from withWideShape's own copy below, which SET_SHAPE_TEXT/SET_SHAPE_FRAME resolve through instead.
   it("warns rather than crashing when SET_SHAPE_ROTATION targets a document with no shape host at all", () => {
     const created = appReducer(createInitialState(), {
       type: "CREATE_DOCUMENT",
@@ -3224,7 +3224,7 @@ describe("appReducer SET_SHAPE_ROTATION on pptx", () => {
     expect(result.status?.text).toContain("a pptx, odp or odg document");
   });
 
-  // withWideShape's own wrongDocument path -- SET_SHAPE_TEXT/SET_SHAPE_FRAME resolve through it, not withShape, so this is a genuinely separate code path from the SET_SHAPE_ROTATION test above.
+  // withWideShape's own wrongDocument path — SET_SHAPE_TEXT/SET_SHAPE_FRAME resolve through it, not withShape, so this is a genuinely separate code path from the SET_SHAPE_ROTATION test above.
   it("warns rather than crashing when SET_SHAPE_TEXT targets a document with no shape host at all", () => {
     const created = appReducer(createInitialState(), {
       type: "CREATE_DOCUMENT",
@@ -3259,7 +3259,7 @@ describe("appReducer xlsx (read-only PDF-preview) documents", () => {
     expect(docxOpened.status?.text).not.toContain("read-only");
   });
 
-  it("has no undo history, the same as odb (pdf gained a real live-view editor and undo history of its own -- see the PDF mutations describe block below)", () => {
+  it("has no undo history, the same as odb (pdf gained a real live-view editor and undo history of its own — see the PDF mutations describe block below)", () => {
     const opened = openXlsxDocument(xlsxTestBytes());
     const undone = appReducer(opened, { type: "UNDO" });
     expect(undone.status?.severity).toBe("warning");
@@ -3268,7 +3268,7 @@ describe("appReducer xlsx (read-only PDF-preview) documents", () => {
   });
 });
 
-// OPEN_FILE_SUCCESS's own "opened as a read-only PDF preview" note names all nine of these formats individually in its own OR-chain (xlsx is exercised separately above, through its own dedicated describe block) -- each one needs its own dispatch to prove that exact branch, not just the shared behaviour the OR-chain produces once any one of them matches.
+// OPEN_FILE_SUCCESS's own "opened as a read-only PDF preview" note names all nine of these formats individually in its own OR-chain (xlsx is exercised separately above, through its own dedicated describe block) — each one needs its own dispatch to prove that exact branch, not just the shared behaviour the OR-chain produces once any one of them matches.
 describe("appReducer OPEN_FILE_SUCCESS's read-only-PDF-preview note names every one of its own nine formats", () => {
   it.each([
     ["csv", () => readOnlyOpenDocument("csv")],
@@ -3310,7 +3310,7 @@ describe("appReducer OPEN_FILE_SUCCESS's read-only-PDF-preview note names every 
         doc,
       });
       expect(opened.status?.text).toBe(
-        `Opened ${doc.path} as a read-only PDF preview -- press ':' then 'export pdf' to save it as a real PDF`,
+        `Opened ${doc.path} as a read-only PDF preview — press ':' then 'export pdf' to save it as a real PDF`,
       );
     },
   );
@@ -3329,7 +3329,7 @@ describe("appReducer OPEN_FILE_SUCCESS's read-only-PDF-preview note names every 
   });
 });
 
-// A minimal real fixture: one page, one text item -- built through the real PdfEditor (createPdf/appendText), never a hand-authored LayoutDocument literal, so these tests exercise the exact writer/reader pair the reducer wires against.
+// A minimal real fixture: one page, one text item — built through the real PdfEditor (createPdf/appendText), never a hand-authored LayoutDocument literal, so these tests exercise the exact writer/reader pair the reducer wires against.
 function pdfTestBytes(): Uint8Array<ArrayBuffer> {
   const editor = createPdf();
   const page = editor.pages()[0];
@@ -3636,7 +3636,7 @@ describe("appReducer PDF item and page mutations", () => {
     expect(result.hasUnsavedChanges).toBe(false);
   });
 
-  // withPdfPage's own wrongDocument path -- every ADD_PDF_* test above only exercises the "no page at that index" branch against an already-open PDF, never the "not a PDF at all" branch.
+  // withPdfPage's own wrongDocument path — every ADD_PDF_* test above only exercises the "no page at that index" branch against an already-open PDF, never the "not a PDF at all" branch.
   it("warns rather than crashing when ADD_PDF_RECT targets a non-PDF document", () => {
     const created = appReducer(createInitialState(), {
       type: "CREATE_DOCUMENT",
@@ -3653,7 +3653,7 @@ describe("appReducer PDF item and page mutations", () => {
     );
   });
 
-  // withPdfItemMatching's own wrongDocument path -- a genuinely separate function from withPdfPage above, so covering one says nothing about the other.
+  // withPdfItemMatching's own wrongDocument path — a genuinely separate function from withPdfPage above, so covering one says nothing about the other.
   it("warns rather than crashing when SET_PDF_RECT_FILL targets a non-PDF document", () => {
     const created = appReducer(createInitialState(), {
       type: "CREATE_DOCUMENT",
@@ -3671,7 +3671,7 @@ describe("appReducer PDF item and page mutations", () => {
     );
   });
 
-  // withPdfItemMatching's own "no item at that index" path -- the wrong-kind test above needs a real item at itemIndex 0 to check its kind against, so it can never reach this branch; this needs a valid page with an item count too low for the requested index instead.
+  // withPdfItemMatching's own "no item at that index" path — the wrong-kind test above needs a real item at itemIndex 0 to check its kind against, so it can never reach this branch; this needs a valid page with an item count too low for the requested index instead.
   it("warns rather than crashing when SET_PDF_RECT_FILL targets an item index that does not exist", () => {
     const opened = openPdfDocument(pdfTestBytes());
     const result = appReducer(opened, {
@@ -4115,7 +4115,7 @@ describe("appReducer PDF item and page mutations", () => {
         type: "SET_PDF_IMAGE_SOURCE",
         pageIndex: 0,
         itemIndex: IMAGE_INDEX,
-        // A different real, decodable PNG (1x1 blue rather than REAL_PNG_BYTES' red) -- distinct content, so registerImageBytes' own dedup-by-content assigns it a genuinely different imageId, proving setImage repointed the item rather than leaving it unchanged.
+        // A different real, decodable PNG (1x1 blue rather than REAL_PNG_BYTES' red) — distinct content, so registerImageBytes' own dedup-by-content assigns it a genuinely different imageId, proving setImage repointed the item rather than leaving it unchanged.
         bytes: new Uint8Array([
           0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00,
           0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
@@ -4189,7 +4189,7 @@ describe("appReducer PDF item and page mutations", () => {
       expect(result.status?.text).toContain("not link");
     });
 
-    // internalLink items arise only from reading a real PDF's own GoTo/Dest annotations (PdfPage has no appendInternalLink -- unlike every other item kind, there is no way to add one fresh through the editor), so only the wrong-kind guard is reachable here; the success path is exercised at the pdf-codec layer instead (see its own navigation.test.ts).
+    // internalLink items arise only from reading a real PDF's own GoTo/Dest annotations (PdfPage has no appendInternalLink — unlike every other item kind, there is no way to add one fresh through the editor), so only the wrong-kind guard is reachable here; the success path is exercised at the pdf-codec layer instead (see its own navigation.test.ts).
     it("warns rather than crashing when an internal-link destination edit targets an item of the wrong kind", () => {
       const state = pdfMultiItemState();
       const result = appReducer(state, {
@@ -4217,7 +4217,7 @@ describe("appReducer PDF item and page mutations", () => {
       expect(result.status?.text).toContain("not internalLink");
     });
 
-    // A real internalLink item, unlike every other PDF item kind, cannot be created through PdfPage's own append* API (see the comment above) -- so this builds one the only other way a genuine internalLink ever arises: writing a LayoutDocument with a real internal-link annotation through pdf-codec's own writePdf, then re-reading it, proving the isPdfInternalLinkItem guard's TRUE branch (not just its wrong-kind rejection) actually matches a real internalLink item.
+    // A real internalLink item, unlike every other PDF item kind, cannot be created through PdfPage's own append* API (see the comment above) — so this builds one the only other way a genuine internalLink ever arises: writing a LayoutDocument with a real internal-link annotation through pdf-codec's own writePdf, then re-reading it, proving the isPdfInternalLinkItem guard's TRUE branch (not just its wrong-kind rejection) actually matches a real internalLink item.
     it("edits a real internal link's destination and frame through the live editor", () => {
       const layoutDoc: LayoutDocument = {
         formatVersion: LAYOUT_FORMAT_VERSION,
@@ -4240,7 +4240,7 @@ describe("appReducer PDF item and page mutations", () => {
                 widthPt: 50,
                 heightPt: 20,
               },
-              // A second internalLink referencing the second destination: writePdf only carries a destination through into the saved document's own /Names tree when something actually references it, so an unreferenced destination is silently dropped on the way back in -- this one needs a real referrer to survive the round trip.
+              // A second internalLink referencing the second destination: writePdf only carries a destination through into the saved document's own /Names tree when something actually references it, so an unreferenced destination is silently dropped on the way back in — this one needs a real referrer to survive the round trip.
               {
                 kind: "internalLink",
                 destination: "other",
@@ -4292,7 +4292,7 @@ describe("appReducer PDF item and page mutations", () => {
       expect(item.heightPt).toBe(4);
     });
 
-    // Every other SET_PDF_*_* field-edit action routes through the identical withPdfItemMatching guard, but each call site carries its OWN copy of the kindLabel string literal -- exercising the wrong-kind path through the FRAME/FILL/one representative action per kind above does not cover the same literal at a sibling action's own call site (e.g. SET_PDF_RECT_FRAME's "rect" and SET_PDF_RECT_STROKE's "rect" are two distinct AST nodes). This table drives every remaining action through the wrong-kind branch once each.
+    // Every other SET_PDF_*_* field-edit action routes through the identical withPdfItemMatching guard, but each call site carries its OWN copy of the kindLabel string literal — exercising the wrong-kind path through the FRAME/FILL/one representative action per kind above does not cover the same literal at a sibling action's own call site (e.g. SET_PDF_RECT_FRAME's "rect" and SET_PDF_RECT_STROKE's "rect" are two distinct AST nodes). This table drives every remaining action through the wrong-kind branch once each.
     const wrongKindCases: [string, Action, string][] = [
       [
         "SET_PDF_TEXT_TEXT",
@@ -4665,7 +4665,7 @@ describe("appReducer INSERT_DOCX_FORMULA", () => {
 });
 
 describe("appReducer ADD_RECT / ADD_ELLIPSE / ADD_LINE / ADD_PATH on odp", () => {
-  it("adds each real vector kind to an odp slide, reachable through OdpSlide.addVector -- recovered by readOdpContent as a synthetic embedded drawing block, since ContentSlide itself has no vectors array", () => {
+  it("adds each real vector kind to an odp slide, reachable through OdpSlide.addVector — recovered by readOdpContent as a synthetic embedded drawing block, since ContentSlide itself has no vectors array", () => {
     const editor = createOdp();
     editor.addSlide();
     const opened = openOdpDocument(editor.toBytes());
@@ -4781,11 +4781,11 @@ describe("appReducer ADD_RECT / ADD_ELLIPSE / ADD_LINE / ADD_PATH on odp", () =>
     expect(withRect.hasUnsavedChanges).toBe(true);
     const vectors = odgDocument(withRect).editor.pages()[0]?.vectors();
     expect(vectors).toHaveLength(1);
-    // A rect and an ellipse share the identical OdgBoxVectorInit shape (frame/fill/stroke), so a mutation that lets ADD_RECT's own case fall through into ADD_ELLIPSE's addEllipse call would still add exactly one vector -- just the wrong kind. The length check above alone cannot catch that.
+    // A rect and an ellipse share the identical OdgBoxVectorInit shape (frame/fill/stroke), so a mutation that lets ADD_RECT's own case fall through into ADD_ELLIPSE's addEllipse call would still add exactly one vector — just the wrong kind. The length check above alone cannot catch that.
     expect(vectors?.[0]?.kind).toBe("rect");
   });
 
-  // The odg branch dispatches through its own inner switch (addRect/addEllipse/addLine/addPath), one case per real OdgPage method -- distinct from the ADD_RECT/ADD_ELLIPSE/ADD_LINE/ADD_PATH coverage above, which only ever reaches odg via ADD_RECT. Each case is its own switch-statement mutant, so proving the rect case works says nothing about whether removing the ellipse/line/path cases would still pass.
+  // The odg branch dispatches through its own inner switch (addRect/addEllipse/addLine/addPath), one case per real OdgPage method — distinct from the ADD_RECT/ADD_ELLIPSE/ADD_LINE/ADD_PATH coverage above, which only ever reaches odg via ADD_RECT. Each case is its own switch-statement mutant, so proving the rect case works says nothing about whether removing the ellipse/line/path cases would still pass.
   it("adds each real vector kind to an odg page via the page's own addEllipse/addLine/addPath", () => {
     const editor = createOdg();
     editor.addPage();
@@ -4899,7 +4899,7 @@ describe("appReducer SET_VECTOR_FILL / SET_VECTOR_STROKE on odg", () => {
     );
     expect(result.hasUnsavedChanges).toBe(false);
 
-    // SET_VECTOR_STROKE has its own, separate copy of the identical wrongDocument call -- covering SET_VECTOR_FILL's above says nothing about this one.
+    // SET_VECTOR_STROKE has its own, separate copy of the identical wrongDocument call — covering SET_VECTOR_FILL's above says nothing about this one.
     const strokeResult = appReducer(state, {
       type: "SET_VECTOR_STROKE",
       vector: rect,

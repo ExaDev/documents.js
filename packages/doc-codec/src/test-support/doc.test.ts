@@ -104,7 +104,7 @@ describe("buildDoc", () => {
     });
     const block = doc.sections[0]?.blocks[0];
     const runs = block?.kind === "paragraph" ? block.runs : [];
-    // Merged into one Chpx exception -- and since both source runs carried the identical formatting, they still read back as one run of the concatenated text.
+    // Merged into one Chpx exception — and since both source runs carried the identical formatting, they still read back as one run of the concatenated text.
     expect(runs).toHaveLength(1);
     expect(runs[0]).toMatchObject({ text: "Bold still bold", bold: true });
   });
@@ -334,7 +334,7 @@ describe("buildDoc", () => {
         {
           name: "MyStyle",
           stk: 1,
-          // sprmCFBold's ToggleOperand is one byte after the two-byte opcode -- three bytes, odd.
+          // sprmCFBold's ToggleOperand is one byte after the two-byte opcode — three bytes, odd.
           papxGrpprl: [0x2a, 0x24, 0x01],
           chpxGrpprl: BOLD_ON,
         },
@@ -466,7 +466,7 @@ describe("buildDoc", () => {
   });
 
   it("writes measurably fewer text bytes when compressed is true than when it is false, for identical text", () => {
-    // Both builds' own "compressed" flag drives every place that needs it (the byte-writing loop, and the piece table's own FcCompressed bit) self-consistently, so a wrong flag still round-trips its OWN text correctly regardless of what the spec actually asked for -- only the raw stream size (or, for the opposite direction, truncation of a character wider than one byte, exercised separately below) can tell the two apart.
+    // Both builds' own "compressed" flag drives every place that needs it (the byte-writing loop, and the piece table's own FcCompressed bit) self-consistently, so a wrong flag still round-trips its OWN text correctly regardless of what the spec actually asked for — only the raw stream size (or, for the opposite direction, truncation of a character wider than one byte, exercised separately below) can tell the two apart.
     const text = "x".repeat(600);
     const compressedLength = readDocStreams(
       buildDoc({ compressed: true, paragraphs: [{ runs: [{ text }] }] }),
@@ -490,7 +490,7 @@ describe("buildDoc", () => {
   });
 
   it("writes exactly one byte per character when compressed, never spilling a second byte past the last one", () => {
-    // Every position within the compressed text is self-healing regardless of which branch runs: the position for character k receives a stray high byte from character k-1's own write (if the wrong, two-byte branch were taken) before character k's own correct low-byte write lands on top of it last, since the loop always runs in increasing index order. Only the byte one past the very last character has nothing after it to self-heal that way -- so the paragraph's own trailing mark (always the actual last character buildDoc writes here, with no footnotes/headers/etc appended after it) is given an arbitrary code whose high byte (0x12) is non-zero, purely to make that one spillover byte observable; readDocStreams reads the raw stream directly; no downstream parse of this arbitrary mark value is needed.
+    // Every position within the compressed text is self-healing regardless of which branch runs: the position for character k receives a stray high byte from character k-1's own write (if the wrong, two-byte branch were taken) before character k's own correct low-byte write lands on top of it last, since the loop always runs in increasing index order. Only the byte one past the very last character has nothing after it to self-heal that way — so the paragraph's own trailing mark (always the actual last character buildDoc writes here, with no footnotes/headers/etc appended after it) is given an arbitrary code whose high byte (0x12) is non-zero, purely to make that one spillover byte observable; readDocStreams reads the raw stream directly; no downstream parse of this arbitrary mark value is needed.
     const streams = readDocStreams(
       buildDoc({
         compressed: true,
@@ -512,7 +512,7 @@ describe("buildDoc", () => {
   });
 
   it("never treats a subdocument's own text as containing a section boundary, even when it happens to carry the identical SECTION_MARK byte", () => {
-    // The main document's own section-boundary scan is bounded to [0, ccpText) precisely so a footnote/header/comment/endnote paragraph's own text -- appended right after, in the same shared logical stream -- can never be mistaken for one. An off-by-one bound here would read this footnote's own leading SECTION_MARK as a real boundary, and buildPlcfSedBytes would then throw on the resulting section-start-CP/Sepx-offset count mismatch (this test's own sectionGrpprl states exactly one section).
+    // The main document's own section-boundary scan is bounded to [0, ccpText) precisely so a footnote/header/comment/endnote paragraph's own text — appended right after, in the same shared logical stream — can never be mistaken for one. An off-by-one bound here would read this footnote's own leading SECTION_MARK as a real boundary, and buildPlcfSedBytes would then throw on the resulting section-start-CP/Sepx-offset count mismatch (this test's own sectionGrpprl states exactly one section).
     expect(() =>
       buildDoc({
         paragraphs: [{ runs: [{ text: "Main" }] }],
@@ -763,7 +763,7 @@ describe("pieceBoundaries", () => {
 describe("buildPlcfSedBytes", () => {
   it("throws naming the exact mismatched counts when startCps and fcSepxList disagree in length", () => {
     expect(() => buildPlcfSedBytes([0, 10], 20, [100])).toThrow(
-      "buildPlcfSedBytes was given 2 section start CPs but 1 Sepx offsets -- these must be the same length",
+      "buildPlcfSedBytes was given 2 section start CPs but 1 Sepx offsets — these must be the same length",
     );
   });
 
@@ -772,15 +772,15 @@ describe("buildPlcfSedBytes", () => {
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     expect(view.getUint32(0, true)).toBe(0x00ff0000); // the section's own start CP, untouched by anything the Sed record writes.
     expect(view.getUint32(4, true)).toBe(0x01000000); // the trailing ccpText terminator.
-    expect(view.getUint16(8, true)).toBe(0); // sed.fn -- ignored.
+    expect(view.getUint16(8, true)).toBe(0); // sed.fn — ignored.
     expect(view.getUint32(10, true)).toBe(0x11223344); // sed.fcSepx.
-    expect(view.getUint16(14, true)).toBe(0); // sed.fnMpr -- ignored.
-    expect(view.getUint32(16, true)).toBe(0xffffffff); // sed.fcMpr -- ignored.
+    expect(view.getUint16(14, true)).toBe(0); // sed.fnMpr — ignored.
+    expect(view.getUint32(16, true)).toBe(0xffffffff); // sed.fcMpr — ignored.
   });
 });
 
 describe("doc.ts's own internal-defect messages", () => {
-  // These name invariants each call site's own comment already explains as unreachable for real input (an array/map lookup that can never actually miss, given how the looked-up key was itself derived) -- tested against a hardcoded duplicate of the exact text, the same discipline table/read.ts's own internal-defect messages follow.
+  // These name invariants each call site's own comment already explains as unreachable for real input (an array/map lookup that can never actually miss, given how the looked-up key was itself derived) — tested against a hardcoded duplicate of the exact text, the same discipline table/read.ts's own internal-defect messages follow.
   it("carries SEPX_OFFSET_MISSING_MESSAGE's own exact text", () => {
     expect(SEPX_OFFSET_MISSING_MESSAGE).toBe("Sepx offset missing");
   });

@@ -6,7 +6,7 @@ import { buildOfficeMath } from "./write";
 
 // OMML -> MathML structural translation, plus the genuine write-then-read round trip that closes the odt -> docx -> odt formula regression: every assertion below is about the recovered MathML TREE (mfrac/msqrt/msubsup/mtable/...), not about a rendered result, exactly mirroring write.test.ts's own "the markup itself is the thing under test" stance.
 
-// Hand-built OMML nodes, in ooxml.js's own XmlElement shape -- the same construction style write.test.ts uses for its MathML inputs, so no XML parsing is needed to build an input tree.
+// Hand-built OMML nodes, in ooxml.js's own XmlElement shape — the same construction style write.test.ts uses for its MathML inputs, so no XML parsing is needed to build an input tree.
 function oel(
   tag: string,
   attrs: Record<string, string> = {},
@@ -68,7 +68,7 @@ function textOf(node: MathMlNode): string {
   return node.children.map(textOf).join("");
 }
 
-// A compact structural signature: every element's tag, nested, with a token element's own text inlined. Two formulas with the same signature carry the same construct types in the same arrangement with the same content -- exactly what "structurally equivalent" means for a formula, and stricter than comparing tags alone.
+// A compact structural signature: every element's tag, nested, with a token element's own text inlined. Two formulas with the same signature carry the same construct types in the same arrangement with the same content — exactly what "structurally equivalent" means for a formula, and stricter than comparing tags alone.
 function signature(nodes: readonly MathMlNode[]): string {
   return nodes
     .flatMap((node) => {
@@ -166,7 +166,7 @@ describe("readOfficeMath: token runs", () => {
     expect(diagnostics).toEqual([
       { kind: "approximated-element", detail: "r" },
     ]);
-    // The content still arrives -- only the un-nameable styling is dropped.
+    // The content still arrives — only the un-nameable styling is dropped.
     expect(textOf(onlyElement(mathml))).toBe("R");
   });
 
@@ -648,7 +648,7 @@ describe("MathML -> OMML -> MathML round trip", () => {
     });
   }
 
-  // signature() compares construct types and content, which is what "structurally equivalent" means for a formula -- these two cover the only attributes either translator actually carries, so an attribute silently lost in the middle still fails a test.
+  // signature() compares construct types and content, which is what "structurally equivalent" means for a formula — these two cover the only attributes either translator actually carries, so an attribute silently lost in the middle still fails a test.
   it("preserves a token's own mathvariant, the styling OMML genuinely records", () => {
     expect(
       mathAttr(

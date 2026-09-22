@@ -14,7 +14,7 @@ function el(tag: string, children: XmlNode[]): XmlNode {
   return { type: "element", tag, attributes: [], children };
 }
 
-// ExaDev/documents.js#994's round-9 finding: textContent is a real published export (re-exported from the package's own barrel), and this package's own internal code -- opf/metadata.ts, before this fix -- used to decode its result with decodeEntities itself. A stale external caller doing the identical decodeEntities(textContent(x)) must keep getting the raw, undecoded text it always got, or that caller silently double-decodes.
+// ExaDev/documents.js#994's round-9 finding: textContent is a real published export (re-exported from the package's own barrel), and this package's own internal code — opf/metadata.ts, before this fix — used to decode its result with decodeEntities itself. A stale external caller doing the identical decodeEntities(textContent(x)) must keep getting the raw, undecoded text it always got, or that caller silently double-decodes.
 describe("textContent", () => {
   it("returns raw, undecoded text content of every text-node descendant", () => {
     expect(textContent([text("Tom &amp; Jerry")])).toBe("Tom &amp; Jerry");
@@ -51,7 +51,7 @@ describe("elementsWithTag", () => {
 
 describe("decodedTextContent", () => {
   it("decodes entities in a text-node descendant exactly once", () => {
-    // A literal source "&amp;amp;" is the two-character entity "&amp;" written out verbatim -- one decode pass restores it to the five-character string "&amp;"; a second pass would over-decode it to a bare "&".
+    // A literal source "&amp;amp;" is the two-character entity "&amp;" written out verbatim — one decode pass restores it to the five-character string "&amp;"; a second pass would over-decode it to a bare "&".
     expect(decodedTextContent([text("&amp;amp;")])).toBe("&amp;");
   });
 
@@ -66,7 +66,7 @@ describe("decodedTextContent", () => {
       text("caf&#233; &amp; "),
       el("code", [cdata("a && b")]),
     ]);
-    // The text node's own numeric and named entities both decode (ExaDev/documents.js#1010); the CDATA section's literal "&&" stays untouched -- exactly the distinction this test exists to demonstrate.
+    // The text node's own numeric and named entities both decode (ExaDev/documents.js#1010); the CDATA section's literal "&&" stays untouched — exactly the distinction this test exists to demonstrate.
     expect(decodedTextContent([tree])).toBe("café & a && b");
   });
 });

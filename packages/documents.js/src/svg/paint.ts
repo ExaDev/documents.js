@@ -1,6 +1,6 @@
 import type { Color } from "document-schema.js";
 
-// SVG paint and colour parsing: the presentation-attribute vocabulary the reader consumes (fill, stroke, stroke-width, stroke-dasharray, fill-rule, opacity). CSS-wide syntax (the style attribute, selectors, inherited CSS rules) is deliberately out of scope -- a style attribute is reported through the svg/css-style-ignored diagnostic instead of being half-parsed, because a partial CSS implementation that honours some declarations and drops others silently misrepresents the document.
+// SVG paint and colour parsing: the presentation-attribute vocabulary the reader consumes (fill, stroke, stroke-width, stroke-dasharray, fill-rule, opacity). CSS-wide syntax (the style attribute, selectors, inherited CSS rules) is deliberately out of scope — a style attribute is reported through the svg/css-style-ignored diagnostic instead of being half-parsed, because a partial CSS implementation that honours some declarations and drops others silently misrepresents the document.
 
 // The CSS/SVG named-colour keywords (CSS Color Module Level 4's named-colour table, which SVG 2 incorporates wholesale). Keys are matched case-insensitively per CSS identifier rules; values are the sRGB 8-bit triplets normalised to the 0..1 floats ColorSchema carries.
 const NAMED_COLORS: Readonly<
@@ -160,7 +160,7 @@ function from8Bit(r: number, g: number, b: number): Color {
   return { r: r / 255, g: g / 255, b: b / 255 };
 }
 
-// One CSS colour value: a named keyword (case-insensitive), #rgb/#rgba/#rrggbb/#rrggbbaa hexadecimal, or rgb()/rgba() in either the 0-255 or percentage form. Alpha is parsed for validity but NOT returned -- this reader models no transparency, and the reader's own opacity diagnostic is the honest channel for that limit (a colour's alpha is reported there rather than silently flattened).
+// One CSS colour value: a named keyword (case-insensitive), #rgb/#rgba/#rrggbb/#rrggbbaa hexadecimal, or rgb()/rgba() in either the 0-255 or percentage form. Alpha is parsed for validity but NOT returned — this reader models no transparency, and the reader's own opacity diagnostic is the honest channel for that limit (a colour's alpha is reported there rather than silently flattened).
 const HEX_PATTERN = /^#([0-9a-fA-F]{3,8})$/;
 const FUNCTION_COLOR_PATTERN = /^rgba?\(\s*([^)]*)\)$/;
 const SPLIT_COMPONENTS = /[\s,]+/;
@@ -244,7 +244,7 @@ export function parseSvgPaint(raw: string): SvgPaint | undefined {
   return color === undefined ? undefined : { kind: "color", color };
 }
 
-// The stroke-dasharray vocabulary reduced to the two stroke styles ContentStroke's own enum carries: a pattern whose every on-length is at most one user unit reads as 'dotted' (dot-style patterns are "0.5 1", "1 3", "0 4"...), anything else dash-shaped reads as 'dashed'. 'none' (and a malformed value) is undefined -- a solid stroke, which is also the attribute's default.
+// The stroke-dasharray vocabulary reduced to the two stroke styles ContentStroke's own enum carries: a pattern whose every on-length is at most one user unit reads as 'dotted' (dot-style patterns are "0.5 1", "1 3", "0 4"...), anything else dash-shaped reads as 'dashed'. 'none' (and a malformed value) is undefined — a solid stroke, which is also the attribute's default.
 export type SvgDashStyle = "dashed" | "dotted";
 
 export function parseSvgDashStyle(

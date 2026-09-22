@@ -361,7 +361,7 @@ describe("resolveCellFill", () => {
   });
 
   it("snaps a tied shading percentage to the earlier, not the later, equally-near percentN step", () => {
-    // 7.5 sits exactly halfway between percent5 and percent10 -- the reduce must keep the first-seen closest step on a tie, not overwrite it with a later equally-close one.
+    // 7.5 sits exactly halfway between percent5 and percent10 — the reduce must keep the first-seen closest step on a tie, not overwrite it with a later equally-close one.
     const fill = resolveCellFill(
       pendingCell({
         backgroundIndex: 1,

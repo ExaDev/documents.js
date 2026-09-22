@@ -10,9 +10,9 @@ import { decodeXmlText } from "../../xml/entities";
 import { takeExpression } from "../shared/expression";
 import { decodeOdfText } from "../shared/text";
 
-// table:content-validation reading -- ODF's own equivalent of xlsx's dataValidation, but structurally inverted: xlsx states a rule's own cell ranges directly (sqref); ODF mints one table:content-validation per RULE, document-wide (a direct child of office:spreadsheet, inside table:content-validations, sibling to every table:table -- confirmed against a real LibreOffice-produced .fods fixture, not assumed), and each table:table-cell that the rule applies to carries a table:content-validation-name reference back to it. This module owns reading the document-wide rule definitions; table/read.ts's own cell walk collects which cells reference which name, and joins the two per sheet (readSheet, ./read.ts) since a rule's own applicable ranges are scoped to whichever sheet(s) actually reference it, not to the rule definition itself.
+// table:content-validation reading — ODF's own equivalent of xlsx's dataValidation, but structurally inverted: xlsx states a rule's own cell ranges directly (sqref); ODF mints one table:content-validation per RULE, document-wide (a direct child of office:spreadsheet, inside table:content-validations, sibling to every table:table — confirmed against a real LibreOffice-produced .fods fixture, not assumed), and each table:table-cell that the rule applies to carries a table:content-validation-name reference back to it. This module owns reading the document-wide rule definitions; table/read.ts's own cell walk collects which cells reference which name, and joins the two per sheet (readSheet, ./read.ts) since a rule's own applicable ranges are scoped to whichever sheet(s) actually reference it, not to the rule definition itself.
 //
-// table:condition is ODF's own small formula-shaped mini-language (e.g. "of:cell-content-is-whole-number() and cell-content()>=1"), not a value this reader can just read off an attribute -- there is no closed grammar for it in the OASIS spec's own prose, so the token vocabulary, comparison operators, and "and <comparison>" secondary-clause structure below are transcribed directly from LibreOffice's own reader (sc/source/filter/xml/xmlcvali.cxx's GetCondition, sc/source/filter/xml/XMLConverter.cxx's ScXMLConditionHelper::parseCondition and its own spConditionInfos identifier table) rather than guessed at, matching how a producer-specific attribute value not otherwise pinned down by the format spec is handled everywhere else this package needs one (see typed/shared/table.ts's own loext: cell-fill precedent).
+// table:condition is ODF's own small formula-shaped mini-language (e.g. "of:cell-content-is-whole-number() and cell-content()>=1"), not a value this reader can just read off an attribute — there is no closed grammar for it in the OASIS spec's own prose, so the token vocabulary, comparison operators, and "and <comparison>" secondary-clause structure below are transcribed directly from LibreOffice's own reader (sc/source/filter/xml/xmlcvali.cxx's GetCondition, sc/source/filter/xml/XMLConverter.cxx's ScXMLConditionHelper::parseCondition and its own spConditionInfos identifier table) rather than guessed at, matching how a producer-specific attribute value not otherwise pinned down by the format spec is handled everywhere else this package needs one (see typed/shared/table.ts's own loext: cell-fill precedent).
 
 type ConditionKind =
   "keyword" | "comparison" | "function0" | "function1" | "function2";
@@ -76,9 +76,9 @@ interface ParsedToken {
   readonly endIndex: number;
 }
 
-// One token of the condition mini-language starting at `start`: an identifier, matched against CONDITION_INFOS, then whatever that identifier's own kind requires immediately after it (a comparison operator and one trailing expression, an empty ()) pair, or one/two parenthesised expressions). Returns undefined on anything this reader cannot make sense of -- a genuinely malformed or producer-extended condition degrades to no validation type/operator rather than a wrong one, mirroring readCellValue's own "an honest 'we don't have one' beats a fabricated value" convention elsewhere in this reader.
+// One token of the condition mini-language starting at `start`: an identifier, matched against CONDITION_INFOS, then whatever that identifier's own kind requires immediately after it (a comparison operator and one trailing expression, an empty ()) pair, or one/two parenthesised expressions). Returns undefined on anything this reader cannot make sense of — a genuinely malformed or producer-extended condition degrades to no validation type/operator rather than a wrong one, mirroring readCellValue's own "an honest 'we don't have one' beats a fabricated value" convention elsewhere in this reader.
 function parseToken(text: string, start: number): ParsedToken | undefined {
-  // Skips leading whitespace before matching -- real ODF condition strings have a literal space either side of the 'and' keyword (lclSkipWhitespace's own call sites in XMLConverter.cxx), and this parser's own primary/secondary calls resume exactly where the previous token's endIndex left off, which is never itself past that space. No separate `searchStart < text.length` bound: `text[searchStart]` for an out-of-range index is `undefined`, which is never `=== " "`, so the character check alone already stops the loop at the end of the string.
+  // Skips leading whitespace before matching — real ODF condition strings have a literal space either side of the 'and' keyword (lclSkipWhitespace's own call sites in XMLConverter.cxx), and this parser's own primary/secondary calls resume exactly where the previous token's endIndex left off, which is never itself past that space. No separate `searchStart < text.length` bound: `text[searchStart]` for an out-of-range index is `undefined`, which is never `=== " "`, so the character check alone already stops the loop at the end of the string.
   let searchStart = start;
   while (text[searchStart] === " ") {
     searchStart += 1;
@@ -181,7 +181,7 @@ interface ParsedCondition {
   readonly operator?: SheetRuleOperator;
   readonly formula1?: string;
   readonly formula2?: string;
-} // table:condition's own outer namespace prefix (e.g. "of:" for OpenFormula) precedes the whole condition string, not any one operand within it -- stripped once, generically, rather than enumerating every namespace a producer might use, since nothing here needs to know WHICH formula grammar the operands are written in (they stay raw text either way, matching ContentSheetDataValidationSchema's own "no formula engine" contract).
+} // table:condition's own outer namespace prefix (e.g. "of:" for OpenFormula) precedes the whole condition string, not any one operand within it — stripped once, generically, rather than enumerating every namespace a producer might use, since nothing here needs to know WHICH formula grammar the operands are written in (they stay raw text either way, matching ContentSheetDataValidationSchema's own "no formula engine" contract).
 const NAMESPACE_PREFIX_PATTERN = /^[a-zA-Z]+:/;
 
 export function parseContentValidationCondition(
@@ -193,7 +193,7 @@ export function parseContentValidationCondition(
     return undefined;
   }
 
-  // FUNCTION1/FUNCTION2/COMPARISON tokens are already a complete condition (cell-content-is-in-list, is-true-formula, the text-length family, or the bare 'and cell-content()<op><expr>' shape when this same parser runs on a KEYWORD's own already-established validation type -- see the caller-facing distinction below).
+  // FUNCTION1/FUNCTION2/COMPARISON tokens are already a complete condition (cell-content-is-in-list, is-true-formula, the text-length family, or the bare 'and cell-content()<op><expr>' shape when this same parser runs on a KEYWORD's own already-established validation type — see the caller-facing distinction below).
   if (primary.info.kind !== "function0") {
     if (primary.info.validation === undefined) {
       return undefined;
@@ -206,7 +206,7 @@ export function parseContentValidationCondition(
     };
   }
 
-  // whole/decimal/date/time: the type alone carries no operator or operand -- both come from a required ' and <comparison>' secondary clause naming the real constraint (GetCondition's own bSecondaryPart handling).
+  // whole/decimal/date/time: the type alone carries no operator or operand — both come from a required ' and <comparison>' secondary clause naming the real constraint (GetCondition's own bSecondaryPart handling).
   if (primary.info.validation === undefined) {
     return undefined;
   }
@@ -230,14 +230,14 @@ export function parseContentValidationCondition(
   };
 }
 
-// table:help-message/table:error-message: a title attribute, a table:display boolean, and text:p children joined with a bare '\n' -- the identical multi-paragraph convention readCellText/readCellComment (./read.ts) already establish for a cell's own text and an annotation's own body.
+// table:help-message/table:error-message: a title attribute, a table:display boolean, and text:p children joined with a bare '\n' — the identical multi-paragraph convention readCellText/readCellComment (./read.ts) already establish for a cell's own text and an annotation's own body.
 function readMessageBody(messageEl: XmlElement): string {
   return childrenWithTag(messageEl, "text:p")
     .map((p) => decodeOdfText(p))
     .join("\n");
 }
 
-/** One table:content-validation definition, everything but the ranges it applies to -- those are resolved per sheet by the caller (readSheet, ./read.ts), since one rule definition can be referenced by cells across more than one sheet. */
+/** One table:content-validation definition, everything but the ranges it applies to — those are resolved per sheet by the caller (readSheet, ./read.ts), since one rule definition can be referenced by cells across more than one sheet. */
 export type ParsedContentValidation = Omit<
   ContentSheetDataValidation,
   "ranges"
@@ -316,7 +316,7 @@ function readContentValidation(
   return rule;
 }
 
-/** Every table:content-validation definition in the document, keyed by its own table:name -- read once from office:spreadsheet's direct children (table:content-validations, a document-wide sibling of every table:table, confirmed against a real LibreOffice-produced .fods fixture rather than assumed to sit per-table the way calcext:conditional-formats does), so every sheet's own readSheet can resolve whichever names its own cells reference. */
+/** Every table:content-validation definition in the document, keyed by its own table:name — read once from office:spreadsheet's direct children (table:content-validations, a document-wide sibling of every table:table, confirmed against a real LibreOffice-produced .fods fixture rather than assumed to sit per-table the way calcext:conditional-formats does), so every sheet's own readSheet can resolve whichever names its own cells reference. */
 export function readContentValidationDefinitions(
   spreadsheetElement: XmlElement,
 ): ReadonlyMap<string, ParsedContentValidation> {
@@ -341,7 +341,7 @@ export function readContentValidationDefinitions(
   return definitions;
 }
 
-/** Joins a sheet's own collected (validation name -> referencing cell ranges) map against the document-wide definitions, into the ContentSheetDataValidation[] a rule referenced by at least one of this sheet's own cells produces. A name with no matching definition (a malformed or not-yet-written producer file) contributes nothing -- the cells that referenced it simply carry no validation, rather than a fabricated one. */
+/** Joins a sheet's own collected (validation name -> referencing cell ranges) map against the document-wide definitions, into the ContentSheetDataValidation[] a rule referenced by at least one of this sheet's own cells produces. A name with no matching definition (a malformed or not-yet-written producer file) contributes nothing — the cells that referenced it simply carry no validation, rather than a fabricated one. */
 export function resolveSheetDataValidations(
   refsByName: ReadonlyMap<string, ContentSheetRange[]>,
   definitions: ReadonlyMap<string, ParsedContentValidation>,
@@ -390,7 +390,7 @@ function comparisonClause(
     : `cell-content()${operatorText}${formula1}`;
 }
 
-// Both call sites below already narrow `operator` to this pair before calling -- a between/notBetween clause is the only shape either the textLength or the default (whole/decimal/date/time) branch ever asks this helper to build, so the return type carries no undefined case for a third operator this helper is never actually invoked with.
+// Both call sites below already narrow `operator` to this pair before calling — a between/notBetween clause is the only shape either the textLength or the default (whole/decimal/date/time) branch ever asks this helper to build, so the return type carries no undefined case for a third operator this helper is never actually invoked with.
 function betweenClause(
   operator: "between" | "notBetween",
   stem: string,
@@ -401,7 +401,7 @@ function betweenClause(
   return `${stem}-${suffix}(${formula1},${formula2})`;
 }
 
-/** The table:condition attribute value for one rule, "of:"-prefixed the way every real producer spells the OpenFormula namespace. Returns undefined when the rule carries no condition this grammar can state at all -- a custom rule with no formula, a list with no list body, or a textLength rule with no comparison -- in which case the writer emits no table:condition attribute, exactly the shape whose absence the read side itself degrades to a bare custom rule. An operator whose operand is missing degrades the same way rather than emitting a clause the read side would reject: the same partial-parse tolerance readContentValidation already shows in the other direction. */
+/** The table:condition attribute value for one rule, "of:"-prefixed the way every real producer spells the OpenFormula namespace. Returns undefined when the rule carries no condition this grammar can state at all — a custom rule with no formula, a list with no list body, or a textLength rule with no comparison — in which case the writer emits no table:condition attribute, exactly the shape whose absence the read side itself degrades to a bare custom rule. An operator whose operand is missing degrades the same way rather than emitting a clause the read side would reject: the same partial-parse tolerance readContentValidation already shows in the other direction. */
 export function synthesiseContentValidationCondition(rule: {
   type: ContentSheetDataValidationType;
   operator?: SheetRuleOperator;

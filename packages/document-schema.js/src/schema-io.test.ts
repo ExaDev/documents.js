@@ -30,7 +30,7 @@ if (!isPackageJsonWithVersion(parsedPackageJson)) {
   throw new Error('package.json is missing a string "version" field');
 }
 const packageVersion: string = parsedPackageJson.version;
-// The installed release's major, read the same way src/schema-io.ts's dispatch reads it -- every URI this test builds keys on this, so the suite stays correct whatever the dev package.json happens to say.
+// The installed release's major, read the same way src/schema-io.ts's dispatch reads it — every URI this test builds keys on this, so the suite stays correct whatever the dev package.json happens to say.
 const installedMajor = Number(/^(\d+)/.exec(packageVersion)?.[1]);
 const installedMajorMinusOne = installedMajor - 1;
 const installedMajorPlusOne = installedMajor + 1;
@@ -130,7 +130,7 @@ describe("documentSchemaKindOf", () => {
     ).toBe("DocumentTree");
   });
 
-  it("returns undefined for a layout-document URI -- that kind moved to pdf-codec", () => {
+  it("returns undefined for a layout-document URI — that kind moved to pdf-codec", () => {
     expect(
       documentSchemaKindOf({
         $schema: schemaUriFor("DocumentTree").replace(
@@ -141,7 +141,7 @@ describe("documentSchemaKindOf", () => {
     ).toBeUndefined();
   });
 
-  it("returns undefined for a document-package URI -- that stem was renamed to document-tree", () => {
+  it("returns undefined for a document-package URI — that stem was renamed to document-tree", () => {
     expect(
       documentSchemaKindOf({
         $schema: uriForVersion(installedMajor, "document-package"),
@@ -194,7 +194,7 @@ describe("documentFromJson dispatches on the $schema URI", () => {
     });
   });
 
-  it("accepts a URI from another release of the SAME major -- patch and minor releases validate a major's dumps", () => {
+  it("accepts a URI from another release of the SAME major — patch and minor releases validate a major's dumps", () => {
     const pkg = documentPackage();
     const tagged = {
       ...documentTreeWithSchema(pkg),
@@ -206,7 +206,7 @@ describe("documentFromJson dispatches on the $schema URI", () => {
     });
   });
 
-  it("refuses an older major's URI and names the change -- the formatVersion era and the flat package shape", () => {
+  it("refuses an older major's URI and names the change — the formatVersion era and the flat package shape", () => {
     const oldDump = {
       $schema: uriForVersion(installedMajorMinusOne, "document-tree"),
       formatVersion: 2,
@@ -310,7 +310,7 @@ describe("documentFromJson dispatches on the $schema URI", () => {
   });
 
   it("parses the major from the very start of the version string, not from wherever a digit first appears", () => {
-    // "v1.0.0" has no leading digit at all -- majorVersionOf must fail to parse it, which routes this dump into the "newer major" (upgrade) branch rather than treating captured "1" as an older major.
+    // "v1.0.0" has no leading digit at all — majorVersionOf must fail to parse it, which routes this dump into the "newer major" (upgrade) branch rather than treating captured "1" as an older major.
     const dump = {
       $schema: uriForVersion("v1.0.0", "document-tree"),
     };
@@ -362,7 +362,7 @@ describe("documentFromJson dispatches on the $schema URI", () => {
     );
   });
 
-  it("SchemaVersionMismatchError treats an equal major as neither older nor newer -- it never actually occurs via documentFromJson (an equal major always parses), so this pins the class's own boundary behaviour directly", () => {
+  it("SchemaVersionMismatchError treats an equal major as neither older nor newer — it never actually occurs via documentFromJson (an equal major always parses), so this pins the class's own boundary behaviour directly", () => {
     const error = new SchemaVersionMismatchError("s", "7.0.0", "7.0.0");
     expect(error.message).toContain("Upgrade document-schema.js");
     expect(error.message).not.toContain("formatVersion");
@@ -376,7 +376,7 @@ describe("documentFromJson dispatches on the $schema URI", () => {
   });
 
   it("a bare DocumentTreeSchema.parse does not version-discriminate: it structurally validates whatever it is handed", () => {
-    // The documented contract (src/schema-io.ts): a direct parse validates structure only. This value carries a foreign version's $schema, which documentFromJson would refuse -- the direct parse accepts, because the installed schema's shape tolerates and strips the unknown $schema key and the tree underneath is valid.
+    // The documented contract (src/schema-io.ts): a direct parse validates structure only. This value carries a foreign version's $schema, which documentFromJson would refuse — the direct parse accepts, because the installed schema's shape tolerates and strips the unknown $schema key and the tree underneath is valid.
     const foreignTagged = {
       ...documentPackage(),
       $schema: uriForVersion(installedMajorPlusOne, "document-tree"),

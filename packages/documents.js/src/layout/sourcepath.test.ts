@@ -29,7 +29,7 @@ const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
 import { convertWordprocessingToLayout } from "./engine";
 import { convertPresentationToLayout } from "./slides";
 
-// Propagation of ContentRun/ContentImageBlock/ContentShape's own sourcePath (assigned in document order by ooxml.js's readDocxContent/readPptxContent, see document-schema.js) onto the LayoutText/LayoutImage/LayoutRect/LayoutLink items engine.ts (docx) and slides.ts (pptx) emit from them -- the last leg of the traceability chain from a positioned PDF-side item back to the semantic content it came from. sourcePath is stable within a single read+layout pass only, not across edits -- see the README's note on this alongside the rest of this file's assertions.
+// Propagation of ContentRun/ContentImageBlock/ContentShape's own sourcePath (assigned in document order by ooxml.js's readDocxContent/readPptxContent, see document-schema.js) onto the LayoutText/LayoutImage/LayoutRect/LayoutLink items engine.ts (docx) and slides.ts (pptx) emit from them — the last leg of the traceability chain from a positioned PDF-side item back to the semantic content it came from. sourcePath is stable within a single read+layout pass only, not across edits — see the README's note on this alongside the rest of this file's assertions.
 
 function fakeMeasurer(): TextMeasurer {
   return {
@@ -164,7 +164,7 @@ describe("sourcePath propagation: docx flow (engine.ts)", () => {
   });
 
   it("gives each fragment of a word split across a run boundary its own run's sourcePath", () => {
-    // "Hel" (run 0) immediately followed by "lo" (run 1), no whitespace between -- atomizeRuns merges them into one word atom spanning both runs, but each StyledFragment inside it must keep its own originating run's sourcePath.
+    // "Hel" (run 0) immediately followed by "lo" (run 1), no whitespace between — atomizeRuns merges them into one word atom spanning both runs, but each StyledFragment inside it must keep its own originating run's sourcePath.
     const { document: layout } = convertWordprocessingToLayout(
       wordprocessingDoc([
         section([
@@ -191,7 +191,7 @@ describe("sourcePath propagation: docx flow (engine.ts)", () => {
   });
 
   it("gives every fragment of one run emergency-split across multiple pages the SAME sourcePath, not a fabricated per-fragment one", () => {
-    // A single, hugely oversized word from one run: text-layout.ts's emergency character split forces it across several pages (see engine.test.ts's identical "Huge" scenario) -- every resulting LayoutText fragment must still trace back to this one source run.
+    // A single, hugely oversized word from one run: text-layout.ts's emergency character split forces it across several pages (see engine.test.ts's identical "Huge" scenario) — every resulting LayoutText fragment must still trace back to this one source run.
     const { document: layout } = convertWordprocessingToLayout(
       wordprocessingDoc([
         section([

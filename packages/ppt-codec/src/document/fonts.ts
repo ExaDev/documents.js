@@ -1,7 +1,7 @@
 import { type PptRecord, childRecords, findChild } from "../record/tree";
 import { RT_FontCollection, RT_FontEntityAtom } from "../record/types";
 
-// The document's font collection, resolved to plain typeface names. A character run names its font as a FontIndexRef -- a zero-based index into this collection -- rather than by name, so nothing downstream can report a typeface without this list. [MS-PPT] FontCollectionContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/88da04bf-6838-4f87-9a87-adf067543837 [MS-PPT] FontEntityAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/b5946b70-2fbc-4f7b-a119-b31fcbeb1794 [MS-PPT] FontIndexRef: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/75b7196f-2d27-4aef-b841-5695fe584140
+// The document's font collection, resolved to plain typeface names. A character run names its font as a FontIndexRef — a zero-based index into this collection — rather than by name, so nothing downstream can report a typeface without this list. [MS-PPT] FontCollectionContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/88da04bf-6838-4f87-9a87-adf067543837 [MS-PPT] FontEntityAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/b5946b70-2fbc-4f7b-a119-b31fcbeb1794 [MS-PPT] FontIndexRef: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/75b7196f-2d27-4aef-b841-5695fe584140
 
 // [MS-PPT] FontEntityAtom: lfFaceName is a fixed 64-byte field holding at most 32 UTF-16 characters including its terminating null, so the tail past the name is padding rather than content.
 const FACE_NAME_BYTES = 64;
@@ -26,7 +26,7 @@ function readFaceName(record: PptRecord): string | undefined {
   return name;
 }
 
-// Every typeface name in the document's environment, in collection order -- the order a FontIndexRef indexes. A document carrying no Environment record at all, or one with no font collection, yields an empty list rather than a failure: both are optional, and text can name no font at all.
+// Every typeface name in the document's environment, in collection order — the order a FontIndexRef indexes. A document carrying no Environment record at all, or one with no font collection, yields an empty list rather than a failure: both are optional, and text can name no font at all.
 export function readFontNames(environment: PptRecord | undefined): string[] {
   if (environment === undefined) {
     return [];

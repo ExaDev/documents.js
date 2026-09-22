@@ -99,7 +99,7 @@ describe("decodeWpCharacter", () => {
     expect(decodeWpCharacter(15, 0)).toBeUndefined();
   });
 
-  // Character set 0's ASCII range is 0x20-0x7f (0x20 itself only reachable through this path, not the document-area byte stream -- see the module's own top comment), boundaries pinned directly since the rest of this describe block never exercises character numbers near either edge.
+  // Character set 0's ASCII range is 0x20-0x7f (0x20 itself only reachable through this path, not the document-area byte stream — see the module's own top comment), boundaries pinned directly since the rest of this describe block never exercises character numbers near either edge.
   it("rejects a character set 0 number one below the ASCII range", () => {
     expect(decodeWpCharacter(0, 0x1f)).toBeUndefined();
   });
@@ -148,7 +148,7 @@ describe("decodeSingleByteCharacter", () => {
 
 describe("decodeWordString", () => {
   it("reads each word's own high byte, not a neighbouring word's", () => {
-    // 'A' (ASCII, high byte 0), then character-set 5 number 0 ('♡', high byte 5), then the null terminator -- every existing caller only ever writes pure-ASCII words (high byte always 0), which cannot distinguish a word's own high byte from its neighbour's.
+    // 'A' (ASCII, high byte 0), then character-set 5 number 0 ('♡', high byte 5), then the null terminator — every existing caller only ever writes pure-ASCII words (high byte always 0), which cannot distinguish a word's own high byte from its neighbour's.
     const bytes = new Uint8Array([0x41, 0, 0, 5, 0, 0]);
     expect(decodeWordString(bytes, 0, 10)).toEqual({
       text: "A♡",

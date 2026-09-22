@@ -6,7 +6,7 @@ import {
   FTAB_NAMES,
 } from "./ptg-functions";
 
-// The full Ftab table ([MS-XLS] 2.5.198.17), transcribed here as an independent literal reference rather than derived from ptg-functions.ts itself -- so a mutation to any single entry's name or fixed-arity number in the source is caught by comparing against a value that mutation never touches (this file is excluded from Stryker's own mutate glob), rather than two derived views of the identical mutated table vacuously agreeing with each other. iftab, name, fixedArity (undefined for a variable/optional-arity function, matching FtabEntry's own shape).
+// The full Ftab table ([MS-XLS] 2.5.198.17), transcribed here as an independent literal reference rather than derived from ptg-functions.ts itself — so a mutation to any single entry's name or fixed-arity number in the source is caught by comparing against a value that mutation never touches (this file is excluded from Stryker's own mutate glob), rather than two derived views of the identical mutated table vacuously agreeing with each other. iftab, name, fixedArity (undefined for a variable/optional-arity function, matching FtabEntry's own shape).
 const FTAB_REFERENCE: readonly (readonly [
   number,
   string,

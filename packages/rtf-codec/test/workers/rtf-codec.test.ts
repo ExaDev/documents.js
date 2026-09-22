@@ -8,9 +8,9 @@ import {
   writeRtfContent,
 } from "../../src";
 
-// Proves rtf-codec's public read/write surface executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs -- both encodings: the tree-form readRtf/writeRtf pair over document-schema.js's DocumentTree, and the flat readRtfContent/writeRtfContent pair over its ContentDocument. The codec is isomorphic by design -- a hand-written tokenizer, destination state machine, code page tables and writer, with only zod as a runtime sibling -- so if either direction touched a Node-only API the workerd isolate would throw instead of these passing.
+// Proves rtf-codec's public read/write surface executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs — both encodings: the tree-form readRtf/writeRtf pair over document-schema.js's DocumentTree, and the flat readRtfContent/writeRtfContent pair over its ContentDocument. The codec is isomorphic by design — a hand-written tokenizer, destination state machine, code page tables and writer, with only zod as a runtime sibling — so if either direction touched a Node-only API the workerd isolate would throw instead of these passing.
 //
-// Two places in this package would be tempting to write with a Node-only shortcut, and this suite is what proves neither was: src/base64.ts's hand-written base64/hex encoders (Buffer.from(bytes).toString('base64') is the Node one-liner they exist instead of) and src/codepage.ts's own byte-to-character tables (iconv-lite is Node-only and is banned by name in this package's eslint config). Both are on the paths below -- the picture case reaches base64, and the accented text reaches cp1252.
+// Two places in this package would be tempting to write with a Node-only shortcut, and this suite is what proves neither was: src/base64.ts's hand-written base64/hex encoders (Buffer.from(bytes).toString('base64') is the Node one-liner they exist instead of) and src/codepage.ts's own byte-to-character tables (iconv-lite is Node-only and is banned by name in this package's eslint config). Both are on the paths below — the picture case reaches base64, and the accented text reaches cp1252.
 //
 // The tree pair matters here in its own right rather than being covered by the flat one: it runs document-schema.js's own assembleTree/flattenTree inside the isolate too, so this is equally a check that the schema package's package-boundary transform is Worker-isomorphic on the path this package puts it on. This is the runtime complement to the existing node `vitest run --project unit` suite, not a replacement for it.
 describe("rtf-codec under the Cloudflare Workers runtime", () => {
@@ -78,7 +78,7 @@ describe("rtf-codec under the Cloudflare Workers runtime", () => {
   });
 
   it("round-trips an embedded object through a real [MS-CFB] compound file, built and read entirely inside the isolate", () => {
-    // Proves src/embedded-object.ts's archive-codec dependency -- writeCompoundFile/writeOlePackage on the way out, readCompoundFile/readOlePackage on the way back -- is genuinely Worker-isomorphic too, not merely bundleable: archive-codec's own CFB/OLE-package machinery runs entirely on DataView/TextEncoder/TextDecoder, and this exercises it for real rather than assuming its own isomorphism proof covers a caller that never calls it.
+    // Proves src/embedded-object.ts's archive-codec dependency — writeCompoundFile/writeOlePackage on the way out, readCompoundFile/readOlePackage on the way back — is genuinely Worker-isomorphic too, not merely bundleable: archive-codec's own CFB/OLE-package machinery runs entirely on DataView/TextEncoder/TextDecoder, and this exercises it for real rather than assuming its own isomorphism proof covers a caller that never calls it.
     const embedded = {
       kind: "spreadsheet" as const,
       metadata: { title: "Embedded sheet" },

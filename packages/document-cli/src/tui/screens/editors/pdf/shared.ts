@@ -17,7 +17,7 @@ import {
 export { parseColorField, parseStrokeField };
 export { parseNumberField } from "../../shared/text.js";
 
-// Every screen in this directory is only ever reached from `pdfPageList`, the root screen `rootScreenForFormat` produces for an open PDF document or for one of the formats opened read-only as a converted PDF preview (an xlsx workbook, a csv sheet, an svg drawing, an rtf document, a wpd document, an epub book -- see state/types.ts's own XlsxOpenDocument/CsvOpenDocument/SvgOpenDocument/RtfOpenDocument/WpdOpenDocument/EpubOpenDocument doc comments; doc, xls, and ppt left this family when they gained live-view editors of their own) -- so `state.openDocument` is always one of these by the time any screen here renders. Every one carries the identical `.layout: LayoutDocument` field this whole screen group reads from, and nothing else, which is exactly what lets one screen family serve all of them with no per-format branch anywhere in page-list.tsx/page-items.tsx/item-detail.tsx. This throws rather than falling back to an empty view because a mismatch would mean the app router itself is broken, not a recoverable, user-facing condition.
+// Every screen in this directory is only ever reached from `pdfPageList`, the root screen `rootScreenForFormat` produces for an open PDF document or for one of the formats opened read-only as a converted PDF preview (an xlsx workbook, a csv sheet, an svg drawing, an rtf document, a wpd document, an epub book — see state/types.ts's own XlsxOpenDocument/CsvOpenDocument/SvgOpenDocument/RtfOpenDocument/WpdOpenDocument/EpubOpenDocument doc comments; doc, xls, and ppt left this family when they gained live-view editors of their own) — so `state.openDocument` is always one of these by the time any screen here renders. Every one carries the identical `.layout: LayoutDocument` field this whole screen group reads from, and nothing else, which is exactly what lets one screen family serve all of them with no per-format branch anywhere in page-list.tsx/page-items.tsx/item-detail.tsx. This throws rather than falling back to an empty view because a mismatch would mean the app router itself is broken, not a recoverable, user-facing condition.
 export function requirePdfDocument(
   openDocument: OpenDocument | undefined,
 ):
@@ -44,7 +44,7 @@ export function requirePdfDocument(
   return openDocument;
 }
 
-// The editing-capable narrowing of the above: an xlsx workbook, csv sheet, svg drawing, rtf document, wpd document, or epub book opens as a fixed, one-shot PDF preview with no live `PdfEditor` behind it at all (see those formats' own OpenDocument doc comments -- each carries `layout`/`bytes`, never an `editor`), so add/edit/delete only ever make sense for a genuine `'pdf'`-format document. Screens call this only from the code paths that mutate (the add-item flow, item-detail's field editor); the plain read-only list/dump views keep using `requirePdfDocument` above so an opened preview format still browses exactly like a real PDF.
+// The editing-capable narrowing of the above: an xlsx workbook, csv sheet, svg drawing, rtf document, wpd document, or epub book opens as a fixed, one-shot PDF preview with no live `PdfEditor` behind it at all (see those formats' own OpenDocument doc comments — each carries `layout`/`bytes`, never an `editor`), so add/edit/delete only ever make sense for a genuine `'pdf'`-format document. Screens call this only from the code paths that mutate (the add-item flow, item-detail's field editor); the plain read-only list/dump views keep using `requirePdfDocument` above so an opened preview format still browses exactly like a real PDF.
 export function isEditablePdfDocument(
   doc:
     | PdfOpenDocument
@@ -58,7 +58,7 @@ export function isEditablePdfDocument(
   return doc.format === "pdf";
 }
 
-// Shared between the page list (a page's own size) and the item detail dump (an image/rect/ellipse/link item's own size) -- both display a plain widthPt×heightPt pair with no further unit conversion.
+// Shared between the page list (a page's own size) and the item detail dump (an image/rect/ellipse/link item's own size) — both display a plain widthPt×heightPt pair with no further unit conversion.
 export function formatSize(widthPt: number, heightPt: number): string {
   return `${widthPt.toFixed(0)}×${heightPt.toFixed(0)}pt`;
 }
@@ -67,7 +67,7 @@ export function formatPt(value: number): string {
   return value.toFixed(1);
 }
 
-// documents.js re-exports `rgbHexToColor` (hex string -> Color) at its top level but not that conversion's own inverse, `colorToRgbHex` -- this is display-only formatting, not a reimplementation of that (unexported) function.
+// documents.js re-exports `rgbHexToColor` (hex string -> Color) at its top level but not that conversion's own inverse, `colorToRgbHex` — this is display-only formatting, not a reimplementation of that (unexported) function.
 export function formatColor(color: LayoutColor): string {
   const byte = (component: number): string =>
     Math.round(component * 255)
@@ -83,7 +83,7 @@ export function formatStroke(stroke: {
   return `${formatColor(stroke.color)} @ ${stroke.widthPt.toFixed(1)}pt`;
 }
 
-// `LayoutText.color`/`LayoutLine.color` are both REQUIRED fields (unlike a rect/ellipse/path's own optional `fill`), so a blank or unparseable entry falls back to the item's current colour rather than clearing it -- there is nowhere in either item's own type for "no colour" to live.
+// `LayoutText.color`/`LayoutLine.color` are both REQUIRED fields (unlike a rect/ellipse/path's own optional `fill`), so a blank or unparseable entry falls back to the item's current colour rather than clearing it — there is nowhere in either item's own type for "no colour" to live.
 export function parseRequiredColorField(
   raw: string,
   fallback: LayoutColor,
@@ -99,13 +99,13 @@ export function parseFontStyle(raw: string): "normal" | "italic" {
   return raw.trim().toLowerCase() === "italic" ? "italic" : "normal";
 }
 
-// Blank-to-clear parse for the optional numeric fields (text/image rotationDeg, text widthPt) -- distinct from parseNumberField's own "blank falls back to the pre-filled default" convention, since these fields are genuinely optional on the underlying LayoutItem and a caller needs a real way to clear them back to unset. No separate blank/whitespace check: Number.parseFloat already skips leading whitespace per spec, and a blank or whitespace-only string parses to NaN either way, which Number.isFinite already rejects -- a prior trim-and-length-check branch was unobservable dead weight, never a behavioural difference.
+// Blank-to-clear parse for the optional numeric fields (text/image rotationDeg, text widthPt) — distinct from parseNumberField's own "blank falls back to the pre-filled default" convention, since these fields are genuinely optional on the underlying LayoutItem and a caller needs a real way to clear them back to unset. No separate blank/whitespace check: Number.parseFloat already skips leading whitespace per spec, and a blank or whitespace-only string parses to NaN either way, which Number.isFinite already rejects — a prior trim-and-length-check branch was unobservable dead weight, never a behavioural difference.
 export function parseOptionalNumberField(raw: string): number | undefined {
   const parsed = Number.parseFloat(raw);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-// A hand-rolled triangle spanning the given frame, in `LayoutSubpath`'s own flat startXPt/startYPt shape -- NOT `ContentSubpath` (the nested `{ start: { xPt, yPt } }` shape `screens/shared/vector-fields.ts`'s own `defaultTriangleSubpaths` builds for odg/odp's `ContentVector`), a genuinely different type for the identical geometric idea, since the PDF pivot and the ODF content pivot each declare their own subpath schema in document-schema.js. Local coordinates, matching `PdfPathInit.subpaths`' own convention (no page-space translation applied here).
+// A hand-rolled triangle spanning the given frame, in `LayoutSubpath`'s own flat startXPt/startYPt shape — NOT `ContentSubpath` (the nested `{ start: { xPt, yPt } }` shape `screens/shared/vector-fields.ts`'s own `defaultTriangleSubpaths` builds for odg/odp's `ContentVector`), a genuinely different type for the identical geometric idea, since the PDF pivot and the ODF content pivot each declare their own subpath schema in document-schema.js. Local coordinates, matching `PdfPathInit.subpaths`' own convention (no page-space translation applied here).
 export function defaultTriangleLayoutSubpaths(
   widthPt: number,
   heightPt: number,

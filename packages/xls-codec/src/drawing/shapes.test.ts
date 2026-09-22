@@ -18,7 +18,7 @@ import {
 const SHAPE_TYPE_RECTANGLE = 0x01;
 const SHAPE_TYPE_PICTURE_FRAME = 0x4b;
 
-/** The full DgContainer/SpgrContainer/patriarch wrapper every real MsoDrawing stream carries around its actual shapes -- patriarchBody lets each test state only the shapes it cares about. */
+/** The full DgContainer/SpgrContainer/patriarch wrapper every real MsoDrawing stream carries around its actual shapes — patriarchBody lets each test state only the shapes it cares about. */
 function drawingBytes(
   shapeContainers: readonly (readonly number[])[],
 ): Uint8Array<ArrayBuffer> {
@@ -26,7 +26,7 @@ function drawingBytes(
   return new Uint8Array(
     escherContainer(0xf002, 0, [
       escherContainer(0xf003, 0, [
-        escherContainer(0xf004, 0, [patriarch]), // the patriarch's own SpContainer -- no anchor, not a real shape
+        escherContainer(0xf004, 0, [patriarch]), // the patriarch's own SpContainer — no anchor, not a real shape
         ...shapeContainers,
       ]),
     ]),
@@ -51,7 +51,7 @@ describe("readSheetShapes", () => {
   });
 
   it("selects the DgContainer among several top-level records by its own recType, not merely the first container found", () => {
-    // Both this container's own kind ("container") and its lack of any real content give the same [] result whether it's wrongly picked or correctly skipped -- what actually tells the two apart is that the REAL DgContainer, found second, carries a genuine shape the wrong one never does.
+    // Both this container's own kind ("container") and its lack of any real content give the same [] result whether it's wrongly picked or correctly skipped — what actually tells the two apart is that the REAL DgContainer, found second, carries a genuine shape the wrong one never does.
     const anchor = clientAnchorSheet(0, 0, 0, 0, 1, 0, 1, 0);
     const unrelatedContainer = escherContainer(0xf999, 0, []);
     const bytes = new Uint8Array([
@@ -65,7 +65,7 @@ describe("readSheetShapes", () => {
   });
 
   it("excludes a top-level record that merely shares DgContainer's own recType while not being a container at all", () => {
-    // The recType half of the DgContainer search alone can't rule this one out -- it genuinely carries ESCHER_DG_CONTAINER's own recType value, just on a plain ATOM instead of a container. Only requiring BOTH halves together excludes it, and doing so wrongly would try to read a container's children off an atom that has none.
+    // The recType half of the DgContainer search alone can't rule this one out — it genuinely carries ESCHER_DG_CONTAINER's own recType value, just on a plain ATOM instead of a container. Only requiring BOTH halves together excludes it, and doing so wrongly would try to read a container's children off an atom that has none.
     const anchor = clientAnchorSheet(0, 0, 0, 0, 1, 0, 1, 0);
     const bogusAtom = escherAtom(ESCHER_DG_CONTAINER, 0, []);
     const bytes = new Uint8Array([
@@ -143,7 +143,7 @@ describe("readSheetShapes", () => {
   });
 
   it("excludes a group child of an unrelated recType, even though it is itself a container", () => {
-    // A container's own kind check alone can't rule this one out -- it genuinely IS a container, just not one of the two recTypes a shape tree ever nests. Giving it a real, well-formed Sp/anchor pair of its own (rather than leaving it empty) is what makes wrongly including it produce an EXTRA shape, rather than an empty one indistinguishable from correctly excluding it.
+    // A container's own kind check alone can't rule this one out — it genuinely IS a container, just not one of the two recTypes a shape tree ever nests. Giving it a real, well-formed Sp/anchor pair of its own (rather than leaving it empty) is what makes wrongly including it produce an EXTRA shape, rather than an empty one indistinguishable from correctly excluding it.
     const interloperAnchor = clientAnchorSheet(0, 0, 0, 0, 1, 0, 1, 0);
     const interloper = escherContainer(0xf999, 0, [
       spAtom(SHAPE_TYPE_RECTANGLE, 999, 0),
@@ -158,7 +158,7 @@ describe("readSheetShapes", () => {
   });
 
   it("excludes a group child that merely shares an SpContainer's own recType while not being a container at all", () => {
-    // The recType half of the filter alone can't rule this one out either -- 0xf004 is genuinely SpContainer's own recType, carried here on a plain ATOM instead. Only requiring BOTH halves of the check together excludes it.
+    // The recType half of the filter alone can't rule this one out either — 0xf004 is genuinely SpContainer's own recType, carried here on a plain ATOM instead. Only requiring BOTH halves of the check together excludes it.
     const bogusAtom = escherAtom(0xf004, 0, []);
     const realAnchor = clientAnchorSheet(0, 0, 0, 0, 1, 0, 1, 0);
     const bytes = drawingBytes([bogusAtom, rectangleShape(61, realAnchor)]);
@@ -202,7 +202,7 @@ describe("readSheetShapes", () => {
   });
 
   it("ignores a well-formed FOPTE entry whose own opid is not pib's", () => {
-    // A single-entry Opt table is otherwise indistinguishable from a real pib entry unless the opid itself is what's actually checked -- this entry is exactly as well-formed as a real pib one, just naming a different property.
+    // A single-entry Opt table is otherwise indistinguishable from a real pib entry unless the opid itself is what's actually checked — this entry is exactly as well-formed as a real pib one, just naming a different property.
     const anchor = clientAnchorSheet(0, 0, 0, 0, 1, 0, 1, 0);
     const picture = escherContainer(0xf004, 0, [
       spAtom(SHAPE_TYPE_PICTURE_FRAME, 90, 0),
@@ -219,7 +219,7 @@ describe("readSheetShapes", () => {
     const childAnchor = clientAnchorSheet(1, 0, 1, 0, 2, 0, 2, 0);
     const nestedGroup = escherContainer(0xf003, 0, [
       escherContainer(0xf004, 0, [
-        spAtom(SHAPE_TYPE_RECTANGLE, 40, 0x1), // fGroup -- the group's own shape record
+        spAtom(SHAPE_TYPE_RECTANGLE, 40, 0x1), // fGroup — the group's own shape record
         groupOwnAnchor,
       ]),
       rectangleShape(41, childAnchor),

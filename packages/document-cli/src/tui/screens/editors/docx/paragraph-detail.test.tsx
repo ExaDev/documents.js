@@ -28,12 +28,12 @@ import {
 } from "../../shared/paragraph-family.js";
 import { ParagraphDetailScreen } from "./paragraph-detail.js";
 
-// A real, minimal PNG -- the signature bytes plus a few arbitrary trailing ones, matching documents.js's own edit/docx/image.test.ts fixture. insertImageAfter only stores/embeds these bytes and declares the media part's type from the caller's own explicit `format`, so a genuine 1x1 decodable pixel grid is not needed to prove the round trip.
+// A real, minimal PNG — the signature bytes plus a few arbitrary trailing ones, matching documents.js's own edit/docx/image.test.ts fixture. insertImageAfter only stores/embeds these bytes and declares the media part's type from the caller's own explicit `format`, so a genuine 1x1 decodable pixel grid is not needed to prove the round trip.
 const PNG_BYTES = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4,
 ]);
 
-// Matching paragraph-family.test.tsx's own SETTLE_TICKS/flush pattern exactly -- this suite renders the identical ParagraphFamilyBodyList component one screen deeper (into ParagraphDetailScreen), so the same real-elapsed-time requirements around Ink's own Escape disambiguation and reconciler settling apply.
+// Matching paragraph-family.test.tsx's own SETTLE_TICKS/flush pattern exactly — this suite renders the identical ParagraphFamilyBodyList component one screen deeper (into ParagraphDetailScreen), so the same real-elapsed-time requirements around Ink's own Escape disambiguation and reconciler settling apply.
 const SETTLE_TICKS = 4;
 const ESCAPE_FLUSH_MARGIN_MS = 30;
 
@@ -60,7 +60,7 @@ async function flush(
 const ENTER = "\r";
 const BACKSPACE = "\x7F";
 
-// Each keystroke must reach ink-text-input as its own write/flush round trip -- writing several backspaces concatenated into one stdin.write() call was empirically observed to be silently ignored, unlike paragraph-family.test.tsx's own replaceField helper, which writes a single backspace this way already. `count` clears a field's own pre-filled default (the TextField cursor starts at its end, per that file's own comment), then `value` is typed fresh and confirmed rendered (see writeAndConfirm below) before returning, so a caller's own immediately-following Enter never races the draft's own commit.
+// Each keystroke must reach ink-text-input as its own write/flush round trip — writing several backspaces concatenated into one stdin.write() call was empirically observed to be silently ignored, unlike paragraph-family.test.tsx's own replaceField helper, which writes a single backspace this way already. `count` clears a field's own pre-filled default (the TextField cursor starts at its end, per that file's own comment), then `value` is typed fresh and confirmed rendered (see writeAndConfirm below) before returning, so a caller's own immediately-following Enter never races the draft's own commit.
 async function replaceField(
   stdin: { readonly write: (data: string) => void },
   lastFrame: () => string | undefined,
@@ -77,7 +77,7 @@ async function replaceField(
   });
 }
 
-// Confirms a just-typed draft actually reached the rendered frame before the caller sends anything else -- see replaceField's own comment for the race this closes. Every raw-text TextField write in this suite (an image path, raw MathML) goes through this rather than a bare stdin.write()+flush(). A further short REAL wait (not a setImmediate tick) follows the frame confirmation itself: ink-text-input's own onSubmit closes over whatever `originalValue` prop its own most recent render saw, and the frame showing the typed text is not proof that render (and Ink's own listener-ref update alongside it) has fully settled -- confirmed empirically, since without this extra margin an immediately-following Enter sometimes submitted the pre-typing empty default instead of the just-confirmed value.
+// Confirms a just-typed draft actually reached the rendered frame before the caller sends anything else — see replaceField's own comment for the race this closes. Every raw-text TextField write in this suite (an image path, raw MathML) goes through this rather than a bare stdin.write()+flush(). A further short REAL wait (not a setImmediate tick) follows the frame confirmation itself: ink-text-input's own onSubmit closes over whatever `originalValue` prop its own most recent render saw, and the frame showing the typed text is not proof that render (and Ink's own listener-ref update alongside it) has fully settled — confirmed empirically, since without this extra margin an immediately-following Enter sometimes submitted the pre-typing empty default instead of the just-confirmed value.
 async function writeAndConfirm(
   stdin: { readonly write: (data: string) => void },
   lastFrame: () => string | undefined,
@@ -106,13 +106,13 @@ function Marker(): ReactElement {
   return <Text>top:{screen.kind}</Text>;
 }
 
-// ContentEmbeddedObjectBlock has no top-level re-export from documents.js (only the ContentBlock union itself does) -- narrowed via Extract from that union's own block-array element type instead, the same trick paragraph-family.test.tsx's own TableProbe already uses for its table-block narrowing.
+// ContentEmbeddedObjectBlock has no top-level re-export from documents.js (only the ContentBlock union itself does) — narrowed via Extract from that union's own block-array element type instead, the same trick paragraph-family.test.tsx's own TableProbe already uses for its table-block narrowing.
 type WordprocessingBlock = Extract<
   ContentDocument,
   { readonly kind: "wordprocessing" }
 >["sections"][number]["blocks"][number];
 
-// Reads the document's own content fresh through readDocxContent/readOdtContent on every render -- the real proof an 'I'/'m'-driven dispatch reached the package, not merely that the reducer ran.
+// Reads the document's own content fresh through readDocxContent/readOdtContent on every render — the real proof an 'I'/'m'-driven dispatch reached the package, not merely that the reducer ran.
 function ContentProbe({
   doc,
 }: {
@@ -247,7 +247,7 @@ describe.each(["docx", "odt"] as const)(
         await flush();
         expect(lastFrame()).toContain("Width (pt)");
 
-        // The width field starts pre-filled with '100' -- clear it and type a distinct value so the assertion below proves the typed value reached the action, not merely that the default survived.
+        // The width field starts pre-filled with '100' — clear it and type a distinct value so the assertion below proves the typed value reached the action, not merely that the default survived.
         await replaceField(stdin, lastFrame, 3, "150");
         stdin.write(ENTER);
         await flush();
@@ -260,7 +260,7 @@ describe.each(["docx", "odt"] as const)(
 
         await writeAndConfirm(stdin, lastFrame, "a caption");
         stdin.write(ENTER);
-        // The image-reading step is async (readInput awaits a real fs read) -- vi.waitFor polls until the probe reflects the real dispatch rather than gambling on a fixed number of flush() ticks. odt's own readOdtContent recovers altText (confirmed directly against documents.js); docx's readDocx (ooxml.js) does not populate ContentImageBlock.altText at all yet, for either name it was written under -- a genuine, confirmed upstream gap on the read side, not something this dispatch/wizard chain can be wrong about. The wizard's own altText field is still exercised for both formats (typed, submitted, reaches the dispatched action -- confirmed independently by inspecting the actual INSERT_PARAGRAPH_IMAGE action), so this only narrows the READ-BACK assertion, not the write.
+        // The image-reading step is async (readInput awaits a real fs read) — vi.waitFor polls until the probe reflects the real dispatch rather than gambling on a fixed number of flush() ticks. odt's own readOdtContent recovers altText (confirmed directly against documents.js); docx's readDocx (ooxml.js) does not populate ContentImageBlock.altText at all yet, for either name it was written under — a genuine, confirmed upstream gap on the read side, not something this dispatch/wizard chain can be wrong about. The wizard's own altText field is still exercised for both formats (typed, submitted, reaches the dispatched action — confirmed independently by inspecting the actual INSERT_PARAGRAPH_IMAGE action), so this only narrows the READ-BACK assertion, not the write.
         const expectedAlt = format === "odt" ? "a caption" : "";
         await vi.waitFor(() => {
           expect(lastFrame()).toContain(
@@ -290,7 +290,7 @@ describe.each(["docx", "odt"] as const)(
         stdin.write(ENTER);
         await vi.waitFor(() => {
           expect(lastFrame()).toContain(
-            "is not a .png or .jpg/.jpeg file -- image not inserted",
+            "is not a .png or .jpg/.jpeg file — image not inserted",
           );
         });
         expect(lastFrame()).toContain("probe:image=none");
@@ -331,7 +331,7 @@ describe('ParagraphDetailScreen "m" formula insertion (docx paragraph-scoped)', 
 
       stdin.write("m");
       await flush();
-      // Six presets precede the "Raw MathML..." row -- navigate down to it.
+      // Six presets precede the "Raw MathML..." row — navigate down to it.
       for (let step = 0; step < 6; step += 1) {
         stdin.write("j");
         await flush();
@@ -370,7 +370,7 @@ describe('ParagraphDetailScreen "m" formula insertion (docx paragraph-scoped)', 
       stdin.write(ENTER);
       await flush();
 
-      // A closing tag missing its final '>' -- fast-xml-parser (parseXml's own implementation) is lenient about several malformed shapes (an unclosed element with no closing tag at all silently parses as whatever it did see), but a truncated closing tag is a genuine, confirmed throw.
+      // A closing tag missing its final '>' — fast-xml-parser (parseXml's own implementation) is lenient about several malformed shapes (an unclosed element with no closing tag at all silently parses as whatever it did see), but a truncated closing tag is a genuine, confirmed throw.
       await writeAndConfirm(stdin, lastFrame, "<mfrac><mi>x</mi></mfrac");
       stdin.write(ENTER);
       await vi.waitFor(() => {
@@ -397,7 +397,7 @@ describe('ParagraphDetailScreen "m" formula insertion (docx paragraph-scoped)', 
 
 describe("ParagraphDetailScreen's own fallback renders", () => {
   it("reports being rendered outside a paragraphDetail screen when mounted before any screen push", () => {
-    // No CREATE_DOCUMENT, no PUSH_SCREEN at all -- the app's own initial screen is never paragraphDetail, so mounting this screen component directly (as app.tsx's real router never would on its own) must hit its own outside-screen guard rather than crash or render nothing.
+    // No CREATE_DOCUMENT, no PUSH_SCREEN at all — the app's own initial screen is never paragraphDetail, so mounting this screen component directly (as app.tsx's real router never would on its own) must hit its own outside-screen guard rather than crash or render nothing.
     const { lastFrame } = render(
       <AppStateProvider>
         <ParagraphDetailScreen />

@@ -65,9 +65,9 @@ import {
 import { buildDrawingWritePlan } from "./workbook/drawing-writer";
 import { cellCarriesFormatting, writesCellRecord } from "./written-cells";
 
-// The BIFF8 write path: a ContentDocument (or DocumentTree) of kind 'spreadsheet' back to real .xls bytes -- a genuine [MS-XLS] Workbook stream wrapped in a genuine [MS-CFB] compound file via archive-codec's writeCompoundFile. The counterpart of content.ts's readXlsContent/readXls, and of ooxml.js's own writeXlsx.
+// The BIFF8 write path: a ContentDocument (or DocumentTree) of kind 'spreadsheet' back to real .xls bytes — a genuine [MS-XLS] Workbook stream wrapped in a genuine [MS-CFB] compound file via archive-codec's writeCompoundFile. The counterpart of content.ts's readXlsContent/readXls, and of ooxml.js's own writeXlsx.
 //
-// Three things are workbook-wide rather than per-sheet, so they are resolved in one pass over every sheet before any record is written: the number-format table (a cell's own numberFormatCode, or a representative default for its value kind when absent, maps onto a shared BIFF8 format identifier the same code reuses everywhere it appears), the colour table (every distinct background, border, and font colour a cell uses, resolved to an icv against the fixed default palette or, when a colour genuinely isn't in it, a real Palette record this pass mints), and the shared string table (every distinct string value, in first-encountered order, referenced by index from a LabelSst cell in any sheet). Two further passes intern the cell-format axes: buildFontPlan gives each distinct cell font its own font-table entry, then buildCellXfPlan interns the (number format, font, alignment, decoration) tuple every cell resolves to into its own cell XF index -- two cells sharing all four share one XF record, mirroring how ooxml.js's own CellFormatTable dedupes an xlsx <xf> on the identical (format, decoration) pair, widened here by two more axes. Building each of these once and threading the result into every sheet's own writer is what keeps two cells in different sheets sharing the identical string, format, font, alignment, or decoration from minting redundant table entries.
+// Three things are workbook-wide rather than per-sheet, so they are resolved in one pass over every sheet before any record is written: the number-format table (a cell's own numberFormatCode, or a representative default for its value kind when absent, maps onto a shared BIFF8 format identifier the same code reuses everywhere it appears), the colour table (every distinct background, border, and font colour a cell uses, resolved to an icv against the fixed default palette or, when a colour genuinely isn't in it, a real Palette record this pass mints), and the shared string table (every distinct string value, in first-encountered order, referenced by index from a LabelSst cell in any sheet). Two further passes intern the cell-format axes: buildFontPlan gives each distinct cell font its own font-table entry, then buildCellXfPlan interns the (number format, font, alignment, decoration) tuple every cell resolves to into its own cell XF index — two cells sharing all four share one XF record, mirroring how ooxml.js's own CellFormatTable dedupes an xlsx <xf> on the identical (format, decoration) pair, widened here by two more axes. Building each of these once and threading the result into every sheet's own writer is what keeps two cells in different sheets sharing the identical string, format, font, alignment, or decoration from minting redundant table entries.
 //
 // See this package's README for the writer's own scope: what it covers (every cell value kind, merged ranges, row/column geometry, number formats, a cell's own font, fill, borders, and alignment, same-sheet formulas, comments, data validation, conditional formats, print settings, metadata) and what it deliberately does not (the formula constructs outside the same-sheet vocabulary, images and embedded objects, and a long tail of BIFF8 records that carry UI/interoperability state rather than document content).
 
@@ -94,7 +94,7 @@ export function builtinCode(id: number): string {
   return code;
 }
 
-/** The default format identifier a value kind resolves to when its own cell carries no numberFormatCode -- chosen so excel-number-format's classifyNumberFormat, run against the resulting code on the way back in, reclassifies to the identical kind. A plain number/string/boolean/error needs no distinguishing code at all: General classifies as 'number', which is exactly the fallback content.ts's own resolveValue already takes for a numeric cell with no format. */
+/** The default format identifier a value kind resolves to when its own cell carries no numberFormatCode — chosen so excel-number-format's classifyNumberFormat, run against the resulting code on the way back in, reclassifies to the identical kind. A plain number/string/boolean/error needs no distinguishing code at all: General classifies as 'number', which is exactly the fallback content.ts's own resolveValue already takes for a numeric cell with no format. */
 function defaultFormatIdForKind(
   kind: ContentSheetCell["value"]["kind"],
 ): number {
@@ -119,9 +119,9 @@ function defaultFormatIdForKind(
 }
 
 /**
- * The number-format code a cell resolves through -- its own explicit numberFormatCode, a `[$USD]#,##0.00`-shaped code for a currency cell that names an ISO 4217 code of its own (see below), or the built-in code for its value kind's own default identifier. This is called identically during the workbook-wide format scan and later per cell, so the two can never resolve a cell to different codes.
+ * The number-format code a cell resolves through — its own explicit numberFormatCode, a `[$USD]#,##0.00`-shaped code for a currency cell that names an ISO 4217 code of its own (see below), or the built-in code for its value kind's own default identifier. This is called identically during the workbook-wide format scan and later per cell, so the two can never resolve a cell to different codes.
  *
- * The ISO-code bracket is the one carrier a currency code survives the round trip through: the format string IS where BIFF8 states a cell's currency, and the classifier this package's own reader reads it back through recovers the code from exactly that bracket -- writing the symbol instead would render identically and lose the code permanently, since no faithful symbol-to-code mapping exists on the way back ('$' alone is USD, CAD, AUD and a dozen others). That is the identical encoding ooxml.js's own typed/xlsx/number-format.ts currencyNumberFormat already states for the same schema field, so an amount round-trips through either legacy format under the same spelling. A currency string that is not an ISO-code shape (a display symbol like "£") cannot go inside that bracket without producing a malformed format code, so it falls back to the plain built-in currency format -- the value kind preserved, the code honestly lost, since inventing a code for a symbol would state a currency the cell never named.
+ * The ISO-code bracket is the one carrier a currency code survives the round trip through: the format string IS where BIFF8 states a cell's currency, and the classifier this package's own reader reads it back through recovers the code from exactly that bracket — writing the symbol instead would render identically and lose the code permanently, since no faithful symbol-to-code mapping exists on the way back ('$' alone is USD, CAD, AUD and a dozen others). That is the identical encoding ooxml.js's own typed/xlsx/number-format.ts currencyNumberFormat already states for the same schema field, so an amount round-trips through either legacy format under the same spelling. A currency string that is not an ISO-code shape (a display symbol like "£") cannot go inside that bracket without producing a malformed format code, so it falls back to the plain built-in currency format — the value kind preserved, the code honestly lost, since inventing a code for a symbol would state a currency the cell never named.
  */
 function formatCodeForCell(cell: ContentSheetCell): string {
   if (cell.numberFormatCode === undefined && cell.value.kind === "currency") {
@@ -144,7 +144,7 @@ export interface FormatPlan {
   readonly formatIdOf: (code: string) => number;
 }
 
-/** Scans every sheet's cells once, assigning each distinct number-format code a formatId: reusing a built-in id for a code matching one of excel-number-format's own BUILTIN_NUMBER_FORMATS strings exactly, minting a new custom id from FIRST_CUSTOM_FORMAT_ID otherwise. Cell XF index assignment is a separate, later pass (buildCellXfPlan below) -- a formatId alone no longer determines a cell's XF index once decoration exists, since two cells sharing a format but differing in background/borders need two distinct XFs. */
+/** Scans every sheet's cells once, assigning each distinct number-format code a formatId: reusing a built-in id for a code matching one of excel-number-format's own BUILTIN_NUMBER_FORMATS strings exactly, minting a new custom id from FIRST_CUSTOM_FORMAT_ID otherwise. Cell XF index assignment is a separate, later pass (buildCellXfPlan below) — a formatId alone no longer determines a cell's XF index once decoration exists, since two cells sharing a format but differing in background/borders need two distinct XFs. */
 export function buildFormatPlan(sheets: readonly ContentSheet[]): FormatPlan {
   const codeToFormatId = new Map<string, number>();
   const builtinIdByCode = new Map<string, number>(
@@ -199,13 +199,13 @@ export function buildFormatPlan(sheets: readonly ContentSheet[]): FormatPlan {
 // --- Cell decoration: the workbook-wide colour table, and the (format, decoration) -> XF-index interning that carries it ---
 
 export interface PalettePlan {
-  /** The workbook's own custom colour table (56 entries, icv 8 first), or undefined when every distinct decoration colour the workbook's cells use already matches the fixed default table -- in which case no Palette record is needed at all, and icvOf resolves every colour straight through that default table. */
+  /** The workbook's own custom colour table (56 entries, icv 8 first), or undefined when every distinct decoration colour the workbook's cells use already matches the fixed default table — in which case no Palette record is needed at all, and icvOf resolves every colour straight through that default table. */
   readonly paletteColors: readonly Color[] | undefined;
-  /** The icv (7-bit colour-table index) a decoration colour resolves to -- into `paletteColors` when defined, into the fixed default table otherwise. Every colour this is called with must already have been registered during the workbook-wide colour scan below. */
+  /** The icv (7-bit colour-table index) a decoration colour resolves to — into `paletteColors` when defined, into the fixed default table otherwise. Every colour this is called with must already have been registered during the workbook-wide colour scan below. */
   readonly icvOf: (color: Color) => number;
 }
 
-/** Scans every sheet's cells once for the distinct fill/border colours the workbook actually uses (background, and each present border side's own colour), then decides whether they all already have a home in the fixed default table (no Palette record needed) or whether at least one genuinely custom colour forces a real one -- in which case every distinct colour, not just the non-default ones, is allocated its own dedicated slot, so the whole 56-entry table is self-consistent and every reference resolves through it rather than a mix of "the file's own table" and "the implicit default". */
+/** Scans every sheet's cells once for the distinct fill/border colours the workbook actually uses (background, and each present border side's own colour), then decides whether they all already have a home in the fixed default table (no Palette record needed) or whether at least one genuinely custom colour forces a real one — in which case every distinct colour, not just the non-default ones, is allocated its own dedicated slot, so the whole 56-entry table is self-consistent and every reference resolves through it rather than a mix of "the file's own table" and "the implicit default". */
 export function buildPalettePlan(sheets: readonly ContentSheet[]): PalettePlan {
   const colorByHex = new Map<string, Color>();
   const record = (color: Color | undefined): void => {
@@ -228,7 +228,7 @@ export function buildPalettePlan(sheets: readonly ContentSheet[]): PalettePlan {
   };
 
   for (const sheet of sheets) {
-    // No writesCellRecord filter here, unlike the format/font scans below: every field this loop reads (background, a differing font's own colour, a present border side's colour) is also one of cellCarriesFormatting's own checks, so a cell this loop would register a colour from is already a cell writesCellRecord counts as formatted and therefore written -- filtering first can never change which colours this scan sees, only cost an extra pass to compute the identical answer.
+    // No writesCellRecord filter here, unlike the format/font scans below: every field this loop reads (background, a differing font's own colour, a present border side's colour) is also one of cellCarriesFormatting's own checks, so a cell this loop would register a colour from is already a cell writesCellRecord counts as formatted and therefore written — filtering first can never change which colours this scan sees, only cost an extra pass to compute the identical answer.
     for (const cell of sheet.cells) {
       recordFill(cell.background);
       record(cell.font?.color);
@@ -253,7 +253,7 @@ export function buildPalettePlan(sheets: readonly ContentSheet[]): PalettePlan {
     );
   };
 
-  // No separate empty-map return: an empty colorByHex has no hex failing the default-table lookup below (there is nothing to iterate), so it already falls out of the fast path exactly as the dedicated empty case would -- paletteColors undefined, icvOf refusing every colour as unregistered, since none ever was. Fast path: does every distinct colour already match the fixed default table exactly? If so, no Palette record is needed at all.
+  // No separate empty-map return: an empty colorByHex has no hex failing the default-table lookup below (there is nothing to iterate), so it already falls out of the fast path exactly as the dedicated empty case would — paletteColors undefined, icvOf refusing every colour as unregistered, since none ever was. Fast path: does every distinct colour already match the fixed default table exactly? If so, no Palette record is needed at all.
   const defaultIcvByHex = new Map<string, number>();
   let needsCustomPalette = false;
   for (const hex of colorByHex.keys()) {
@@ -273,7 +273,7 @@ export function buildPalettePlan(sheets: readonly ContentSheet[]): PalettePlan {
     };
   }
 
-  // Slow path: at least one colour needs a genuinely custom entry. Allocate every distinct colour -- not just the non-default ones -- into fresh slots in first-use order, so the record this writes is fully self-consistent.
+  // Slow path: at least one colour needs a genuinely custom entry. Allocate every distinct colour — not just the non-default ones — into fresh slots in first-use order, so the record this writes is fully self-consistent.
   if (colorByHex.size > PALETTE_ENTRY_COUNT) {
     throw new BiffWriteError(
       `workbook needs ${colorByHex.size} distinct decoration colours, more than the ${PALETTE_ENTRY_COUNT} entries [MS-XLS] 2.4.188's own Palette record can hold`,
@@ -287,7 +287,7 @@ export function buildPalettePlan(sheets: readonly ContentSheet[]): PalettePlan {
     paletteColors.push(color);
     nextIcv += 1;
   }
-  // Unused trailing slots are never referenced by any XF this writer emits -- their exact content is immaterial, and black is as good a filler as any -- but the record still declares the full, spec-required 56 entries rather than a short one.
+  // Unused trailing slots are never referenced by any XF this writer emits — their exact content is immaterial, and black is as good a filler as any — but the record still declares the full, spec-required 56 entries rather than a short one.
   while (paletteColors.length < PALETTE_ENTRY_COUNT) {
     paletteColors.push({ r: 0, g: 0, b: 0 });
   }
@@ -311,7 +311,7 @@ function resolveWriteEdge(
   return { style: borderStyleTokenFor(border), icv: icvOf(border.color) };
 }
 
-/** A ContentCellFill's own fillPattern/fillForegroundIcv/fillBackgroundIcv triple, resolved for whichever of 'solid'/'pattern' the cell states -- undefined input resolves to FLSNULL with both colours Automatic, matching the pre-#951 undecorated case exactly. A 'pattern' fill leaving one of its own colours unstated writes that colour Automatic too, the inverse of xf-colors.ts's own resolveFillBackground treating an unresolvable icv the same way on read. */
+/** A ContentCellFill's own fillPattern/fillForegroundIcv/fillBackgroundIcv triple, resolved for whichever of 'solid'/'pattern' the cell states — undefined input resolves to FLSNULL with both colours Automatic, matching the pre-#951 undecorated case exactly. A 'pattern' fill leaving one of its own colours unstated writes that colour Automatic too, the inverse of xf-colors.ts's own resolveFillBackground treating an unresolvable icv the same way on read. */
 function resolveFillFields(
   fill: ContentCellFill | undefined,
   icvOf: (color: Color) => number,
@@ -360,7 +360,7 @@ function resolveFillFields(
   }
 }
 
-/** A cell's own decoration, resolved into the raw XfDecorationFields the CellXF payload packs -- undefined for a cell with neither a background nor any border, so it shares the workbook's plain undecorated XF exactly as it did before decoration existed. The "has decoration at all" question is written-cells.ts's, since the writer's own record-emission predicate turns on the identical answer. */
+/** A cell's own decoration, resolved into the raw XfDecorationFields the CellXF payload packs — undefined for a cell with neither a background nor any border, so it shares the workbook's plain undecorated XF exactly as it did before decoration existed. The "has decoration at all" question is written-cells.ts's, since the writer's own record-emission predicate turns on the identical answer. */
 function resolveDecorationForCell(
   cell: ContentSheetCell,
   icvOf: (color: Color) => number,
@@ -378,9 +378,9 @@ function resolveDecorationForCell(
 }
 
 /**
- * A deterministic signature for one cell XF's own (formatId, fontIndex, alignment, verticalAlignment, decoration) tuple, so two cells sharing all five share one XF record -- the interning key buildCellXfPlan below dedupes on, mirroring how CellFormatTable in ooxml.js's typed/xlsx/styles.ts dedupes an <xf> on (number format, decoration) together rather than on format alone, widened here by the cell's own font and alignment.
+ * A deterministic signature for one cell XF's own (formatId, fontIndex, alignment, verticalAlignment, decoration) tuple, so two cells sharing all five share one XF record — the interning key buildCellXfPlan below dedupes on, mirroring how CellFormatTable in ooxml.js's typed/xlsx/styles.ts dedupes an <xf> on (number format, decoration) together rather than on format alone, widened here by the cell's own font and alignment.
  *
- * JSON.stringify rather than hand-assembled template segments: a per-field placeholder for "this field was left unstated" (a `?? ""` fallback, an `if (field !== undefined)` guard before appending a segment) is either unobservable -- no real Alignment/verticalAlignment/decoration value can ever equal an arbitrary placeholder string, so no mutation of it changes any test's outcome -- or, worse, itself wrong: `JSON.stringify` already drops an `undefined`-valued property from its own object-literal argument entirely (`JSON.stringify({a: undefined})` is `"{}"`, identical to an object that never had the key), which is exactly "unstated fields collapse to one shared signature, stated ones do not" with no hand-written branch to get subtly wrong or leave untested.
+ * JSON.stringify rather than hand-assembled template segments: a per-field placeholder for "this field was left unstated" (a `?? ""` fallback, an `if (field !== undefined)` guard before appending a segment) is either unobservable — no real Alignment/verticalAlignment/decoration value can ever equal an arbitrary placeholder string, so no mutation of it changes any test's outcome — or, worse, itself wrong: `JSON.stringify` already drops an `undefined`-valued property from its own object-literal argument entirely (`JSON.stringify({a: undefined})` is `"{}"`, identical to an object that never had the key), which is exactly "unstated fields collapse to one shared signature, stated ones do not" with no hand-written branch to get subtly wrong or leave untested.
  */
 function signatureOfCellXf(
   formatId: number,
@@ -401,11 +401,11 @@ function signatureOfCellXf(
 export interface FontPlan {
   /** The workbook's font table in write order: entry 0 is the Normal font, every later entry one distinct cell font, exactly as globals-writer.ts writes the records. */
   readonly fontEntries: readonly XfFontFields[];
-  /** The font-table index a cell's own font resolves to -- 0 (the Normal font) for a cell stating none, so the index this returns and the font-entry interning above can never disagree about what "no font" means. */
+  /** The font-table index a cell's own font resolves to — 0 (the Normal font) for a cell stating none, so the index this returns and the font-entry interning above can never disagree about what "no font" means. */
   readonly fontIndexForCell: (cell: ContentSheetCell) => number;
 }
 
-/** A deterministic signature for one font-table entry, the interning key below dedupes on -- name, height, the four flags, and the colour index, since those are the whole record as far as this package's reader is concerned. */
+/** A deterministic signature for one font-table entry, the interning key below dedupes on — name, height, the four flags, and the colour index, since those are the whole record as far as this package's reader is concerned. */
 function signatureOfFont(fields: XfFontFields): string {
   return (
     `${fields.name}|${fields.heightTwips}|` +
@@ -415,7 +415,7 @@ function signatureOfFont(fields: XfFontFields): string {
 }
 
 /**
- * Scans every sheet's cells once, interning each distinct cell font into its own font-table entry: the Normal font is always entry 0 (every style XF and the implicit General cell XF reference it, whether or not any cell states a font of its own), and each distinct ContentFont the workbook's cells resolve to mints one further entry the first time it is seen. A ContentFont that normalises back to the Normal font's own fields -- absent, empty, or restating only default values -- resolves to entry 0 and mints nothing, the write-side mirror of the reader's own diff against entry 0.
+ * Scans every sheet's cells once, interning each distinct cell font into its own font-table entry: the Normal font is always entry 0 (every style XF and the implicit General cell XF reference it, whether or not any cell states a font of its own), and each distinct ContentFont the workbook's cells resolve to mints one further entry the first time it is seen. A ContentFont that normalises back to the Normal font's own fields — absent, empty, or restating only default values — resolves to entry 0 and mints nothing, the write-side mirror of the reader's own diff against entry 0.
  */
 export function buildFontPlan(
   sheets: readonly ContentSheet[],
@@ -447,7 +447,7 @@ export function buildFontPlan(
       const index = indexBySignature.get(signatureOfFont(fieldsOf(cell)));
       if (index === undefined) {
         throw new BiffWriteError(
-          `internal error: the cell at row ${cell.row}, column ${cell.column} resolves to a font the workbook-wide font scan never saw -- the writer's own "does this cell get a record" predicate and its font-interning pass disagree about this cell`,
+          `internal error: the cell at row ${cell.row}, column ${cell.column} resolves to a font the workbook-wide font scan never saw — the writer's own "does this cell get a record" predicate and its font-interning pass disagree about this cell`,
         );
       }
       return index;
@@ -461,9 +461,9 @@ export interface CellXfPlan {
 }
 
 /**
- * Scans every sheet's cells once, interning each distinct (number format, font, alignment, decoration) combination into its own cell XF index -- a cell with General formatting, the Normal font, and no decoration resolves to the workbook's own implicit GENERAL_CELL_XF_INDEX with no new XF record at all, exactly as before; every other combination mints one XF record the first time it is seen and is reused by every later cell sharing it.
+ * Scans every sheet's cells once, interning each distinct (number format, font, alignment, decoration) combination into its own cell XF index — a cell with General formatting, the Normal font, and no decoration resolves to the workbook's own implicit GENERAL_CELL_XF_INDEX with no new XF record at all, exactly as before; every other combination mints one XF record the first time it is seen and is reused by every later cell sharing it.
  *
- * The returned xfIndexForCell only ever LOOKS UP -- it cannot mint an entry, and refuses a signature this scan never saw. buildWorkbookGlobals is handed cellXfEntries before any sheet's records are built, so an entry minted later than this scan would be one no XF record was written for, and the cell record naming its index would point past the end of the workbook's XF table. Nothing about the resulting bytes says so: a reader resolves that index to whatever XF happens to sit there, or to none, and the cell's format is silently wrong either way. Refusing the lookup is the only place that divergence can still be caught.
+ * The returned xfIndexForCell only ever LOOKS UP — it cannot mint an entry, and refuses a signature this scan never saw. buildWorkbookGlobals is handed cellXfEntries before any sheet's records are built, so an entry minted later than this scan would be one no XF record was written for, and the cell record naming its index would point past the end of the workbook's XF table. Nothing about the resulting bytes says so: a reader resolves that index to whatever XF happens to sit there, or to none, and the cell's format is silently wrong either way. Refusing the lookup is the only place that divergence can still be caught.
  */
 export function buildCellXfPlan(
   sheets: readonly ContentSheet[],
@@ -526,7 +526,7 @@ export function buildCellXfPlan(
       const index = xfIndexBySignature.get(signature);
       if (index === undefined) {
         throw new BiffWriteError(
-          `internal error: the cell at row ${cell.row}, column ${cell.column} resolves to cell-XF signature ${JSON.stringify(signature)}, which the workbook-wide cell-format scan never saw -- the writer's own "does this cell get a record" predicate and its XF-interning pass disagree about this cell`,
+          `internal error: the cell at row ${cell.row}, column ${cell.column} resolves to cell-XF signature ${JSON.stringify(signature)}, which the workbook-wide cell-format scan never saw — the writer's own "does this cell get a record" predicate and its XF-interning pass disagree about this cell`,
         );
       }
       return index;
@@ -585,7 +585,7 @@ function buildPrintNamePlan(
   );
 }
 
-/** Patches a BoundSheet8's own lbPlyPos field in place: a 4-byte little-endian integer at a byte offset globals-writer.ts already reported, once the real value -- where that sheet's own substream landed in the finished workbook stream -- is known. */
+/** Patches a BoundSheet8's own lbPlyPos field in place: a 4-byte little-endian integer at a byte offset globals-writer.ts already reported, once the real value — where that sheet's own substream landed in the finished workbook stream — is known. */
 function patchBoundSheetOffsets(
   globalsBytes: Uint8Array<ArrayBuffer>,
   offsets: readonly number[],
@@ -616,7 +616,7 @@ function concatBytes(
 
 export interface WorkbookStreamBuild {
   readonly bytes: Uint8Array<ArrayBuffer>;
-  /** The Embedding Storage streams (drawing-writer.ts's own MBD-named Package streams, [MS-XLS] 2.1.7) an embedded OLE object needs beside the Workbook stream in the outer compound file -- empty when the workbook carries none. */
+  /** The Embedding Storage streams (drawing-writer.ts's own MBD-named Package streams, [MS-XLS] 2.1.7) an embedded OLE object needs beside the Workbook stream in the outer compound file — empty when the workbook carries none. */
   readonly embeddingStreams: readonly {
     readonly path: string;
     readonly bytes: Uint8Array<ArrayBuffer>;
@@ -669,7 +669,7 @@ export function buildWorkbookStream(
     const drawing = drawingPlan.sheetDrawings[index];
     if (drawing === undefined) {
       throw new BiffWriteError(
-        `internal error: sheet ${index} has no drawing plan entry -- buildDrawingWritePlan produced fewer entries than there are sheets`,
+        `internal error: sheet ${index} has no drawing plan entry — buildDrawingWritePlan produced fewer entries than there are sheets`,
       );
     }
     return buildWorksheetSubstream(sheet, sheetContext, drawing);
@@ -682,7 +682,7 @@ export function buildWorkbookStream(
     offset += stream.length;
   }
 
-  // No defensive copy before patching in place: concatRecords (buildWorkbookGlobals's own final step) always allocates a fresh Uint8Array regardless of piece count, so globals.bytes is never a reference to any other array this module -- or globals-writer.ts's own caller -- could observe, and nothing reads globals.bytes again after this point.
+  // No defensive copy before patching in place: concatRecords (buildWorkbookGlobals's own final step) always allocates a fresh Uint8Array regardless of piece count, so globals.bytes is never a reference to any other array this module — or globals-writer.ts's own caller — could observe, and nothing reads globals.bytes again after this point.
   patchBoundSheetOffsets(globals.bytes, globals.lbPlyPosOffsets, sheetOffsets);
 
   return {
@@ -716,7 +716,7 @@ export function writeXlsContent(
   return writeCompoundFile(streams);
 }
 
-/** Writes a DocumentTree of kind 'spreadsheet' to real .xls bytes, flattening it to a ContentDocument first -- the counterpart of content.ts's readXls. */
+/** Writes a DocumentTree of kind 'spreadsheet' to real .xls bytes, flattening it to a ContentDocument first — the counterpart of content.ts's readXls. */
 export function writeXls(tree: DocumentTree): Uint8Array<ArrayBuffer> {
   const content: ContentDocument = flattenTree(tree);
   if (content.kind !== "spreadsheet") {

@@ -52,7 +52,7 @@ function findOfficeSpreadsheet(pkg: Package): XmlElement {
   return spreadsheet;
 }
 
-// The single, shared, idempotently-created table-family style every sheet this editor creates references via table:table/@table:style-name -- mirrors odt/automatic-styles.ts's own ensurePageBreakStyleName exactly (one fixed name, reused across every call rather than re-minted, since there is exactly one print-settings reference every sheet this editor builds ever wants: scaffold.ts's own shared master page). Reuses odt/automatic-styles.ts's ensureAutomaticStyles wholesale rather than reimplementing "find or create office:automatic-styles at the right schema position" a second time -- that helper's own "before office:body/master-styles/settings" insertion rule is generic ODF content-part structure, not odt-specific, despite living in odt/.
+// The single, shared, idempotently-created table-family style every sheet this editor creates references via table:table/@table:style-name — mirrors odt/automatic-styles.ts's own ensurePageBreakStyleName exactly (one fixed name, reused across every call rather than re-minted, since there is exactly one print-settings reference every sheet this editor builds ever wants: scaffold.ts's own shared master page). Reuses odt/automatic-styles.ts's ensureAutomaticStyles wholesale rather than reimplementing "find or create office:automatic-styles at the right schema position" a second time — that helper's own "before office:body/master-styles/settings" insertion rule is generic ODF content-part structure, not odt-specific, despite living in odt/.
 function ensureSheetTableStyleName(pkg: Package): string {
   const automaticStyles = ensureAutomaticStyles(pkg);
   const existing = automaticStyles.children.find(
@@ -81,7 +81,7 @@ export class OdsEditor {
     this.pkg = pkg;
   }
 
-  // Reads/patches meta.xml directly on the live package -- ExaDev/documents.js#933's own "editor.metadata = {...}" gap, mirroring OdtEditor's own identical getter/setter exactly (src/edit/odt/editor.ts's own comment states the full title/author/subject/keywords-only rationale).
+  // Reads/patches meta.xml directly on the live package — ExaDev/documents.js#933's own "editor.metadata = {...}" gap, mirroring OdtEditor's own identical getter/setter exactly (src/edit/odt/editor.ts's own comment states the full title/author/subject/keywords-only rationale).
   get metadata(): LayoutMetadata {
     return readOdfMetadata(this.pkg);
   }
@@ -101,7 +101,7 @@ export class OdsEditor {
     return out;
   }
 
-  // The first sheet whose table:name matches, or throws -- mirrors OdtTable.cell's own throwing convention (src/edit/odt/table.ts) for an address that doesn't exist.
+  // The first sheet whose table:name matches, or throws — mirrors OdtTable.cell's own throwing convention (src/edit/odt/table.ts) for an address that doesn't exist.
   sheet(name: string): OdsSheet {
     const found = this.sheets().find((candidate) => candidate.name === name);
     if (found === undefined) {
@@ -152,7 +152,7 @@ export interface CreateOdsOptions {
   readonly clock?: ClockPort;
 }
 
-// Creates a fresh ods with real office:meta creation/modification timestamps -- mirrors createDocx's own default-on clock behaviour exactly (src/edit/docx/editor.ts).
+// Creates a fresh ods with real office:meta creation/modification timestamps — mirrors createDocx's own default-on clock behaviour exactly (src/edit/docx/editor.ts).
 export function createOds(options?: CreateOdsOptions): OdsEditor {
   const clock = options?.clock ?? systemClock;
   const metadata = resolveMetadataTimestamps({}, clock);

@@ -79,7 +79,7 @@ interface OdbRenderReportCliOptions extends ConversionCliFlags, FontCliFlags {
 
 type AbortReason = "interrupt" | "timeout" | undefined;
 
-// Shared by all five odb commands -- OdbNoEmbeddedDataSourceError (no embedded engine at all) and OdbUnsupportedFormatError (a recognised-but-unimplemented HSQLDB script serialisation) can surface from readOdbTables regardless of which command called it, since odb-to-xlsx and odb-tables both extract every table exactly the way odb-to-csv does before either selects or skips a single one. Neither error can arise from odb-forms/odb-reports at all (a form or report is a static ODF sub-document, resolved with no reference to the database's own storage engine), but they route through this same reporter anyway so an odf.js-level failure reads identically whichever odb command hit it.
+// Shared by all five odb commands — OdbNoEmbeddedDataSourceError (no embedded engine at all) and OdbUnsupportedFormatError (a recognised-but-unimplemented HSQLDB script serialisation) can surface from readOdbTables regardless of which command called it, since odb-to-xlsx and odb-tables both extract every table exactly the way odb-to-csv does before either selects or skips a single one. Neither error can arise from odb-forms/odb-reports at all (a form or report is a static ODF sub-document, resolved with no reference to the database's own storage engine), but they route through this same reporter anyway so an odf.js-level failure reads identically whichever odb command hit it.
 function reportOdbError(
   command: string,
   error: unknown,
@@ -97,7 +97,7 @@ function reportOdbError(
   return mapErrorToExit(error, abortReason);
 }
 
-// odb-to-csv only: OdbTableNotSpecifiedError/OdbTableNotFoundError are thrown exclusively by odbToCsv's own table selection -- odb-to-xlsx exports every table and odb-tables never selects one, so neither command can ever hit this branch.
+// odb-to-csv only: OdbTableNotSpecifiedError/OdbTableNotFoundError are thrown exclusively by odbToCsv's own table selection — odb-to-xlsx exports every table and odb-tables never selects one, so neither command can ever hit this branch.
 function reportOdbCsvError(
   command: string,
   error: unknown,
@@ -116,7 +116,7 @@ function reportOdbCsvError(
   return reportOdbError(command, error, verbose, abortReason);
 }
 
-// odb-render-report only: OdbReportNotSpecifiedError is thrown exclusively by readOdbReportContent's own report selection (mirrors selectReport in documents.js's src/odb/report/content.ts) -- no other odb command can hit this branch, since odb-query resolves a saved *query* by name, never a report.
+// odb-render-report only: OdbReportNotSpecifiedError is thrown exclusively by readOdbReportContent's own report selection (mirrors selectReport in documents.js's src/odb/report/content.ts) — no other odb command can hit this branch, since odb-query resolves a saved *query* by name, never a report.
 function reportOdbReportError(
   command: string,
   error: unknown,
@@ -132,7 +132,7 @@ function reportOdbReportError(
   return reportOdbError(command, error, verbose, abortReason);
 }
 
-// odb-to-csv's own output is genuinely CSV bytes, not one of DocumentFormat's nine members -- resolveDefaultOutputPath (src/runtime/io.ts) is typed against DocumentFormat specifically because every other command in this CLI writes one of those nine formats, so this command needs its own equivalent rather than forcing 'csv' through a type it was never meant to accept.
+// odb-to-csv's own output is genuinely CSV bytes, not one of DocumentFormat's nine members — resolveDefaultOutputPath (src/runtime/io.ts) is typed against DocumentFormat specifically because every other command in this CLI writes one of those nine formats, so this command needs its own equivalent rather than forcing 'csv' through a type it was never meant to accept.
 function resolveDefaultCsvOutputPath(inputPath: string): string {
   const directory = dirname(inputPath);
   const stem = basename(inputPath, extname(inputPath));
@@ -285,13 +285,13 @@ function resolveQuerySql(
   if (saved === undefined) {
     const available = inventory.queries.map((candidate) => candidate.name);
     return {
-      errorMessage: `this .odb declares no saved query named '${queryName}'${available.length === 0 ? "" : ` -- available: ${available.join(", ")}`}`,
+      errorMessage: `this .odb declares no saved query named '${queryName}'${available.length === 0 ? "" : ` — available: ${available.join(", ")}`}`,
     };
   }
   return { sql: saved.command };
 }
 
-// Runs a bounded single-table SELECT (documents.js's own src/odb/sql/ engine -- parseSelect/evaluateSelect, no database anywhere in the path) over every table an embedded .odb extracts, either given directly via --sql or by naming one of the .odb's own saved queries via --query. --json emits the bare SqlResultSet ({ columns, rows }) straight to stdout, matching odb-tables' own structural-JSON convention rather than the NDJSON-diagnostics convention the conversion-flag commands use -- this command produces no document bytes and reports no diagnostics of its own.
+// Runs a bounded single-table SELECT (documents.js's own src/odb/sql/ engine — parseSelect/evaluateSelect, no database anywhere in the path) over every table an embedded .odb extracts, either given directly via --sql or by naming one of the .odb's own saved queries via --query. --json emits the bare SqlResultSet ({ columns, rows }) straight to stdout, matching odb-tables' own structural-JSON convention rather than the NDJSON-diagnostics convention the conversion-flag commands use — this command produces no document bytes and reports no diagnostics of its own.
 async function runOdbQuery(
   input: string,
   options: OdbQueryCliOptions,
@@ -337,7 +337,7 @@ async function runOdbQuery(
   }
 }
 
-// odb-forms and odb-reports both read STRUCTURE, not data: a form's own field-bound controls and a report's own band/group/formula layout live in static ODF sub-documents inside the package, resolved by odf.js without ever consulting the embedded database. That is why neither command needs (or offers) --table, an output path, or any of the conversion flags -- there is nothing to convert and nothing to write, only a structure to print.
+// odb-forms and odb-reports both read STRUCTURE, not data: a form's own field-bound controls and a report's own band/group/formula layout live in static ODF sub-documents inside the package, resolved by odf.js without ever consulting the embedded database. That is why neither command needs (or offers) --table, an output path, or any of the conversion flags — there is nothing to convert and nothing to write, only a structure to print.
 async function runOdbForms(
   input: string,
   options: { readonly json: boolean },
@@ -387,7 +387,7 @@ async function runOdbReports(
     );
 
     if (options.json) {
-      // Unlike a form (whose own `document` field carries the entire parsed sub-document -- see odbFormSummary), an OdbReport carries nothing but its own structure, so it serialises verbatim with no reshaping.
+      // Unlike a form (whose own `document` field carries the entire parsed sub-document — see odbFormSummary), an OdbReport carries nothing but its own structure, so it serialises verbatim with no reshaping.
       process.stdout.write(`${JSON.stringify(reports)}\n`);
       return EXIT_SUCCESS;
     }
@@ -409,7 +409,7 @@ async function runOdbReports(
   }
 }
 
-// odb-render-report only: the three real targets a rendered report can become. Restricted to a subset of DocumentFormat's own ten members -- readOdbReportContent always produces a wordprocessing ContentDocument, and pptx/xlsx/odg/odp/ods/markdown/odf all have no wordprocessing counterpart to build one into (the same reasoning buildDocxPackage/buildOdtPackage's own internal 'wordprocessing'-only guards already enforce at runtime; this is that same restriction stated as a type).
+// odb-render-report only: the three real targets a rendered report can become. Restricted to a subset of DocumentFormat's own ten members — readOdbReportContent always produces a wordprocessing ContentDocument, and pptx/xlsx/odg/odp/ods/markdown/odf all have no wordprocessing counterpart to build one into (the same reasoning buildDocxPackage/buildOdtPackage's own internal 'wordprocessing'-only guards already enforce at runtime; this is that same restriction stated as a type).
 const ODB_REPORT_TARGET_FORMATS: Readonly<
   Record<"docx" | "odt" | "pdf", true>
 > = { docx: true, odt: true, pdf: true };
@@ -478,7 +478,7 @@ async function runOdbRenderReport(
     const pkg = decodeOdbPackage(new Uint8Array(inputBytes));
     const content = readOdbReportContent(pkg, { report: options.report });
 
-    // docx/odt need neither fonts nor signal -- building a fresh package from a ContentDocument is a single bounded synchronous pass, exactly as odbReportToDocx/odbReportToOdt's own signature (no fonts option at all) already states. pdf mirrors markdownToPdf's own pipeline: a rendered report has no source package of its own to extract embedded fonts from, so the caller-supplied faces plus the vendored substitutes and the standard 14 are the whole registry.
+    // docx/odt need neither fonts nor signal — building a fresh package from a ContentDocument is a single bounded synchronous pass, exactly as odbReportToDocx/odbReportToOdt's own signature (no fonts option at all) already states. pdf mirrors markdownToPdf's own pipeline: a rendered report has no source package of its own to extract embedded fonts from, so the caller-supplied faces plus the vendored substitutes and the standard 14 are the whole registry.
     const bytes =
       targetFormat === "docx"
         ? odbReportToDocx(content)
@@ -555,7 +555,7 @@ function registerOdbToCsvCommand(program: Command): void {
   addVerboseOption(command);
   command.option(
     "--table <name>",
-    "the table to export -- required when the .odb declares more than one table",
+    "the table to export — required when the .odb declares more than one table",
   );
   command.action(
     async (
@@ -624,11 +624,11 @@ function registerOdbQueryCommand(program: Command): void {
     )
     .option(
       "--sql <text>",
-      "the SELECT statement to run -- mutually exclusive with --query",
+      "the SELECT statement to run — mutually exclusive with --query",
     )
     .option(
       "--query <savedName>",
-      "the name of one of the .odb's own saved queries to run -- mutually exclusive with --sql",
+      "the name of one of the .odb's own saved queries to run — mutually exclusive with --sql",
     )
     .option(
       "--json",
@@ -644,7 +644,7 @@ function registerOdbRenderReportCommand(program: Command): void {
   const command = program
     .command("odb-render-report <input> [output]")
     .description(
-      "render one of an .odb's own reports -- its query resolved, its rpt: formulas evaluated, its bands laid out -- to docx, odt, or pdf",
+      "render one of an .odb's own reports — its query resolved, its rpt: formulas evaluated, its bands laid out — to docx, odt, or pdf",
     );
   addOutOption(command);
   addTimeoutOption(command);
@@ -654,7 +654,7 @@ function registerOdbRenderReportCommand(program: Command): void {
   addFontOptions(command);
   command.option(
     "--report <name>",
-    "the report to render -- required only when the .odb declares more than one report",
+    "the report to render — required only when the .odb declares more than one report",
   );
   command.option(
     "--to <format>",

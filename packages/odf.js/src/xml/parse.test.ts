@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseXml } from "./parse";
 
-// parseXml had no direct unit tests at all -- every reader test in this package exercises it only indirectly, through a whole XML document string, which never isolates a single node kind's own mapping. These pin each of parseNode's own branches (text/comment/cdata/declaration/pi/element) directly against a minimal real XML string, plus attribute parsing and nested-element recursion.
+// parseXml had no direct unit tests at all — every reader test in this package exercises it only indirectly, through a whole XML document string, which never isolates a single node kind's own mapping. These pin each of parseNode's own branches (text/comment/cdata/declaration/pi/element) directly against a minimal real XML string, plus attribute parsing and nested-element recursion.
 
 describe("parseXml: node kinds", () => {
   it("parses a bare element with no children, attributes, or text", () => {
@@ -87,7 +87,7 @@ describe("parseXml: node kinds", () => {
     });
   });
 
-  it("does not re-encode entities -- an already-encoded &amp; comes back exactly as written", () => {
+  it("does not re-encode entities — an already-encoded &amp; comes back exactly as written", () => {
     const [node] = parseXml("<a>x &amp; y</a>");
     expect(node).toMatchObject({
       children: [{ type: "text", value: "x &amp; y" }],

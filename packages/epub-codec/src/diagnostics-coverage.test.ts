@@ -6,7 +6,7 @@ import { readXhtmlBody } from "./xhtml/read";
 import { writeEpubContent } from "./write";
 import { zipPackage } from "./zip";
 
-// Coverage sweep: every entry in EpubDiagnosticCodes must be reachable from some real input to this package's own read/write surface, matching markdown-codec's own identical diagnostics-coverage discipline (its src/diagnostics/diagnostics.test.ts) -- a code that exists in the table but that nothing ever fires is dead documentation, worse than no documentation at all. Each case here is deliberately minimal; more thoroughly asserted per-gap behaviour lives in src/opf/parse.test.ts, src/xhtml/read.test.ts, src/xhtml/style-residue.test.ts, and src/read.test.ts. The final test asserts every code fires at least once across this sweep, so EpubDiagnosticCodes can never grow a new, silently-unreachable entry.
+// Coverage sweep: every entry in EpubDiagnosticCodes must be reachable from some real input to this package's own read/write surface, matching markdown-codec's own identical diagnostics-coverage discipline (its src/diagnostics/diagnostics.test.ts) — a code that exists in the table but that nothing ever fires is dead documentation, worse than no documentation at all. Each case here is deliberately minimal; more thoroughly asserted per-gap behaviour lives in src/opf/parse.test.ts, src/xhtml/read.test.ts, src/xhtml/style-residue.test.ts, and src/read.test.ts. The final test asserts every code fires at least once across this sweep, so EpubDiagnosticCodes can never grow a new, silently-unreachable entry.
 
 const reached = new Set<string>();
 
@@ -535,7 +535,7 @@ describe("every EpubDiagnosticCodes entry is reachable from real input", () => {
     expect(codes.has(EpubDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(true);
   });
 
-  it("covers the whole EpubDiagnosticCodes table -- no entry is left unreachable", () => {
+  it("covers the whole EpubDiagnosticCodes table — no entry is left unreachable", () => {
     const allCodes = Object.values(EpubDiagnosticCodes);
     for (const code of allCodes) {
       expect(
