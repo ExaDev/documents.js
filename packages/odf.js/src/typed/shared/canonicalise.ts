@@ -218,7 +218,12 @@ export function canonicalTable(
   const gridPositions = walkTableGrid(table);
   const canonical: ContentTable = {
     kind: "table",
-    columnWidthsPt: [...table.columnWidthsPt],
+    // isHeader is carried through unchanged on both axes, never normalised away: table:table-header-rows/table:table-header-columns are real ODF wrappers writeOdfTable actually writes and readOdfTable actually reads back (typed/shared/table.ts), so dropping either flag here would be claiming a fidelity gap this writer does not have. Since THE LAW normalises both sides of the round trip identically, a dropped flag would silently stop this oracle from ever catching a real regression in either axis's own header round-trip, not merely under-represent one that already exists.
+    columns: table.columns.map((column) =>
+      column.isHeader === true
+        ? { widthPt: column.widthPt, isHeader: true }
+        : { widthPt: column.widthPt },
+    ),
     rows: table.rows.map((row, rowIndex) => {
       // walkTableGrid returns one array per table row, in row order, so this index is always in range.
       const cells = gridPositions[rowIndex]!.map((position) => {
@@ -229,9 +234,13 @@ export function canonicalTable(
           listState,
         );
       });
-      return row.heightPt === undefined
-        ? { cells }
-        : { cells, heightPt: row.heightPt };
+      const canonicalRow =
+        row.heightPt === undefined
+          ? { cells }
+          : { cells, heightPt: row.heightPt };
+      return row.isHeader === true
+        ? { ...canonicalRow, isHeader: true }
+        : canonicalRow;
     }),
   };
   closeListPlan(listState);
