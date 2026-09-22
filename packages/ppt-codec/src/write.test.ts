@@ -1052,7 +1052,7 @@ describe("writePptContent / readPptContent round trip", () => {
                         heightPt: 60,
                       },
                     ],
-                    columnWidthsPt: [120, 120],
+                    columns: [{ widthPt: 120 }, { widthPt: 120 }],
                   },
                 ],
               },
@@ -1107,7 +1107,7 @@ describe("writePptContent / readPptContent round trip", () => {
                         ],
                       },
                     ],
-                    columnWidthsPt: [200],
+                    columns: [{ widthPt: 200 }],
                   },
                 ]),
               ],
@@ -1150,7 +1150,7 @@ describe("writePptContent / readPptContent round trip", () => {
                         heightPt: 60,
                       },
                     ],
-                    columnWidthsPt: [100, 140],
+                    columns: [{ widthPt: 100 }, { widthPt: 140 }],
                   },
                 ]),
               ],
@@ -1178,7 +1178,7 @@ describe("writePptContent / readPptContent round trip", () => {
             },
           ],
           // 100pt and 140pt are whole master units (800 and 1120), so the widths read back exactly.
-          columnWidthsPt: [100, 140],
+          columns: [{ widthPt: 100 }, { widthPt: 140 }],
         },
       ]);
     });
@@ -1197,7 +1197,7 @@ describe("writePptContent / readPptContent round trip", () => {
                     {
                       kind: "table",
                       rows: [{ cells: [{ blocks: [paragraph("x")] }] }],
-                      columnWidthsPt: [240],
+                      columns: [{ widthPt: 240 }],
                     },
                   ],
                 },
@@ -1228,7 +1228,7 @@ describe("writePptContent / readPptContent round trip", () => {
                           heightPt: 120,
                         },
                       ],
-                      columnWidthsPt: [240],
+                      columns: [{ widthPt: 240 }],
                     },
                   ]),
                 ],
@@ -1251,7 +1251,7 @@ describe("writePptContent / readPptContent round trip", () => {
               heightPt: 120,
             },
           ],
-          columnWidthsPt: [240],
+          columns: [{ widthPt: 240 }],
         },
       ]);
       expect(diagnostics).toEqual([
@@ -1269,7 +1269,7 @@ describe("writePptContent / readPptContent round trip", () => {
       const table = {
         kind: "table" as const,
         rows: [{ cells: [{ blocks: [] }] }],
-        columnWidthsPt: [240],
+        columns: [{ widthPt: 240 }],
       };
       const { slides } = readPptContent(
         writePptContent(
@@ -1313,7 +1313,7 @@ describe("writePptContent / readPptContent round trip", () => {
                         { cells: [{ blocks: [] }, { blocks: [] }] },
                         { cells: [{ blocks: [] }, { blocks: [] }] },
                       ],
-                      columnWidthsPt: [120, 120],
+                      columns: [{ widthPt: 120 }, { widthPt: 120 }],
                     },
                   ]),
                 ],
