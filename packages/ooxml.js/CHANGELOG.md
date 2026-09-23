@@ -1,3 +1,10 @@
+## [12.2.7](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.6...ooxml.js%4012.2.7) (2026-09-23)
+
+### Tests
+
+* **ooxml.js:** pin a solid fill's colours and a styled border edge's colour, isolated per test ([923cf70](https://github.com/ExaDev/documents.js/commit/923cf70a2abee1db57b0d16f03d9d6cce814e328))
+* **ooxml.js:** pin xl/styles.xml and docProps facts inside isolated per-test xlsx builds ([e70fe82](https://github.com/ExaDev/documents.js/commit/e70fe822986addbb1cc1f8b298e3da61a1e63b7a))
+
 ## [12.2.6](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.5...ooxml.js%4012.2.6) (2026-09-23)
 
 ### Code Refactoring
