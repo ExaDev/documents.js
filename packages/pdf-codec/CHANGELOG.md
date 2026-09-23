@@ -1,3 +1,9 @@
+## [5.2.12](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.11...pdf-codec%405.2.12) (2026-09-23)
+
+### Tests
+
+* **pdf-codec:** cover images-read.ts's colour-space, sample-unpacking and boundary gaps ([88efab1](https://github.com/ExaDev/documents.js/commit/88efab1c928203f184876cf74ea705a35546eeaa)), references [#1306](https://github.com/ExaDev/documents.js/issues/1306)
+
 ## [5.2.11](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.10...pdf-codec%405.2.11) (2026-09-23)
 
 ### Tests
