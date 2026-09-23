@@ -51,9 +51,14 @@ function childrenWithLocalName(
   return out;
 }
 
-// ST_Guid as written in these parts is braced and upper case, but the brace spelling varies across producers, so both sides of every guid comparison (personId -> person/@id) go through this normaliser. The specific choice of toLowerCase over toUpperCase here is a genuinely irreducible equivalent mutation opportunity, not merely an untested one: this normaliser's only observable effect anywhere in this file is whether two guid spellings compare equal (a Map key match in readPersons/readThreadedAuthor) — and folding every input to the SAME case, in either direction, produces that identical equality relation for every possible pair of inputs. No test built on this function's own observable contract (guid equality, never the normalised string's own case) can ever tell toLowerCase and toUpperCase apart here, any more than a test could tell +180 from -180 apart in a value that is always later reduced modulo 360 (see canonicalizeGroupRotation's own doc comment in shared/drawingml.ts for the general shape of this argument).
+// ST_Guid as written in these parts is braced and upper case, but the brace spelling varies across producers, so both sides of every guid comparison (personId -> person/@id) go through this normaliser. Folding through a direct ASCII offset on the uppercase hex letters, rather than String.prototype.toLowerCase, avoids the one genuinely irreducible equivalent mutation the obvious spelling has: toLowerCase and toUpperCase are BOTH valid, symmetric case folds, so swapping one for the other cannot ever change this function's only observable effect (guid equality, a Map key match in readPersons/readThreadedAuthor) for any input, since only consistency between the two comparison sides matters, never which direction was chosen. Adding 32 (the fixed uppercase-to-lowercase ASCII offset for A-F, matching '0'-'9' and 'a'-'f' already sitting outside the matched class) has no such symmetric sibling: a mutant flipping "+" to "-" folds 'A'-'F' onto the C0 control range instead of 'a'-'f', which is not another valid case fold, so any guid actually containing an uppercase letter fails to compare equal under it.
 function normalizeGuid(value: string): string {
-  return value.replaceAll("{", "").replaceAll("}", "").toLowerCase();
+  return value
+    .replaceAll("{", "")
+    .replaceAll("}", "")
+    .replace(/[A-F]/g, (letter) =>
+      String.fromCharCode(letter.charCodeAt(0) + 32),
+    );
 }
 
 // Package-relative targets of every relationship of one type from one subject part, already resolved by resolveRelationships (external targets never carry these comment types, whose parts are always internal).
