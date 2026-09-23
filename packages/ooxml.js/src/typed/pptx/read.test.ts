@@ -2845,6 +2845,121 @@ describe("readPptxContent: a table cell's borders object carries only the edges 
   });
 });
 
+describe("readPptxContent: a:pattFill's own foreground/background colours are included only when they resolve", () => {
+  function patternCell(
+    pattFillChildren: ReturnType<typeof el>[],
+  ): ContentTableCell {
+    return readOnlyTableCell(
+      minimalTableGraphicFrame(
+        [el("a:gridCol", { w: "914400" })],
+        [
+          el("a:tr", {}, [
+            el("a:tc", {}, [
+              el("a:tcPr", {}, [
+                el("a:pattFill", { prst: "pct25" }, pattFillChildren),
+              ]),
+              el("a:txBody", {}, [
+                el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("x")])])]),
+              ]),
+            ]),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  it("carries only foregroundColor when a:bgClr is absent — no backgroundColor key at all, not an undefined-valued one", () => {
+    const cell = patternCell([
+      el("a:fgClr", {}, [el("a:srgbClr", { val: "00FF00" })]),
+    ]);
+    expect(cell.background).toStrictEqual({
+      kind: "pattern",
+      patternType: "percent25",
+      foregroundColor: FILL_GREEN,
+    });
+  });
+
+  it("carries only backgroundColor when a:fgClr is absent — no foregroundColor key at all, not an undefined-valued one", () => {
+    const cell = patternCell([
+      el("a:bgClr", {}, [el("a:srgbClr", { val: "0000FF" })]),
+    ]);
+    expect(cell.background).toStrictEqual({
+      kind: "pattern",
+      patternType: "percent25",
+      backgroundColor: FILL_BLUE,
+    });
+  });
+});
+
+describe("readPptxContent: graphic frame kind dispatch checks its own uri, not merely whichever child element happens to be present", () => {
+  it("keeps the frame's geometry with empty content for a chart-uri frame with no c:chart — a spurious a:tbl child is not mistaken for real table content", () => {
+    const frame = el("p:graphicFrame", {}, [
+      el("p:nvGraphicFramePr", {}, [
+        el("p:cNvPr", { id: "2", name: "Chart 1" }),
+      ]),
+      el("p:xfrm", {}, [
+        el("a:off", { x: "914400", y: "914400" }),
+        el("a:ext", { cx: "1828800", cy: "914400" }),
+      ]),
+      el("a:graphic", {}, [
+        el(
+          "a:graphicData",
+          { uri: "http://schemas.openxmlformats.org/drawingml/2006/chart" },
+          [
+            // No c:chart at all — genuinely chart-typed content that happens to also carry an a:tbl the table branch must never reach, since this frame's own uri isn't the table uri.
+            el("a:tbl", {}, [
+              el("a:tblGrid", {}, [el("a:gridCol", { w: "914400" })]),
+              el("a:tr", {}, [
+                el("a:tc", {}, [el("a:txBody", {}, [el("a:p")])]),
+              ]),
+            ]),
+          ],
+        ),
+      ]),
+    ]);
+    const doc = readPptxContent(minimalSlidePackage([frame]));
+    const shape = doc.slides[0]?.shapes.find((s) => s.name === "Chart 1");
+    expect(shape?.blocks).toEqual([]);
+  });
+
+  it("keeps the frame's geometry with empty content for an unrecognised uri, even one whose graphicData carries an a:blip an OLE frame would otherwise read", () => {
+    const frame = el("p:graphicFrame", {}, [
+      el("p:nvGraphicFramePr", {}, [
+        el("p:cNvPr", { id: "2", name: "Unknown 1" }),
+      ]),
+      el("p:xfrm", {}, [
+        el("a:off", { x: "914400", y: "914400" }),
+        el("a:ext", { cx: "1828800", cy: "914400" }),
+      ]),
+      el("a:graphic", {}, [
+        el(
+          "a:graphicData",
+          {
+            uri: "http://schemas.openxmlformats.org/drawingml/2006/unknownKind",
+          },
+          [el("a:blip", { "r:embed": "rIdImage" })],
+        ),
+      ]),
+    ]);
+    const pkg = minimalSlidePackage([frame]);
+    pkg.parts["ppt/slides/_rels/slide1.xml.rels"] = {
+      kind: "xml",
+      nodes: [
+        rels([
+          { id: "rIdImage", type: IMAGE_REL, target: "../media/image1.png" },
+        ]),
+      ],
+    };
+    pkg.parts["ppt/media/image1.png"] = {
+      kind: "binary",
+      base64: tinyPngBase64(),
+    };
+    const doc = readPptxContent(pkg);
+    const shape = doc.slides[0]?.shapes.find((s) => s.name === "Unknown 1");
+    expect(shape?.blocks).toEqual([]);
+  });
+});
+
 describe("readPptxContent: a:pattFill with no @prst at all", () => {
   it("reads no background fill when a:pattFill carries no prst attribute", () => {
     const cell = readOnlyTableCell(
