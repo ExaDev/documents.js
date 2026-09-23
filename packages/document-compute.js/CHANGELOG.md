@@ -1,3 +1,14 @@
+## [1.6.9](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.6.8...document-compute.js%401.6.9) (2026-09-23)
+
+### Bug Fixes
+
+* **document-compute.js:** escape literal braces the TSDoc parser tried to interpret ([0709b77](https://github.com/ExaDev/documents.js/commit/0709b774310a7b48af86783b0f658d715ea0e9f4)), references [ExaDev/documents.js#1275](https://github.com/ExaDev/documents.js/issues/1275)
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.0
+
 ## [1.6.8](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.6.7...document-compute.js%401.6.8) (2026-09-23)
 
 
