@@ -12,14 +12,18 @@ import { createEmptyPptxPackage, ensureNotesMaster } from "./scaffold";
 
 // The first child of a part's element with the given tag, failing the test (with the tag in the message) when absent — every assertion below walks down from a real element, so a missing rung is a scaffold defect, not an undefined-chase.
 function elementChild(node: XmlElement | undefined, tag: string): XmlElement {
-  const found = childrenWithTag(node, tag)[0];
+  const found = node === undefined ? undefined : childrenWithTag(node, tag)[0];
   if (found === undefined) {
     throw new Error(`expected a <${tag}> child`);
   }
   return found;
 }
 
-function attributeMap(node: XmlElement): Record<string, string> {
+// A part root's attributes as one map, failing the test when the root itself is absent for the same reason.
+function attributeMap(node: XmlElement | undefined): Record<string, string> {
+  if (node === undefined) {
+    throw new Error("expected an element");
+  }
   return Object.fromEntries(
     node.attributes.map((a) => [a.name, a.value] as const),
   );
@@ -821,6 +825,7 @@ describe("ensureNotesMaster: relationships and failure paths", () => {
     const pkg = createEmptyPptxPackage();
     ensureNotesMaster(pkg);
     const master = rootElement(pkg.parts["ppt/notesMasters/notesMaster1.xml"]);
+    expect(master?.tag).toBe("p:notesMaster");
     expect(attributeMap(master)).toEqual({
       "xmlns:p": "http://schemas.openxmlformats.org/presentationml/2006/main",
       "xmlns:a": "http://schemas.openxmlformats.org/drawingml/2006/main",
@@ -882,5 +887,48 @@ describe("ensureNotesMaster: relationships and failure paths", () => {
       ?.children.filter((c): c is XmlElement => c.type === "element")
       .map((c) => c.tag);
     expect(childTags).toEqual(["p:notesMasterIdLst"]);
+  });
+
+  it("inserts directly after p:sldMasterIdLst even when it is not the first element", () => {
+    // A hand-authored presentation may order its own children differently; the insertion point is AFTER p:sldMasterIdLst itself, not simply at index 1 or at the front.
+    const pkg = createEmptyPptxPackage();
+    const presentation = rootElement(pkg.parts["ppt/presentation.xml"]);
+    presentation?.children.reverse();
+    ensureNotesMaster(pkg);
+    const childTags = rootElement(pkg.parts["ppt/presentation.xml"])
+      ?.children.filter((c): c is XmlElement => c.type === "element")
+      .map((c) => c.tag);
+    expect(childTags).toEqual([
+      "p:notesSz",
+      "p:sldSz",
+      "p:sldIdLst",
+      "p:sldMasterIdLst",
+      "p:notesMasterIdLst",
+    ]);
+  });
+
+  it("a second call re-runs nothing: the presentation gains no duplicate list and the notes master no duplicate relationship", () => {
+    // Part-count alone cannot see a re-run (every part key is overwritten in place), so idempotency is pinned on the two structures a re-run would duplicate instead.
+    const pkg = createEmptyPptxPackage();
+    ensureNotesMaster(pkg);
+    ensureNotesMaster(pkg);
+    const presentation = rootElement(pkg.parts["ppt/presentation.xml"]);
+    const notesMasterListCount =
+      presentation === undefined
+        ? 0
+        : presentation.children.filter(
+            (c): c is XmlElement =>
+              c.type === "element" && c.tag === "p:notesMasterIdLst",
+          ).length;
+    expect(notesMasterListCount).toBe(1);
+    const rels = rootElement(
+      pkg.parts["ppt/notesMasters/_rels/notesMaster1.xml.rels"],
+    );
+    const relationshipCount =
+      rels === undefined
+        ? 0
+        : rels.children.filter((c): c is XmlElement => c.type === "element")
+            .length;
+    expect(relationshipCount).toBe(1);
   });
 });
