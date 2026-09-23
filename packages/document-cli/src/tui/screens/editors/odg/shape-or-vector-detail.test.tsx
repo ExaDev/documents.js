@@ -246,6 +246,34 @@ describe("OdgShapeOrVectorDetailScreen", () => {
     expect(frame).toMatch(/Stroke: rgb\(0\.00, 0\.00, 0\.00\) 1\.0pt/);
   });
 
+  it("starts the Fill row's own edit box empty when the vector has no fill of its own", async () => {
+    const editor = createOdg();
+    const page = editor.addPage();
+    page.addRect({ frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 } });
+    const doc = openOdgDocument(editor);
+
+    const rendered = render(
+      <AppStateProvider>
+        <Harness
+          doc={doc}
+          target={{ kind: "shapeOrVectorDetail", pageIndex: 0, itemIndex: 0 }}
+        />
+      </AppStateProvider>,
+    );
+    await waitForTop(rendered, "shapeOrVectorDetail");
+    rendered.stdin.write("\r");
+    await settle();
+    // Typing straight after Enter, with no backspacing first, proves the box started empty: a fixed "0.9 0.9 0.9" landing means currentValue's own "" branch for an undefined fill never ran, leaving a leftover non-empty draft from React's own initial state instead.
+    rendered.stdin.write("0.9 0.9 0.9");
+    await settle();
+    rendered.stdin.write("\r");
+
+    const frame = await waitForFlatFrame(rendered, (candidate) =>
+      candidate.includes("0.90, 0.90, 0.90"),
+    );
+    expect(frame).toMatch(/Fill: rgb\(0\.90, 0\.90, 0\.90\)/);
+  });
+
   it("commits a new fill through SET_VECTOR_FILL when the Fill row is edited, over its own real pre-filled value", async () => {
     const editor = createOdg();
     const page = editor.addPage();
