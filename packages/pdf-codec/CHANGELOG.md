@@ -1,3 +1,13 @@
+## [5.2.14](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.13...pdf-codec%405.2.14) (2026-09-23)
+
+### Code Refactoring
+
+* **pdf-codec:** remove equivalent-mutant shapes from the tier-2 packet decoder ([85865d8](https://github.com/ExaDev/documents.js/commit/85865d89e40b3ec9eff32827827757881f81deb9)), references [#1306](https://github.com/ExaDev/documents.js/issues/1306)
+
+### Tests
+
+* **pdf-codec:** close jpeg2000-t2.ts's mutation gap from 70 to 100 ([76e608f](https://github.com/ExaDev/documents.js/commit/76e608f42a8cf819118db9e161a4ab187b5882c8)), references [#1306](https://github.com/ExaDev/documents.js/issues/1306)
+
 ## [5.2.13](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.12...pdf-codec%405.2.13) (2026-09-23)
 
 ### Tests
