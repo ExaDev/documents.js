@@ -232,6 +232,18 @@ describe("reconstructWordprocessing: paragraph clustering", () => {
     const paras = paragraphs(doc);
     expect(paras).toHaveLength(1);
   });
+
+  it("never clusters two items onto one baseline once their vertical gap exceeds the tolerance, pinning that tolerance at exactly 0.5em rather than a looser generic default", () => {
+    const pg = page(612, 792, [
+      // 12pt font, 7pt vertical gap: 0.5em (this module's own tolerance) is 6pt, so 7pt is genuinely a different baseline; a looser ~0.667em default would wrongly admit it (8pt threshold).
+      text({ text: "FirstLine", xPt: 50, yPt: 700, widthPt: 60, sizePt: 12 }),
+      text({ text: "SecondLine", xPt: 50, yPt: 693, widthPt: 60, sizePt: 12 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    // Two genuinely separate lines within one paragraph join with a single inserted space; onto one (wrongly merged) baseline they would instead sort by x and abut directly with no space, since the items occupy the same x-range.
+    expect(para!.runs.map((r) => r.text).join("")).toBe("FirstLine SecondLine");
+  });
 });
 
 describe("reconstructWordprocessing: heading inference from font size", () => {
@@ -500,6 +512,70 @@ describe("reconstructWordprocessing: duplicate-paint collapsing", () => {
       "Op",
     ]);
   });
+
+  it("drops an exact duplicate paint of a zero-width item at the identical position, a case the overlap-based dedup below can never catch since a zero-width item never overlaps its own repeat", () => {
+    const pg = page(612, 792, [
+      text({ text: "X", xPt: 50, yPt: 700, widthPt: 0 }),
+      text({ text: "X", xPt: 50, yPt: 700, widthPt: 0 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.map((r) => r.text)).toEqual(["X"]);
+  });
+
+  it("keeps two zero-width same-text items whose duplicate-paint position bucket genuinely differs, proving the bucket is measured from real division rather than a coarser scale", () => {
+    const pg = page(612, 792, [
+      text({ text: "AB", xPt: 50, yPt: 700, widthPt: 3 }),
+      // 4pt away: comfortably outside the 0.1pt duplicate-paint bucket, and outside item 1's own 3pt-wide extent, so this is genuinely distinct content, not float noise.
+      text({ text: "AB", xPt: 54, yPt: 700, widthPt: 3 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.map((r) => r.text).join("")).toBe("AB AB");
+  });
+
+  it("keeps two zero-width same-text items at the same x but a y position genuinely outside the duplicate-paint bucket, proving the y bucket is measured from real division too", () => {
+    const pg = page(612, 792, [
+      text({ text: "CD", xPt: 50, yPt: 700, widthPt: 0 }),
+      // Same x (so a zero-width item never overlaps its own repeat, keeping the overlap-based dedup below out of this), 4pt away in y — comfortably outside the 0.1pt bucket, and still within baseline tolerance so both land on one clustered line.
+      text({ text: "CD", xPt: 50, yPt: 704, widthPt: 0 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.map((r) => r.text)).toEqual(["CD", "CD"]);
+  });
+
+  it("drops a duplicate paint that differs from the kept occurrence only by a trailing space, when the two are far enough apart that the overlap-based dedup below cannot also catch it", () => {
+    const pg = page(612, 792, [
+      text({ text: "Hello ", xPt: 50, yPt: 700, widthPt: 0 }),
+      text({ text: "Hello", xPt: 50, yPt: 700, widthPt: 0 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.map((r) => r.text)).toEqual(["Hello "]);
+  });
+
+  it("drops an overlapping repeat whose own position sits far enough from the kept occurrence that the duplicate-paint position bucket above cannot also catch it", () => {
+    const pg = page(612, 792, [
+      text({ text: "Hello ", xPt: 50, yPt: 700, widthPt: 30 }),
+      // 5pt away (outside the 0.1pt duplicate-paint bucket) but still inside the kept occurrence's own 30pt-wide extent, so only the overlap-based dedup, not the position-bucket one, can catch this.
+      text({ text: "Hello", xPt: 55, yPt: 700, widthPt: 30 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.map((r) => r.text)).toEqual(["Hello "]);
+  });
+
+  it("keeps a repeat that starts exactly at the kept occurrence's own right edge, the boundary at which touching stops being overlapping", () => {
+    const pg = page(612, 792, [
+      text({ text: "Op", xPt: 50, yPt: 700, widthPt: 10 }),
+      // Starts at exactly 60 (50 + 10) — touching, not overlapping: a real table never lays out two cells this close unless they are genuinely distinct.
+      text({ text: "Op", xPt: 60, yPt: 700, widthPt: 10 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.map((r) => r.text)).toEqual(["Op", "Op"]);
+  });
 });
 
 describe("reconstructWordprocessing: fuzzy redraw collapsing (ExaDev/documents.js#1066)", () => {
@@ -597,6 +673,162 @@ describe("reconstructWordprocessing: fuzzy redraw collapsing (ExaDev/documents.j
     const doc = reconstructWordprocessing(docFrom([pg]));
     const [para] = paragraphs(doc);
     expect(para!.runs.map((r) => r.text)).toEqual(["NP"]);
+  });
+
+  it("still recognises a redraw whose text is split into many single-character fragments as the same sentence a differently-fragmented copy already carries, proving pass text is joined with no separator between fragments", () => {
+    const word = "Accesscontrolpolicies";
+    const pg = page(612, 792, [
+      text({ text: "Access", xPt: 50, yPt: 700, widthPt: 36 }),
+      text({ text: "control", xPt: 86, yPt: 700, widthPt: 42 }),
+      text({ text: "policies", xPt: 128, yPt: 700, widthPt: 48 }),
+      // The identical sentence redrawn as one single-character fragment per letter, restarting near the same left margin — genuinely the same content, just tokenised far more finely than the kept copy above.
+      ...Array.from(word).map((ch, i) =>
+        text({ text: ch, xPt: 50.2 + i, yPt: 700, widthPt: 1 }),
+      ),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.map((r) => r.text).join("")).toBe(
+      "Accesscontrolpolicies",
+    );
+  });
+
+  it("recognises a redraw that differs from the kept copy by exactly one substituted character in the middle, not just at the very end", () => {
+    const pg = page(612, 792, [
+      text({ text: "AACCGECCCIAC", xPt: 50, yPt: 700, widthPt: 100 }),
+      // A restart well behind the kept copy's own reach, one character different (position 8: C -> D) from an otherwise identical 12-character redraw.
+      text({ text: "AACCGECDCIAC", xPt: 52, yPt: 700, widthPt: 100 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.map((r) => r.text).join("")).toBe("AACCGECCCIAC");
+  });
+
+  it("keeps a pass's own reached extent at its high-water mark rather than shrinking it when a later item's own reach is smaller, so a redraw starting just behind that mark is still recognised", () => {
+    const pg = page(612, 792, [
+      text({
+        text: "Access control policies",
+        xPt: 50,
+        yPt: 700,
+        widthPt: 100,
+      }),
+      // A short, narrow filler that reaches less far than item 1 already did — must never pull the pass's own tracked reach backwards.
+      text({ text: " ", xPt: 148, yPt: 700, widthPt: 1 }),
+      // Positioned just behind item 1's own 150pt reach (147.5, within the 2pt rewind tolerance of 148) — a genuine redraw restart, not a continuation of the current pass.
+      text({
+        text: "Access control policied",
+        xPt: 147.5,
+        yPt: 700,
+        widthPt: 100,
+      }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const paras = paragraphs(doc);
+    const allText = paras.flatMap((p) => p.runs.map((r) => r.text)).join("");
+    expect(allText).not.toContain("policied");
+  });
+
+  it("measures redraw similarity as a fraction of the longer pass's own text, not the shorter, so a short kept copy is never treated as an unrecognisable redraw purely because a genuine longer redraw padded a little extra onto it", () => {
+    const pg = page(612, 792, [
+      text({ text: "AACCGECCCIAC", xPt: 50, yPt: 700, widthPt: 100 }),
+      // The identical 12 characters plus 6 extra tacked on — still comfortably similar measured against its own (longer) length, but would read as barely half-similar if measured against the shorter kept copy instead.
+      text({ text: "AACCGECCCIACXXXXXX", xPt: 52, yPt: 700, widthPt: 150 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.map((r) => r.text).join("")).toBe("AACCGECCCIAC");
+  });
+
+  it("never treats a baseline's first pass as a candidate redraw source once its own text falls short of the sentence-length floor, even when a later pass on the same baseline is long and would otherwise look similar enough", () => {
+    const pg = page(612, 792, [
+      text({ text: "Hi there", xPt: 50, yPt: 700, widthPt: 60 }),
+      text({ text: "Hi there!!!!", xPt: 52, yPt: 700, widthPt: 90 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.map((r) => r.text)).toEqual(["Hi there", "Hi there!!!!"]);
+  });
+
+  it("never drops a candidate pass whose own text falls short of the sentence-length floor, even when it reads as similar enough to a long first pass", () => {
+    const pg = page(612, 792, [
+      text({ text: "Hi there!!!!", xPt: 50, yPt: 700, widthPt: 90 }),
+      text({ text: "Hi there!!!", xPt: 52, yPt: 700, widthPt: 80 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.map((r) => r.text)).toEqual([
+      "Hi there!!!!",
+      "Hi there!!!",
+    ]);
+  });
+
+  it("never drops a second pass whose own text merely reads as similar, when its own position never actually overlaps the first pass's own page-space at all", () => {
+    const pg = page(612, 792, [
+      text({
+        text: "Access control policies",
+        xPt: 50,
+        yPt: 700,
+        widthPt: 100,
+      }),
+      // Positioned well to the left of item 1 entirely (10-35), triggering splitIntoPasses' own restart detection (10 is far behind item 1's own 150pt reach) without ever spatially overlapping it — coincidentally similar text, genuinely distinct content.
+      text({ text: "Access control policied", xPt: 10, yPt: 700, widthPt: 25 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const paras = paragraphs(doc);
+    const allText = paras.flatMap((p) => p.runs.map((r) => r.text)).join("");
+    expect(allText).toContain("policied");
+  });
+
+  it("never treats two passes as overlapping when one starts exactly where the other ends — touching, not overlapping, on either edge of the comparison", () => {
+    const pg = page(612, 792, [
+      text({
+        text: "Access control policies",
+        xPt: 100,
+        yPt: 700,
+        widthPt: 100,
+      }),
+      // Restarts well behind item 1's own reach (its own end, 100, lands exactly on item 1's own start) — touching item 1's own left edge precisely, not overlapping it.
+      text({ text: "Access control policied", xPt: 50, yPt: 700, widthPt: 50 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const paras = paragraphs(doc);
+    const allText = paras.flatMap((p) => p.runs.map((r) => r.text)).join("");
+    expect(allText).toContain("policied");
+  });
+
+  it("never treats a third pass as overlapping the first once its own start lands exactly on the first pass's own end, touching rather than overlapping on that edge", () => {
+    const pg = page(612, 792, [
+      text({
+        text: "Access control policies",
+        xPt: 100,
+        yPt: 700,
+        widthPt: 100,
+      }),
+      // A short, unrelated filler pass with a wide reach — long enough to make item 3 below rewind against IT rather than against item 1, and too short itself to ever be considered as a redraw candidate.
+      text({ text: ".", xPt: 10, yPt: 700, widthPt: 300 }),
+      // Starts exactly at item 1's own end (200) — touching its right edge precisely, not overlapping it.
+      text({
+        text: "Access control policied",
+        xPt: 200,
+        yPt: 700,
+        widthPt: 100,
+      }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const paras = paragraphs(doc);
+    const allText = paras.flatMap((p) => p.runs.map((r) => r.text)).join("");
+    expect(allText).toContain("policied");
+  });
+
+  it("drops a redraw whose similarity lands exactly on the recognition threshold, not just strictly above it", () => {
+    const pg = page(612, 792, [
+      text({ text: "AAAAAAAAAAAAAAA", xPt: 50, yPt: 700, widthPt: 100 }),
+      // 6 of 15 characters differ (a similarity of exactly 0.6, the threshold itself), restarting well behind item 1's own reach.
+      text({ text: "BBBBBBAAAAAAAAA", xPt: 52, yPt: 700, widthPt: 100 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.map((r) => r.text).join("")).toBe("AAAAAAAAAAAAAAA");
   });
 });
 
