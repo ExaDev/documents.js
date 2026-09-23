@@ -43,6 +43,7 @@ import {
   buildSfnt,
 } from "./test-support/sfnt";
 import { decodePdfString } from "./pdf-text";
+import { FixtureBuilder } from "./test-support/pdf";
 
 function textLayoutItems(
   items: readonly { kind: string }[],
@@ -404,5 +405,118 @@ describe("decodePdfString", () => {
   it("decodes a plain (no-BOM) string byte-for-byte as Latin-1", () => {
     const bytes = new TextEncoder().encode("Hello");
     expect(decodePdfString(bytes)).toBe("Hello");
+  });
+});
+
+// A minimal one-page PDF with no header junk, no destinations, no outline, no attachments, no optional-content layers, no form fields, no structure tree, and no catalog-level residue at all — the plain baseline every "absent, not merely empty" assertion below needs.
+function plainPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header();
+  b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+  b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+  b.object(
+    3,
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+  );
+  b.object(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  b.stream(
+    5,
+    "<< >>",
+    new TextEncoder().encode("BT /F1 12 Tf 10 50 Td (Hi) Tj ET"),
+  );
+  b.classicXrefAndTrailer(5, "/Root 1 0 R");
+  return b.bytes();
+}
+
+describe("readPdf: top-level fields are absent, not merely empty, when a document carries none of them", () => {
+  it("carries no destinations, outline, attachments, layers, form, structure or source keys at all", () => {
+    const doc = readPdf(plainPdf());
+    expect(doc).not.toHaveProperty("destinations");
+    expect(doc).not.toHaveProperty("outline");
+    expect(doc).not.toHaveProperty("attachments");
+    expect(doc).not.toHaveProperty("layers");
+    expect(doc).not.toHaveProperty("form");
+    expect(doc).not.toHaveProperty("structure");
+    expect(doc).not.toHaveProperty("source");
+  });
+});
+
+describe('readPdf: the "%PDF-" header search window', () => {
+  it("finds the header after leading junk bytes, not only at offset 0", () => {
+    const real = plainPdf();
+    const withJunk = new Uint8Array(3 + real.length);
+    withJunk.set([0xef, 0xbb, 0xbf], 0); // a UTF-8 BOM, the real-world case the search window exists for
+    withJunk.set(real, 3);
+    expect(() => readPdf(withJunk)).not.toThrow();
+    expect(readPdf(withJunk).pages).toHaveLength(1);
+  });
+
+  it('states plainly that the file does not look like a PDF at all when no "%PDF-" header exists anywhere', () => {
+    expect(() => readPdf(new TextEncoder().encode("not a pdf"))).toThrow(
+      /no "%PDF-" header found/,
+    );
+  });
+});
+
+describe("readPdf: catalog-level residue beyond viewer-preferences, page-mode and trailer-id", () => {
+  function residuePdf(): Uint8Array<ArrayBuffer> {
+    const b = new FixtureBuilder().header();
+    b.object(
+      1,
+      "<< /Type /Catalog /Pages 2 0 R /PageLayout /TwoColumnLeft /OpenAction [3 0 R /Fit] /PieceInfo << /Private 6 0 R >> /Legal << /Marked true >> /Collection << /Type /Collection >> >>",
+    );
+    b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    b.object(
+      3,
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    );
+    b.object(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+    b.stream(
+      5,
+      "<< >>",
+      new TextEncoder().encode("BT /F1 12 Tf 10 50 Td (Hi) Tj ET"),
+    );
+    b.object(6, "<< /Marker (custom) >>");
+    b.classicXrefAndTrailer(6, "/Root 1 0 R");
+    return b.bytes();
+  }
+
+  it("quarantines /PageLayout, /OpenAction, /PieceInfo, /Legal and /Collection under their own residue keys", () => {
+    const doc = readPdf(residuePdf());
+    expect(doc.source?.["page-layout"]?.xml).toBe("/TwoColumnLeft");
+    expect(doc.source?.["open-action"]?.xml).toContain("/Fit");
+    expect(doc.source?.["piece-info"]?.xml).toContain("/Private");
+    expect(doc.source?.legal?.xml).toContain("/Marked");
+    expect(doc.source?.collection?.xml).toContain("/Collection");
+  });
+});
+
+describe("readPdf: /Keywords parsing", () => {
+  function withKeywords(keywords: string): Uint8Array<ArrayBuffer> {
+    const b = new FixtureBuilder().header();
+    b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+    b.object(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    b.object(
+      3,
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    );
+    b.object(4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+    b.stream(
+      5,
+      "<< >>",
+      new TextEncoder().encode("BT /F1 12 Tf 10 50 Td (Hi) Tj ET"),
+    );
+    b.object(6, `<< /Keywords (${keywords}) >>`);
+    b.classicXrefAndTrailer(6, "/Root 1 0 R /Info 6 0 R");
+    return b.bytes();
+  }
+
+  it("drops empty entries left by a doubled or trailing comma, trimming whitespace around each survivor", () => {
+    const doc = readPdf(withKeywords("alpha, , beta,,  "));
+    expect(doc.metadata.keywords).toEqual(["alpha", "beta"]);
+  });
+
+  it("reports keywords as undefined when every entry is empty, rather than an empty array", () => {
+    const doc = readPdf(withKeywords(" , ,"));
+    expect(doc.metadata.keywords).toBeUndefined();
   });
 });
