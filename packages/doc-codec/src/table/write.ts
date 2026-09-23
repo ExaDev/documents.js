@@ -401,6 +401,21 @@ function rowSplitFits(
 export const LOST_BOUNDARIES_FEWER_ROW_BUCKETS_MESSAGE =
   "internal defect: distributeLostBoundaries returned fewer buckets than the table has rows";
 
+// A column's own isHeader (ContentTableColumn, document-schema.js, ExaDev/documents.js#1381) is reported through onWarning rather than written: [MS-DOC]'s own table grid ([MS-DOC] 2.9.328's TAP, and the rgdxaCenter boundaries every row states) has no element for a column repeating at the left of each printed page at all — unlike a row's own isHeader, which sprmTTableHeader states directly per row, there is no column-axis counterpart anywhere in the format's table vocabulary (ExaDev/documents.js#1398). The column's own cells are written exactly like any other column; only the flag itself is dropped. Reported once per flagged column, naming the table's own block index and the column's index, matching this function's own lost-boundary warnings below for the identical "doc-codec: table at block N, ..." wording convention.
+function reportDroppedHeaderColumns(
+  table: ContentTable,
+  blockIndex: number,
+  onWarning: WriteWarning | undefined,
+): void {
+  table.columns.forEach((column, columnIndex) => {
+    if (column.isHeader === true) {
+      onWarning?.(
+        `doc-codec: table at block ${blockIndex}, column ${columnIndex} is a header column, and that is dropped; this format's table grid has no header-column marker, so the column is written exactly as any other`,
+      );
+    }
+  });
+}
+
 function flattenTable(
   table: ContentTable,
   blockIndex: number,
@@ -418,6 +433,7 @@ function flattenTable(
       `doc-codec: table at block ${blockIndex} breaks the grid rule: ${describeTableGridFault(gridFault)}`,
     );
   }
+  reportDroppedHeaderColumns(table, blockIndex, onWarning);
   const boundaries = columnBoundariesTwips(table.columns.map((c) => c.widthPt));
   const physicalRows = walkTableGrid(table).map((positions, rowIndex) =>
     physicalCellsForRow(positions, rowIndex),
