@@ -325,6 +325,9 @@ describe("FilePickerScreen", () => {
     expect(appleIndex).toBeLessThan(zebraIndex);
     expect(zebraIndex).toBeLessThan(bravoIndex);
     expect(bravoIndex).toBeLessThan(yankeeIndex);
+    // Proves the files array's own .filter((entry) => !entry.isDirectory()) actually excludes the two real directories: without it, "apple"/"zebra" would additionally appear a second time, unslashed, among the files.
+    expect(frame).not.toMatch(/apple(?!\/)/);
+    expect(frame).not.toMatch(/zebra(?!\/)/);
   });
 
   it("shows no parent entry at the filesystem root, where dirname equals the directory itself", async () => {
