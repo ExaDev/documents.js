@@ -8,6 +8,7 @@ import {
   GB18030_RANGES,
   JIS0208,
   JIS0212,
+  type DbcsTable,
 } from "./dbcs-tables";
 
 /**
@@ -97,33 +98,53 @@ function codePointToText(codePoint: number): string {
   return String.fromCodePoint(codePoint);
 }
 
+/** The first pointer in `table` for which {@link pointerCodePoint} returns a defined code point, or -1 if none does. */
+function firstDefinedPointer(table: DbcsTable): number {
+  for (let pointer = 0; pointer < table.codeUnits.length; pointer += 1) {
+    if (pointerCodePoint(table, pointer) !== undefined) {
+      return pointer;
+    }
+  }
+  return -1;
+}
+
+/** The first pointer in `table` for which {@link pointerCodePoint} returns undefined, or -1 if none does. */
+function firstGapPointer(table: DbcsTable): number {
+  for (let pointer = 0; pointer < table.codeUnits.length; pointer += 1) {
+    if (pointerCodePoint(table, pointer) === undefined) {
+      return pointer;
+    }
+  }
+  return -1;
+}
+
 describe("pointerCodePoint", () => {
   it("returns the table's own value at an in-range, defined pointer", () => {
-    const definedPointer = JIS0208.findIndex((codePoint) => codePoint !== -1);
+    const definedPointer = firstDefinedPointer(JIS0208);
     expect(definedPointer).toBeGreaterThanOrEqual(0);
     expect(pointerCodePoint(JIS0208, definedPointer)).toBe(
-      JIS0208[definedPointer],
+      JIS0208.codeUnits.charCodeAt(definedPointer),
     );
   });
 
-  it("returns undefined at a pointer the table leaves as its own -1 gap marker", () => {
-    const gapPointer = JIS0208.findIndex((codePoint) => codePoint === -1);
+  it("returns undefined at a pointer the table leaves as its own gap marker", () => {
+    const gapPointer = firstGapPointer(JIS0208);
     expect(gapPointer).toBeGreaterThanOrEqual(0);
     expect(pointerCodePoint(JIS0208, gapPointer)).toBeUndefined();
   });
 
   it("returns undefined for a pointer past the end of the table entirely", () => {
     // No real decoder call in this file can ever produce a pointer this large (every one of them bounds pointer to its own table's exact length by construction — see this function's own doc comment) — tested directly here rather than left as untestable defensive code.
-    expect(pointerCodePoint(JIS0208, JIS0208.length)).toBeUndefined();
+    expect(pointerCodePoint(JIS0208, JIS0208.codeUnits.length)).toBeUndefined();
     expect(pointerCodePoint(JIS0208, -1)).toBeUndefined();
   });
 });
 
 describe("decodeText Shift_JIS", () => {
   it("decodes every defined JIS X 0208 pointer to the code point the WHATWG index names", () => {
-    for (let pointer = 0; pointer < JIS0208.length; pointer += 1) {
-      const codePoint = JIS0208[pointer];
-      if (codePoint === undefined || codePoint === -1) {
+    for (let pointer = 0; pointer < JIS0208.codeUnits.length; pointer += 1) {
+      const codePoint = pointerCodePoint(JIS0208, pointer);
+      if (codePoint === undefined) {
         continue;
       }
       const [leading, trail] = shiftJisBytesForPointer(pointer);
@@ -174,11 +195,12 @@ describe("decodeText Shift_JIS", () => {
   it("does not treat the pointer just below the EUDC range as EUDC", () => {
     // Pointer 8647, the highest defined JIS X 0208 pointer below the EUDC band (8836): a real table entry, resolved through the ordinary table lookup rather than the 0xE000 Private Use Area formula.
     const pointer = 8647;
-    const codePoint = JIS0208[pointer];
+    const codePoint = pointerCodePoint(JIS0208, pointer);
     if (codePoint === undefined) {
-      throw new Error("JIS0208 fixture pointer 8647 is out of range");
+      throw new Error(
+        "JIS0208 fixture pointer 8647 is out of range or undefined",
+      );
     }
-    expect(codePoint).not.toBe(-1);
     const [leading, trail] = shiftJisBytesForPointer(pointer);
     expect(
       decodeText(Uint8Array.of(leading, trail), { encoding: "shift_jis" }).text,
@@ -234,8 +256,8 @@ describe("decodeText Shift_JIS", () => {
 
   it("rejects an out-of-band trailing byte even when the pointer arithmetic would otherwise wrap onto a real, defined pointer belonging to a neighbouring lead byte", () => {
     // twoByteTrailColumn's own doc comment explains why every boundary here is written against a reachable byte value, but a wrong column computed for an OUT-OF-BAND byte is a distinct risk from a wrong boundary: with lead byte 0x81 specifically, an out-of-range column can only ever produce a negative pointer (nothing to wrap onto, since pointer 0 is 0x81's own first column), which is why 0x81 alone cannot catch a column formula that silently starts counting from the wrong place. Lead byte 0x82 can: 0x82's own row starts at pointer 188, so a column of exactly 188 or -1 lands one past the end of 0x81's row or one before the start of 0x82's own, and both of those pointers are real, defined JIS X 0208 entries — bytes 0x3F and 0xFD have to be refused as invalid trailing bytes outright, not silently reinterpreted as a valid pointer one row over.
-    expect(JIS0208[187]).not.toBe(-1); // 0x81's own last column, reachable by wrapping 0x3F backwards from lead byte 0x82
-    expect(JIS0208[376]).not.toBe(-1); // lead byte 0x83's own first column, reachable by wrapping 0xFD forwards from lead byte 0x82
+    expect(pointerCodePoint(JIS0208, 187)).not.toBeUndefined(); // 0x81's own last column, reachable by wrapping 0x3F backwards from lead byte 0x82
+    expect(pointerCodePoint(JIS0208, 376)).not.toBeUndefined(); // lead byte 0x83's own first column, reachable by wrapping 0xFD forwards from lead byte 0x82
     for (const trail of [0x3f, 0xfd]) {
       expectMalformed(
         () => decodeText(Uint8Array.of(0x82, trail), { encoding: "shift_jis" }),
@@ -267,8 +289,8 @@ describe("decodeText EUC-JP", () => {
   it("decodes every defined JIS X 0208 pointer EUC-JP's own byte range can reach", () => {
     const maxTwoBytePointer = 93 * 94 + 93;
     for (let pointer = 0; pointer <= maxTwoBytePointer; pointer += 1) {
-      const codePoint = JIS0208[pointer];
-      if (codePoint === undefined || codePoint === -1) {
+      const codePoint = pointerCodePoint(JIS0208, pointer);
+      if (codePoint === undefined) {
         continue;
       }
       const [leading, trail] = eucJis0208BytesForPointer(pointer);
@@ -280,9 +302,9 @@ describe("decodeText EUC-JP", () => {
   });
 
   it("decodes every defined JIS X 0212 pointer behind its own 0x8F lead byte", () => {
-    for (let pointer = 0; pointer < JIS0212.length; pointer += 1) {
-      const codePoint = JIS0212[pointer];
-      if (codePoint === undefined || codePoint === -1) {
+    for (let pointer = 0; pointer < JIS0212.codeUnits.length; pointer += 1) {
+      const codePoint = pointerCodePoint(JIS0212, pointer);
+      if (codePoint === undefined) {
         continue;
       }
       const [leading, trail] = eucJis0208BytesForPointer(pointer);
@@ -385,7 +407,7 @@ describe("decodeText EUC-JP", () => {
 
   it("rejects a trailing byte just below the JIS X 0208 index band even when the pointer arithmetic would otherwise wrap onto a real, defined pointer belonging to the row below", () => {
     // Lead byte 0xA1 alone (the lowest valid lead byte) can only wrap a too-low trailing byte to a negative pointer, nothing to land on; lead byte 0xA2 can, since 0xA2's own row starts immediately after 0xA1's, so a trailing byte of 0xA0 (one below the valid [0xA1,0xFE] band) must not silently resolve to 0xA1's own last column.
-    expect(JIS0208[93]).not.toBe(-1);
+    expect(pointerCodePoint(JIS0208, 93)).not.toBeUndefined();
     expectMalformed(
       () => decodeText(Uint8Array.of(0xa2, 0xa0), { encoding: "euc-jp" }),
       "EUC-JP",
@@ -426,9 +448,9 @@ describe("decodeText EUC-JP", () => {
 
 describe("decodeText EUC-KR", () => {
   it("decodes every pointer EUC_KR defines to the code point the WHATWG index names", () => {
-    for (let pointer = 0; pointer < EUC_KR.length; pointer += 1) {
-      const codePoint = EUC_KR[pointer];
-      if (codePoint === undefined || codePoint === -1) {
+    for (let pointer = 0; pointer < EUC_KR.codeUnits.length; pointer += 1) {
+      const codePoint = pointerCodePoint(EUC_KR, pointer);
+      if (codePoint === undefined) {
         continue;
       }
       const [leading, trail] = eucKrBytesForPointer(pointer);
@@ -476,8 +498,8 @@ describe("decodeText EUC-KR", () => {
 
   it("rejects an out-of-band trailing byte even when the pointer arithmetic would otherwise wrap onto a real, defined pointer belonging to a neighbouring lead byte", () => {
     // The same risk twoByteTrailColumn's own doc comment describes for Shift_JIS, Big5 and gb18030, but EUC-KR computes its own single-band column directly rather than through that shared helper, so it needs its own version of the same check: lead byte 0x82 (not the lowest possible lead byte, 0x81, which can only wrap to a negative pointer with nothing real to land on) with a trailing byte just outside [0x41,0xFE] on either side.
-    expect(EUC_KR[189]).not.toBe(-1); // 0x81's own last column, reachable by wrapping 0x40 backwards from lead byte 0x82
-    expect(EUC_KR[380]).not.toBe(-1); // lead byte 0x83's own first column, reachable by wrapping 0xFF forwards from lead byte 0x82
+    expect(pointerCodePoint(EUC_KR, 189)).not.toBeUndefined(); // 0x81's own last column, reachable by wrapping 0x40 backwards from lead byte 0x82
+    expect(pointerCodePoint(EUC_KR, 380)).not.toBeUndefined(); // lead byte 0x83's own first column, reachable by wrapping 0xFF forwards from lead byte 0x82
     for (const trail of [0x40, 0xff]) {
       expectMalformed(
         () => decodeText(Uint8Array.of(0x82, trail), { encoding: "euc-kr" }),
@@ -527,12 +549,12 @@ describe("decodeText Big5", () => {
   ]);
 
   it("decodes every single-code-point pointer Big5 defines to the code point the WHATWG index names", () => {
-    for (let pointer = 0; pointer < BIG5.length; pointer += 1) {
+    for (let pointer = 0; pointer < BIG5.codeUnits.length; pointer += 1) {
       if (DOUBLE_CODE_POINT_POINTERS.has(pointer)) {
         continue;
       }
-      const codePoint = BIG5[pointer];
-      if (codePoint === undefined || codePoint === -1) {
+      const codePoint = pointerCodePoint(BIG5, pointer);
+      if (codePoint === undefined) {
         continue;
       }
       const [leading, trail] = big5BytesForPointer(pointer);
@@ -544,12 +566,13 @@ describe("decodeText Big5", () => {
   });
 
   it("decodes a supplementary-plane pointer as a real surrogate pair", () => {
-    // The first BIG5 pointer above the Basic Multilingual Plane, from the CJK Compatibility Ideographs Supplement block.
-    const supplementaryPointer = BIG5.findIndex(
-      (codePoint) => codePoint > 0xffff,
-    );
+    // The first BIG5 pointer above the Basic Multilingual Plane, from the CJK Compatibility Ideographs Supplement block: the lowest key BIG5.astral holds, since dbcs-tables.ts's own generator inserts astral entries in ascending pointer order (see that file's own header comment) and every astral pointer's real code point is, by construction, above 0xFFFF.
+    const supplementaryPointer = BIG5.astral.keys().next().value;
+    if (supplementaryPointer === undefined) {
+      throw new Error("BIG5.astral is unexpectedly empty");
+    }
     expect(supplementaryPointer).toBeGreaterThan(0);
-    const codePoint = BIG5[supplementaryPointer];
+    const codePoint = pointerCodePoint(BIG5, supplementaryPointer);
     expect(codePoint).toBeDefined();
     const [leading, trail] = big5BytesForPointer(supplementaryPointer);
     const text = decodeText(Uint8Array.of(leading, trail), {
@@ -626,9 +649,9 @@ describe("decodeText Big5", () => {
 
 describe("decodeText gb18030 and GBK", () => {
   it("decodes every two-byte pointer GB18030 defines to the code point the WHATWG index names", () => {
-    for (let pointer = 0; pointer < GB18030.length; pointer += 1) {
-      const codePoint = GB18030[pointer];
-      if (codePoint === undefined || codePoint === -1) {
+    for (let pointer = 0; pointer < GB18030.codeUnits.length; pointer += 1) {
+      const codePoint = pointerCodePoint(GB18030, pointer);
+      if (codePoint === undefined) {
         continue;
       }
       const [leading, trail] = gb18030TwoByteBytesForPointer(pointer);
@@ -846,12 +869,12 @@ describe("decodeText DBCS encodings, cross-checked against a platform TextDecode
             ? eucJis0208BytesForPointer
             : gb18030TwoByteBytesForPointer;
       const maxPointer =
-        label === "euc-jp" ? EUC_JP_MAX_POINTER : table.length - 1;
+        label === "euc-jp" ? EUC_JP_MAX_POINTER : table.codeUnits.length - 1;
       const platform = new TextDecoder(label, { fatal: true });
       let sampled = 0;
       for (let pointer = 0; pointer <= maxPointer; pointer += SAMPLE_STEP) {
-        const codePoint = table[pointer];
-        if (codePoint === undefined || codePoint === -1) {
+        const codePoint = pointerCodePoint(table, pointer);
+        if (codePoint === undefined) {
           continue;
         }
         const [leading, trail] = bytesForPointer(pointer);
@@ -868,9 +891,9 @@ describe("decodeText DBCS encodings, cross-checked against a platform TextDecode
   it("agrees with a platform EUC-KR decoder inside the traditional 0xA1-0xFE sub-range", () => {
     const platform = new TextDecoder("euc-kr", { fatal: true });
     let sampled = 0;
-    for (let pointer = 0; pointer < EUC_KR.length; pointer += 1) {
-      const codePoint = EUC_KR[pointer];
-      if (codePoint === undefined || codePoint === -1) {
+    for (let pointer = 0; pointer < EUC_KR.codeUnits.length; pointer += 1) {
+      const codePoint = pointerCodePoint(EUC_KR, pointer);
+      if (codePoint === undefined) {
         continue;
       }
       const [leading, trail] = eucKrBytesForPointer(pointer);
