@@ -92,6 +92,33 @@ export default tseslint.config(
     },
   },
   {
+    // useOpenDocument is a hook exported alongside its own OpenDocumentProvider component -- every consumer nested under the '/_document' layout route needs both from the one module, and route files (which are the exempted case above) never see this file directly.
+    files: ["src/document/OpenDocumentContext.tsx"],
+    rules: {
+      "react-refresh/only-export-components": [
+        "warn",
+        { allowConstantExport: true, allowExportNames: ["useOpenDocument"] },
+      ],
+    },
+  },
+  {
+    // resetOpenDocumentCapture/openDocument/mountWithOpenDocument are plain test-helper functions exported alongside an internal, unexported OpenDocumentCapture component this file defines purely to read openDocument out of context for the tests that import it -- the identical shape RecentFilesPanel.tsx's own override above documents.
+    files: ["src/test/openDocumentHarness.tsx"],
+    rules: {
+      "react-refresh/only-export-components": [
+        "warn",
+        {
+          allowConstantExport: true,
+          allowExportNames: [
+            "resetOpenDocumentCapture",
+            "openDocument",
+            "mountWithOpenDocument",
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ["src/workers/**/*.ts"],
     languageOptions: { globals: { ...globals.worker } },
   },
