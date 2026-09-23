@@ -46,12 +46,8 @@ function readNumberFormatCodesById(
     if (idRaw === undefined || formatCode === undefined) {
       continue;
     }
-    const id = Number.parseInt(idRaw, 10);
-    // Genuinely irreducible, not merely untested, given every real caller: readCellStyles' own numFmtId lookup below applies the identical Number.isInteger guard before ever calling codes.get, so a non-integer id here can only ever register a Map entry keyed by NaN that no real call site can ever look up (a genuine cell xf's own numFmtId is gated by that same guard first) — this function's only observable effect, through readCellFormatCodes/readCellStyles, is unchanged whether or not this check runs.
-    if (Number.isInteger(id)) {
-      // decodeEntities is load-bearing here, not defensive: this package's lossless layer keeps attribute values exactly as written, and a real format code routinely contains quoted literals — LibreOffice's own boolean format arrives as `&quot;TRUE&quot;;&quot;TRUE&quot;;&quot;FALSE&quot;`, which would tokenize as bare code characters rather than as quoted text if fed through raw.
-      codes.set(id, decodeEntities(formatCode));
-    }
+    // No Number.isInteger(id) guard here: a malformed numFmtId that fails to parse (Number.parseInt returns NaN) still registers, keyed by NaN — harmless, since readCellStyles' own numFmtId lookup below applies its own Number.isInteger guard before ever calling codes.get, so a genuine cell xf can never actually look this entry back up. Guarding here too would only ever be a second copy of that same check, not a different one. decodeEntities is load-bearing here, not defensive: this package's lossless layer keeps attribute values exactly as written, and a real format code routinely contains quoted literals — LibreOffice's own boolean format arrives as `&quot;TRUE&quot;;&quot;TRUE&quot;;&quot;FALSE&quot;`, which would tokenize as bare code characters rather than as quoted text if fed through raw.
+    codes.set(Number.parseInt(idRaw, 10), decodeEntities(formatCode));
   }
   return codes;
 }
@@ -240,12 +236,9 @@ export function colorFromElement(
   if (raw === undefined) {
     return undefined;
   }
-  // Excel writes "FFRRGGBB" (alpha + RGB); a 6-digit "RRGGBB" is also spec-legal. Take the LAST six hex digits in both cases, since the alpha channel has no ContentSheetCell.background representation and a leading "FF" is the only prefix real producers emit. The boundary here (">=" rather than ">") is a genuinely irreducible equivalent mutation opportunity: at raw.length exactly 6, slice(-6) returns the whole, unchanged string — identical to what the ">" branch's bare `raw` would have returned directly — so the two operators can never be told apart by this result for any input.
-  const hex = raw.length >= 6 ? raw.slice(-6) : raw;
-  // The regex's own "^"/"$" anchors are equally irreducible: `hex` is always either exactly 6 characters (the slice above) or fewer (raw itself, when shorter) — never more. A {6}-quantified pattern can only ever match a 6-character string across its entire length regardless of anchors, and can never match a shorter one at all, so no possible `hex` value can tell an anchored and an unanchored match apart here.
-  if (!/^[0-9a-fA-F]{6}$/.test(hex)) {
-    return undefined;
-  }
+  // Excel writes "FFRRGGBB" (alpha + RGB); a 6-digit "RRGGBB" is also spec-legal. Take the LAST six hex digits in both cases, since the alpha channel has no ContentSheetCell.background representation and a leading "FF" is the only prefix real producers emit. slice(-6) alone already covers every raw.length: a string shorter than 6 characters clamps to the whole, unchanged string, exactly what a separate "too short, leave it alone" branch would have returned.
+  const hex = raw.slice(-6);
+  // No local hex-pattern guard: rgbHexToColor validates its own argument against this exact 6-digit pattern and throws for anything that doesn't match, which the catch below turns into the same undefined a local guard would otherwise have returned directly.
   try {
     return rgbHexToColor(hex);
   } catch {
@@ -429,7 +422,7 @@ export function readCellStyles(pkg: Package): readonly CellStyleEntry[] {
         ? GENERAL_NUM_FMT_ID
         : Number.parseInt(numFmtRaw, 10);
     const entry: CellStyleEntry = {};
-    // Genuinely irreducible, not merely untested: readNumberFormatCodesById above applies this identical guard before ever writing a Map entry, so `codes` can never actually hold a NaN key — codes.get(NaN) already returns undefined on its own (a Map lookup miss, not a throw), the same outcome this guard would have skipped to directly for a non-integer numFmtId.
+    // Load-bearing, not defensive: readNumberFormatCodesById above registers a malformed <numFmts><numFmt> entry too (keyed by whatever Number.parseInt produced, NaN included), so this guard is what actually stops a cell xf whose own numFmtId fails to parse from spuriously matching a differently-malformed numFmts declaration that happens to parse to the identical NaN.
     if (Number.isInteger(numFmtId)) {
       const code = codes.get(numFmtId);
       if (code !== undefined) {
@@ -563,24 +556,24 @@ function normalisedFontOf(font: ContentFont | undefined): DeclaredFont {
   };
 }
 
-// Every "=== true" comparison and the "?? ''" colour fallback below are genuinely irreducible equivalent mutation opportunities, not merely untested ones: this signature is consumed ONLY as an internal Map key (fontIndexBySignature), never exposed, so what matters is solely whether two DIFFERENT DeclaredFont values ever produce equal strings (a wrong collision) or two IDENTICAL values ever produce different ones (a wrong split) — never which literal characters a given input maps to. Flipping "=== true" to "!== true" for one boolean field relabels that field's two segment values (swapping which string means "on" and which means "off") but stays a bijection over {true, non-true}, so it still correctly distinguishes every bold=true font from every bold=false one and still collides every bold=true font with every other bold=true font — the equivalence classes this signature partitions inputs into are unchanged. The colour fallback is the same shape: no valid 6-hex-digit colorRgb string can ever equal the empty string (or any other fixed placeholder a mutant substitutes), so the "no colour" case can never collide with a real one regardless of which placeholder marks it.
+// This signature is consumed ONLY as an internal Map key (fontIndexBySignature), never exposed, so what matters is solely whether two DIFFERENT DeclaredFont values ever produce equal strings (a wrong collision) or two IDENTICAL values ever produce different ones (a wrong split) — never which literal characters a given input maps to. Each boolean segment folds through "?? false" rather than a "=== true" comparison: normalisedFontOf's own contract states bold/italic/underline/strike as `true` or `undefined`, and "?? false" collapses both a genuine `undefined` and an out-of-contract `false` onto the identical "false" segment, the same two-bucket split "=== true" gave — so a font-table entry-0 diff and a font actually stating the property off still collide exactly as they must, this table's own real correctness requirement (proven by the "font signature isolates every one of its own segments" tests below, not merely assumed). declared.colorRgb is interpolated with no "no colour" placeholder: the JS-coerced string "undefined" can never collide with a real 6-hex-digit colorRgb value, so there is nothing here for a false/undefined-style collapse to protect.
 function signatureOfFont(font: ContentFont | undefined): string {
   const declared = normalisedFontOf(font);
-  let sig = `b:${declared.bold === true}`;
-  sig += `|i:${declared.italic === true}`;
-  sig += `|u:${declared.underline === true}`;
-  sig += `|s:${declared.strike === true}`;
-  sig += `|rgb:${declared.colorRgb ?? ""}`;
+  let sig = `b:${declared.bold ?? false}`;
+  sig += `|i:${declared.italic ?? false}`;
+  sig += `|u:${declared.underline ?? false}`;
+  sig += `|s:${declared.strike ?? false}`;
+  sig += `|rgb:${declared.colorRgb}`;
   sig += `|sz:${declared.sz}`;
   sig += `|n:${declared.name}`;
   return sig;
 }
 
-// A deterministic signature for one ContentCellFill, shared by signatureOfDecoration (the cellXfs interning key) and CellFormatTable.internFill (the <fills> table's own dedup key) so the two can never disagree about which fills count as identical. Each "? '' :" fallback below is a genuinely irreducible equivalent mutation opportunity for the identical reason signatureOfFont's own colour fallback is: no valid colorToRgbHex output can ever equal a mutant's substituted placeholder, so an absent foreground/background colour can never collide with a real one regardless of which fixed string marks its absence.
+// A deterministic signature for one ContentCellFill, shared by signatureOfDecoration (the cellXfs interning key) and CellFormatTable.internFill (the <fills> table's own dedup key) so the two can never disagree about which fills count as identical. An absent foreground/background colour interpolates as the JS-coerced "undefined" rather than through an empty-string fallback: no valid colorToRgbHex output can ever equal that string, so absence can never collide with a real colour either way, and there is no separate placeholder literal for that to depend on.
 function fillSignature(fill: ContentCellFill): string {
   return fill.kind === "solid"
     ? `solid:${colorToRgbHex(fill.color)}`
-    : `pattern:${fill.patternType}:${fill.foregroundColor === undefined ? "" : colorToRgbHex(fill.foregroundColor)}:${fill.backgroundColor === undefined ? "" : colorToRgbHex(fill.backgroundColor)}`;
+    : `pattern:${fill.patternType}:${fill.foregroundColor === undefined ? undefined : colorToRgbHex(fill.foregroundColor)}:${fill.backgroundColor === undefined ? undefined : colorToRgbHex(fill.backgroundColor)}`;
 }
 
 // A deterministic signature for a decoration, so two cells carrying identical decoration share one xf entry. widthPt is encoded with enough precision to round-trip the named-weight widths above (0.5/0.75/1.5/2.25) without floating-point drift producing spurious distinct entries.
@@ -599,13 +592,9 @@ function signatureOfDecoration(decoration: CellFormatDecoration): string {
       }
     }
   }
-  // Both presence guards below are genuinely irreducible equivalent mutation opportunities, not merely untested ones: Alignment and its vertical counterpart are closed string-literal unions (left/center/right/justify, top/middle/bottom) that can never hold the literal string "undefined" a forced-true mutant would interpolate here for an actually-absent value — so an alignment-less decoration can never collide with one genuinely stating a real alignment value, regardless of whether this guard runs.
-  if (decoration.alignment !== undefined) {
-    sig += `|h:${decoration.alignment}`;
-  }
-  if (decoration.verticalAlignment !== undefined) {
-    sig += `|v:${decoration.verticalAlignment}`;
-  }
+  // No presence guard on either segment below: Alignment and its vertical counterpart are closed string-literal unions (left/center/right/justify, top/middle/bottom) that can never hold the JS-coerced string "undefined" an absent value interpolates as here — so an alignment-less decoration can never collide with one genuinely stating a real alignment value, guard or no guard.
+  sig += `|h:${decoration.alignment}`;
+  sig += `|v:${decoration.verticalAlignment}`;
   return sig;
 }
 
@@ -823,17 +812,17 @@ export class CellFormatTable {
 
   private internBorder(borders: ContentCellBorders): number {
     const edges: DeclaredBorder["edges"] = {};
-    // The initial value here is a genuinely irreducible equivalent mutation opportunity, not merely an untested one: borderIndexBySignature starts genuinely empty (no pre-seeded entry, unlike fontIndexBySignature's own DEFAULT_FONT seed), so this string is never compared against a fixed external constant — only ever against itself, built the identical way, on a later call. Any fixed starting string works identically as a dedup key, as long as it is used consistently, which it is.
-    let signature = "";
     for (const edge of ["left", "right", "top", "bottom"] as const) {
       const border = borders[edge];
       if (border !== undefined) {
-        const style = borderToXlsxStyle(border);
-        const rgb = colorToRgbHex(border.color);
-        edges[edge] = { style, rgb };
-        signature += `|${edge}:${style}:${rgb}`;
+        edges[edge] = {
+          style: borderToXlsxStyle(border),
+          rgb: colorToRgbHex(border.color),
+        };
       }
     }
+    // The dedup key IS the declared edges themselves, serialised, rather than a separately hand-built string: two decorations sharing identical edges must share one <borders> entry, and JSON.stringify's key order follows the fixed left/right/top/bottom insertion order the loop above always uses, so this is deterministic with no separate accumulator or starting-value literal for a mutant to find an equivalent substitute for.
+    const signature = JSON.stringify(edges);
     const existing = this.borderIndexBySignature.get(signature);
     if (existing !== undefined) {
       return existing;
