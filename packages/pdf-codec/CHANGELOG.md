@@ -1,3 +1,9 @@
+## [5.2.9](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.8...pdf-codec%405.2.9) (2026-09-23)
+
+### Tests
+
+* **pdf-codec:** cover interpret.ts's colour, marked-content and shape-boundary gaps ([30d5997](https://github.com/ExaDev/documents.js/commit/30d599794221fb7be6ff0d5d66fede088bde7968)), references [#1306](https://github.com/ExaDev/documents.js/issues/1306)
+
 ## [5.2.8](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.7...pdf-codec%405.2.8) (2026-09-23)
 
 
