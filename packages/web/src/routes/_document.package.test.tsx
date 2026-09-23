@@ -5,7 +5,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { OpenedFile } from "../ports/fileAccess";
 import { createMockRpcClient } from "../test/mockRpcClient";
-import { mountWithProviders } from "../test/mountComponent";
+import {
+  mountWithOpenDocument,
+  openDocument,
+  resetOpenDocumentCapture,
+} from "../test/openDocumentHarness";
 
 // A minimal but genuinely schema-valid wordprocessing document, and the tree-form dump PackagePage actually renders for it — assembleTree is the same structural transform the real content.read handler applies (src/rpc/router.ts), so this fixture's package shape matches what the route really receives rather than an ad hoc stand-in.
 const sampleContent: ContentDocument = {
@@ -42,17 +46,8 @@ vi.mock("../ui/notify", () => ({
   },
 }));
 
-// Stands in for the real FileUpload (already covered by its own dedicated test suite): PackagePage's own logic — inferring the format, calling readContent.mutate, rendering/editing the dumped JSON, and restoring it — is what this file exercises.
-let latestOnFile: ((file: OpenedFile) => void) | undefined;
-vi.mock("../ui/FileUpload", () => ({
-  FileUpload: (props: { onFile: (file: OpenedFile) => void }) => {
-    latestOnFile = props.onFile;
-    return <div data-testid="file-upload" />;
-  },
-}));
-
 const { getRpcClient } = await import("../rpc/client");
-const { Route } = await import("./package");
+const { Route } = await import("./_document.package");
 const PackagePage = Route.options.component!;
 
 function openedFile(name: string): OpenedFile {
@@ -60,7 +55,7 @@ function openedFile(name: string): OpenedFile {
 }
 
 function mountPackagePage() {
-  return mountWithProviders(<PackagePage />);
+  return mountWithOpenDocument(<PackagePage />);
 }
 
 function jsonTextarea(container: HTMLElement) {
@@ -79,7 +74,7 @@ function typeInto(textarea: HTMLTextAreaElement, value: string) {
 }
 
 afterEach(() => {
-  latestOnFile = undefined;
+  resetOpenDocumentCapture();
   notifyError.mockReset();
   notifySuccess.mockReset();
   saveFile.mockReset();
@@ -87,17 +82,14 @@ afterEach(() => {
 });
 
 describe("PackagePage", () => {
-  it("renders only the FileUpload before anything is picked", () => {
+  it("prompts to open a document before anything is open", () => {
     const client = createMockRpcClient();
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountPackagePage();
-    expect(
-      mounted.container.querySelector('[data-testid="file-upload"]'),
-    ).not.toBeNull();
-    expect(jsonTextarea(mounted.container)).toBeUndefined();
-    expect(mounted.container.textContent).not.toContain(
-      "does not identify a known document format",
+    expect(mounted.container.textContent).toContain(
+      "Open a document above to see its structure as JSON.",
     );
+    expect(jsonTextarea(mounted.container)).toBeUndefined();
     mounted.unmount();
   });
 
@@ -107,7 +99,7 @@ describe("PackagePage", () => {
     const mounted = mountPackagePage();
 
     act(() => {
-      latestOnFile?.(openedFile("notes.xyz"));
+      openDocument(openedFile("notes.xyz"));
     });
 
     expect(mounted.container.textContent).toContain(
@@ -132,7 +124,7 @@ describe("PackagePage", () => {
     const mounted = mountPackagePage();
 
     act(() => {
-      latestOnFile?.(openedFile("report.docx"));
+      openDocument(openedFile("report.docx"));
     });
     await vi.waitFor(() => {
       expect(mounted.container.textContent).toContain(
@@ -168,7 +160,7 @@ describe("PackagePage", () => {
     mounted.unmount();
   });
 
-  it("clears the previous read's JSON panel when the next pick's extension is unrecognised", async () => {
+  it("clears the previous document's JSON panel when the next open's extension is unrecognised", async () => {
     const client = createMockRpcClient();
     vi.mocked(client.content.read).mockResolvedValue({
       content: sampleContent,
@@ -178,14 +170,14 @@ describe("PackagePage", () => {
     const mounted = mountPackagePage();
 
     act(() => {
-      latestOnFile?.(openedFile("report.docx"));
+      openDocument(openedFile("report.docx"));
     });
     await vi.waitFor(() => {
       expect(jsonTextarea(mounted.container)).toBeDefined();
     });
 
     act(() => {
-      latestOnFile?.(openedFile("notes.xyz"));
+      openDocument(openedFile("notes.xyz"));
     });
 
     expect(jsonTextarea(mounted.container)).toBeUndefined();
@@ -195,32 +187,7 @@ describe("PackagePage", () => {
     mounted.unmount();
   });
 
-  it("stops showing the loading text for a still-in-flight read once the next pick's extension is unrecognised", async () => {
-    const client = createMockRpcClient();
-    vi.mocked(client.content.read).mockReturnValue(new Promise(() => {}));
-    vi.mocked(getRpcClient).mockReturnValue(client);
-    const mounted = mountPackagePage();
-
-    act(() => {
-      latestOnFile?.(openedFile("report.docx"));
-    });
-    await vi.waitFor(() => {
-      expect(mounted.container.textContent).toContain(
-        "Loading document structure…",
-      );
-    });
-
-    act(() => {
-      latestOnFile?.(openedFile("notes.xyz"));
-    });
-
-    expect(mounted.container.textContent).not.toContain(
-      "Loading document structure…",
-    );
-    mounted.unmount();
-  });
-
-  it("does not carry a previous file's in-flight restore state into the next file's Restore button", async () => {
+  it("does not carry a previous document's in-flight restore state into the next document's Restore button", async () => {
     const client = createMockRpcClient();
     vi.mocked(client.content.read).mockResolvedValue({
       content: sampleContent,
@@ -238,7 +205,7 @@ describe("PackagePage", () => {
     const mounted = mountPackagePage();
 
     act(() => {
-      latestOnFile?.(openedFile("first.docx"));
+      openDocument(openedFile("first.docx"));
     });
     await vi.waitFor(() => {
       expect(jsonTextarea(mounted.container)).toBeDefined();
@@ -251,7 +218,7 @@ describe("PackagePage", () => {
     });
 
     act(() => {
-      latestOnFile?.(openedFile("second.docx"));
+      openDocument(openedFile("second.docx"));
     });
     await vi.waitFor(() => {
       expect(jsonTextarea(mounted.container)).toBeDefined();
@@ -275,7 +242,7 @@ describe("PackagePage", () => {
     const mounted = mountPackagePage();
 
     act(() => {
-      latestOnFile?.(openedFile("report.docx"));
+      openDocument(openedFile("report.docx"));
     });
     await vi.waitFor(() => {
       expect(notifyError).toHaveBeenCalledWith(
@@ -297,7 +264,7 @@ describe("PackagePage", () => {
     const mounted = mountPackagePage();
 
     act(() => {
-      latestOnFile?.(openedFile("report.docx"));
+      openDocument(openedFile("report.docx"));
     });
     await vi.waitFor(() => {
       expect(jsonTextarea(mounted.container)).toBeDefined();
@@ -323,7 +290,7 @@ describe("PackagePage", () => {
     const mounted = mountPackagePage();
 
     act(() => {
-      latestOnFile?.(openedFile("report.docx"));
+      openDocument(openedFile("report.docx"));
     });
     await vi.waitFor(() => {
       expect(jsonTextarea(mounted.container)).toBeDefined();
@@ -362,7 +329,7 @@ describe("PackagePage", () => {
     const mounted = mountPackagePage();
 
     act(() => {
-      latestOnFile?.(openedFile("report.docx"));
+      openDocument(openedFile("report.docx"));
     });
     await vi.waitFor(() => {
       expect(jsonTextarea(mounted.container)).toBeDefined();
@@ -396,7 +363,7 @@ describe("PackagePage", () => {
     const mounted = mountPackagePage();
 
     act(() => {
-      latestOnFile?.(openedFile("report.docx"));
+      openDocument(openedFile("report.docx"));
     });
     await vi.waitFor(() => {
       expect(jsonTextarea(mounted.container)).toBeDefined();

@@ -3,23 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { OpenedFile } from "../ports/fileAccess";
 import { createMockRpcClient } from "../test/mockRpcClient";
-import { mountWithProviders } from "../test/mountComponent";
+import {
+  mountWithOpenDocument,
+  openDocument,
+  resetOpenDocumentCapture,
+} from "../test/openDocumentHarness";
 
 vi.mock("../rpc/client", () => ({ getRpcClient: vi.fn() }));
-
-// Stands in for the real FileUpload (already covered by its own dedicated test suite): OdbPage's own logic — calling readOdb.mutate with the picked file's bytes and surfacing the inventory/error/pending states — is what this file exercises.
-let latestOnFile: ((file: OpenedFile) => void) | undefined;
-let latestAccept: Record<string, string[]> | undefined;
-vi.mock("../ui/FileUpload", () => ({
-  FileUpload: (props: {
-    onFile: (file: OpenedFile) => void;
-    accept: Record<string, string[]>;
-  }) => {
-    latestOnFile = props.onFile;
-    latestAccept = props.accept;
-    return <div data-testid="file-upload" />;
-  },
-}));
 
 // Stands in for the real SheetPreview (already covered by its own dedicated test suite): asserting the label/format/content it is given is enough to prove OdbPage wired its own read result through correctly.
 vi.mock("../ui/SheetPreview", () => ({
@@ -45,7 +35,7 @@ vi.mock("../ui/notify", () => ({
 }));
 
 const { getRpcClient } = await import("../rpc/client");
-const { Route } = await import("./odb");
+const { Route } = await import("./_document.odb");
 const OdbPage = Route.options.component!;
 
 function openedFile(name: string): OpenedFile {
@@ -53,30 +43,26 @@ function openedFile(name: string): OpenedFile {
 }
 
 function mountOdbPage() {
-  return mountWithProviders(<OdbPage />);
+  return mountWithOpenDocument(<OdbPage />);
 }
 
 afterEach(() => {
-  latestOnFile = undefined;
-  latestAccept = undefined;
+  resetOpenDocumentCapture();
   notifyError.mockReset();
   vi.mocked(getRpcClient).mockReset();
 });
 
 describe("OdbPage", () => {
-  it("renders the FileUpload, restricted to .odb, with no inventory, error, or preview before anything is picked", () => {
+  it("prompts to open a database, with no inventory, error, or preview before anything is open", () => {
     const client = createMockRpcClient();
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountOdbPage();
-    expect(
-      mounted.container.querySelector('[data-testid="file-upload"]'),
-    ).not.toBeNull();
+    expect(mounted.container.textContent).toContain(
+      "Open an .odb database above to browse it.",
+    );
     expect(
       mounted.container.querySelector('[data-testid="sheet-preview"]'),
     ).toBeNull();
-    expect(latestAccept).toEqual({
-      "application/vnd.oasis.opendocument.base": [".odb"],
-    });
     expect(mounted.container.textContent).not.toContain("tables");
     expect(mounted.container.textContent).not.toContain("could not be read");
     mounted.unmount();
@@ -95,7 +81,9 @@ describe("OdbPage", () => {
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountOdbPage();
 
-    latestOnFile?.(openedFile("archive.odb"));
+    act(() => {
+      openDocument(openedFile("archive.odb"));
+    });
     await vi.waitFor(() => {
       expect(mounted.container.textContent).toContain("Reading database…");
     });
@@ -130,7 +118,9 @@ describe("OdbPage", () => {
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountOdbPage();
 
-    latestOnFile?.(openedFile("archive.odb"));
+    act(() => {
+      openDocument(openedFile("archive.odb"));
+    });
     await vi.waitFor(() => {
       expect(mounted.container.textContent).toContain("2 tables");
     });
@@ -169,7 +159,9 @@ describe("OdbPage", () => {
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountOdbPage();
 
-    latestOnFile?.({ bytes: new Uint8Array([1]), name: "" });
+    act(() => {
+      openDocument({ bytes: new Uint8Array([1]), name: "" });
+    });
     await vi.waitFor(() => {
       expect(mounted.container.textContent).toContain("0 tables");
     });
@@ -196,7 +188,9 @@ describe("OdbPage", () => {
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountOdbPage();
 
-    latestOnFile?.(openedFile("archive.odb"));
+    act(() => {
+      openDocument(openedFile("archive.odb"));
+    });
     await vi.waitFor(() => {
       expect(mounted.container.textContent).toContain("Connection: none");
     });
@@ -209,7 +203,9 @@ describe("OdbPage", () => {
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountOdbPage();
 
-    latestOnFile?.(openedFile("archive.odb"));
+    act(() => {
+      openDocument(openedFile("archive.odb"));
+    });
     await vi.waitFor(() => {
       expect(notifyError).toHaveBeenCalledWith(
         "Could not read database",
@@ -225,13 +221,15 @@ describe("OdbPage", () => {
     mounted.unmount();
   });
 
-  it("clears a previous error immediately on picking a new file, before its read settles", async () => {
+  it("clears a previous error immediately on opening a new database, before its read settles", async () => {
     const client = createMockRpcClient();
     vi.mocked(client.odb.read).mockRejectedValueOnce(new Error("bad header"));
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountOdbPage();
 
-    latestOnFile?.(openedFile("broken.odb"));
+    act(() => {
+      openDocument(openedFile("broken.odb"));
+    });
     await vi.waitFor(() => {
       expect(mounted.container.textContent).toContain("could not be read");
     });
@@ -245,9 +243,12 @@ describe("OdbPage", () => {
       }),
     );
     act(() => {
-      latestOnFile?.(openedFile("archive.odb"));
+      openDocument(openedFile("archive.odb"));
     });
-    expect(mounted.container.textContent).not.toContain("could not be read");
+    // The new mutate() dispatch is triggered from inside an effect (reacting to the shared document changing), one render cycle removed from this act() call itself, rather than synchronously in the same event-handler tick the pre-refactor version called mutate() from -- waitFor settles that extra cycle instead of asserting on it immediately.
+    await vi.waitFor(() => {
+      expect(mounted.container.textContent).not.toContain("could not be read");
+    });
 
     resolveRead({
       inventory: { tables: [], queries: [], forms: [], reports: [] },

@@ -10,26 +10,26 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ConvertRouteImport } from './routes/convert'
+import { Route as DocumentRouteImport } from './routes/_document'
 import { Route as EditorsRouteImport } from './routes/editors'
-import { Route as FontsRouteImport } from './routes/fonts'
-import { Route as InspectRouteImport } from './routes/inspect'
-import { Route as MetadataRouteImport } from './routes/metadata'
-import { Route as OdbRouteImport } from './routes/odb'
-import { Route as OdmRouteImport } from './routes/odm'
-import { Route as PackageRouteImport } from './routes/package'
 import { Route as RecentRouteImport } from './routes/recent'
-import { Route as ConvertIndexRouteImport } from './routes/convert.index'
-import { Route as ConvertSourceTargetRouteImport } from './routes/convert.$source.$target'
+import { Route as DocumentConvertRouteImport } from './routes/_document.convert'
+import { Route as DocumentFontsRouteImport } from './routes/_document.fonts'
+import { Route as DocumentInspectRouteImport } from './routes/_document.inspect'
+import { Route as DocumentMetadataRouteImport } from './routes/_document.metadata'
+import { Route as DocumentOdbRouteImport } from './routes/_document.odb'
+import { Route as DocumentOdmRouteImport } from './routes/_document.odm'
+import { Route as DocumentPackageRouteImport } from './routes/_document.package'
+import { Route as DocumentConvertIndexRouteImport } from './routes/_document.convert.index'
+import { Route as DocumentConvertSourceTargetRouteImport } from './routes/_document.convert.$source.$target'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ConvertRoute = ConvertRouteImport.update({
-  id: '/convert',
-  path: '/convert',
+const DocumentRoute = DocumentRouteImport.update({
+  id: '/_document',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EditorsRoute = EditorsRouteImport.update({
@@ -37,148 +37,150 @@ const EditorsRoute = EditorsRouteImport.update({
   path: '/editors',
   getParentRoute: () => rootRouteImport,
 } as any)
-const FontsRoute = FontsRouteImport.update({
-  id: '/fonts',
-  path: '/fonts',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const InspectRoute = InspectRouteImport.update({
-  id: '/inspect',
-  path: '/inspect',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MetadataRoute = MetadataRouteImport.update({
-  id: '/metadata',
-  path: '/metadata',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OdbRoute = OdbRouteImport.update({
-  id: '/odb',
-  path: '/odb',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OdmRoute = OdmRouteImport.update({
-  id: '/odm',
-  path: '/odm',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PackageRoute = PackageRouteImport.update({
-  id: '/package',
-  path: '/package',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const RecentRoute = RecentRouteImport.update({
   id: '/recent',
   path: '/recent',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ConvertIndexRoute = ConvertIndexRouteImport.update({
+const DocumentConvertRoute = DocumentConvertRouteImport.update({
+  id: '/convert',
+  path: '/convert',
+  getParentRoute: () => DocumentRoute,
+} as any)
+const DocumentFontsRoute = DocumentFontsRouteImport.update({
+  id: '/fonts',
+  path: '/fonts',
+  getParentRoute: () => DocumentRoute,
+} as any)
+const DocumentInspectRoute = DocumentInspectRouteImport.update({
+  id: '/inspect',
+  path: '/inspect',
+  getParentRoute: () => DocumentRoute,
+} as any)
+const DocumentMetadataRoute = DocumentMetadataRouteImport.update({
+  id: '/metadata',
+  path: '/metadata',
+  getParentRoute: () => DocumentRoute,
+} as any)
+const DocumentOdbRoute = DocumentOdbRouteImport.update({
+  id: '/odb',
+  path: '/odb',
+  getParentRoute: () => DocumentRoute,
+} as any)
+const DocumentOdmRoute = DocumentOdmRouteImport.update({
+  id: '/odm',
+  path: '/odm',
+  getParentRoute: () => DocumentRoute,
+} as any)
+const DocumentPackageRoute = DocumentPackageRouteImport.update({
+  id: '/package',
+  path: '/package',
+  getParentRoute: () => DocumentRoute,
+} as any)
+const DocumentConvertIndexRoute = DocumentConvertIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => ConvertRoute,
+  getParentRoute: () => DocumentConvertRoute,
 } as any)
-const ConvertSourceTargetRoute = ConvertSourceTargetRouteImport.update({
-  id: '/$source/$target',
-  path: '/$source/$target',
-  getParentRoute: () => ConvertRoute,
-} as any)
+const DocumentConvertSourceTargetRoute =
+  DocumentConvertSourceTargetRouteImport.update({
+    id: '/$source/$target',
+    path: '/$source/$target',
+    getParentRoute: () => DocumentConvertRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/convert': typeof ConvertRouteWithChildren
   '/editors': typeof EditorsRoute
-  '/fonts': typeof FontsRoute
-  '/inspect': typeof InspectRoute
-  '/metadata': typeof MetadataRoute
-  '/odb': typeof OdbRoute
-  '/odm': typeof OdmRoute
-  '/package': typeof PackageRoute
   '/recent': typeof RecentRoute
-  '/convert/': typeof ConvertIndexRoute
-  '/convert/$source/$target': typeof ConvertSourceTargetRoute
+  '/convert': typeof DocumentConvertRouteWithChildren
+  '/fonts': typeof DocumentFontsRoute
+  '/inspect': typeof DocumentInspectRoute
+  '/metadata': typeof DocumentMetadataRoute
+  '/odb': typeof DocumentOdbRoute
+  '/odm': typeof DocumentOdmRoute
+  '/package': typeof DocumentPackageRoute
+  '/convert/': typeof DocumentConvertIndexRoute
+  '/convert/$source/$target': typeof DocumentConvertSourceTargetRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/editors': typeof EditorsRoute
-  '/fonts': typeof FontsRoute
-  '/inspect': typeof InspectRoute
-  '/metadata': typeof MetadataRoute
-  '/odb': typeof OdbRoute
-  '/odm': typeof OdmRoute
-  '/package': typeof PackageRoute
   '/recent': typeof RecentRoute
-  '/convert': typeof ConvertIndexRoute
-  '/convert/$source/$target': typeof ConvertSourceTargetRoute
+  '/fonts': typeof DocumentFontsRoute
+  '/inspect': typeof DocumentInspectRoute
+  '/metadata': typeof DocumentMetadataRoute
+  '/odb': typeof DocumentOdbRoute
+  '/odm': typeof DocumentOdmRoute
+  '/package': typeof DocumentPackageRoute
+  '/convert': typeof DocumentConvertIndexRoute
+  '/convert/$source/$target': typeof DocumentConvertSourceTargetRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/convert': typeof ConvertRouteWithChildren
+  '/_document': typeof DocumentRouteWithChildren
   '/editors': typeof EditorsRoute
-  '/fonts': typeof FontsRoute
-  '/inspect': typeof InspectRoute
-  '/metadata': typeof MetadataRoute
-  '/odb': typeof OdbRoute
-  '/odm': typeof OdmRoute
-  '/package': typeof PackageRoute
   '/recent': typeof RecentRoute
-  '/convert/': typeof ConvertIndexRoute
-  '/convert/$source/$target': typeof ConvertSourceTargetRoute
+  '/_document/convert': typeof DocumentConvertRouteWithChildren
+  '/_document/fonts': typeof DocumentFontsRoute
+  '/_document/inspect': typeof DocumentInspectRoute
+  '/_document/metadata': typeof DocumentMetadataRoute
+  '/_document/odb': typeof DocumentOdbRoute
+  '/_document/odm': typeof DocumentOdmRoute
+  '/_document/package': typeof DocumentPackageRoute
+  '/_document/convert/': typeof DocumentConvertIndexRoute
+  '/_document/convert/$source/$target': typeof DocumentConvertSourceTargetRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/convert'
     | '/editors'
+    | '/recent'
+    | '/convert'
     | '/fonts'
     | '/inspect'
     | '/metadata'
     | '/odb'
     | '/odm'
     | '/package'
-    | '/recent'
     | '/convert/'
     | '/convert/$source/$target'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/editors'
+    | '/recent'
     | '/fonts'
     | '/inspect'
     | '/metadata'
     | '/odb'
     | '/odm'
     | '/package'
-    | '/recent'
     | '/convert'
     | '/convert/$source/$target'
   id:
     | '__root__'
     | '/'
-    | '/convert'
+    | '/_document'
     | '/editors'
-    | '/fonts'
-    | '/inspect'
-    | '/metadata'
-    | '/odb'
-    | '/odm'
-    | '/package'
     | '/recent'
-    | '/convert/'
-    | '/convert/$source/$target'
+    | '/_document/convert'
+    | '/_document/fonts'
+    | '/_document/inspect'
+    | '/_document/metadata'
+    | '/_document/odb'
+    | '/_document/odm'
+    | '/_document/package'
+    | '/_document/convert/'
+    | '/_document/convert/$source/$target'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ConvertRoute: typeof ConvertRouteWithChildren
+  DocumentRoute: typeof DocumentRouteWithChildren
   EditorsRoute: typeof EditorsRoute
-  FontsRoute: typeof FontsRoute
-  InspectRoute: typeof InspectRoute
-  MetadataRoute: typeof MetadataRoute
-  OdbRoute: typeof OdbRoute
-  OdmRoute: typeof OdmRoute
-  PackageRoute: typeof PackageRoute
   RecentRoute: typeof RecentRoute
 }
 
@@ -191,11 +193,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/convert': {
-      id: '/convert'
-      path: '/convert'
-      fullPath: '/convert'
-      preLoaderRoute: typeof ConvertRouteImport
+    '/_document': {
+      id: '/_document'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof DocumentRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/editors': {
@@ -205,48 +207,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EditorsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/fonts': {
-      id: '/fonts'
-      path: '/fonts'
-      fullPath: '/fonts'
-      preLoaderRoute: typeof FontsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/inspect': {
-      id: '/inspect'
-      path: '/inspect'
-      fullPath: '/inspect'
-      preLoaderRoute: typeof InspectRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/metadata': {
-      id: '/metadata'
-      path: '/metadata'
-      fullPath: '/metadata'
-      preLoaderRoute: typeof MetadataRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/odb': {
-      id: '/odb'
-      path: '/odb'
-      fullPath: '/odb'
-      preLoaderRoute: typeof OdbRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/odm': {
-      id: '/odm'
-      path: '/odm'
-      fullPath: '/odm'
-      preLoaderRoute: typeof OdmRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/package': {
-      id: '/package'
-      path: '/package'
-      fullPath: '/package'
-      preLoaderRoute: typeof PackageRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/recent': {
       id: '/recent'
       path: '/recent'
@@ -254,46 +214,114 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RecentRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/convert/': {
-      id: '/convert/'
+    '/_document/convert': {
+      id: '/_document/convert'
+      path: '/convert'
+      fullPath: '/convert'
+      preLoaderRoute: typeof DocumentConvertRouteImport
+      parentRoute: typeof DocumentRoute
+    }
+    '/_document/fonts': {
+      id: '/_document/fonts'
+      path: '/fonts'
+      fullPath: '/fonts'
+      preLoaderRoute: typeof DocumentFontsRouteImport
+      parentRoute: typeof DocumentRoute
+    }
+    '/_document/inspect': {
+      id: '/_document/inspect'
+      path: '/inspect'
+      fullPath: '/inspect'
+      preLoaderRoute: typeof DocumentInspectRouteImport
+      parentRoute: typeof DocumentRoute
+    }
+    '/_document/metadata': {
+      id: '/_document/metadata'
+      path: '/metadata'
+      fullPath: '/metadata'
+      preLoaderRoute: typeof DocumentMetadataRouteImport
+      parentRoute: typeof DocumentRoute
+    }
+    '/_document/odb': {
+      id: '/_document/odb'
+      path: '/odb'
+      fullPath: '/odb'
+      preLoaderRoute: typeof DocumentOdbRouteImport
+      parentRoute: typeof DocumentRoute
+    }
+    '/_document/odm': {
+      id: '/_document/odm'
+      path: '/odm'
+      fullPath: '/odm'
+      preLoaderRoute: typeof DocumentOdmRouteImport
+      parentRoute: typeof DocumentRoute
+    }
+    '/_document/package': {
+      id: '/_document/package'
+      path: '/package'
+      fullPath: '/package'
+      preLoaderRoute: typeof DocumentPackageRouteImport
+      parentRoute: typeof DocumentRoute
+    }
+    '/_document/convert/': {
+      id: '/_document/convert/'
       path: '/'
       fullPath: '/convert/'
-      preLoaderRoute: typeof ConvertIndexRouteImport
-      parentRoute: typeof ConvertRoute
+      preLoaderRoute: typeof DocumentConvertIndexRouteImport
+      parentRoute: typeof DocumentConvertRoute
     }
-    '/convert/$source/$target': {
-      id: '/convert/$source/$target'
+    '/_document/convert/$source/$target': {
+      id: '/_document/convert/$source/$target'
       path: '/$source/$target'
       fullPath: '/convert/$source/$target'
-      preLoaderRoute: typeof ConvertSourceTargetRouteImport
-      parentRoute: typeof ConvertRoute
+      preLoaderRoute: typeof DocumentConvertSourceTargetRouteImport
+      parentRoute: typeof DocumentConvertRoute
     }
   }
 }
 
-interface ConvertRouteChildren {
-  ConvertIndexRoute: typeof ConvertIndexRoute
-  ConvertSourceTargetRoute: typeof ConvertSourceTargetRoute
+interface DocumentConvertRouteChildren {
+  DocumentConvertIndexRoute: typeof DocumentConvertIndexRoute
+  DocumentConvertSourceTargetRoute: typeof DocumentConvertSourceTargetRoute
 }
 
-const ConvertRouteChildren: ConvertRouteChildren = {
-  ConvertIndexRoute: ConvertIndexRoute,
-  ConvertSourceTargetRoute: ConvertSourceTargetRoute,
+const DocumentConvertRouteChildren: DocumentConvertRouteChildren = {
+  DocumentConvertIndexRoute: DocumentConvertIndexRoute,
+  DocumentConvertSourceTargetRoute: DocumentConvertSourceTargetRoute,
 }
 
-const ConvertRouteWithChildren =
-  ConvertRoute._addFileChildren(ConvertRouteChildren)
+const DocumentConvertRouteWithChildren = DocumentConvertRoute._addFileChildren(
+  DocumentConvertRouteChildren,
+)
+
+interface DocumentRouteChildren {
+  DocumentConvertRoute: typeof DocumentConvertRouteWithChildren
+  DocumentFontsRoute: typeof DocumentFontsRoute
+  DocumentInspectRoute: typeof DocumentInspectRoute
+  DocumentMetadataRoute: typeof DocumentMetadataRoute
+  DocumentOdbRoute: typeof DocumentOdbRoute
+  DocumentOdmRoute: typeof DocumentOdmRoute
+  DocumentPackageRoute: typeof DocumentPackageRoute
+}
+
+const DocumentRouteChildren: DocumentRouteChildren = {
+  DocumentConvertRoute: DocumentConvertRouteWithChildren,
+  DocumentFontsRoute: DocumentFontsRoute,
+  DocumentInspectRoute: DocumentInspectRoute,
+  DocumentMetadataRoute: DocumentMetadataRoute,
+  DocumentOdbRoute: DocumentOdbRoute,
+  DocumentOdmRoute: DocumentOdmRoute,
+  DocumentPackageRoute: DocumentPackageRoute,
+}
+
+const DocumentRouteWithChildren = DocumentRoute._addFileChildren(
+  DocumentRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ConvertRoute: ConvertRouteWithChildren,
+  DocumentRoute: DocumentRouteWithChildren,
   EditorsRoute: EditorsRoute,
-  FontsRoute: FontsRoute,
-  InspectRoute: InspectRoute,
-  MetadataRoute: MetadataRoute,
-  OdbRoute: OdbRoute,
-  OdmRoute: OdmRoute,
-  PackageRoute: PackageRoute,
   RecentRoute: RecentRoute,
 }
 export const routeTree = rootRouteImport
