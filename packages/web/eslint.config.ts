@@ -102,21 +102,9 @@ export default tseslint.config(
     },
   },
   {
-    // resetOpenDocumentCapture/openDocument/mountWithOpenDocument are plain test-helper functions exported alongside an internal, unexported OpenDocumentCapture component this file defines purely to read openDocument out of context for the tests that import it -- the identical shape RecentFilesPanel.tsx's own override above documents.
+    // A test-only helper, never served through Vite's dev server, so fast-refresh boundaries are not a real concern here the way they are for RecentFilesPanel.tsx's own override above -- this file's actual public API is the plain functions it exports (resetOpenDocumentCapture/openDocument/mountWithOpenDocument); OpenDocumentCapture is an internal, unexported component that exists purely to read openDocument out of context for those functions to capture.
     files: ["src/test/openDocumentHarness.tsx"],
-    rules: {
-      "react-refresh/only-export-components": [
-        "warn",
-        {
-          allowConstantExport: true,
-          allowExportNames: [
-            "resetOpenDocumentCapture",
-            "openDocument",
-            "mountWithOpenDocument",
-          ],
-        },
-      ],
-    },
+    rules: { "react-refresh/only-export-components": "off" },
   },
   {
     files: ["src/workers/**/*.ts"],
