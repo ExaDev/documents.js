@@ -4484,7 +4484,36 @@ describe("buildXlsxPackageFromContent: xl/styles.xml and docProps facts pinned i
     expect(childElement(left, "color")).toBeUndefined();
     const top = requireChild(border, "top");
     expect(attributeOf(top, "style")).toBeDefined();
-    expect(childElement(top, "color")).toBeDefined();
+    const topColor = requireChild(top, "color");
+    expect(attributeOf(topColor, "rgb")).toBe("FF00ff00");
+  });
+
+  it("writes a solid fill's own colour into fgColor, with bgColor always the reserved indexed=64 sentinel", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "filled" },
+          displayText: "filled",
+          background: { kind: "solid", color: { r: 1, g: 0, b: 1 } },
+        },
+      ]),
+    );
+    const fill = elementsOf(
+      requireChild(styleSheetOf(pkg), "fills"),
+      "fill",
+    )[2];
+    if (fill === undefined) {
+      throw new Error("expected the interned solid <fill> at index 2");
+    }
+    expect(fill.tag).toBe("fill");
+    const patternFill = requireChild(fill, "patternFill");
+    expect(attributeOf(patternFill, "patternType")).toBe("solid");
+    const fgColor = requireChild(patternFill, "fgColor");
+    expect(attributeOf(fgColor, "rgb")).toBe("FFff00ff");
+    const bgColor = requireChild(patternFill, "bgColor");
+    expect(attributeOf(bgColor, "indexed")).toBe("64");
   });
 
   it("writes no bold/italic/strike/underline/colour element on a font with none of those set", () => {
