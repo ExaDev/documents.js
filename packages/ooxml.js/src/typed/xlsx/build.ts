@@ -40,7 +40,6 @@ import {
 import { SharedStringTable } from "./shared-strings";
 import {
   CellFormatTable,
-  DEFAULT_CELL_FORMAT_INDEX,
   DEFAULT_FONT_INDEX,
   GENERAL_NUM_FMT_ID,
   RESERVED_BORDER_INDICES,
@@ -287,12 +286,9 @@ function buildWorkbookRelsPart(sheetCount: number): XmlPart {
 
 // --- xl/workbook.xml (sheets list + the document's own names + sheet-scoped Print_Area/Print_Titles defined names) ---
 
-// The (name, localSheetId) identity of one emitted definedName, the key the two emission passes reconcile against: a workbook never carries two definedNames of the same name and scope, so a derived print name whose (name, scope) the names array already carries verbatim is a second spelling of the one fact, derived only when the array does not carry it. An unscoped name keys on the empty sheet segment.
-function definedNameKey(
-  name: string,
-  localSheetId: number | undefined,
-): string {
-  return `${name}@${localSheetId ?? ""}`;
+// The (name, localSheetId) identity of one emitted definedName, the key the two emission passes reconcile against: a workbook never carries two definedNames of the same name and scope, so a derived print name whose (name, scope) the names array already carries verbatim is a second spelling of the one fact, derived only when the array does not carry it. localSheetId is typed as a plain number, never undefined, because both call sites below only ever look up a sheet-scoped print name's own (numeric) sheet index — an unscoped name's key (the `@` with nothing after it, matching definitions-write.ts's own buildNameDefinedNameElements, which populates carriedNames) is added there but never looked up through this function, so an undefined branch here would have no caller to observe it.
+function definedNameKey(name: string, localSheetId: number): string {
+  return `${name}@${localSheetId}`;
 }
 
 function buildDefinedNameElements(
@@ -766,29 +762,19 @@ function buildCellElement(
     cell.formula !== undefined,
     sharedStrings,
   );
-  // The cell's own font and decoration (font/background/borders/alignment/verticalAlignment) is interned INTO the same cellXfs index as its number format, so two cells sharing format, font, and decoration share one <xf> entry exactly as a real producer's own output does. A cell carrying neither lands on the same xf an identical-format undecorated cell already did before decoration existed.
-  const decoration =
-    cell.font !== undefined ||
-    cell.background !== undefined ||
-    cell.borders !== undefined ||
-    cell.alignment !== undefined ||
-    cell.verticalAlignment !== undefined
-      ? {
-          font: cell.font,
-          background: cell.background,
-          borders: cell.borders,
-          alignment: cell.alignment,
-          verticalAlignment: cell.verticalAlignment,
-        }
-      : undefined;
+  // The cell's own font and decoration (font/background/borders/alignment/verticalAlignment) is interned INTO the same cellXfs index as its number format, so two cells sharing format, font, and decoration share one <xf> entry exactly as a real producer's own output does. No presence guard ahead of this: an undecorated cell's {font: undefined, background: undefined, ...} object produces the identical signature signatureOfDecoration derives from {}, so cellFormats.intern's own signature cache already lands it on the same default xf an identical-format undecorated cell gets — a separate early return spelled that fact a second time rather than observing anything intern() does not already guarantee.
+  const decoration = {
+    font: cell.font,
+    background: cell.background,
+    borders: cell.borders,
+    alignment: cell.alignment,
+    verticalAlignment: cell.verticalAlignment,
+  };
   const format = rendered?.format;
-  const styleIndex =
-    format === undefined && decoration === undefined
-      ? DEFAULT_CELL_FORMAT_INDEX
-      : cellFormats.intern(
-          format ?? { kind: "builtin", id: GENERAL_NUM_FMT_ID },
-          decoration,
-        );
+  const styleIndex = cellFormats.intern(
+    format ?? { kind: "builtin", id: GENERAL_NUM_FMT_ID },
+    decoration,
+  );
   const attrs: Record<string, string> = {
     r: cellReference(cell.row, cell.column),
     s: String(styleIndex),
