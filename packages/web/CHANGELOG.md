@@ -1,3 +1,18 @@
+## [2.13.0](https://github.com/ExaDev/documents.js/compare/web%402.12.2...web%402.13.0) (2026-09-23)
+
+### Features
+
+* **web:** add a shared open-document context for the document-tool pages ([6826d39](https://github.com/ExaDev/documents.js/commit/6826d396eea6769305d68a0478fd304d53c485f0))
+
+### Bug Fixes
+
+* **web:** repair e2e assumptions that predate the shared open-document layout ([4e50f3e](https://github.com/ExaDev/documents.js/commit/4e50f3ec56b8e3d1ed79d618204aaf5ce5d7c4c3))
+* **web:** stop exporting OpenDocumentCapture just to satisfy fast-refresh ([17c5c9a](https://github.com/ExaDev/documents.js/commit/17c5c9a6a2a02cac4b28a5a777476ce866b60f1b))
+
+### Code Refactoring
+
+* **web:** unify Convert/Metadata/Inspect/Fonts/Package/.odb/.odm onto one open document ([5d303c4](https://github.com/ExaDev/documents.js/commit/5d303c4e92327c6188b8e4616a1727279ba6654c))
+
 ## [2.12.2](https://github.com/ExaDev/documents.js/compare/web%402.12.1...web%402.12.2) (2026-09-23)
 
 ### Tests
