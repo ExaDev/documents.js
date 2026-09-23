@@ -1,3 +1,9 @@
+## [5.2.13](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.12...pdf-codec%405.2.13) (2026-09-23)
+
+### Tests
+
+* **pdf-codec:** cover read.ts's header search, residue and keyword-parsing gaps ([a821fb6](https://github.com/ExaDev/documents.js/commit/a821fb6178a06bb4fddac41716bba8178306550e)), references [#1306](https://github.com/ExaDev/documents.js/issues/1306)
+
 ## [5.2.12](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.11...pdf-codec%405.2.12) (2026-09-23)
 
 ### Tests
