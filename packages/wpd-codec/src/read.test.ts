@@ -99,7 +99,11 @@ describe("readWpdContent", () => {
     const diagnostics: WpdDiagnostic[] = [];
     readWpdContent(
       buildWpdFile([...text("First"), HARD_EOL, ...text("Second")]),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     expect(
       diagnostics.some(
@@ -184,7 +188,11 @@ describe("readWpdContent", () => {
     // Character 0 of set 12 (Tibetan): libwpd's own tibetanMap1 table has no entry below character number 33, so this position genuinely has no mapping in the cited source rather than being a gap this package introduced.
     const document = readWpdContent(
       buildWpdFile([...text("x"), 0xf0, 0, 12, 0xf0]),
-      { sink: (diagnostic) => diagnostics.push(diagnostic) },
+      {
+        sink: (diagnostic) => {
+          diagnostics.push(diagnostic);
+        },
+      },
     );
     expect(paragraphsOf(document)[0]?.runs[0]?.text).toBe("x�");
     const found = diagnostics.find(
@@ -607,7 +615,11 @@ describe("readWpdContent", () => {
         ...variableFunction({ group: 0xd0, subgroup: 7 }),
         ...text("second"),
       ]),
-      { sink: (diagnostic) => diagnostics.push(diagnostic) },
+      {
+        sink: (diagnostic) => {
+          diagnostics.push(diagnostic);
+        },
+      },
     );
     expect(paragraphsOf(document).map((p) => p.runs[0]?.text)).toEqual([
       "first",
@@ -714,7 +726,11 @@ describe("readWpdContent", () => {
     const diagnostics: WpdDiagnostic[] = [];
     const document = readWpdContent(
       buildWpdFile([...text("cell"), 0xc6, ...text("next"), 0xbf]),
-      { sink: (diagnostic) => diagnostics.push(diagnostic) },
+      {
+        sink: (diagnostic) => {
+          diagnostics.push(diagnostic);
+        },
+      },
     );
     expect(paragraphsOf(document).map((p) => p.runs[0]?.text)).toEqual([
       "cell",
@@ -747,7 +763,9 @@ describe("readWpdContent", () => {
       ...variableFunction({ group: 0xd7, subgroup: 0x01 }), // FOOTNOTE_OFF
     ]);
     const document = readWpdContent(bytes, {
-      sink: (d) => diagnostics.push(d),
+      sink: (d) => {
+        diagnostics.push(d);
+      },
     });
     const paragraphs = paragraphsOf(document);
     expect(
@@ -773,7 +791,11 @@ describe("readWpdContent", () => {
         }),
         ...text("plain"),
       ]),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     const found = diagnostics.find(
       (d) => d.code === WpdDiagnosticCodes.MissingPrefixPacket,
@@ -1002,7 +1024,11 @@ describe("readWpdContent", () => {
         ...variableFunction({ group: MERGE_GROUP, subgroup: 0x08 }), // ELSE
         ...text("plain"),
       ]);
-      readWpdContent(bytes, { sink: (d) => diagnostics.push(d) });
+      readWpdContent(bytes, {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      });
       expect(
         diagnostics.filter(
           (diagnostic) =>
@@ -1021,7 +1047,9 @@ describe("readWpdContent", () => {
         ...variableFunction({ group: MERGE_GROUP, subgroup: FIELD_OFF }),
       ]);
       const document = readWpdContent(bytes, {
-        sink: (d) => diagnostics.push(d),
+        sink: (d) => {
+          diagnostics.push(d);
+        },
       });
       const paragraphs = paragraphsOf(document);
       expect(
@@ -1256,7 +1284,11 @@ describe("boxes", () => {
           generalWpTextPacket(text("should not be lifted")),
         ],
       ),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     if (document.kind !== "wordprocessing")
       throw new Error("expected wordprocessing");
@@ -1280,7 +1312,11 @@ describe("boxes", () => {
           { packetType: 0x55, bytes: new Uint8Array(0) }, // font descriptor, not General WP Text
         ],
       ),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     const found = diagnostics.find(
       (d) => d.code === WpdDiagnosticCodes.BoxContentUnresolved,
@@ -1309,7 +1345,11 @@ describe("boxes", () => {
           generalWpTextPacket(text("boxed")),
         ],
       ),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     if (document.kind !== "wordprocessing")
       throw new Error("expected wordprocessing");
@@ -1414,7 +1454,11 @@ describe("boxes", () => {
         { packetType: 0x40, bytes: new Uint8Array([0]) }, // Graphics Filename, not decoded
       ],
     );
-    readWpdContent(bytes, { sink: (d) => diagnostics.push(d) });
+    readWpdContent(bytes, {
+      sink: (d) => {
+        diagnostics.push(d);
+      },
+    });
     const matches = diagnostics.filter(
       (diagnostic) =>
         diagnostic.code === WpdDiagnosticCodes.BoxContentUnresolved,
@@ -1500,7 +1544,11 @@ describe("boxes", () => {
           { packetType: 0x42, bytes: png },
         ],
       ),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     if (document.kind !== "wordprocessing")
       throw new Error("expected wordprocessing");
@@ -1588,7 +1636,11 @@ describe("boxes", () => {
         nonDeletable: boxNonDeletable(0, new Map()),
       }),
     ]);
-    readWpdContent(bytes, { sink: (d) => diagnostics.push(d) });
+    readWpdContent(bytes, {
+      sink: (d) => {
+        diagnostics.push(d);
+      },
+    });
     expect(
       diagnostics.filter(
         (diagnostic) => diagnostic.code === WpdDiagnosticCodes.BoxDropped,
@@ -1648,7 +1700,11 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
           nonDeletable: [1, 0],
         }),
       ]),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     if (document.kind !== "wordprocessing")
       throw new Error("expected wordprocessing");
@@ -1669,7 +1725,11 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
         // General WP Text, the right packet type, but too short for even its own block-count word.
         [{ packetType: 0x08, bytes: new Uint8Array(0) }],
       ),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     if (document.kind !== "wordprocessing")
       throw new Error("expected wordprocessing");
@@ -1732,7 +1792,11 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
         ],
         [generalWpTextPacket(text("DRAFT"))],
       ),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     if (document.kind !== "wordprocessing")
       throw new Error("expected wordprocessing");
@@ -1778,7 +1842,11 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
         ],
         [generalWpTextPacket(text("First watermark"))],
       ),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     if (document.kind !== "wordprocessing")
       throw new Error("expected wordprocessing");
@@ -1809,7 +1877,11 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
         ],
         [generalWpTextPacket(text("DRAFT"))],
       ),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     if (document.kind !== "wordprocessing")
       throw new Error("expected wordprocessing");
@@ -1828,7 +1900,11 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
         ],
         [generalWpTextPacket(text("First header"))],
       ),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     if (document.kind !== "wordprocessing")
       throw new Error("expected wordprocessing");
@@ -1858,7 +1934,9 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
     ];
     const diagnostics: WpdDiagnostic[] = [];
     const flat = readWpdContent(buildWpdFile(documentArea, [noteBody]), {
-      sink: (d) => diagnostics.push(d),
+      sink: (d) => {
+        diagnostics.push(d);
+      },
     });
     if (flat.kind !== "wordprocessing")
       throw new Error("expected wordprocessing");
@@ -1912,7 +1990,11 @@ describe("page furniture and notes (D6/D7, #1128)", () => {
         ],
         [{ packetType: 0x55, bytes: new Uint8Array(0) }], // a real packet, but not General WP Text
       ),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     const found = diagnostics.find(
       (d) => d.code === WpdDiagnosticCodes.NoteDropped,
@@ -2123,7 +2205,11 @@ describe("native OLE objects (#1191)", () => {
 
     // The flat read recovers the bytes but has no field for them, and says so through the OLE-specific code rather than the generic box-content-unresolved one.
     const diagnostics: WpdDiagnostic[] = [];
-    readWpdContent(compound, { sink: (d) => diagnostics.push(d) });
+    readWpdContent(compound, {
+      sink: (d) => {
+        diagnostics.push(d);
+      },
+    });
     const oleDroppedMatches = diagnostics.filter(
       (d) => d.code === WpdDiagnosticCodes.OleObjectDropped,
     );
@@ -2164,7 +2250,11 @@ describe("native OLE objects (#1191)", () => {
     );
 
     const diagnostics: WpdDiagnostic[] = [];
-    readWpdContent(bare, { sink: (d) => diagnostics.push(d) });
+    readWpdContent(bare, {
+      sink: (d) => {
+        diagnostics.push(d);
+      },
+    });
     expect(
       diagnostics.filter((d) => d.code === WpdDiagnosticCodes.OleObjectDropped),
     ).toHaveLength(1);
@@ -2206,7 +2296,11 @@ describe("native OLE objects (#1191)", () => {
           { packetType: 0x40, bytes: new Uint8Array([0]) }, // no children: just a filename
         ],
       ),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     expect(
       diagnostics.filter(
@@ -2391,7 +2485,11 @@ describe("WPG vector graphics embedded in an image box", () => {
           graphicsCachedFileDataPacket(withSkip),
         ],
       ),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     if (document.kind !== "wordprocessing") {
       throw new Error("expected wordprocessing");
@@ -2562,7 +2660,11 @@ describe("WPG vector graphics embedded in an image box", () => {
           graphicsCachedFileDataPacket(withSkips),
         ],
       ),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     const found = diagnostics.find(
       (d) => d.code === WpdDiagnosticCodes.WpgRecordsUndecoded,
@@ -2584,7 +2686,11 @@ describe("WPG vector graphics embedded in an image box", () => {
           graphicsCachedFileDataPacket(wpg),
         ],
       ),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     if (document.kind !== "wordprocessing") {
       throw new Error("expected wordprocessing");
@@ -2612,7 +2718,11 @@ describe("WPG vector graphics embedded in an image box", () => {
           graphicsCachedFileDataPacket(wpg),
         ],
       ),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     if (document.kind !== "wordprocessing") {
       throw new Error("expected wordprocessing");
@@ -2640,7 +2750,11 @@ describe("WPG vector graphics embedded in an image box", () => {
           graphicsCachedFileDataPacket(wpg),
         ],
       ),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     const found = diagnostics.find(
       (d) => d.code === WpdDiagnosticCodes.WpgRecordsUndecoded,
@@ -2662,7 +2776,11 @@ describe("WPG vector graphics embedded in an image box", () => {
           graphicsCachedFileDataPacket(wpg),
         ],
       ),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     const found = diagnostics.find(
       (d) => d.code === WpdDiagnosticCodes.WpgRecordsUndecoded,
@@ -2684,7 +2802,11 @@ describe("WPG vector graphics embedded in an image box", () => {
           graphicsCachedFileDataPacket(wpg),
         ],
       ),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     const found = diagnostics.find(
       (d) => d.code === WpdDiagnosticCodes.WpgRecordsUndecoded,
