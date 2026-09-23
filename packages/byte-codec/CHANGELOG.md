@@ -1,3 +1,19 @@
+## [1.9.0](https://github.com/ExaDev/documents.js/compare/byte-codec%401.8.1...byte-codec%401.9.0) (2026-09-23)
+
+### Features
+
+* **byte-codec:** decode Shift_JIS, EUC-JP, EUC-KR, GBK, gb18030 and Big5 in decodeText ([3863db5](https://github.com/ExaDev/documents.js/commit/3863db5ea60768b348c878b8a804df2a3ca70436)), references [ExaDev/documents.js#1388](https://github.com/ExaDev/documents.js/issues/1388)
+* **byte-codec:** generate WHATWG index tables for legacy multi-byte CJK encodings ([22b5270](https://github.com/ExaDev/documents.js/commit/22b52700f847d60ee73d7fe8c7bd73dd7fcf6b12))
+
+### Bug Fixes
+
+* **byte-codec:** drop the dead odd-length guard from dbcs-tables.ts's astral map ([61a1297](https://github.com/ExaDev/documents.js/commit/61a1297a2b9d89ffde7551b3f48fbc2a000b63df))
+* **byte-codec:** store DBCS index tables as strings instead of number arrays ([cd51602](https://github.com/ExaDev/documents.js/commit/cd5160254cd7157f8ad9e7e0c953b53f2174dbd8))
+
+### Tests
+
+* **byte-codec:** give exhaustive DBCS table sweeps a longer timeout ([7cfd290](https://github.com/ExaDev/documents.js/commit/7cfd290572e01d0997cba7449b02b9bb309a0f1b))
+
 ## [1.8.1](https://github.com/ExaDev/documents.js/compare/byte-codec%401.8.0...byte-codec%401.8.1) (2026-09-22)
 
 ### Bug Fixes
