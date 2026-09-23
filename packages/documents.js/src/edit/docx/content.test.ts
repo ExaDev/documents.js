@@ -21,6 +21,8 @@ import { collectDrawingMlVectors } from "../../test-support/drawingml-vector";
 import { VECTOR_FIXTURE, vectorDrawingBlock } from "../../test-support/vectors";
 import { walkElements } from "../../xml/query";
 import { buildDocxPackage } from "./content";
+import { DocxWriteDiagnosticCodes } from "./diagnostics";
+import type { DocxWriteDiagnostic } from "./diagnostics";
 import { DocxEditor } from "./editor";
 
 function wordDoc(
@@ -1155,5 +1157,123 @@ describe("buildDocxPackage: a table that states no column widths", () => {
         "buildDocxPackage: table has no rows, and a table with no rows cannot be written in every word-processing format (ODF requires at least one table:table-row)",
       );
     }
+  });
+});
+
+describe("buildDocxPackage: a table column's own isHeader has no w:tblGrid spelling", () => {
+  function cellOf(text: string): ContentTableCell {
+    return { blocks: [{ kind: "paragraph", runs: [{ text }] }] };
+  }
+
+  function documentOf(table: ContentTable): ContentDocument {
+    return wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [table],
+      },
+    ]);
+  }
+
+  it("reports a warning naming the column, and does not throw, when no onDiagnostic is supplied", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columns: [{ widthPt: 100, isHeader: true }, { widthPt: 100 }],
+      rows: [{ cells: [cellOf("Name"), cellOf("Score")] }],
+    };
+    expect(() => buildDocxPackage(documentOf(table))).not.toThrow();
+  });
+
+  it("passes the table's own sourcePath as the diagnostic's context", () => {
+    const table: ContentTable = {
+      kind: "table",
+      sourcePath: "body/table[0]",
+      columns: [{ widthPt: 100, isHeader: true }],
+      rows: [{ cells: [cellOf("Name")] }],
+    };
+    const contexts: { readonly sourcePath?: string }[] = [];
+    buildDocxPackage(documentOf(table), {
+      onDiagnostic: (_diagnostic, context) => contexts.push(context),
+    });
+    expect(contexts).toEqual([{ sourcePath: "body/table[0]" }]);
+  });
+
+  it("calls onDiagnostic once, with TABLE_HEADER_COLUMN_DROPPED, naming the column's own index", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columns: [{ widthPt: 100, isHeader: true }, { widthPt: 100 }],
+      rows: [{ cells: [cellOf("Name"), cellOf("Score")] }],
+    };
+    const diagnostics: DocxWriteDiagnostic[] = [];
+    buildDocxPackage(documentOf(table), {
+      onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+    });
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toEqual({
+      code: DocxWriteDiagnosticCodes.TABLE_HEADER_COLUMN_DROPPED,
+      severity: "warning",
+      message:
+        "buildDocxPackage: table column 0 is a header column, and that is dropped; w:tblGrid has no header-column marker, so the column is written exactly as any other",
+    });
+  });
+
+  it("still writes the header column's own cell content, exactly like any other column", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columns: [{ widthPt: 100, isHeader: true }, { widthPt: 100 }],
+      rows: [{ cells: [cellOf("Name"), cellOf("Score")] }],
+    };
+    const reread = readDocxContent(buildDocxPackage(documentOf(table)));
+    if (reread.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const block = reread.sections[0]?.blocks[0];
+    if (block?.kind !== "table") {
+      throw new Error("expected the section to hold a table");
+    }
+    // The flag itself does not round-trip (w:tblGrid has no header-column marker to read it back from), but the column's own cell text survives untouched.
+    expect(block.columns[0]?.isHeader).toBeUndefined();
+    expect(
+      block.rows[0]?.cells.map((cell) =>
+        cell.blocks.flatMap((cellBlock) =>
+          cellBlock.kind === "paragraph"
+            ? cellBlock.runs.map((run) => run.text)
+            : [],
+        ),
+      ),
+    ).toEqual([["Name"], ["Score"]]);
+  });
+
+  it("reports a diagnostic per flagged column, naming each one's own index, for non-adjacent header columns", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columns: [
+        { widthPt: 100, isHeader: true },
+        { widthPt: 100 },
+        { widthPt: 100, isHeader: true },
+      ],
+      rows: [{ cells: [cellOf("a"), cellOf("b"), cellOf("c")] }],
+    };
+    const diagnostics: DocxWriteDiagnostic[] = [];
+    buildDocxPackage(documentOf(table), {
+      onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+    });
+    expect(diagnostics.map((d) => d.message)).toEqual([
+      expect.stringContaining("table column 0 is a header column"),
+      expect.stringContaining("table column 2 is a header column"),
+    ]);
+  });
+
+  it("reports nothing at all for a table whose columns state no header flag", () => {
+    const table: ContentTable = {
+      kind: "table",
+      columns: [{ widthPt: 100 }, { widthPt: 100 }],
+      rows: [{ cells: [cellOf("a"), cellOf("b")] }],
+    };
+    const diagnostics: DocxWriteDiagnostic[] = [];
+    buildDocxPackage(documentOf(table), {
+      onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+    });
+    expect(diagnostics).toEqual([]);
   });
 });
