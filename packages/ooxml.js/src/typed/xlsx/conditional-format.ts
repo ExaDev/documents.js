@@ -242,7 +242,7 @@ function readColorScaleStops(
   for (let index = 0; index < cfvoEls.length; index++) {
     const cfvoEl = cfvoEls[index];
     const colorEl = colorEls[index];
-    if (cfvoEl === undefined || colorEl === undefined) {
+    if (cfvoEl === undefined) {
       return undefined;
     }
     const value = readCfvo(cfvoEl);
@@ -876,7 +876,6 @@ export function buildConditionalFormattingElements(
     while (usedPriorities.has(nextPriority)) {
       nextPriority++;
     }
-    usedPriorities.add(nextPriority);
     return nextPriority++;
   };
 
