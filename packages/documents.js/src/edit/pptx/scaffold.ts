@@ -289,6 +289,12 @@ export function createEmptyPptxPackage(
     }),
   ]);
 
+  // Held directly rather than re-found from pkg.parts below: this function built the part one screen up, so a lookup whose only failure mode is this function already having misbehaved would be re-deriving a value already in hand (and carrying an unreachable throw to guard it).
+  const presentation = el("p:presentation", {
+    "xmlns:p": PML_NS,
+    "xmlns:r": R_NS,
+  });
+
   const pkg: Package = {
     parts: {
       "[Content_Types].xml": {
@@ -298,10 +304,7 @@ export function createEmptyPptxPackage(
       "_rels/.rels": { kind: "xml", nodes: [declaration(), rootRels] },
       [PRESENTATION_PART_PATH]: {
         kind: "xml",
-        nodes: [
-          declaration(),
-          el("p:presentation", { "xmlns:p": PML_NS, "xmlns:r": R_NS }),
-        ],
+        nodes: [declaration(), presentation],
       },
     },
   };
@@ -367,19 +370,7 @@ export function createEmptyPptxPackage(
   );
 
   // p:sldMasterIdLst must precede p:sldIdLst in CT_Presentation's own element sequence (ECMA-376 Part 1, 13.2.4.1).
-  const presentationPart = pkg.parts[PRESENTATION_PART_PATH];
-  const presentationElement =
-    presentationPart?.kind === "xml"
-      ? presentationPart.nodes.find(
-          (n): n is XmlElement => n.type === "element",
-        )
-      : undefined;
-  if (presentationElement === undefined) {
-    throw new Error(
-      "createEmptyPptxPackage: failed to build ppt/presentation.xml",
-    );
-  }
-  presentationElement.children.push(
+  presentation.children.push(
     el("p:sldMasterIdLst", {}, [
       el("p:sldMasterId", {
         id: String(MIN_MASTER_OR_LAYOUT_ID),
