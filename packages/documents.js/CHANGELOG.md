@@ -1,3 +1,10 @@
+## [14.4.2](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.1...documents.js%4014.4.2) (2026-09-23)
+
+
+### Dependencies
+
+- Updated ooxml.js to 12.2.7
+
 ## [14.4.1](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.0...documents.js%4014.4.1) (2026-09-23)
 
 ### Tests
