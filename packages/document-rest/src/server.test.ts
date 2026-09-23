@@ -40,7 +40,7 @@ async function start(): Promise<RunningServer> {
   }
   return {
     baseUrl: `http://127.0.0.1:${String(address.port)}`,
-    close: () =>
+    close: async () =>
       new Promise<void>((resolve, reject) => {
         server.close((error) => {
           if (error) {
