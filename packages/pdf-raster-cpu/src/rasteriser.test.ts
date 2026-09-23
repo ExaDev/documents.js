@@ -565,7 +565,16 @@ describe("image pixels", () => {
 
     const diagnostics: RasterCpuDiagnostic[] = [];
     const image = decodePng(
-      drive(bytes, 0, {}, { onDiagnostic: (d) => diagnostics.push(d) }),
+      drive(
+        bytes,
+        0,
+        {},
+        {
+          onDiagnostic: (d) => {
+            diagnostics.push(d);
+          },
+        },
+      ),
     );
     expect(diagnostics.map((d) => d.code)).toEqual([
       "raster-cpu/jpeg-image-undecoded",
@@ -696,7 +705,9 @@ describe("CpuRasteriser: draw ops driven directly", () => {
   it("reports the JPEG refusal's own message text, not just its code", () => {
     const diagnostics: RasterCpuDiagnostic[] = [];
     const rasteriser = new CpuRasteriser({
-      onDiagnostic: (d) => diagnostics.push(d),
+      onDiagnostic: (d) => {
+        diagnostics.push(d);
+      },
     });
     rasteriser.beginPage(pageGeometry(4, 4));
     rasteriser.draw({
