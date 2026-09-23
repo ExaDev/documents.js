@@ -20,10 +20,12 @@ vi.mock("document-operations", async (importOriginal) => {
     description:
       "Test-only operation reporting whether it received an AbortSignal in its run context.",
     inputSchema: z.object({}),
-    run: (_input: unknown, context) => {
-      signalState.presenceHasSignal = context?.signal instanceof AbortSignal;
-      return Promise.resolve({ hasSignal: signalState.presenceHasSignal });
-    },
+    // A Promise executor, like abortOperation's own run() below, rather than a block-bodied async function with a plain return — the executor runs synchronously and resolve() carries the value out, so there is no await for @typescript-eslint/require-await to ask for, and the arrow itself stays the single new Promise(...) expression promise-function-async wants an async function to return.
+    run: async (_input: unknown, context) =>
+      new Promise<{ hasSignal: boolean }>((resolve) => {
+        signalState.presenceHasSignal = context?.signal instanceof AbortSignal;
+        resolve({ hasSignal: signalState.presenceHasSignal });
+      }),
   };
 
   const abortOperation: (typeof actual.DOCUMENT_OPERATIONS)[number] = {
@@ -32,7 +34,7 @@ vi.mock("document-operations", async (importOriginal) => {
     description:
       "Test-only operation that resolves only once its run context's signal aborts.",
     inputSchema: z.object({}),
-    run: (_input: unknown, context) =>
+    run: async (_input: unknown, context) =>
       new Promise((resolve) => {
         context?.signal?.addEventListener("abort", () => {
           signalState.aborted = true;
@@ -47,9 +49,11 @@ vi.mock("document-operations", async (importOriginal) => {
     operation.name === "odb_render_report"
       ? {
           ...operation,
-          run: (): Promise<never> => {
-            throw new OdbReportNotSpecifiedError(["Invoice", "Summary"]);
-          },
+          // A Promise executor that throws synchronously rejects the Promise it constructs with that same error (standard executor behaviour) — the same new Promise(...) shape as presenceOperation's own run() above, for the same require-await/promise-function-async reason. handleOperationRequest always awaits operation.run(...) inside a try/catch, so this rejection is caught identically to how a genuine synchronous throw from run() itself would be; the test only cares that odb_render_report's own mapError sees the error.
+          run: async (): Promise<never> =>
+            new Promise(() => {
+              throw new OdbReportNotSpecifiedError(["Invoice", "Summary"]);
+            }),
         }
       : operation,
   );
@@ -82,7 +86,7 @@ async function start(): Promise<RunningServer> {
   }
   return {
     baseUrl: `http://127.0.0.1:${String(address.port)}`,
-    close: () =>
+    close: async () =>
       new Promise<void>((resolve, reject) => {
         server.close((error) => {
           if (error) {
