@@ -516,6 +516,51 @@ describe("readXlsxContent: scope boundaries and error/fallback paths (synthetic 
       displayText: "2026-07-31T00:00:00Z",
     });
   });
+
+  it("falls back to an all-defaults sheet, rather than throwing, when a <sheet> in xl/workbook.xml points at a part the package doesn't actually have", () => {
+    const pkg: Package = {
+      parts: {
+        "xl/workbook.xml": {
+          kind: "xml",
+          nodes: [
+            el("workbook", {}, [
+              el("sheets", {}, [
+                el("sheet", { name: "Missing", "r:id": "rId1" }),
+              ]),
+            ]),
+          ],
+        },
+        "xl/_rels/workbook.xml.rels": {
+          kind: "xml",
+          nodes: [
+            el("Relationships", {}, [
+              el("Relationship", {
+                Id: "rId1",
+                Type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
+                Target: "worksheets/sheet1.xml",
+              }),
+            ]),
+          ],
+        },
+        // No "xl/worksheets/sheet1.xml" part at all — the malformed-package case rootElement's own undefined-part branch exists for.
+      },
+    };
+    const result = readXlsxContent(pkg);
+    expect(result.kind).toBe("spreadsheet");
+    if (result.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    expect(result.sheets).toHaveLength(1);
+    expect(result.sheets[0]).toMatchObject({
+      name: "Missing",
+      cells: [],
+      columns: [],
+      rows: [],
+      images: [],
+    });
+    // The fallback's own printSettings comes from readPrintSettings given a childless <worksheet>, which is exercised (and its exact shape asserted) by print-settings.ts's own tests — this only proves the fallback reaches it at all, rather than throwing.
+    expect(result.sheets[0]?.printSettings).toBeDefined();
+  });
 });
 
 // The number format governs only what a NUMERIC cell holds. These build a package carrying a real xl/styles.xml so a cell's own s attribute resolves to a genuine format code, exercising the boundaries the kitchen-sink fixture has no cell for.
