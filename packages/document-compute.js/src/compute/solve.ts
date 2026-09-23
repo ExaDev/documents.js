@@ -22,7 +22,7 @@ export interface SolveForOptions {
   bracket?: [number, number];
   /** Required for 'newton': the starting point the iteration refines from. */
   initialGuess?: number;
-  /** The dimension the unknown symbol is bound under at each trial point. Default {} (dimensionless) — set this when the unknown is not dimensionless, e.g. { length: 1 } to solve for a length in SI-coherent metres. */
+  /** The dimension the unknown symbol is bound under at each trial point. Default `{}` (dimensionless) — set this when the unknown is not dimensionless, e.g. `{ length: 1 }` to solve for a length in SI-coherent metres. */
   unknownDimension?: DimensionVector;
   /** Step size h for Newton's central-difference derivative estimate (see newton() below). Default 1e-6. */
   derivativeStep?: number;
