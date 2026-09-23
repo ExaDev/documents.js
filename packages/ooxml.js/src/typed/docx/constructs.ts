@@ -185,6 +185,22 @@ export interface ParagraphRangeMarkerHalf {
   readonly runPosition: number;
 }
 
+// Whether a position in a paragraph's own element list precedes every content-bearing child — shared by isBlockScopedHalf below and recordParagraphRangeMarkers (typed/docx/read.ts), since both derive the identical "before all content" fact from a ParagraphContentIndex. firstContentIndex's own "-1 means no content at all, so everything is leading" case needs its explicit shortcut: position < firstContentIndex alone would read a firstContentIndex of -1 as "nothing is before it", the opposite of what's meant, given position is never negative for either caller (a real array index, or an XML-element position within a paragraph's own children).
+export function isLeadingContentPosition(
+  index: ParagraphContentIndex,
+  position: number,
+): boolean {
+  return index.firstContentIndex === -1 || position < index.firstContentIndex;
+}
+
+// Whether a position in a paragraph's own element list follows every content-bearing child — the mirror image of isLeadingContentPosition above, and deliberately NOT written the same way: position is guaranteed >= 0 for either caller, so position > lastContentIndex ALREADY evaluates true on its own whenever lastContentIndex is -1 (anything non-negative exceeds it) — an explicit "lastContentIndex === -1 ||" would be checking a case its own right-hand side already covers unaided.
+export function isTrailingContentPosition(
+  index: ParagraphContentIndex,
+  position: number,
+): boolean {
+  return position > index.lastContentIndex;
+}
+
 // Whether a half brackets whole blocks rather than a run sub-sequence: a direct paragraph child sitting outside every content-bearing child (leading or trailing) is block-scoped — the position recordParagraphRangeMarkers gives a block index to — while a child between content, or a half nested inside a content-bearing container (w:hyperlink, w:ins, an inline w:sdt), sits between runs by construction and is run-scoped. The container case answers "not found among the direct children" rather than being an error: the run walk recurses where the content index does not, and a half inside a container is definitionally interior to the paragraph's run sequence.
 function isBlockScopedHalf(
   half: ParagraphRangeMarkerHalf,
@@ -194,11 +210,10 @@ function isBlockScopedHalf(
   if (position === -1) {
     return false;
   }
-  // firstContentIndex's own "-1 means no content at all, so everything is leading" case needs its explicit shortcut: position < firstContentIndex alone would read a firstContentIndex of -1 as "nothing is before it", the opposite of what's meant, since position is never negative here (the guard above already excludes it). lastContentIndex's mirror-image shortcut has no such need and is deliberately NOT written the same way: position is guaranteed >= 0 at this point, so position > lastContentIndex ALREADY evaluates true on its own whenever lastContentIndex is -1 (anything non-negative exceeds it) — an explicit "lastContentIndex === -1 ||" would be checking a case its own right-hand side already covers unaided.
-  const leading =
-    index.firstContentIndex === -1 || position < index.firstContentIndex;
-  const trailing = position > index.lastContentIndex;
-  return leading || trailing;
+  return (
+    isLeadingContentPosition(index, position) ||
+    isTrailingContentPosition(index, position)
+  );
 }
 
 // Pairs one paragraph's own range-marker halves (bookmarks and comment extents alike) by family+w:id into run-level construct extents (document-schema.js's RunConstructExtent): a pair whose halves both sit in THIS paragraph and are not both block-scoped becomes an entry on the paragraph's constructs field. A pair with both halves block-scoped is skipped — that is the block-marker path's extent (recordParagraphRangeMarkers has already emitted its events, and one occurrence must never carry both encodings) — and everything else about the pairing mirrors the block path's own rules: exactly one start and one end per family+id, a name on a bookmark's start, and an end that does not precede the start. A bookmark is named by its own w:name; a comment extent by its w:id, the key WordprocessingML itself joins the extent to its w:comment body through (the flat model carries that body in DocxDocument.comments under the same id, so the join survives with no second vocabulary). A pair split across two paragraphs is never seen here at all (each paragraph pairs only its own halves), so it stays dropped exactly as before. Crossing pairs need no special case: run ranges are data, not brackets, so two extents that overlap are two entries.

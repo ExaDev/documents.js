@@ -80,6 +80,8 @@ import {
   indexParagraphContent,
   insertConstructMarkers,
   isDeletedChange,
+  isLeadingContentPosition,
+  isTrailingContentPosition,
   readContentControlDescriptor,
   readFormControlDescriptor,
   readProvenanceDescriptor,
@@ -1416,10 +1418,9 @@ function recordParagraphRangeMarkers(
     const start =
       element.tag === "w:bookmarkStart" ||
       element.tag === "w:commentRangeStart";
-    const leading =
-      index.firstContentIndex === -1 || position < index.firstContentIndex;
-    // No "lastContentIndex === -1 ||" shortcut here, mirroring constructs.ts's own isBlockScopedHalf reasoning: position is always >= 0 at this point, so position > -1 is already true whenever lastContentIndex is -1 and the right-hand side covers the empty-paragraph case unaided.
-    const trailing = position > index.lastContentIndex;
+    // isLeadingContentPosition/isTrailingContentPosition (constructs.ts) are the exact same "before or after every content-bearing child" test isBlockScopedHalf applies to a run-level half — shared rather than duplicated, since both derive the identical fact from a ParagraphContentIndex.
+    const leading = isLeadingContentPosition(index, position);
+    const trailing = isTrailingContentPosition(index, position);
     if (start) {
       // Only a bookmark's start half carries a @w:name in real markup, and the pairing below reads a name only for bookmarks (a comment extent is named by its own w:id), so reading @w:name unconditionally is safe even for a comment start carrying one.
       const name = attr(element, "w:name");
