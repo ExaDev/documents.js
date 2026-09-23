@@ -41,7 +41,8 @@ interface LayoutContext {
   readonly inheritedVariant: MathVariant | undefined;
   readonly displayStyle: boolean;
   readonly cramped: boolean;
-  readonly scriptLevel: number;
+  // Whether the next script level to be entered is still the FIRST one (scriptPercentScaleDown) or a deeper one (scriptScriptPercentScaleDown). A level counter would carry the same information, but nothing ever reads its absolute value, only this zero-or-not distinction, and a number whose arithmetic nobody consumes gives equivalent mutants a place to hide.
+  readonly firstScriptLevel: boolean;
   readonly diagnostics: MathDiagnostic[];
 }
 
@@ -56,22 +57,21 @@ function rootContext(
     inheritedVariant: undefined,
     displayStyle: true,
     cramped: false,
-    scriptLevel: 0,
+    firstScriptLevel: true,
     diagnostics,
   };
 }
 
 function scriptContext(ctx: LayoutContext, cramped: boolean): LayoutContext {
-  const scale =
-    ctx.scriptLevel === 0
-      ? ctx.metrics.scriptPercentScaleDown
-      : ctx.metrics.scriptScriptPercentScaleDown;
+  const scale = ctx.firstScriptLevel
+    ? ctx.metrics.scriptPercentScaleDown
+    : ctx.metrics.scriptScriptPercentScaleDown;
   return {
     ...ctx,
     sizePt: ctx.sizePt * scale,
     displayStyle: false,
     cramped,
-    scriptLevel: ctx.scriptLevel + 1,
+    firstScriptLevel: false,
   };
 }
 
