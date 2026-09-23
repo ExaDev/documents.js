@@ -610,17 +610,7 @@ function interleaveRunConstructExtents(
       }),
     );
   }
-  if (
-    bookmarks.length === 0 &&
-    fields.length === 0 &&
-    commentRanges.length === 0
-  ) {
-    return wrapInternalLinks(
-      [...runElements],
-      new RunPositions(runElements),
-      links,
-    );
-  }
+  // No early return for the all-empty case: when bookmarks, fields and commentRanges are all empty, closingAt/openingAt/pointAt below never gain an entry, so the general loop's `out` ends up exactly `[...runElements]` anyway — the early return was a second spelling of the same result, never an observable difference.
   const closingAt = new Map<number, XmlElement[]>();
   const openingAt = new Map<number, XmlElement[]>();
   const pointAt = new Map<number, XmlElement[]>();
@@ -748,7 +738,8 @@ function wrapInternalLinks(
         last = index;
       }
     });
-    if (first === -1 || last === -1 || last < first) {
+    // No separate `last === -1` check: last starts at -1 and only ever moves forward, so whenever first has resolved to a real index (>= 0), `last < first` already catches an unresolved last on its own — the two conditions were never independently observable.
+    if (first === -1 || last < first) {
       continue;
     }
     const slice = out.slice(first, last + 1);
