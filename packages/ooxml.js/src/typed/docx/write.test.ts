@@ -4743,6 +4743,34 @@ describe("buildDocxPackageFromContent: tracked-change paragraph marks and ids", 
     expect(childrenWithTag(pPr, "w:rPr")).toHaveLength(0);
   });
 
+  it("stops a nested formatChange extent from inheriting the outer tracked change's own wrapper", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [
+        {
+          ...emptyBodySection(),
+          blocks: [
+            { kind: "constructStart", descriptor: insertion },
+            {
+              kind: "constructStart",
+              descriptor: { ...insertion, change: "formatChange" },
+            },
+            {
+              kind: "paragraph",
+              styleId: "Styled",
+              runs: [{ text: "reformatted" }],
+            },
+            { kind: "constructEnd" },
+            { kind: "constructEnd" },
+          ],
+        },
+      ],
+    });
+    const paragraph = bodyParagraphs(written)[0]!;
+    expect(childrenWithTag(paragraph, "w:ins")).toHaveLength(0);
+    const pPr = childrenWithTag(paragraph, "w:pPr")[0]!;
+    expect(childrenWithTag(pPr, "w:rPr")).toHaveLength(0);
+  });
+
   it("deletes a tracked deletion's runs through the delText spelling", () => {
     const written = buildDocxPackageFromContent({
       sections: [
