@@ -108,7 +108,8 @@ const IGNORABLE_STATEMENT_PREFIXES: readonly string[] = [
 ];
 
 function isIgnorableStatement(statement: string): boolean {
-  const normalized = statement.replace(/\s+/g, " ").trim().toUpperCase();
+  // No trailing trim: splitStatements already hands every statement over trimmed, and the collapse itself turns any residual edge whitespace into a single space that startsWith would reject anyway.
+  const normalized = statement.replace(/\s+/g, " ").toUpperCase();
   return IGNORABLE_STATEMENT_PREFIXES.some((prefix) =>
     normalized.startsWith(prefix),
   );
@@ -363,9 +364,9 @@ function unescapeSingleQuotes(s: string): string {
   return s.replace(/''/g, "'");
 }
 
-// The column-type-clause bucket this module cares about: only DATE and TIME change how a bare (un-prefixed) quoted literal is interpreted — every other declared type (INTEGER, VARCHAR, DECIMAL, BOOLEAN, ...) falls to 'other', where a bare quoted literal is always a plain string.
+// The column-type-clause bucket this module cares about: only DATE and TIME change how a bare (un-prefixed) quoted literal is interpreted — every other declared type (INTEGER, VARCHAR, DECIMAL, BOOLEAN, ...) falls to 'other', where a bare quoted literal is always a plain string. No trim of its own: parseCreateTable builds every column's type clause with its own trailing trim, so the input here always arrives without surrounding whitespace and the anchored leading-word read below can rely on that.
 function typeBucket(typeText: string): "date" | "time" | "other" {
-  const leading = /^([A-Za-z_]+)/.exec(typeText.trim());
+  const leading = /^([A-Za-z_]+)/.exec(typeText);
   const word = leading?.[1]?.toUpperCase();
   if (word === "DATE") {
     return "date";
@@ -383,24 +384,25 @@ function parseLiteral(
   raw: string,
   bucket: "date" | "time" | "other",
 ): ContentCellValue {
-  const trimmed = raw.trim();
-  if (/^NULL$/i.test(trimmed)) {
+  // No trim of its own: parseInsertInto trims every VALUES field as it splits them, so `raw` always arrives without surrounding whitespace — a spaced tuple's "1 " and " 2" are already clean by the time they reach here.
+
+  if (/^NULL$/i.test(raw)) {
     return { kind: "empty" };
   }
-  const dateTyped = /^DATE\s*'((?:[^']|'')*)'$/i.exec(trimmed);
+  const dateTyped = /^DATE\s*'((?:[^']|'')*)'$/i.exec(raw);
   if (dateTyped?.[1] !== undefined) {
     return { kind: "date", value: unescapeSingleQuotes(dateTyped[1]) };
   }
-  const timeTyped = /^TIME\s*'((?:[^']|'')*)'$/i.exec(trimmed);
+  const timeTyped = /^TIME\s*'((?:[^']|'')*)'$/i.exec(raw);
   if (timeTyped?.[1] !== undefined) {
     return { kind: "time", value: unescapeSingleQuotes(timeTyped[1]) };
   }
-  const timestampTyped = /^TIMESTAMP\s*'((?:[^']|'')*)'$/i.exec(trimmed);
+  const timestampTyped = /^TIMESTAMP\s*'((?:[^']|'')*)'$/i.exec(raw);
   if (timestampTyped?.[1] !== undefined) {
     return { kind: "date", value: unescapeSingleQuotes(timestampTyped[1]) };
   }
-  if (trimmed.length >= 2 && trimmed.startsWith("'") && trimmed.endsWith("'")) {
-    const text = unescapeSingleQuotes(trimmed.slice(1, -1));
+  if (raw.length >= 2 && raw.startsWith("'") && raw.endsWith("'")) {
+    const text = unescapeSingleQuotes(raw.slice(1, -1));
     if (bucket === "date") {
       return { kind: "date", value: text };
     }
@@ -409,16 +411,16 @@ function parseLiteral(
     }
     return { kind: "string", value: text };
   }
-  if (/^TRUE$/i.test(trimmed)) {
+  if (/^TRUE$/i.test(raw)) {
     return { kind: "boolean", value: true };
   }
-  if (/^FALSE$/i.test(trimmed)) {
+  if (/^FALSE$/i.test(raw)) {
     return { kind: "boolean", value: false };
   }
-  if (NUMBER_LITERAL_RE.test(trimmed)) {
-    return { kind: "number", value: Number(trimmed) };
+  if (NUMBER_LITERAL_RE.test(raw)) {
+    return { kind: "number", value: Number(raw) };
   }
-  throw new HsqldbScriptParseError(`unrecognised literal "${trimmed}"`, raw);
+  throw new HsqldbScriptParseError(`unrecognised literal "${raw}"`, raw);
 }
 
 interface MutableTable {
@@ -504,7 +506,8 @@ function parseInsertInto(statement: string): {
   if (statement.charAt(i) === "(") {
     const { inner, next: afterCols } = readBalancedParens(statement, i);
     explicitColumns = splitTopLevel(inner, ",").map(
-      (part) => readIdentifier(part.trim(), 0).name,
+      // No trim of each field: readIdentifier skips leading whitespace itself.
+      (part) => readIdentifier(part, 0).name,
     );
     i = skipWs(statement, afterCols);
   }
@@ -525,7 +528,8 @@ function parseInsertInto(statement: string): {
     );
   }
   const { inner, next: afterTuple } = readBalancedParens(statement, i);
-  const trailing = statement.slice(afterTuple).trim();
+  // No trim: splitStatements hands the statement over already trimmed, so nothing but the tuple's own closing paren can end it — whatever follows that paren is real trailing content.
+  const trailing = statement.slice(afterTuple);
   if (trailing.length > 0) {
     throw new HsqldbScriptParseError(
       `INSERT INTO "${tableName}": unexpected trailing content after the VALUES tuple ("${trailing}") — multiple tuples per INSERT are outside this bounded parser's scope`,

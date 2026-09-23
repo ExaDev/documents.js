@@ -266,3 +266,538 @@ describe("displayTextFor", () => {
     expect(displayTextFor({ kind: "empty" })).toBe("");
   });
 });
+
+describe("parseHsqldbScript: statement splitting", () => {
+  it("does not split at a newline inside a single-quoted string value", () => {
+    // One INSERT whose value embeds a real newline: splitStatements must keep it as one statement, and the value keeps the newline verbatim.
+    const raw = [
+      "CREATE MEMORY TABLE T(A VARCHAR(20))",
+      "INSERT INTO T VALUES('line one",
+      "line two')",
+    ].join("\n");
+    const [table] = parseHsqldbScript(new TextEncoder().encode(raw));
+    expect(table?.rows).toEqual([
+      [{ kind: "string", value: "line one\nline two" }],
+    ]);
+  });
+
+  it("does not split at a newline inside a double-quoted table identifier", () => {
+    const raw = [
+      'CREATE MEMORY TABLE "My',
+      'Table"(A INTEGER)',
+      'INSERT INTO "My\nTable" VALUES(1)',
+    ].join("\n");
+    const [table] = parseHsqldbScript(new TextEncoder().encode(raw));
+    expect(table?.tableName).toBe("My\nTable");
+  });
+
+  it("does not split at a newline that follows a doubled quote still inside a string", () => {
+    // 'a'' followed by a newline: the '' is an escaped quote, so the string is still open when the newline arrives — the value must keep both the quote and the newline. Treating the '' pair as close-then-reopen would instead end the statement at that newline and leave an unparsable remainder.
+    const raw = [
+      "CREATE MEMORY TABLE T(A VARCHAR(20))",
+      "INSERT INTO T VALUES('a''",
+      "b')",
+    ].join("\n");
+    const [table] = parseHsqldbScript(new TextEncoder().encode(raw));
+    expect(table?.rows).toEqual([[{ kind: "string", value: "a'\nb" }]]);
+  });
+
+  it("does not split at a newline inside a doubled quote in a double-quoted identifier", () => {
+    const raw = [
+      'CREATE MEMORY TABLE "a""b',
+      'c"(A INTEGER)',
+      'INSERT INTO "a""b\nc" VALUES(1)',
+    ].join("\n");
+    const [table] = parseHsqldbScript(new TextEncoder().encode(raw));
+    expect(table?.tableName).toBe('a"b\nc');
+  });
+
+  it("drops blank and whitespace-only lines rather than emitting empty statements", () => {
+    // Ending on a whitespace-only line with NO trailing newline exercises the tail case too: the final partial statement is whitespace only and must be dropped like a blank line, not emitted as an empty statement.
+    const raw = [
+      "",
+      "   ",
+      "\t",
+      "CREATE MEMORY TABLE T(A INTEGER)",
+      "  ",
+    ].join("\n");
+    const tables = parseHsqldbScript(new TextEncoder().encode(raw));
+    expect(tables).toHaveLength(1);
+    expect(tables[0]?.tableName).toBe("T");
+  });
+
+  it("keeps a statement that ends without a trailing newline (the tail case)", () => {
+    const raw = "CREATE MEMORY TABLE T(A INTEGER)\nINSERT INTO T VALUES(3)";
+    const [table] = parseHsqldbScript(new TextEncoder().encode(raw));
+    expect(table?.rows).toEqual([[{ kind: "number", value: 3 }]]);
+  });
+});
+
+describe("parseHsqldbScript: identifiers", () => {
+  it("reads a double-quoted table name, keeping it verbatim and case-sensitive", () => {
+    const bytes = scriptBytes([
+      'CREATE MEMORY TABLE "My Table"(A INTEGER)',
+      'INSERT INTO "My Table" VALUES(1)',
+    ]);
+    const [table] = parseHsqldbScript(bytes);
+    expect(table?.tableName).toBe("My Table");
+  });
+
+  it('un-doubles "" inside a double-quoted identifier', () => {
+    const bytes = scriptBytes([
+      'CREATE MEMORY TABLE "He said ""hi"""(A INTEGER)',
+      'INSERT INTO "He said ""hi""" VALUES(1)',
+    ]);
+    const [table] = parseHsqldbScript(bytes);
+    expect(table?.tableName).toBe('He said "hi"');
+  });
+
+  it('un-doubles "" inside a double-quoted column name in the column list', () => {
+    const bytes = scriptBytes(['CREATE MEMORY TABLE T("a""b" INTEGER)']);
+    const [table] = parseHsqldbScript(bytes);
+    expect(table?.columns[0]?.name).toBe('a"b');
+  });
+
+  it("reads a quoted column name containing a comma, without splitting the column list", () => {
+    const bytes = scriptBytes([
+      'CREATE MEMORY TABLE T("x,y" INTEGER, B INTEGER)',
+      "INSERT INTO T VALUES(1, 2)",
+    ]);
+    const [table] = parseHsqldbScript(bytes);
+    expect(table?.columns.map((column) => column.name)).toEqual(["x,y", "B"]);
+  });
+
+  it("reads a quoted column name containing a closing paren, without ending the column list early", () => {
+    const bytes = scriptBytes([
+      'CREATE MEMORY TABLE T("a)b" INTEGER, B INTEGER)',
+      "INSERT INTO T VALUES(1, 2)",
+    ]);
+    const [table] = parseHsqldbScript(bytes);
+    expect(table?.columns.map((column) => column.name)).toEqual(["a)b", "B"]);
+  });
+
+  it("accepts every character of HSQLDB's unquoted-identifier set in a column name", () => {
+    const bytes = scriptBytes(["CREATE MEMORY TABLE T(A$_#9 INTEGER)"]);
+    const [table] = parseHsqldbScript(bytes);
+    expect(table?.columns[0]?.name).toBe("A$_#9");
+  });
+
+  it("keeps only the last segment of a schema-qualified name, quoted or not, in both CREATE and INSERT", () => {
+    const bytes = scriptBytes([
+      "CREATE MEMORY TABLE A.B.C(ID INTEGER)",
+      "INSERT INTO A.B.C VALUES(5)",
+      'CREATE MEMORY TABLE X."Odd Name"(ID INTEGER)',
+      'INSERT INTO X."Odd Name" VALUES(6)',
+    ]);
+    const tables = parseHsqldbScript(bytes);
+    expect(tables.map((table) => table.tableName)).toEqual(["C", "Odd Name"]);
+    expect(tables[0]?.rows[0]).toEqual([{ kind: "number", value: 5 }]);
+    expect(tables[1]?.rows[0]).toEqual([{ kind: "number", value: 6 }]);
+  });
+});
+
+describe("parseHsqldbScript: CREATE TABLE spellings and column-list shapes", () => {
+  it.each([
+    "CREATE TABLE",
+    "CREATE CACHED TABLE",
+    "CREATE TEXT TABLE",
+    "CREATE TEMP TABLE",
+    "CREATE TEMPORARY TABLE",
+    "CREATE GLOBAL TEMPORARY TABLE",
+    "create memory table",
+    "CREATE  MEMORY\tTABLE",
+  ])("%s is recognised and its columns extracted", (spelling) => {
+    const bytes = scriptBytes([
+      `${spelling} T(A INTEGER)`,
+      "INSERT INTO T VALUES(1)",
+    ]);
+    const [table] = parseHsqldbScript(bytes);
+    expect(table?.tableName).toBe("T");
+    expect(table?.rows).toEqual([[{ kind: "number", value: 1 }]]);
+  });
+
+  it.each(["FOREIGN", "UNIQUE", "CHECK", "CONSTRAINT"])(
+    "skips a table-level %s(...) clause, not just PRIMARY KEY",
+    (keyword) => {
+      const clause =
+        keyword === "FOREIGN"
+          ? "FOREIGN KEY(A) REFERENCES U(A)"
+          : keyword === "CHECK"
+            ? "CHECK(A > 0)"
+            : keyword === "CONSTRAINT"
+              ? "CONSTRAINT PK PRIMARY KEY(A)"
+              : "UNIQUE(A)";
+      const bytes = scriptBytes([
+        `CREATE MEMORY TABLE T(A INTEGER, ${clause})`,
+        "INSERT INTO T VALUES(1)",
+      ]);
+      const [table] = parseHsqldbScript(bytes);
+      expect(table?.columns.map((column) => column.name)).toEqual(["A"]);
+    },
+  );
+
+  it("skips empty entries in a column list (a stray comma), rather than erroring", () => {
+    const bytes = scriptBytes(["CREATE MEMORY TABLE T(A INTEGER,,B INTEGER)"]);
+    const [table] = parseHsqldbScript(bytes);
+    expect(table?.columns.map((column) => column.name)).toEqual(["A", "B"]);
+  });
+
+  it("throws when the column list never opens", () => {
+    const bytes = scriptBytes(["CREATE MEMORY TABLE T A INTEGER"]);
+    expect(() => parseHsqldbScript(bytes)).toThrow(/expected "\(" to start/);
+  });
+
+  it("throws when no column definition can be read at all", () => {
+    const bytes = scriptBytes(["CREATE MEMORY TABLE T(- INTEGER)"]);
+    expect(() => parseHsqldbScript(bytes)).toThrow(
+      /could not read a column name/,
+    );
+  });
+
+  it("throws when the column list is empty", () => {
+    const bytes = scriptBytes(["CREATE MEMORY TABLE T()"]);
+    expect(() => parseHsqldbScript(bytes)).toThrow(/no columns found/);
+  });
+
+  it("throws on an unterminated column list", () => {
+    const bytes = scriptBytes(["CREATE MEMORY TABLE T(A INTEGER"]);
+    expect(() => parseHsqldbScript(bytes)).toThrow(/unterminated parenthesis/);
+  });
+});
+
+describe("parseHsqldbScript: INSERT shapes", () => {
+  it("throws when the VALUES keyword is missing", () => {
+    const bytes = scriptBytes([
+      "CREATE MEMORY TABLE T(A INTEGER)",
+      "INSERT INTO T 5",
+    ]);
+    expect(() => parseHsqldbScript(bytes)).toThrow(
+      /expected the VALUES keyword/,
+    );
+  });
+
+  it("throws when VALUES appears anywhere but at the head of the post-table text", () => {
+    // "NOTVALUES" must not satisfy the VALUES keyword: the match is anchored to where the keyword is expected, not searched for anywhere in the rest of the statement.
+    const bytes = scriptBytes([
+      "CREATE MEMORY TABLE T(A INTEGER)",
+      "INSERT INTO T NOTVALUES(1)",
+    ]);
+    expect(() => parseHsqldbScript(bytes)).toThrow(
+      /expected the VALUES keyword/,
+    );
+  });
+
+  it("throws when the VALUES tuple never opens", () => {
+    const bytes = scriptBytes([
+      "CREATE MEMORY TABLE T(A INTEGER)",
+      "INSERT INTO T VALUES 1",
+    ]);
+    expect(() => parseHsqldbScript(bytes)).toThrow(
+      /expected "\(" to start the VALUES tuple/,
+    );
+  });
+
+  it("matches an explicit column list case-insensitively, with padded fields, against the declared names", () => {
+    const bytes = scriptBytes([
+      "CREATE MEMORY TABLE T(A INTEGER,B INTEGER)",
+      "insert into t( b , a ) values(2, 1)",
+    ]);
+    const [table] = parseHsqldbScript(bytes);
+    expect(table?.rows).toEqual([
+      [
+        { kind: "number", value: 1 },
+        { kind: "number", value: 2 },
+      ],
+    ]);
+  });
+
+  it("reads quoted identifiers in an explicit column list", () => {
+    const bytes = scriptBytes([
+      'CREATE MEMORY TABLE T("The A" INTEGER)',
+      'INSERT INTO T("The A") VALUES(9)',
+    ]);
+    const [table] = parseHsqldbScript(bytes);
+    expect(table?.rows).toEqual([[{ kind: "number", value: 9 }]]);
+  });
+
+  it("keeps a value containing a closing paren inside its quotes, without ending the tuple early", () => {
+    const bytes = scriptBytes([
+      "CREATE MEMORY TABLE T(A VARCHAR(10), B INTEGER)",
+      "INSERT INTO T VALUES('a)b', 2)",
+    ]);
+    const [table] = parseHsqldbScript(bytes);
+    expect(table?.rows).toEqual([
+      [
+        { kind: "string", value: "a)b" },
+        { kind: "number", value: 2 },
+      ],
+    ]);
+  });
+
+  it("keeps a paren that follows a doubled quote inside a string, without counting it toward tuple depth", () => {
+    // 'a''(b)' is one string a'(b): if the '' pair were read as close-then-reopen, the ( between the halves would sit OUTSIDE the string and push the tuple's paren depth up, leaving the statement unterminated.
+    const bytes = scriptBytes([
+      "CREATE MEMORY TABLE T(A VARCHAR(10))",
+      "INSERT INTO T VALUES('a''(b)')",
+    ]);
+    const [table] = parseHsqldbScript(bytes);
+    expect(table?.rows).toEqual([[{ kind: "string", value: "a'(b)" }]]);
+  });
+
+  it("trims whitespace around each VALUES field, so a spaced tuple parses as cleanly as a tight one", () => {
+    const bytes = scriptBytes([
+      "CREATE MEMORY TABLE T(A INTEGER,B INTEGER)",
+      "INSERT INTO T VALUES( 1 , 2 )",
+    ]);
+    const [table] = parseHsqldbScript(bytes);
+    expect(table?.rows).toEqual([
+      [
+        { kind: "number", value: 1 },
+        { kind: "number", value: 2 },
+      ],
+    ]);
+  });
+});
+
+describe("parseHsqldbScript: literal recognition boundaries", () => {
+  it.each([
+    ["XNULL", /unrecognised literal/],
+    ["NULLX", /unrecognised literal/],
+    ["XTRUE", /unrecognised literal/],
+    ["TRUEX", /unrecognised literal/],
+    ["XFALSE", /unrecognised literal/],
+    ["FALSEX", /unrecognised literal/],
+    ["DATEX'2024-01-01'", /unrecognised literal/],
+    ["XDATE'2024-01-01'", /unrecognised literal/],
+    ["TIMEX'13:45:00'", /unrecognised literal/],
+    ["XTIME'13:45:00'", /unrecognised literal/],
+    ["TIMESTAMPX'2024-01-01 13:45:00'", /unrecognised literal/],
+    ["XTIMESTAMP'2024-01-01 13:45:00'", /unrecognised literal/],
+    ["x''", /unrecognised literal/],
+    ["''x", /unrecognised literal/],
+  ])("%s is not a recognised literal form and throws", (literal, pattern) => {
+    const bytes = scriptBytes([
+      "CREATE MEMORY TABLE T(A INTEGER)",
+      `INSERT INTO T VALUES(${literal})`,
+    ]);
+    expect(() => parseHsqldbScript(bytes)).toThrow(pattern);
+  });
+
+  it.each([
+    "DATE'2024-01-01'X",
+    "TIME'01:02:03'X",
+    "TIMESTAMP'2024-01-01 13:45:00'X",
+  ])(
+    "trailing content after a typed literal's closing quote (%s) is not a typed literal",
+    (literal) => {
+      const bytes = scriptBytes([
+        "CREATE MEMORY TABLE T(A VARCHAR(40))",
+        `INSERT INTO T VALUES(${literal})`,
+      ]);
+      expect(() => parseHsqldbScript(bytes)).toThrow(/unrecognised literal/);
+    },
+  );
+
+  it("a quoted column named after a constraint keyword is a column, not a skipped constraint", () => {
+    // Quoted identifiers exist precisely so a reserved word can be a name: the constraint-skip check reads the clause's LEADING word, and a quoted name never has one.
+    const bytes = scriptBytes([
+      'CREATE MEMORY TABLE T("PRIMARY" INTEGER)',
+      'INSERT INTO T("PRIMARY") VALUES(4)',
+    ]);
+    const [table] = parseHsqldbScript(bytes);
+    expect(table?.columns.map((column) => column.name)).toEqual(["PRIMARY"]);
+    expect(table?.rows).toEqual([[{ kind: "number", value: 4 }]]);
+  });
+
+  it("a value of exactly two quotes is an empty string, not an error and not a number", () => {
+    const bytes = scriptBytes([
+      "CREATE MEMORY TABLE T(A VARCHAR(10))",
+      "INSERT INTO T VALUES('')",
+    ]);
+    const [table] = parseHsqldbScript(bytes);
+    expect(table?.rows).toEqual([[{ kind: "string", value: "" }]]);
+  });
+});
+
+describe("parseHsqldbScript: literal forms", () => {
+  it("matches NULL and TRUE/FALSE case-insensitively", () => {
+    const bytes = scriptBytes([
+      "CREATE MEMORY TABLE T(A BOOLEAN,B BOOLEAN,C INTEGER)",
+      "INSERT INTO T VALUES(true, FALSE, null)",
+    ]);
+    const [table] = parseHsqldbScript(bytes);
+    expect(table?.rows).toEqual([
+      [
+        { kind: "boolean", value: true },
+        { kind: "boolean", value: false },
+        { kind: "empty" },
+      ],
+    ]);
+  });
+
+  it("reads date/time/timestamp typed literals case-insensitively and with escaped quotes inside", () => {
+    const bytes = scriptBytes([
+      "CREATE MEMORY TABLE T(A DATE,B TIME,C TIMESTAMP)",
+      "INSERT INTO T VALUES(date'2024-02-03', time'04:05:06', timestamp'a''b')",
+    ]);
+    const [table] = parseHsqldbScript(bytes);
+    expect(table?.rows).toEqual([
+      [
+        { kind: "date", value: "2024-02-03" },
+        { kind: "time", value: "04:05:06" },
+        { kind: "date", value: "a'b" },
+      ],
+    ]);
+  });
+
+  it("classifies a bare quoted literal by its column's declared type bucket, on the declared type's leading word", () => {
+    const bytes = scriptBytes([
+      "CREATE MEMORY TABLE T(D DATE NOT NULL, T TIME(0), O INTEGER)",
+      "INSERT INTO T VALUES('2024-01-01', '01:02:03', 'plain')",
+    ]);
+    const [table] = parseHsqldbScript(bytes);
+    expect(table?.rows).toEqual([
+      [
+        { kind: "date", value: "2024-01-01" },
+        { kind: "time", value: "01:02:03" },
+        { kind: "string", value: "plain" },
+      ],
+    ]);
+  });
+
+  it("a quoted type clause (a quoted DOMAIN reference) does not bucket as DATE or TIME: its bare quoted literal stays a string", () => {
+    // The leading-word read is anchored to the START of the type clause: a domain named DATE, referenced quoted, is not the DATE type.
+    const bytes = scriptBytes([
+      'CREATE MEMORY TABLE T(A "DATE", B "TIME")',
+      "INSERT INTO T VALUES('2024-01-01', '01:02:03')",
+    ]);
+    const [table] = parseHsqldbScript(bytes);
+    expect(table?.rows).toEqual([
+      [
+        { kind: "string", value: "2024-01-01" },
+        { kind: "string", value: "01:02:03" },
+      ],
+    ]);
+  });
+
+  it("accepts an explicitly signed number and a lowercase exponent, and rejects a leading-dot or trailing-dot number", () => {
+    const ok = scriptBytes([
+      "CREATE MEMORY TABLE T(A DOUBLE,B DOUBLE)",
+      "INSERT INTO T VALUES(+4, 2e3)",
+    ]);
+    expect(parseHsqldbScript(ok)[0]?.rows).toEqual([
+      [
+        { kind: "number", value: 4 },
+        { kind: "number", value: 2000 },
+      ],
+    ]);
+    const leadingDot = scriptBytes([
+      "CREATE MEMORY TABLE T(A DOUBLE)",
+      "INSERT INTO T VALUES(.5)",
+    ]);
+    expect(() => parseHsqldbScript(leadingDot)).toThrow(/unrecognised literal/);
+    const trailingDot = scriptBytes([
+      "CREATE MEMORY TABLE T(A DOUBLE)",
+      "INSERT INTO T VALUES(5.)",
+    ]);
+    expect(() => parseHsqldbScript(trailingDot)).toThrow(
+      /unrecognised literal/,
+    );
+  });
+
+  it("decodes the script as strict UTF-8: invalid bytes throw a decoding TypeError, not a replacement-character parse", () => {
+    expect(() => parseHsqldbScript(new Uint8Array([0xff, 0xfe]))).toThrow(
+      TypeError,
+    );
+  });
+});
+
+describe("parseHsqldbScript: ignorable statements", () => {
+  it("matches an ignorable prefix case-insensitively and across collapsed runs of whitespace", () => {
+    const bytes = scriptBytes([
+      "cReAtE uSeR sa PASSWORD ''",
+      "SET\tDATABASE  UNIQUE NAME X",
+      "set   schema    public",
+      "CREATE MEMORY TABLE T(A INTEGER)",
+    ]);
+    expect(parseHsqldbScript(bytes)).toHaveLength(1);
+  });
+});
+
+describe("HsqldbScriptParseError", () => {
+  it("carries the full statement verbatim and a preview in the message for a short statement", () => {
+    const bytes = scriptBytes(["SELECT * FROM T"]);
+    let error: unknown;
+    try {
+      parseHsqldbScript(bytes);
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(HsqldbScriptParseError);
+    if (!(error instanceof HsqldbScriptParseError)) {
+      throw new Error("expected HsqldbScriptParseError");
+    }
+    expect(error.name).toBe("HsqldbScriptParseError");
+    expect(error.statement).toBe("SELECT * FROM T");
+    expect(error.message).toContain("in statement: SELECT * FROM T");
+    expect(error.message).not.toContain("...");
+  });
+
+  it("truncates the message's statement preview at exactly 200 characters, keeping the full statement on the error", () => {
+    // 201 characters total: the preview must be the first 200 plus "...", while err.statement keeps all 201.
+    const statement = `SELECT ${"A".repeat(194)}`;
+    expect(statement.length).toBe(201);
+    let error: unknown;
+    try {
+      parseHsqldbScript(scriptBytes([statement]));
+    } catch (caught) {
+      error = caught;
+    }
+    if (!(error instanceof HsqldbScriptParseError)) {
+      throw new Error("expected HsqldbScriptParseError");
+    }
+    expect(error.statement).toBe(statement);
+    expect(error.message).toContain(
+      `in statement: ${statement.slice(0, 200)}...`,
+    );
+
+    // At exactly 200 characters the statement fits whole: no ellipsis.
+    const exact = `SELECT ${"A".repeat(193)}`;
+    expect(exact.length).toBe(200);
+    let exactError: unknown;
+    try {
+      parseHsqldbScript(scriptBytes([exact]));
+    } catch (caught) {
+      exactError = caught;
+    }
+    if (!(exactError instanceof HsqldbScriptParseError)) {
+      throw new Error("expected HsqldbScriptParseError");
+    }
+    expect(exactError.message).toContain(`in statement: ${exact}`);
+    expect(exactError.message).not.toContain("...");
+  });
+});
+
+describe("displayTextFor: the remaining value kinds", () => {
+  it("renders percentage as value*100 with a % sign, exactly", () => {
+    expect(displayTextFor({ kind: "percentage", value: 0.5 })).toBe("50%");
+    expect(displayTextFor({ kind: "percentage", value: 0.125 })).toBe("12.5%");
+  });
+
+  it("renders currency with its ISO code when present and bare otherwise", () => {
+    expect(
+      displayTextFor({ kind: "currency", value: 42.5, currency: "USD" }),
+    ).toBe("42.5 USD");
+    expect(displayTextFor({ kind: "currency", value: 42.5 })).toBe("42.5");
+  });
+
+  it("renders time, dateTime and error values verbatim", () => {
+    expect(displayTextFor({ kind: "time", value: "13:45:00" })).toBe(
+      "13:45:00",
+    );
+    expect(
+      displayTextFor({ kind: "dateTime", value: "2024-01-15T13:45:00" }),
+    ).toBe("2024-01-15T13:45:00");
+    expect(displayTextFor({ kind: "error", value: "#DIV/0!" })).toBe("#DIV/0!");
+  });
+});
