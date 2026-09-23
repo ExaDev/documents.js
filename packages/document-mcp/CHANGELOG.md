@@ -1,3 +1,9 @@
+## [4.14.59](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.58...document-mcp%404.14.59) (2026-09-23)
+
+### Bug Fixes
+
+* **document-mcp:** use function properties instead of shorthand methods in RoutableResponse ([cc8b12b](https://github.com/ExaDev/documents.js/commit/cc8b12b76026b842e377967c0f3668406227ec9f)), references [ExaDev/documents.js#1275](https://github.com/ExaDev/documents.js/issues/1275)
+
 ## [4.14.58](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.57...document-mcp%404.14.58) (2026-09-23)
 
 
