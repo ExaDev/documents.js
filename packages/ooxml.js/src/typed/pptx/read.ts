@@ -566,7 +566,7 @@ const DRAWINGML_DASH_STYLE_MAP: ReadonlyMap<string, ContentStrokeStyle> =
     ["lgDashDotDot", "dashed"],
   ]);
 
-// One a:tcPr child among a:lnL/a:lnR/a:lnT/a:lnB (ECMA-376 21.1.3.2-5, each a CT_LineProperties) — the DrawingML table cell's own per-edge border, the pptx-side counterpart to WordprocessingML's w:tcBorders edges (typed/docx/read.ts's readCellBorderEdge). @w is the edge's width in EMU and an a:solidFill child names its colour, resolved through the same scheme-colour-aware readSolidFillColor this cell's own background fill already uses rather than the write side's own srgbClr-only shortcut (src/edit/pptx/table.ts), so a theme-coloured border resolves correctly too; an optional a:prstDash child names its dash pattern. An edge missing @w, whose @w doesn't resolve to a positive number (non-numeric, zero, or negative), or whose colour doesn't resolve (no a:solidFill, or one this reader can't resolve to a Color — including an explicit a:noFill), reads as no border on that side: ContentBorderSchema requires both a resolved colour and a positive widthPt, so an edge failing either has no valid ContentBorder to construct — unlike WordprocessingML's own readCellBorderEdge, which defaults an absent width to half a point and an absent colour to black rather than dropping the edge, since w:tcBorders only ever omits @w:sz/@w:color on a genuine (non-nil/none) edge.
+// One a:tcPr child among a:lnL/a:lnR/a:lnT/a:lnB (ECMA-376 21.1.3.2-5, each a CT_LineProperties) — the DrawingML table cell's own per-edge border, the pptx-side counterpart to WordprocessingML's w:tcBorders edges (typed/docx/read.ts's readCellBorderEdge). @w is the edge's width in EMU and an a:solidFill child names its colour, resolved through the same scheme-colour-aware readSolidFillColor this cell's own background fill already uses rather than the write side's own srgbClr-only shortcut (src/edit/pptx/table.ts), so a theme-coloured border resolves correctly too; an optional a:prstDash child names its dash pattern, and @cmpd="dbl" (ST_CompoundLine, ECMA-376 20.1.2.2.24) names a double line — the one ContentStrokeStyle member a:prstDash cannot spell, so it takes priority over any a:prstDash also present, the same "@cmpd wins" convention src/edit/pptx/table.ts's own readBorderStyle follows. An edge missing @w, whose @w doesn't resolve to a positive number (non-numeric, zero, or negative), or whose colour doesn't resolve (no a:solidFill, or one this reader can't resolve to a Color — including an explicit a:noFill), reads as no border on that side: ContentBorderSchema requires both a resolved colour and a positive widthPt, so an edge failing either has no valid ContentBorder to construct — unlike WordprocessingML's own readCellBorderEdge, which defaults an absent width to half a point and an absent colour to black rather than dropping the edge, since w:tcBorders only ever omits @w:sz/@w:color on a genuine (non-nil/none) edge.
 function readTableCellBorderEdge(
   tcPr: XmlElement,
   tag: "a:lnL" | "a:lnR" | "a:lnT" | "a:lnB",
@@ -591,13 +591,16 @@ function readTableCellBorderEdge(
   }
   const prstDash = childrenWithTag(lnElement, "a:prstDash")[0];
   const dashVal = prstDash === undefined ? undefined : attr(prstDash, "val");
+  const style: ContentStrokeStyle | undefined =
+    attr(lnElement, "cmpd") === "dbl"
+      ? "double"
+      : dashVal === undefined
+        ? undefined
+        : (DRAWINGML_DASH_STYLE_MAP.get(dashVal) ?? "solid");
   return {
     color,
     widthPt,
-    style:
-      dashVal === undefined
-        ? undefined
-        : (DRAWINGML_DASH_STYLE_MAP.get(dashVal) ?? "solid"),
+    style,
   };
 }
 
