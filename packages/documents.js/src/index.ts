@@ -738,12 +738,13 @@ export {
   xlsxPdfCodec,
 } from "./convert/codec";
 
-// --- The cross-format bridges: same-variant direct copies (odt<->docx, odp<->pptx, ods<->xlsx, csv<->ods, csv<->xlsx, svg<->odg, markdown<->docx, markdown<->odt) and cross-variant semantic transforms (docx<->pptx, odt<->odp) bypass PDF entirely — see convert.ts's own module comment on this section for why those carry substantially higher fidelity than the PDF-pivot conversions above. The remaining two pairs (xlsx<->markdown, csv<->markdown) are PDF-composed internally, the last-resort routes the pathfinder picks when no shorter path exists. ---
+// --- The cross-format bridges: same-variant direct copies (odt<->docx, odp<->pptx, ods<->xlsx, csv<->ods, csv<->xlsx, svg<->odg, markdown<->docx, markdown<->odt) and cross-variant semantic transforms (docx<->pptx, odt<->odp) bypass PDF entirely — see convert.ts's own module comment on this section for why those carry substantially higher fidelity than the PDF-pivot conversions above. Five further one-way routes bypass PDF the same way but have no registered reverse: xlsxToMarkdown/csvToMarkdown/xlsToMarkdown/pptToMarkdown are cross-variant bridges (spreadsheetToWordprocessing or presentationToWordprocessing), and docToMarkdown is a same-variant bridge, each with no markdown-sourced transform back — markdownToXlsx/markdownToCsv below are the only reverse direction registered, and they still go through PDF for that reason. ---
 export type { DocumentBridgeOptions } from "./convert/convert";
 export {
   csvToMarkdown,
   csvToOds,
   csvToXlsx,
+  docToMarkdown,
   docxToMarkdown,
   docxToOdt,
   markdownToCsv,
@@ -755,10 +756,12 @@ export {
   odsToXlsx,
   odtToDocx,
   odtToMarkdown,
+  pptToMarkdown,
   pptxToOdp,
   svgToOdg,
   xlsxToCsv,
   xlsxToOds,
+  xlsToMarkdown,
   docxToPptx,
   pptxToDocx,
   odtToOdp,
@@ -985,6 +988,7 @@ export { readDocumentMetadata } from "./convert/from-pdf";
 // --- The source's own native DocumentTree, by DocumentFormat, with no cross-format bridging or conversion target involved (#823 Ask 1) — see convert/from-pdf.ts's own module comment for why this reports something genuinely different from ConversionResult.package/onDocument. ---
 export type { ReadNativeDocumentTreeOptions } from "./convert/from-pdf";
 export { readNativeDocumentTree } from "./convert/from-pdf";
+
 export type {
   PatchDocxMetadataOptions,
   SetDocumentMetadataOptions,
