@@ -733,8 +733,9 @@ function lowerSupsub(
   }
   const detail = spanOfNodes(context, [node]);
   const base = isTemmlNode(node.base) ? node.base : undefined;
-  const sub = node.sub === undefined ? undefined : nodesOfScript(node.sub);
-  const sup = node.sup === undefined ? undefined : nodesOfScript(node.sup);
+  // nodesOfScript already answers undefined for anything that is not a node, so an absent script needs no separate guard here.
+  const sub = nodesOfScript(node.sub);
+  const sup = nodesOfScript(node.sup);
   if (sub !== undefined) {
     const subWritten = simpleScriptGlyph(sub);
     const baseGlyph =
@@ -855,8 +856,8 @@ function readBinder(node: TemmlNode, context: LoweringContext): BinderRead {
   }
   const kind = base.name === "\\sum" ? "sum" : "prod";
   const detail = spanOfNodes(context, [node]);
-  const sub = node.sub === undefined ? undefined : nodesOfScript(node.sub);
-  const sup = node.sup === undefined ? undefined : nodesOfScript(node.sup);
+  const sub = nodesOfScript(node.sub);
+  const sup = nodesOfScript(node.sup);
   const upper =
     sup === undefined ? implicitBound(context) : lowerNodeList(sup, context);
   // `_{name = expression}`
@@ -881,7 +882,7 @@ function readBinder(node: TemmlNode, context: LoweringContext): BinderRead {
     }
   }
   // A bare bound glyph (`\sum_i`): the binder still lowers, the missing range stays visible.
-  if ((sub?.length ?? 0) === 1 && sub !== undefined) {
+  if (sub?.length === 1) {
     const singleGlyph = simpleScriptGlyph(sub);
     if (singleGlyph !== undefined) {
       diagnose(context, "latex/binder-bound-implicit", detail);
