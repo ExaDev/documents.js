@@ -1,5 +1,6 @@
 import type { LayoutMetadata } from "document-schema.js";
 import type { Package, XmlElement, XmlNode } from "ooxml.js";
+import { childrenWithTag } from "ooxml.js";
 import { addCoreProperties } from "../../opc/core-properties";
 import { ensureContentTypeOverride } from "../../opc/content-types";
 import { buildRelativeTarget } from "../../opc/paths";
@@ -244,15 +245,19 @@ export function ensureNotesMaster(pkg: Package): string {
       "ensureNotesMaster: package has no ppt/presentation.xml element",
     );
   }
-  // p:notesMasterIdLst must directly follow p:sldMasterIdLst in CT_Presentation's own element sequence — inserted here rather than appended, since this runs after createEmptyPptxPackage already built sldMasterIdLst/sldIdLst/sldSz in their own required order.
+  // p:notesMasterIdLst must directly follow p:sldMasterIdLst in CT_Presentation's own element sequence — inserted right after it rather than appended, since this runs after createEmptyPptxPackage already built sldMasterIdLst/sldIdLst/sldSz in their own required order. A presentation carrying no p:sldMasterIdLst at all needs no special case: no child then matches, findIndex answers -1, and -1 + 1 splices at the front, the only position left.
+  const sldMasterIdLst = childrenWithTag(
+    presentationElement,
+    "p:sldMasterIdLst",
+  )[0];
   const sldMasterIdLstIndex = presentationElement.children.findIndex(
-    (c) => c.type === "element" && c.tag === "p:sldMasterIdLst",
+    (child) => child === sldMasterIdLst,
   );
   const notesMasterIdLst = el("p:notesMasterIdLst", {}, [
     el("p:notesMasterId", { "r:id": relId }),
   ]);
   presentationElement.children.splice(
-    sldMasterIdLstIndex === -1 ? 0 : sldMasterIdLstIndex + 1,
+    sldMasterIdLstIndex + 1,
     0,
     notesMasterIdLst,
   );
