@@ -164,6 +164,12 @@ function isStretchyOperator(element: MathMlElement): boolean {
   return operatorProperties(textContent(element).trim()).stretchy;
 }
 
+// The one code point of `text` when it is exactly one code point long, undefined for empty or multi-code-point text: the font's MathVariants data is keyed per glyph, so a multi-character operator has no single construction to look up, and a top-accent attachment point belongs to exactly one glyph. One shared definition for its three callers (vertical stretch, horizontal stretch, accent-attachment resolution) rather than three copies of the same spread-and-count — the multi-code-point branch is reachable through resolveTopAccentXPt's own multi-character-base fallback, keeping it honestly covered rather than dead behind one caller's own guard.
+function singleCodePoint(text: string): number | undefined {
+  const codePoints = [...text];
+  return codePoints.length === 1 ? codePoints[0]?.codePointAt(0) : undefined;
+}
+
 // Turns one resolved stretchy construction into a box holding a single 'assembled-glyphs' item. The construction's own real ink is centred on the maths axis — the default `symmetric` behaviour MathML gives a fence, and the reason a pair of tall brackets lines up with the fraction rule between them rather than with the text baseline — so the drawing origin sits `originAboveBaselinePt` above the shared baseline and the box's own edges land exactly on the ink's own top and bottom.
 function stretchedBox(
   result: MathStretchResult,
@@ -209,12 +215,8 @@ function stretchOperator(
   ctx: LayoutContext,
 ): MathBox | undefined {
   const text = textContent(element).trim();
-  const codePoints = [...text];
   // A multi-character operator has no single glyph to look a construction up for; the font's MathVariants data is keyed per glyph.
-  if (codePoints.length !== 1) {
-    return undefined;
-  }
-  const codePoint = codePoints[0]?.codePointAt(0);
+  const codePoint = singleCodePoint(text);
   if (codePoint === undefined) {
     return undefined;
   }
@@ -275,12 +277,8 @@ function stretchHorizontalOperator(
   ctx: LayoutContext,
 ): MathBox | undefined {
   const text = textContent(element).trim();
-  const codePoints = [...text];
   // A multi-character operator has no single glyph to look a construction up for; the font's MathVariants data is keyed per glyph.
-  if (codePoints.length !== 1) {
-    return undefined;
-  }
-  const codePoint = codePoints[0]?.codePointAt(0);
+  const codePoint = singleCodePoint(text);
   if (codePoint === undefined) {
     return undefined;
   }
@@ -324,9 +322,6 @@ function stretchRowOperators(
   ctx: LayoutContext,
 ): readonly MathBox[] {
   const stretchy = children.map(isStretchyOperator);
-  if (!stretchy.includes(true)) {
-    return boxes;
-  }
   const others = boxes.filter((_, index) => stretchy[index] !== true);
   if (others.length === 0) {
     return boxes;
@@ -364,20 +359,19 @@ function layoutRowChildren(
     children.map((child) => layoutNode(child, ctx)),
     ctx,
   );
-  const gapsPt = children.map((child, index) => {
-    if (index === 0) {
-      return 0;
-    }
-    const previous = children[index - 1];
-    let gapEm = 0;
-    if (previous !== undefined && elementLocalName(previous) === "mo") {
-      gapEm += operatorProperties(textContent(previous).trim()).rspaceEm;
-    }
-    if (elementLocalName(child) === "mo") {
-      gapEm += operatorProperties(textContent(child).trim()).lspaceEm;
-    }
-    return gapEm * ctx.sizePt;
-  });
+  // One operator-dictionary lookup per child rather than two: an operator's own rspace feeds the gap AFTER it and its lspace the gap BEFORE it, so carrying each child's rspace into the next iteration computes the identical rspace[i-1] + lspace[i] sum a pairwise form would, with no prev-element lookup at all. The row's own first child gets no gap (there is nothing to its left to space against), matching MathML's own leading-edge behaviour.
+  const gapsPt: number[] = [];
+  let carriedRspaceEm = 0;
+  for (const [index, child] of children.entries()) {
+    const properties =
+      elementLocalName(child) === "mo"
+        ? operatorProperties(textContent(child).trim())
+        : undefined;
+    const gapEm =
+      index === 0 ? 0 : carriedRspaceEm + (properties?.lspaceEm ?? 0);
+    gapsPt.push(gapEm * ctx.sizePt);
+    carriedRspaceEm = properties?.rspaceEm ?? 0;
+  }
   return concatBoxesHorizontally(boxes, gapsPt);
 }
 
@@ -413,34 +407,28 @@ function layoutScripts(
   ctx: LayoutContext,
 ): MathBox {
   const metrics = ctx.metrics;
-  let supShiftUpPt = 0;
-  let subShiftDownPt = 0;
-
-  if (superscript !== undefined) {
-    supShiftUpPt = Math.max(
-      ctx.cramped
-        ? metrics.superscriptShiftUpCrampedPt
-        : metrics.superscriptShiftUpPt,
-      base.ascentPt - metrics.superscriptBaselineDropMaxPt,
-    );
-  }
-  if (subscript !== undefined) {
-    subShiftDownPt = Math.max(
-      metrics.subscriptShiftDownPt,
-      base.descentPt + metrics.subscriptBaselineDropMinPt,
-    );
-  }
+  // Both shifts depend only on the base and the font's own constants, never on whether their script exists, so they are computed unconditionally and simply go unused when their script is absent.
+  const initialSupShiftUpPt = Math.max(
+    ctx.cramped
+      ? metrics.superscriptShiftUpCrampedPt
+      : metrics.superscriptShiftUpPt,
+    base.ascentPt - metrics.superscriptBaselineDropMaxPt,
+  );
+  const initialSubShiftDownPt = Math.max(
+    metrics.subscriptShiftDownPt,
+    base.descentPt + metrics.subscriptBaselineDropMinPt,
+  );
+  // The gap correction is clamped at zero rather than branch-guarded: a negative deficit (the two scripts already clear each other by more than subSuperscriptGapMinPt) must move neither script, and adding a negative correction would pull them towards each other. Split evenly, so the combined box grows symmetrically.
+  let correctionPt = 0;
   if (superscript !== undefined && subscript !== undefined) {
     const gapPt =
-      supShiftUpPt -
+      initialSupShiftUpPt -
       superscript.descentPt +
-      (subShiftDownPt - subscript.ascentPt);
-    const deficitPt = metrics.subSuperscriptGapMinPt - gapPt;
-    if (deficitPt > 0) {
-      supShiftUpPt += deficitPt / 2;
-      subShiftDownPt += deficitPt / 2;
-    }
+      (initialSubShiftDownPt - subscript.ascentPt);
+    correctionPt = Math.max(0, metrics.subSuperscriptGapMinPt - gapPt) / 2;
   }
+  const supShiftUpPt = initialSupShiftUpPt + correctionPt;
+  const subShiftDownPt = initialSubShiftDownPt + correctionPt;
 
   const ascentPt = Math.max(
     base.ascentPt,
@@ -575,11 +563,7 @@ function resolveTopAccentXPt(
     rawText,
     tokenVariant(baseElement, intrinsicDefault, ctx),
   );
-  const codePoints = [...styled];
-  if (codePoints.length !== 1) {
-    return undefined;
-  }
-  const codePoint = codePoints[0]?.codePointAt(0);
+  const codePoint = singleCodePoint(styled);
   if (codePoint === undefined) {
     return undefined;
   }
@@ -601,13 +585,7 @@ function layoutUnderOverElement(
   if (!ctx.displayStyle && isMovableLimitsOperator(baseElement)) {
     const base = layoutNode(baseElement, ctx);
     const scriptCtx = scriptContext(ctx, ctx.cramped);
-    if (kind === "munder") {
-      const sub =
-        children[1] === undefined
-          ? undefined
-          : layoutNode(children[1], scriptCtx);
-      return layoutScripts(base, sub, undefined, ctx);
-    }
+    // "munder" needs no case of its own: the fall-through tail reads its subscript from children[1] and finds children[2] absent, which is exactly the layoutScripts(base, sub, undefined, ...) call a dedicated case would make.
     if (kind === "mover") {
       const sup =
         children[1] === undefined
@@ -628,25 +606,15 @@ function layoutUnderOverElement(
 
   const base = layoutNode(baseElement, ctx);
   const scriptCtx = scriptContext(ctx, false);
-  // accent/accentunder each opt only their own respective script (over for accent, under for accentunder) into attachment-point centring — munderover's two scripts are independent, so each is resolved against its own flag.
+  // accent/accentunder each opt only their own respective script (over for accent, under for accentunder) into attachment-point centring, and each flag resolves the base's attachment point independently — munderover carrying both flags resolves the same pure lookup twice rather than sharing one conditional result between two semantically separate opt-ins.
   const isAccent = attrValue(element, "accent") === "true";
   const isAccentUnder = attrValue(element, "accentunder") === "true";
-  const topAccentXPt =
-    isAccent || isAccentUnder
-      ? resolveTopAccentXPt(baseElement, ctx)
-      : undefined;
   const accentAttachment: AccentAttachment = {
-    overXPt: isAccent ? topAccentXPt : undefined,
-    underXPt: isAccentUnder ? topAccentXPt : undefined,
+    overXPt: isAccent ? resolveTopAccentXPt(baseElement, ctx) : undefined,
+    underXPt: isAccentUnder ? resolveTopAccentXPt(baseElement, ctx) : undefined,
   };
 
-  if (kind === "munder") {
-    const under =
-      children[1] === undefined
-        ? undefined
-        : layoutUnderOverChild(children[1], base.widthPt, scriptCtx);
-    return layoutUnderOver(base, under, undefined, ctx, accentAttachment);
-  }
+  // "munder" needs no case of its own: the fall-through below reads its under script from children[1] and finds children[2] absent, which is exactly the layoutUnderOver(base, under, undefined, ...) call a dedicated case would make.
   if (kind === "mover") {
     const over =
       children[1] === undefined
@@ -669,7 +637,11 @@ function layoutFraction(element: MathMlElement, ctx: LayoutContext): MathBox {
   const children = elementChildren(element);
   const numeratorElement = children[0];
   const denominatorElement = children[1];
-  if (numeratorElement === undefined || denominatorElement === undefined) {
+  // Two separate guards rather than one ||: elementChildren returns an array, so a present denominator always implies a present numerator, and a single disjunction's right-hand check would be unreachable on its own.
+  if (numeratorElement === undefined) {
+    return EMPTY_BOX;
+  }
+  if (denominatorElement === undefined) {
     return EMPTY_BOX;
   }
 
@@ -881,13 +853,10 @@ function layoutTable(element: MathMlElement, ctx: LayoutContext): MathBox {
   const rows = elementChildren(element).filter(
     (child) => elementLocalName(child) === "mtr",
   );
-  if (rows.length === 0) {
-    return EMPTY_BOX;
-  }
-  const columnAligns = (attrValue(element, "columnalign") ?? "")
-    .trim()
-    .split(/\s+/)
-    .filter((s) => s.length > 0);
+  // No separate rows-empty guard: a table with no mtr rows yields no row cells and therefore columnCount 0, which the columnCount guard below already returns EMPTY_BOX for.
+  const columnAlignAttr = attrValue(element, "columnalign");
+  const columnAligns =
+    columnAlignAttr === undefined ? [] : (columnAlignAttr.match(/\S+/g) ?? []);
 
   const rowCells: MathBox[][] = rows.map((row) =>
     elementChildren(row)
@@ -902,15 +871,9 @@ function layoutTable(element: MathMlElement, ctx: LayoutContext): MathBox {
   if (columnCount === 0) {
     return EMPTY_BOX;
   }
-  const columnWidthsPt: number[] = [];
-  for (let column = 0; column < columnCount; column++) {
-    columnWidthsPt.push(
-      rowCells.reduce(
-        (max, row) => Math.max(max, row[column]?.widthPt ?? 0),
-        0,
-      ),
-    );
-  }
+  const columnWidthsPt = Array.from({ length: columnCount }, (_, column) =>
+    rowCells.reduce((max, row) => Math.max(max, row[column]?.widthPt ?? 0), 0),
+  );
 
   const columnGapPt = 0.8 * ctx.sizePt;
   const rowGapPt = 0.5 * ctx.sizePt;
@@ -929,10 +892,9 @@ function layoutTable(element: MathMlElement, ctx: LayoutContext): MathBox {
     let cursorXPt = 0;
     row.forEach((cell, columnIndex) => {
       const columnWidthPt = columnWidthsPt[columnIndex] ?? cell.widthPt;
+      // An undefined per-column or last-value align is simply neither "left" nor "right", so the dx ternary's final arm is the default centring — no explicit "center" literal to drift from the two named cases.
       const align =
-        columnAligns[columnIndex] ??
-        columnAligns[columnAligns.length - 1] ??
-        "center";
+        columnAligns[columnIndex] ?? columnAligns[columnAligns.length - 1];
       const extraPt = columnWidthPt - cell.widthPt;
       const dxPt =
         align === "left" ? 0 : align === "right" ? extraPt : extraPt / 2;
