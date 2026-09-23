@@ -1091,6 +1091,68 @@ describe("readPptxContent: a covered table position's own decoration", () => {
   });
 });
 
+// ExaDev/documents.js#1400: a:prstDash has no 'double' member (ST_PresetLineDashVal, ECMA-376 20.1.10.48), so a double border edge is instead stated on @cmpd="dbl" (ST_CompoundLine, ECMA-376 20.1.2.2.24), the same attribute a:ln itself carries — a:lnL/a:lnR/a:lnT/a:lnB share it because all five are typed CT_LineProperties.
+describe("readPptxContent: a cell border's double stroke style", () => {
+  it('reads @cmpd="dbl" as style: "double"', () => {
+    const table = tableFromRows([
+      [
+        el("a:tc", {}, [
+          el("a:txBody", {}, [
+            el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("A")])])]),
+          ]),
+          el("a:tcPr", {}, [
+            el("a:lnL", { w: "12700", cmpd: "dbl" }, [solidFillEl("FF0000")]),
+          ]),
+        ]),
+      ],
+    ]);
+    expect(table.rows[0]?.cells[0]?.borders).toEqual({
+      left: { color: FILL_RED, widthPt: 1, style: "double" },
+    });
+  });
+
+  it('@cmpd="dbl" takes priority over an a:prstDash also present on the same edge, since ContentStrokeStyle has no way to state both at once', () => {
+    const table = tableFromRows([
+      [
+        el("a:tc", {}, [
+          el("a:txBody", {}, [
+            el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("A")])])]),
+          ]),
+          el("a:tcPr", {}, [
+            el("a:lnL", { w: "12700", cmpd: "dbl" }, [
+              solidFillEl("FF0000"),
+              el("a:prstDash", { val: "dash" }),
+            ]),
+          ]),
+        ]),
+      ],
+    ]);
+    expect(table.rows[0]?.cells[0]?.borders).toEqual({
+      left: { color: FILL_RED, widthPt: 1, style: "double" },
+    });
+  });
+
+  it('a @cmpd value other than "dbl" is ignored, falling back to a:prstDash (or no style at all)', () => {
+    const table = tableFromRows([
+      [
+        el("a:tc", {}, [
+          el("a:txBody", {}, [
+            el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("A")])])]),
+          ]),
+          el("a:tcPr", {}, [
+            el("a:lnL", { w: "12700", cmpd: "thickThin" }, [
+              solidFillEl("FF0000"),
+            ]),
+          ]),
+        ]),
+      ],
+    ]);
+    expect(table.rows[0]?.cells[0]?.borders).toEqual({
+      left: { color: FILL_RED, widthPt: 1 },
+    });
+  });
+});
+
 describe("readPptxContent: group shapes", () => {
   it("flattens a group's child shape into the slide's flat shape list at its absolute (transformed) position", () => {
     const doc = readPptxContent(buildFixturePackage());
