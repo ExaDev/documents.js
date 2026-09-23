@@ -55,7 +55,9 @@ function readWithDiagnostics(documentArea: readonly number[]): {
 } {
   const diagnostics: WpdDiagnostic[] = [];
   const document = readWpdContent(buildWpdFile(documentArea), {
-    sink: (diagnostic) => diagnostics.push(diagnostic),
+    sink: (diagnostic) => {
+      diagnostics.push(diagnostic);
+    },
   });
   return { document, diagnostics };
 }
@@ -695,7 +697,11 @@ describe("tables", () => {
         }),
         ...eolFunction({ subgroup: EOL_TABLE_OFF }),
       ]),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     expect(
       diagnostics.some(
@@ -1211,7 +1217,11 @@ describe("page geometry margin subgroup isolation", () => {
         ...marginFunction(PAGE_GROUP, 0x00, 2400),
         ...text("second"),
       ]),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     const found = diagnostics.find(
       (d) => d.code === WpdDiagnosticCodes.PageGeometryChanged,
@@ -1229,7 +1239,11 @@ describe("page geometry margin subgroup isolation", () => {
           ...pageForm({ lengthWpu: 10200, widthWpu: 13200, orientation: 1 }),
           ...text("wide"),
         ]),
-        { sink: (d) => diagnostics.push(d) },
+        {
+          sink: (d) => {
+            diagnostics.push(d);
+          },
+        },
       );
       return { document, diagnostics };
     })();
@@ -1260,7 +1274,11 @@ describe("table cell attribute gaps", () => {
         }),
         ...eolFunction({ subgroup: EOL_TABLE_OFF }),
       ]),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     void document;
     const found = diagnostics.find(
@@ -1289,7 +1307,11 @@ describe("table cell attribute gaps", () => {
         }),
         ...eolFunction({ subgroup: EOL_TABLE_OFF }),
       ]),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     void document;
     const found = diagnostics.find(
@@ -1320,7 +1342,11 @@ describe("table cell attribute gaps", () => {
         }),
         ...eolFunction({ subgroup: EOL_TABLE_OFF }),
       ]),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     const cell = tablesOf(document)[0]?.rows[0]?.cells[0];
     expect(cell?.formula).toBe("A1+B1");
@@ -1348,7 +1374,11 @@ describe("table cell attribute gaps", () => {
         }),
         ...eolFunction({ subgroup: EOL_TABLE_OFF }),
       ]),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     const cell = tablesOf(document)[0]?.rows[0]?.cells[0];
     expect(cell?.background?.kind).toBe("pattern");
@@ -1369,7 +1399,11 @@ describe("table cell attribute gaps", () => {
         ...eolFunction({ subgroup: EOL_TABLE_ROW }),
         ...eolFunction({ subgroup: EOL_TABLE_OFF }),
       ]),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     expect(
       diagnostics.some(
@@ -1394,7 +1428,11 @@ describe("table cell attribute gaps", () => {
         }),
         ...eolFunction({ subgroup: EOL_TABLE_OFF }),
       ]),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     const cell = tablesOf(document)[0]?.rows[0]?.cells[0];
     expect(cell?.background?.kind).toBe("solid");
@@ -1459,7 +1497,11 @@ describe("style resolution depth and scope handling", () => {
         ],
         packets,
       ),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     void document;
     const found = diagnostics.find(
@@ -1505,7 +1547,11 @@ describe("style resolution depth and scope handling", () => {
         ],
         packets,
       ),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     expect(
       diagnostics.filter(
@@ -1539,7 +1585,9 @@ describe("style resolution depth and scope handling", () => {
     ]);
     const diagnostics: WpdDiagnostic[] = [];
     readWpdContent(buildWpdFile([...documentArea, ...text("done")], packets), {
-      sink: (d) => diagnostics.push(d),
+      sink: (d) => {
+        diagnostics.push(d);
+      },
     });
     expect(
       diagnostics.some(

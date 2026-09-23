@@ -6,7 +6,6 @@ export default packageLintConfig({
   newRuleDebt: [
     "@typescript-eslint/no-shadow",
     "@typescript-eslint/strict-boolean-expressions",
-    "@typescript-eslint/strict-void-return",
   ],
   isomorphic: true,
   // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why — this package's own WordPerfect prefix/function-code parser genuinely mutates a handful of array/object parameters in place. Tracked for burn-down.
