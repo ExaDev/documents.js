@@ -218,15 +218,24 @@ async function waitForBrowseMode(
 
 describe("FilePickerScreen", () => {
   it.each([
-    ["open", "Open a document"],
-    ["saveAs", "Save as"],
-    ["exportTarget", "Export destination"],
+    ["open", "Open a document", "Enter to open, Esc to cancel"],
+    [
+      "saveAs",
+      "Save as",
+      "Enter a directory to browse into it, a to name the destination file, Esc to cancel",
+    ],
+    [
+      "exportTarget",
+      "Export destination",
+      "Enter a directory to browse into it, a to name the destination file, Esc to cancel",
+    ],
   ] as const)(
-    "shows the %s title alongside the current directory",
-    async (purpose, title) => {
+    "shows the %s title alongside the current directory, and its own browse-mode hint",
+    async (purpose, title, hint) => {
       const rendered = renderPicker(purpose, root);
       const frame = await waitForBrowseMode(rendered);
       expect(frame).toContain(`${title} — ${root}`);
+      expect(frame).toContain(hint);
     },
   );
 
@@ -245,6 +254,9 @@ describe("FilePickerScreen", () => {
     expect(bDirIndex).toBeLessThan(subIndex);
     expect(subIndex).toBeLessThan(aFileIndex);
     expect(aFileIndex).toBeLessThan(zFileIndex);
+    // Files never carry the trailing "/" only a real directory's own isDirectory:true earns — proves the directory/file split itself (readEntries's own two filter() calls), not just the final ordering.
+    expect(frame).not.toContain("aFile.md/");
+    expect(frame).not.toContain("zFile.md/");
   });
 
   it("shows no parent entry at the filesystem root, where dirname equals the directory itself", async () => {
@@ -276,6 +288,16 @@ describe("FilePickerScreen", () => {
     expect(frame).not.toContain("sub/");
     expect(frame).not.toContain("aFile.md");
     expect(frame).not.toContain("zFile.md");
+  });
+
+  it("trims surrounding whitespace from the search query before matching", async () => {
+    const rendered = renderPicker("open", root, { searchQuery: " bDir " });
+    const frame = await waitForFlatFrame(
+      rendered,
+      (candidate) =>
+        candidate.includes("screen:filePicker") && !candidate.includes("sub/"),
+    );
+    expect(frame).toContain("bDir/");
   });
 
   it("navigates into a selected directory and back out via the parent entry", async () => {
@@ -402,6 +424,29 @@ describe("FilePickerScreen", () => {
       rendered.stdin.write("\x7f");
       await settle();
     }
+    rendered.stdin.write("\r");
+
+    const frame = await waitForFlatFrame(rendered, (candidate) =>
+      candidate.includes("status:warning"),
+    );
+    expect(frame).toContain("status:warning:Enter a filename first");
+    expect(vi.mocked(saveDocumentTo)).not.toHaveBeenCalled();
+  });
+
+  it("warns instead of saving when the destination name is whitespace-only", async () => {
+    const rendered = renderPicker("saveAs", root, { withDocument: true });
+    await waitForBrowseMode(rendered);
+    rendered.stdin.write("a");
+    await waitForFlatFrame(rendered, (candidate) =>
+      candidate.includes("untitled.md"),
+    );
+    await settle();
+    for (let step = 0; step < 11; step += 1) {
+      rendered.stdin.write("\x7f");
+      await settle();
+    }
+    rendered.stdin.write("   ");
+    await settle();
     rendered.stdin.write("\r");
 
     const frame = await waitForFlatFrame(rendered, (candidate) =>
