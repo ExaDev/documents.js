@@ -1047,6 +1047,17 @@ describe("readCellStyles: numFmtId/numberFormatCode/alignment key presence", () 
     );
   });
 
+  it("leaves numberFormatCode absent for a well-formed numFmtId that resolves to no code at all", () => {
+    const pkg = stylesPackage(
+      el("styleSheet", {}, [
+        el("cellXfs", {}, [el("xf", { numFmtId: "200" })]),
+      ]),
+    );
+    expect(hasOwn(readCellStyles(pkg)[0] ?? {}, "numberFormatCode")).toBe(
+      false,
+    );
+  });
+
   it("leaves alignment absent (not undefined) when the xf's own <alignment> states no recognised horizontal value, but still states verticalAlignment", () => {
     const pkg = stylesPackage(
       el("styleSheet", {}, [
