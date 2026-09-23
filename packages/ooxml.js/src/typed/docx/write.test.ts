@@ -18,6 +18,8 @@ import { ptToEmu } from "../shared/units";
 import type { DocxDocument } from "./read";
 import { readDocxContent } from "./read";
 import { buildDocxPackageFromContent } from "./write";
+import { DocxWriteDiagnosticCodes } from "./diagnostics";
+import type { DocxWriteDiagnostic } from "./diagnostics";
 
 // The round trip these tests actually assert: a docx read into sections, written back out through buildDocxPackageFromContent, and read again must produce the identical sections. Every fixture below is a real word/document.xml body, so the assertion is over the whole pair rather than over the writer's XML in isolation — what the writer emits only matters inasmuch as readDocxContent reads the same model back out of it.
 
@@ -6308,5 +6310,135 @@ describe("buildDocxPackageFromContent: note part body structure", () => {
           .join(""),
       ),
     ).toEqual(["the note body"]);
+  });
+});
+
+describe("buildDocxPackageFromContent: a table column's own isHeader has no w:tblGrid spelling", () => {
+  function tableWithHeaderColumn(
+    sourcePath?: string,
+  ): Extract<ContentBlock, { kind: "table" }> {
+    return {
+      kind: "table",
+      sourcePath,
+      columns: [{ widthPt: 100, isHeader: true }, { widthPt: 100 }],
+      rows: [
+        { cells: [{ blocks: [] }, { blocks: [] }] },
+        { cells: [{ blocks: [] }, { blocks: [] }] },
+      ],
+    };
+  }
+
+  it("does not throw when no onDiagnostic is supplied", () => {
+    expect(() =>
+      buildDocxPackageFromContent({
+        sections: [
+          { ...emptyBodySection(), blocks: [tableWithHeaderColumn()] },
+        ],
+      }),
+    ).not.toThrow();
+  });
+
+  it("calls onDiagnostic once, with TABLE_HEADER_COLUMN_DROPPED, naming the column's own index", () => {
+    const diagnostics: DocxWriteDiagnostic[] = [];
+    buildDocxPackageFromContent(
+      {
+        sections: [
+          { ...emptyBodySection(), blocks: [tableWithHeaderColumn()] },
+        ],
+      },
+      { onDiagnostic: (diagnostic) => diagnostics.push(diagnostic) },
+    );
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toEqual({
+      code: DocxWriteDiagnosticCodes.TABLE_HEADER_COLUMN_DROPPED,
+      severity: "warning",
+      message:
+        "buildDocxPackageFromContent: table column 0 is a header column, and that is dropped; w:tblGrid has no header-column marker, so the column is written exactly as any other",
+    });
+  });
+
+  it("passes the table's own sourcePath as the diagnostic's context", () => {
+    const contexts: { readonly sourcePath?: string }[] = [];
+    buildDocxPackageFromContent(
+      {
+        sections: [
+          {
+            ...emptyBodySection(),
+            blocks: [tableWithHeaderColumn("body/table[0]")],
+          },
+        ],
+      },
+      { onDiagnostic: (_diagnostic, context) => contexts.push(context) },
+    );
+    expect(contexts).toEqual([{ sourcePath: "body/table[0]" }]);
+  });
+
+  it("still writes the header column's own cells, exactly like any other column", () => {
+    const written = buildDocxPackageFromContent({
+      sections: [{ ...emptyBodySection(), blocks: [tableWithHeaderColumn()] }],
+    });
+    const grid = childrenWithTag(
+      elementsWithTag(
+        [rootElement(written.parts["word/document.xml"])!],
+        "w:tbl",
+      )[0]!,
+      "w:tblGrid",
+    )[0]!;
+    expect(childrenWithTag(grid, "w:gridCol")).toHaveLength(2);
+  });
+
+  it("reports a diagnostic per flagged column, naming each one's own index, for non-adjacent header columns", () => {
+    const diagnostics: DocxWriteDiagnostic[] = [];
+    buildDocxPackageFromContent(
+      {
+        sections: [
+          {
+            ...emptyBodySection(),
+            blocks: [
+              {
+                kind: "table",
+                columns: [
+                  { widthPt: 100, isHeader: true },
+                  { widthPt: 100 },
+                  { widthPt: 100, isHeader: true },
+                ],
+                rows: [
+                  {
+                    cells: [{ blocks: [] }, { blocks: [] }, { blocks: [] }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      { onDiagnostic: (diagnostic) => diagnostics.push(diagnostic) },
+    );
+    expect(diagnostics.map((d) => d.message)).toEqual([
+      expect.stringContaining("table column 0 is a header column"),
+      expect.stringContaining("table column 2 is a header column"),
+    ]);
+  });
+
+  it("reports nothing at all for a table whose columns state no header flag", () => {
+    const diagnostics: DocxWriteDiagnostic[] = [];
+    buildDocxPackageFromContent(
+      {
+        sections: [
+          {
+            ...emptyBodySection(),
+            blocks: [
+              {
+                kind: "table",
+                columns: [{ widthPt: 100 }, { widthPt: 100 }],
+                rows: [{ cells: [{ blocks: [] }, { blocks: [] }] }],
+              },
+            ],
+          },
+        ],
+      },
+      { onDiagnostic: (diagnostic) => diagnostics.push(diagnostic) },
+    );
+    expect(diagnostics).toEqual([]);
   });
 });
