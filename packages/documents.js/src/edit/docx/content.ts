@@ -2,6 +2,7 @@ import type {
   ContentBlock,
   ContentDocument,
   ContentEmbeddedObjectBlock,
+  ContentListMembership,
   ContentParagraph,
   ContentTable,
   ContentTableCell,
@@ -15,6 +16,7 @@ import {
   walkTableGrid,
 } from "document-schema.js";
 import type { Package } from "ooxml.js";
+import { buildNumberingElement } from "ooxml.js";
 import { resolveMetadataTimestamps } from "../../model/metadata";
 import {
   drawingOfBlock,
@@ -38,7 +40,7 @@ import {
   type DocxWriteDiagnosticSink,
 } from "./diagnostics";
 import {
-  buildNumberingRoot,
+  buildNumberingDefinitions,
   declaration as numberingDeclaration,
   NUMBERING_CONTENT_TYPE,
   NUMBERING_REL_TYPE,
@@ -122,38 +124,42 @@ export function buildDocxPackage(
   const clock = options?.clock ?? systemClock;
   const metadata = resolveMetadataTimestamps(content.metadata, clock);
   const pkg = createEmptyDocxPackage({ metadata });
-  // Pre-pass: collect every distinct list numId + its levels across all blocks (recursing into table cells), then synthesise a word/numbering.xml so the w:numPr/w:numId references DocxParagraph.list writes actually resolve in Word. Without this, numIds dangle and Word renders no bullets.
-  const numIdLevels = new Map<string | undefined, Set<number>>();
+  // Pre-pass: collect every distinct list numId + each level's own numbering format across all blocks (recursing into table cells), then synthesise a word/numbering.xml so the w:numPr/w:numId references DocxParagraph.list writes actually resolve in Word AND carry the format each membership actually asked for, rather than a blanket bullet. Without the part at all, numIds dangle and Word renders no bullets/numbers.
+  const numIdLevels = new Map<
+    string | undefined,
+    Map<number, ContentListMembership["format"]>
+  >();
   for (const section of content.sections) {
     collectListNumIds(section.blocks, numIdLevels);
   }
   const remap = new Map<string | undefined, string>();
   if (numIdLevels.size > 0) {
     const entries: NumberingEntry[] = [];
-    let abstractNumId = 0;
     let numId = 1;
     for (const [sourceNumId, levels] of numIdLevels) {
       const remapped = String(numId);
       remap.set(sourceNumId, remapped);
-      entries.push({
-        sourceNumId,
-        remappedNumId: remapped,
-        abstractNumId: String(abstractNumId),
-        levels: [...levels].sort((a, b) => a - b),
-      });
-      abstractNumId += 1;
+      entries.push({ sourceNumId, remappedNumId: remapped, levels });
       numId += 1;
     }
-    const numberingRoot = buildNumberingRoot(entries);
-    pkg.parts[NUMBERING_PART_PATH] = {
-      kind: "xml",
-      nodes: [numberingDeclaration(), numberingRoot],
-    };
-    ensureContentTypeOverride(pkg, NUMBERING_PART_PATH, NUMBERING_CONTENT_TYPE);
-    addRelationship(pkg, "word/document.xml", {
-      type: NUMBERING_REL_TYPE,
-      target: "numbering.xml",
-    });
+    const numberingRoot = buildNumberingElement(
+      buildNumberingDefinitions(entries),
+    );
+    if (numberingRoot !== undefined) {
+      pkg.parts[NUMBERING_PART_PATH] = {
+        kind: "xml",
+        nodes: [numberingDeclaration(), numberingRoot],
+      };
+      ensureContentTypeOverride(
+        pkg,
+        NUMBERING_PART_PATH,
+        NUMBERING_CONTENT_TYPE,
+      );
+      addRelationship(pkg, "word/document.xml", {
+        type: NUMBERING_REL_TYPE,
+        target: "numbering.xml",
+      });
+    }
   }
   const editor = new DocxEditor(pkg);
   const markers = new ConstructMarkerState();
@@ -183,20 +189,21 @@ function isMergeableImageParagraph(
   );
 }
 
-// Walks blocks recursively (paragraphs at any level, including inside table cells), collecting every distinct list numId and the set of levels each uses — the input to the numbering.xml synthesis pre-pass above.
-// The pre-pass map is keyed by a membership's numId OR its absence (undefined): numId is optional since schema 4.0.0 — an OOXML drawing paragraph or a de-numIded bridge product carries only a level — and every distinct key, present or absent, needs its own numbering definition for the numIds DocxParagraph.list writes to resolve. All memberships sharing the absent key land on one shared w:num, which is exactly right for a bullet-template table: the only thing a numbering definition distinguishes is the marker template, and every level of every entry this synthesiser emits is the same bullet anyway.
+// Walks blocks recursively (paragraphs at any level, including inside table cells), collecting every distinct list numId and, per level, the numbering format its memberships actually asked for — the input to the numbering.xml synthesis pre-pass above. The pre-pass map is keyed by a membership's numId OR its absence (undefined): numId is optional since schema 4.0.0 — an OOXML drawing paragraph or a de-numIded bridge product carries only a level — and every distinct key, present or absent, needs its own numbering definition for the numIds DocxParagraph.list writes to resolve. All memberships sharing the absent key land on one shared w:num, since there is no numId to keep them apart by. Within one (numId, level) pair, the FIRST membership's own format wins — real docx abstract numbering defines one format per level, so a level whose memberships genuinely disagree on format has no single correct answer, and taking the first is a documented, predictable choice rather than an arbitrary one.
 function collectListNumIds(
   blocks: readonly ContentBlock[],
-  out: Map<string | undefined, Set<number>>,
+  out: Map<string | undefined, Map<number, ContentListMembership["format"]>>,
 ): void {
   for (const block of blocks) {
     if (block.kind === "paragraph" && block.list !== undefined) {
       let levels = out.get(block.list.numId);
       if (levels === undefined) {
-        levels = new Set<number>();
+        levels = new Map<number, ContentListMembership["format"]>();
         out.set(block.list.numId, levels);
       }
-      levels.add(block.list.level);
+      if (!levels.has(block.list.level)) {
+        levels.set(block.list.level, block.list.format);
+      }
     } else if (block.kind === "table") {
       for (const row of block.rows) {
         for (const cell of row.cells) {
@@ -220,7 +227,7 @@ function remapListNumIds(
       const remapped = numIdMap.get(block.list.numId);
       return remapped === undefined
         ? block
-        : { ...block, list: { numId: remapped, level: block.list.level } };
+        : { ...block, list: { ...block.list, numId: remapped } };
     }
     if (block.kind === "table") {
       return {

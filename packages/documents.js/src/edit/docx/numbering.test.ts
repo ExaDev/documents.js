@@ -4,6 +4,7 @@ import type { ContentDocument } from "document-schema.js";
 import type { XmlElement } from "ooxml.js";
 import { attr } from "ooxml.js";
 import { buildDocxPackage } from "./content";
+import { readDocxExtras } from "../../ooxml/docx/extras";
 
 function wordprocessingDocWithList(): ContentDocument {
   return {
@@ -144,5 +145,131 @@ describe("buildDocxPackage list numbering synthesis", () => {
     };
     const pkg = buildDocxPackage(doc);
     expect(pkg.parts["word/numbering.xml"]).toBeUndefined();
+  });
+
+  // ExaDev/documents.js#1273: the writer used to ignore ContentListMembership's own numId/numFmt entirely and always synthesise numId "1" as a bullet list, regardless of what the source membership actually asked for.
+  it("threads a list membership's own numId and numFmt through into word/numbering.xml, rather than always synthesising a bullet", () => {
+    const doc: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 595, heightPt: 842 },
+          margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [{ text: "ordered item" }],
+              list: { numId: "2", level: 0, format: "decimal" },
+            },
+          ],
+        },
+      ],
+    };
+    const pkg = buildDocxPackage(doc);
+    const { numbering } = readDocxExtras(pkg);
+    const definitions = Object.values(numbering);
+    expect(definitions).toHaveLength(1);
+    expect(definitions[0]?.levels["0"]).toMatchObject({
+      format: "decimal",
+      startAt: 1,
+    });
+    // The docx numFmt is genuinely non-bullet — the literal bug this issue reports.
+    expect(definitions[0]?.levels["0"]?.format).not.toBe("bullet");
+  });
+
+  it("keeps distinct numIds' own formats independent of each other", () => {
+    const doc: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [{ text: "bullet item" }],
+              list: { numId: "bullets", level: 0, format: "bullet" },
+            },
+            {
+              kind: "paragraph",
+              runs: [{ text: "roman item" }],
+              list: { numId: "romans", level: 0, format: "upperRoman" },
+            },
+          ],
+        },
+      ],
+    };
+    const pkg = buildDocxPackage(doc);
+    const { numbering } = readDocxExtras(pkg);
+    const formats = Object.values(numbering).map(
+      (def) => def.levels["0"]?.format,
+    );
+    expect(
+      [...formats].sort((a, b) => (a ?? "").localeCompare(b ?? "")),
+    ).toEqual(["bullet", "upperRoman"]);
+  });
+
+  it("defaults to bullet when a list membership carries no explicit format, matching ContentListMembership's own documented implicit-bullet contract", () => {
+    const doc: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [{ text: "item" }],
+              list: { numId: "list-1", level: 0 },
+            },
+          ],
+        },
+      ],
+    };
+    const pkg = buildDocxPackage(doc);
+    const { numbering } = readDocxExtras(pkg);
+    const definition = Object.values(numbering)[0];
+    expect(definition?.levels["0"]?.format).toBe("bullet");
+  });
+
+  it("still writes a resolving numId for a list membership with no numId at all, honouring its own format rather than always defaulting to bullet", () => {
+    const doc: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [{ text: "level-only ordered item" }],
+              list: { level: 0, format: "lowerRoman" },
+            },
+          ],
+        },
+      ],
+    };
+    const pkg = buildDocxPackage(doc);
+    const { numbering } = readDocxExtras(pkg);
+    const definitions = Object.values(numbering);
+    expect(definitions).toHaveLength(1);
+    expect(definitions[0]?.levels["0"]?.format).toBe("lowerRoman");
+
+    // The paragraph's own w:numId still resolves to that one definition — CT_NumPr requires a numId (see DocxParagraph.list's own doc comment), so a numId-less membership is still minted one, deliberately, rather than left unlisted.
+    const docRoot =
+      pkg.parts["word/document.xml"]?.kind === "xml"
+        ? pkg.parts["word/document.xml"].nodes.find(
+            (n): n is XmlElement =>
+              n.type === "element" && n.tag === "w:document",
+          )
+        : undefined;
+    expect(docRoot).toBeDefined();
+    const numIdEl = findElement(docRoot!, "w:numId");
+    expect(numIdEl).toBeDefined();
+    expect(Object.keys(numbering)).toContain(attr(numIdEl!, "w:val"));
   });
 });
