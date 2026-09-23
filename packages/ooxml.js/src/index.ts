@@ -319,6 +319,16 @@ export type {
   DocxContent,
   EmbeddedPresentationSerialiser,
 } from "./typed/docx/write";
+export {
+  DocxWriteDiagnosticCodes,
+  NOOP_DOCX_WRITE_DIAGNOSTIC_SINK,
+} from "./typed/docx/diagnostics";
+export type {
+  DocxWriteDiagnostic,
+  DocxWriteDiagnosticCode,
+  DocxWriteDiagnosticSeverity,
+  DocxWriteDiagnosticSink,
+} from "./typed/docx/diagnostics";
 
 // One <w:shd> element -> a ContentCellFill, the resolution readDocxContent applies to every table cell's own background — exported on its own so a consumer editing raw docx XML directly (documents.js's live table-cell editor, rather than the full ContentDocument pipeline above) can read a cell's real w:val-based shading (w:val="clear" from w:fill, w:val="solid" from w:color instead, every other named pattern token from whichever of w:color/w:fill states a concrete colour) instead of re-deriving a narrower, easily-diverging approximation of the same logic.
 export { readCellShading } from "./typed/docx/shading";

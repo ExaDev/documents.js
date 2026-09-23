@@ -43,6 +43,11 @@ import {
   ptToTwips,
 } from "../shared/units";
 import { buildXlsxPackageFromContent } from "../xlsx/build";
+import {
+  NOOP_DOCX_WRITE_DIAGNOSTIC_SINK,
+  DocxWriteDiagnosticCodes,
+  type DocxWriteDiagnosticSink,
+} from "./diagnostics";
 import { TABLE_OF_CONTENTS_GALLERY, isDeletedChange } from "./constructs";
 import type {
   Comment,
@@ -162,6 +167,8 @@ export type EmbeddedPresentationSerialiser = (
 
 export interface BuildDocxContentOptions {
   readonly serialiseEmbeddedPresentation?: EmbeddedPresentationSerialiser;
+  // The write-side degrade channel (ExaDev/documents.js#1398), reporting a construct this writer could not carry into WordprocessingML at all — today, only a table column's own isHeader (see diagnostics.ts's own TABLE_HEADER_COLUMN_DROPPED comment). Defaults to NOOP_DOCX_WRITE_DIAGNOSTIC_SINK, the same discard-everything default every sink in this family uses when a caller supplies none.
+  readonly onDiagnostic?: DocxWriteDiagnosticSink;
 }
 
 interface WriteRelationship {
@@ -195,6 +202,7 @@ interface WriteState {
   readonly embeddingParts: Map<string, EmbeddedPayload>;
   readonly serialiseEmbeddedPresentation:
     EmbeddedPresentationSerialiser | undefined;
+  readonly onDiagnostic: DocxWriteDiagnosticSink;
   readonly counters: WriteCounters;
 }
 
@@ -211,6 +219,7 @@ function newWriteState(
     embeddingIds: new Map(),
     embeddingParts: new Map(),
     serialiseEmbeddedPresentation: options?.serialiseEmbeddedPresentation,
+    onDiagnostic: options?.onDiagnostic ?? NOOP_DOCX_WRITE_DIAGNOSTIC_SINK,
     counters: counters ?? {
       nextDrawingId: 1,
       nextMarkerId: 1,
@@ -852,6 +861,25 @@ function buildCell(
   ]);
 }
 
+// A column's own isHeader (ContentTableColumn, ExaDev/documents.js#1381) is reported through state.onDiagnostic rather than written: w:tblGrid has no header-column marker at all, so the column's own cells are written exactly like any other column and only the flag is dropped. Reported once per flagged column, naming its index, matching ppt-codec's/documents.js's own pptx TABLE_HEADER_COLUMN_DROPPED precedent (src/drawing/shapes-write.ts, src/edit/pptx/content.ts) for the identical field.
+function reportDroppedHeaderColumns(
+  table: ContentTable,
+  state: WriteState,
+): void {
+  table.columns.forEach((column, columnIndex) => {
+    if (column.isHeader === true) {
+      state.onDiagnostic(
+        {
+          code: DocxWriteDiagnosticCodes.TABLE_HEADER_COLUMN_DROPPED,
+          severity: "warning",
+          message: `buildDocxPackageFromContent: table column ${String(columnIndex)} is a header column, and that is dropped; w:tblGrid has no header-column marker, so the column is written exactly as any other`,
+        },
+        { sourcePath: table.sourcePath },
+      );
+    }
+  });
+}
+
 // Vertical merges are written back the way ECMA-376 spells them — a w:vMerge restart on the anchor and a bare w:vMerge below it — derived from the anchors' own rowSpan, which is exactly what readTable derived that rowSpan from. Horizontal merges are the asymmetric half: ECMA-376 has no element for a column a w:gridSpan already reaches, so a position covered along its own row contributes no w:tc at all, while a position covered from an earlier row contributes one at the covering anchor's first column and none at the rest, carrying that anchor's gridSpan so the continuation is exactly as wide as the cell it continues.
 function buildTable(
   table: ContentTable,
@@ -864,7 +892,8 @@ function buildTable(
       `buildDocxPackageFromContent: table breaks the grid rule (${describeTableGridFault(gridFault)})`,
     );
   }
-  // w:tblGrid has no element for a column repeating at the left of each printed page (docx has no header-column concept at all), so column.isHeader is never written here; tracked as a known gap in #1398.
+  // w:tblGrid has no element for a column repeating at the left of each printed page (docx has no header-column concept at all), so column.isHeader is never written here — reported through state.onDiagnostic instead (ExaDev/documents.js#1398), once per flagged column, before the grid itself is built.
+  reportDroppedHeaderColumns(table, state);
   const grid = el(
     "w:tblGrid",
     {},
