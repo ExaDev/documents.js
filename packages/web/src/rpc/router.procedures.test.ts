@@ -156,7 +156,7 @@ describe("content.read / content.restore", () => {
   });
 
   it("resolves a docx list paragraph's opaque numId against its real numbering.xml definition", async () => {
-    // The tree-based docx writer (buildDocumentBytes) emits a real word/numbering.xml abstractNum/num pair for any list-membership paragraph — built via the same public assembleTree/buildDocumentBytes pipeline the Package/JSON tool uses, not a hand-authored fixture, so router.ts's own normalizeDocxListKinds resolves against a real NumberingDefinitions map exactly as it would for a document Word itself produced. (ExaDev/documents.js#1273: this writer currently always synthesises numId "1" as a bullet list regardless of the source ContentListMembership's own numId/format, so this asserts the writer's real current output rather than the specific numId/format requested below.)
+    // The tree-based docx writer (buildDocumentBytes) emits a real word/numbering.xml abstractNum/num pair for any list-membership paragraph — built via the same public assembleTree/buildDocumentBytes pipeline the Package/JSON tool uses, not a hand-authored fixture, so router.ts's own normalizeDocxListKinds resolves against a real NumberingDefinitions map exactly as it would for a document Word itself produced.
     const bytes = buildDocumentBytes(
       documentTreeWithSchema(
         assembleTree({
@@ -172,6 +172,11 @@ describe("content.read / content.restore", () => {
                   runs: [{ text: "bullet item" }],
                   list: { numId: "1", level: 0, format: "bullet" },
                 },
+                {
+                  kind: "paragraph",
+                  runs: [{ text: "ordered item" }],
+                  list: { numId: "2", level: 0, format: "decimal" },
+                },
               ],
             },
           ],
@@ -183,10 +188,14 @@ describe("content.read / content.restore", () => {
     if (read.content.kind !== "wordprocessing") {
       throw new Error("expected a wordprocessing ContentDocument");
     }
-    const block = read.content.sections[0]?.blocks[0];
-    expect(block?.kind === "paragraph" ? block.list?.numId : undefined).toBe(
-      "bullet:1",
-    );
+    const [bulletBlock, orderedBlock] = read.content.sections[0]?.blocks ?? [];
+    // ExaDev/documents.js#1273 fixed: the writer now threads each membership's own numId/format through into numbering.xml, so this exercises both the bullet AND the ordered resolve-by-numId branch, not just a synthesised bullet regardless of what was asked for.
+    expect(
+      bulletBlock?.kind === "paragraph" ? bulletBlock.list?.numId : undefined,
+    ).toBe("bullet:1");
+    expect(
+      orderedBlock?.kind === "paragraph" ? orderedBlock.list?.numId : undefined,
+    ).toBe("ordered:2");
   });
 
   it("resolves a docx list paragraph's numId inside a table cell too, recursing into the cell's own blocks", async () => {
@@ -238,6 +247,40 @@ describe("content.read / content.restore", () => {
     expect(
       cellBlock?.kind === "paragraph" ? cellBlock.list?.numId : undefined,
     ).toBe("bullet:1");
+  });
+
+  it("resolves a docx list paragraph carrying no numId at all against the writer's own shared no-numId numbering definition", async () => {
+    // ExaDev/documents.js#1273: the writer used to synthesise numId "1"/bullet for a numId-less membership too, indistinguishable from any other case. It now still mints a numId (docx's CT_NumPr requires one — see DocxParagraph.list's own doc comment), but honours the membership's own format rather than always defaulting to bullet.
+    const bytes = buildDocumentBytes(
+      documentTreeWithSchema(
+        assembleTree({
+          kind: "wordprocessing",
+          metadata: {},
+          sections: [
+            {
+              pageSize: { widthPt: 595, heightPt: 842 },
+              margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+              blocks: [
+                {
+                  kind: "paragraph",
+                  runs: [{ text: "level-only ordered item" }],
+                  list: { level: 0, format: "lowerRoman" },
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+      "docx",
+    );
+    const read = await call(router.content.read, { format: "docx", bytes });
+    if (read.content.kind !== "wordprocessing") {
+      throw new Error("expected a wordprocessing ContentDocument");
+    }
+    const block = read.content.sections[0]?.blocks[0];
+    expect(block?.kind === "paragraph" ? block.list?.numId : undefined).toMatch(
+      /^ordered:/,
+    );
   });
 
   it("reads pptx content via the OPC package path", async () => {
