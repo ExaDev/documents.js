@@ -254,10 +254,10 @@ function readLineSpacingMultiplier(
   return val === undefined ? undefined : Number(val) / 100_000;
 }
 
-// a:pPr/@lvl (ST_TextIndentLevelType, 0-8) parsed once for both of its consumers: the a:lvl1pPr..a:lvl9pPr style lookup in resolveDefaultRunProperties, and ContentParagraph.list below. Malformed spellings (non-numeric, fractional, negative) degrade to undefined the way this repo's other numeric attribute readers do (parseChildIndex in xlsx/styles.ts), never to a fabricated or schema-invalid level.
+// a:pPr/@lvl (ST_TextIndentLevelType, 0-8) parsed once for both of its consumers: the a:lvl1pPr..a:lvl9pPr style lookup in resolveDefaultRunProperties, and ContentParagraph.list below. Malformed spellings (non-numeric, fractional, negative) degrade to undefined the way this repo's other numeric attribute readers do (parseChildIndex in xlsx/styles.ts), never to a fabricated or schema-invalid level. An absent @lvl needs no guard of its own: Number(undefined) is NaN, which Number.isInteger already rejects below, so raw only needs an explicit check for the empty string, whose Number() coercion is 0 rather than NaN.
 function readOutlineLevel(pPr: XmlElement | undefined): number | undefined {
   const raw = pPr === undefined ? undefined : attr(pPr, "lvl");
-  if (raw === undefined || raw === "") {
+  if (raw === "") {
     return undefined;
   }
   const level = Number(raw);
@@ -576,10 +576,8 @@ function readTableCellBorderEdge(
   if (lnElement === undefined) {
     return undefined;
   }
+  // An absent @w needs no guard of its own: Number(undefined) is NaN, emuToPt(NaN) is still NaN, and the finiteness check below already rejects that the same way it rejects a non-numeric or non-positive @w.
   const w = attr(lnElement, "w");
-  if (w === undefined) {
-    return undefined;
-  }
   const widthPt = emuToPt(Number(w));
   if (!Number.isFinite(widthPt) || widthPt <= 0) {
     return undefined;
@@ -858,67 +856,80 @@ function readGraphicFrameShape(
     graphic === undefined
       ? undefined
       : childrenWithTag(graphic, "a:graphicData")[0];
-  const uri = graphicData === undefined ? undefined : attr(graphicData, "uri");
-  const tbl =
-    uri === TABLE_GRAPHIC_URI && graphicData !== undefined
-      ? childrenWithTag(graphicData, "a:tbl")[0]
-      : undefined;
   let blocks: ContentBlock[];
   let shapeSource: SourceResidue | undefined;
   // origin names what this shape's content IS, when the graphic-frame kind establishes it: a SmartArt diagram's blocks are the diagram's own node text, not freeform slide prose — the annotation channel's motivating distinction, stated only where the reader genuinely knows it.
   let shapeOrigin: ContentOrigin | undefined;
-  if (tbl !== undefined) {
-    blocks = [readTable(tbl, context, slideRels)];
-  } else if (uri === CHART_GRAPHIC_URI && graphicData !== undefined) {
-    const chartRef = childrenWithTag(graphicData, "c:chart")[0];
-    const chartRoot = relatedPartRoot(
-      chartRef === undefined ? undefined : attr(chartRef, "r:id"),
-      slideRels,
-      pkg,
-    );
-    const chartTable =
-      chartRoot === undefined ? undefined : readChartTable(chartRoot, frame);
-    if (chartTable !== undefined && chartRoot !== undefined) {
-      chartTable.source = readChartResidue(chartRoot, "pptx");
-    }
-    blocks = chartTable === undefined ? [] : [chartTable];
-  } else if (uri === DIAGRAM_GRAPHIC_URI && graphicData !== undefined) {
-    // dgm:relIds' r:dm names the data model part — the semantic graph of nodes and text. r:lo/r:qs/r:cs (layout, quick-style, colours) only decide how that graph is DRAWN, so they carry no text of their own to read into blocks; they quarantine whole as the shape's own residue instead (readDiagramResidue), rather than being silently dropped.
-    const relIds = childrenWithTag(graphicData, "dgm:relIds")[0];
-    const relPartRoot = (attrName: string): XmlElement | undefined =>
-      relatedPartRoot(
-        relIds === undefined ? undefined : attr(relIds, attrName),
+  if (graphicData === undefined) {
+    // No a:graphicData at all keeps the frame's geometry with empty content, the same as any other graphic frame kind this reader does not recognise.
+    blocks = [];
+  } else {
+    // graphicData is narrowed to XmlElement for the whole branch below, so none of uri's own kind checks need to re-test it: a genuine graphicData is the precondition for even asking what uri names.
+    const uri = attr(graphicData, "uri");
+    const tbl =
+      uri === TABLE_GRAPHIC_URI
+        ? childrenWithTag(graphicData, "a:tbl")[0]
+        : undefined;
+    if (tbl !== undefined) {
+      blocks = [readTable(tbl, context, slideRels)];
+    } else if (uri === CHART_GRAPHIC_URI) {
+      const chartRef = childrenWithTag(graphicData, "c:chart")[0];
+      const chartRoot = relatedPartRoot(
+        chartRef === undefined ? undefined : attr(chartRef, "r:id"),
         slideRels,
         pkg,
       );
-    const dataModelRoot = relPartRoot("r:dm");
-    blocks = dataModelRoot === undefined ? [] : readDiagramText(dataModelRoot);
-    shapeSource = readDiagramResidue(
-      relPartRoot("r:lo"),
-      relPartRoot("r:qs"),
-      relPartRoot("r:cs"),
-    );
-    shapeOrigin = "diagram";
-  } else if (uri === OLE_GRAPHIC_URI && graphicData !== undefined) {
-    // What the slide actually displays is the OLE object's fallback picture (mc:Fallback > p:oleObj > p:pic under the mc:AlternateContent wrapper, or a p:pic directly under p:oleObj where a producer skipped the wrapper), so that picture is read like any other blip image. With no reachable picture, the p:oleObj's progId at least records what kind of object the frame holds. The object's own payload (p:oleObj/@r:id's embedded part) is additionally decoded when it is a ZIP archive — a modern producer's embedded xlsx/docx/pptx — and its recovered sub-document appended as an embeddedObject block beside whatever the display path produced (readOleEmbeddedObject below); the classic non-ZIP OLE compound-file payload stays opaque external-application data, and a ZIP that does not decode as one of the three OOXML flavours degrades to no embedded block, so an undecodable payload never fails the slide read.
-    const image = readBlipImage(graphicData, slideRels, pkg, frame);
-    if (image !== undefined) {
-      blocks = [image];
-    } else {
-      const oleObj = elementsWithTag([graphicData], "p:oleObj")[0];
-      const progId = oleObj === undefined ? undefined : attr(oleObj, "progId");
+      const chartTable =
+        chartRoot === undefined ? undefined : readChartTable(chartRoot, frame);
+      if (chartTable !== undefined && chartRoot !== undefined) {
+        chartTable.source = readChartResidue(chartRoot, "pptx");
+      }
+      blocks = chartTable === undefined ? [] : [chartTable];
+    } else if (uri === DIAGRAM_GRAPHIC_URI) {
+      // dgm:relIds' r:dm names the data model part — the semantic graph of nodes and text. r:lo/r:qs/r:cs (layout, quick-style, colours) only decide how that graph is DRAWN, so they carry no text of their own to read into blocks; they quarantine whole as the shape's own residue instead (readDiagramResidue), rather than being silently dropped.
+      const relIds = childrenWithTag(graphicData, "dgm:relIds")[0];
+      const relPartRoot = (attrName: string): XmlElement | undefined =>
+        relatedPartRoot(
+          relIds === undefined ? undefined : attr(relIds, attrName),
+          slideRels,
+          pkg,
+        );
+      const dataModelRoot = relPartRoot("r:dm");
       blocks =
-        progId === undefined
-          ? []
-          : [{ kind: "paragraph", runs: [{ text: progId }] }];
+        dataModelRoot === undefined ? [] : readDiagramText(dataModelRoot);
+      shapeSource = readDiagramResidue(
+        relPartRoot("r:lo"),
+        relPartRoot("r:qs"),
+        relPartRoot("r:cs"),
+      );
+      shapeOrigin = "diagram";
+    } else if (uri === OLE_GRAPHIC_URI) {
+      // What the slide actually displays is the OLE object's fallback picture (mc:Fallback > p:oleObj > p:pic under the mc:AlternateContent wrapper, or a p:pic directly under p:oleObj where a producer skipped the wrapper), so that picture is read like any other blip image. With no reachable picture, the p:oleObj's progId at least records what kind of object the frame holds. The object's own payload (p:oleObj/@r:id's embedded part) is additionally decoded when it is a ZIP archive — a modern producer's embedded xlsx/docx/pptx — and its recovered sub-document appended as an embeddedObject block beside whatever the display path produced (readOleEmbeddedObject below); the classic non-ZIP OLE compound-file payload stays opaque external-application data, and a ZIP that does not decode as one of the three OOXML flavours degrades to no embedded block, so an undecodable payload never fails the slide read.
+      const image = readBlipImage(graphicData, slideRels, pkg, frame);
+      if (image !== undefined) {
+        blocks = [image];
+      } else {
+        const oleObj = elementsWithTag([graphicData], "p:oleObj")[0];
+        const progId =
+          oleObj === undefined ? undefined : attr(oleObj, "progId");
+        blocks =
+          progId === undefined
+            ? []
+            : [{ kind: "paragraph", runs: [{ text: progId }] }];
+      }
+      const embedded = readOleEmbeddedObject(
+        graphicData,
+        slideRels,
+        pkg,
+        frame,
+      );
+      if (embedded !== undefined) {
+        blocks.push(embedded);
+      }
+    } else {
+      // Any other graphic frame kind keeps its geometry with empty content.
+      blocks = [];
     }
-    const embedded = readOleEmbeddedObject(graphicData, slideRels, pkg, frame);
-    if (embedded !== undefined) {
-      blocks.push(embedded);
-    }
-  } else {
-    // Any other graphic frame kind keeps its geometry with empty content.
-    blocks = [];
   }
   return {
     name: shapeName(gf),
