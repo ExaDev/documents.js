@@ -1,3 +1,15 @@
+## [14.4.0](https://github.com/ExaDev/documents.js/compare/documents.js%4014.3.7...documents.js%4014.4.0) (2026-09-23)
+
+### Features
+
+* **documents.js:** add readContentDocument, a generic byte-in ContentDocument reader ([7c31d9a](https://github.com/ExaDev/documents.js/commit/7c31d9ab4a7616f741993a650ed23c929df8716f))
+* **documents.js:** add xlsToMarkdown, docToMarkdown, pptToMarkdown ([ad80df6](https://github.com/ExaDev/documents.js/commit/ad80df6d1345965e19d308513bdc1f043d89ab5c))
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.2.11
+
 ## [14.3.7](https://github.com/ExaDev/documents.js/compare/documents.js%4014.3.6...documents.js%4014.3.7) (2026-09-23)
 
 

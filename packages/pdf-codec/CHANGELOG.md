@@ -1,3 +1,9 @@
+## [5.2.11](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.10...pdf-codec%405.2.11) (2026-09-23)
+
+### Tests
+
+* **pdf-codec:** cover gsub-table.ts's malformed-table and glyph-skip gaps ([ca933b6](https://github.com/ExaDev/documents.js/commit/ca933b6bd78bec12c4a763404512a991e0a4bae5)), references [#1306](https://github.com/ExaDev/documents.js/issues/1306)
+
 ## [5.2.10](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.9...pdf-codec%405.2.10) (2026-09-23)
 
 
