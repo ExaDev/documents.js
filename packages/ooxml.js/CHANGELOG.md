@@ -1,3 +1,15 @@
+## [12.2.4](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.3...ooxml.js%4012.2.4) (2026-09-23)
+
+### Bug Fixes
+
+* **ooxml.js:** stop a nested formatChange from inheriting its outer change's wrapper ([4c29db8](https://github.com/ExaDev/documents.js/commit/4c29db8ec7cfdba23e2774a3a317a6869c61048f))
+
+### Code Refactoring
+
+* **ooxml.js:** remove two unobservable branches in docx/write.ts interleaving ([9ed828a](https://github.com/ExaDev/documents.js/commit/9ed828afebb05130957794b8ebed3580738a1c3c))
+* **ooxml.js:** remove unreachable branches in xlsx/build.ts cell formatting ([6d38e4e](https://github.com/ExaDev/documents.js/commit/6d38e4e82709b722c8e5fbef7fe9425d81179d2c))
+* **ooxml.js:** share the leading/trailing content-position test with read.ts ([a327cb6](https://github.com/ExaDev/documents.js/commit/a327cb6e90d63f09fcf71424e628845271f4695c))
+
 ## [12.2.3](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.2...ooxml.js%4012.2.3) (2026-09-23)
 
 

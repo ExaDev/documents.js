@@ -1,3 +1,9 @@
+## [1.0.33](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.32...pdf-raster-cpu%401.0.33) (2026-09-23)
+
+### Bug Fixes
+
+* **pdf-raster-cpu:** give both onDiagnostic test callbacks void bodies ([354eb3f](https://github.com/ExaDev/documents.js/commit/354eb3fa0db26c508b43ebd99dfbc1cffd646acc)), references [ExaDev/documents.js#1275](https://github.com/ExaDev/documents.js/issues/1275)
+
 ## [1.0.32](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.31...pdf-raster-cpu%401.0.32) (2026-09-23)
 
 
