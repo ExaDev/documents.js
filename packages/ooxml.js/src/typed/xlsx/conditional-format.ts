@@ -475,8 +475,8 @@ function readCfRule(
 
   if (type === "top10") {
     const rankRaw = attr(cfRule, "rank");
-    const rank = rankRaw === undefined ? undefined : Number(rankRaw);
-    if (rank === undefined || !Number.isFinite(rank) || rank <= 0) {
+    const rank = Number(rankRaw);
+    if (!Number.isFinite(rank) || rank <= 0) {
       return undefined;
     }
     return {
