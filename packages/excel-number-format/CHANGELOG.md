@@ -1,3 +1,10 @@
+## [1.2.7](https://github.com/ExaDev/documents.js/compare/excel-number-format%401.2.6...excel-number-format%401.2.7) (2026-09-23)
+
+### Bug Fixes
+
+* **excel-number-format:** escape a backslash the TSDoc parser tried to interpret ([1167746](https://github.com/ExaDev/documents.js/commit/116774698f8cbb45a7887a8ae95c83918fbac0c6)), references [ExaDev/documents.js#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **excel-number-format:** use markdown bullets instead of asterisks in a JSDoc list ([170a32a](https://github.com/ExaDev/documents.js/commit/170a32ac7ff8ad77ca1a6e964a40c39355a78944)), references [ExaDev/documents.js#1275](https://github.com/ExaDev/documents.js/issues/1275)
+
 ## [1.2.6](https://github.com/ExaDev/documents.js/compare/excel-number-format%401.2.5...excel-number-format%401.2.6) (2026-09-22)
 
 ### Bug Fixes

@@ -1,3 +1,15 @@
+## [1.4.58](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.57...document-rest%401.4.58) (2026-09-23)
+
+### Bug Fixes
+
+* **document-rest:** mark every Promise-returning test mock async ([68ec8bc](https://github.com/ExaDev/documents.js/commit/68ec8bccd8706c9c795fe9078c14116b096a5356)), references [ExaDev/documents.js#1275](https://github.com/ExaDev/documents.js/issues/1275)
+
+
+### Dependencies
+
+- Updated documents.js to 14.3.4
+- Updated document-operations to 1.1.57
+
 ## [1.4.57](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.56...document-rest%401.4.57) (2026-09-23)
 
 

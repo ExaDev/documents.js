@@ -1,3 +1,15 @@
+## [1.1.57](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.56...document-operations%401.1.57) (2026-09-23)
+
+### Bug Fixes
+
+* **document-operations:** name every magic number the no-magic-numbers rule flags ([279f5fe](https://github.com/ExaDev/documents.js/commit/279f5fe059c2b64a127a311454d11dda0bf5b47c)), references [ExaDev/documents.js#1275](https://github.com/ExaDev/documents.js/issues/1275)
+
+
+### Dependencies
+
+- Updated documents.js to 14.3.4
+- Updated document-compute.js to 1.6.5
+
 ## [1.1.56](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.55...document-operations%401.1.56) (2026-09-23)
 
 
