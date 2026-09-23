@@ -7,6 +7,14 @@
 // Every encoding here is decoded by this module rather than delegated to TextDecoder, with UTF-8 the one exception. TextDecoder's legacy single-byte and UTF-16 support comes from the host's ICU build, which a Node binary compiled with small-icu or with ICU disabled does not carry, and the Encoding Standard has no UTF-32 at all (https://encoding.spec.whatwg.org/#names-and-labels, https://web.archive.org/web/2026/https://encoding.spec.whatwg.org/#names-and-labels), so delegating would make the same bytes decode differently, or not at all, depending on where the code runs. The windows-1252 table has to exist here in any case, because the plausibility check is defined in terms of which byte positions that code page leaves without a character of their own. UTF-8 stays with TextDecoder because its fatal mode is exactly the validity check wanted, and UTF-8 is the one encoding every runtime supports without ICU. The legacy single-byte code pages in legacy-single-byte-tables.ts keep the same rule for the same reason: a caller who explicitly names koi8-r wants koi8-r everywhere this code runs, not koi8-r on a full-icu host and a thrown error on a small-icu one.
 
 import {
+  decodeBig5,
+  decodeEucJp,
+  decodeEucKr,
+  decodeGb18030,
+  decodeShiftJis,
+  type DbcsEncodingLabel,
+} from "./decode-dbcs";
+import {
   LEGACY_SINGLE_BYTE_TABLES,
   type LegacySingleByteEncodingLabel,
 } from "./legacy-single-byte-tables";
@@ -16,7 +24,7 @@ import {
  *
  * Detection stays deliberately bounded to `"utf-8"`, `"utf-16le"`, `"utf-16be"`, `"utf-32le"`, `"utf-32be"` and `"windows-1252"`: each of those is either self-identifying through a byte order mark, structurally checkable through its own validity rules, or guessable behind a stated plausibility test, and nothing distinguishes one legacy code page from another, or from windows-1252, without the statistical model this module does not carry. Bytes that look like an undetected legacy encoding are refused rather than guessed at.
  *
- * {@link DecodeTextOptions.encoding} can name more than detection can reach, though: every {@link LegacySingleByteEncodingLabel} the WHATWG Encoding Standard defines is also accepted, for a caller who already knows their file's code page rather than asking this module to guess it (ExaDev/documents.js#1361). Legacy multi-byte and double-byte CJK encodings (Shift_JIS, EUC-JP, ISO-2022-JP, GBK, gb18030, Big5, EUC-KR) remain outside what either detection or a declared `encoding` can reach; see legacy-single-byte-tables.ts for why that is a different kind of change, tracked separately as ExaDev/documents.js#1388.
+ * {@link DecodeTextOptions.encoding} can name more than detection can reach, though: every {@link LegacySingleByteEncodingLabel} the WHATWG Encoding Standard defines is also accepted, for a caller who already knows their file's code page rather than asking this module to guess it (ExaDev/documents.js#1361), and so is every {@link DbcsEncodingLabel} — the standard's legacy multi-byte and double-byte CJK encodings, Shift_JIS, EUC-JP, EUC-KR, GBK, gb18030 and Big5, decoded against decode-dbcs.ts's own generated index tables for the same reason (ExaDev/documents.js#1388). ISO-2022-JP, the one legacy CJK encoding that is a genuine escape-sequence state machine rather than a byte-width decoder, is tracked as its own follow-on to #1388 rather than bundled in here.
  */
 export type TextEncodingLabel =
   | "utf-8"
@@ -25,7 +33,8 @@ export type TextEncodingLabel =
   | "utf-32le"
   | "utf-32be"
   | "windows-1252"
-  | LegacySingleByteEncodingLabel;
+  | LegacySingleByteEncodingLabel
+  | DbcsEncodingLabel;
 
 /**
  * How {@link decodeText} arrived at the encoding it used.
@@ -135,7 +144,27 @@ const LOW_SURROGATE_MASK = 0x3ff;
  */
 export const TEXT_DECODE_CHUNK_CODE_UNITS = 65_536 / 2;
 
-function fromCodeUnits(units: readonly number[]): string {
+/**
+ * Splits `codePoint` into one or two UTF-16 code units and pushes them onto `units`: the code point itself below the supplementary plane, a surrogate pair biased by {@link SURROGATE_BITS} and {@link LOW_SURROGATE_MASK} above it. Shared by every decoder here that can produce a code point outside the Basic Multilingual Plane — {@link decodeUtf32} for UTF-32's own scalar values, and decode-dbcs.ts's decoders for the WHATWG index tables' own supplementary-plane entries (Big5's CJK Compatibility Ideographs Supplement pointers, gb18030's final algorithmic range) — so the split happens in exactly one place rather than once per caller.
+ * @param units - The code unit array to push onto, in place.
+ * @param codePoint - A Unicode scalar value in the range 0 to {@link MAX_CODE_POINT}.
+ */
+export function appendCodePoint(units: number[], codePoint: number): void {
+  if (codePoint < SUPPLEMENTARY_PLANE_START) {
+    units.push(codePoint);
+    return;
+  }
+  const supplementary = codePoint - SUPPLEMENTARY_PLANE_START;
+  units.push(HIGH_SURROGATE_START + (supplementary >> SURROGATE_BITS));
+  units.push(LOW_SURROGATE_START + (supplementary & LOW_SURROGATE_MASK));
+}
+
+/**
+ * Converts a sequence of UTF-16 code units to a string in fixed-size chunks (see {@link TEXT_DECODE_CHUNK_CODE_UNITS}), shared by every decoder in this module and in decode-dbcs.ts so each collects code units into a plain array and calls this once at the end rather than concatenating a string one character at a time.
+ * @param units - The code units to convert, in order.
+ * @returns The resulting string.
+ */
+export function fromCodeUnits(units: readonly number[]): string {
   return Array.from(
     { length: Math.ceil(units.length / TEXT_DECODE_CHUNK_CODE_UNITS) },
     (_unused, chunk) => {
@@ -274,13 +303,7 @@ function decodeUtf32(bytes: Uint8Array, littleEndian: boolean): string {
         "UTF-32 text must hold only Unicode scalar values",
       );
     }
-    if (codePoint < SUPPLEMENTARY_PLANE_START) {
-      units.push(codePoint);
-      continue;
-    }
-    const supplementary = codePoint - SUPPLEMENTARY_PLANE_START;
-    units.push(HIGH_SURROGATE_START + (supplementary >> SURROGATE_BITS));
-    units.push(LOW_SURROGATE_START + (supplementary & LOW_SURROGATE_MASK));
+    appendCodePoint(units, codePoint);
   }
   return fromCodeUnits(units);
 }
@@ -380,6 +403,12 @@ const DECODERS: Readonly<
   "windows-1257": legacySingleByteDecoder("windows-1257"),
   "windows-1258": legacySingleByteDecoder("windows-1258"),
   "x-mac-cyrillic": legacySingleByteDecoder("x-mac-cyrillic"),
+  shift_jis: decodeShiftJis,
+  "euc-jp": decodeEucJp,
+  "euc-kr": decodeEucKr,
+  gbk: decodeGb18030,
+  gb18030: decodeGb18030,
+  big5: decodeBig5,
 };
 
 /** The text-versus-binary rule itself, over character codes: a NUL settles it outright, and every other C0 control outside {@link TEXTUAL_CONTROL_CODES} is allowed only up to one per {@link CODES_PER_PERMITTED_CONTROL}. Reading codes through an accessor rather than taking an array lets the identical rule run over a Uint8Array's bytes and over a decoded string's code units without copying either into one. */
