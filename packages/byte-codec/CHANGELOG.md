@@ -1,3 +1,13 @@
+## [1.10.0](https://github.com/ExaDev/documents.js/compare/byte-codec%401.9.0...byte-codec%401.10.0) (2026-09-23)
+
+### Features
+
+* **byte-codec:** decode ISO-2022-JP's stateful escape-sequence encoding in decodeText ([afa58eb](https://github.com/ExaDev/documents.js/commit/afa58ebb83e7d601dfb6dedf16c92088b35c19bf))
+
+### Bug Fixes
+
+* **byte-codec:** read JIS0208 through pointerCodePoint in ISO-2022-JP ([c21e535](https://github.com/ExaDev/documents.js/commit/c21e535500cde57ef7fa2ea498825b0458e8ce57))
+
 ## [1.9.0](https://github.com/ExaDev/documents.js/compare/byte-codec%401.8.1...byte-codec%401.9.0) (2026-09-23)
 
 ### Features

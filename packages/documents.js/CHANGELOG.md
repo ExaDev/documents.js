@@ -1,3 +1,20 @@
+## [14.3.3](https://github.com/ExaDev/documents.js/compare/documents.js%4014.3.2...documents.js%4014.3.3) (2026-09-23)
+
+
+### Dependencies
+
+- Updated byte-codec to 1.10.0
+- Updated epub-codec to 5.1.2
+- Updated markdown-codec to 11.1.2
+- Updated odf.js to 11.1.2
+- Updated pdf-codec to 5.2.8
+- Updated doc-codec to 6.1.2
+- Updated ooxml.js to 12.2.2
+- Updated ppt-codec to 2.2.2
+- Updated rtf-codec to 8.1.2
+- Updated wpd-codec to 5.1.4
+- Updated xls-codec to 4.15.20
+
 ## [14.3.2](https://github.com/ExaDev/documents.js/compare/documents.js%4014.3.1...documents.js%4014.3.2) (2026-09-23)
 
 

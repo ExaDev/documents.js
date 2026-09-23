@@ -1,3 +1,12 @@
+## [1.4.57](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.56...document-rest%401.4.57) (2026-09-23)
+
+
+### Dependencies
+
+- Updated odf.js to 11.1.2
+- Updated documents.js to 14.3.3
+- Updated document-operations to 1.1.56
+
 ## [1.4.56](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.55...document-rest%401.4.56) (2026-09-23)
 
 
