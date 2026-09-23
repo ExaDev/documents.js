@@ -1,3 +1,14 @@
+## [5.1.5](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.1.4...wpd-codec%405.1.5) (2026-09-23)
+
+### Bug Fixes
+
+* **wpd-codec:** give every diagnostics-sink test callback a void body ([7a27435](https://github.com/ExaDev/documents.js/commit/7a27435c3a5989fbf3077c01e9959cc2d4d67104)), references [ExaDev/documents.js#1275](https://github.com/ExaDev/documents.js/issues/1275)
+
+
+### Dependencies
+
+- Updated byte-codec to 1.10.1
+
 ## [5.1.4](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.1.3...wpd-codec%405.1.4) (2026-09-23)
 
 
