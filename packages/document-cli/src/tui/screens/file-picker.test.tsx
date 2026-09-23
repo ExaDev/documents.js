@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Box, Text } from "ink";
+import { Box, renderToString, Text } from "ink";
 import { render } from "ink-testing-library";
 import { useEffect, useRef, type ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -160,6 +160,12 @@ function Harness({
       </Text>
       <Text>
         diagnosticsPanelOpen:{String(state.overlays.diagnosticsPanel)}
+      </Text>
+      <Text>
+        diagnostics:
+        {state.diagnostics
+          .map((diagnostic) => `${diagnostic.severity}:${diagnostic.message}`)
+          .join("|")}
       </Text>
     </Box>
   );
@@ -539,5 +545,38 @@ describe("FilePickerScreen", () => {
       candidate.includes("screen:launcher"),
     );
     expect(frame).toContain("screen:launcher");
+  });
+
+  it("throws naming itself when rendered while the top of the stack is not a filePicker screen", () => {
+    expect(() =>
+      renderToString(
+        <AppStateProvider>
+          <FilePickerScreen />
+        </AppStateProvider>,
+      ),
+    ).toThrow(
+      /FilePickerScreen was rendered while the current screen was not a filePicker screen\./,
+    );
+  });
+
+  it("forwards a diagnostic raised while opening a document through to APPEND_DIAGNOSTIC", async () => {
+    vi.mocked(openDocumentAtPath).mockImplementationOnce((_path, options) => {
+      options?.onDiagnostic?.({
+        severity: "warning",
+        message: "a heading level was clamped",
+      });
+      return Promise.resolve(fakeOpenDocument());
+    });
+    const rendered = renderPicker("open", root);
+    await waitForBrowseMode(rendered);
+
+    await pressDown(rendered, 3);
+    rendered.stdin.write("\r");
+
+    const frame = await waitForFlatFrame(rendered, (candidate) =>
+      candidate.includes("openFormat:markdown"),
+    );
+    expect(frame).not.toContain("screen:filePicker");
+    expect(frame).toContain("diagnostics:warning:a heading level was clamped");
   });
 });
