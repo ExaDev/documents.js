@@ -12,6 +12,7 @@ import {
   GB18030_RANGES,
   JIS0208,
   JIS0212,
+  type DbcsTable,
 } from "./dbcs-tables";
 
 /**
@@ -20,27 +21,29 @@ import {
 export type DbcsEncodingLabel =
   "shift_jis" | "euc-jp" | "euc-kr" | "gbk" | "gb18030" | "big5";
 
-/** The value {@link JIS0208}, {@link JIS0212}, {@link BIG5}, {@link EUC_KR} and {@link GB18030} hold at a pointer the Encoding Standard's own index leaves undefined — see dbcs-tables.ts's own header comment for why -1 rather than null or NaN. */
-const UNDEFINED_POINTER = -1;
+/** The code unit {@link JIS0208}, {@link JIS0212}, {@link BIG5}, {@link EUC_KR} and {@link GB18030}'s own `codeUnits` strings hold at a pointer that is either genuinely undefined or holds an astral code point — see dbcs-tables.ts's own header comment for why U+FFFD is safe as a sentinel here. */
+const REPLACEMENT_CHARACTER_CODE_UNIT = 0xfffd;
 
 /** The last byte value the Encoding Standard's own "ASCII byte" term covers (0x00 to 0x7F inclusive) in every one of these encodings: below this, and outside each encoding's own designated multi-byte lead range, a byte is its own code point unchanged. */
 const ASCII_BYTE_MAX = 0x7f;
 
 /**
- * The Unicode code point {@link JIS0208}, {@link JIS0212}, {@link BIG5}, {@link EUC_KR} or {@link GB18030} holds at `pointer` — the Encoding Standard's own "index code point" (https://encoding.spec.whatwg.org/#index-code-point) operation — or `undefined` when `pointer` lands on {@link UNDEFINED_POINTER}, the table's own gap marker, or falls outside the table entirely.
+ * The Unicode code point {@link JIS0208}, {@link JIS0212}, {@link BIG5}, {@link EUC_KR} or {@link GB18030} holds at `pointer` — the Encoding Standard's own "index code point" (https://encoding.spec.whatwg.org/#index-code-point) operation — or `undefined` when `pointer` lands on the table's own gap marker, needs disambiguating against `astral` and turns out to have no entry there either, or falls outside the table entirely.
  *
- * A pointer past the end of the table is never checked for separately: `table[pointer]` for such a pointer is already `undefined` under this project's `noUncheckedIndexedAccess`, exactly the value this function returns for the table's own in-range gap marker too, so there is nothing a dedicated bounds check could return that reading straight through does not already give. No real call from this file's own decoders can produce an out-of-range pointer in any case — every one of them computes `pointer` from a byte pair its own lead/trail ranges bound, and each such range is sized to match its own table's length exactly (JIS0208's 11280 entries are precisely 188 columns × 60 lead-byte rows, and so on for every other table here) — but the type stays honest about it regardless, and this function's own exported unit tests exercise an out-of-range pointer directly rather than leaving that guarantee unverified.
+ * A pointer past the end of `table.codeUnits` is never checked for separately: `String.prototype.charCodeAt` already returns `NaN` for such a pointer, which is never {@link REPLACEMENT_CHARACTER_CODE_UNIT} (a real numeric value), so it falls through to the final `astral.get(pointer)` the same way a genuinely undefined in-range pointer does, and an out-of-range pointer was never inserted into `astral` either — so both cases resolve to `undefined` through the same path without a dedicated bounds check. No real call from this file's own decoders can produce an out-of-range pointer in any case — every one of them computes `pointer` from a byte pair its own lead/trail ranges bound, and each such range is sized to match its own table's length exactly (JIS0208's 11280 entries are precisely 188 columns × 60 lead-byte rows, and so on for every other table here) — but the function stays honest about it regardless, and this function's own exported unit tests exercise an out-of-range pointer directly rather than leaving that guarantee unverified.
  * @param table - One of dbcs-tables.ts's generated pointer-keyed index tables.
  * @param pointer - The pointer computed from a decoder's lead and trailing bytes.
  * @returns The code point at that pointer, or `undefined` when the table leaves it undefined.
  */
 export function pointerCodePoint(
-  table: readonly number[],
+  table: DbcsTable,
   pointer: number,
 ): number | undefined {
-  // No separate "is pointer out of range" check: table[pointer] for an out-of-range pointer is already `undefined`, exactly the value this returns for the table's own in-range gap marker, so a check that only ever matched that same already-`undefined` value would return an identical result whether it fired or not.
-  const codePoint = table[pointer];
-  return codePoint === UNDEFINED_POINTER ? undefined : codePoint;
+  const codeUnit = table.codeUnits.charCodeAt(pointer);
+  if (codeUnit !== REPLACEMENT_CHARACTER_CODE_UNIT) {
+    return Number.isNaN(codeUnit) ? undefined : codeUnit;
+  }
+  return table.astral.get(pointer);
 }
 
 function malformed(label: string, detail: string): never {
