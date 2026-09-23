@@ -26,12 +26,6 @@ export interface CpuRasteriserOptions {
   readonly onDiagnostic?: (diagnostic: RasterCpuDiagnostic) => void;
 }
 
-export function createCpuRasteriser(
-  options: CpuRasteriserOptions = {},
-): PageRasteriser {
-  return new CpuRasteriser(options);
-}
-
 // An sRGB colour in the 0..1 floats every draw op carries (document-schema.js's Color); named structurally so this package adds no dependency on the schema package for one lerp's sake.
 export interface UnitRgb {
   readonly r: number;
@@ -237,6 +231,12 @@ export class CpuRasteriser implements PageRasteriser {
       (canvas[base + 2] ?? 0) + (colour.b - (canvas[base + 2] ?? 0)) * alpha,
     );
   }
+}
+
+export function createCpuRasteriser(
+  options: CpuRasteriserOptions = {},
+): PageRasteriser {
+  return new CpuRasteriser(options);
 }
 
 // Exported (from this module only, not from the package's own index) purely so rasteriser.test.ts can pin its arithmetic directly, the same way stroke.test.ts reaches past this package's narrow public surface into dashPolyline.
