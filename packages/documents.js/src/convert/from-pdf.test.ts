@@ -45,9 +45,11 @@ import { minimalOdsBytes } from "../test-support/ods";
 import { minimalOdtBytes } from "../test-support/odt";
 import { richMarkdownTextWithFrontMatter } from "../test-support/markdown";
 import { minimalPptxBytes } from "../test-support/pptx";
+import { readXlsContent, writeXlsContent } from "xls-codec";
 import { convertDocument } from "./composition-to-pdf";
 import {
   pdfToDocx,
+  readContentDocument,
   readDocumentMetadata,
   readNativeDocumentTree,
 } from "./from-pdf";
@@ -463,5 +465,124 @@ describe("readNativeDocumentTree", () => {
     );
     expect(formulaCell?.formula).toBe("SUM(C1:C2)");
     expect(formulaCell?.value).toEqual({ kind: "number", value: 7 });
+  });
+});
+
+// readContentDocument dispatches through the identical per-format reader readNativeDocumentTree does (see from-pdf.ts's own readNativeContent comment) — these cases prove that for the formats the issue's own ask names explicitly (xlsx, xls, ods, csv, docx), plus pdf, the one format with no ContentDocument reader of its own, so its deliberate reconstructWordprocessing choice is proven rather than assumed.
+describe("readContentDocument", () => {
+  it("xlsx: returns the native spreadsheet content with the workbook's own cell value, matching readXlsxContent(...) exactly", () => {
+    const bytes = odsToXlsx(minimalOdsBytes());
+    const content = readContentDocument("xlsx", bytes);
+    expect(content.kind).toBe("spreadsheet");
+    expect(content).toEqual(readXlsxContent(decodeOoxmlPackage(bytes)));
+  });
+
+  it("xls: returns the native spreadsheet content built through xls-codec's own reader, with no cross-variant bridge and no pdf pivot", () => {
+    const bytes = writeXlsContent({
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [
+            {
+              row: 0,
+              column: 0,
+              value: { kind: "string", value: "Hello world" },
+              displayText: "Hello world",
+            },
+          ],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: {
+            pageSize: { widthPt: 612, heightPt: 792 },
+            margins: {
+              topPt: 54,
+              rightPt: 50.4,
+              bottomPt: 54,
+              leftPt: 50.4,
+            },
+            gridlines: false,
+            headers: false,
+            pageOrder: "downThenOver",
+          },
+        },
+      ],
+    });
+    const content = readContentDocument("xls", bytes);
+    expect(content.kind).toBe("spreadsheet");
+    expect(content).toEqual(readXlsContent(bytes));
+    if (content.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    const anchor = content.sheets[0]?.cells.find(
+      (cell) => cell.row === 0 && cell.column === 0,
+    );
+    expect(anchor?.value).toEqual({ kind: "string", value: "Hello world" });
+  });
+
+  it("ods: returns the native spreadsheet content, matching readOdsContent(...) exactly", () => {
+    const bytes = minimalOdsBytes();
+    expect(readContentDocument("ods", bytes)).toEqual(
+      readOdsContent(decodeOdfPackage(bytes)),
+    );
+  });
+
+  it("csv: returns the native spreadsheet content with the row's own cell text, matching readCsvContent(...) exactly", () => {
+    const bytes = encodeCsvText("Name,Age\nAlice,30\n");
+    const content = readContentDocument("csv", bytes);
+    expect(content.kind).toBe("spreadsheet");
+    expect(content).toEqual(readCsvContent(decodeCsvText(bytes)));
+    if (content.kind !== "spreadsheet") {
+      throw new Error("expected a spreadsheet ContentDocument");
+    }
+    const cellText = content.sheets[0]?.cells.map((cell) => cell.displayText);
+    expect(cellText).toContain("Alice");
+  });
+
+  it("docx: returns the native wordprocessing content with the document's own paragraph text, matching readDocxContent(...) exactly", () => {
+    const bytes = minimalDocxBytes();
+    const content = readContentDocument("docx", bytes);
+    expect(content.kind).toBe("wordprocessing");
+    expect(content).toEqual(readDocxContent(decodeOoxmlPackage(bytes)));
+  });
+
+  it("matches flattenTree(readNativeDocumentTree(format, bytes)) for every non-pdf format, proving the two entry points can never drift on what a source's native content means", () => {
+    const bytes = minimalDocxBytes();
+    expect(readContentDocument("docx", bytes)).toEqual(
+      flattenTree(readNativeDocumentTree("docx", bytes)),
+    );
+  });
+
+  // pdf has no ContentDocument reader of its own — readContentDocument's deliberate choice (documented on from-pdf.ts's own readNativeContent) is to mirror readNativeDocumentTree's own reconstructWordprocessing pass over readPdf's LayoutDocument, the same reconstruction pdfToDocx's own onDocument report carries, rather than refuse. This proves that choice rather than assuming it: a genuinely different resolution (e.g. a typed refusal) would fail this assertion.
+  it("pdf: reconstructs the identical wordprocessing content pdfToDocx's own onDocument capture reports, rather than refusing", () => {
+    const pdfBytes = docxToPdf(minimalDocxBytes());
+    let captured: DocumentTree | undefined;
+    pdfToDocx(pdfBytes, {
+      onDocument: (pkg) => {
+        captured = pkg;
+      },
+    });
+    if (captured === undefined) {
+      throw new Error("expected pdfToDocx to report a package");
+    }
+    const content = readContentDocument("pdf", pdfBytes);
+    expect(content.kind).toBe("wordprocessing");
+    expect(content).toEqual(flattenTree(captured));
+  });
+
+  it("pdf: forwards the abort signal to readPdf, which checks it before parsing", () => {
+    const controller = new AbortController();
+    controller.abort();
+    const bytes = docxToPdf(minimalDocxBytes());
+    let caught: unknown;
+    try {
+      readContentDocument("pdf", bytes, { signal: controller.signal });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(DOMException);
+    expect((caught as DOMException).name).toBe("AbortError");
   });
 });
