@@ -2574,6 +2574,20 @@ describe("readPptxContent: slide size falls back to the widescreen default when 
     const result = readPptxContent(pkg);
     expect(result.slides[0]?.size).toEqual({ widthPt: 960, heightPt: 540 });
   });
+
+  it("reads the widescreen default (960x540pt), not the real sldSz value, when p:sldSz carries no cy", () => {
+    const pkg = minimalSlidePackage([
+      textShape(el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("x")])])])),
+    ]);
+    // The mirror image of the cx-missing case above: a real cy of 6858000 EMU (540pt) would be observably identical to the widescreen default's own height, so cx is given a DIFFERENT value (9144000 EMU, 720pt, not the default's 960pt) to isolate exactly this one field's own effect on the fallback.
+    const presentation = el("p:presentation", {}, [
+      el("p:sldIdLst", {}, [el("p:sldId", { id: "256", "r:id": "rIdSlide1" })]),
+      el("p:sldSz", { cx: "9144000" }),
+    ]);
+    pkg.parts["ppt/presentation.xml"] = { kind: "xml", nodes: [presentation] };
+    const result = readPptxContent(pkg);
+    expect(result.slides[0]?.size).toEqual({ widthPt: 960, heightPt: 540 });
+  });
 });
 
 describe("readPptxContent: paragraph alignment, every token distinctly", () => {
