@@ -199,6 +199,10 @@ export function dashPolyline(
   // Built from `start`, already confirmed a real point above, rather than re-reading subpath.points[0]: an indexed re-read is typed Pt | undefined regardless of this guard having already run, which would leave every point in this array (not just the appended one) typed as possibly undefined for no real reason.
   const points = subpath.closed ? [...subpath.points, start] : subpath.points;
   const pieces: Pt[][] = [];
+  let index = 0;
+  let remaining = 0;
+  let cursor: Pt = start;
+  let current: Pt[] = [];
   const endOnPiece = (): void => {
     if (current.length >= 2) {
       pieces.push(current);
@@ -221,10 +225,6 @@ export function dashPolyline(
       current = [cursor];
     }
   };
-  let index = 0;
-  let remaining = 0;
-  let cursor: Pt = start;
-  let current: Pt[] = [];
   // A zero-length first entry needs no explicit boundary transition here: remaining and current are already seeded at 0 and [] above, exactly the state atBoundary's own zero-length-entry search starts hunting forward from, and the main loop's first `remaining === 0` check (below) reaches the identical entry atBoundary would have — one iteration later, at zero cost, since a step of length min(segmentRemaining, 0) moves nothing.
   const firstEntry = pattern[0];
   if (firstEntry !== undefined && firstEntry > 0) {
