@@ -217,6 +217,18 @@ describe("readColorScaleStops: the cfvo/color count boundary (2..3 stops, matche
     expect(residueElements).toHaveLength(1);
   });
 
+  it("rejects a colorScale with more color elements than cfvo elements, not just fewer", () => {
+    const { formats, residueElements } = colorScaleFormats([
+      el("cfvo", { type: "min" }),
+      el("cfvo", { type: "max" }),
+      el("color", { rgb: "FFFF0000" }),
+      el("color", { rgb: "FF00FF00" }),
+      el("color", { rgb: "FF0000FF" }),
+    ]);
+    expect(formats).toEqual([]);
+    expect(residueElements).toHaveLength(1);
+  });
+
   it("rejects a single-stop colorScale (below the 2-stop minimum)", () => {
     const { formats, residueElements } = colorScaleFormats([
       el("cfvo", { type: "min" }),
@@ -285,7 +297,17 @@ describe("readDataBar: showValue's own default-is-true convention", () => {
   }
 
   it("states no showValue key at all when the attribute is absent (the true default)", () => {
-    expect(hasOwn({ v: dataBarShowValue(undefined) }, "v")).toBe(true);
+    const { formats } = worksheetWithRule(
+      "A1",
+      el("cfRule", { type: "dataBar", priority: "1" }, [
+        el("dataBar", {}, [
+          el("cfvo", { type: "min" }),
+          el("cfvo", { type: "max" }),
+          el("color", { rgb: "FFFF0000" }),
+        ]),
+      ]),
+    );
+    expect(hasOwn(formats[0] ?? {}, "showValue")).toBe(false);
     expect(dataBarShowValue(undefined)).toBeUndefined();
   });
 
@@ -319,6 +341,26 @@ describe("readIconSet: reverse, showValue, and the empty-thresholds rejection", 
     );
     const format = formats[0];
     expect(format?.type === "iconSet" ? format.reverse : undefined).toBe(true);
+  });
+
+  it("states no reverse key at all when the attribute is absent", () => {
+    const { formats } = worksheetWithRule(
+      "A1",
+      el("cfRule", { type: "iconSet", priority: "1" }, [
+        el("iconSet", {}, [el("cfvo", { type: "percent", val: "33" })]),
+      ]),
+    );
+    expect(hasOwn(formats[0] ?? {}, "reverse")).toBe(false);
+  });
+
+  it("states no showValue key at all when the attribute is absent (the true default)", () => {
+    const { formats } = worksheetWithRule(
+      "A1",
+      el("cfRule", { type: "iconSet", priority: "1" }, [
+        el("iconSet", {}, [el("cfvo", { type: "percent", val: "33" })]),
+      ]),
+    );
+    expect(hasOwn(formats[0] ?? {}, "showValue")).toBe(false);
   });
 
   it("states showValue: false only for an explicit false value, and nothing for an explicit true", () => {
@@ -378,6 +420,13 @@ describe("styleFromDxf/dxfResidueChildren: residue passthrough for font/fill/num
     expect(style?.source?.xml).toContain("<b");
   });
 
+  it("preserves a font's own malformed color element (no rgb attribute) as residue rather than mistaking its mere presence for a captured textColor", () => {
+    const style = styleOf(el("dxf", {}, [el("font", {}, [el("color", {})])]));
+    expect(style?.textColor).toBeUndefined();
+    expect(style?.source?.xml).toContain("<font");
+    expect(style?.source?.xml).toContain("<color");
+  });
+
   it("keeps a residual numFmt element verbatim", () => {
     const style = styleOf(
       el("dxf", {}, [el("numFmt", { numFmtId: "1", formatCode: "0.00" })]),
@@ -412,6 +461,86 @@ describe("styleFromDxf/dxfResidueChildren: residue passthrough for font/fill/num
     );
     expect(style?.background).toBeUndefined();
     expect(style?.source?.xml).toContain("fgColor");
+  });
+
+  it("preserves a fill's own malformed bgColor element (no rgb attribute) as residue rather than mistaking its mere presence for a captured background", () => {
+    const style = styleOf(
+      el("dxf", {}, [
+        el("fill", {}, [el("patternFill", {}, [el("bgColor", {})])]),
+      ]),
+    );
+    expect(style?.background).toBeUndefined();
+    expect(style?.source?.xml).toContain("<fill");
+    expect(style?.source?.xml).toContain("<bgColor");
+  });
+
+  it("doesn't route a wholly empty non-fill/font residue element (e.g. an empty alignment) through the fill-collapse logic once a background has genuinely been captured from an earlier fill", () => {
+    const style = styleOf(
+      el("dxf", {}, [
+        el("fill", {}, [
+          el("patternFill", {}, [el("bgColor", { rgb: "FFFF0000" })]),
+        ]),
+        el("alignment", {}, []),
+      ]),
+    );
+    expect(style?.background).toEqual({ r: 1, g: 0, b: 0 });
+    expect(style?.source?.xml).toContain("<alignment");
+  });
+
+  it("keeps a patternFill's own attributes (e.g. patternType) as residue even once its only child (bgColor) has been fully captured", () => {
+    const style = styleOf(
+      el("dxf", {}, [
+        el("fill", {}, [
+          el("patternFill", { patternType: "solid" }, [
+            el("bgColor", { rgb: "FFFF0000" }),
+          ]),
+        ]),
+      ]),
+    );
+    expect(style?.background).toEqual({ r: 1, g: 0, b: 0 });
+    expect(style?.source?.xml).toContain('patternType="solid"');
+  });
+
+  it("keeps a fill element's own attributes as residue when its patternFill collapses to nothing but the fill itself carries an attribute", () => {
+    const style = styleOf(
+      el("dxf", {}, [
+        el("fill", { unknownFillAttr: "x" }, [
+          el("patternFill", {}, [el("bgColor", { rgb: "FFFF0000" })]),
+        ]),
+      ]),
+    );
+    expect(style?.background).toEqual({ r: 1, g: 0, b: 0 });
+    expect(style?.source?.xml).toContain('unknownFillAttr="x"');
+  });
+
+  it("keeps a fill element's other (non-patternFill) children as residue when its patternFill collapses to nothing", () => {
+    const style = styleOf(
+      el("dxf", {}, [
+        el("fill", {}, [
+          el("patternFill", {}, [el("bgColor", { rgb: "FFFF0000" })]),
+          el("gradientFill", {}, []),
+        ]),
+      ]),
+    );
+    expect(style?.background).toEqual({ r: 1, g: 0, b: 0 });
+    expect(style?.source?.xml).toContain("<gradientFill");
+  });
+
+  it("keeps a second, patternFill-less <fill> element's own content as residue once background has already been captured from the first fill", () => {
+    const style = styleOf(
+      el("dxf", {}, [
+        el("fill", {}, [
+          el("patternFill", {}, [el("bgColor", { rgb: "FFFF0000" })]),
+        ]),
+        el("fill", { emptySecondFillAttr: "a" }, []),
+        el("fill", {}, [el("gradientFill", {}, [])]),
+        el("fill", {}, []),
+      ]),
+    );
+    expect(style?.background).toEqual({ r: 1, g: 0, b: 0 });
+    expect(style?.source?.xml).toContain('emptySecondFillAttr="a"');
+    expect(style?.source?.xml).toContain("<gradientFill");
+    expect(style?.source?.xml).not.toContain("<fill></fill>");
   });
 
   it("keeps alignment/border/protection residue elements verbatim, in document order", () => {
@@ -490,6 +619,133 @@ describe("styleFromDxf/dxfResidueChildren: residue passthrough for font/fill/num
         (a) => a.name === "rgb",
       )?.value,
     ).toBe("FF0000ff");
+  });
+
+  it("round-trips a patternFill's own attributes (e.g. patternType) through DxfTable.intern when rebuilding a background style", () => {
+    const { formats } = worksheetWithRule(
+      "A1",
+      el("cfRule", { type: "containsBlanks", priority: "1", dxfId: "0" }),
+      [
+        el("dxf", {}, [
+          el("fill", {}, [
+            el("patternFill", { patternType: "solid" }, [
+              el("fgColor", { rgb: "FF00FF00" }),
+              el("bgColor", { rgb: "FF0000FF" }),
+            ]),
+          ]),
+        ]),
+      ],
+    );
+    const style =
+      formats[0]?.type === "containsBlanks" ? formats[0].style : undefined;
+    if (style === undefined) {
+      throw new Error("expected a style");
+    }
+    const dxfTable = new DxfTable();
+    dxfTable.intern(style);
+    const rebuilt = dxfTable.dxfElements()[0];
+    if (rebuilt === undefined) {
+      throw new Error("expected a rebuilt dxf element");
+    }
+    const fill = childrenWithTag(rebuilt, "fill")[0];
+    const patternFill = childrenWithTag(fill ?? el("x"), "patternFill")[0];
+    expect(
+      patternFill?.attributes.find((a) => a.name === "patternType")?.value,
+    ).toBe("solid");
+  });
+
+  it("keeps a fill's own other (non-patternFill) children, and never duplicates patternFill itself, when rebuilding a background style through DxfTable.intern", () => {
+    const { formats } = worksheetWithRule(
+      "A1",
+      el("cfRule", { type: "containsBlanks", priority: "1", dxfId: "0" }),
+      [
+        el("dxf", {}, [
+          el("fill", {}, [
+            el("patternFill", {}, [
+              el("fgColor", { rgb: "FF00FF00" }),
+              el("bgColor", { rgb: "FFFF0000" }),
+            ]),
+            el("gradientFill", {}, []),
+          ]),
+        ]),
+      ],
+    );
+    const style =
+      formats[0]?.type === "containsBlanks" ? formats[0].style : undefined;
+    if (style === undefined) {
+      throw new Error("expected a style");
+    }
+    const dxfTable = new DxfTable();
+    dxfTable.intern(style);
+    const rebuilt = dxfTable.dxfElements()[0];
+    if (rebuilt === undefined) {
+      throw new Error("expected a rebuilt dxf element");
+    }
+    const fill = childrenWithTag(rebuilt, "fill")[0];
+    const fillChildTags = (fill?.children ?? [])
+      .filter((c) => c.type === "element")
+      .map((c) => c.tag);
+    expect(fillChildTags.filter((tag) => tag === "patternFill")).toHaveLength(
+      1,
+    );
+    expect(fillChildTags).toContain("gradientFill");
+  });
+
+  it("round-trips a font carrying no captured textColor (residue only) through DxfTable.intern", () => {
+    const { formats } = worksheetWithRule(
+      "A1",
+      el("cfRule", { type: "containsBlanks", priority: "1", dxfId: "0" }),
+      [el("dxf", {}, [el("font", {}, [el("b")])])],
+    );
+    const style =
+      formats[0]?.type === "containsBlanks" ? formats[0].style : undefined;
+    if (style === undefined) {
+      throw new Error("expected a style");
+    }
+    expect(style.textColor).toBeUndefined();
+    const dxfTable = new DxfTable();
+    dxfTable.intern(style);
+    const rebuilt = dxfTable.dxfElements()[0];
+    if (rebuilt === undefined) {
+      throw new Error("expected a rebuilt dxf element");
+    }
+    const font = childrenWithTag(rebuilt, "font")[0];
+    expect(childrenWithTag(font ?? el("x"), "b")).toHaveLength(1);
+  });
+
+  it("round-trips a fill carrying no captured background (residue only) through DxfTable.intern", () => {
+    const { formats } = worksheetWithRule(
+      "A1",
+      el("cfRule", { type: "containsBlanks", priority: "1", dxfId: "0" }),
+      [
+        el("dxf", {}, [
+          el("fill", {}, [
+            el("patternFill", { patternType: "solid" }, [
+              el("fgColor", { rgb: "FF00FF00" }),
+            ]),
+          ]),
+        ]),
+      ],
+    );
+    const style =
+      formats[0]?.type === "containsBlanks" ? formats[0].style : undefined;
+    if (style === undefined) {
+      throw new Error("expected a style");
+    }
+    expect(style.background).toBeUndefined();
+    const dxfTable = new DxfTable();
+    dxfTable.intern(style);
+    const rebuilt = dxfTable.dxfElements()[0];
+    if (rebuilt === undefined) {
+      throw new Error("expected a rebuilt dxf element");
+    }
+    const fill = childrenWithTag(rebuilt, "fill")[0];
+    const patternFill = childrenWithTag(fill ?? el("x"), "patternFill")[0];
+    expect(
+      childrenWithTag(patternFill ?? el("x"), "fgColor")[0]?.attributes.find(
+        (a) => a.name === "rgb",
+      )?.value,
+    ).toBe("FF00FF00");
   });
 
   it("resolves style from an out-of-range dxfId as no style at all, rather than throwing", () => {
@@ -634,6 +890,17 @@ describe("readCfRule: colorScale/iconSet type discrimination", () => {
     );
     expect(formats[0]?.type).toBe("iconSet");
   });
+
+  it("rejects an unrecognised cfRule type even when it happens to carry an <iconSet> child, rather than misreading it as the iconSet kind", () => {
+    const { formats, residueElements } = worksheetWithRule(
+      "A1",
+      el("cfRule", { type: "expression", priority: "1" }, [
+        el("iconSet", {}, [el("cfvo", { type: "percent", val: "33" })]),
+      ]),
+    );
+    expect(formats).toEqual([]);
+    expect(residueElements).toHaveLength(1);
+  });
 });
 
 // --- the write side ---------------------------------------------------------------------------------------------
@@ -719,6 +986,29 @@ describe("rangeSetKey: distinguishes ranges by the separator between fields, not
           ranges: [
             { startRow: 1, startColumn: 0, endRow: 1, endColumn: 1 },
             { startRow: 0, startColumn: 1, endRow: 1, endColumn: 1 },
+          ],
+        },
+      ],
+      new DxfTable(),
+    );
+    expect(elements).toHaveLength(2);
+  });
+
+  it("distinguishes two range sets whose per-range keys, once joined without a separator between ranges, would collide into the identical string", () => {
+    const elements = buildConditionalFormattingElements(
+      [
+        {
+          type: "containsBlanks",
+          ranges: [
+            { startRow: 1, startColumn: 0, endRow: 0, endColumn: 12 },
+            { startRow: 3, startColumn: 0, endRow: 0, endColumn: 1 },
+          ],
+        },
+        {
+          type: "containsErrors",
+          ranges: [
+            { startRow: 1, startColumn: 0, endRow: 0, endColumn: 1 },
+            { startRow: 23, startColumn: 0, endRow: 0, endColumn: 1 },
           ],
         },
       ],
