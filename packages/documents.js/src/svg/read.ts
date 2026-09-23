@@ -60,8 +60,8 @@ const KAPPA = (4 / 3) * (Math.SQRT2 - 1);
 
 // Namespace-agnostic by design: real-world SVG files mix prefixed and unprefixed names (svg:rect and rect), and the namespaces that matter here (SVG, xlink, dc metadata) carry no same-local-name collisions a walk keyed on local names could confuse.
 function localName(tag: string): string {
-  const colon = tag.indexOf(":");
-  return colon === -1 ? tag : tag.slice(colon + 1);
+  // No branch on "no colon": indexOf returns -1 when absent, and tag.slice(-1 + 1) === tag.slice(0), which is the identity slice — the same expression already returns the whole tag unmodified in that case, so a separate branch would be dead code.
+  return tag.slice(tag.indexOf(":") + 1);
 }
 
 function findAttribute(element: XmlElement, name: string): string | undefined {
@@ -117,12 +117,13 @@ interface ReaderState {
   paintOrder: number;
 }
 
+// No optional detail: every call site in this module already names the element or value being degraded, so a detail-less overload would be dead code no caller ever exercises.
 function report(
   state: ReaderState,
   code: SvgDiagnosticCode,
-  detail?: string,
+  detail: string,
 ): void {
-  state.sink?.(detail === undefined ? { code } : { code, detail });
+  state.sink?.({ code, detail });
 }
 
 // One paint property resolved to the schema's vocabulary, with every degradation named. Defaults follow SVG's own: an absent fill paints black, an absent stroke paints nothing. 'none' unpaints; url(#...) is reported as the gradient limit and unpaints (rendering a guessed solid colour would misrepresent the document worse than leaving it unpainted); currentColor renders black — the CSS 'color' property's own initial value — under a paint-unsupported diagnostic; an unparseable value falls back to the property's own default under the same diagnostic rather than poisoning geometry with a half-parse.
