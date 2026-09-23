@@ -1,3 +1,9 @@
+## [1.0.31](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.30...pdf-raster-cpu%401.0.31) (2026-09-23)
+
+### Bug Fixes
+
+* **pdf-raster-cpu:** define every identifier before the closure that captures it ([7f87fc7](https://github.com/ExaDev/documents.js/commit/7f87fc7a769edfc499460f8b1bb17a987456dec0)), references [ExaDev/documents.js#1275](https://github.com/ExaDev/documents.js/issues/1275)
+
 ## [1.0.30](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.29...pdf-raster-cpu%401.0.30) (2026-09-23)
 
 

@@ -1,3 +1,9 @@
+## [1.4.59](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.58...document-rest%401.4.59) (2026-09-23)
+
+### Bug Fixes
+
+* **document-rest:** stop implicitly returning Server from a void Promise executor ([46b3c7d](https://github.com/ExaDev/documents.js/commit/46b3c7dcf6aa49b37b70557561858f702a812723)), references [ExaDev/documents.js#1275](https://github.com/ExaDev/documents.js/issues/1275)
+
 ## [1.4.58](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.57...document-rest%401.4.58) (2026-09-23)
 
 ### Bug Fixes
