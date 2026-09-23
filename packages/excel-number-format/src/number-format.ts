@@ -11,7 +11,7 @@
  *   - and a ';' inside a quoted literal does not start a new section.
  */
 
-/** A single lexical unit of a format code. 'literal' covers every construct whose payload is TEXT rather than format codes — a "..." quoted run, a \x escape, and the payload character of an _x (reserve the width of x) or *x (repeat x to fill the cell) placeholder — so nothing inside one is ever read as a date/time/numeric code. Its text is still SCANNED for a currency symbol, because a literal currency symbol is exactly how ECMA-376's own built-in accounting formats (42/44, `_("$"* #,##0_)`) mark money. */
+/** A single lexical unit of a format code. 'literal' covers every construct whose payload is TEXT rather than format codes — a "..." quoted run, a `\x` escape, and the payload character of an _x (reserve the width of x) or *x (repeat x to fill the cell) placeholder — so nothing inside one is ever read as a date/time/numeric code. Its text is still SCANNED for a currency symbol, because a literal currency symbol is exactly how ECMA-376's own built-in accounting formats (42/44, `_("$"* #,##0_)`) mark money. */
 export type NumberFormatToken =
   | { kind: "literal"; text: string }
   | { kind: "bracket"; body: string }
