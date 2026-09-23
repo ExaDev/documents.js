@@ -6,11 +6,12 @@
 
 import {
   assembleTree,
+  type ContentDocument,
   type DocumentTree,
   type LayoutMetadata,
 } from "document-schema.js";
 import type { MarkdownImageResolver } from "markdown-codec";
-import type { PdfDiagnosticSink } from "pdf-codec";
+import type { LayoutDocument, PdfDiagnosticSink } from "pdf-codec";
 import { readPdf } from "pdf-codec/read";
 import { convertDocumentFromPdf } from "./composition";
 import type { CsvWriteOptions, SvgWriteOptions } from "./convert";
@@ -43,12 +44,15 @@ export interface ReadNativeDocumentTreeOptions {
   readonly sink?: PdfDiagnosticSink;
 }
 
-// Reads a DocumentTree straight from a source document's own bytes — the source's native structure, with no conversion target and no bridging hop involved at all. See this module's own top comment for why this exists alongside readDocumentMetadata and ConversionResult.package/onDocument.
-export function readNativeDocumentTree(
+// readContentDocument's own options are the identical shape — one options type for both, so a caller forwarding {signal, images, sink} through either entry point never needs to know which fields the OTHER one ignores.
+export type ReadContentDocumentOptions = ReadNativeDocumentTreeOptions;
+
+// The single dispatch both readContentDocument and readNativeDocumentTree resolve "this format's own reader" through, so the two can never drift on what a source's native content means. Every DocumentFormat member reads through CONTENT_READERS directly except pdf, which has no ContentDocument reader of its own — see readNativeDocumentTree's own module comment for why reconstructWordprocessing over readPdf's LayoutDocument is pdf's deliberately chosen native representation here, not a silent guess. Returns the LayoutDocument alongside the content only for a pdf source (undefined otherwise), since readNativeDocumentTree's pdf branch needs it for pages/stampPdfPackageTables and readContentDocument does not.
+function readNativeContent(
   format: DocumentFormat,
   bytes: Uint8Array<ArrayBuffer>,
   options?: ReadNativeDocumentTreeOptions,
-): DocumentTree {
+): { readonly content: ContentDocument; readonly layout?: LayoutDocument } {
   if (format === "pdf") {
     const layout = readPdf(bytes, {
       signal: options?.signal,
@@ -57,6 +61,23 @@ export function readNativeDocumentTree(
     const content = reconstructWordprocessing(layout, {
       signal: options?.signal,
     });
+    return { content, layout };
+  }
+  const content = CONTENT_READERS[format](bytes, {
+    signal: options?.signal,
+    images: options?.images,
+  });
+  return { content };
+}
+
+// Reads a DocumentTree straight from a source document's own bytes — the source's native structure, with no conversion target and no bridging hop involved at all. See this module's own top comment for why this exists alongside readDocumentMetadata and ConversionResult.package/onDocument.
+export function readNativeDocumentTree(
+  format: DocumentFormat,
+  bytes: Uint8Array<ArrayBuffer>,
+  options?: ReadNativeDocumentTreeOptions,
+): DocumentTree {
+  const { content, layout } = readNativeContent(format, bytes, options);
+  if (layout !== undefined) {
     const pages = layout.pages.map((page) => ({
       widthPt: page.widthPt,
       heightPt: page.heightPt,
@@ -65,11 +86,16 @@ export function readNativeDocumentTree(
     stampPdfPackageTables(reported, layout);
     return reported;
   }
-  const content = CONTENT_READERS[format](bytes, {
-    signal: options?.signal,
-    images: options?.images,
-  });
   return assembleTree(content);
+}
+
+// Reads a format's own native ContentDocument straight from its bytes — flat content, no DocumentTree wrapper, no conversion target and no bridging hop, extending readNativeDocumentTree's identical "native, no bridging" contract to a caller who wants the flat ContentDocument shape every read<Format>Content function already returns (e.g. readXlsxContent(decodePackage(...))) rather than readNativeDocumentTree's tree-form report. Dispatches through the identical readNativeContent this module's own readNativeDocumentTree does, including pdf's reconstructWordprocessing choice — see that function's own comment for what each format resolves to and why pdf is a reconstruction rather than a refusal.
+export function readContentDocument(
+  format: DocumentFormat,
+  bytes: Uint8Array<ArrayBuffer>,
+  options?: ReadContentDocumentOptions,
+): ContentDocument {
+  return readNativeContent(format, bytes, options).content;
 }
 
 export interface PdfToDocumentOptions {

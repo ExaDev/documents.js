@@ -989,6 +989,10 @@ export { readDocumentMetadata } from "./convert/from-pdf";
 export type { ReadNativeDocumentTreeOptions } from "./convert/from-pdf";
 export { readNativeDocumentTree } from "./convert/from-pdf";
 
+// --- The same source-native read as readNativeDocumentTree above, but reporting the flat ContentDocument shape instead of the DocumentTree — for a caller who wants "whatever ContentDocument this format's own reader produces" for any DocumentFormat member without hand-rolling a per-format switch over readXlsxContent/readOdsContent/readXlsContent/readCsvContent/etc themselves. Dispatches through the identical per-format reader readNativeDocumentTree does; see convert/from-pdf.ts's own comment on readContentDocument for pdf's deliberate reconstructWordprocessing choice. ---
+export type { ReadContentDocumentOptions } from "./convert/from-pdf";
+export { readContentDocument } from "./convert/from-pdf";
+
 export type {
   PatchDocxMetadataOptions,
   SetDocumentMetadataOptions,
