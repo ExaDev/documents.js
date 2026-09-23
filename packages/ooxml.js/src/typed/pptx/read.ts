@@ -662,9 +662,9 @@ function readPatternFill(
   pattFillEl: XmlElement,
   context: SlideInheritanceContext,
 ): ContentCellFill | undefined {
-  const patternType = DRAWINGML_PATTERN_PERCENT_MAP.get(
-    attr(pattFillEl, "prst") ?? "",
-  );
+  const prst = attr(pattFillEl, "prst");
+  const patternType =
+    prst === undefined ? undefined : DRAWINGML_PATTERN_PERCENT_MAP.get(prst);
   if (patternType === undefined) {
     return undefined;
   }
@@ -768,9 +768,10 @@ function readTable(
   const columns =
     tblGrid === undefined
       ? []
-      : childrenWithTag(tblGrid, "a:gridCol").map((col) => ({
-          widthPt: emuToPt(Number(attr(col, "w") ?? "0")),
-        }));
+      : childrenWithTag(tblGrid, "a:gridCol").map((col) => {
+          const w = attr(col, "w");
+          return { widthPt: w === undefined ? 0 : emuToPt(Number(w)) };
+        });
   const rows = childrenWithTag(tbl, "a:tr").map((tr) => {
     const h = attr(tr, "h");
     return {
