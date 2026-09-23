@@ -911,10 +911,8 @@ function buildTable(
       }
       const anchor =
         gridPositions[position.anchorRowIndex]![position.anchorColumnIndex]!;
-      if (
-        position.anchorRowIndex < rowIndex &&
-        position.columnIndex === position.anchorColumnIndex
-      ) {
+      // No "anchorRowIndex < rowIndex" check ahead of the column comparison: walkTableGrid only ever assigns a covered position's anchorColumnIndex to a STRICTLY earlier column within the same row (columns are walked left to right, so a same-row anchor's own column is always used up before a later covered position reaches it), so a horizontally-covered position (anchorRowIndex === rowIndex) can never also satisfy columnIndex === anchorColumnIndex — the column comparison alone already excludes it, the same "covered along its own row contributes no w:tc" case this branch's own doc comment above names.
+      if (position.columnIndex === position.anchorColumnIndex) {
         cells.push(
           buildCell(
             position.cell,
@@ -1372,16 +1370,13 @@ function buildConstructNodes(
     ];
   }
   if (descriptor.kind === "provenance") {
-    const tag = TRACKED_CHANGE_TAG_BY_CHANGE[descriptor.change];
-    if (tag !== undefined) {
-      // No block-level element here: buildParagraph wraps each paragraph's own runs in `tag` instead, threading this descriptor through so every paragraph in the extent — one or many — carries the same change on both its runs and its own paragraph mark.
-      return buildFlowItems(
-        children,
-        state,
-        deleted || isDeletedChange(descriptor.change),
-        descriptor,
-      );
-    }
+    // No block-level element here, and no branch on whether TRACKED_CHANGE_TAG_BY_CHANGE has an entry for this change: buildParagraph reads descriptor.change back out of the threaded provenance itself and decides there whether to wrap each paragraph's own runs in a tag, so this only needs to thread the descriptor through unconditionally — the ordinary nesting rule for two constructs of the same kind, replacing whatever ambient provenance this extent sits inside for every paragraph the extent reaches. A formatChange nested inside an outer tracked change (an insertion's own pPrChange, say) therefore correctly stops inheriting the outer change's own w:ins/w:del wrapper for its own extent, rather than silently carrying it through untouched.
+    return buildFlowItems(
+      children,
+      state,
+      deleted || isDeletedChange(descriptor.change),
+      descriptor,
+    );
   }
   if (descriptor.kind === "anchor" && descriptor.anchorType === "bookmark") {
     const id = String(state.counters.nextMarkerId++);
