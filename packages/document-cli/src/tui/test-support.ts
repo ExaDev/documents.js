@@ -34,3 +34,8 @@ export async function settle(): Promise<void> {
     setTimeout(resolve, EFFECT_SETTLE_MS);
   });
 }
+
+// Ink genuinely soft-wraps a single `<Text>` line's own content once it exceeds the injected stdout's column width (100 in ink-testing-library's own `Stdout` stub), inserting a real "\n" into the captured frame mid-string — not a display artefact of however this frame later gets printed. A probe line built from a long value (an absolute path under a system temp directory routinely runs past 80 characters on its own) can wrap this way, splitting a literal substring an assertion expects to find intact (e.g. "status:info:Saved " and the path landing on separate lines). Word-wrap also drops the single space at its own break point (the word boundary the wrap chose), so simply deleting every "\n" would glue the two halves back together with no space at all where the source text had exactly one; replacing each "\n" with a space instead reconstructs that boundary correctly, and collapsing any run of spaces this produces (a wrap that happened to land on an already-blank column, or two adjacent `<Text>` rows joining with none of their own) keeps a genuine multi-word match like "Could not open <path>" intact regardless of where Ink chose to wrap it.
+export function flattenFrame(frame: string | undefined): string {
+  return (frame ?? "").replace(/\n/g, " ").replace(/ {2,}/g, " ");
+}
