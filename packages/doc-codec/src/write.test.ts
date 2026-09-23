@@ -1378,6 +1378,76 @@ describe("writeDocContent tables", () => {
     expect(Object.hasOwn(block.rows[1] ?? {}, "isHeader")).toBe(false);
   });
 
+  it("reports a column's own header flag through onWarning, rather than silently dropping it, and still writes the column's cells unchanged (ExaDev/documents.js#1398)", () => {
+    // Unlike a row's own isHeader (sprmTTableHeader, stated directly per row above), [MS-DOC]'s own table grid has no header-column marker at all — the column's own cells are written exactly like any other column, and only the flag itself is reported as dropped.
+    const input = document([
+      {
+        kind: "table",
+        columns: [{ widthPt: 100, isHeader: true }, { widthPt: 100 }],
+        rows: [
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "Name" }])] },
+              { blocks: [paragraph([{ text: "Score" }])] },
+            ],
+          },
+        ],
+      },
+    ]);
+    const warnings: string[] = [];
+    const bytes = writeDocContent(input, {
+      onWarning: (message) => warnings.push(message),
+    });
+    expect(warnings).toEqual([
+      "doc-codec: table at block 0, column 0 is a header column, and that is dropped; this format's table grid has no header-column marker, so the column is written exactly as any other",
+    ]);
+    const block = tableAt(readDocContent(bytes), 0);
+    expect(block.columns[0]?.isHeader).toBeUndefined();
+    expect(block.rows[0]?.cells.map((cell) => cellText(cell))).toEqual([
+      "Name",
+      "Score",
+    ]);
+  });
+
+  it("writing without an onWarning callback still succeeds instead of throwing, for a table whose column states a header flag", () => {
+    const input = document([
+      {
+        kind: "table",
+        columns: [{ widthPt: 100, isHeader: true }],
+        rows: [{ cells: [{ blocks: [paragraph([{ text: "Name" }])] }] }],
+      },
+    ]);
+    expect(() => writeDocContent(input)).not.toThrow();
+  });
+
+  it("reports a warning per flagged column, naming each one's own index, for non-adjacent header columns", () => {
+    const input = document([
+      {
+        kind: "table",
+        columns: [
+          { widthPt: 100, isHeader: true },
+          { widthPt: 100 },
+          { widthPt: 100, isHeader: true },
+        ],
+        rows: [
+          {
+            cells: [
+              { blocks: [paragraph([{ text: "a" }])] },
+              { blocks: [paragraph([{ text: "b" }])] },
+              { blocks: [paragraph([{ text: "c" }])] },
+            ],
+          },
+        ],
+      },
+    ]);
+    const warnings: string[] = [];
+    writeDocContent(input, { onWarning: (message) => warnings.push(message) });
+    expect(warnings).toEqual([
+      "doc-codec: table at block 0, column 0 is a header column, and that is dropped; this format's table grid has no header-column marker, so the column is written exactly as any other",
+      "doc-codec: table at block 0, column 2 is a header column, and that is dropped; this format's table grid has no header-column marker, so the column is written exactly as any other",
+    ]);
+  });
+
   it("round-trips a horizontally merged cell's colSpan via the merged row's own narrower, wider physical cells", () => {
     // A real, independent [MS-DOC] implementation (LibreOffice 26.2.5.2) was confirmed not to read TCGRF.horzMerge/sprmTMerge at all for a horizontal merge — it states one purely through a merged row's own physical cell layout: fewer, wider cells than an unmerged row in the same table (ExaDev/documents.js#895). This writer matches that encoding whenever some other row in the table would otherwise reveal the merged boundary anyway, so the merged row genuinely has 2 physical cells here, not 3 — the reader recovers colSpan by comparing this row's own boundaries against the second, unmerged row's, which is what reveals that the table has 3 conceptual columns at all (see the dedicated "recovers colSpan and columns" test below for the fallback this writer uses instead when no row ever reveals that boundary on its own).
     const input = document([
