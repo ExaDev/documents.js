@@ -474,47 +474,81 @@ describe("OdgShapeOrVectorDetailScreen", () => {
     expect(frame).toContain("Text: bonjour");
   });
 
-  it("commits a new X through SET_SHAPE_FRAME, leaving Y/width/height untouched", async () => {
-    const editor = createOdg();
-    const page = editor.addPage();
-    page.addTextBox({
-      frame: { xPt: 5, yPt: 6, widthPt: 80, heightPt: 40 },
-      text: "hello",
-    });
-    const doc = openOdgDocument(editor);
+  it.each([
+    {
+      field: "X",
+      downCount: 1,
+      initial: "5",
+      other: { Y: "6.0pt", Width: "80.0pt", Height: "40.0pt" },
+    },
+    {
+      field: "Y",
+      downCount: 2,
+      initial: "6",
+      other: { X: "5.0pt", Width: "80.0pt", Height: "40.0pt" },
+    },
+    {
+      field: "Width",
+      downCount: 3,
+      initial: "80",
+      other: { X: "5.0pt", Y: "6.0pt", Height: "40.0pt" },
+    },
+    {
+      field: "Height",
+      downCount: 4,
+      initial: "40",
+      other: { X: "5.0pt", Y: "6.0pt", Width: "80.0pt" },
+    },
+  ] as const)(
+    "commits a new $field through SET_SHAPE_FRAME, leaving the other frame fields untouched",
+    async ({ field, downCount, initial, other }) => {
+      const editor = createOdg();
+      const page = editor.addPage();
+      page.addTextBox({
+        frame: { xPt: 5, yPt: 6, widthPt: 80, heightPt: 40 },
+        text: "hello",
+      });
+      const doc = openOdgDocument(editor);
 
-    const rendered = render(
-      <AppStateProvider>
-        <Harness
-          doc={doc}
-          target={{ kind: "shapeOrVectorDetail", pageIndex: 0, itemIndex: 0 }}
-        />
-      </AppStateProvider>,
-    );
-    await waitForTop(rendered, "shapeOrVectorDetail");
-    // X is the second row (after Text).
-    rendered.stdin.write("j");
-    await settle();
-    rendered.stdin.write("\r");
-    await settle();
-    let remainingChars = "5".length;
-    while (remainingChars > 0) {
-      rendered.stdin.write("\x7f");
+      const rendered = render(
+        <AppStateProvider>
+          <Harness
+            doc={doc}
+            target={{
+              kind: "shapeOrVectorDetail",
+              pageIndex: 0,
+              itemIndex: 0,
+            }}
+          />
+        </AppStateProvider>,
+      );
+      await waitForTop(rendered, "shapeOrVectorDetail");
+      // Text is row 0; X/Y/Width/Height are rows 1-4 in that order.
+      for (let step = 0; step < downCount; step += 1) {
+        rendered.stdin.write("j");
+        await settle();
+      }
+      rendered.stdin.write("\r");
       await settle();
-      remainingChars -= 1;
-    }
-    rendered.stdin.write("42");
-    await settle();
-    rendered.stdin.write("\r");
+      let remainingChars = initial.length;
+      while (remainingChars > 0) {
+        rendered.stdin.write("\x7f");
+        await settle();
+        remainingChars -= 1;
+      }
+      rendered.stdin.write("42");
+      await settle();
+      rendered.stdin.write("\r");
 
-    const frame = await waitForFlatFrame(rendered, (candidate) =>
-      candidate.includes("X: 42.0pt"),
-    );
-    expect(frame).toContain("X: 42.0pt");
-    expect(frame).toContain("Y: 6.0pt");
-    expect(frame).toContain("Width: 80.0pt");
-    expect(frame).toContain("Height: 40.0pt");
-  });
+      const frame = await waitForFlatFrame(rendered, (candidate) =>
+        candidate.includes(`${field}: 42.0pt`),
+      );
+      expect(frame).toContain(`${field}: 42.0pt`);
+      for (const [otherField, expected] of Object.entries(other)) {
+        expect(frame).toContain(`${otherField}: ${expected}`);
+      }
+    },
+  );
 
   it("sets a rotation through SET_SHAPE_ROTATION when the Rotation row is given a value", async () => {
     const editor = createOdg();
