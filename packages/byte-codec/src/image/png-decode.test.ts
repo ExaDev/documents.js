@@ -161,7 +161,7 @@ describe("decodePng: chunk-stream parsing edge cases", () => {
       (corrupted[corrupted.length - 1]! ^ 0xff) & 0xff;
     const bytes = new Uint8Array([...PNG_SIGNATURE, ...ihdr, ...corrupted]);
 
-    const onWarning = vi.fn();
+    const onWarning = vi.fn<(message: string) => void>();
     decodePng(bytes, { onWarning });
     expect(onWarning).toHaveBeenCalledWith(
       "PNG chunk 'IDAT' failed its CRC32 check",
@@ -173,7 +173,7 @@ describe("decodePng: chunk-stream parsing edge cases", () => {
       realChunk("IHDR", ihdrData(1, 1, 8, 0)),
       idatChunk([0, 9]),
     ]);
-    const onWarning = vi.fn();
+    const onWarning = vi.fn<(message: string) => void>();
     decodePng(bytes, { onWarning });
     expect(onWarning).not.toHaveBeenCalled();
   });
@@ -197,7 +197,7 @@ describe("decodePng: chunk-stream parsing edge cases", () => {
       realChunk("IDAT", Array.from(truncated)),
     ]);
 
-    const onWarning = vi.fn();
+    const onWarning = vi.fn<(message: string) => void>();
     decodePng(bytes, { onWarning });
     expect(onWarning).toHaveBeenCalledWith(
       "PNG IDAT stream required tolerant recovery (truncated or malformed)",
