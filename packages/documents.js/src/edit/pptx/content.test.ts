@@ -779,6 +779,102 @@ describe("buildPptxPackage: a slide table that states no column widths", () => {
   });
 });
 
+// ExaDev/documents.js#1400: heightPt and a cell border's stroke style were both genuinely representable in DrawingML but never wired through buildPptxPackage's table writer — heightPt was replaced with a hardcoded 20pt placeholder on every row, and a border's style (dashed/dotted/double) was dropped entirely. Both are fixed by real wiring, not a diagnostic, since DrawingML has no format limitation here (contrast with #1389, ContentTableRow.isHeader, which genuinely has no DrawingML spelling).
+describe("buildPptxPackage: table row heightPt and cell border style round-trip", () => {
+  function cellOf(
+    text: string,
+    borders?: ContentTableCell["borders"],
+  ): ContentTableCell {
+    return { blocks: [{ kind: "paragraph", runs: [{ text }] }], borders };
+  }
+
+  function documentOf(table: ContentTable): ContentDocument {
+    return presentationDoc([
+      {
+        size: SLIDE_SIZE,
+        notes: "",
+        shapes: [
+          {
+            frame: { xPt: 10, yPt: 10, widthPt: 300, heightPt: 100 },
+            ...ZERO_INSETS,
+            blocks: [table],
+          },
+        ],
+      },
+    ]);
+  }
+
+  function writtenTable(table: ContentTable): ContentTable {
+    const reread = readPptxContent(buildPptxPackage(documentOf(table)));
+    if (reread.kind !== "presentation") {
+      throw new Error("expected a presentation ContentDocument");
+    }
+    const block = reread.slides[0]?.shapes[0]?.blocks[0];
+    if (block?.kind !== "table") {
+      throw new Error("expected the slide's shape to hold a table");
+    }
+    return block;
+  }
+
+  it("writes each row's own heightPt rather than the shared 20pt placeholder", () => {
+    const written = writtenTable({
+      kind: "table",
+      columns: [{ widthPt: 100 }],
+      rows: [
+        { cells: [cellOf("a")], heightPt: 36 },
+        { cells: [cellOf("b")], heightPt: 72 },
+      ],
+    });
+    expect(written.rows.map((row) => row.heightPt)).toEqual([36, 72]);
+  });
+
+  it("a row stating no heightPt falls back to the 20pt placeholder, unchanged from before", () => {
+    const written = writtenTable({
+      kind: "table",
+      columns: [{ widthPt: 100 }],
+      rows: [{ cells: [cellOf("a")] }],
+    });
+    expect(written.rows[0]?.heightPt).toBe(20);
+  });
+
+  it("writes and reads back a cell border's dashed/dotted/double stroke style, not just its colour and width", () => {
+    const written = writtenTable({
+      kind: "table",
+      columns: [{ widthPt: 100 }],
+      rows: [
+        {
+          cells: [
+            cellOf("a", {
+              left: {
+                color: { r: 1, g: 0, b: 0 },
+                widthPt: 2,
+                style: "dashed",
+              },
+              right: {
+                color: { r: 0, g: 1, b: 0 },
+                widthPt: 1,
+                style: "dotted",
+              },
+              top: { color: { r: 0, g: 0, b: 1 }, widthPt: 0.5 },
+              bottom: {
+                color: { r: 0, g: 0, b: 0 },
+                widthPt: 1.5,
+                style: "double",
+              },
+            }),
+          ],
+        },
+      ],
+    });
+    expect(written.rows[0]?.cells[0]?.borders).toEqual({
+      left: { color: { r: 1, g: 0, b: 0 }, widthPt: 2, style: "dashed" },
+      right: { color: { r: 0, g: 1, b: 0 }, widthPt: 1, style: "dotted" },
+      top: { color: { r: 0, g: 0, b: 1 }, widthPt: 0.5 },
+      bottom: { color: { r: 0, g: 0, b: 0 }, widthPt: 1.5, style: "double" },
+    });
+  });
+});
+
 describe("buildPptxPackage: a table row's own isHeader has no DrawingML spelling", () => {
   function cellOf(text: string): ContentTableCell {
     return { blocks: [{ kind: "paragraph", runs: [{ text }] }] };
