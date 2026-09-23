@@ -1,3 +1,9 @@
+## [12.2.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.1.0...ooxml.js%4012.2.0) (2026-09-23)
+
+### Features
+
+* **ooxml.js:** export buildNumberingElement ([a2bdbb5](https://github.com/ExaDev/documents.js/commit/a2bdbb53db3f70a824765978081a25cb2b5739b7))
+
 ## [12.1.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.0.2...ooxml.js%4012.1.0) (2026-09-23)
 
 ### Features

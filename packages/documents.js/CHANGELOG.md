@@ -1,3 +1,14 @@
+## [14.3.1](https://github.com/ExaDev/documents.js/compare/documents.js%4014.3.0...documents.js%4014.3.1) (2026-09-23)
+
+### Bug Fixes
+
+* **documents.js:** thread list membership numId and numFmt into docx numbering.xml ([59a6d2f](https://github.com/ExaDev/documents.js/commit/59a6d2f74a80251973410642026cd629c4048f39))
+
+
+### Dependencies
+
+- Updated ooxml.js to 12.2.0
+
 ## [14.3.0](https://github.com/ExaDev/documents.js/compare/documents.js%4014.2.0...documents.js%4014.3.0) (2026-09-23)
 
 ### Features

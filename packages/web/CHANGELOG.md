@@ -1,3 +1,15 @@
+## [2.12.2](https://github.com/ExaDev/documents.js/compare/web%402.12.1...web%402.12.2) (2026-09-23)
+
+### Tests
+
+* **web:** exercise the docx ordered-list resolve-by-numId branch ([b37ec73](https://github.com/ExaDev/documents.js/commit/b37ec739eab62afbaa1ee69d50d191a67e17ce6a)), references [ExaDev/documents.js#1273](https://github.com/ExaDev/documents.js/issues/1273)
+
+
+### Dependencies
+
+- Updated ooxml.js to 12.2.0
+- Updated documents.js to 14.3.1
+
 ## [2.12.1](https://github.com/ExaDev/documents.js/compare/web%402.12.0...web%402.12.1) (2026-09-23)
 
 
