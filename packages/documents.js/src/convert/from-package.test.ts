@@ -23,6 +23,7 @@ import { readOdpContent } from "../odf/odp/read";
 import { readOdsContent } from "../odf/ods/read";
 import { readOdtContent } from "../odf/odt/read";
 import { minimalDocxBytes } from "../test-support/docx";
+import { readDocxExtras } from "../ooxml/docx/extras";
 import { minimalOdgBytes } from "../test-support/odg";
 import { minimalOdpBytes } from "../test-support/odp";
 import { minimalOdsBytes } from "../test-support/ods";
@@ -56,6 +57,32 @@ describe("buildDocumentBytes", () => {
       .map((p) => p.text)
       .join(" ");
     expect(text).toContain("Hello from odt");
+  });
+
+  // ExaDev/documents.js#1273: the docx writer used to ignore a list paragraph's own ContentListMembership.numId/format entirely and always synthesise numId "1" as a bullet list.
+  it("writes a list paragraph's own numId and numFmt into the built docx, not a synthesised bullet", () => {
+    const pkg = assembleTree({
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 595, heightPt: 842 },
+          margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [{ text: "ordered item" }],
+              list: { numId: "2", level: 0, format: "decimal" },
+            },
+          ],
+        },
+      ],
+    });
+    const bytes = buildDocumentBytes(pkg, "docx");
+    const { numbering } = readDocxExtras(decodeOoxmlPackage(bytes));
+    const definitions = Object.values(numbering);
+    expect(definitions).toHaveLength(1);
+    expect(definitions[0]?.levels["0"]?.format).toBe("decimal");
   });
 
   it("builds real odt bytes from a wordprocessing package", () => {
