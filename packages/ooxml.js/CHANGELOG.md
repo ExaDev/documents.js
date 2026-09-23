@@ -1,3 +1,13 @@
+## [12.1.0](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.0.2...ooxml.js%4012.1.0) (2026-09-23)
+
+### Features
+
+* **ooxml.js:** report a dropped docx header column via onDiagnostic ([444d085](https://github.com/ExaDev/documents.js/commit/444d08514f91167b14041260a0cfeadfef1724b9))
+
+### Bug Fixes
+
+* **ooxml.js:** read a pptx table cell border's double stroke style via [@cmpd](https://github.com/cmpd) ([e6a621c](https://github.com/ExaDev/documents.js/commit/e6a621c5e1c3580a700607ddf236123168fdd5ce))
+
 ## [12.0.2](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.0.1...ooxml.js%4012.0.2) (2026-09-22)
 
 ### Code Refactoring
