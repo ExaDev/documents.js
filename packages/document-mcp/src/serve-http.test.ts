@@ -11,7 +11,7 @@ function fakeResponse() {
 describe("routeHttpRequest", () => {
   it("throws when the request carries no url at all", () => {
     const res = fakeResponse();
-    const onMcpRequest = vi.fn();
+    const onMcpRequest = vi.fn<() => void>();
 
     expect(() => {
       routeHttpRequest({ url: undefined }, res, onMcpRequest);
@@ -21,7 +21,7 @@ describe("routeHttpRequest", () => {
 
   it("404s a path other than MCP_HTTP_PATH with an exact plain-text response", () => {
     const res = fakeResponse();
-    const onMcpRequest = vi.fn();
+    const onMcpRequest = vi.fn<() => void>();
 
     routeHttpRequest({ url: "/other" }, res, onMcpRequest);
 
@@ -34,7 +34,7 @@ describe("routeHttpRequest", () => {
 
   it("dispatches to onMcpRequest for MCP_HTTP_PATH itself, without touching the response directly", () => {
     const res = fakeResponse();
-    const onMcpRequest = vi.fn();
+    const onMcpRequest = vi.fn<() => void>();
 
     routeHttpRequest({ url: MCP_HTTP_PATH }, res, onMcpRequest);
 
@@ -44,7 +44,7 @@ describe("routeHttpRequest", () => {
 
   it("dispatches a query string on MCP_HTTP_PATH too, matching on pathname alone", () => {
     const res = fakeResponse();
-    const onMcpRequest = vi.fn();
+    const onMcpRequest = vi.fn<() => void>();
 
     routeHttpRequest(
       { url: `${MCP_HTTP_PATH}?sessionId=abc` },
