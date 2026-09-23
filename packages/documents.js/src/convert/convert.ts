@@ -517,6 +517,36 @@ export function csvToMarkdown(
   return convertDocument("csv", "markdown", bytes, options);
 }
 
+// xls -> markdown: xls shares xlsx's spreadsheet variant, so this is the identical spreadsheetToWordprocessing cross-variant bridge xlsxToMarkdown above uses, fed by xls-codec's own reader instead of ooxml.js's — the same single bridge hop, no PDF layout pass, and the same losses (formulas, print settings, comments, anchored images/embedded objects have no wordprocessing counterpart). There is no markdownToXls: the reverse direction has no registered transform for the identical reason markdownToXlsx below still goes through PDF, and xls-codec's own writer scope (see that package's README) makes a PDF-pivot round trip a worse trade than simply not offering it.
+
+// Forwards to convertDocument (src/convert/composition.ts).
+export function xlsToMarkdown(
+  bytes: Uint8Array<ArrayBuffer>,
+  options?: DocumentBridgeOptions,
+): Uint8Array<ArrayBuffer> {
+  return convertDocument("xls", "markdown", bytes, options);
+}
+
+// doc -> markdown: doc shares docx/odt/markdown's own wordprocessing variant (see capability.ts), so this resolves as a plain same-variant bridge hop exactly like docxToMarkdown/odtToMarkdown above — no PDF layout pass, no cross-variant transform, and no loss beyond what doc-codec's own reader already can't represent (see that package's README for its exact scope).
+
+// Forwards to convertDocument (src/convert/composition.ts).
+export function docToMarkdown(
+  bytes: Uint8Array<ArrayBuffer>,
+  options?: DocumentBridgeOptions,
+): Uint8Array<ArrayBuffer> {
+  return convertDocument("doc", "markdown", bytes, options);
+}
+
+// ppt -> markdown: ppt is a presentation-variant format, so this crosses the same variant boundary xlsxToMarkdown does, via presentationToWordprocessing (src/convert/variant-bridges.ts) rather than spreadsheetToWordprocessing — a single cross-variant bridge hop, no PDF layout pass. A deck has no flow structure, so every slide's blocks are concatenated into one section with slide boundaries lost, and a slide's speaker notes have no wordprocessing counterpart and are silently dropped, the same APPROXIMATION class the other cross-variant bridges above already carry for their own dropped fields.
+
+// Forwards to convertDocument (src/convert/composition.ts).
+export function pptToMarkdown(
+  bytes: Uint8Array<ArrayBuffer>,
+  options?: DocumentBridgeOptions,
+): Uint8Array<ArrayBuffer> {
+  return convertDocument("ppt", "markdown", bytes, options);
+}
+
 // markdown -> xlsx and markdown -> csv: the reverse direction has no registered transform — a markdown table has no cell types, formulas, or geometry of its own to recover, so wordprocessing -> spreadsheet stays a separate question with no honest answer (see variant-bridges.ts's own module comment). convertDocument's pathfinder therefore still resolves these through PDF: markdownToXlsx as [markdown -> ods, ods -> pdf, pdf -> xlsx], markdownToCsv as [markdown -> ods, ods -> pdf, pdf -> csv] — both legs' lossiness inherited in full. onDocument reports the last hop's package under the composition engine's own "fires exactly once, on the last hop" convention.
 
 // Forwards to convertDocument (src/convert/composition.ts).
