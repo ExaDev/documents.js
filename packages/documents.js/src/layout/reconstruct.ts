@@ -240,11 +240,9 @@ function levenshteinDistance(a: string, b: string): number {
   return distance(a.length, b.length);
 }
 
+// No zero-length guard: both of dropFuzzyRedrawnPasses' own call sites already reject a text shorter than MIN_REDRAW_PASS_TEXT_LENGTH before ever reaching here, so maxLength is always >= that floor and the division can never see a 0 denominator.
 function textSimilarity(a: string, b: string): number {
   const maxLength = Math.max(a.length, b.length);
-  if (maxLength === 0) {
-    return 1;
-  }
   return 1 - levenshteinDistance(a, b) / maxLength;
 }
 
