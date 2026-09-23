@@ -143,7 +143,7 @@ function appendShape(
         "buildPptxPackage: table has no rows, and a table with no rows cannot be written in every presentation format (ODF requires at least one table:table-row)",
       );
     }
-    // The grid is as wide as the rows and columns together state, so a table that states no column widths still gets one a:gridCol per grid column; a column with no stated width takes an equal share of the default table width, the same as any column created without one.
+    // The grid is as wide as the rows and columns together state, so a table that states no column widths still gets one a:gridCol per grid column; a column with no stated width takes an equal share of the default table width, the same as any column created without one. Likewise, a row with no stated heightPt gets buildDrawingTable's own DEFAULT_ROW_HEIGHT_PT rather than losing its real height when one was read.
     const table = slide.addTable({
       frame: shape.frame,
       rotationDeg: shape.rotationDeg,
@@ -151,6 +151,7 @@ function appendShape(
         rows: onlyBlock.rows.length,
         columns: tableGridColumnCount(onlyBlock),
         columnWidthsPt: onlyBlock.columns.map((c) => c.widthPt),
+        rowHeightsPt: onlyBlock.rows.map((r) => r.heightPt),
       },
     });
     populatePptxTable(

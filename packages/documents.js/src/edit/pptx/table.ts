@@ -2,6 +2,7 @@ import type {
   Color,
   ContentBorder,
   ContentCellBorders,
+  ContentStrokeStyle,
   ContentTableCell,
 } from "document-schema.js";
 import { rgbHexToColor } from "document-schema.js";
@@ -19,11 +20,13 @@ export interface PptxTableInit {
   readonly rows: number;
   readonly columns: number;
   readonly columnWidthsPt?: readonly number[];
+  // One entry per row, read back from ContentTableRow.heightPt (ECMA-376 a:tr/@h) — a row whose own entry is absent or whose caller supplies no array at all falls back to DEFAULT_ROW_HEIGHT_PT below, the same "no explicit width, share the default" convention columnWidthsPt already follows for columns.
+  readonly rowHeightsPt?: readonly (number | undefined)[];
 }
 
 // Matches docx/odt's own DEFAULT_TABLE_WIDTH_TWIPS/DEFAULT_TABLE_WIDTH_PT convention (468pt, US Letter width minus 1in margins either side) — the content width a new table defaults to when no explicit column widths are given.
 const DEFAULT_TABLE_WIDTH_PT = 468;
-// PowerPoint always writes a real measured row height; nothing in this writer's own callers (buildPptxPackage's appendShape) currently supplies one, so every row gets this single-line placeholder.
+// PowerPoint always writes a real measured row height; a row whose own ContentTableRow carries no heightPt (or whose caller supplies no rowHeightsPt at all) gets this single-line placeholder instead.
 const DEFAULT_ROW_HEIGHT_PT = 20;
 
 const TABLE_GRAPHIC_URI =
@@ -38,6 +41,26 @@ const PPTX_TABLE_CELL_VERTICAL_ALIGN_ANCHOR = {
   NonNullable<ContentTableCell["verticalAlign"]>,
   string
 >;
+
+// ContentBorder.style's own solid/dashed/dotted vocabulary written as a:prstDash/@val — a preset naturally read back by ooxml.js's own DRAWINGML_DASH_STYLE_MAP (typed/pptx/read.ts), so the two stay in step. 'double' is deliberately absent: a:prstDash has no 'double' member (ST_PresetLineDashVal, ECMA-376 20.1.10.48), so that style is instead carried on @cmpd rather than as a dash preset — see the borders getter/setter below.
+const PPTX_BORDER_STYLE_TO_DASH_VAL: Readonly<
+  Partial<Record<ContentStrokeStyle, string>>
+> = {
+  solid: "solid",
+  dashed: "dash",
+  dotted: "sysDot",
+};
+
+// The read-side inverse of PPTX_BORDER_STYLE_TO_DASH_VAL above, for PptxTableCell.readBorder below — deliberately narrower than ooxml.js's own DRAWINGML_DASH_STYLE_MAP (typed/pptx/read.ts), which also narrows several OOXML dash-dot variants this package never writes onto 'dashed'/'dotted'; any a:prstDash/@val this map doesn't recognise falls back to 'solid', matching that same "narrow to the closest matching value" convention.
+const DASH_VAL_TO_PPTX_BORDER_STYLE: ReadonlyMap<string, ContentStrokeStyle> =
+  new Map([
+    ["solid", "solid"],
+    ["dash", "dashed"],
+    ["sysDot", "dotted"],
+  ]);
+
+// a:lnL/a:lnR/a:lnT/a:lnB's own @cmpd value (ST_CompoundLine, ECMA-376 20.1.2.2.24) for a 'double' ContentBorder.style — the one ContentStrokeStyle member a:prstDash cannot spell.
+const PPTX_BORDER_CMPD_DOUBLE = "dbl";
 
 // The read-side inverse of PPTX_TABLE_CELL_VERTICAL_ALIGN_ANCHOR above, for PptxTableCell.verticalAlign's own getter.
 const ANCHOR_TABLE_CELL_VERTICAL_ALIGN: ReadonlyMap<
@@ -145,7 +168,7 @@ export class PptxTableCell {
     );
   }
 
-  // a:tcPr children a:lnL/a:lnR/a:lnT/a:lnB (ECMA-376 21.1.3.2/3/4/5) — the four cell-border edges. Each a:lnX carries @w in EMU and an a:solidFill/a:srgbClr child naming the border colour. ooxml.js's own readTableCell reads these too (its own readTableCellBorders, resolved through the scheme-colour-aware readSolidFillColor rather than this setter's own srgbClr-only shortcut), so a border's colour and width written here round-trip through both this package's own reader below and ooxml.js's. A border's stroke style (dashed/dotted/etc, ContentStrokeStyle) does not round-trip: the setter below never writes an a:prstDash child, and this package's own readBorder has no style field to read one back into even were it present.
+  // a:tcPr children a:lnL/a:lnR/a:lnT/a:lnB (ECMA-376 21.1.3.2/3/4/5) — the four cell-border edges. Each a:lnX carries @w in EMU, an a:solidFill/a:srgbClr child naming the border colour, and an optional a:prstDash child (ECMA-376 20.1.10.48's ST_PresetLineDashVal) naming a non-solid dash pattern; a 'double' style has no a:prstDash member at all, so it is instead stated on @cmpd (ECMA-376 20.1.2.2.24's ST_CompoundLine, the same attribute a:ln itself carries), which this cell-border edge shares because a:lnL/a:lnR/a:lnT/a:lnB are all typed CT_LineProperties, the identical complex type a:ln uses. ooxml.js's own readTableCell reads all of this too (its own readTableCellBorders, resolved through the scheme-colour-aware readSolidFillColor rather than this setter's own srgbClr-only shortcut, and its own DRAWINGML_DASH_STYLE_MAP plus @cmpd check for the identical solid/dashed/dotted/double vocabulary), so a border's colour, width, and stroke style written here round-trip through both this package's own reader below and ooxml.js's.
   get borders(): ContentCellBorders | undefined {
     const tcPr = this.tcPrElement(false);
     if (tcPr === undefined) {
@@ -204,13 +227,26 @@ export class PptxTableCell {
       if (border === undefined) {
         continue;
       }
-      tcPr.children.push(
-        el(tag, { w: String(ptToEmu(border.widthPt)) }, [
-          el("a:solidFill", {}, [
-            el("a:srgbClr", { val: drawingMlColorHex(border.color) }),
-          ]),
+      // a:solidFill must precede a:prstDash on CT_LineProperties (ECMA-376 20.1.2.2.24's own child sequence: fill, then dash, then join, then head/tail-end).
+      const lineChildren: XmlElement[] = [
+        el("a:solidFill", {}, [
+          el("a:srgbClr", { val: drawingMlColorHex(border.color) }),
         ]),
-      );
+      ];
+      const dashVal =
+        border.style === undefined
+          ? undefined
+          : PPTX_BORDER_STYLE_TO_DASH_VAL[border.style];
+      if (dashVal !== undefined) {
+        lineChildren.push(el("a:prstDash", { val: dashVal }));
+      }
+      const lineAttrs: Record<string, string> = {
+        w: String(ptToEmu(border.widthPt)),
+      };
+      if (border.style === "double") {
+        lineAttrs.cmpd = PPTX_BORDER_CMPD_DOUBLE;
+      }
+      tcPr.children.push(el(tag, lineAttrs, lineChildren));
     }
   }
 
@@ -262,10 +298,27 @@ export class PptxTableCell {
     if (hex === undefined) {
       return undefined;
     }
+    const style = this.readBorderStyle(lnElement);
     return {
       color: rgbHexToColor(hex),
       widthPt,
+      ...(style === undefined ? {} : { style }),
     };
+  }
+
+  // @cmpd="dbl" (ECMA-376 20.1.2.2.24's ST_CompoundLine) takes priority over a:prstDash: the two attributes are independent in the schema (a double line could in principle also carry a dash pattern), but ContentStrokeStyle's own flat enum has no way to state both at once, so a cmpd of 'dbl' always reads back as 'double' regardless of any a:prstDash also present. Absent from both reads back as no style at all (see the borders getter's own comment above for why 'solid' is written and read explicitly rather than folded into that same absent case).
+  private readBorderStyle(
+    lnElement: XmlElement,
+  ): ContentStrokeStyle | undefined {
+    if (attr(lnElement, "cmpd") === PPTX_BORDER_CMPD_DOUBLE) {
+      return "double";
+    }
+    const prstDash = directChildElement(lnElement, "a:prstDash");
+    const dashVal = prstDash === undefined ? undefined : attr(prstDash, "val");
+    if (dashVal === undefined) {
+      return undefined;
+    }
+    return DASH_VAL_TO_PPTX_BORDER_STYLE.get(dashVal) ?? "solid";
   }
 
   // Replaces this cell's own a:txBody paragraph content — mirrors PptxShape.setParagraphs (shape.ts) exactly, since a:tc's own a:txBody is the identical CT_TextBody content model a p:sp's is.
@@ -358,7 +411,8 @@ export function buildDrawingTable(init: PptxTableInit): XmlElement {
     for (let c = 0; c < init.columns; c++) {
       cells.push(buildTableCellElement());
     }
-    rows.push(el("a:tr", { h: String(ptToEmu(DEFAULT_ROW_HEIGHT_PT)) }, cells));
+    const heightPt = init.rowHeightsPt?.[r] ?? DEFAULT_ROW_HEIGHT_PT;
+    rows.push(el("a:tr", { h: String(ptToEmu(heightPt)) }, cells));
   }
   return el("a:tbl", {}, [
     el("a:tblPr"),

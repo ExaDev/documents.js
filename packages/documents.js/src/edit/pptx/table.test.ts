@@ -1,3 +1,4 @@
+import type { XmlElement } from "ooxml.js";
 import { describe, expect, it } from "vitest";
 import { directChildElement } from "../../xml/edit";
 import { el } from "../../xml/fragment";
@@ -30,6 +31,42 @@ describe("buildDrawingTable / PptxTable", () => {
         : undefined,
     );
     expect(widths).toEqual(["1270000", "2540000"]);
+  });
+
+  // ExaDev/documents.js#1400: buildDrawingTable hardcoded every row to DEFAULT_ROW_HEIGHT_PT (20pt), so a real row height read from a source pptx was silently replaced with the placeholder on write.
+  it("uses explicit row heights when given, converting points to EMU", () => {
+    const tableElement = buildDrawingTable({
+      rows: 2,
+      columns: 1,
+      rowHeightsPt: [36, 72],
+    });
+    const heights = tableElement.children
+      .filter((c) => c.type === "element" && c.tag === "a:tr")
+      .map((c) =>
+        c.type === "element"
+          ? c.attributes.find((a) => a.name === "h")?.value
+          : undefined,
+      );
+    expect(heights).toEqual(["457200", "914400"]);
+  });
+
+  it("a row with no stated height, or no rowHeightsPt array at all, falls back to the default row height", () => {
+    const withGap = buildDrawingTable({
+      rows: 2,
+      columns: 1,
+      rowHeightsPt: [36, undefined],
+    });
+    const noArray = buildDrawingTable({ rows: 1, columns: 1 });
+    const rowHeights = (tableElement: XmlElement): (string | undefined)[] =>
+      tableElement.children
+        .filter((c) => c.type === "element" && c.tag === "a:tr")
+        .map((c) =>
+          c.type === "element"
+            ? c.attributes.find((a) => a.name === "h")?.value
+            : undefined,
+        );
+    expect(rowHeights(withGap)).toEqual(["457200", "254000"]); // 20pt DEFAULT_ROW_HEIGHT_PT in EMU
+    expect(rowHeights(noArray)).toEqual(["254000"]);
   });
 
   it("cell(row, col) returns the right cell, and setParagraphs replaces its own a:txBody content", () => {
@@ -128,18 +165,64 @@ describe("buildDrawingTable / PptxTable", () => {
     ).toBe(false);
   });
 
-  it("borders round-trip colour and width through get/set, but not stroke style", () => {
+  it("borders round-trip colour, width, and stroke style through get/set", () => {
     const tableElement = buildDrawingTable({ rows: 1, columns: 1 });
     const table = new PptxTable(tableElement);
     const cell = table.cell(0, 0);
     cell.borders = {
       left: { color: { r: 1, g: 0, b: 0 }, widthPt: 2, style: "dashed" },
+      right: { color: { r: 0, g: 1, b: 0 }, widthPt: 1, style: "dotted" },
       top: { color: { r: 0, g: 0, b: 1 }, widthPt: 0.5 },
+      bottom: { color: { r: 0, g: 0, b: 0 }, widthPt: 1.5, style: "double" },
     };
     expect(cell.borders).toEqual({
-      left: { color: { r: 1, g: 0, b: 0 }, widthPt: 2 },
+      left: { color: { r: 1, g: 0, b: 0 }, widthPt: 2, style: "dashed" },
+      right: { color: { r: 0, g: 1, b: 0 }, widthPt: 1, style: "dotted" },
       top: { color: { r: 0, g: 0, b: 1 }, widthPt: 0.5 },
+      bottom: { color: { r: 0, g: 0, b: 0 }, widthPt: 1.5, style: "double" },
     });
+  });
+
+  it("an explicit solid stroke style round-trips as 'solid' rather than collapsing into the same undefined absent style carries", () => {
+    const tableElement = buildDrawingTable({ rows: 1, columns: 1 });
+    const table = new PptxTable(tableElement);
+    const cell = table.cell(0, 0);
+    cell.borders = {
+      left: { color: { r: 1, g: 0, b: 0 }, widthPt: 1, style: "solid" },
+    };
+    expect(cell.borders).toEqual({
+      left: { color: { r: 1, g: 0, b: 0 }, widthPt: 1, style: "solid" },
+    });
+    const tcPr = directChildElement(cell.element, "a:tcPr");
+    const lnL =
+      tcPr === undefined ? undefined : directChildElement(tcPr, "a:lnL");
+    const prstDash =
+      lnL === undefined ? undefined : directChildElement(lnL, "a:prstDash");
+    expect(
+      prstDash?.type === "element"
+        ? prstDash.attributes.find((a) => a.name === "val")?.value
+        : undefined,
+    ).toBe("solid");
+  });
+
+  it("a double stroke style is written as @cmpd=\"dbl\" rather than an a:prstDash preset, since DrawingML's dash vocabulary has no 'double' member", () => {
+    const tableElement = buildDrawingTable({ rows: 1, columns: 1 });
+    const table = new PptxTable(tableElement);
+    const cell = table.cell(0, 0);
+    cell.borders = {
+      left: { color: { r: 1, g: 0, b: 0 }, widthPt: 1, style: "double" },
+    };
+    const tcPr = directChildElement(cell.element, "a:tcPr");
+    const lnL =
+      tcPr === undefined ? undefined : directChildElement(tcPr, "a:lnL");
+    expect(lnL?.type === "element" ? lnL.attributes : undefined).toContainEqual(
+      { name: "cmpd", value: "dbl" },
+    );
+    expect(
+      lnL?.type === "element"
+        ? directChildElement(lnL, "a:prstDash")
+        : undefined,
+    ).toBeUndefined();
   });
 
   it("borders getter treats a resolved zero-width or non-numeric-width edge as no border", () => {
