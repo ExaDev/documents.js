@@ -291,9 +291,9 @@ jobs:
           echo "::error::Timed out waiting for run $RUN_ID on $BRANCH; the fix pull request is left open."
           exit 0
 
-  # Deletes the superseded turbo cache entries on main. Every task's setup action saves one entry per main push (see .github/actions/setup-workspace/action.yml); this keeps only the newest per task, so the number of entries stays at one per task however many pushes there are. It is its own job so that actions: write is held only by a job that runs on a push to main and runs no workspace code: the jobs that execute a pull request's or a merge-queue entry's ref keep the read-only token. Entries are grouped by the key with its lockfile hash and commit removed, and the newest of each group is kept, so a task that did not save on this push keeps its previous entry.
+  # Deletes superseded cache entries on main, for both families that a main push regenerates under a fresh key: turbo's per-task cache (keyed on the lockfile/turbo.json hash and the commit) and setup-node's per-platform pnpm store (keyed on the lockfile hash alone, from actions/setup-node's built-in caching in .github/actions/setup-workspace/action.yml). Neither key changes on every run, only when its own hash input changes, but nothing else ever removes the entry the previous hash left behind, so each was accumulating one more entry per generation with no bound. This job keeps only the newest entry per task (turbo) and per OS/arch (node-cache), so entry counts stay at one per task and one per platform however many pushes there are. It is its own job so that actions: write is held only by a job that runs on a push to main and runs no workspace code: the jobs that execute a pull request's or a merge-queue entry's ref keep the read-only token. Entries are grouped by the key with its trailing hash (and, for turbo, the commit) removed, and the newest of each group is kept, so a task or platform that did not save on this push keeps its previous entry.
   prune-caches:
-    name: Prune turbo caches
+    name: Prune superseded caches
     needs: [lint, typecheck, test, test-workers, test-smoke, test-e2e, knip]
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -308,6 +308,12 @@ jobs:
         run: |
           gh cache list --ref refs/heads/main --key turbo- --limit 100 --json id,key,createdAt \
             --jq 'group_by(.key | sub("-[0-9a-f]{64}-[0-9a-f]{40}$"; "")) | .[] | sort_by(.createdAt) | .[:-1] | .[].id' \
+            | while read -r id; do gh cache delete "$id"; done
+
+      - name: Keep the newest node-cache entry of each platform
+        run: |
+          gh cache list --ref refs/heads/main --key node-cache- --limit 100 --json id,key,createdAt \
+            --jq 'group_by(.key | sub("-[0-9a-f]{64}$"; "")) | .[] | sort_by(.createdAt) | .[:-1] | .[].id' \
             | while read -r id; do gh cache delete "$id"; done
 
   release:
