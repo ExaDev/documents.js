@@ -3,7 +3,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { OpenedFile } from "../ports/fileAccess";
 import { createMockRpcClient } from "../test/mockRpcClient";
-import { mountWithProviders } from "../test/mountComponent";
+import {
+  mountWithOpenDocument,
+  openDocument,
+  resetOpenDocumentCapture,
+} from "../test/openDocumentHarness";
 
 vi.mock("../rpc/client", () => ({ getRpcClient: vi.fn() }));
 
@@ -29,17 +33,8 @@ vi.mock("../ui/notify", () => ({
   },
 }));
 
-// Stands in for the real FileUpload (already covered by its own dedicated test suite): MetadataPage's own logic — inferring the format, calling readMetadata.mutate, seeding title/author, and saving overrides — is what this file exercises.
-let latestOnFile: ((file: OpenedFile) => void) | undefined;
-vi.mock("../ui/FileUpload", () => ({
-  FileUpload: (props: { onFile: (file: OpenedFile) => void }) => {
-    latestOnFile = props.onFile;
-    return <div data-testid="file-upload" />;
-  },
-}));
-
 const { getRpcClient } = await import("../rpc/client");
-const { Route } = await import("./metadata");
+const { Route } = await import("./_document.metadata");
 const MetadataPage = Route.options.component!;
 
 function openedFile(name: string): OpenedFile {
@@ -47,7 +42,7 @@ function openedFile(name: string): OpenedFile {
 }
 
 function mountMetadataPage() {
-  return mountWithProviders(<MetadataPage />);
+  return mountWithOpenDocument(<MetadataPage />);
 }
 
 function inputForLabel(
@@ -82,7 +77,7 @@ function typeInto(input: HTMLInputElement, value: string) {
 }
 
 afterEach(() => {
-  latestOnFile = undefined;
+  resetOpenDocumentCapture();
   notifyError.mockReset();
   notifySuccess.mockReset();
   saveFile.mockReset();
@@ -90,15 +85,14 @@ afterEach(() => {
 });
 
 describe("MetadataPage", () => {
-  it("renders only the FileUpload before anything is picked", () => {
+  it("prompts to open a document before anything is open", () => {
     const client = createMockRpcClient();
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountMetadataPage();
-    expect(
-      mounted.container.querySelector('[data-testid="file-upload"]'),
-    ).not.toBeNull();
+    expect(mounted.container.textContent).toContain(
+      "Open a document above to see its metadata.",
+    );
     expect(mounted.container.querySelector("table")).toBeNull();
-    expect(mounted.container.textContent).not.toContain("Could not recognise");
     mounted.unmount();
   });
 
@@ -108,7 +102,7 @@ describe("MetadataPage", () => {
     const mounted = mountMetadataPage();
 
     act(() => {
-      latestOnFile?.(openedFile("notes.xyz"));
+      openDocument(openedFile("notes.xyz"));
     });
 
     expect(mounted.container.textContent).toContain(
@@ -133,7 +127,7 @@ describe("MetadataPage", () => {
     const mounted = mountMetadataPage();
 
     act(() => {
-      latestOnFile?.(openedFile("report.docx"));
+      openDocument(openedFile("report.docx"));
     });
     await vi.waitFor(() => {
       expect(mounted.container.querySelector("table")).not.toBeNull();
@@ -153,21 +147,21 @@ describe("MetadataPage", () => {
     mounted.unmount();
   });
 
-  it("clears the previous read's data table when the next pick's extension is unrecognised", async () => {
+  it("clears the previous document's data table when the next open's extension is unrecognised", async () => {
     const client = createMockRpcClient();
     vi.mocked(client.metadata.read).mockResolvedValue({ title: "Existing" });
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountMetadataPage();
 
     act(() => {
-      latestOnFile?.(openedFile("report.docx"));
+      openDocument(openedFile("report.docx"));
     });
     await vi.waitFor(() => {
       expect(mounted.container.querySelector("table")).not.toBeNull();
     });
 
     act(() => {
-      latestOnFile?.(openedFile("notes.xyz"));
+      openDocument(openedFile("notes.xyz"));
     });
 
     expect(mounted.container.querySelector("table")).toBeNull();
@@ -176,14 +170,14 @@ describe("MetadataPage", () => {
     mounted.unmount();
   });
 
-  it("does not carry a previous file's edited title/author into the next file's fields", async () => {
+  it("does not carry a previous document's edited title/author into the next document's fields", async () => {
     const client = createMockRpcClient();
     vi.mocked(client.metadata.read).mockResolvedValue({ title: "Original" });
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountMetadataPage();
 
     act(() => {
-      latestOnFile?.(openedFile("first.docx"));
+      openDocument(openedFile("first.docx"));
     });
     await vi.waitFor(() => {
       expect(mounted.container.querySelector("table")).not.toBeNull();
@@ -192,19 +186,21 @@ describe("MetadataPage", () => {
     typeInto(authorInput(mounted.container)!, "Edited author");
 
     vi.mocked(client.metadata.read).mockResolvedValue({
-      title: "Second file's title",
+      title: "Second document's title",
     });
     act(() => {
-      latestOnFile?.(openedFile("second.docx"));
+      openDocument(openedFile("second.docx"));
     });
     await vi.waitFor(() => {
-      expect(titleInput(mounted.container)?.value).toBe("Second file's title");
+      expect(titleInput(mounted.container)?.value).toBe(
+        "Second document's title",
+      );
     });
     expect(authorInput(mounted.container)?.value).toBe("");
     mounted.unmount();
   });
 
-  it("does not carry a previous file's in-flight save state into the next file's Save button", async () => {
+  it("does not carry a previous document's in-flight save state into the next document's Save button", async () => {
     const client = createMockRpcClient();
     vi.mocked(client.metadata.read).mockResolvedValue({});
     let resolveWrite!: (
@@ -219,7 +215,7 @@ describe("MetadataPage", () => {
     const mounted = mountMetadataPage();
 
     act(() => {
-      latestOnFile?.(openedFile("first.docx"));
+      openDocument(openedFile("first.docx"));
     });
     await vi.waitFor(() => {
       expect(mounted.container.querySelector("table")).not.toBeNull();
@@ -232,7 +228,7 @@ describe("MetadataPage", () => {
     });
 
     act(() => {
-      latestOnFile?.(openedFile("second.docx"));
+      openDocument(openedFile("second.docx"));
     });
     await vi.waitFor(() => {
       expect(mounted.container.querySelector("table")).not.toBeNull();
@@ -254,7 +250,7 @@ describe("MetadataPage", () => {
     const mounted = mountMetadataPage();
 
     act(() => {
-      latestOnFile?.(openedFile("report.docx"));
+      openDocument(openedFile("report.docx"));
     });
     await vi.waitFor(() => {
       expect(mounted.container.querySelector("table")).not.toBeNull();
@@ -273,7 +269,7 @@ describe("MetadataPage", () => {
     const mounted = mountMetadataPage();
 
     act(() => {
-      latestOnFile?.(openedFile("report.docx"));
+      openDocument(openedFile("report.docx"));
     });
     await vi.waitFor(() => {
       expect(notifyError).toHaveBeenCalledWith(
@@ -292,7 +288,7 @@ describe("MetadataPage", () => {
     const mounted = mountMetadataPage();
 
     act(() => {
-      latestOnFile?.(openedFile("report.docx"));
+      openDocument(openedFile("report.docx"));
     });
     await vi.waitFor(() => {
       expect(mounted.container.querySelector("table")).not.toBeNull();
@@ -316,7 +312,7 @@ describe("MetadataPage", () => {
     const mounted = mountMetadataPage();
 
     act(() => {
-      latestOnFile?.(openedFile("report.docx"));
+      openDocument(openedFile("report.docx"));
     });
     await vi.waitFor(() => {
       expect(mounted.container.querySelector("table")).not.toBeNull();
@@ -356,7 +352,7 @@ describe("MetadataPage", () => {
     const mounted = mountMetadataPage();
 
     act(() => {
-      latestOnFile?.(openedFile("report.docx"));
+      openDocument(openedFile("report.docx"));
     });
     await vi.waitFor(() => {
       expect(mounted.container.querySelector("table")).not.toBeNull();

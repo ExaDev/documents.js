@@ -4,33 +4,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { OpenedFile } from "../ports/fileAccess";
 import { createMockRpcClient } from "../test/mockRpcClient";
-import { mountWithProviders } from "../test/mountComponent";
+import {
+  mountWithOpenDocument,
+  openDocument,
+  resetOpenDocumentCapture,
+} from "../test/openDocumentHarness";
 
 vi.mock("../rpc/client", () => ({ getRpcClient: vi.fn() }));
 
-// Stands in for the real FileUpload (already covered by its own dedicated test suite): InspectPage's own logic — auto-detecting a picked file's format and starting inspection immediately, or falling through to the format Select when detection fails — is what this file exercises.
-let latestOnFile: ((file: OpenedFile) => void) | undefined;
-let latestFormatHint: string | undefined;
-vi.mock("../ui/FileUpload", () => ({
-  FileUpload: (props: {
-    onFile: (file: OpenedFile) => void;
-    formatHint?: string;
-    file?: OpenedFile;
-    loading: boolean;
-  }) => {
-    latestOnFile = props.onFile;
-    latestFormatHint = props.formatHint;
-    return (
-      <div
-        data-testid="file-upload"
-        data-loading={String(props.loading)}
-        data-file-name={props.file?.name ?? ""}
-      />
-    );
-  },
-}));
-
-// Real Mantine Select renders as a text input with no accessible way to drive its dropdown without @testing-library/user-event — capturing its own props (as the mocked FileUpload above already does) lets this suite drive onChange directly, the same way it drives FileUpload's onFile.
+// Real Mantine Select renders as a text input with no accessible way to drive its dropdown without @testing-library/user-event — capturing its own props lets this suite drive onChange directly.
 let latestSelect:
   | {
       data: string[];
@@ -86,7 +68,7 @@ vi.mock("../ui/notify", () => ({
 }));
 
 const { getRpcClient } = await import("../rpc/client");
-const { Route } = await import("./inspect");
+const { Route } = await import("./_document.inspect");
 const InspectPage = Route.options.component!;
 
 function openedFile(name: string): OpenedFile {
@@ -94,27 +76,25 @@ function openedFile(name: string): OpenedFile {
 }
 
 function mountInspectPage() {
-  return mountWithProviders(<InspectPage />);
+  return mountWithOpenDocument(<InspectPage />);
 }
 
 afterEach(() => {
-  latestOnFile = undefined;
-  latestFormatHint = undefined;
+  resetOpenDocumentCapture();
   latestSelect = undefined;
   notifyError.mockReset();
   vi.mocked(getRpcClient).mockReset();
 });
 
 describe("InspectPage", () => {
-  it("renders the FileUpload with the joined format list once it loads, and no format alert, select, or result panel before anything is picked", async () => {
+  it("prompts to open a document, with no format alert, select, or result panel, before anything is open", () => {
     const client = createMockRpcClient();
-    vi.mocked(client.formats.list).mockResolvedValue(["pdf", "csv", "docx"]);
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountInspectPage();
 
-    await vi.waitFor(() => {
-      expect(latestFormatHint).toBe("pdf, csv, docx");
-    });
+    expect(mounted.container.textContent).toContain(
+      "Open a document above to inspect its structure.",
+    );
     expect(
       mounted.container.querySelector('[data-testid="format-select"]'),
     ).toBeNull();
@@ -127,8 +107,6 @@ describe("InspectPage", () => {
 
   it("auto-detects a recognised format and starts inspection immediately, surfacing the content-backed result", async () => {
     const client = createMockRpcClient();
-    // Deliberately not already alphabetical — proves the Select's own `data` is actually sorted, not just passed through in whatever order formats.list resolved with.
-    vi.mocked(client.formats.list).mockResolvedValue(["pdf", "docx"]);
     vi.mocked(client.pdf.inspect).mockResolvedValue({
       pageCount: 3,
       itemKindCounts: {},
@@ -138,7 +116,9 @@ describe("InspectPage", () => {
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountInspectPage();
 
-    latestOnFile?.(openedFile("report.pdf"));
+    act(() => {
+      openDocument(openedFile("report.pdf"));
+    });
     await vi.waitFor(() => {
       expect(
         mounted.container.querySelector('[data-testid="inspect-panel"]'),
@@ -157,18 +137,17 @@ describe("InspectPage", () => {
     );
     expect(diagnostics?.getAttribute("data-count")).toBe("0");
     expect(mounted.container.textContent).not.toContain("pick it below");
+    // The Select is always present once a document is open (mirroring Convert's own always-visible "From"), so a well-detected format can still be manually overridden — only the Alert is conditional on the format actually being unknown.
     const select = mounted.container.querySelector(
       '[data-testid="format-select"]',
     );
     expect(select).not.toBeNull();
-    expect(select?.getAttribute("data-options")).toBe("docx,pdf");
     expect(select?.getAttribute("data-value")).toBe("pdf");
     mounted.unmount();
   });
 
   it("converts a non-pdf source to pdf before inspecting it, carrying the conversion's own diagnostics through", async () => {
     const client = createMockRpcClient();
-    vi.mocked(client.formats.list).mockResolvedValue(["docx", "pdf"]);
     vi.mocked(client.convert).mockResolvedValue({
       document: { format: "pdf", bytes: new Uint8Array([9, 9]) },
       diagnostics: [
@@ -188,7 +167,9 @@ describe("InspectPage", () => {
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountInspectPage();
 
-    latestOnFile?.(openedFile("report.docx"));
+    act(() => {
+      openDocument(openedFile("report.docx"));
+    });
     await vi.waitFor(() => {
       expect(
         mounted.container.querySelector('[data-testid="inspect-panel"]'),
@@ -215,7 +196,9 @@ describe("InspectPage", () => {
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountInspectPage();
 
-    latestOnFile?.(openedFile("notes.xyz"));
+    act(() => {
+      openDocument(openedFile("notes.xyz"));
+    });
     await vi.waitFor(() => {
       expect(mounted.container.textContent).toContain(
         'Could not detect "notes.xyz"',
@@ -239,7 +222,7 @@ describe("InspectPage", () => {
     const mounted = mountInspectPage();
 
     act(() => {
-      latestOnFile?.(openedFile("notes.xyz"));
+      openDocument(openedFile("notes.xyz"));
     });
     const select = mounted.container.querySelector(
       '[data-testid="format-select"]',
@@ -260,7 +243,9 @@ describe("InspectPage", () => {
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountInspectPage();
 
-    latestOnFile?.(openedFile("notes.xyz"));
+    act(() => {
+      openDocument(openedFile("notes.xyz"));
+    });
     await vi.waitFor(() => {
       expect(latestSelect).toBeDefined();
     });
@@ -279,25 +264,23 @@ describe("InspectPage", () => {
     mounted.unmount();
   });
 
-  it("ignores an onChange of null, or one fired before any file is picked", async () => {
+  it("ignores a null onChange from the Select", async () => {
     const client = createMockRpcClient();
     vi.mocked(client.formats.list).mockResolvedValue(["docx", "pdf"]);
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountInspectPage();
 
-    await vi.waitFor(() => {
-      expect(latestFormatHint).toBeDefined();
+    act(() => {
+      openDocument(openedFile("notes.xyz"));
     });
-    latestSelect?.onChange("pdf");
-    expect(client.pdf.inspect).not.toHaveBeenCalled();
-
-    latestOnFile?.(openedFile("notes.xyz"));
     await vi.waitFor(() => {
       expect(
         mounted.container.querySelector('[data-testid="format-select"]'),
       ).not.toBeNull();
     });
-    latestSelect?.onChange(null);
+    act(() => {
+      latestSelect?.onChange(null);
+    });
     expect(client.pdf.inspect).not.toHaveBeenCalled();
     mounted.unmount();
   });
@@ -308,11 +291,15 @@ describe("InspectPage", () => {
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountInspectPage();
 
-    latestOnFile?.(openedFile("notes.xyz"));
+    act(() => {
+      openDocument(openedFile("notes.xyz"));
+    });
     await vi.waitFor(() => {
       expect(latestSelect).toBeDefined();
     });
-    latestSelect?.onChange("not-a-real-format");
+    act(() => {
+      latestSelect?.onChange("not-a-real-format");
+    });
     expect(client.pdf.inspect).not.toHaveBeenCalled();
     expect(client.convert).not.toHaveBeenCalled();
     mounted.unmount();
@@ -320,12 +307,13 @@ describe("InspectPage", () => {
 
   it("notifies when inspection rejects", async () => {
     const client = createMockRpcClient();
-    vi.mocked(client.formats.list).mockResolvedValue(["docx", "pdf"]);
     vi.mocked(client.pdf.inspect).mockRejectedValue(new Error("corrupt pdf"));
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountInspectPage();
 
-    latestOnFile?.(openedFile("report.pdf"));
+    act(() => {
+      openDocument(openedFile("report.pdf"));
+    });
     await vi.waitFor(() => {
       expect(notifyError).toHaveBeenCalledWith(
         "Could not inspect document",

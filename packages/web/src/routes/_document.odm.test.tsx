@@ -1,19 +1,17 @@
+import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { OpenedFile } from "../ports/fileAccess";
 import { createMockRpcClient } from "../test/mockRpcClient";
-import { mountWithProviders } from "../test/mountComponent";
+import {
+  mountWithOpenDocument,
+  openDocument,
+  resetOpenDocumentCapture,
+} from "../test/openDocumentHarness";
 
 vi.mock("../rpc/client", () => ({ getRpcClient: vi.fn() }));
 
-// Stands in for the real FileUpload (already covered by its own dedicated test suite): OdmPage's own logic — rendering against whichever chapters are on hand, replacing a re-picked chapter rather than duplicating it, and surfacing the unresolved-hrefs/error/rendered-PDF states — is what this file exercises. The two FileUpload instances are told apart by their own `accept` key, exactly as a real reader would tell them apart by which file type each one names.
-let latestMasterProps:
-  | {
-      onFile: (file: OpenedFile) => void;
-      accept: Record<string, string[]>;
-      file?: OpenedFile;
-    }
-  | undefined;
+// Stands in for the real FileUpload (already covered by its own dedicated test suite): OdmPage's own chapter-handling logic — rendering against whichever chapters are on hand, replacing a re-picked chapter rather than duplicating it — is what this file exercises. The master is now opened via the shared layout's own FileUpload (the openDocument harness), not this panel's own.
 let latestChapterProps:
   | {
       onFile: (file: OpenedFile) => void;
@@ -26,17 +24,7 @@ vi.mock("../ui/FileUpload", () => ({
     onFile: (file: OpenedFile) => void;
     accept: Record<string, string[]>;
     formatHint?: string;
-    file?: OpenedFile;
   }) => {
-    if ("application/vnd.oasis.opendocument.text-master" in props.accept) {
-      latestMasterProps = props;
-      return (
-        <div
-          data-testid="file-upload-master"
-          data-file-name={props.file?.name ?? ""}
-        />
-      );
-    }
     latestChapterProps = props;
     return (
       <div
@@ -55,7 +43,7 @@ vi.mock("../ui/notify", () => ({
 }));
 
 const { getRpcClient } = await import("../rpc/client");
-const { Route } = await import("./odm");
+const { Route } = await import("./_document.odm");
 const OdmPage = Route.options.component!;
 
 function openedFile(name: string): OpenedFile {
@@ -63,11 +51,11 @@ function openedFile(name: string): OpenedFile {
 }
 
 function mountOdmPage() {
-  return mountWithProviders(<OdmPage />);
+  return mountWithOpenDocument(<OdmPage />);
 }
 
 afterEach(() => {
-  latestMasterProps = undefined;
+  resetOpenDocumentCapture();
   latestChapterProps = undefined;
   notifyError.mockReset();
   vi.mocked(getRpcClient).mockReset();
@@ -75,27 +63,39 @@ afterEach(() => {
 });
 
 describe("OdmPage", () => {
-  it("renders both FileUploads, with no missing-chapters alert or rendered PDF, before anything is picked", () => {
+  it("prompts to open a master document, with no chapter upload, missing-chapters alert, or rendered PDF, before anything is open", () => {
     const client = createMockRpcClient();
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountOdmPage();
 
-    expect(
-      mounted.container.querySelector('[data-testid="file-upload-master"]'),
-    ).not.toBeNull();
-    expect(latestChapterProps?.formatHint).toBe(
-      "the linked chapter .odt files",
+    expect(mounted.container.textContent).toContain(
+      "Open an .odm master document above to render it.",
     );
-    expect(latestMasterProps?.accept).toEqual({
-      "application/vnd.oasis.opendocument.text-master": [".odm"],
-    });
-    expect(latestChapterProps?.accept).toEqual({
-      "application/vnd.oasis.opendocument.text": [".odt"],
-    });
+    expect(
+      mounted.container.querySelector('[data-testid="file-upload-chapter"]'),
+    ).toBeNull();
     expect(mounted.container.textContent).not.toContain(
       "Chapters still missing",
     );
     expect(mounted.container.querySelector("iframe")).toBeNull();
+    mounted.unmount();
+  });
+
+  it("shows the chapter upload, restricted to .odt, once a master is open", () => {
+    const client = createMockRpcClient();
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountOdmPage();
+
+    act(() => {
+      openDocument(openedFile("book.odm"));
+    });
+
+    expect(latestChapterProps?.formatHint).toBe(
+      "the linked chapter .odt files",
+    );
+    expect(latestChapterProps?.accept).toEqual({
+      "application/vnd.oasis.opendocument.text": [".odt"],
+    });
     mounted.unmount();
   });
 
@@ -110,7 +110,9 @@ describe("OdmPage", () => {
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
     const mounted = mountOdmPage();
 
-    latestMasterProps?.onFile(openedFile("book.odm"));
+    act(() => {
+      openDocument(openedFile("book.odm"));
+    });
     await vi.waitFor(() => {
       expect(mounted.container.querySelector("iframe")).not.toBeNull();
     });
@@ -138,14 +140,18 @@ describe("OdmPage", () => {
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
     const mounted = mountOdmPage();
 
-    latestMasterProps?.onFile(openedFile("book.odm"));
+    act(() => {
+      openDocument(openedFile("book.odm"));
+    });
     await vi.waitFor(() => {
       expect(vi.mocked(client.odm.render).mock.calls.length).toBe(1);
     });
 
-    latestChapterProps?.onFile({
-      bytes: new Uint8Array([1]),
-      name: "ch1.odt",
+    act(() => {
+      latestChapterProps?.onFile({
+        bytes: new Uint8Array([1]),
+        name: "ch1.odt",
+      });
     });
     await vi.waitFor(() => {
       expect(latestChapterProps?.formatHint).toBe(
@@ -158,9 +164,11 @@ describe("OdmPage", () => {
     ]);
 
     // A second, differently-named chapter must join the set rather than replace ch1.
-    latestChapterProps?.onFile({
-      bytes: new Uint8Array([2]),
-      name: "ch2.odt",
+    act(() => {
+      latestChapterProps?.onFile({
+        bytes: new Uint8Array([2]),
+        name: "ch2.odt",
+      });
     });
     await vi.waitFor(() => {
       // A real comma-space join, not a bare concatenation — proves the separator, not just that both names appear.
@@ -170,9 +178,11 @@ describe("OdmPage", () => {
     });
 
     // Re-picking ch1 with different bytes must replace only ch1, leaving ch2 untouched.
-    latestChapterProps?.onFile({
-      bytes: new Uint8Array([9, 9]),
-      name: "ch1.odt",
+    act(() => {
+      latestChapterProps?.onFile({
+        bytes: new Uint8Array([9, 9]),
+        name: "ch1.odt",
+      });
     });
     await vi.waitFor(() => {
       expect(vi.mocked(client.odm.render).mock.calls.length).toBe(4);
@@ -194,7 +204,9 @@ describe("OdmPage", () => {
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountOdmPage();
 
-    latestMasterProps?.onFile(openedFile("book.odm"));
+    act(() => {
+      openDocument(openedFile("book.odm"));
+    });
     await vi.waitFor(() => {
       expect(mounted.container.textContent).toContain("Chapters still missing");
     });
@@ -213,7 +225,9 @@ describe("OdmPage", () => {
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountOdmPage();
 
-    latestMasterProps?.onFile(openedFile("book.odm"));
+    act(() => {
+      openDocument(openedFile("book.odm"));
+    });
     await vi.waitFor(() => {
       expect(vi.mocked(client.odm.render).mock.calls.length).toBe(1);
     });
@@ -223,13 +237,44 @@ describe("OdmPage", () => {
     mounted.unmount();
   });
 
-  it("does not start a render when a chapter is picked before any master file", () => {
+  it("re-renders from a clean slate, dropping the previous master's chapters, when a new master is opened", async () => {
     const client = createMockRpcClient();
+    vi.mocked(client.odm.render).mockResolvedValue({
+      ok: true,
+      pdf: new Uint8Array([1]),
+    });
     vi.mocked(getRpcClient).mockReturnValue(client);
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:one");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
     const mounted = mountOdmPage();
 
-    latestChapterProps?.onFile(openedFile("ch1.odt"));
-    expect(client.odm.render).not.toHaveBeenCalled();
+    act(() => {
+      openDocument(openedFile("first.odm"));
+    });
+    await vi.waitFor(() => {
+      expect(vi.mocked(client.odm.render).mock.calls.length).toBe(1);
+    });
+    act(() => {
+      latestChapterProps?.onFile({
+        bytes: new Uint8Array([1]),
+        name: "ch1.odt",
+      });
+    });
+    await vi.waitFor(() => {
+      expect(vi.mocked(client.odm.render).mock.calls.length).toBe(2);
+    });
+
+    act(() => {
+      openDocument(openedFile("second.odm"));
+    });
+    await vi.waitFor(() => {
+      expect(vi.mocked(client.odm.render).mock.calls.length).toBe(3);
+    });
+    const thirdInput = vi.mocked(client.odm.render).mock.calls[2]![0];
+    expect(thirdInput.chapters).toEqual([]);
+    expect(latestChapterProps?.formatHint).toBe(
+      "the linked chapter .odt files",
+    );
     mounted.unmount();
   });
 
@@ -239,7 +284,9 @@ describe("OdmPage", () => {
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountOdmPage();
 
-    latestMasterProps?.onFile(openedFile("book.odm"));
+    act(() => {
+      openDocument(openedFile("book.odm"));
+    });
     await vi.waitFor(() => {
       expect(notifyError).toHaveBeenCalledWith(
         "Could not render master document",
