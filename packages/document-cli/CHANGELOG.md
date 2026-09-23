@@ -1,3 +1,22 @@
+## [5.12.13](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.12...document-cli%405.12.13) (2026-09-23)
+
+### Code Refactoring
+
+* **document-cli:** drop two redundant branches in file-picker.tsx ([df655e4](https://github.com/ExaDev/documents.js/commit/df655e4bbe8357dcf1acb58dc7c624e488102cd9))
+
+### Tests
+
+* **document-cli:** cover file-picker.tsx's browse, search, navigation and open/save/export flows ([aeb0c40](https://github.com/ExaDev/documents.js/commit/aeb0c40313de4e9d4d25a349f753fbc5fece19f8))
+* **document-cli:** cover file-picker.tsx's invariant throw and diagnostic forwarding ([8193a68](https://github.com/ExaDev/documents.js/commit/8193a6807948f1ce0d3356b1ece9038e6c6fb472))
+* **document-cli:** cover file-picker.tsx's trim() calls and per-purpose hints ([e58c7cf](https://github.com/ExaDev/documents.js/commit/e58c7cf9b4aaf84eee4ff6c8c9fa95d888bda859))
+* **document-cli:** prove file-picker.tsx's directory/file sort with a mocked readdirSync ([a427a45](https://github.com/ExaDev/documents.js/commit/a427a451582c86784214acb390871397717d304a))
+* **document-cli:** prove the files array excludes real directories in file-picker.tsx ([dffb645](https://github.com/ExaDev/documents.js/commit/dffb645b90d86275fe6a5ea9658019708afb6b45))
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.4
+
 ## [5.12.12](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.11...document-cli%405.12.12) (2026-09-23)
 
 

@@ -1,3 +1,15 @@
+## [14.4.4](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.3...documents.js%4014.4.4) (2026-09-23)
+
+### Tests
+
+* **documents.js:** kill svg read.ts's remaining diagnostic-detail and geometry-boundary survivors ([8650028](https://github.com/ExaDev/documents.js/commit/8650028fc81df4acd1186523e1dae802c533a948))
+* **documents.js:** kill svg read.ts's shape-geometry and diagnostic-detail survivors ([7f05251](https://github.com/ExaDev/documents.js/commit/7f05251b463b6df05dea97e97270ec882cca1303))
+
+
+### Dependencies
+
+- Updated ooxml.js to 12.2.8
+
 ## [14.4.3](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.2...documents.js%4014.4.3) (2026-09-23)
 
 
