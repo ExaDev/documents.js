@@ -46,7 +46,7 @@ export function routeHttpRequest(
   onMcpRequest();
 }
 
-export function serveHttp(
+export async function serveHttp(
   port: number,
   host: string,
 ): Promise<HttpServerBinding> {
