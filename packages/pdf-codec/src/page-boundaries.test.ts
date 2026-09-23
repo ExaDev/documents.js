@@ -40,6 +40,8 @@ describe("readPdf: crop box as the visible region", () => {
       widthPt: 20,
       heightPt: 10,
     });
+    // No /OC span wraps this rect, so it must carry no layer property at all, not one explicitly set to undefined.
+    expect(straddle).not.toHaveProperty("layer");
   });
 
   it("does not filter link annotations, which are anchored constructs rather than painted content", () => {
