@@ -44,7 +44,7 @@ describe("registerOperation", () => {
       title: "Echo",
       description: "Echoes its input back",
       inputSchema: z.object({ value: z.string() }),
-      run: (input) => Promise.resolve({ echoed: input.value }),
+      run: async (input) => Promise.resolve({ echoed: input.value }),
       ...overrides,
     };
   }
@@ -98,10 +98,11 @@ describe("registerOperation", () => {
     registerOperation(
       server,
       operationOf({
-        run: (input, context) => {
-          observedSignal = context?.signal;
-          return Promise.resolve({ echoed: input.value });
-        },
+        run: async (input, context) =>
+          new Promise((resolve) => {
+            observedSignal = context?.signal;
+            resolve({ echoed: input.value });
+          }),
       }),
     );
     await connect();
