@@ -12,6 +12,22 @@ import { flattenTree } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { fromPackageOperation } from "./from-package";
 
+/** Invalid lead bytes for UTF-8. */
+const INVALID_UTF8_LEAD_BYTE_1 = 0xff;
+const INVALID_UTF8_LEAD_BYTE_2 = 0xfe;
+
+/** The ASCII codes for '{' and '}', appended after the invalid lead bytes so the fixture also looks, at a glance, like it might open a JSON object. */
+const ASCII_OPEN_BRACE = 0x7b;
+const ASCII_CLOSE_BRACE = 0x7d;
+
+/** A byte sequence that fails UTF-8 decoding before any JSON parsing is attempted — the fixture `fromPackageOperation` needs to prove the raw-decode failure is reported distinctly from the "not valid JSON" wrapper. */
+const INVALID_UTF8_JSON_LOOKALIKE_BYTES = [
+  INVALID_UTF8_LEAD_BYTE_1,
+  INVALID_UTF8_LEAD_BYTE_2,
+  ASCII_OPEN_BRACE,
+  ASCII_CLOSE_BRACE,
+];
+
 async function captureRejection(promise: Promise<unknown>): Promise<unknown> {
   try {
     await promise;
@@ -23,7 +39,7 @@ async function captureRejection(promise: Promise<unknown>): Promise<unknown> {
 
 describe("fromPackageOperation", () => {
   it("propagates a raw decode failure for invalid UTF-8 bytes, distinct from the 'not valid JSON' wrapper", async () => {
-    const invalidUtf8 = new Uint8Array([0xff, 0xfe, 0x7b, 0x7d]);
+    const invalidUtf8 = new Uint8Array(INVALID_UTF8_JSON_LOOKALIKE_BYTES);
 
     await expect(
       fromPackageOperation.run({

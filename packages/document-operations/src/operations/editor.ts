@@ -38,6 +38,9 @@ const WRITABLE_FORMATS = [
 const WritableFormatSchema = z.enum(WRITABLE_FORMATS);
 type WritableFormat = z.infer<typeof WritableFormatSchema>;
 
+/** The deepest heading level docx/odt support — HTML/ODF both cap heading nesting at h1-h6. */
+const MAX_HEADING_LEVEL = 6;
+
 // Every field docx's and odt's own RunInit/ParagraphInit accept (identical shapes in both — see edit/docx/run.ts and edit/odt/run.ts), plus markdown's own divergent extras (hyperlink, code) validated as unsupported outside markdown below rather than silently dropped. There is deliberately no separate pptx/odp/ods/odg paragraph-append operation here: this first editor surface covers only the wordprocessing paragraph/run family (docx/odt/markdown) — slide/sheet/drawing editing is real remaining scope, tracked separately.
 const RunSchema = z.object({
   text: z.string().optional().describe("The run's own text content."),
@@ -74,7 +77,7 @@ const ParagraphSchema = z.object({
     .number()
     .int()
     .min(1)
-    .max(6)
+    .max(MAX_HEADING_LEVEL)
     .optional()
     .describe("docx/odt only."),
   alignment: z

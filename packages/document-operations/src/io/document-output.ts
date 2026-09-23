@@ -16,10 +16,20 @@ export const DocumentOutputSchema = z.object({
 
 export type DocumentOutput = z.infer<typeof DocumentOutputSchema>;
 
+/** Bytes per kibibyte, the base unit `LARGE_RESULT_THRESHOLD_BYTES` is derived from. */
+const BYTES_PER_KIBIBYTE = 1024;
+
+/** Bytes per mebibyte. */
+const BYTES_PER_MEBIBYTE = BYTES_PER_KIBIBYTE * BYTES_PER_KIBIBYTE;
+
+/** The threshold size, in mebibytes, above which an inline base64 result is flagged `large: true` — a reasonable default order of magnitude for "an LLM context probably wants to know before this lands inline", well under typical MCP stdio transport limits. */
+const LARGE_RESULT_THRESHOLD_MEBIBYTES = 5;
+
 /**
- * Above this many bytes, an inline base64 result is flagged `large: true` so a caller/LLM can see the response is sizeable before deciding whether to consume it directly. Purely advisory: `resolveDocumentOutput` never truncates or refuses to return large bytes, it only flags them — silently truncating a document would produce a corrupt file with no indication anything was lost. 5 MB is a reasonable default order of magnitude for "an LLM context probably wants to know before this lands inline", well under typical MCP stdio transport limits.
+ * Above this many bytes, an inline base64 result is flagged `large: true` so a caller/LLM can see the response is sizeable before deciding whether to consume it directly. Purely advisory: `resolveDocumentOutput` never truncates or refuses to return large bytes, it only flags them — silently truncating a document would produce a corrupt file with no indication anything was lost.
  */
-export const LARGE_RESULT_THRESHOLD_BYTES = 5 * 1024 * 1024;
+export const LARGE_RESULT_THRESHOLD_BYTES =
+  LARGE_RESULT_THRESHOLD_MEBIBYTES * BYTES_PER_MEBIBYTE;
 
 export interface WrittenDocumentOutput {
   readonly path: string;
