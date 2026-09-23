@@ -1,3 +1,24 @@
+## [14.4.6](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.5...documents.js%4014.4.6) (2026-09-23)
+
+### Code Refactoring
+
+* **documents.js:** encode layout.ts's script level as the boolean it is ([e021102](https://github.com/ExaDev/documents.js/commit/e021102b5cd5b616b2267f1ecb3a7a4b41a8ee21))
+* **documents.js:** hold the built p:presentation element directly in the pptx scaffold ([7fd3bb8](https://github.com/ExaDev/documents.js/commit/7fd3bb8185f658463953c6e755771f880266e99f))
+* **documents.js:** remove layout.ts branches only equivalent mutants reach ([82a499f](https://github.com/ExaDev/documents.js/commit/82a499f457c47d7b313b895841cc03c5c218bba0))
+* **documents.js:** resolve the notes-master insertion point through the shared tag helper ([287eebf](https://github.com/ExaDev/documents.js/commit/287eebf4dcb248182019e09ba9c2732db76a6163))
+
+### Tests
+
+* **documents.js:** cover hsqldb script.ts's quoting, identifier and literal gaps ([27aeffe](https://github.com/ExaDev/documents.js/commit/27aeffe4b56fe6a6e4e7ee00fef7f6c7f1f5b0e1))
+* **documents.js:** pin mathml layout.ts geometry against the real font ([fca48ae](https://github.com/ExaDev/documents.js/commit/fca48ae85fa7be275d27e1a612902ea732278f82))
+* **documents.js:** pin the empty pptx scaffold's exact package shape ([23fe44e](https://github.com/ExaDev/documents.js/commit/23fe44eb595755de78a24f0d874e45041c19ae50))
+* **documents.js:** pin the notes master's root tag, reordering and repeat-call behaviour ([573f41c](https://github.com/ExaDev/documents.js/commit/573f41c50db5ac9217a28edb37651cb95bb4da48))
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.2.14
+
 ## [14.4.5](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.4...documents.js%4014.4.5) (2026-09-23)
 
 
