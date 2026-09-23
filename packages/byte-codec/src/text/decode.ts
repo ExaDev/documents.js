@@ -15,6 +15,10 @@ import {
   type DbcsEncodingLabel,
 } from "./decode-dbcs";
 import {
+  decodeIso2022Jp,
+  type Iso2022JpEncodingLabel,
+} from "./decode-iso-2022-jp";
+import {
   LEGACY_SINGLE_BYTE_TABLES,
   type LegacySingleByteEncodingLabel,
 } from "./legacy-single-byte-tables";
@@ -24,7 +28,7 @@ import {
  *
  * Detection stays deliberately bounded to `"utf-8"`, `"utf-16le"`, `"utf-16be"`, `"utf-32le"`, `"utf-32be"` and `"windows-1252"`: each of those is either self-identifying through a byte order mark, structurally checkable through its own validity rules, or guessable behind a stated plausibility test, and nothing distinguishes one legacy code page from another, or from windows-1252, without the statistical model this module does not carry. Bytes that look like an undetected legacy encoding are refused rather than guessed at.
  *
- * {@link DecodeTextOptions.encoding} can name more than detection can reach, though: every {@link LegacySingleByteEncodingLabel} the WHATWG Encoding Standard defines is also accepted, for a caller who already knows their file's code page rather than asking this module to guess it (ExaDev/documents.js#1361), and so is every {@link DbcsEncodingLabel} — the standard's legacy multi-byte and double-byte CJK encodings, Shift_JIS, EUC-JP, EUC-KR, GBK, gb18030 and Big5, decoded against decode-dbcs.ts's own generated index tables for the same reason (ExaDev/documents.js#1388). ISO-2022-JP, the one legacy CJK encoding that is a genuine escape-sequence state machine rather than a byte-width decoder, is tracked as its own follow-on to #1388 rather than bundled in here.
+ * {@link DecodeTextOptions.encoding} can name more than detection can reach, though: every {@link LegacySingleByteEncodingLabel} the WHATWG Encoding Standard defines is also accepted, for a caller who already knows their file's code page rather than asking this module to guess it (ExaDev/documents.js#1361), and so is every {@link DbcsEncodingLabel} and {@link Iso2022JpEncodingLabel} — the standard's legacy multi-byte and double-byte CJK encodings, decoded against decode-dbcs.ts's own generated index tables, and ISO-2022-JP's own escape-sequence state machine in decode-iso-2022-jp.ts, for the same reason (ExaDev/documents.js#1388).
  */
 export type TextEncodingLabel =
   | "utf-8"
@@ -34,7 +38,8 @@ export type TextEncodingLabel =
   | "utf-32be"
   | "windows-1252"
   | LegacySingleByteEncodingLabel
-  | DbcsEncodingLabel;
+  | DbcsEncodingLabel
+  | Iso2022JpEncodingLabel;
 
 /**
  * How {@link decodeText} arrived at the encoding it used.
@@ -409,6 +414,7 @@ const DECODERS: Readonly<
   gbk: decodeGb18030,
   gb18030: decodeGb18030,
   big5: decodeBig5,
+  "iso-2022-jp": decodeIso2022Jp,
 };
 
 /** The text-versus-binary rule itself, over character codes: a NUL settles it outright, and every other C0 control outside {@link TEXTUAL_CONTROL_CODES} is allowed only up to one per {@link CODES_PER_PERMITTED_CONTROL}. Reading codes through an accessor rather than taking an array lets the identical rule run over a Uint8Array's bytes and over a decoded string's code units without copying either into one. */
