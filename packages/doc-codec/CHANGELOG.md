@@ -1,3 +1,9 @@
+## [6.1.0](https://github.com/ExaDev/documents.js/compare/doc-codec%406.0.3...doc-codec%406.1.0) (2026-09-23)
+
+### Features
+
+* **doc-codec:** report a dropped header column via onWarning ([b06f6d4](https://github.com/ExaDev/documents.js/commit/b06f6d46e848d768e0eacd026a56999c666f3e36))
+
 ## [6.0.3](https://github.com/ExaDev/documents.js/compare/doc-codec%406.0.2...doc-codec%406.0.3) (2026-09-22)
 
 ### Code Refactoring

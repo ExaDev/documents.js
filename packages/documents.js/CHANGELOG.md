@@ -1,3 +1,19 @@
+## [14.3.0](https://github.com/ExaDev/documents.js/compare/documents.js%4014.2.0...documents.js%4014.3.0) (2026-09-23)
+
+### Features
+
+* **documents.js:** report a dropped docx header column via onDiagnostic ([5b0563c](https://github.com/ExaDev/documents.js/commit/5b0563cab56dfcb0ffca313bba0d31a7202d459f))
+
+### Bug Fixes
+
+* **documents.js:** write a pptx table row's real height and a cell border's stroke style ([5f7572f](https://github.com/ExaDev/documents.js/commit/5f7572f11d7c5a0599a8d282c23eefcfa0dcbf37))
+
+
+### Dependencies
+
+- Updated doc-codec to 6.1.0
+- Updated ooxml.js to 12.1.0
+
 ## [14.2.0](https://github.com/ExaDev/documents.js/compare/documents.js%4014.1.1...documents.js%4014.2.0) (2026-09-22)
 
 ### Features
