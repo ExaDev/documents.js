@@ -30,7 +30,11 @@ for (const { label, heading } of REAL_TOOLS) {
     page,
   }) => {
     await page.goto("/");
-    await page.getByRole("link", { name: label }).click();
+    // Scoped to the sidebar <nav>, not a bare page-wide lookup: seven of these labels (every REAL_TOOLS entry nested under '/_document') now also appear a second time in that layout's own tab strip, which would otherwise make the locator ambiguous.
+    await page
+      .getByRole("navigation")
+      .getByRole("link", { name: label })
+      .click();
     await expect(page.getByRole("heading", { name: heading })).toBeVisible();
   });
 }
