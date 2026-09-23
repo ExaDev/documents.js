@@ -146,7 +146,38 @@ async function waitForTop(
 }
 
 describe("OdgShapeOrVectorDetailScreen", () => {
-  it("shows an item-not-found message and pops the screen on Escape when the item no longer exists", async () => {
+  it.each([
+    ["Escape", "\u001B"],
+    ["h", "h"],
+    ["the left arrow", "\u001B[D"],
+  ] as const)(
+    "shows an item-not-found message and pops the screen on %s when the item no longer exists",
+    async (_label, key) => {
+      const editor = createOdg();
+      editor.addPage();
+      const doc = openOdgDocument(editor);
+
+      const rendered = render(
+        <AppStateProvider>
+          <Harness
+            doc={doc}
+            target={{ kind: "shapeOrVectorDetail", pageIndex: 0, itemIndex: 0 }}
+          />
+        </AppStateProvider>,
+      );
+      const frame = await waitForTop(rendered, "shapeOrVectorDetail");
+      expect(frame).toContain("There is no item 0 on page 1 any more.");
+
+      rendered.stdin.write(key);
+      const after = await waitForFlatFrame(
+        rendered,
+        (candidate) => !candidate.includes("shapeOrVectorDetail"),
+      );
+      expect(after).toContain("top:pageList");
+    },
+  );
+
+  it("does nothing on an unrelated key while the item-not-found message is shown", async () => {
     const editor = createOdg();
     editor.addPage();
     const doc = openOdgDocument(editor);
@@ -159,15 +190,12 @@ describe("OdgShapeOrVectorDetailScreen", () => {
         />
       </AppStateProvider>,
     );
-    const frame = await waitForTop(rendered, "shapeOrVectorDetail");
-    expect(frame).toContain("There is no item 0 on page 1 any more.");
-
-    rendered.stdin.write("\u001B");
-    const after = await waitForFlatFrame(
-      rendered,
-      (candidate) => !candidate.includes("shapeOrVectorDetail"),
-    );
-    expect(after).toContain("top:pageList");
+    const before = await waitForTop(rendered, "shapeOrVectorDetail");
+    rendered.stdin.write("x");
+    await new Promise((resolve) => {
+      setTimeout(resolve, 50);
+    });
+    expect(flattenFrame(rendered.lastFrame())).toBe(before);
   });
 
   it("routes a vector item to VectorDetail with its own live handle and shows Fill/Stroke rows for a box vector", async () => {
@@ -218,10 +246,14 @@ describe("OdgShapeOrVectorDetailScreen", () => {
     expect(frame).toMatch(/Stroke: rgb\(0\.00, 0\.00, 0\.00\) 1\.0pt/);
   });
 
-  it("commits a new fill through SET_VECTOR_FILL when the Fill row is edited", async () => {
+  it("commits a new fill through SET_VECTOR_FILL when the Fill row is edited, over its own real pre-filled value", async () => {
     const editor = createOdg();
     const page = editor.addPage();
-    page.addRect({ frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 } });
+    page.addRect({
+      frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
+      fill: { r: 1, g: 0, b: 0 },
+      stroke: { color: { r: 0, g: 0, b: 1 }, widthPt: 2 },
+    });
     const doc = openOdgDocument(editor);
 
     const rendered = render(
@@ -232,15 +264,27 @@ describe("OdgShapeOrVectorDetailScreen", () => {
         />
       </AppStateProvider>,
     );
-    await waitForTop(rendered, "shapeOrVectorDetail");
-    // Fill is the first row.
+    const listFrame = await waitForTop(rendered, "shapeOrVectorDetail");
+    // Fill is the first (selected-by-default) row, Stroke the second: the ">" marker distinguishes which one, and each row's own real fill/stroke values back its label. flattenFrame collapses the unselected marker's own "  " down to a single space alongside any real line wrap, so the absence of "> " directly before "Stroke:" is what actually proves it, not an exact space count.
+    expect(listFrame).toMatch(/> Fill: rgb\(1\.00, 0\.00, 0\.00\)/);
+    expect(listFrame).toContain("Stroke: rgb(0.00, 0.00, 1.00) 2.0pt");
+    expect(listFrame).not.toContain("> Stroke:");
+
     rendered.stdin.write("\r");
-    await waitForFlatFrame(
+    const editFrame = await waitForFlatFrame(
       rendered,
       (candidate) =>
         !candidate.includes("Enter to edit a field, Esc to go back"),
     );
+    // The edit box's own starting value is the real currentValue built from vector.fill (buildVectorRows), not the field's own leftover React state from a previous edit — proves setDraft(row.currentValue) actually ran.
+    expect(editFrame).toContain("1 0 0");
     await settle();
+    let remainingChars = "1 0 0".length;
+    while (remainingChars > 0) {
+      rendered.stdin.write("\x7f");
+      await settle();
+      remainingChars -= 1;
+    }
     rendered.stdin.write("0.25 0.5 0.75");
     await settle();
     rendered.stdin.write("\r");
@@ -300,10 +344,19 @@ describe("OdgShapeOrVectorDetailScreen", () => {
         />
       </AppStateProvider>,
     );
-    await waitForTop(rendered, "shapeOrVectorDetail");
+    const listFrame = await waitForTop(rendered, "shapeOrVectorDetail");
+    // This rect has a stroke but no fill of its own, unlike the sibling "commits a new fill" test's fixture — together the two cover both the defined and the "none" label branch for each field.
+    expect(listFrame).toMatch(/Fill: none/);
     rendered.stdin.write("j");
     await settle();
     rendered.stdin.write("\r");
+    const editFrame = await waitForFlatFrame(
+      rendered,
+      (candidate) =>
+        !candidate.includes("Enter to edit a field, Esc to go back"),
+    );
+    // Proves buildVectorRows' own currentValue (built from vector.stroke) actually reached the edit box, not a leftover empty draft.
+    expect(editFrame).toContain("0 0 0 1");
     await settle();
     // Clear the pre-filled "0 0 0 1" currentValue down to empty, then submit.
     for (let step = 0; step < 8; step += 1) {
@@ -455,8 +508,17 @@ describe("OdgShapeOrVectorDetailScreen", () => {
         />
       </AppStateProvider>,
     );
-    await waitForTop(rendered, "shapeOrVectorDetail");
+    const listFrame = await waitForTop(rendered, "shapeOrVectorDetail");
+    // ">"/"  " distinguishes the selected row from any sibling; Text is the first (selected-by-default) row.
+    expect(listFrame).toContain("> Text: hello");
     rendered.stdin.write("\r");
+    const editFrame = await waitForFlatFrame(
+      rendered,
+      (candidate) =>
+        !candidate.includes("Enter to edit a field, Esc to go back"),
+    );
+    // Proves setDraft(row.currentValue) actually populated the edit box from the shape's own real text, not a leftover empty draft.
+    expect(editFrame).toContain("hello");
     await settle();
     let remainingChars = "hello".length;
     while (remainingChars > 0) {
@@ -614,6 +676,13 @@ describe("OdgShapeOrVectorDetailScreen", () => {
       await settle();
     }
     rendered.stdin.write("\r");
+    const editFrame = await waitForFlatFrame(
+      rendered,
+      (candidate) =>
+        !candidate.includes("Enter to edit a field, Esc to go back"),
+    );
+    // Proves the Rotation row's own currentValue ternary actually took its defined-value branch (String(shape.rotationDeg)), not a hardcoded "" regardless of whether a rotation is set.
+    expect(editFrame).toContain(String(shape.rotationDeg));
     await settle();
     for (let step = 0; step < rawRotationLength; step += 1) {
       rendered.stdin.write("\x7f");
