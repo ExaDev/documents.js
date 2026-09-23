@@ -1,10 +1,24 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  writeFileSync,
+  type Dirent,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Box, renderToString, Text } from "ink";
 import { render } from "ink-testing-library";
 import { useEffect, useRef, type ReactElement } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+} from "vitest";
 import { exportToPdf } from "../format/export-pdf.js";
 import { openDocumentAtPath, saveDocumentTo } from "../format/open-document.js";
 import {
@@ -27,6 +41,29 @@ function isOpenDocumentModule(value: unknown): value is {
     "saveDocumentTo" in value
   );
 }
+
+function isNodeFsModule(value: unknown): value is {
+  readdirSync: typeof readdirSync;
+} {
+  return typeof value === "object" && value !== null && "readdirSync" in value;
+}
+
+// Captured so afterEach can put the real implementation back after the one test below overrides it — every other test needs readdirSync to list a genuine temp directory. vi.hoisted rather than a plain top-level let/const: vi.mock's own factory is hoisted above every statement in this file, including a block-scoped declaration, which would otherwise throw a temporal-dead-zone ReferenceError the instant the hoisted factory tried to assign to it.
+const realReaddirSyncHolder = vi.hoisted<{
+  current: typeof readdirSync | undefined;
+}>(() => ({ current: undefined }));
+
+// Wraps the real readdirSync by default, so every test other than the one below still lists a genuine temp directory — only that one test overrides the return value to prove readEntries' own .sort(byName) calls actually reorder whatever the filesystem handed back, rather than relying on this OS's own readdir already returning entries alphabetically (APFS does, on this machine, which is exactly why a real-filesystem fixture alone can't distinguish "sorted by our code" from "already sorted by the OS").
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal();
+  if (!isNodeFsModule(actual)) {
+    throw new Error(
+      "node:fs mock: importOriginal() returned an unexpected shape",
+    );
+  }
+  realReaddirSyncHolder.current = actual.readdirSync;
+  return { ...actual, readdirSync: vi.fn(actual.readdirSync) };
+});
 
 vi.mock("../format/open-document.js", async (importOriginal) => {
   const actual = await importOriginal();
@@ -74,6 +111,9 @@ afterEach(() => {
   vi.mocked(openDocumentAtPath).mockReset();
   vi.mocked(saveDocumentTo).mockReset();
   vi.mocked(exportToPdf).mockReset();
+  if (realReaddirSyncHolder.current !== undefined) {
+    vi.mocked(readdirSync).mockImplementation(realReaddirSyncHolder.current);
+  }
 });
 
 // A minimal OpenDocument test double for the 'open' happy-path tests, where only .format/.path are ever read by the code under test (file-picker.tsx never touches .editor for a document it has just received from openDocumentAtPath). The cast is a deliberate, justified test fixture, not a production narrowing: constructing a genuinely valid MarkdownEditor here would exercise documents.js's real editor construction for no assertion this suite makes.
@@ -257,6 +297,34 @@ describe("FilePickerScreen", () => {
     // Files never carry the trailing "/" only a real directory's own isDirectory:true earns — proves the directory/file split itself (readEntries's own two filter() calls), not just the final ordering.
     expect(frame).not.toContain("aFile.md/");
     expect(frame).not.toContain("zFile.md/");
+  });
+
+  it("sorts each group alphabetically even when the filesystem itself returns entries out of order", async () => {
+    // APFS (this machine's own filesystem) already returns readdirSync entries alphabetically regardless of creation order, so a real-fixture test alone can never prove readEntries' own .sort(byName) calls do anything — mock readdirSync directly with entries in a deliberately scrambled order instead.
+    const fakeEntries: Dirent[] = [
+      { name: "zebra", isDirectory: () => true },
+      { name: "yankee.txt", isDirectory: () => false },
+      { name: "apple", isDirectory: () => true },
+      { name: "bravo.txt", isDirectory: () => false },
+    ] as unknown as Dirent[];
+    // readdirSync is overloaded on its `options` parameter; casting the mock itself to one concrete, non-overloaded signature sidesteps that overload resolution entirely, rather than needing Dirent's own Buffer-flavoured (and currently internal-use-only) type parameter just to satisfy vi.mocked's inferred call signature.
+    const mockedReaddirSync = readdirSync as unknown as Mock<
+      (path: string, options?: unknown) => Dirent[]
+    >;
+    mockedReaddirSync.mockReturnValue(fakeEntries);
+
+    const rendered = renderPicker("open", root);
+    const frame = await waitForBrowseMode(rendered);
+
+    const appleIndex = frame.indexOf("apple/");
+    const zebraIndex = frame.indexOf("zebra/");
+    const bravoIndex = frame.indexOf("bravo.txt");
+    const yankeeIndex = frame.indexOf("yankee.txt");
+
+    expect(appleIndex).toBeGreaterThanOrEqual(0);
+    expect(appleIndex).toBeLessThan(zebraIndex);
+    expect(zebraIndex).toBeLessThan(bravoIndex);
+    expect(bravoIndex).toBeLessThan(yankeeIndex);
   });
 
   it("shows no parent entry at the filesystem root, where dirname equals the directory itself", async () => {
