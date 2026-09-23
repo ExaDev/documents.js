@@ -7,7 +7,6 @@ export default packageLintConfig({
     "@typescript-eslint/consistent-return",
     "@typescript-eslint/no-shadow",
     "@typescript-eslint/switch-exhaustiveness-check",
-    "tsdoc/syntax",
   ],
   isomorphic: true,
   // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why — this package's own layout/compute passes genuinely mutate several array/object parameters in place. Tracked for burn-down.
