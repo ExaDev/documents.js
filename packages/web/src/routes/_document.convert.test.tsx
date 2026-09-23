@@ -7,7 +7,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { OpenedFile } from "../ports/fileAccess";
 import { createMockRpcClient } from "../test/mockRpcClient";
-import { mountWithProviders } from "../test/mountComponent";
+import {
+  mountWithOpenDocument,
+  openDocument,
+  resetOpenDocumentCapture,
+} from "../test/openDocumentHarness";
 import { setPendingReopen } from "../ui/reopenMailbox";
 
 vi.mock("../rpc/client", () => ({ getRpcClient: vi.fn() }));
@@ -23,21 +27,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   };
 });
 
-// Stands in for the real FileUpload (already covered by its own dedicated test suite): ConvertLayout's own logic — format detection/branch selection, the convert/download flows, and the URL-sync effect — is what this file exercises.
-let latestOnFile: ((file: OpenedFile) => void) | undefined;
-let latestFile: OpenedFile | undefined;
-vi.mock("../ui/FileUpload", () => ({
-  FileUpload: (props: {
-    onFile: (file: OpenedFile) => void;
-    file?: OpenedFile;
-  }) => {
-    latestOnFile = props.onFile;
-    latestFile = props.file;
-    return <div data-testid="file-upload" />;
-  },
-}));
-
-// Real Mantine Select renders as a text input with no accessible way to drive its dropdown without @testing-library/user-event — capturing its own props (as the mocked FileUpload above already does) lets this suite drive onChange directly, keyed by the Select's own label since ConvertLayout renders two ("From"/"To").
+// Real Mantine Select renders as a text input with no accessible way to drive its dropdown without @testing-library/user-event — capturing its own props lets this suite drive onChange directly, keyed by the Select's own label since ConvertLayout renders two ("From"/"To").
 interface CapturedSelect {
   data: unknown;
   value: string | null;
@@ -162,7 +152,7 @@ const {
   isSheetFormat,
   isSlidesFormat,
   isWordProcessingFormat,
-} = await import("./convert");
+} = await import("./_document.convert");
 const ConvertLayout = Route.options.component!;
 
 function openedFile(name: string): OpenedFile {
@@ -170,7 +160,7 @@ function openedFile(name: string): OpenedFile {
 }
 
 function mountConvertLayout() {
-  return mountWithProviders(<ConvertLayout />);
+  return mountWithOpenDocument(<ConvertLayout />);
 }
 
 function click(element: Element) {
@@ -239,8 +229,7 @@ function baseClient() {
 }
 
 afterEach(() => {
-  latestOnFile = undefined;
-  latestFile = undefined;
+  resetOpenDocumentCapture();
   latestSelects = {};
   inspectPanelCalls = [];
   currentParams = {};
@@ -252,15 +241,13 @@ afterEach(() => {
 });
 
 describe("ConvertLayout", () => {
-  it("renders only the FileUpload before anything is picked, with To disabled until a source exists", () => {
+  it("prompts to open a document before anything is open, with To disabled until a source exists", () => {
     vi.mocked(getRpcClient).mockReturnValue(baseClient());
     const mounted = mountConvertLayout();
-    expect(
-      mounted.container.querySelector('[data-testid="file-upload"]'),
-    ).not.toBeNull();
-    expect(convertButton(mounted.container).disabled).toBe(true);
+    expect(mounted.container.textContent).toContain(
+      "Open a document above to convert it.",
+    );
     expect(mounted.container.textContent).not.toContain("Could not detect");
-    expect(latestSelects.To?.disabled).toBe(true);
     mounted.unmount();
   });
 
@@ -269,7 +256,7 @@ describe("ConvertLayout", () => {
     const mounted = mountConvertLayout();
 
     act(() => {
-      latestOnFile?.(openedFile("a.docx"));
+      openDocument(openedFile("a.docx"));
     });
     await vi.waitFor(() => {
       expect(latestSelects.To?.data).not.toEqual([]);
@@ -286,7 +273,7 @@ describe("ConvertLayout", () => {
     const mounted = mountConvertLayout();
 
     act(() => {
-      latestOnFile?.(openedFile("notes.xyz"));
+      openDocument(openedFile("notes.xyz"));
     });
 
     expect(mounted.container.textContent).toContain(
@@ -357,7 +344,7 @@ describe("ConvertLayout", () => {
       const mounted = mountConvertLayout();
 
       act(() => {
-        latestOnFile?.(openedFile(sourceFile));
+        openDocument(openedFile(sourceFile));
       });
       expect(latestSelects.From?.value).toBe(source);
       expect(mounted.container.textContent).not.toContain("Could not detect");
@@ -429,7 +416,7 @@ describe("ConvertLayout", () => {
     const mounted = mountConvertLayout();
 
     act(() => {
-      latestOnFile?.(openedFile("a.docx"));
+      openDocument(openedFile("a.docx"));
     });
     await vi.waitFor(() => {
       expect(latestSelects.From?.data).not.toEqual([]);
@@ -461,7 +448,7 @@ describe("ConvertLayout", () => {
     const mounted = mountConvertLayout();
 
     act(() => {
-      latestOnFile?.(openedFile("a.docx"));
+      openDocument(openedFile("a.docx"));
     });
     expect(latestSelects.From?.description).toBe("Detected from file");
 
@@ -482,7 +469,7 @@ describe("ConvertLayout", () => {
     const mounted = mountConvertLayout();
 
     act(() => {
-      latestOnFile?.(openedFile("a.docx"));
+      openDocument(openedFile("a.docx"));
     });
     act(() => {
       latestSelects.To?.onChange("pdf");
@@ -495,7 +482,7 @@ describe("ConvertLayout", () => {
     });
 
     act(() => {
-      latestOnFile?.(openedFile("notes.xyz"));
+      openDocument(openedFile("notes.xyz"));
     });
 
     expect(
@@ -504,13 +491,47 @@ describe("ConvertLayout", () => {
     mounted.unmount();
   });
 
-  it("never prefetches original content for a file whose extension is unrecognised", () => {
+  it("resets source/target/the previous conversion when a different document is opened while this tab is already mounted", async () => {
+    const client = baseClient();
+    vi.mocked(client.convert).mockResolvedValue({
+      document: { format: "pdf", bytes: new Uint8Array([1]) },
+      diagnostics: [],
+    });
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountConvertLayout();
+
+    act(() => {
+      openDocument(openedFile("a.docx"));
+    });
+    act(() => {
+      latestSelects.To?.onChange("pdf");
+    });
+    click(convertButton(mounted.container));
+    await vi.waitFor(() => {
+      expect(
+        mounted.container.querySelector('[data-testid="diagnostics-panel"]'),
+      ).not.toBeNull();
+    });
+
+    act(() => {
+      openDocument(openedFile("b.xlsx"));
+    });
+
+    expect(latestSelects.From?.value).toBe("xlsx");
+    expect(latestSelects.To?.value).toBeNull();
+    expect(
+      mounted.container.querySelector('[data-testid="diagnostics-panel"]'),
+    ).toBeNull();
+    mounted.unmount();
+  });
+
+  it("never prefetches original content for a document whose extension is unrecognised", () => {
     const client = baseClient();
     vi.mocked(getRpcClient).mockReturnValue(client);
     const mounted = mountConvertLayout();
 
     act(() => {
-      latestOnFile?.(openedFile("notes.xyz"));
+      openDocument(openedFile("notes.xyz"));
     });
 
     expect(client.content.read).not.toHaveBeenCalled();
@@ -525,7 +546,7 @@ describe("ConvertLayout", () => {
     const mounted = mountConvertLayout();
 
     act(() => {
-      latestOnFile?.(openedFile("a.docx"));
+      openDocument(openedFile("a.docx"));
     });
     act(() => {
       latestSelects.To?.onChange("pdf");
@@ -554,7 +575,7 @@ describe("ConvertLayout", () => {
     const mounted = mountConvertLayout();
 
     act(() => {
-      latestOnFile?.(openedFile("a.md"));
+      openDocument(openedFile("a.md"));
     });
     await vi.waitFor(() => {
       // The original-side prefetch (source=markdown) already calls content.read once.
@@ -585,7 +606,7 @@ describe("ConvertLayout", () => {
     const mounted = mountConvertLayout();
 
     act(() => {
-      latestOnFile?.(openedFile("a.docx"));
+      openDocument(openedFile("a.docx"));
     });
     act(() => {
       latestSelects.To?.onChange("pdf");
@@ -618,7 +639,7 @@ describe("ConvertLayout", () => {
     const mounted = mountConvertLayout();
 
     act(() => {
-      latestOnFile?.(openedFile("a.docx"));
+      openDocument(openedFile("a.docx"));
     });
     act(() => {
       latestSelects.To?.onChange("pdf");
@@ -646,7 +667,7 @@ describe("ConvertLayout", () => {
     const mounted = mountConvertLayout();
 
     act(() => {
-      latestOnFile?.(openedFile("a.docx"));
+      openDocument(openedFile("a.docx"));
     });
     expect(navigate).not.toHaveBeenCalled();
 
@@ -663,8 +684,9 @@ describe("ConvertLayout", () => {
     mounted.unmount();
   });
 
-  it("seeds source and target from the route params on first mount", () => {
+  it("seeds source and target from the route params on first mount, taking priority over the open document's own detected format", () => {
     currentParams = { source: "docx", target: "pdf" };
+    setPendingReopen({ file: openedFile("reopened.xlsx"), format: "xlsx" });
     vi.mocked(getRpcClient).mockReturnValue(baseClient());
     const mounted = mountConvertLayout();
 
@@ -673,17 +695,17 @@ describe("ConvertLayout", () => {
     mounted.unmount();
   });
 
-  it("seeds the file and source from a pending Recent Files reopen", () => {
+  it("seeds source from a document already open when this tab is first reached (e.g. a Recent Files reopen)", () => {
     setPendingReopen({ file: openedFile("reopened.docx"), format: "docx" });
     vi.mocked(getRpcClient).mockReturnValue(baseClient());
     const mounted = mountConvertLayout();
 
-    expect(latestFile?.name).toBe("reopened.docx");
     expect(latestSelects.From?.value).toBe("docx");
+    expect(latestSelects.From?.description).toBe("Detected from file");
     mounted.unmount();
   });
 
-  it("downloads the converted bytes under the source file's own basename plus the target extension", async () => {
+  it("downloads the converted bytes under the source document's own basename plus the target extension", async () => {
     const client = baseClient();
     const convertedBytes = new Uint8Array([7, 7, 7]);
     vi.mocked(client.convert).mockResolvedValue({
@@ -695,7 +717,7 @@ describe("ConvertLayout", () => {
     const mounted = mountConvertLayout();
 
     act(() => {
-      latestOnFile?.(openedFile("report.final.docx"));
+      openDocument(openedFile("report.final.docx"));
     });
     act(() => {
       latestSelects.To?.onChange("pdf");
@@ -729,7 +751,7 @@ describe("ConvertLayout", () => {
     const mounted = mountConvertLayout();
 
     act(() => {
-      latestOnFile?.(openedFile("a.docx"));
+      openDocument(openedFile("a.docx"));
     });
     act(() => {
       latestSelects.To?.onChange("pdf");
@@ -756,7 +778,7 @@ describe("ConvertLayout", () => {
     const mounted = mountConvertLayout();
 
     act(() => {
-      latestOnFile?.(openedFile("a.pdf"));
+      openDocument(openedFile("a.pdf"));
     });
     await vi.waitFor(() => {
       expect(client.pdf.inspect).toHaveBeenCalled();
@@ -786,7 +808,7 @@ describe("ConvertLayout", () => {
     const mounted = mountConvertLayout();
 
     act(() => {
-      latestOnFile?.(openedFile("a.docx"));
+      openDocument(openedFile("a.docx"));
     });
     await vi.waitFor(() => {
       expect(client.content.read).toHaveBeenCalled();
