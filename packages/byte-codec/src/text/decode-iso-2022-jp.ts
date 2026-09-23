@@ -4,6 +4,7 @@
 
 import { fromCodeUnits, UndecodableTextError } from "./decode";
 import { JIS0208 } from "./dbcs-tables";
+import { pointerCodePoint } from "./decode-dbcs";
 
 /** ISO-2022-JP's own label — its own union member, kept apart from {@link DbcsEncodingLabel} in decode-dbcs.ts, for the reason this file's own header comment gives. */
 export type Iso2022JpEncodingLabel = "iso-2022-jp";
@@ -149,8 +150,8 @@ export function decodeIso2022Jp(bytes: Uint8Array): string {
           (leadingByte - JIS0208_INDEX_BYTE_MIN) * JIS0208_INDEX_COLUMNS +
           byte -
           JIS0208_INDEX_BYTE_MIN;
-        const codePoint = JIS0208[pointer];
-        if (codePoint === undefined || codePoint === -1) {
+        const codePoint = pointerCodePoint(JIS0208, pointer);
+        if (codePoint === undefined) {
           malformed(
             `has no character for lead byte 0x${leadingByte.toString(16)} trail byte 0x${byte.toString(16)}`,
           );

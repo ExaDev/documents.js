@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decodeText, UndecodableTextError } from "./decode";
+import { pointerCodePoint } from "./decode-dbcs";
 import { JIS0208 } from "./dbcs-tables";
 
 /**
@@ -65,8 +66,8 @@ describe("decodeText ISO-2022-JP", () => {
 
   it("decodes every defined JIS X 0208 pointer from a fresh designator switch", () => {
     for (let pointer = 0; pointer <= MAX_REACHABLE_POINTER; pointer += 1) {
-      const codePoint = JIS0208[pointer];
-      if (codePoint === undefined || codePoint === -1) {
+      const codePoint = pointerCodePoint(JIS0208, pointer);
+      if (codePoint === undefined) {
         continue;
       }
       expect(
@@ -80,8 +81,8 @@ describe("decodeText ISO-2022-JP", () => {
     const platform = new TextDecoder("iso-2022-jp", { fatal: true });
     let sampled = 0;
     for (let pointer = 0; pointer <= MAX_REACHABLE_POINTER; pointer += 37) {
-      const codePoint = JIS0208[pointer];
-      if (codePoint === undefined || codePoint === -1) {
+      const codePoint = pointerCodePoint(JIS0208, pointer);
+      if (codePoint === undefined) {
         continue;
       }
       const bytes = Uint8Array.from(jis0208BytesForPointer(pointer));
@@ -214,7 +215,7 @@ describe("decodeText ISO-2022-JP", () => {
 
   it("rejects a trailing byte just below the JIS X 0208 index band even when the pointer arithmetic would otherwise wrap onto a real, defined pointer belonging to the row below", () => {
     // Lead byte 0x21 alone (the lowest valid lead byte) can only wrap a too-low trailing byte to a negative pointer, nothing to land on; lead byte 0x22 can, since 0x22's own row starts immediately after 0x21's — the same risk decode-dbcs.test.ts checks for its own two-byte decoders' shared trailing-byte helper.
-    expect(JIS0208[93]).not.toBe(-1);
+    expect(pointerCodePoint(JIS0208, 93)).not.toBeUndefined();
     expectMalformed(
       () => decodeIso2022Jp([0x1b, 0x24, 0x42, 0x22, 0x20]),
       "ISO-2022-JP",
@@ -225,7 +226,7 @@ describe("decodeText ISO-2022-JP", () => {
   it("throws when a JIS X 0208 lead and trailing byte pair to an undefined pointer", () => {
     // Pointer 5734 (bytes 0x7E 0x7E): a real JIS X 0208 gap, confirmed against the generated table directly rather than assumed.
     const pointer = (0x7e - 0x21) * 94 + (0x7e - 0x21);
-    expect(JIS0208[pointer]).toBe(-1);
+    expect(pointerCodePoint(JIS0208, pointer)).toBeUndefined();
     expectMalformed(
       () => decodeIso2022Jp([0x1b, 0x24, 0x42, 0x7e, 0x7e]),
       "ISO-2022-JP",
