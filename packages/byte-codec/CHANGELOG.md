@@ -1,3 +1,9 @@
+## [1.10.1](https://github.com/ExaDev/documents.js/compare/byte-codec%401.10.0...byte-codec%401.10.1) (2026-09-23)
+
+### Bug Fixes
+
+* **byte-codec:** type onWarning test mocks to genuinely return void ([08cc1c4](https://github.com/ExaDev/documents.js/commit/08cc1c49d71f36562396e7547bc76c174dc97735)), references [ExaDev/documents.js#1275](https://github.com/ExaDev/documents.js/issues/1275)
+
 ## [1.10.0](https://github.com/ExaDev/documents.js/compare/byte-codec%401.9.0...byte-codec%401.10.0) (2026-09-23)
 
 ### Features

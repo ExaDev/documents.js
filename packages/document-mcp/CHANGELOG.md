@@ -1,3 +1,18 @@
+## [4.14.62](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.61...document-mcp%404.14.62) (2026-09-23)
+
+### Bug Fixes
+
+* **document-mcp:** mark every Promise-returning function async ([f2d513a](https://github.com/ExaDev/documents.js/commit/f2d513adaf63b59adb7f86ebd612e0e678b9edb7)), references [ExaDev/documents.js#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **document-mcp:** stop implying a value out of void test callbacks ([f6adf49](https://github.com/ExaDev/documents.js/commit/f6adf49fecbbac52fc2c2a7015553122536d7d0a)), references [ExaDev/documents.js#1275](https://github.com/ExaDev/documents.js/issues/1275) [#1427](https://github.com/ExaDev/documents.js/issues/1427)
+
+
+### Dependencies
+
+- Updated odf.js to 11.1.3
+- Updated wpd-codec to 5.1.5
+- Updated documents.js to 14.3.7
+- Updated document-operations to 1.1.60
+
 ## [4.14.61](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.60...document-mcp%404.14.61) (2026-09-23)
 
 
