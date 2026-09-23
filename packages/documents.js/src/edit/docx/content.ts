@@ -33,6 +33,11 @@ import type { DocxBody } from "./editor";
 import { DocxEditor } from "./editor";
 import { createEmptyDocxPackage } from "./scaffold";
 import {
+  NOOP_DOCX_WRITE_DIAGNOSTIC_SINK,
+  DocxWriteDiagnosticCodes,
+  type DocxWriteDiagnosticSink,
+} from "./diagnostics";
+import {
   buildNumberingRoot,
   declaration as numberingDeclaration,
   NUMBERING_CONTENT_TYPE,
@@ -52,6 +57,8 @@ export interface BuildDocxPackageOptions {
     context: { readonly sourcePath?: string },
   ) => void;
   readonly clock?: ClockPort;
+  // This write path's own general degrade channel (ExaDev/documents.js#1398), kept separate from onMathDiagnostic's shared OMML-specific one; see diagnostics.ts's own module comment for why the two stay apart. Defaults to NOOP_DOCX_WRITE_DIAGNOSTIC_SINK, the same discard-everything default every sink in this family uses when a caller supplies none.
+  readonly onDiagnostic?: DocxWriteDiagnosticSink;
 }
 
 // ContentDocument -> a fresh docx Package, built entirely through the same edit/docx/* live-view primitives a caller would use by hand — the write-side counterpart to src/ooxml/docx/read.ts's readDocxContent. Used by the PDF->docx conversion path (src/layout/reconstruct.ts's output never contains a ContentTable, since PDF table reconstruction degrades to tab-separated text), but written to handle the full ContentBlock union for any other caller that wants a ContentDocument turned into real docx bytes. Constructs its own package directly (createEmptyDocxPackage + DocxEditor) rather than calling createDocx(), since createDocx() always starts metadata from {} — this function needs the SOURCE content's own metadata to reach resolveMetadataTimestamps, not an empty object.
@@ -381,8 +388,35 @@ function docxRowCells(
   });
 }
 
-function appendTable(body: DocxBody, block: ContentTable): void {
+// A column's own isHeader (ContentTableColumn, ExaDev/documents.js#1381) is reported through onDiagnostic rather than written: w:tblGrid has no header-column marker at all, so the column's own cells are written exactly like any other column and only the flag is dropped. Reported once per flagged column, naming its index, matching ooxml.js's own buildDocxPackageFromContent and documents.js's own pptx TABLE_HEADER_COLUMN_DROPPED precedent (src/edit/pptx/content.ts) for the identical field.
+function reportDroppedHeaderColumns(
+  block: ContentTable,
+  onDiagnostic: DocxWriteDiagnosticSink,
+): void {
+  block.columns.forEach((column, columnIndex) => {
+    if (column.isHeader === true) {
+      onDiagnostic(
+        {
+          code: DocxWriteDiagnosticCodes.TABLE_HEADER_COLUMN_DROPPED,
+          severity: "warning",
+          message: `buildDocxPackage: table column ${String(columnIndex)} is a header column, and that is dropped; w:tblGrid has no header-column marker, so the column is written exactly as any other`,
+        },
+        { sourcePath: block.sourcePath },
+      );
+    }
+  });
+}
+
+function appendTable(
+  body: DocxBody,
+  block: ContentTable,
+  options: BuildDocxPackageOptions | undefined,
+): void {
   assertTableObeysGridRule(block, "buildDocxPackage");
+  reportDroppedHeaderColumns(
+    block,
+    options?.onDiagnostic ?? NOOP_DOCX_WRITE_DIAGNOSTIC_SINK,
+  );
   // A table with no rows has no row to carry a grid and no fault for the check above to report, and dropping it would lose it without a trace; ODF, the other word-processing target, requires at least one row, so it is refused here too rather than written by one format and not the other.
   if (block.rows.length === 0) {
     throw new Error(
@@ -449,7 +483,7 @@ function appendBlock(
   } else if (block.kind === "pageBreak") {
     body.appendPageBreak();
   } else if (block.kind === "table") {
-    appendTable(body, block);
+    appendTable(body, block, options);
   } else if (block.kind === "embeddedObject") {
     appendEmbeddedObject(body, block, options);
   } else if (block.kind === "constructStart") {
