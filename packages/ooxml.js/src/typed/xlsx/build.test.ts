@@ -506,6 +506,18 @@ function styleSheetOf(pkg: Package): XmlElement {
   return styles;
 }
 
+// The <cellXfs><xf> a written cell's own `s` attribute resolves to — never cellXfs's first child, which is the table's own reserved default entry (always seeded at index 0 regardless of whether any cell uses it) rather than necessarily the cell being asked about.
+function cellXfFor(pkg: Package, reference: string): XmlElement {
+  const index = Number(attributeOf(writtenCell(pkg, reference), "s") ?? "0");
+  const xf = elementsOf(requireChild(styleSheetOf(pkg), "cellXfs"), "xf")[
+    index
+  ];
+  if (xf === undefined) {
+    throw new Error(`expected a <cellXfs><xf> at index ${index}`);
+  }
+  return xf;
+}
+
 // Every written cell of the first worksheet, keyed by its own A1 reference.
 function writtenCells(pkg: Package): Map<string, XmlElement> {
   const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
@@ -4397,5 +4409,413 @@ describe("buildXlsxPackageFromContent: bottom alignment and the exact minimal ov
       "/docProps/core.xml",
       "/docProps/app.xml",
     ]);
+  });
+});
+
+// Every build below constructs its own package inside its own it(), deliberately never sharing a describe-scoped const the way most of this file's other suites do: a describe body's own top-level statements run once during vitest's collection phase, before any individual test starts, so per-test mutation-coverage analysis cannot attribute that collection-time call to any specific it() — a mutation in code reached only that way can show up as a false survivor even though the assertions below it would catch the exact same change if coverage were attributed correctly. Isolating each build inside its own it() sidesteps that attribution gap entirely, on top of pinning several xl/styles.xml and docProps facts (dc:title/dc:creator/cp:keywords text, the printOptions flags) this file never asserted directly anywhere else.
+describe("buildXlsxPackageFromContent: xl/styles.xml and docProps facts pinned inside isolated per-test builds", () => {
+  it("omits <numFmts> entirely for a workbook needing no custom number format", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "plain" },
+          displayText: "plain",
+        },
+      ]),
+    );
+    const styles = styleSheetOf(pkg);
+    expect(childElement(styles, "numFmts")).toBeUndefined();
+    const xf = requireChild(requireChild(styles, "cellXfs"), "xf");
+    expect(attributeOf(xf, "numFmtId")).toBe("0");
+    expect(attributeOf(xf, "applyNumberFormat")).toBeUndefined();
+  });
+
+  it("keeps the reserved none/gray125 fills as a bare <patternFill patternType> with no fgColor/bgColor children", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "plain" },
+          displayText: "plain",
+        },
+      ]),
+    );
+    const fills = elementsOf(requireChild(styleSheetOf(pkg), "fills"), "fill");
+    const none = fills[0];
+    const gray125 = fills[1];
+    if (none === undefined || gray125 === undefined) {
+      throw new Error("expected the two reserved <fill> entries");
+    }
+    const nonePatternFill = requireChild(none, "patternFill");
+    expect(attributeOf(nonePatternFill, "patternType")).toBe("none");
+    expect(nonePatternFill.children).toHaveLength(0);
+    const gray125PatternFill = requireChild(gray125, "patternFill");
+    expect(attributeOf(gray125PatternFill, "patternType")).toBe("gray125");
+    expect(gray125PatternFill.children).toHaveLength(0);
+  });
+
+  it("writes a border's four edges and its always-bare diagonal in the fixed left/right/top/bottom/diagonal order, leaving an unset edge bare", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "bordered" },
+          displayText: "bordered",
+          borders: { top: { color: { r: 0, g: 1, b: 0 }, widthPt: 1.5 } },
+        },
+      ]),
+    );
+    const styles = styleSheetOf(pkg);
+    const border = elementsOf(requireChild(styles, "borders"), "border")[1];
+    if (border === undefined) {
+      throw new Error("expected the interned <border> at index 1");
+    }
+    expect(
+      border.children
+        .filter((node): node is XmlElement => node.type === "element")
+        .map((node) => node.tag),
+    ).toEqual(["left", "right", "top", "bottom", "diagonal"]);
+    const left = requireChild(border, "left");
+    expect(attributeOf(left, "style")).toBeUndefined();
+    expect(childElement(left, "color")).toBeUndefined();
+    const top = requireChild(border, "top");
+    expect(attributeOf(top, "style")).toBeDefined();
+    expect(childElement(top, "color")).toBeDefined();
+  });
+
+  it("writes no bold/italic/strike/underline/colour element on a font with none of those set", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "plain" },
+          displayText: "plain",
+        },
+      ]),
+    );
+    const font = requireChild(requireChild(styleSheetOf(pkg), "fonts"), "font");
+    expect(childElement(font, "b")).toBeUndefined();
+    expect(childElement(font, "i")).toBeUndefined();
+    expect(childElement(font, "strike")).toBeUndefined();
+    expect(childElement(font, "u")).toBeUndefined();
+    expect(childElement(font, "color")).toBeUndefined();
+  });
+
+  it("writes every bold/italic/strike/underline/colour element on a font with all of them set", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "decorated" },
+          displayText: "decorated",
+          font: {
+            bold: true,
+            italic: true,
+            strike: true,
+            underline: true,
+            color: { r: 0, g: 1, b: 0 },
+          },
+        },
+      ]),
+    );
+    const styles = styleSheetOf(pkg);
+    const font = elementsOf(requireChild(styles, "fonts"), "font")[1];
+    if (font === undefined) {
+      throw new Error("expected the decorated <font> at index 1");
+    }
+    expect(childElement(font, "b")).toBeDefined();
+    expect(childElement(font, "i")).toBeDefined();
+    expect(childElement(font, "strike")).toBeDefined();
+    const underline = requireChild(font, "u");
+    expect(attributeOf(underline, "val")).toBe("single");
+    const color = requireChild(font, "color");
+    expect(attributeOf(color, "rgb")).toBe("FF00ff00");
+  });
+
+  it("writes the reserved cellXfs xfId as the literal string zero", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "plain" },
+          displayText: "plain",
+        },
+      ]),
+    );
+    expect(attributeOf(cellXfFor(pkg, "A1"), "xfId")).toBe("0");
+  });
+
+  it("sets applyNumberFormat only on an xf whose numFmtId is not the General one, and always to the literal true spelling", () => {
+    const generalPkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "plain" },
+          displayText: "plain",
+        },
+      ]),
+    );
+    expect(
+      attributeOf(cellXfFor(generalPkg, "A1"), "applyNumberFormat"),
+    ).toBeUndefined();
+
+    const customFormatPkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "boolean", value: true },
+          displayText: "TRUE",
+        },
+      ]),
+    );
+    expect(
+      attributeOf(cellXfFor(customFormatPkg, "A1"), "applyNumberFormat"),
+    ).toBe("true");
+  });
+
+  it("sets applyFont only on an xf whose fontId is not the default font", () => {
+    const defaultFontPkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "plain" },
+          displayText: "plain",
+        },
+      ]),
+    );
+    expect(
+      attributeOf(cellXfFor(defaultFontPkg, "A1"), "applyFont"),
+    ).toBeUndefined();
+
+    const customFontPkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "styled" },
+          displayText: "styled",
+          font: { bold: true },
+        },
+      ]),
+    );
+    expect(attributeOf(cellXfFor(customFontPkg, "A1"), "applyFont")).toBe(
+      "true",
+    );
+  });
+
+  it("sets applyFill only on an xf whose fillId is not the reserved none fill", () => {
+    const noFillPkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "plain" },
+          displayText: "plain",
+        },
+      ]),
+    );
+    expect(
+      attributeOf(cellXfFor(noFillPkg, "A1"), "applyFill"),
+    ).toBeUndefined();
+
+    const filledPkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "filled" },
+          displayText: "filled",
+          background: { kind: "solid", color: { r: 1, g: 0, b: 1 } },
+        },
+      ]),
+    );
+    expect(attributeOf(cellXfFor(filledPkg, "A1"), "applyFill")).toBe("true");
+  });
+
+  it("sets applyBorder only on an xf whose borderId is not the reserved empty border", () => {
+    const noBorderPkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "plain" },
+          displayText: "plain",
+        },
+      ]),
+    );
+    expect(
+      attributeOf(cellXfFor(noBorderPkg, "A1"), "applyBorder"),
+    ).toBeUndefined();
+
+    const borderedPkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "bordered" },
+          displayText: "bordered",
+          borders: { top: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 } },
+        },
+      ]),
+    );
+    expect(attributeOf(cellXfFor(borderedPkg, "A1"), "applyBorder")).toBe(
+      "true",
+    );
+  });
+
+  it("writes a cell's own explicit horizontal alignment onto the inline <alignment> element", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "aligned" },
+          displayText: "aligned",
+          alignment: "center",
+        },
+      ]),
+    );
+    const alignment = requireChild(cellXfFor(pkg, "A1"), "alignment");
+    expect(attributeOf(alignment, "horizontal")).toBe("center");
+  });
+
+  it("writes the styleSheet root under its own tag and the SpreadsheetML namespace", () => {
+    const pkg = buildXlsxPackageFromContent(
+      singleSheetDocument([
+        {
+          row: 0,
+          column: 0,
+          value: { kind: "string", value: "plain" },
+          displayText: "plain",
+        },
+      ]),
+    );
+    const styles = styleSheetOf(pkg);
+    expect(styles.tag).toBe("styleSheet");
+    expect(attributeOf(styles, "xmlns")).toBe(
+      "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
+    );
+  });
+
+  it("writes title, author, and every keyword joined by a comma-space into docProps/core.xml", () => {
+    const pkg = buildXlsxPackageFromContent({
+      kind: "spreadsheet",
+      metadata: {
+        title: "My Title",
+        author: "My Author",
+        keywords: ["one", "two"],
+      },
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: DEFAULT_PRINT_SETTINGS,
+        },
+      ],
+    });
+    const core = rootElement(pkg.parts["docProps/core.xml"]);
+    if (core === undefined) {
+      throw new Error("expected docProps/core.xml to have a root element");
+    }
+    expect(textContent(requireChild(core, "dc:title"))).toBe("My Title");
+    expect(textContent(requireChild(core, "dc:creator"))).toBe("My Author");
+    expect(textContent(requireChild(core, "cp:keywords"))).toBe("one, two");
+  });
+
+  it("declares all four required namespaces on docProps/core.xml's own root element", () => {
+    const pkg = buildXlsxPackageFromContent({
+      kind: "spreadsheet",
+      metadata: { title: "T" },
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: DEFAULT_PRINT_SETTINGS,
+        },
+      ],
+    });
+    const core = rootElement(pkg.parts["docProps/core.xml"]);
+    if (core === undefined) {
+      throw new Error("expected docProps/core.xml to have a root element");
+    }
+    expect(attributeOf(core, "xmlns:cp")).toBe(
+      "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
+    );
+    expect(attributeOf(core, "xmlns:dc")).toBe(
+      "http://purl.org/dc/elements/1.1/",
+    );
+    expect(attributeOf(core, "xmlns:dcterms")).toBe(
+      "http://purl.org/dc/terms/",
+    );
+    expect(attributeOf(core, "xmlns:xsi")).toBe(
+      "http://www.w3.org/2001/XMLSchema-instance",
+    );
+  });
+
+  it("writes the creator into docProps/app.xml's own <Application> element", () => {
+    const pkg = buildXlsxPackageFromContent({
+      kind: "spreadsheet",
+      metadata: { creator: "My Creator" },
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: DEFAULT_PRINT_SETTINGS,
+        },
+      ],
+    });
+    const app = rootElement(pkg.parts["docProps/app.xml"]);
+    if (app === undefined) {
+      throw new Error("expected docProps/app.xml to have a root element");
+    }
+    expect(textContent(requireChild(app, "Application"))).toBe("My Creator");
+  });
+
+  it("writes the sheet's own gridlines/headers flags onto xl/worksheets/sheet1.xml's <printOptions>", () => {
+    const pkg = buildXlsxPackageFromContent({
+      kind: "spreadsheet",
+      metadata: {},
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [],
+          columns: [],
+          rows: [],
+          images: [],
+          printSettings: {
+            ...DEFAULT_PRINT_SETTINGS,
+            gridlines: true,
+            headers: true,
+          },
+        },
+      ],
+    });
+    const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
+    if (worksheet === undefined) {
+      throw new Error("expected a worksheet root element");
+    }
+    const printOptions = requireChild(worksheet, "printOptions");
+    expect(printOptions.tag).toBe("printOptions");
+    expect(attributeOf(printOptions, "gridLines")).toBe("true");
+    expect(attributeOf(printOptions, "headings")).toBe("true");
   });
 });
