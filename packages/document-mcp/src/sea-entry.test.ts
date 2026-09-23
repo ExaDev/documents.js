@@ -20,7 +20,9 @@ describe("sea-entry", () => {
     const { main } = await import("./cli");
     await import("./sea-entry");
     // main().catch(...)'s own continuation runs as a microtask after the dynamic import settles — a macrotask tick flushes it before the assertions below run.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
 
     expect(main).toHaveBeenCalledTimes(1);
     expect(console.error).not.toHaveBeenCalled();
@@ -31,7 +33,9 @@ describe("sea-entry", () => {
     const failure = new Error("boom");
     vi.doMock("./cli", () => ({ main: vi.fn().mockRejectedValue(failure) }));
     await import("./sea-entry");
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
 
     expect(console.error).toHaveBeenCalledWith(failure);
     expect(process.exitCode).toBe(1);
