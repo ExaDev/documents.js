@@ -4,11 +4,11 @@
  * This is a classifier, NOT a formatter: nothing here renders a value through a format code (that needs locale data, fill/alignment placeholder geometry, conditional-section evaluation, and colour handling neither consuming codec has asked for), only classifies one.
  *
  * Tokenizing rather than pattern-matching is load-bearing, not a stylistic preference — every meaningful signal in this language is context-sensitive, and a regex over the raw string gets each of them wrong:
- *   * a 'd' inside "dollars" is literal text, not a day code, and so is every character inside a \-escape or an _x/*x placeholder;
- *   * '$' immediately followed by '-' inside a bracket is a LOCALE tag ([$-809], "English (United Kingdom)") carrying no currency meaning at all, while the same bracket with text before the dash ([$GBP-809], [$£-809]) genuinely is a currency marker — one character apart, opposite meanings;
- *   * '[h]' is an elapsed-hours bucket (a duration that may exceed 24h) while a bare 'h' is an hour-of-day;
- *   * 'm' is minutes or months depending purely on the code runs around it;
- *   * and a ';' inside a quoted literal does not start a new section.
+ *   - a 'd' inside "dollars" is literal text, not a day code, and so is every character inside a \-escape or an _x/*x placeholder;
+ *   - '$' immediately followed by '-' inside a bracket is a LOCALE tag ([$-809], "English (United Kingdom)") carrying no currency meaning at all, while the same bracket with text before the dash ([$GBP-809], [$£-809]) genuinely is a currency marker — one character apart, opposite meanings;
+ *   - '[h]' is an elapsed-hours bucket (a duration that may exceed 24h) while a bare 'h' is an hour-of-day;
+ *   - 'm' is minutes or months depending purely on the code runs around it;
+ *   - and a ';' inside a quoted literal does not start a new section.
  */
 
 /** A single lexical unit of a format code. 'literal' covers every construct whose payload is TEXT rather than format codes — a "..." quoted run, a \x escape, and the payload character of an _x (reserve the width of x) or *x (repeat x to fill the cell) placeholder — so nothing inside one is ever read as a date/time/numeric code. Its text is still SCANNED for a currency symbol, because a literal currency symbol is exactly how ECMA-376's own built-in accounting formats (42/44, `_("$"* #,##0_)`) mark money. */
