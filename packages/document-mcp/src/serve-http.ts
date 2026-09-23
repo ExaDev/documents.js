@@ -22,10 +22,10 @@ interface RoutableRequest {
   readonly url?: string;
 }
 interface RoutableResponse {
-  writeHead(
+  writeHead: (
     statusCode: number,
     headers: Record<string, string>,
-  ): { end(chunk: string): void };
+  ) => { end: (chunk: string) => void };
 }
 
 // Routes one HTTP request to onMcpRequest for MCP_HTTP_PATH, or 404s any other path — extracted from serveHttp's own listener callback so this routing decision is directly unit-testable. onMcpRequest takes no arguments because the real caller already closes over whichever req/res it is routing.
