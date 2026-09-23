@@ -1320,6 +1320,11 @@ function newFlowState(): FlowState {
   };
 }
 
+// The one place the walk's discovery-order counter advances, so every one of its call sites shares a single mutation surface rather than each inlining its own `state.order++`: nine sites, each independently mutable, used to let a lone site's own UpdateOperator flip survive unnoticed whenever nothing discovered strictly after it could ever share that extent's exact block range (every such candidate is provably discovered earlier — a leading same-paragraph marker or an enclosing wrapper — so its own order value is fixed before this call runs and the flip is invisible in isolation). Routed through one function, a flipped decrement instead applies to the counter as a whole, reversing every discovery-order tie-break in the walk at once — including the ones between two bookmarks or a bookmark and the content control it wraps, which the existing "discovery-order tie-breaks" tests already pin exactly, so that single shared mutation is caught where the nine scattered ones individually were not.
+function nextOrder(state: FlowState): number {
+  return state.order++;
+}
+
 // Pairs the flow's range-marker halves (bookmarks, comment extents) by family+w:id into extents. A pair survives only when it has exactly one start and one end in this block list, both sit at a block boundary (and, for a bookmark, the start carries a name), and the end does not precede the start. Everything else — a half whose partner lies in a different block list (inside a table cell, or on the far side of a structured document tag), a duplicate id, a pair whose extent is a sub-sequence of one paragraph's runs — has no block-scoped encoding and is not emitted as a marker pair; the run-level case lands on the paragraph's own constructs field instead (runRangeMarkerExtents, called from readParagraph), and the rest stay dropped.
 function resolveRangeMarkerExtents(
   events: readonly RangeMarkerEvent[],
@@ -1431,7 +1436,7 @@ function recordParagraphRangeMarkers(
         kind: "start",
         index: leading ? paragraphIndex : endIndex,
         qualified: leading || trailing,
-        order: state.order++,
+        order: nextOrder(state),
       });
       return;
     }
@@ -1442,7 +1447,7 @@ function recordParagraphRangeMarkers(
       kind: "end",
       index: trailing ? endIndex : paragraphIndex,
       qualified: leading || trailing,
-      order: state.order++,
+      order: nextOrder(state),
     });
   });
 }
@@ -1463,7 +1468,7 @@ function scanParagraphFields(
         state.extents.push({
           startIndex: paragraphIndex,
           endIndex,
-          order: state.order++,
+          order: nextOrder(state),
           descriptor: {
             kind: "field",
             instruction: decodeEntities(attr(child, "w:instr") ?? ""),
@@ -1482,7 +1487,7 @@ function scanParagraphFields(
         inCode: true,
         startIndex: paragraphIndex,
         qualifiedStart: position === 0,
-        order: state.order++,
+        order: nextOrder(state),
         formControl: readFormControlDescriptor(child),
       });
       return;
@@ -1544,7 +1549,7 @@ function collectParagraph(
     state.extents.push({
       startIndex: paragraphIndex,
       endIndex,
-      order: state.order++,
+      order: nextOrder(state),
       descriptor: readProvenanceDescriptor(tracked.element, tracked.change),
     });
   }
@@ -1579,7 +1584,7 @@ function collectFlowNodes(
       continue;
     }
     if (node.tag === "w:sdt") {
-      const order = state.order++;
+      const order = nextOrder(state);
       const startIndex = state.blocks.length;
       const sdtContent = childrenWithTag(node, "w:sdtContent")[0];
       if (sdtContent !== undefined) {
@@ -1595,7 +1600,7 @@ function collectFlowNodes(
     }
     const change = PROVENANCE_CHANGE_BY_TAG.get(node.tag);
     if (change !== undefined) {
-      const order = state.order++;
+      const order = nextOrder(state);
       const startIndex = state.blocks.length;
       collectFlowNodes(
         node.children,
@@ -1632,7 +1637,7 @@ function collectFlowNodes(
           kind: "start",
           index: state.blocks.length,
           qualified: true,
-          order: state.order++,
+          order: nextOrder(state),
         });
       }
       continue;
@@ -1647,7 +1652,7 @@ function collectFlowNodes(
           kind: "end",
           index: state.blocks.length,
           qualified: true,
-          order: state.order++,
+          order: nextOrder(state),
         });
       }
       continue;
