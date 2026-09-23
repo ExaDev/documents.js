@@ -7,6 +7,7 @@ import type {
   ContentImageBlock,
   ContentParagraph,
   ContentTable,
+  ContentTableCell,
 } from "document-schema.js";
 import { el, txt } from "../../xml/fragment";
 import { bytesToBase64 } from "byte-codec";
@@ -1707,6 +1708,78 @@ describe("readPptxContent: internal slide-jump links (a:hlinkClick to a slide)",
     const paragraph = asParagraph(doc.slides[0]?.shapes[0]?.blocks[1]);
     expect(paragraph.constructs).toBeUndefined();
   });
+
+  // readInternalSlideJump's own condition needs BOTH a non-External targetMode and a slide-typed relationship — neither alone is sufficient. A run resolving to a relationship of the slide type but marked External (unusual, but distinct from the ordinary "no TargetMode at all" internal spelling every other fixture here uses) must still read as no jump, exactly like the ordinary external-hyperlink case, proving the targetMode check pulls its own weight rather than being implied by the type check beside it.
+  function edgeCaseJumpPackage(rel: {
+    type: string;
+    external?: boolean;
+  }): Package {
+    const shape = el("p:sp", {}, [
+      el("p:nvSpPr", {}, [
+        el("p:cNvPr", { id: "2", name: "Edge" }),
+        el("p:cNvSpPr"),
+        el("p:nvPr"),
+      ]),
+      el("p:spPr", {}, [
+        el("a:xfrm", {}, [
+          el("a:off", { x: "914400", y: "914400" }),
+          el("a:ext", { cx: "914400", cy: "457200" }),
+        ]),
+      ]),
+      el("p:txBody", {}, [
+        el("a:p", {}, [
+          el("a:r", {}, [
+            el("a:rPr", {}, [el("a:hlinkClick", { "r:id": "rIdEdge" })]),
+            el("a:t", {}, [txt("edge")]),
+          ]),
+        ]),
+      ]),
+    ]);
+    const slide = el("p:sld", {}, [
+      el("p:cSld", {}, [el("p:spTree", {}, [shape])]),
+    ]);
+    const presentation = el("p:presentation", {}, [
+      el("p:sldIdLst", {}, [el("p:sldId", { id: "256", "r:id": "rId1" })]),
+    ]);
+    const presentationRels = rels([
+      { id: "rId1", type: SLIDE_REL, target: "slides/slide1.xml" },
+    ]);
+    const slideRels = rels([
+      {
+        id: "rIdEdge",
+        type: rel.type,
+        target: rel.external ? "slide99.xml" : "slide2.xml",
+        external: rel.external,
+      },
+    ]);
+    return {
+      parts: {
+        "ppt/presentation.xml": { kind: "xml", nodes: [presentation] },
+        "ppt/_rels/presentation.xml.rels": {
+          kind: "xml",
+          nodes: [presentationRels],
+        },
+        "ppt/slides/slide1.xml": { kind: "xml", nodes: [slide] },
+        "ppt/slides/_rels/slide1.xml.rels": { kind: "xml", nodes: [slideRels] },
+      },
+    };
+  }
+
+  it("records no jump for a slide-typed relationship explicitly marked External, even though the type matches", () => {
+    const doc = readPptxContent(
+      edgeCaseJumpPackage({ type: SLIDE_REL, external: true }),
+    );
+    const paragraph = asParagraph(doc.slides[0]?.shapes[0]?.blocks[0]);
+    expect(paragraph.constructs).toBeUndefined();
+  });
+
+  it("records no jump for an ordinary internal relationship whose type is not the slide relationship type", () => {
+    const doc = readPptxContent(
+      edgeCaseJumpPackage({ type: SLIDE_LAYOUT_REL }),
+    );
+    const paragraph = asParagraph(doc.slides[0]?.shapes[0]?.blocks[0]);
+    expect(paragraph.constructs).toBeUndefined();
+  });
 });
 
 describe("readPptxContent: chart graphic frames", () => {
@@ -2342,6 +2415,7 @@ function outlineLevelFixturePackage(): Package {
       para({ lvl: "two" }, "non-numeric"),
       para({ lvl: "-1" }, "negative"),
       para({ lvl: "1.5" }, "fractional"),
+      para({ lvl: "" }, "empty string"),
     ]),
   ]);
 
@@ -2406,6 +2480,13 @@ describe("readPptxContent: paragraph outline levels", () => {
     }
   });
 
+  // Number("") coerces to 0, a valid non-negative integer, so an explicit empty @lvl needs its own check distinct from the malformed spellings above — it cannot degrade to no list merely by failing Number.isInteger the way "two"/"-1"/"1.5" do.
+  it('degrades an explicit lvl="" to no list too, rather than reading it as level 0', () => {
+    const para = outlineParagraph("empty string");
+    expect(para.list).toBeUndefined();
+    expect(para.runs[0]?.text).toBe("empty string");
+  });
+
   it("reads a slide of mixed levels back in document order", () => {
     const doc = readPptxContent(outlineLevelFixturePackage());
     const shape = doc.slides[0]?.shapes.find((s) => s.name === "Outline Body");
@@ -2421,6 +2502,7 @@ describe("readPptxContent: paragraph outline levels", () => {
       { text: "non-numeric", list: undefined },
       { text: "negative", list: undefined },
       { text: "fractional", list: undefined },
+      { text: "empty string", list: undefined },
     ]);
   });
 });
@@ -2562,5 +2644,483 @@ describe("readPptxContent: run underline/strikethrough exact val tokens", () => 
 
   it("reads no strike attribute at all as strike: undefined", () => {
     expect(runProps({})?.strike).toBeUndefined();
+  });
+});
+
+describe("readPptxContent: an unreachable presentation part reads as an empty deck, not a crash", () => {
+  it("reads no slides when the package carries no presentation part at all", () => {
+    const doc = readPptxContent({ parts: {} });
+    expect(doc.slides).toEqual([]);
+  });
+
+  it("reads no slides when the presentation part carries no p:sldIdLst", () => {
+    const presentation = el("p:presentation", {}, [
+      el("p:sldSz", { cx: "9144000", cy: "6858000" }),
+    ]);
+    const doc = readPptxContent({
+      parts: {
+        "ppt/presentation.xml": { kind: "xml", nodes: [presentation] },
+      },
+    });
+    expect(doc.slides).toEqual([]);
+  });
+});
+
+describe("readPptxContent: a run with no a:t child at all", () => {
+  it('reads text: "" for an a:r carrying no a:t', () => {
+    const para = firstShapeParagraph([
+      textShape(el("a:p", {}, [el("a:r", {})])),
+    ]);
+    expect(para.runs[0]?.text).toBe("");
+  });
+});
+
+describe("readPptxContent: a:spcBef present but carrying no a:spcPts value", () => {
+  it("leaves spacingBeforePt undefined when a:spcBef has no a:spcPts child", () => {
+    const para = firstShapeParagraph([
+      textShape(
+        el("a:p", {}, [
+          el("a:pPr", {}, [el("a:spcBef", {})]),
+          el("a:r", {}, [el("a:t", {}, [txt("x")])]),
+        ]),
+      ),
+    ]);
+    expect(para.spacingBeforePt).toBeUndefined();
+  });
+});
+
+describe("readPptxContent: a:spcAft", () => {
+  it("reads an absolute a:spcAft the same way a:spcBef is read", () => {
+    const para = firstShapeParagraph([
+      textShape(
+        el("a:p", {}, [
+          el("a:pPr", {}, [
+            el("a:spcAft", {}, [el("a:spcPts", { val: "400" })]),
+          ]),
+          el("a:r", {}, [el("a:t", {}, [txt("x")])]),
+        ]),
+      ),
+    ]);
+    expect(para.spacingAfterPt).toBe(4);
+  });
+});
+
+describe("readPptxContent: a paragraph-level a:pPr/a:defRPr overrides the master cascade", () => {
+  it("gives a run with no own rPr the paragraph's own a:defRPr size, not the (absent) master default", () => {
+    const para = firstShapeParagraph([
+      textShape(
+        el("a:p", {}, [
+          el("a:pPr", {}, [el("a:defRPr", { sz: "3600" })]),
+          el("a:r", {}, [el("a:t", {}, [txt("x")])]),
+        ]),
+      ),
+    ]);
+    expect(para.runs[0]?.sizePt).toBe(36);
+  });
+});
+
+describe("readPptxContent: the a:fld-only field-construct branch never fires for an a:r", () => {
+  it("creates no field construct for an a:r, even one carrying a stray @type attribute of its own", () => {
+    // @type on a:r is not a real ECMA-376 attribute — it exists here purely to prove the field-construct branch is gated on child.tag === 'a:fld', not merely on whatever attr(child, 'type') happens to return.
+    const para = firstShapeParagraph([
+      textShape(
+        el("a:p", {}, [
+          el("a:r", { type: "slidenum" }, [el("a:t", {}, [txt("x")])]),
+        ]),
+      ),
+    ]);
+    expect(para.constructs).toBeUndefined();
+  });
+});
+
+describe("readPptxContent: an a:fld with @type but no cached a:t", () => {
+  it('reads cachedResult: "" for a field with no a:t child at all', () => {
+    const para = firstShapeParagraph([
+      textShape(
+        el("a:p", {}, [
+          el(
+            "a:fld",
+            { id: "{00000000-0000-0000-0000-000000000000}", type: "slidenum" },
+            [],
+          ),
+        ]),
+      ),
+    ]);
+    expect(para.constructs?.[0]).toEqual({
+      descriptor: { kind: "field", instruction: "slidenum", cachedResult: "" },
+      startRun: 0,
+      endRun: 1,
+    });
+  });
+});
+
+describe("readPptxContent: a:br within a paragraph", () => {
+  it("reads a forced line break as a run of its own, carrying a literal newline, between the runs either side of it", () => {
+    const para = firstShapeParagraph([
+      textShape(
+        el("a:p", {}, [
+          el("a:r", {}, [el("a:t", {}, [txt("before")])]),
+          el("a:br"),
+          el("a:r", {}, [el("a:t", {}, [txt("after")])]),
+        ]),
+      ),
+    ]);
+    expect(para.runs.map((run) => run.text)).toEqual(["before", "\n", "after"]);
+  });
+});
+
+// A standalone table graphicFrame, built without buildFixturePackage's own layout/master chain, so a single cell's border/fill/rotation behaviour can be isolated the same way minimalSlidePackage isolates a paragraph's own properties elsewhere in this file.
+function minimalTableGraphicFrame(
+  gridCols: ReturnType<typeof el>[],
+  rows: ReturnType<typeof el>[],
+  xfrmAttrs: Record<string, string> = {},
+): ReturnType<typeof el> {
+  return el("p:graphicFrame", {}, [
+    el("p:nvGraphicFramePr", {}, [el("p:cNvPr", { id: "2", name: "Table 1" })]),
+    el("p:xfrm", xfrmAttrs, [
+      el("a:off", { x: "914400", y: "914400" }),
+      el("a:ext", { cx: "1828800", cy: "914400" }),
+    ]),
+    el("a:graphic", {}, [
+      el(
+        "a:graphicData",
+        { uri: "http://schemas.openxmlformats.org/drawingml/2006/table" },
+        [el("a:tbl", {}, [el("a:tblGrid", {}, gridCols), ...rows])],
+      ),
+    ]),
+  ]);
+}
+
+function readOnlyTableCell(frame: ReturnType<typeof el>): ContentTableCell {
+  const doc = readPptxContent(minimalSlidePackage([frame]));
+  const shape = doc.slides[0]?.shapes.find((s) => s.name === "Table 1");
+  const table = asTable(shape?.blocks[0]);
+  const cell = table.rows[0]?.cells[0];
+  if (cell === undefined) {
+    throw new Error("expected a cell");
+  }
+  return cell;
+}
+
+describe("readPptxContent: a table cell's borders object carries only the edges that actually resolved", () => {
+  function cellFrame(
+    tcPrChildren: ReturnType<typeof el>[],
+  ): ReturnType<typeof el> {
+    const cell = el("a:tc", {}, [
+      el("a:tcPr", {}, tcPrChildren),
+      el("a:txBody", {}, [
+        el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("x")])])]),
+      ]),
+    ]);
+    return minimalTableGraphicFrame(
+      [el("a:gridCol", { w: "914400" })],
+      [el("a:tr", {}, [cell])],
+    );
+  }
+
+  it("carries only a 'top' key when just a:lnT resolves — left/right/bottom are genuinely absent, not present-and-undefined", () => {
+    const cell = readOnlyTableCell(
+      cellFrame([
+        el("a:lnT", { w: "12700" }, [
+          el("a:solidFill", {}, [el("a:srgbClr", { val: "FF0000" })]),
+        ]),
+      ]),
+    );
+    expect(cell.borders).toStrictEqual({
+      top: { color: FILL_RED, widthPt: 1, style: undefined },
+    });
+  });
+
+  it("carries only a 'bottom' key when just a:lnB resolves — left/right/top are genuinely absent, not present-and-undefined", () => {
+    const cell = readOnlyTableCell(
+      cellFrame([
+        el("a:lnB", { w: "25400" }, [
+          el("a:solidFill", {}, [el("a:srgbClr", { val: "0000FF" })]),
+        ]),
+      ]),
+    );
+    expect(cell.borders).toStrictEqual({
+      bottom: { color: FILL_BLUE, widthPt: 2, style: undefined },
+    });
+  });
+});
+
+describe("readPptxContent: a:pattFill with no @prst at all", () => {
+  it("reads no background fill when a:pattFill carries no prst attribute", () => {
+    const cell = readOnlyTableCell(
+      minimalTableGraphicFrame(
+        [el("a:gridCol", { w: "914400" })],
+        [
+          el("a:tr", {}, [
+            el("a:tc", {}, [
+              el("a:tcPr", {}, [
+                el("a:pattFill", {}, [
+                  el("a:fgClr", {}, [el("a:srgbClr", { val: "00FF00" })]),
+                  el("a:bgClr", {}, [el("a:srgbClr", { val: "0000FF" })]),
+                ]),
+              ]),
+              el("a:txBody", {}, [
+                el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("x")])])]),
+              ]),
+            ]),
+          ]),
+        ],
+      ),
+    );
+    expect(cell.background).toBeUndefined();
+  });
+});
+
+describe("readPptxContent: a table column with no @w at all", () => {
+  it("reads widthPt: 0 for an a:gridCol carrying no w attribute", () => {
+    const frame = minimalTableGraphicFrame(
+      [el("a:gridCol", {})],
+      [el("a:tr", {}, [el("a:tc", {}, [el("a:txBody", {}, [el("a:p")])])])],
+    );
+    const doc = readPptxContent(minimalSlidePackage([frame]));
+    const shape = doc.slides[0]?.shapes.find((s) => s.name === "Table 1");
+    const table = asTable(shape?.blocks[0]);
+    expect(table.columns[0]?.widthPt).toBe(0);
+  });
+});
+
+describe("readPptxContent: a graphic frame's own rotation, composed the same way a shape's is", () => {
+  function tableFrameWith(
+    xfrmAttrs: Record<string, string>,
+  ): ReturnType<typeof el> {
+    return minimalTableGraphicFrame(
+      [el("a:gridCol", { w: "914400" })],
+      [el("a:tr", {}, [el("a:tc", {}, [el("a:txBody", {}, [el("a:p")])])])],
+      xfrmAttrs,
+    );
+  }
+
+  it("reads a table frame's own non-zero p:xfrm@rot as rotationDeg", () => {
+    const doc = readPptxContent(
+      minimalSlidePackage([tableFrameWith({ rot: "2700000" })]),
+    );
+    const shape = doc.slides[0]?.shapes.find((s) => s.name === "Table 1");
+    expect(shape?.rotationDeg).toBe(45);
+  });
+
+  it("leaves rotationDeg undefined for an unrotated table frame", () => {
+    const doc = readPptxContent(minimalSlidePackage([tableFrameWith({})]));
+    const shape = doc.slides[0]?.shapes.find((s) => s.name === "Table 1");
+    expect(shape?.rotationDeg).toBeUndefined();
+  });
+});
+
+describe("readPptxContent: p:cxnSp connector shapes are never recursed into", () => {
+  it("skips a p:cxnSp whole, even one synthetically holding a nested p:sp child", () => {
+    // p:cxnSp cannot really carry a p:sp per ECMA-376 — this proves walkShapeTreeChildren's own tag check is what keeps a connector's content out of the flat shape list, not merely that connectors never have children in practice.
+    const nestedShape = el("p:sp", {}, [
+      el("p:nvSpPr", {}, [
+        el("p:cNvPr", { id: "3", name: "ShouldNotAppear" }),
+        el("p:cNvSpPr"),
+        el("p:nvPr"),
+      ]),
+      el("p:spPr", {}, [
+        el("a:xfrm", {}, [
+          el("a:off", { x: "0", y: "0" }),
+          el("a:ext", { cx: "914400", cy: "914400" }),
+        ]),
+      ]),
+      el("p:txBody", {}, [
+        el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("nested")])])]),
+      ]),
+    ]);
+    const cxnSp = el("p:cxnSp", {}, [
+      el("p:nvCxnSpPr", {}, [el("p:cNvPr", { id: "2", name: "Connector" })]),
+      nestedShape,
+    ]);
+    const doc = readPptxContent(minimalSlidePackage([cxnSp]));
+    expect(doc.slides[0]?.shapes).toEqual([]);
+  });
+});
+
+describe("readPptxContent: SmartArt colour part (r:cs) resolves into the diagram's own residue", () => {
+  it("includes the colour part's own XML in source.xml when r:cs resolves to a real part, the same way r:lo/r:qs already do", () => {
+    const pkg = smartArtFixturePackage();
+    const colors = el("dgm:colorsDef", { uniqueId: "colors1" });
+    pkg.parts["ppt/diagrams/colors1.xml"] = { kind: "xml", nodes: [colors] };
+    pkg.parts["ppt/slides/_rels/slide1.xml.rels"] = {
+      kind: "xml",
+      nodes: [
+        rels([
+          {
+            id: "rIdDm",
+            type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramData",
+            target: "../diagrams/data1.xml",
+          },
+          {
+            id: "rIdCs",
+            type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramColors",
+            target: "../diagrams/colors1.xml",
+          },
+        ]),
+      ],
+    };
+    const doc = readPptxContent(pkg);
+    const diagramShape = doc.slides[0]?.shapes.find(
+      (s) => s.name === "Diagram 1",
+    );
+    expect(diagramShape?.source?.format).toBe("pptx");
+    const xml = diagramShape?.source?.xml ?? "";
+    expect(xml.indexOf("dgm:colorsDef")).toBeGreaterThanOrEqual(0);
+  });
+});
+
+// Exercises readNotes' own bodyShape precedence: a shape with no placeholder at all, one with a placeholder of a different type, and one with an explicit type="body" placeholder — all of which the real body shape (a bare, typeless placeholder, PowerPoint's own default-to-body spelling) must be found ahead of, since shapes.find stops at the first match.
+function notesPrecedenceFixturePackage(): Package {
+  const shapeWithPh = (
+    id: string,
+    name: string,
+    ph: Record<string, string> | undefined,
+    runs: ReturnType<typeof el>[],
+  ) =>
+    el("p:sp", {}, [
+      el("p:nvSpPr", {}, [
+        el("p:cNvPr", { id, name }),
+        el("p:cNvSpPr"),
+        el("p:nvPr", {}, ph === undefined ? [] : [el("p:ph", ph)]),
+      ]),
+      el("p:spPr"),
+      el("p:txBody", {}, [el("a:p", {}, runs)]),
+    ]);
+  const r = (text: string) => el("a:r", {}, [el("a:t", {}, [txt(text)])]);
+  const noPlaceholder = shapeWithPh("2", "NoPlaceholder", undefined, [
+    r("NoPlaceholderText"),
+  ]);
+  const titleType = shapeWithPh("3", "TitleType", { type: "title" }, [
+    r("TitleTypeText"),
+  ]);
+  // A bare p:ph with no @type at all is the real body placeholder — readNotes' own bodyShape predicate treats a typeless placeholder the same as an explicit type="body" one.
+  const typelessBody = shapeWithPh("4", "TypelessBody", { idx: "1" }, [
+    r("Alpha"),
+    r("Beta"),
+  ]);
+  const explicitBody = shapeWithPh("5", "ExplicitBody", { type: "body" }, [
+    r("ExplicitBodyText"),
+  ]);
+  const notesSlide = el("p:notes", {}, [
+    el("p:cSld", {}, [
+      el("p:spTree", {}, [
+        noPlaceholder,
+        titleType,
+        typelessBody,
+        explicitBody,
+      ]),
+    ]),
+  ]);
+  const slide = el("p:sld", {}, [el("p:cSld", {}, [el("p:spTree")])]);
+  const presentation = el("p:presentation", {}, [
+    el("p:sldIdLst", {}, [el("p:sldId", { id: "256", "r:id": "rId1" })]),
+  ]);
+  const presentationRels = rels([
+    { id: "rId1", type: SLIDE_REL, target: "slides/slide1.xml" },
+  ]);
+  const slideRels = rels([
+    {
+      id: "rIdNotes",
+      type: NOTES_SLIDE_REL,
+      target: "../notesSlides/notesSlide1.xml",
+    },
+  ]);
+  return {
+    parts: {
+      "ppt/presentation.xml": { kind: "xml", nodes: [presentation] },
+      "ppt/_rels/presentation.xml.rels": {
+        kind: "xml",
+        nodes: [presentationRels],
+      },
+      "ppt/slides/slide1.xml": { kind: "xml", nodes: [slide] },
+      "ppt/slides/_rels/slide1.xml.rels": { kind: "xml", nodes: [slideRels] },
+      "ppt/notesSlides/notesSlide1.xml": { kind: "xml", nodes: [notesSlide] },
+    },
+  };
+}
+
+describe("readPptxContent: notes bodyShape precedence and fallback paths", () => {
+  it("finds the typeless placeholder ahead of an earlier non-placeholder and non-body-typed shape, and joins its own runs with no separator", () => {
+    const doc = readPptxContent(notesPrecedenceFixturePackage());
+    expect(doc.slides[0]?.notes).toBe("AlphaBeta");
+  });
+
+  it('reads "" when the notesSlide relationship resolves but the target part is missing from the package', () => {
+    const pkg = buildFixturePackage();
+    delete pkg.parts["ppt/notesSlides/notesSlide1.xml"];
+    const doc = readPptxContent(pkg);
+    expect(doc.slides[1]?.notes).toBe("");
+  });
+
+  it("falls back to concatenating every a:t in the notes part, with no separator, when no shape qualifies as the body placeholder", () => {
+    const titleOnly = el("p:sp", {}, [
+      el("p:nvSpPr", {}, [
+        el("p:cNvPr", { id: "2", name: "Title" }),
+        el("p:cNvSpPr"),
+        el("p:nvPr", {}, [el("p:ph", { type: "title" })]),
+      ]),
+      el("p:spPr"),
+      el("p:txBody", {}, [
+        el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("Title")])])]),
+      ]),
+    ]);
+    const slideNumOnly = el("p:sp", {}, [
+      el("p:nvSpPr", {}, [
+        el("p:cNvPr", { id: "3", name: "SlideNum" }),
+        el("p:cNvSpPr"),
+        el("p:nvPr", {}, [el("p:ph", { type: "sldNum" })]),
+      ]),
+      el("p:spPr"),
+      el("p:txBody", {}, [
+        el("a:p", {}, [
+          el(
+            "a:fld",
+            {
+              id: "{00000000-0000-0000-0000-000000000000}",
+              type: "slidenum",
+            },
+            [el("a:t", {}, [txt("1")])],
+          ),
+        ]),
+      ]),
+    ]);
+    const notesSlide = el("p:notes", {}, [
+      el("p:cSld", {}, [el("p:spTree", {}, [titleOnly, slideNumOnly])]),
+    ]);
+    const slide = el("p:sld", {}, [el("p:cSld", {}, [el("p:spTree")])]);
+    const presentation = el("p:presentation", {}, [
+      el("p:sldIdLst", {}, [el("p:sldId", { id: "256", "r:id": "rId1" })]),
+    ]);
+    const presentationRels = rels([
+      { id: "rId1", type: SLIDE_REL, target: "slides/slide1.xml" },
+    ]);
+    const slideRels = rels([
+      {
+        id: "rIdNotes",
+        type: NOTES_SLIDE_REL,
+        target: "../notesSlides/notesSlide1.xml",
+      },
+    ]);
+    const pkg: Package = {
+      parts: {
+        "ppt/presentation.xml": { kind: "xml", nodes: [presentation] },
+        "ppt/_rels/presentation.xml.rels": {
+          kind: "xml",
+          nodes: [presentationRels],
+        },
+        "ppt/slides/slide1.xml": { kind: "xml", nodes: [slide] },
+        "ppt/slides/_rels/slide1.xml.rels": {
+          kind: "xml",
+          nodes: [slideRels],
+        },
+        "ppt/notesSlides/notesSlide1.xml": {
+          kind: "xml",
+          nodes: [notesSlide],
+        },
+      },
+    };
+    const doc = readPptxContent(pkg);
+    expect(doc.slides[0]?.notes).toBe("Title1");
   });
 });
