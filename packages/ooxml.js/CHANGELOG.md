@@ -1,3 +1,29 @@
+## [12.2.6](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.5...ooxml.js%4012.2.6) (2026-09-23)
+
+### Code Refactoring
+
+* **ooxml.js:** compute top10's rank directly from Number(rankRaw) ([443b78c](https://github.com/ExaDev/documents.js/commit/443b78c7aad301abdb369870df1c8f1e17e015be))
+* **ooxml.js:** drop three dead mutation opportunities in conditional-format.ts ([52f7004](https://github.com/ExaDev/documents.js/commit/52f7004bd24e36c022aea270cf581314ad91d5ce))
+* **ooxml.js:** drop two fallback string literals pptx/read.ts never observably needed ([905da31](https://github.com/ExaDev/documents.js/commit/905da31f1f7e705ae3547124faf559130162ae8f))
+* **ooxml.js:** fold xlsx/comments.ts's guid case through an ASCII offset ([cdcbb1a](https://github.com/ExaDev/documents.js/commit/cdcbb1a5dd8726203d29d135eca87054d3c38455))
+* **ooxml.js:** remove redundant dedup-signature guards in xlsx/styles.ts ([8c4269f](https://github.com/ExaDev/documents.js/commit/8c4269f42fedd11f76433c3bb5bd0547db504036))
+* **ooxml.js:** remove three redundant guards in pptx/read.ts ([10887ca](https://github.com/ExaDev/documents.js/commit/10887caa7452e79ce00e163e4610698ef506dd84))
+* **ooxml.js:** remove xlsx/content.ts's equivalent-mutation opportunities ([9262756](https://github.com/ExaDev/documents.js/commit/92627562c1a051bdc910e73b6bfc241a32c29990))
+* **ooxml.js:** remove xlsx/drawings.ts's equivalent-mutation opportunities ([2a1f19e](https://github.com/ExaDev/documents.js/commit/2a1f19e8ec78776245c877dbfb1e2e7a565b7e40))
+
+### Documentation
+
+* **ooxml.js:** record two failed restructurings of drawingml.ts's 180deg shift ([7d84b83](https://github.com/ExaDev/documents.js/commit/7d84b83c1f17e4f2c4218e284d9b801e5502d2e3))
+
+### Tests
+
+* **ooxml.js:** cover xlsx/content.ts's missing-worksheet-part fallback ([2530899](https://github.com/ExaDev/documents.js/commit/2530899c21b6351f5d7534064d40490dc0e5e818))
+* **ooxml.js:** pin conditional-format.ts's absent-key and malformed-residue edge cases ([c2f5c4c](https://github.com/ExaDev/documents.js/commit/c2f5c4c8ec69f009b49ce1bc8c500e7a7ce7e0d4))
+* **ooxml.js:** pin pptx/read.ts's a:pattFill colour spread and graphic-frame uri dispatch ([684a7e0](https://github.com/ExaDev/documents.js/commit/684a7e0e6fc7cd9c9e142a4cf549abaaf71e22bb))
+* **ooxml.js:** pin pptx/read.ts's boundary and fallback behaviour ([7c97e81](https://github.com/ExaDev/documents.js/commit/7c97e81744b03f1a07a142377c50607eebf73374))
+* **ooxml.js:** pin xlsx/styles.ts's italic/underline font declarations ([0af3075](https://github.com/ExaDev/documents.js/commit/0af30750d908d6406c0ec0db5760ab11436cab9d))
+* **ooxml.js:** pin xlsx/styles.ts's numberFormatCode absence for an unresolvable numFmtId ([e18aa7b](https://github.com/ExaDev/documents.js/commit/e18aa7bc34d38319ed216fc827bf96f30ee02118))
+
 ## [12.2.5](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.4...ooxml.js%4012.2.5) (2026-09-23)
 
 
