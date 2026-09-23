@@ -169,7 +169,9 @@ interface ResolvedCellValue {
 }
 
 // Derives displayText — xlsx has no cached "producer-rendered string" field the way ODF's own text:p content (or, for a genuinely numeric cell, its office:value-type-adjacent convention) gives readOds for free; a numeric cell's <v> is always the bare, unformatted number, with the thousands separators, currency symbol, date pattern, and percent sign living purely in xl/styles.xml's own numFmt code. This reader CLASSIFIES that code (see the top-of-file scope note) but does not render through it, so displayText remains a plain string representation of the typed value, NOT the producer's own rendering: String(value) for a number/percentage/currency (0.4256, not "42.56%"; 99.99, not "£99.99"), 'TRUE'/'FALSE' for a boolean (matching Excel's own default, unformatted boolean display), the string/error text verbatim for the string/error kinds, and the ISO spelling for the three temporal kinds — which, for a date/time cell, is a real improvement over the bare serial this reader used to show, even though it is still not what the sheet itself prints.
-function deriveDisplayText(value: ContentCellValue): string {
+function deriveDisplayText(
+  value: Exclude<ContentCellValue, { kind: "empty" }>,
+): string {
   switch (value.kind) {
     case "number":
     case "percentage":
@@ -183,9 +185,6 @@ function deriveDisplayText(value: ContentCellValue): string {
     case "time":
     case "dateTime":
       return value.value;
-    // This branch is genuinely unreachable through either of this function's own two call sites (both below): the boolean case always passes a value of kind "boolean", and the numeric case always passes whatever resolveNumericValue itself returns, which is one of number/percentage/currency/date/time/dateTime/elapsedTime — never "empty". It stays here, and its own return value stays untestable, purely because ContentCellValue's declared type still includes "empty" as a member: removing this case would make the switch non-exhaustive over that type and this function would no longer type-check as returning `string` unconditionally. This is the same shape of irreducible gap as localName's own "no colon" branch (comments.ts) — a case the type system requires but no real call site can ever actually reach.
-    case "empty":
-      return "";
   }
 }
 
@@ -234,7 +233,7 @@ function resolveNumericValue(
   num: number,
   cell: XmlElement,
   context: CellFormatContext,
-): ContentCellValue {
+): Exclude<ContentCellValue, { kind: "empty" }> {
   const format = numberFormatOf(cell, context);
   switch (format.kind) {
     case "percentage":
@@ -300,8 +299,8 @@ function readCellValue(
     return { value: { kind: "string", value: raw }, displayText: raw };
   }
   if (type === "b") {
-    const value: ContentCellValue = {
-      kind: "boolean",
+    const value = {
+      kind: "boolean" as const,
       value: raw === "1" || raw.toLowerCase() === "true",
     };
     return { value, displayText: deriveDisplayText(value) };
@@ -481,8 +480,8 @@ function applyCellResidueRules(
   }
   for (const rule of rules) {
     const sqref = attr(rule, "sqref");
-    // The regex's own "+" (one-or-more, versus a single whitespace character) is a genuinely irreducible equivalent mutation opportunity here, not merely an untested one: only index [0] of the split result is ever read, and the substring BEFORE the first regex match is identical regardless of how many whitespace characters that first match itself consumes — \s and \s+ always start matching at the same position, so [0] can never differ between them for any input, only the LATER elements of the split array (never read here) can.
-    const firstToken = sqref === undefined ? undefined : sqref.split(/\s+/)[0];
+    // No "+" quantifier: only index [0] of the split result is ever read, and the substring BEFORE the first whitespace character is identical whether the delimiter consumes one whitespace character or a run of them, so a bare \s already gives the same [0] a quantified \s+ would for every input, without a quantifier there for a mutant to find an equivalent removal of.
+    const firstToken = sqref === undefined ? undefined : sqref.split(/\s/)[0];
     // No "firstToken === ''" disjunct: parseRangeReference('') already returns undefined rather than throwing (verified directly against document-schema.js's own implementation), so an empty firstToken already falls through to the identical `range === undefined` outcome this disjunct would have short-circuited to. The `undefined` check alone stays load-bearing: parseRangeReference(undefined) throws, unlike the empty-string case.
     const range =
       firstToken === undefined ? undefined : parseRangeReference(firstToken);
@@ -525,7 +524,7 @@ function readSheet(
       rows: [],
       images: [],
       printSettings: readPrintSettings(
-        fallbackEmptyWorksheet(),
+        fallbackEmptyWorksheet(entry.path),
         sheetIndex,
         definedNamesBySheet,
       ),
@@ -562,9 +561,9 @@ function readSheet(
   };
 }
 
-// A minimal, childless <worksheet> element, used only as readPrintSettings' own input when a <sheet> in xl/workbook.xml points at a part the package doesn't actually have (a malformed package) — gives the same all-defaults ContentSheetPrintSettings a genuinely empty worksheet would produce, without readPrintSettings itself needing an `undefined`-worksheet branch. The "worksheet" tag string itself is a genuinely irreducible equivalent mutation opportunity, not merely an untested one, matching drawings.ts's own identically-shaped emptyWorksheet: readPrintSettings only ever reads this element's CHILDREN's tags (via childrenWithTag), never its own tag, so with no children to walk it is an otherwise-empty shell whose own tag field is dead structurally — no test built on readPrintSettings' own observable output can ever tell one tag string from another here.
-function fallbackEmptyWorksheet(): XmlElement {
-  return { type: "element", tag: "worksheet", attributes: [], children: [] };
+// A minimal, childless element, used only as readPrintSettings' own input when a <sheet> in xl/workbook.xml points at a part the package doesn't actually have (a malformed package) — gives the same all-defaults ContentSheetPrintSettings a genuinely empty worksheet would produce, without readPrintSettings itself needing an `undefined`-worksheet branch. readPrintSettings only ever reads this element's CHILDREN's tags (via childrenWithTag), never its own tag, so with no children to walk it is an otherwise-empty shell whose own tag field is dead structurally. tag is the missing part's own path (rather than a fixed placeholder string like "worksheet"): both spellings are equally inert for readPrintSettings' own purposes, but a fixed string literal is itself a mutation opportunity no test can ever distinguish from any other fixed string, whereas partPath is a real, already-available value with no literal for a mutant to substitute.
+function fallbackEmptyWorksheet(partPath: string): XmlElement {
+  return { type: "element", tag: partPath, attributes: [], children: [] };
 }
 
 export function readXlsxContent(pkg: Package): ContentDocument {
