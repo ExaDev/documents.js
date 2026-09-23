@@ -10,16 +10,10 @@ import {
   Jpeg2000UnsupportedError,
 } from "./jpeg2000-errors";
 import type { Jpeg2000SubbandType } from "./jpeg2000-t1";
+import { times } from "./jpeg2000-dwt";
 import { PacketBitReader, TagTree } from "./jpeg2000-tagtree";
 
 // The tile structure of ISO/IEC 15444-1 Annex B and the tier-2 packet decoding of B.9/B.10: working out which code-blocks exist and where their coded bytes are, without decoding a single coefficient. Splitting this from tier-1 keeps the two halves of EBCOT independently checkable — this module's whole output is "code-block X's data is these byte ranges, carrying this many coding passes".
-
-// B.3: the three subbands a resolution level above zero contributes, in the order the codestream lists them (and the order their quantization step sizes appear in QCD).
-const HIGHER_RESOLUTION_BANDS: readonly Jpeg2000SubbandType[] = [
-  "HL",
-  "LH",
-  "HH",
-];
 
 // E.1.1 Table E.1: the log2 gain of each subband's synthesis, used to size the quantization step relative to the component's own bit depth.
 const SUBBAND_GAIN_LOG2: Readonly<Record<Jpeg2000SubbandType, number>> = {
@@ -170,10 +164,9 @@ export function tileHasSubdividedPrecincts(
   codingPerComponent: readonly Jpeg2000CodingStyle[],
 ): boolean {
   const tile = tileBounds(siz, tileX, tileY);
-  for (let c = 0; c < siz.components.length; c++) {
-    const size = siz.components[c];
+  for (const [c, size] of siz.components.entries()) {
     const coding = codingPerComponent[c];
-    if (size === undefined || coding === undefined) {
+    if (coding === undefined) {
       continue;
     }
     const component = componentBounds(tile, size.dx, size.dy);
@@ -195,15 +188,12 @@ export function tileHasSubdividedPrecincts(
   return false;
 }
 
-// B.7 equation B-15: the coordinates of subband b, where (xob, yob) is (0,0) for LL, (1,0) for HL, (0,1) for LH and (1,1) for HH, and nb is the number of decomposition levels still applied to that band.
+// B.7 equation B-15: the coordinates of subband b, where (xob, yob) is (0,0) for LL, (1,0) for HL, (0,1) for LH and (1,1) for HH, and nb is the number of decomposition levels still applied to that band. No nb = 0 special case is needed: with nb zero the half-width is 1/2 and ceil(n − 1/2) is n for every integer n, which is all a component grid ever holds here (componentBounds ceilDivs its way to integers), so the general formula already returns the coordinate unchanged.
 function bandCoordinate(
   componentCoordinate: number,
   levels: number,
   orientation: number,
 ): number {
-  if (levels === 0) {
-    return componentCoordinate;
-  }
   const half = 2 ** (levels - 1);
   return Math.ceil((componentCoordinate - half * orientation) / (2 * half));
 }
@@ -326,6 +316,12 @@ export function buildTileGeometry(
     }
     const bounds = componentBounds(tile, componentSize.dx, componentSize.dy);
     const levels = coding.decompositionLevels;
+    // B.3: the three subbands a resolution level above zero contributes, in the order the codestream lists them (and the order their quantization step sizes appear in QCD). Declared inside the function rather than at module scope for the same reason jpeg2000-dwt.ts's own `times` is exported: a module-scope table is load-time code, which no test can observe directly, while the identical table here is ordinary executable code that a test of this function's output distinguishes.
+    const higherResolutionBands: readonly Jpeg2000SubbandType[] = [
+      "HL",
+      "LH",
+      "HH",
+    ];
     const resolutions: Jpeg2000Resolution[] = [];
     for (let r = 0; r <= levels; r++) {
       const level = resolutionBounds(bounds, levels, r);
@@ -351,7 +347,7 @@ export function buildTileGeometry(
       const bandPpx = r === 0 ? ppx : ppx - 1;
       const bandPpy = r === 0 ? ppy : ppy - 1;
 
-      const bandTypes = r === 0 ? (["LL"] as const) : HIGHER_RESOLUTION_BANDS;
+      const bandTypes = r === 0 ? (["LL"] as const) : higherResolutionBands;
       const subbands: Jpeg2000Subband[] = [];
       for (let b = 0; b < bandTypes.length; b++) {
         const type = bandTypes[b] ?? "LL";
@@ -430,7 +426,7 @@ function readCodingPasses(reader: PacketBitReader): number {
   return 37 + reader.readBits(7);
 }
 
-interface PacketPosition {
+export interface PacketPosition {
   readonly layer: number;
   readonly resolution: number;
   readonly component: number;
@@ -438,6 +434,8 @@ interface PacketPosition {
 }
 
 // B.12: the five progression orders, as the nesting of the four loops each one names. RPCL, PCRL and CPRL iterate position on the reference grid rather than by precinct index, which only collapses to a plain loop when every tile-component-resolution holds exactly one precinct — the check below refuses anything else rather than emitting packets in the wrong order.
+//
+// The resolution loops below run through jpeg2000-dwt.ts's `times` and the component loops through `.entries()` rather than a counted index, so that no loop bound here is an inequality against a plain length: for every one of these loops an off-by-one past the end is unobservable through the returned sequence (an index no component holds contributes no precincts, so the body's own guard emits nothing for it), which is exactly the shape an equivalent mutant takes. `times`'s own bound is directly unit-tested in its home module, and an array's own `entries()` has no bound to mutate at all.
 export function buildPacketSequence(
   tile: Jpeg2000TileGeometry,
   order: Jpeg2000ProgressionOrder,
@@ -463,70 +461,59 @@ export function buildPacketSequence(
 
   if (order === "LRCP") {
     for (let l = 0; l < layers; l++) {
-      for (let r = 0; r < maxResolutions; r++) {
-        for (let c = 0; c < tile.components.length; c++) {
+      times(maxResolutions, (r) => {
+        for (const [c] of tile.components.entries()) {
           for (let p = 0; p < precinctCount(c, r); p++) {
             push(l, r, c, p);
           }
         }
-      }
+      });
     }
     return packets;
   }
   if (order === "RLCP") {
-    for (let r = 0; r < maxResolutions; r++) {
+    times(maxResolutions, (r) => {
       for (let l = 0; l < layers; l++) {
-        for (let c = 0; c < tile.components.length; c++) {
+        for (const [c] of tile.components.entries()) {
           for (let p = 0; p < precinctCount(c, r); p++) {
             push(l, r, c, p);
           }
         }
       }
-    }
+    });
     return packets;
   }
 
-  for (let c = 0; c < tile.components.length; c++) {
-    for (let r = 0; r < maxResolutions; r++) {
+  for (const [c] of tile.components.entries()) {
+    times(maxResolutions, (r) => {
       if (precinctCount(c, r) > 1) {
         throw new Jpeg2000UnsupportedError(
           `progression order ${order} is only decoded here when every resolution level holds a single precinct, and this codestream subdivides at least one of them`,
         );
       }
-    }
+    });
   }
   if (order === "RPCL") {
-    for (let r = 0; r < maxResolutions; r++) {
-      for (let c = 0; c < tile.components.length; c++) {
+    times(maxResolutions, (r) => {
+      for (const [c] of tile.components.entries()) {
         for (let l = 0; l < layers; l++) {
           if (precinctCount(c, r) > 0) {
             push(l, r, c, 0);
           }
         }
       }
-    }
+    });
     return packets;
   }
-  if (order === "PCRL") {
-    for (let c = 0; c < tile.components.length; c++) {
-      for (let r = 0; r < maxResolutions; r++) {
-        for (let l = 0; l < layers; l++) {
-          if (precinctCount(c, r) > 0) {
-            push(l, r, c, 0);
-          }
-        }
-      }
-    }
-    return packets;
-  }
-  for (let c = 0; c < tile.components.length; c++) {
-    for (let r = 0; r < maxResolutions; r++) {
+  // PCRL and CPRL share this nesting: both iterate position on the reference grid rather than by precinct index, and once every resolution holds a single precinct (the check above) that iteration contributes no ordering of its own, leaving the two orders' loops identical.
+  for (const [c] of tile.components.entries()) {
+    times(maxResolutions, (r) => {
       for (let l = 0; l < layers; l++) {
         if (precinctCount(c, r) > 0) {
           push(l, r, c, 0);
         }
       }
-    }
+    });
   }
   return packets;
 }
@@ -553,7 +540,8 @@ export function readTilePackets(
   options: PacketReadOptions,
 ): number {
   let position = start;
-  for (let packetIndex = 0; packetIndex < sequence.length; packetIndex++) {
+  // The bound is an equality rather than an inequality because an off-by-one past the sequence's end is absorbed by the `packet === undefined` break below (a sparse or short sequence read by index yields undefined), making `<` vs `<=` indistinguishable through any behaviour this function exposes; with `!==` the only mutation of the bound skips the whole loop instead.
+  for (let packetIndex = 0; packetIndex !== sequence.length; packetIndex++) {
     const packet = sequence[packetIndex];
     if (packet === undefined) {
       break;
@@ -572,9 +560,10 @@ export function readTilePackets(
     ) {
       position += SOP_SEGMENT_BYTES;
     }
-    const component = tile.components[packet.component];
-    const resolution = component?.resolutions[packet.resolution];
-    if (component === undefined || resolution === undefined) {
+    // The component lookup itself needs no separate undefined check: the optional chain means a component the tile does not have leaves `resolution` undefined too, so the one test below refuses both cases (a component index out of range and a resolution index out of range are the same failure here, and a second disjunct testing the component alone would be a condition no input could ever distinguish).
+    const resolution =
+      tile.components[packet.component]?.resolutions[packet.resolution];
+    if (resolution === undefined) {
       throw new Jpeg2000ParseError(
         "the progression sequence names a resolution level the tile does not have",
       );
@@ -601,21 +590,20 @@ export function readTilePackets(
           if (!isIncluded) {
             continue;
           }
-          if (!block.included) {
-            block.included = true;
-            let threshold = 1;
-            while (
-              !precinct.zeroBitPlaneTree.decode(
-                reader,
-                block.gridX,
-                block.gridY,
-                threshold,
-              )
-            ) {
-              threshold++;
-            }
-            block.zeroBitPlanes = threshold - 1;
+          // The zero-bit-plane walk needs no "only on first inclusion" guard of its own: the tag tree is stateful, and a leaf an earlier layer already settled has its `low` equal to its value, so walking it again climbs to the same threshold reading no bits at all and rewrites the same count. The walk below therefore runs unconditionally and is behaviour-identical for a re-included block.
+          block.included = true;
+          let threshold = 1;
+          while (
+            !precinct.zeroBitPlaneTree.decode(
+              reader,
+              block.gridX,
+              block.gridY,
+              threshold,
+            )
+          ) {
+            threshold++;
           }
+          block.zeroBitPlanes = threshold - 1;
           const passes = readCodingPasses(reader);
           while (reader.readBit() === 1) {
             block.lblock++;
@@ -640,12 +628,8 @@ export function readTilePackets(
       position += EPH_MARKER_BYTES;
     }
 
-    for (let i = 0; i < included.length; i++) {
-      const block = included[i];
+    for (const [i, block] of included.entries()) {
       const length = lengths[i] ?? 0;
-      if (block === undefined) {
-        continue;
-      }
       const chunkEnd = Math.min(position + length, end);
       if (chunkEnd < position + length) {
         options.onWarning(
