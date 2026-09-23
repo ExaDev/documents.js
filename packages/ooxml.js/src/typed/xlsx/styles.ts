@@ -556,13 +556,13 @@ function normalisedFontOf(font: ContentFont | undefined): DeclaredFont {
   };
 }
 
-// This signature is consumed ONLY as an internal Map key (fontIndexBySignature), never exposed, so what matters is solely whether two DIFFERENT DeclaredFont values ever produce equal strings (a wrong collision) or two IDENTICAL values ever produce different ones (a wrong split) — never which literal characters a given input maps to. Each boolean segment folds through "?? false" rather than a "=== true" comparison: normalisedFontOf's own contract states bold/italic/underline/strike as `true` or `undefined`, and "?? false" collapses both a genuine `undefined` and an out-of-contract `false` onto the identical "false" segment, the same two-bucket split "=== true" gave — so a font-table entry-0 diff and a font actually stating the property off still collide exactly as they must, this table's own real correctness requirement (proven by the "font signature isolates every one of its own segments" tests below, not merely assumed). declared.colorRgb is interpolated with no "no colour" placeholder: the JS-coerced string "undefined" can never collide with a real 6-hex-digit colorRgb value, so there is nothing here for a false/undefined-style collapse to protect.
+// This signature is consumed ONLY as an internal Map key (fontIndexBySignature), never exposed, so what matters is solely whether two DIFFERENT DeclaredFont values ever produce equal strings (a wrong collision) or two IDENTICAL values ever produce different ones (a wrong split) — never which literal characters a given input maps to. Every segment below interpolates its declared value directly, with no comparison, fallback or placeholder for a mutant to find an equivalent substitute in: declared.bold/italic/underline/strike are normalisedFontOf's own `true` or `undefined` by contract (each independently pinned against fontDeclarations() below, which is where a wrong true/false/undefined would actually be observable), and declared.colorRgb's absence interpolates as the JS-coerced string "undefined", which no real 6-hex-digit colour can ever equal.
 function signatureOfFont(font: ContentFont | undefined): string {
   const declared = normalisedFontOf(font);
-  let sig = `b:${declared.bold ?? false}`;
-  sig += `|i:${declared.italic ?? false}`;
-  sig += `|u:${declared.underline ?? false}`;
-  sig += `|s:${declared.strike ?? false}`;
+  let sig = `b:${declared.bold}`;
+  sig += `|i:${declared.italic}`;
+  sig += `|u:${declared.underline}`;
+  sig += `|s:${declared.strike}`;
   sig += `|rgb:${declared.colorRgb}`;
   sig += `|sz:${declared.sz}`;
   sig += `|n:${declared.name}`;

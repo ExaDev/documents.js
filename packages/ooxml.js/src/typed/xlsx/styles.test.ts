@@ -616,6 +616,16 @@ describe("CellFormatTable: interning the cell font alongside the number format",
       sz: "14",
       name: "Courier New",
     });
+    table.intern(
+      { kind: "builtin", id: GENERAL_NUM_FMT_ID },
+      { font: { italic: true, underline: true } },
+    );
+    expect(table.fontDeclarations()[3]).toEqual({
+      italic: true,
+      underline: true,
+      sz: "11",
+      name: "Calibri",
+    });
   });
 
   it("carries fontId on the cellFormatRecord, distinct from the default font's 0", () => {
