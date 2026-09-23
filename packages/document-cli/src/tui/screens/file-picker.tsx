@@ -94,11 +94,11 @@ export function FilePickerScreen(): ReactElement {
 
   const isActive = !anyOverlayOpen(state);
   const { entries: rawEntries, error: listError } = readEntries(currentDir);
+  // No special-case branch for an empty query: every name includes the empty string, so filtering unconditionally already returns every entry when there is nothing to search for.
   const query = state.searchQuery.trim().toLowerCase();
-  const filtered =
-    query === ""
-      ? rawEntries
-      : rawEntries.filter((entry) => entry.name.toLowerCase().includes(query));
+  const filtered = rawEntries.filter((entry) =>
+    entry.name.toLowerCase().includes(query),
+  );
   const hasParent = dirname(currentDir) !== currentDir;
   const displayEntries = hasParent ? [PARENT_ENTRY, ...filtered] : filtered;
 
@@ -194,10 +194,7 @@ export function FilePickerScreen(): ReactElement {
       if (entry === undefined) {
         return;
       }
-      if (entry.name === "..") {
-        setCurrentDir(dirname(currentDir));
-        return;
-      }
+      // No special case for the parent entry: `join(currentDir, "..")` resolves to the same directory `dirname(currentDir)` would, and PARENT_ENTRY's own isDirectory:true already routes it through this same branch.
       const fullPath = join(currentDir, entry.name);
       if (entry.isDirectory) {
         setCurrentDir(fullPath);
