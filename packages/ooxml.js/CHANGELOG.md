@@ -1,3 +1,9 @@
+## [12.2.8](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.7...ooxml.js%4012.2.8) (2026-09-23)
+
+### Code Refactoring
+
+* **ooxml.js:** route docx read.ts's discovery-order counter through one function ([4f50b0b](https://github.com/ExaDev/documents.js/commit/4f50b0bc00628766139987939133e3519ac25d28))
+
 ## [12.2.7](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.6...ooxml.js%4012.2.7) (2026-09-23)
 
 ### Tests
