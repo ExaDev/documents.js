@@ -1,3 +1,14 @@
+## [14.4.1](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.0...documents.js%4014.4.1) (2026-09-23)
+
+### Tests
+
+* **documents.js:** kill reconstruct.ts's duplicate-paint and fuzzy-redraw survivors ([0972523](https://github.com/ExaDev/documents.js/commit/097252399774ceb54d7e6af263e03557b0217405))
+
+
+### Dependencies
+
+- Updated ooxml.js to 12.2.6
+
 ## [14.4.0](https://github.com/ExaDev/documents.js/compare/documents.js%4014.3.7...documents.js%4014.4.0) (2026-09-23)
 
 ### Features
