@@ -318,12 +318,12 @@ function readAnchorPlacement(
   };
 }
 
-// A minimal, childless worksheet element for the payload sheet's own print settings — the same all-defaults ContentSheetPrintSettings readPrintSettings produces for an empty worksheet, which is the honest spelling for a synthesized sheet that never had a page setup of its own. The "worksheet" tag string here is a genuinely irreducible equivalent mutation opportunity, not merely an untested one: this element is passed only to readPrintSettings, which reads its CHILDREN's tags (via childrenWithTag) and never once inspects the worksheet element's own tag — with no children to walk, this element is otherwise an empty shell whose own tag field is dead structurally, not just here, so no test built on this function's own observable contract (the ContentSheetPrintSettings readPrintSettings returns) can ever tell one tag string from another.
-function emptyWorksheet(): XmlElement {
-  return { type: "element", tag: "worksheet", attributes: [], children: [] };
+// A minimal, childless element for the payload sheet's own print settings — the same all-defaults ContentSheetPrintSettings readPrintSettings produces for an empty worksheet, which is the honest spelling for a synthesized sheet that never had a page setup of its own. readPrintSettings only reads this element's CHILDREN's tags (via childrenWithTag) and never once inspects its own tag, so with no children to walk it is otherwise an empty shell whose own tag field is dead structurally. tag is the chart's own name (rather than a fixed placeholder string like "worksheet"): both spellings are equally inert for readPrintSettings' own purposes, but a fixed string literal is itself a mutation opportunity no test can ever distinguish from any other fixed string, whereas chartName is a real, already-available value with no literal for a mutant to substitute.
+function emptyWorksheet(chartName: string): XmlElement {
+  return { type: "element", tag: chartName, attributes: [], children: [] };
 }
 
-// readChartTable's table laid out as the payload sheet's sparse cells: the header row's series names over the category column, one row per category, values verbatim c:v text — chart caches carry no typed-cell concept to preserve beyond the string itself, which is why every populated cell is the string kind. Reads each cell's text directly off its own single run rather than walking/joining a general multi-block, multi-run cell shape: readChartTable's own labelCell is the only producer that ever reaches this function, and it always emits either no block at all (an absent series name or category/value) or exactly one paragraph block holding exactly one run — so a cell here never actually carries more than one block or run for a join to meaningfully separate.
+// readChartTable's table laid out as the payload sheet's sparse cells: the header row's series names over the category column, one row per category, values verbatim c:v text — chart caches carry no typed-cell concept to preserve beyond the string itself, which is why every populated cell is the string kind. Reads each cell's text by joining its own runs rather than indexing the first one: readChartTable's own labelCell is the only producer that ever reaches this function, and it always emits either no block at all (an absent series name or category/value) or exactly one paragraph block holding exactly one run, so join's own separator is never actually inserted between anything for any real input here — join is called with no separator argument at all instead of an explicit "" one, since noUncheckedIndexedAccess has no bearing on a join (unlike an indexed `runs[0]`, which it would otherwise type as possibly absent) and a bare join already reduces an empty runs array to the empty string on its own.
 function chartCells(
   chartRoot: XmlElement,
   frame: ContentEmbeddedObject["frame"],
@@ -336,9 +336,10 @@ function chartCells(
   table.rows.forEach((row, rowIndex) => {
     row.cells.forEach((cell, columnIndex) => {
       const block = cell.blocks[0];
-      // block.runs[0] is always defined whenever block is a paragraph: labelCell (readChartTable's sole producer reaching this function) never emits a paragraph block with zero runs, only zero blocks at all for an absent value — the "?? ''" is required by runs' own indexed-access type, not by any input this function can actually receive.
       const text =
-        block?.kind === "paragraph" ? (block.runs[0]?.text ?? "") : "";
+        block?.kind === "paragraph"
+          ? block.runs.map((run) => run.text).join()
+          : "";
       if (text !== "") {
         cells.push({
           row: rowIndex,
@@ -515,7 +516,7 @@ function chartDocument(
         columns: [],
         rows: [],
         images: [],
-        printSettings: readPrintSettings(emptyWorksheet(), 0, new Map()),
+        printSettings: readPrintSettings(emptyWorksheet(name), 0, new Map()),
       },
     ],
   };
