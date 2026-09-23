@@ -98,6 +98,9 @@ function codePointToText(codePoint: number): string {
   return String.fromCodePoint(codePoint);
 }
 
+/** The timeout an exhaustive full-table sweep test needs, passed as `it`'s own third argument. Vitest's 5000ms default is sized for an ordinary unit test, not a loop that calls decodeText tens of thousands of times (EUC_KR and GB18030 each define around 24000 pointers, and the GB18030 sweep below calls decodeText twice per pointer to cross-check its gbk alias); under `vitest run --coverage`'s v8 instrumentation on a loaded CI runner this suite's own GB18030 sweep has been observed taking upwards of 7 seconds even though the same sweep completes in under 20ms uninstrumented locally, so the margin here is generous rather than tuned to a single observed figure. */
+const EXHAUSTIVE_SWEEP_TIMEOUT_MS = 30000;
+
 /** The first pointer in `table` for which {@link pointerCodePoint} returns a defined code point, or -1 if none does. */
 function firstDefinedPointer(table: DbcsTable): number {
   for (let pointer = 0; pointer < table.codeUnits.length; pointer += 1) {
@@ -141,20 +144,24 @@ describe("pointerCodePoint", () => {
 });
 
 describe("decodeText Shift_JIS", () => {
-  it("decodes every defined JIS X 0208 pointer to the code point the WHATWG index names", () => {
-    for (let pointer = 0; pointer < JIS0208.codeUnits.length; pointer += 1) {
-      const codePoint = pointerCodePoint(JIS0208, pointer);
-      if (codePoint === undefined) {
-        continue;
+  it(
+    "decodes every defined JIS X 0208 pointer to the code point the WHATWG index names",
+    () => {
+      for (let pointer = 0; pointer < JIS0208.codeUnits.length; pointer += 1) {
+        const codePoint = pointerCodePoint(JIS0208, pointer);
+        if (codePoint === undefined) {
+          continue;
+        }
+        const [leading, trail] = shiftJisBytesForPointer(pointer);
+        expect(
+          decodeText(Uint8Array.of(leading, trail), { encoding: "shift_jis" })
+            .text,
+          `pointer ${String(pointer)}, bytes 0x${leading.toString(16)} 0x${trail.toString(16)}`,
+        ).toBe(codePointToText(codePoint));
       }
-      const [leading, trail] = shiftJisBytesForPointer(pointer);
-      expect(
-        decodeText(Uint8Array.of(leading, trail), { encoding: "shift_jis" })
-          .text,
-        `pointer ${String(pointer)}, bytes 0x${leading.toString(16)} 0x${trail.toString(16)}`,
-      ).toBe(codePointToText(codePoint));
-    }
-  });
+    },
+    EXHAUSTIVE_SWEEP_TIMEOUT_MS,
+  );
 
   it("decodes every ASCII byte and 0x80 as its own code point", () => {
     for (let byte = 0x00; byte <= 0x80; byte += 1) {
@@ -286,38 +293,48 @@ describe("decodeText Shift_JIS", () => {
 });
 
 describe("decodeText EUC-JP", () => {
-  it("decodes every defined JIS X 0208 pointer EUC-JP's own byte range can reach", () => {
-    const maxTwoBytePointer = 93 * 94 + 93;
-    for (let pointer = 0; pointer <= maxTwoBytePointer; pointer += 1) {
-      const codePoint = pointerCodePoint(JIS0208, pointer);
-      if (codePoint === undefined) {
-        continue;
+  it(
+    "decodes every defined JIS X 0208 pointer EUC-JP's own byte range can reach",
+    () => {
+      const maxTwoBytePointer = 93 * 94 + 93;
+      for (let pointer = 0; pointer <= maxTwoBytePointer; pointer += 1) {
+        const codePoint = pointerCodePoint(JIS0208, pointer);
+        if (codePoint === undefined) {
+          continue;
+        }
+        const [leading, trail] = eucJis0208BytesForPointer(pointer);
+        expect(
+          decodeText(Uint8Array.of(leading, trail), { encoding: "euc-jp" })
+            .text,
+          `pointer ${String(pointer)}`,
+        ).toBe(codePointToText(codePoint));
       }
-      const [leading, trail] = eucJis0208BytesForPointer(pointer);
-      expect(
-        decodeText(Uint8Array.of(leading, trail), { encoding: "euc-jp" }).text,
-        `pointer ${String(pointer)}`,
-      ).toBe(codePointToText(codePoint));
-    }
-  });
+    },
+    EXHAUSTIVE_SWEEP_TIMEOUT_MS,
+  );
 
-  it("decodes every defined JIS X 0212 pointer behind its own 0x8F lead byte", () => {
-    for (let pointer = 0; pointer < JIS0212.codeUnits.length; pointer += 1) {
-      const codePoint = pointerCodePoint(JIS0212, pointer);
-      if (codePoint === undefined) {
-        continue;
+  it(
+    "decodes every defined JIS X 0212 pointer behind its own 0x8F lead byte",
+    () => {
+      for (let pointer = 0; pointer < JIS0212.codeUnits.length; pointer += 1) {
+        const codePoint = pointerCodePoint(JIS0212, pointer);
+        if (codePoint === undefined) {
+          continue;
+        }
+        const [leading, trail] = eucJis0208BytesForPointer(pointer);
+        if (leading > 0xfe) {
+          continue;
+        }
+        expect(
+          decodeText(Uint8Array.of(0x8f, leading, trail), {
+            encoding: "euc-jp",
+          }).text,
+          `jis0212 pointer ${String(pointer)}`,
+        ).toBe(codePointToText(codePoint));
       }
-      const [leading, trail] = eucJis0208BytesForPointer(pointer);
-      if (leading > 0xfe) {
-        continue;
-      }
-      expect(
-        decodeText(Uint8Array.of(0x8f, leading, trail), { encoding: "euc-jp" })
-          .text,
-        `jis0212 pointer ${String(pointer)}`,
-      ).toBe(codePointToText(codePoint));
-    }
-  });
+    },
+    EXHAUSTIVE_SWEEP_TIMEOUT_MS,
+  );
 
   it("decodes 0x8E-prefixed halfwidth katakana", () => {
     for (let byte = 0xa1; byte <= 0xdf; byte += 1) {
@@ -447,19 +464,24 @@ describe("decodeText EUC-JP", () => {
 });
 
 describe("decodeText EUC-KR", () => {
-  it("decodes every pointer EUC_KR defines to the code point the WHATWG index names", () => {
-    for (let pointer = 0; pointer < EUC_KR.codeUnits.length; pointer += 1) {
-      const codePoint = pointerCodePoint(EUC_KR, pointer);
-      if (codePoint === undefined) {
-        continue;
+  it(
+    "decodes every pointer EUC_KR defines to the code point the WHATWG index names",
+    () => {
+      for (let pointer = 0; pointer < EUC_KR.codeUnits.length; pointer += 1) {
+        const codePoint = pointerCodePoint(EUC_KR, pointer);
+        if (codePoint === undefined) {
+          continue;
+        }
+        const [leading, trail] = eucKrBytesForPointer(pointer);
+        expect(
+          decodeText(Uint8Array.of(leading, trail), { encoding: "euc-kr" })
+            .text,
+          `pointer ${String(pointer)}, bytes 0x${leading.toString(16)} 0x${trail.toString(16)}`,
+        ).toBe(codePointToText(codePoint));
       }
-      const [leading, trail] = eucKrBytesForPointer(pointer);
-      expect(
-        decodeText(Uint8Array.of(leading, trail), { encoding: "euc-kr" }).text,
-        `pointer ${String(pointer)}, bytes 0x${leading.toString(16)} 0x${trail.toString(16)}`,
-      ).toBe(codePointToText(codePoint));
-    }
-  });
+    },
+    EXHAUSTIVE_SWEEP_TIMEOUT_MS,
+  );
 
   it("decodes every ASCII byte as its own code point", () => {
     for (let byte = 0x00; byte <= 0x7f; byte += 1) {
@@ -548,22 +570,26 @@ describe("decodeText Big5", () => {
     [1166, [0x00ea, 0x030c]],
   ]);
 
-  it("decodes every single-code-point pointer Big5 defines to the code point the WHATWG index names", () => {
-    for (let pointer = 0; pointer < BIG5.codeUnits.length; pointer += 1) {
-      if (DOUBLE_CODE_POINT_POINTERS.has(pointer)) {
-        continue;
+  it(
+    "decodes every single-code-point pointer Big5 defines to the code point the WHATWG index names",
+    () => {
+      for (let pointer = 0; pointer < BIG5.codeUnits.length; pointer += 1) {
+        if (DOUBLE_CODE_POINT_POINTERS.has(pointer)) {
+          continue;
+        }
+        const codePoint = pointerCodePoint(BIG5, pointer);
+        if (codePoint === undefined) {
+          continue;
+        }
+        const [leading, trail] = big5BytesForPointer(pointer);
+        expect(
+          decodeText(Uint8Array.of(leading, trail), { encoding: "big5" }).text,
+          `pointer ${String(pointer)}, bytes 0x${leading.toString(16)} 0x${trail.toString(16)}`,
+        ).toBe(codePointToText(codePoint));
       }
-      const codePoint = pointerCodePoint(BIG5, pointer);
-      if (codePoint === undefined) {
-        continue;
-      }
-      const [leading, trail] = big5BytesForPointer(pointer);
-      expect(
-        decodeText(Uint8Array.of(leading, trail), { encoding: "big5" }).text,
-        `pointer ${String(pointer)}, bytes 0x${leading.toString(16)} 0x${trail.toString(16)}`,
-      ).toBe(codePointToText(codePoint));
-    }
-  });
+    },
+    EXHAUSTIVE_SWEEP_TIMEOUT_MS,
+  );
 
   it("decodes a supplementary-plane pointer as a real surrogate pair", () => {
     // The first BIG5 pointer above the Basic Multilingual Plane, from the CJK Compatibility Ideographs Supplement block: the lowest key BIG5.astral holds, since dbcs-tables.ts's own generator inserts astral entries in ascending pointer order (see that file's own header comment) and every astral pointer's real code point is, by construction, above 0xFFFF.
@@ -648,25 +674,29 @@ describe("decodeText Big5", () => {
 });
 
 describe("decodeText gb18030 and GBK", () => {
-  it("decodes every two-byte pointer GB18030 defines to the code point the WHATWG index names", () => {
-    for (let pointer = 0; pointer < GB18030.codeUnits.length; pointer += 1) {
-      const codePoint = pointerCodePoint(GB18030, pointer);
-      if (codePoint === undefined) {
-        continue;
+  it(
+    "decodes every two-byte pointer GB18030 defines to the code point the WHATWG index names",
+    () => {
+      for (let pointer = 0; pointer < GB18030.codeUnits.length; pointer += 1) {
+        const codePoint = pointerCodePoint(GB18030, pointer);
+        if (codePoint === undefined) {
+          continue;
+        }
+        const [leading, trail] = gb18030TwoByteBytesForPointer(pointer);
+        const bytes = Uint8Array.of(leading, trail);
+        expect(
+          decodeText(bytes, { encoding: "gb18030" }).text,
+          `pointer ${String(pointer)}, bytes 0x${leading.toString(16)} 0x${trail.toString(16)}`,
+        ).toBe(codePointToText(codePoint));
+        // GBK's decoder is defined by the Encoding Standard as identical to gb18030's own (https://encoding.spec.whatwg.org/#gbk-decoder), so every two-byte pointer decodes the same way under either label.
+        expect(
+          decodeText(bytes, { encoding: "gbk" }).text,
+          `gbk pointer ${String(pointer)}`,
+        ).toBe(codePointToText(codePoint));
       }
-      const [leading, trail] = gb18030TwoByteBytesForPointer(pointer);
-      const bytes = Uint8Array.of(leading, trail);
-      expect(
-        decodeText(bytes, { encoding: "gb18030" }).text,
-        `pointer ${String(pointer)}, bytes 0x${leading.toString(16)} 0x${trail.toString(16)}`,
-      ).toBe(codePointToText(codePoint));
-      // GBK's decoder is defined by the Encoding Standard as identical to gb18030's own (https://encoding.spec.whatwg.org/#gbk-decoder), so every two-byte pointer decodes the same way under either label.
-      expect(
-        decodeText(bytes, { encoding: "gbk" }).text,
-        `gbk pointer ${String(pointer)}`,
-      ).toBe(codePointToText(codePoint));
-    }
-  });
+    },
+    EXHAUSTIVE_SWEEP_TIMEOUT_MS,
+  );
 
   it("decodes every ASCII byte as its own code point", () => {
     for (let byte = 0x00; byte <= 0x7f; byte += 1) {
@@ -888,31 +918,35 @@ describe("decodeText DBCS encodings, cross-checked against a platform TextDecode
     },
   );
 
-  it("agrees with a platform EUC-KR decoder inside the traditional 0xA1-0xFE sub-range", () => {
-    const platform = new TextDecoder("euc-kr", { fatal: true });
-    let sampled = 0;
-    for (let pointer = 0; pointer < EUC_KR.codeUnits.length; pointer += 1) {
-      const codePoint = pointerCodePoint(EUC_KR, pointer);
-      if (codePoint === undefined) {
-        continue;
+  it(
+    "agrees with a platform EUC-KR decoder inside the traditional 0xA1-0xFE sub-range",
+    () => {
+      const platform = new TextDecoder("euc-kr", { fatal: true });
+      let sampled = 0;
+      for (let pointer = 0; pointer < EUC_KR.codeUnits.length; pointer += 1) {
+        const codePoint = pointerCodePoint(EUC_KR, pointer);
+        if (codePoint === undefined) {
+          continue;
+        }
+        const [leading, trail] = eucKrBytesForPointer(pointer);
+        if (leading < 0xa1 || trail < 0xa1) {
+          continue;
+        }
+        const bytes = Uint8Array.of(leading, trail);
+        let platformResult: string;
+        try {
+          platformResult = platform.decode(bytes);
+        } catch {
+          // A small number of pointers even inside the traditional sub-range are undefined in Node's own ICU build (the Euro sign and registered-trademark sign among them); skip rather than assert agreement where there is demonstrably none to check.
+          continue;
+        }
+        sampled += 1;
+        expect(platformResult, `pointer ${String(pointer)}`).toBe(
+          decodeText(bytes, { encoding: "euc-kr" }).text,
+        );
       }
-      const [leading, trail] = eucKrBytesForPointer(pointer);
-      if (leading < 0xa1 || trail < 0xa1) {
-        continue;
-      }
-      const bytes = Uint8Array.of(leading, trail);
-      let platformResult: string;
-      try {
-        platformResult = platform.decode(bytes);
-      } catch {
-        // A small number of pointers even inside the traditional sub-range are undefined in Node's own ICU build (the Euro sign and registered-trademark sign among them); skip rather than assert agreement where there is demonstrably none to check.
-        continue;
-      }
-      sampled += 1;
-      expect(platformResult, `pointer ${String(pointer)}`).toBe(
-        decodeText(bytes, { encoding: "euc-kr" }).text,
-      );
-    }
-    expect(sampled).toBeGreaterThan(100);
-  });
+      expect(sampled).toBeGreaterThan(100);
+    },
+    EXHAUSTIVE_SWEEP_TIMEOUT_MS,
+  );
 });
