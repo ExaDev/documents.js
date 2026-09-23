@@ -3,7 +3,7 @@
 //
 // Node rather than rtf-codec's own scripts/generate-dbcs-tables.py: that script's whole reason for being Python is decoding raw bytes through Python's stdlib codecs module (bytes([...]).decode(codec)), since it derives its tables by actually running Microsoft's cpNNNN codecs byte by byte — see that script's own header comment. This script derives nothing by decoding anything; it is a pure JSON-to-TypeScript transform of index tables the WHATWG Encoding Standard already publishes pre-computed (https://encoding.spec.whatwg.org/#indexes), so it has the same shape as markdown-codec's own scripts/generate-entity-table.mjs (vendored WHATWG JSON in, generated .ts out) and uses that script's language for the same reason.
 //
-// Each of jis0208, jis0212, big5, euc-kr and gb18030 becomes a `DbcsTable`: a `codeUnits` string holding exactly one UTF-16 code unit per pointer (0 to the table's own length minus one), plus an `astral` map for the rare pointer whose real code point does not fit in one UTF-16 code unit. A string literal rather than rtf-codec's own dense `readonly number[]` (the format this file used before): Prettier never inserts a line break inside a string literal, so a whole table collapses to one source line regardless of how many entries it holds, exactly the property rtf-codec's own string-keyed codepage-dbcs.ts already relies on for the same reason (see that file's own header comment). `codeUnits.charCodeAt(pointer)` gives the code point directly for anything in the Basic Multilingual Plane; U+FFFD stands in both for a pointer the Encoding Standard's own index leaves undefined and for a pointer whose real code point is astral (needs two UTF-16 code units, so cannot itself occupy the one code unit `codeUnits` gives every pointer) — the `astral` map disambiguates the two, holding the real code point for the second case only, keyed by that same pointer, so a genuinely undefined pointer is exactly the one whose sentinel has no corresponding `astral` entry. Only big5 currently has any astral entries (a handful of CJK Compatibility Ideographs Supplement code points its WHATWG index maps beyond the Basic Multilingual Plane); this generator throws if a future Encoding Standard update ever makes a table map a pointer to U+FFFD itself, since that would make the sentinel ambiguous. `GB18030_RANGES` is gb18030's own separate ranges index for its algorithmic four-byte form: [pointer, codePointOffset] pairs, sorted ascending by pointer exactly as the source JSON already orders them, which decode-dbcs.ts's decodeGb18030RangesCodePoint binary-searches; small enough on its own that the array-per-line format this file used throughout before this change is left as it was.
+// Each of jis0208, jis0212, big5, euc-kr and gb18030 becomes a `DbcsTable`: a `codeUnits` string holding exactly one UTF-16 code unit per pointer (0 to the table's own length minus one), plus an `astral` map for the rare pointer whose real code point does not fit in one UTF-16 code unit. A string literal rather than rtf-codec's own dense `readonly number[]` (the format this file used before): Prettier never inserts a line break inside a string literal, so a whole table collapses to one source line regardless of how many entries it holds, exactly the property rtf-codec's own string-keyed codepage-dbcs.ts already relies on for the same reason (see that file's own header comment). `codeUnits.charCodeAt(pointer)` gives the code point directly for anything in the Basic Multilingual Plane; U+FFFD stands in both for a pointer the Encoding Standard's own index leaves undefined and for a pointer whose real code point is astral (needs two UTF-16 code units, so cannot itself occupy the one code unit `codeUnits` gives every pointer) — the `astral` map disambiguates the two, holding the real code point for the second case only, keyed by that same pointer, so a genuinely undefined pointer is exactly the one whose sentinel has no corresponding `astral` entry. Only big5 currently has any astral entries (a handful of CJK Compatibility Ideographs Supplement code points its WHATWG index maps beyond the Basic Multilingual Plane); this generator throws if a future Encoding Standard update ever makes a table map a pointer to U+FFFD itself, since that would make the sentinel ambiguous. `astral` and `GB18030_RANGES` (gb18030's own separate ranges index for its algorithmic four-byte form: [pointer, codePointOffset] pairs, sorted ascending by pointer exactly as the source JSON already orders them, which decode-dbcs.ts's decodeGb18030RangesCodePoint binary-searches) both use the same `[pointer, value]` pair-tuple array literal, passed straight to `new Map` for `astral` — small enough, even for big5's own astral entries, that the one-tuple-per-line format this file used throughout before this change is left as it was, rather than reaching for a denser but more roundabout encoding.
 //
 // Run with `node scripts/generate-dbcs-tables.mjs` after replacing the vendored indexes.json (e.g. a WHATWG Living Standard update). Not part of `pnpm build`/`pnpm test` — the generated .ts file is committed to the repository as an ordinary source file, exactly like markdown-codec's own scripts/generate-entity-table.mjs pattern (see that script's own header comment).
 //
@@ -72,23 +72,14 @@ function tsStringLiteral(value) {
 }
 
 /**
- * A table's astral overflow entries as a call to the emitted file's own `astralMap` helper, passed a flat `[pointer, codePoint, pointer, codePoint, ...]` array literal rather than an array of `[pointer, codePoint]` tuples: Prettier packs a flat array of number literals several to a line (the same dense format this file's own arrays used throughout before this change), but formats an array of 2-tuples one tuple per line regardless of how short each one is, which would put every astral entry back on its own line and defeat the point of converting this file to a compact format in the first place.
- * @param {ReadonlyArray<readonly [number, number]>} astral
+ * An array of `[pointer, codePoint]` pairs as a TypeScript tuple-literal array, one tuple per line — the same shape `GB18030_RANGES` already used throughout this file before this change, reused here for a table's own astral overflow entries. Passed straight to `new Map(...)` in the emitted literal: `Map`'s own constructor takes an iterable of `[K, V]` pairs directly, so building a table's `astral` field this way needs no runtime reconstruction, no indexed access into the literal, and therefore no "what if this pair is malformed" guard for a shape the generator itself always emits well-formed — the flat-array-plus-zip-function this file used at one point existed only to make Prettier pack the literal more densely, and its own defensive length check was dead code no real caller could ever trigger, which is worse than the handful of extra lines the plain tuple-array format costs.
+ * @param {ReadonlyArray<readonly [number, number]>} pairs
  */
-function astralMapLiteral(astral) {
-  if (astral.length === 0) {
-    return "astralMap([])";
+function pairsArrayLiteral(pairs) {
+  if (pairs.length === 0) {
+    return "[]";
   }
-  const flat = astral.flatMap(([pointer, codePoint]) => [pointer, codePoint]);
-  return `astralMap([${flat.map(String).join(", ")}])`;
-}
-
-/**
- * gb18030's own ranges index, already sorted ascending by pointer in the source JSON, as an array of TypeScript tuple literals.
- * @param {ReadonlyArray<[number, number]>} ranges
- */
-function rangesArrayLiteral(ranges) {
-  const lines = ranges.map(
+  const lines = pairs.map(
     ([pointer, codePoint]) => `  [${String(pointer)}, ${String(codePoint)}],`,
   );
   return `[\n${lines.join("\n")}\n]`;
@@ -105,30 +96,16 @@ const gb18030Ranges = indexes["gb18030-ranges"];
  * @param {{ codeUnits: string, astral: ReadonlyArray<readonly [number, number]> }} built
  */
 function dbcsTableLiteral(built) {
-  return `{\n  codeUnits: ${tsStringLiteral(built.codeUnits)},\n  astral: ${astralMapLiteral(built.astral)},\n}`;
+  return `{\n  codeUnits: ${tsStringLiteral(built.codeUnits)},\n  astral: new Map(${pairsArrayLiteral(built.astral)}),\n}`;
 }
 
 const header = `// AUTO-GENERATED by scripts/generate-dbcs-tables.mjs from assets/whatwg-encoding/indexes.json — do not hand-edit.
 // Regenerate with: node scripts/generate-dbcs-tables.mjs
 //
-// One \`DbcsTable\` per WHATWG Encoding Standard pointer-keyed index (https://encoding.spec.whatwg.org/#indexes). \`codeUnits\` holds one UTF-16 code unit per pointer (0 to the string's own length minus one): the Unicode code point itself for anything in the Basic Multilingual Plane, or U+FFFD where that pointer is either undefined or holds a code point needing more than one UTF-16 code unit. \`astral\` gives the real code point for the second case only, keyed by pointer, built by this file's own \`astralMap\` helper from a flat \`[pointer, codePoint, pointer, codePoint, ...]\` literal (flat rather than an array of pair tuples so Prettier packs it several entries to a line, the same dense format every other numeric array in this file uses, instead of one tuple per line) — decode-dbcs.ts's own pointerCodePoint reads \`codeUnits.charCodeAt(pointer)\` first and only consults \`astral\` when that comes back U+FFFD, so a pointer with no \`astral\` entry of its own is exactly the pointers the index leaves genuinely undefined. See this script's own header comment for why U+FFFD is safe as a sentinel here. \`GB18030_RANGES\` is gb18030's own separate ranges index for its algorithmic four-byte form: [pointer, codePointOffset] pairs, sorted ascending by pointer exactly as the source JSON already orders them, which decode-dbcs.ts's decodeGb18030RangesCodePoint binary-searches.
+// One \`DbcsTable\` per WHATWG Encoding Standard pointer-keyed index (https://encoding.spec.whatwg.org/#indexes). \`codeUnits\` holds one UTF-16 code unit per pointer (0 to the string's own length minus one): the Unicode code point itself for anything in the Basic Multilingual Plane, or U+FFFD where that pointer is either undefined or holds a code point needing more than one UTF-16 code unit. \`astral\` gives the real code point for the second case only, keyed by pointer, built directly by \`new Map\` from a \`[pointer, codePoint]\` pair-tuple literal (the same shape \`GB18030_RANGES\` below already uses) — decode-dbcs.ts's own pointerCodePoint reads \`codeUnits.charCodeAt(pointer)\` first and only consults \`astral\` when that comes back U+FFFD, so a pointer with no \`astral\` entry of its own is exactly the pointers the index leaves genuinely undefined. See this script's own header comment for why U+FFFD is safe as a sentinel here. \`GB18030_RANGES\` is gb18030's own separate ranges index for its algorithmic four-byte form: [pointer, codePointOffset] pairs, sorted ascending by pointer exactly as the source JSON already orders them, which decode-dbcs.ts's decodeGb18030RangesCodePoint binary-searches.
 export interface DbcsTable {
   readonly codeUnits: string;
   readonly astral: ReadonlyMap<number, number>;
-}
-
-/** Rebuilds a table's \`astral\` overflow map from its own flat \`[pointer, codePoint, pointer, codePoint, ...]\` literal — see this file's own header comment for why that literal is flat rather than an array of pair tuples. */
-function astralMap(flatPointersAndCodePoints: readonly number[]): ReadonlyMap<number, number> {
-  const map = new Map<number, number>();
-  for (let index = 0; index < flatPointersAndCodePoints.length; index += 2) {
-    const pointer = flatPointersAndCodePoints[index];
-    const codePoint = flatPointersAndCodePoints[index + 1];
-    if (pointer === undefined || codePoint === undefined) {
-      throw new Error("dbcs-tables.ts's own astral overflow literal has an odd length");
-    }
-    map.set(pointer, codePoint);
-  }
-  return map;
 }
 
 export const JIS0208: DbcsTable = ${dbcsTableLiteral(jis0208)};
@@ -141,7 +118,7 @@ export const EUC_KR: DbcsTable = ${dbcsTableLiteral(eucKr)};
 
 export const GB18030: DbcsTable = ${dbcsTableLiteral(gb18030)};
 
-export const GB18030_RANGES: readonly (readonly [number, number])[] = ${rangesArrayLiteral(gb18030Ranges)};
+export const GB18030_RANGES: readonly (readonly [number, number])[] = ${pairsArrayLiteral(gb18030Ranges)};
 `;
 
 writeFileSync(outputPath, header, "utf8");
