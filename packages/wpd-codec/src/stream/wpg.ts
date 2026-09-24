@@ -4,11 +4,11 @@ import type {
   ContentBlock,
   ContentShape,
   ContentStroke,
-  ContentSubpath,
   ContentVector,
   PageSize,
 } from "document-schema.js";
 import { byteAt, int16At, uint16At, uint32At } from "../bytes/view";
+import { readPrimitiveVector } from "./wpg-primitives";
 
 // — WPG (WordPerfect Graphic) vector graphics, per the SDK's "WordPerfect Graphic File Format" pages --
 //
@@ -24,9 +24,9 @@ import { byteAt, int16At, uint16At, uint32At } from "../bytes/view";
 const RECORD_START_WPG = 0x01;
 const RECORD_END_WPG = 0x02;
 const RECORD_TEXT_DATA = 0x0f;
-const RECORD_POLYLINE = 0x15;
-const RECORD_RECTANGLE = 0x18;
-const RECORD_ARC = 0x19;
+export const RECORD_POLYLINE = 0x15;
+export const RECORD_RECTANGLE = 0x18;
+export const RECORD_ARC = 0x19;
 const RECORD_TEXT_BLOCK = 0x1d;
 const RECORD_GROUP = 0x20;
 const RECORD_PEN_FORE_COLOR = 0x25;
@@ -99,13 +99,13 @@ const FLAG_SCALE = 1 << 3;
 const FLAG_ROTATE = 1 << 4;
 const FLAG_OBJECT_ID = 1 << 5;
 const FLAG_EDIT_LOCK = 1 << 7;
-const FLAG_PATH_WINDING = 1 << 12;
-const FLAG_FILL = 1 << 13;
-const FLAG_CLOSE = 1 << 14;
-const FLAG_FRAME = 1 << 15;
+export const FLAG_PATH_WINDING = 1 << 12;
+export const FLAG_FILL = 1 << 13;
+export const FLAG_CLOSE = 1 << 14;
+export const FLAG_FRAME = 1 << 15;
 
 // The one approximation this decoder makes: a rounded Rectangle's corners are quarter ellipses, and the shared path model carries only straight and cubic segments, so each quarter becomes the standard cubic approximation of a quarter ellipse — control points offset by 4/3*(sqrt(2)-1) of the radii, the identical bounded approximation this family's SVG path module applies to elliptical arcs at no more than 90 degrees per cubic. Derived from the circle constant here rather than hard-coded, so the geometry and its derivation stay checkable together.
-const QUARTER_ELLIPSE_KAPPA = (4 / 3) * (Math.SQRT2 - 1);
+export const QUARTER_ELLIPSE_KAPPA = (4 / 3) * (Math.SQRT2 - 1);
 
 // The WPG prefix's own product/file-type/version gates: product type 1 ("always 1 for WPG files"), file type 22 (0x16, "always 22 for WPG files"), and the major version byte that separates the two record vocabularies (2 for the framed record stream this decoder reads, 1 for WPG 1.0's earlier type-and-length-only stream it refuses).
 const WPG_PRODUCT_TYPE = 1;
@@ -116,7 +116,7 @@ const WPG_MAJOR_1 = 1;
 // The fixed prefix head: file ID (4), {start of document} (4), product type, file type, major version, minor version, [encryption key] (2), [start packet data] (2), entry count, resource complete, [start encryption] (2), {file size} (4), [encryption version] (2). Every field this decoder reads sits inside it.
 const WPG_PREFIX_HEAD_SIZE = 26;
 
-const POINTS_PER_INCH = 72;
+export const POINTS_PER_INCH = 72;
 
 // The one injected dependency: a Text Data record's bytes are a WP document stream, and folding one into blocks is the read layer's own machinery (the identical tokeniser and fold a box's WP-text content takes) — injected as a callback so this module stays a pure byte decoder with no dependency back on src/read.ts.
 export type WpgTextFold = (documentArea: Uint8Array) => readonly ContentBlock[];
@@ -144,7 +144,7 @@ interface WpgColor {
 }
 
 // The running rendition state a drawing's records decode against, seeded from the specification's own "WPG Defaults" table: pen and brush foreground black, pen width 0 ("0 = hairline", the thinnest width the output device can render), opacities fully opaque. The hairline default has no positive point value the shared stroke shape can state (its widthPt is positive-only), so a framed record with no Pen Size record states no stroke at all — the identical reading the family's PDF reconstruction gives a zero-width paint, whose stroke is likewise absent rather than a guessed width.
-interface WpgRenditionState {
+export interface WpgRenditionState {
   penColor: WpgColor;
   penWidthUnits: number;
   brushColor: WpgColor;
@@ -153,7 +153,7 @@ interface WpgRenditionState {
 const WPG_DEFAULT_BLACK: WpgColor = { r: 0, g: 0, b: 0, a: 0 };
 
 // The running geometry every decoded coordinate converts through: the image extent in points (the page size and the Y-flip reference), the pixels-per-inch of each axis, and the coordinate precision Start WPG stated.
-interface WpgGeometry {
+export interface WpgGeometry {
   readonly widthPt: number;
   readonly heightPt: number;
   readonly xPpi: number;
@@ -195,7 +195,7 @@ function readCountField(
 }
 
 // Reads one coordinate at the stream's stated precision: a signed 16-bit unit in single precision, a 32-bit 16.16 fixed-point value in double ("Corel products use the fractional portion for rounding only", so the fraction is kept rather than truncated).
-function coordinateAt(
+export function coordinateAt(
   bytes: Uint8Array,
   offset: number,
   doublePrecision: boolean,
@@ -207,7 +207,7 @@ function coordinateAt(
 }
 
 // The characterisation flags word plus the walk past the optional data its low bits state — exactly as far as this decoder needs: past the edit-lock descriptor and the Object ID. A record carrying any transformation flag (taper/translate/skew/scale/rotate) is refused whole, so the transformation elements themselves are never walked past — like every other refusal this function makes, that is undefined, not a sentinel value inside an otherwise-valid result for callers to separately test.
-function readCharacterization(
+export function readCharacterization(
   bytes: Uint8Array,
   cursor: number,
 ): { readonly flags: number; readonly geometryAt: number } | undefined {
@@ -233,16 +233,16 @@ function readCharacterization(
   }
 }
 
-function xToPt(geometry: WpgGeometry, x: number): number {
+export function xToPt(geometry: WpgGeometry, x: number): number {
   return (x / geometry.xPpi) * POINTS_PER_INCH;
 }
 
 // WPG's Y grows up from the extent's bottom; the shared model's grows down from the page top. Flipping against the extent height converts one to the other.
-function yToPt(geometry: WpgGeometry, y: number): number {
+export function yToPt(geometry: WpgGeometry, y: number): number {
   return geometry.heightPt - (y / geometry.yPpi) * POINTS_PER_INCH;
 }
 
-function strokeOf(
+export function strokeOf(
   geometry: WpgGeometry,
   state: WpgRenditionState,
 ): ContentStroke | undefined {
@@ -257,7 +257,7 @@ function strokeOf(
   };
 }
 
-function fillOf(state: WpgRenditionState): {
+export function fillOf(state: WpgRenditionState): {
   fill: Color;
   fillOpacity: number;
 } {
@@ -600,7 +600,7 @@ function readTextBlockFrame(
 }
 
 // The shared frame for two WPG corners (lower-left and upper-right, Y up): normalised and converted to the model's top-left-origin, Y-down page space, in points. yToPt has already performed the one flip against the extent height, so the smaller converted Y is the frame's top edge — subtracting it from heightPt again would flip it back into Y-up space.
-function frameFromCorners(
+export function frameFromCorners(
   geometry: WpgGeometry,
   x1: number,
   y1: number,
@@ -616,325 +616,5 @@ function frameFromCorners(
     yPt: top,
     widthPt: right - left,
     heightPt: bottom - top,
-  };
-}
-
-// The primitive records that decode to a ContentVector: Polyline, Rectangle, and Arc-as-full-ellipse. Returns undefined for any other type, for a record this reader must refuse (transformation flags, truncated data, a partial arc), leaving the caller to name it.
-function readPrimitiveVector(
-  type: number,
-  data: Uint8Array,
-  geometry: WpgGeometry,
-  state: WpgRenditionState,
-): ContentVector | undefined {
-  const characterization = readCharacterization(data, 0);
-  if (characterization === undefined) {
-    return undefined;
-  }
-  const { flags, geometryAt } = characterization;
-  const stroke =
-    (flags & FLAG_FRAME) !== 0 ? strokeOf(geometry, state) : undefined;
-  switch (type) {
-    case RECORD_POLYLINE:
-      return readPolyline(data, geometry, flags, geometryAt, stroke, state);
-    case RECORD_RECTANGLE:
-      return readWpgRectangle(data, geometry, flags, geometryAt, stroke, state);
-    case RECORD_ARC:
-      return readWpgFullEllipse(
-        data,
-        geometry,
-        flags,
-        geometryAt,
-        stroke,
-        state,
-      );
-    default:
-      return undefined;
-  }
-}
-
-function readPolyline(
-  data: Uint8Array,
-  geometry: WpgGeometry,
-  flags: number,
-  geometryAt: number,
-  stroke: ContentStroke | undefined,
-  state: WpgRenditionState,
-): ContentVector | undefined {
-  // uint16At and coordinateAt are both built on byteAt, whose own bounds check throws rather than returning undefined — a count field or a point that runs past data's own end surfaces as one caught exception, not a separate manual "room for N more bytes" comparison at each read.
-  const points: { xPt: number; yPt: number }[] = [];
-  try {
-    const count = uint16At(data, geometryAt);
-    let at = geometryAt + 2;
-    for (let index = 0; index < count; index += 1) {
-      points.push({
-        xPt: xToPt(geometry, coordinateAt(data, at, geometry.doublePrecision)),
-        yPt: yToPt(
-          geometry,
-          coordinateAt(
-            data,
-            at + geometry.coordinateSize,
-            geometry.doublePrecision,
-          ),
-        ),
-      });
-      at += geometry.coordinateSize * 2;
-    }
-  } catch {
-    return undefined;
-  }
-  const firstPoint = points[0];
-  if (firstPoint === undefined) {
-    return undefined;
-  }
-  const secondPoint = points[1];
-  const closed = (flags & FLAG_CLOSE) !== 0;
-  const filled = (flags & FLAG_FILL) !== 0;
-
-  // Two points, not closed, is the shared model's own line variant — the shape a plain stroke draws — when a stroke resolved for it (the variant carries a required stroke, and a hairline-framed line keeps its geometry as a path instead).
-  if (
-    points.length === 2 &&
-    secondPoint !== undefined &&
-    !closed &&
-    stroke !== undefined
-  ) {
-    return {
-      kind: "line",
-      from: firstPoint,
-      to: secondPoint,
-      stroke,
-    };
-  }
-
-  // A path's subpath points are local to its own frame (the shared path variant's contract), so the bounding box of the converted points becomes the frame and each point shifts by its origin.
-  const frame = boundingFrame(points);
-  const local = points.map((point) => ({
-    xPt: point.xPt - frame.xPt,
-    yPt: point.yPt - frame.yPt,
-  }));
-  const subpath: ContentSubpath = {
-    start: {
-      xPt: firstPoint.xPt - frame.xPt,
-      yPt: firstPoint.yPt - frame.yPt,
-    },
-    segments: local
-      .slice(1)
-      .map((point) => ({ kind: "line" as const, to: point })),
-    closed,
-  };
-  const fill = filled ? fillOf(state) : undefined;
-  return {
-    kind: "path",
-    frame,
-    subpaths: [subpath],
-    ...(fill !== undefined
-      ? {
-          fill: fill.fill,
-          ...(fill.fillOpacity < 1 ? { fillOpacity: fill.fillOpacity } : {}),
-          ...((flags & FLAG_PATH_WINDING) !== 0
-            ? { fillRule: "nonzero" as const }
-            : {}),
-        }
-      : {}),
-    ...(stroke !== undefined ? { stroke } : {}),
-  };
-}
-
-function boundingFrame(points: readonly { xPt: number; yPt: number }[]): Box {
-  let minX = Number.POSITIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  let maxX = Number.NEGATIVE_INFINITY;
-  let maxY = Number.NEGATIVE_INFINITY;
-  for (const point of points) {
-    minX = Math.min(minX, point.xPt);
-    minY = Math.min(minY, point.yPt);
-    maxX = Math.max(maxX, point.xPt);
-    maxY = Math.max(maxY, point.yPt);
-  }
-  return { xPt: minX, yPt: minY, widthPt: maxX - minX, heightPt: maxY - minY };
-}
-
-function readWpgRectangle(
-  data: Uint8Array,
-  geometry: WpgGeometry,
-  flags: number,
-  geometryAt: number,
-  stroke: ContentStroke | undefined,
-  state: WpgRenditionState,
-): ContentVector | undefined {
-  const coordinateSize = geometry.coordinateSize;
-  if (geometryAt + coordinateSize * 6 > data.length) {
-    return undefined;
-  }
-  const xll = coordinateAt(data, geometryAt, geometry.doublePrecision);
-  const yll = coordinateAt(
-    data,
-    geometryAt + coordinateSize,
-    geometry.doublePrecision,
-  );
-  const xur = coordinateAt(
-    data,
-    geometryAt + coordinateSize * 2,
-    geometry.doublePrecision,
-  );
-  const yur = coordinateAt(
-    data,
-    geometryAt + coordinateSize * 3,
-    geometry.doublePrecision,
-  );
-  const rx = coordinateAt(
-    data,
-    geometryAt + coordinateSize * 4,
-    geometry.doublePrecision,
-  );
-  const ry = coordinateAt(
-    data,
-    geometryAt + coordinateSize * 5,
-    geometry.doublePrecision,
-  );
-  const frame = frameFromCorners(geometry, xll, yll, xur, yur);
-  const filled = (flags & FLAG_FILL) !== 0;
-  const fill = filled ? fillOf(state) : undefined;
-  const fillFields =
-    fill !== undefined
-      ? {
-          fill: fill.fill,
-          ...(fill.fillOpacity < 1 ? { fillOpacity: fill.fillOpacity } : {}),
-        }
-      : {};
-
-  // "If either the horizontal radius or the vertical radius is less than or equal to zero, then the corner is assumed to be square" — the plain rect the shared model carries directly.
-  if (rx <= 0 || ry <= 0) {
-    return {
-      kind: "rect",
-      frame,
-      ...fillFields,
-      ...(stroke !== undefined ? { stroke } : {}),
-    };
-  }
-
-  // A genuinely rounded rectangle: the shared rect variant carries no corner radii, so the shape becomes a path whose corners are the quarter-ellipse cubics named at this module's head. The path starts at the nine o'clock position the specification itself defines for a rectangle's path, and the subpath points are local to the frame as the path variant's own contract states. A corner radius is a magnitude, not a position, so only the unit conversion applies — running one through yToPt would flip it against an extent height it never measured from — and each radius clamps to half its side so a radius larger than the rectangle itself still yields a path inside the frame, with the cubic control offsets derived from the clamped values to match.
-  const cornerRxPt = Math.min(
-    (rx / geometry.xPpi) * POINTS_PER_INCH,
-    frame.widthPt / 2,
-  );
-  const cornerRyPt = Math.min(
-    (ry / geometry.yPpi) * POINTS_PER_INCH,
-    frame.heightPt / 2,
-  );
-  const kx = cornerRxPt * QUARTER_ELLIPSE_KAPPA;
-  const ky = cornerRyPt * QUARTER_ELLIPSE_KAPPA;
-  const width = frame.widthPt;
-  const height = frame.heightPt;
-  const left = { xPt: 0, yPt: height / 2 };
-  return {
-    kind: "path",
-    frame,
-    subpaths: [
-      {
-        start: left,
-        closed: true,
-        segments: [
-          { kind: "line", to: { xPt: cornerRxPt, yPt: 0 } },
-          {
-            kind: "cubic",
-            control1: { xPt: cornerRxPt - kx, yPt: 0 },
-            control2: { xPt: width, yPt: cornerRyPt - ky },
-            to: { xPt: width, yPt: cornerRyPt },
-          },
-          { kind: "line", to: { xPt: width, yPt: height - cornerRyPt } },
-          {
-            kind: "cubic",
-            control1: { xPt: width, yPt: height - cornerRyPt + ky },
-            control2: { xPt: width - cornerRxPt + kx, yPt: height },
-            to: { xPt: width - cornerRxPt, yPt: height },
-          },
-          { kind: "line", to: { xPt: cornerRxPt, yPt: height } },
-          {
-            kind: "cubic",
-            control1: { xPt: cornerRxPt - kx, yPt: height },
-            control2: { xPt: 0, yPt: height - cornerRyPt + ky },
-            to: { xPt: 0, yPt: height - cornerRyPt },
-          },
-          { kind: "line", to: { xPt: 0, yPt: cornerRyPt } },
-          {
-            kind: "cubic",
-            control1: { xPt: 0, yPt: cornerRyPt - ky },
-            control2: { xPt: cornerRxPt - kx, yPt: 0 },
-            to: { xPt: cornerRxPt, yPt: 0 },
-          },
-          { kind: "line", to: left },
-        ],
-      },
-    ],
-    ...fillFields,
-    ...(stroke !== undefined ? { stroke } : {}),
-  };
-}
-
-// An Arc record whose initial and terminal endpoint offsets are identical: "Identical endpoint coordinates define a full ellipse or circle" — the only arc spelling this decoder lifts, since a partial elliptical arc has no exact segment shape in the shared path model (whose cubics would approximate, not carry, it). Any other arc is refused and named.
-function readWpgFullEllipse(
-  data: Uint8Array,
-  geometry: WpgGeometry,
-  flags: number,
-  geometryAt: number,
-  stroke: ContentStroke | undefined,
-  state: WpgRenditionState,
-): ContentVector | undefined {
-  const coordinateSize = geometry.coordinateSize;
-  if (geometryAt + coordinateSize * 8 + 1 > data.length) {
-    return undefined;
-  }
-  const cx = coordinateAt(data, geometryAt, geometry.doublePrecision);
-  const cy = coordinateAt(
-    data,
-    geometryAt + coordinateSize,
-    geometry.doublePrecision,
-  );
-  const rx = coordinateAt(
-    data,
-    geometryAt + coordinateSize * 2,
-    geometry.doublePrecision,
-  );
-  const ry = coordinateAt(
-    data,
-    geometryAt + coordinateSize * 3,
-    geometry.doublePrecision,
-  );
-  const ix = coordinateAt(
-    data,
-    geometryAt + coordinateSize * 4,
-    geometry.doublePrecision,
-  );
-  const iy = coordinateAt(
-    data,
-    geometryAt + coordinateSize * 5,
-    geometry.doublePrecision,
-  );
-  const ex = coordinateAt(
-    data,
-    geometryAt + coordinateSize * 6,
-    geometry.doublePrecision,
-  );
-  const ey = coordinateAt(
-    data,
-    geometryAt + coordinateSize * 7,
-    geometry.doublePrecision,
-  );
-  if (ix !== ex || iy !== ey) {
-    return undefined;
-  }
-  const frame = frameFromCorners(geometry, cx - rx, cy - ry, cx + rx, cy + ry);
-  const filled = (flags & FLAG_FILL) !== 0;
-  const fill = filled ? fillOf(state) : undefined;
-  return {
-    kind: "ellipse",
-    frame,
-    ...(fill !== undefined
-      ? {
-          fill: fill.fill,
-          ...(fill.fillOpacity < 1 ? { fillOpacity: fill.fillOpacity } : {}),
-        }
-      : {}),
-    ...(stroke !== undefined ? { stroke } : {}),
   };
 }
