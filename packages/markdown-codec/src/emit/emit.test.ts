@@ -1126,7 +1126,8 @@ describe("headings", () => {
         }
         const blocks = reparsed.sections[0]?.blocks ?? [];
         // The reparse now carries a real division pair around the quoted heading (ExaDev/document-schema.js#1122) rather than degrading to indent-only structure — a heading inside a construct's extent groups fine, so the quote's own container fidelity survives alongside the heading's.
-        expect(blocks).toHaveLength(3);
+        const blockCountWithQuotedHeading = 3;
+        expect(blocks).toHaveLength(blockCountWithQuotedHeading);
         const [open, headingBlock, close] = blocks;
         expect(open).toEqual({
           kind: "constructStart",
@@ -2357,7 +2358,8 @@ describe("lists", () => {
     const blocks = reparsed.sections[0]?.blocks ?? [];
     // The item stays ONE item across the reparse: "before", the quoted division pair, and "after" all still share a single itemId, none of them split out as separate top-level content the way this issue's own root cause used to fracture them.
     const paragraphs = blocks.filter((block) => block.kind === "paragraph");
-    expect(paragraphs).toHaveLength(3);
+    const paragraphCount = 3;
+    expect(paragraphs).toHaveLength(paragraphCount);
     const itemIds = new Set(
       paragraphs.map((paragraph) => paragraph.list?.itemId),
     );
@@ -2377,7 +2379,8 @@ describe("lists", () => {
     const blocks = reparsed.sections[0]?.blocks ?? [];
     const paragraphs = blocks.filter((block) => block.kind === "paragraph");
     // Four paragraphs total: "before"/"after" (the outer item) plus "a"/"b" (the quote's own nested list) — none of them dropped or fused together.
-    expect(paragraphs).toHaveLength(4);
+    const paragraphCount = 4;
+    expect(paragraphs).toHaveLength(paragraphCount);
     const [before, a, b, after] = paragraphs;
     // "before" and "after" still share ONE outer itemId across the construct, exactly like the plain-paragraph-in-quote case above — the construct did not fracture the item.
     expect(before?.list?.itemId).toBeDefined();
@@ -2403,7 +2406,8 @@ describe("lists", () => {
       (block) => block.kind === "paragraph",
     );
     const [before, a, b] = paragraphs;
-    expect(paragraphs).toHaveLength(3);
+    const paragraphCount = 3;
+    expect(paragraphs).toHaveLength(paragraphCount);
     expect(before?.list?.itemId).toBeDefined();
     expect(a?.list?.itemId).toBeDefined();
     expect(b?.list?.itemId).toBeDefined();
@@ -2424,7 +2428,8 @@ describe("lists", () => {
       (block) => block.kind === "paragraph",
     );
     const [before, a, b, after] = paragraphs;
-    expect(paragraphs).toHaveLength(4);
+    const paragraphCount = 4;
+    expect(paragraphs).toHaveLength(paragraphCount);
     // "before" and "after" still share one outer itemId across BOTH constructs.
     expect(before?.list?.itemId).toBeDefined();
     expect(after?.list?.itemId).toBe(before?.list?.itemId);
@@ -2448,7 +2453,8 @@ describe("lists", () => {
       (block) => block.kind === "paragraph",
     );
     const [before, a, second] = paragraphs;
-    expect(paragraphs).toHaveLength(3);
+    const paragraphCount = 3;
+    expect(paragraphs).toHaveLength(paragraphCount);
     expect(before?.list?.itemId).toBeDefined();
     expect(a?.list?.itemId).toBeDefined();
     expect(a?.list?.itemId).not.toBe(before?.list?.itemId);
@@ -2471,7 +2477,8 @@ describe("lists", () => {
       (block) => block.kind === "paragraph",
     );
     const [outer, inner, a, b, inner2] = paragraphs;
-    expect(paragraphs).toHaveLength(5);
+    const paragraphCount = 5;
+    expect(paragraphs).toHaveLength(paragraphCount);
     // "outer" stays level 0; "inner"/"inner2" stay level 1, siblings of the SAME nested list, never displaced to level 0 by the construct sitting between them.
     expect(outer?.list?.level).toBe(0);
     expect(inner?.list?.level).toBe(1);
@@ -2496,7 +2503,8 @@ describe("lists", () => {
       (block) => block.kind === "paragraph",
     );
     const [before, nested, quoted, after] = paragraphs;
-    expect(paragraphs).toHaveLength(4);
+    const paragraphCount = 4;
+    expect(paragraphs).toHaveLength(paragraphCount);
     // "before", "quoted", and "after" all still share the OUTER item's own itemId across the reparse — the construct resuming the outer item after the nested sub-list closes did not fracture it apart, and the construct's own marker is never inverted (no bullet ends up rendered inside the blockquote).
     expect(before?.list?.level).toBe(0);
     expect(quoted?.list?.level).toBe(0);
@@ -2522,7 +2530,8 @@ describe("lists", () => {
       (block) => block.kind === "paragraph",
     );
     const [before, nested, q1, q2, after] = paragraphs;
-    expect(paragraphs).toHaveLength(5);
+    const paragraphCount = 5;
+    expect(paragraphs).toHaveLength(paragraphCount);
     expect(before?.list?.itemId).toBeDefined();
     expect(after?.list?.itemId).toBe(before?.list?.itemId);
     // "nested" is the outer item's own deeper sibling list, untouched by the quote resuming past it.
@@ -2549,7 +2558,8 @@ describe("lists", () => {
       (block) => block.kind === "paragraph",
     );
     const [before, nested, quoted] = paragraphs;
-    expect(paragraphs).toHaveLength(3);
+    const paragraphCount = 3;
+    expect(paragraphs).toHaveLength(paragraphCount);
     expect(before?.list?.itemId).toBeDefined();
     expect(quoted?.list?.itemId).toBe(before?.list?.itemId);
     expect(nested?.list?.itemId).not.toBe(before?.list?.itemId);
@@ -3045,7 +3055,8 @@ describe("lists", () => {
       throw new Error("expected a wordprocessing ContentDocument");
     }
     const blocks = reparsed.sections[0]?.blocks ?? [];
-    expect(blocks).toHaveLength(3);
+    const blockCount = 3;
+    expect(blocks).toHaveLength(blockCount);
     const [fooBlock, barBlock, bazBlock] = blocks;
     if (
       fooBlock?.kind !== "paragraph" ||
@@ -3894,7 +3905,8 @@ describe("round trip through src/lower", () => {
     const source = "&nbsp; &amp; foo";
     const first = lowerMarkdown(source);
     const markdown = emitMarkdown(first);
-    expect(markdown.charCodeAt(0)).toBe(0x00a0);
+    const nbspCharCode = 0x00a0; // &nbsp;'s own resolved codepoint, U+00A0 NO-BREAK SPACE
+    expect(markdown.charCodeAt(0)).toBe(nbspCharCode);
     expect(leafText(lowerMarkdown(markdown))).toBe(leafText(first));
   });
 });
