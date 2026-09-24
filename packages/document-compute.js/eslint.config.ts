@@ -8,6 +8,4 @@ export default packageLintConfig({
     "@typescript-eslint/switch-exhaustiveness-check",
   ],
   isomorphic: true,
-  // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why — this package's own layout/compute passes genuinely mutate several array/object parameters in place. Tracked for burn-down.
-  preferReadonlyParams: "off",
 });

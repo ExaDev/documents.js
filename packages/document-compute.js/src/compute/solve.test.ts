@@ -11,8 +11,11 @@ function num(numerator: string, denominator = "1"): MathExpression {
 function sym(id: string): MathExpression {
   return { kind: "sym", id };
 }
-function app(operator: string, args: MathExpression[]): MathExpression {
-  return { kind: "app", operator, args };
+function app(
+  operator: string,
+  args: readonly MathExpression[],
+): MathExpression {
+  return { kind: "app", operator, args: [...args] };
 }
 
 // x^2, used across both algorithms below: solveFor(xSquared, 4, 'x', {}, ...) should find x = 2 (within the chosen bracket/initial guess).

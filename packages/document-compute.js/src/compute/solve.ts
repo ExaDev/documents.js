@@ -40,7 +40,7 @@ function residualFn(
   unknownSymbol: string,
   bindings: FormulaBindings,
   context: SymbolTable,
-  dimension: DimensionVector,
+  dimension: Readonly<DimensionVector>,
 ): (x: number) => number {
   return (x: number): number => {
     const result = evaluate(
@@ -93,7 +93,7 @@ export function solveFor(
 
 function bisection(
   f: (x: number) => number,
-  bracket: [number, number] | undefined,
+  bracket: readonly [number, number] | undefined,
   tolerance: number,
   maxIterations: number,
 ): number {

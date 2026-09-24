@@ -10,7 +10,7 @@ function bigintOfCanonicalDigits(digits: string): bigint {
   return BigInt(digits);
 }
 
-export function toRational(value: ExactRational): Rational {
+export function toRational(value: Readonly<ExactRational>): Rational {
   return {
     n: bigintOfCanonicalDigits(value.numerator),
     d: bigintOfCanonicalDigits(value.denominator),

@@ -13,7 +13,7 @@ import { DivisionByZeroError, IncompatibleDimensionsError } from "./errors";
 export function interval(
   min: number,
   max: number,
-  dimension: DimensionVector = {},
+  dimension: Readonly<DimensionVector> = {},
 ): Interval {
   if (min > max) {
     throw new RangeError(`interval: min (${min}) must not exceed max (${max})`);
@@ -24,7 +24,7 @@ export function interval(
 // Lifts a plain point value into a degenerate (min === max) interval — how evaluate.ts lets a Quantity operand mix into interval arithmetic.
 export function pointInterval(
   magnitude: number,
-  dimension: DimensionVector = {},
+  dimension: Readonly<DimensionVector> = {},
 ): Interval {
   return { kind: "interval", min: magnitude, max: magnitude, dimension };
 }
