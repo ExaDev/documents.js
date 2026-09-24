@@ -1396,7 +1396,9 @@ describe("writeDocContent tables", () => {
     ]);
     const warnings: string[] = [];
     const bytes = writeDocContent(input, {
-      onWarning: (message) => warnings.push(message),
+      onWarning: (message) => {
+        warnings.push(message);
+      },
     });
     expect(warnings).toEqual([
       "doc-codec: table at block 0, column 0 is a header column, and that is dropped; this format's table grid has no header-column marker, so the column is written exactly as any other",
@@ -1441,7 +1443,11 @@ describe("writeDocContent tables", () => {
       },
     ]);
     const warnings: string[] = [];
-    writeDocContent(input, { onWarning: (message) => warnings.push(message) });
+    writeDocContent(input, {
+      onWarning: (message) => {
+        warnings.push(message);
+      },
+    });
     expect(warnings).toEqual([
       "doc-codec: table at block 0, column 0 is a header column, and that is dropped; this format's table grid has no header-column marker, so the column is written exactly as any other",
       "doc-codec: table at block 0, column 2 is a header column, and that is dropped; this format's table grid has no header-column marker, so the column is written exactly as any other",
@@ -1746,7 +1752,9 @@ describe("writeDocContent tables", () => {
     ]);
     const warnings: string[] = [];
     const bytes = writeDocContent(input, {
-      onWarning: (message) => warnings.push(message),
+      onWarning: (message) => {
+        warnings.push(message);
+      },
     });
     const result = readDocContent(bytes);
     expect(warnings).toEqual([]);
@@ -1804,7 +1812,9 @@ describe("writeDocContent tables", () => {
     const input = document([{ kind: "table", columns, rows }]);
     const warnings: string[] = [];
     const bytes = writeDocContent(input, {
-      onWarning: (message) => warnings.push(message),
+      onWarning: (message) => {
+        warnings.push(message);
+      },
     });
     expect(isDocBytes(bytes)).toBe(true);
     const block = tableAt(readDocContent(bytes), 0);
@@ -1834,7 +1844,9 @@ describe("writeDocContent tables", () => {
     const input = document([{ kind: "table", columns, rows }]);
     const warnings: string[] = [];
     const bytes = writeDocContent(input, {
-      onWarning: (message) => warnings.push(message),
+      onWarning: (message) => {
+        warnings.push(message);
+      },
     });
     expect(isDocBytes(bytes)).toBe(true);
     const block = tableAt(readDocContent(bytes), 0);
@@ -1881,7 +1893,9 @@ describe("writeDocContent tables", () => {
 
     const fittingWarnings: string[] = [];
     const fittingBytes = writeDocContent(buildSingleRowTable(withinBudget), {
-      onWarning: (message) => fittingWarnings.push(message),
+      onWarning: (message) => {
+        fittingWarnings.push(message);
+      },
     });
     const fittingBlock = tableAt(readDocContent(fittingBytes), 0);
     expect(fittingWarnings).toEqual([]);
@@ -1890,7 +1904,9 @@ describe("writeDocContent tables", () => {
 
     const overflowingWarnings: string[] = [];
     const overflowingBytes = writeDocContent(buildSingleRowTable(overBudget), {
-      onWarning: (message) => overflowingWarnings.push(message),
+      onWarning: (message) => {
+        overflowingWarnings.push(message);
+      },
     });
     expect(isDocBytes(overflowingBytes)).toBe(true);
     const overflowingBlock = tableAt(readDocContent(overflowingBytes), 0);
@@ -1929,7 +1945,9 @@ describe("writeDocContent tables", () => {
     ]);
     const warnings: string[] = [];
     const bytes = writeDocContent(input, {
-      onWarning: (message) => warnings.push(message),
+      onWarning: (message) => {
+        warnings.push(message);
+      },
     });
     expect(isDocBytes(bytes)).toBe(true);
     const block = tableAt(readDocContent(bytes), 0);
@@ -1988,7 +2006,9 @@ describe("writeDocContent tables", () => {
     ]);
     const warnings: string[] = [];
     const bytes = writeDocContent(input, {
-      onWarning: (message) => warnings.push(message),
+      onWarning: (message) => {
+        warnings.push(message);
+      },
     });
     expect(isDocBytes(bytes)).toBe(true);
     expect(warnings).toHaveLength(2);
@@ -2579,7 +2599,9 @@ describe("writeDocContent tables", () => {
     ]);
     const warnings: string[] = [];
     const bytes = writeDocContent(input, {
-      onWarning: (message) => warnings.push(message),
+      onWarning: (message) => {
+        warnings.push(message);
+      },
     });
     expect(isDocBytes(bytes)).toBe(true);
     const block = tableAt(readDocContent(bytes), 0);
@@ -2616,7 +2638,9 @@ describe("writeDocContent tables", () => {
     const warnings: string[] = [];
     expect(() =>
       writeDocContent(input, {
-        onWarning: (message) => warnings.push(message),
+        onWarning: (message) => {
+          warnings.push(message);
+        },
       }),
     ).toThrow(/does not fit in one 512-byte formatted disk page/);
     expect(warnings).toEqual([]);
@@ -2645,7 +2669,9 @@ describe("writeDocContent tables", () => {
     const warnings: string[] = [];
     expect(() =>
       writeDocContent(input, {
-        onWarning: (message) => warnings.push(message),
+        onWarning: (message) => {
+          warnings.push(message);
+        },
       }),
     ).toThrow(/does not fit in one 512-byte formatted disk page/);
     expect(warnings).toHaveLength(1);
