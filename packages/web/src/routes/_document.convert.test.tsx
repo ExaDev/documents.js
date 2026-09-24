@@ -538,6 +538,63 @@ describe("ConvertLayout", () => {
     mounted.unmount();
   });
 
+  it("disables the To select until a source is chosen, then enables it", () => {
+    const client = baseClient();
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountConvertLayout();
+
+    act(() => {
+      openDocument(openedFile("notes.xyz"));
+    });
+    expect(latestSelects.To?.disabled).toBe(true);
+
+    act(() => {
+      latestSelects.From?.onChange("docx");
+    });
+    expect(latestSelects.To?.disabled).toBe(false);
+    mounted.unmount();
+  });
+
+  it("prefetches the newly picked source's content once the source changes away from pdf", async () => {
+    const client = baseClient();
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountConvertLayout();
+
+    act(() => {
+      openDocument(openedFile("a.pdf"));
+    });
+    expect(client.content.read).not.toHaveBeenCalled();
+
+    act(() => {
+      latestSelects.From?.onChange("docx");
+    });
+    await vi.waitFor(() => {
+      expect(client.content.read).toHaveBeenCalledTimes(1);
+    });
+    const [readInput] = vi.mocked(client.content.read).mock.calls[0]!;
+    expect(readInput.format).toBe("docx");
+    mounted.unmount();
+  });
+
+  it("inspects the original bytes once the source changes to pdf, having skipped it while content-backed", async () => {
+    const client = baseClient();
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountConvertLayout();
+
+    act(() => {
+      openDocument(openedFile("a.docx"));
+    });
+    expect(client.pdf.inspect).not.toHaveBeenCalled();
+
+    act(() => {
+      latestSelects.From?.onChange("pdf");
+    });
+    await vi.waitFor(() => {
+      expect(client.pdf.inspect).toHaveBeenCalled();
+    });
+    mounted.unmount();
+  });
+
   it("notifies and shows no Done panel when the conversion rejects", async () => {
     const client = baseClient();
     vi.mocked(client.convert).mockRejectedValue(new Error("bad bytes"));
