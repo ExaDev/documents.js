@@ -6,4 +6,5 @@ export default packageLintConfig({
   newRuleDebt: [],
   isomorphic: true,
   maxLines: "error",
+  magicNumbers: "error",
 });
