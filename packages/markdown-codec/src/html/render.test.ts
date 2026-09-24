@@ -4,8 +4,11 @@ import { describe, expect, it } from "vitest";
 import type { MarkdownBlockNode, MarkdownDocumentNode } from "../ast/ast";
 import { escapeHref, renderDocumentToHtml, renderInlines } from "./render";
 
-function render(children: MarkdownBlockNode[]): string {
-  const document: MarkdownDocumentNode = { type: "document", children };
+function render(children: readonly MarkdownBlockNode[]): string {
+  const document: MarkdownDocumentNode = {
+    type: "document",
+    children: [...children],
+  };
   return renderDocumentToHtml(document);
 }
 

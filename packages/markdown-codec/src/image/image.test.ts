@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { detectImageFormat, readImageDimensions } from "./image";
 
-function bytes(...values: number[]): Uint8Array {
+function bytes(...values: readonly number[]): Uint8Array {
   return new Uint8Array(values);
 }
 

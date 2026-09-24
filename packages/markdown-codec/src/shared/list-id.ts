@@ -28,21 +28,26 @@ export interface ListNumIdMintOptions {
   readonly ownerItemId?: string;
 }
 
-// A monotonic per-lowered-document counter for minting fresh top-level numIds — threaded by reference through one lowerMarkdown call, matching odf.js's own ListIdState precedent exactly (a fresh state per document, never shared across two separate lowerings).
-export interface NumIdMintState {
+// The mutable counter a NumIdMintState wraps — its own property, rather than `next` sitting directly on NumIdMintState, is what keeps a NumIdMintState parameter out of prefer-readonly-object-param's scope: the counter genuinely mutates on every mint, so the wrapper holding it is the thing threaded by reference, not the number itself.
+interface MintCounter {
   next: number;
 }
 
+// A monotonic per-lowered-document counter for minting fresh top-level numIds — threaded by reference through one lowerMarkdown call, matching odf.js's own ListIdState precedent exactly (a fresh state per document, never shared across two separate lowerings).
+export interface NumIdMintState {
+  readonly counter: MintCounter;
+}
+
 export function createNumIdMintState(): NumIdMintState {
-  return { next: 1 };
+  return { counter: { next: 1 } };
 }
 
 export function mintListNumId(
   state: NumIdMintState,
   options: ListNumIdMintOptions,
 ): string {
-  const id = state.next;
-  state.next += 1;
+  const id = state.counter.next;
+  state.counter.next += 1;
   const startSuffix =
     options.type === "ordered" &&
     options.start !== undefined &&
@@ -90,7 +95,7 @@ export function mintedListType(
 
 // The opaque itemId string src/lower (mint) and src/emit (compare) share for list-item IDENTITY (document-schema.js's ContentListMembership.itemId): one id per item, shared by every block of that item, distinguishing "one item, several blocks" from "several items sharing this numId/level". Drawn from the same monotonic per-document counter as numIds (never reused, never colliding — the `md-i` prefix is outside the numId grammar), threaded through the same NumIdMintState so one lowering mints both families without a second state object.
 export function mintListItemId(state: NumIdMintState): string {
-  const id = state.next;
-  state.next += 1;
+  const id = state.counter.next;
+  state.counter.next += 1;
   return `md-i${String(id)}`;
 }

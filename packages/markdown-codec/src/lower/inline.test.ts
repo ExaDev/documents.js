@@ -11,7 +11,7 @@ import { createDiagnosticCollector } from "../test-support/diagnostics";
 import { lowerCodeBlockRun, lowerInlineNodes } from "./inline";
 
 function lower(
-  nodes: MarkdownInlineNode[],
+  nodes: readonly MarkdownInlineNode[],
   rawHtml: "preserve" | "drop" = "preserve",
 ) {
   const collector = createDiagnosticCollector();

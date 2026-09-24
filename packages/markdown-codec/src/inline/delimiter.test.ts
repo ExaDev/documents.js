@@ -10,11 +10,13 @@ import {
 } from "./delimiter";
 import { InlineNode } from "./node";
 
-function delimiter(fields: {
-  char: "*" | "_" | "~";
-  origCount: number;
-  canOpen: boolean;
-}): Delimiter {
+function delimiter(
+  fields: Readonly<{
+    char: "*" | "_" | "~";
+    origCount: number;
+    canOpen: boolean;
+  }>,
+): Delimiter {
   return {
     char: fields.char,
     count: fields.origCount,

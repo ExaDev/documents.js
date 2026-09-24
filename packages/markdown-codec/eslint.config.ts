@@ -15,8 +15,6 @@ export default packageLintConfig({
   isomorphic: true,
   // scripts/ holds a standalone build step importing from ../dist, the same reason test/ is ignored.
   additionalIgnores: ["scripts"],
-  // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why — this package's own scanner/parser/emitter genuinely mutates several array/object parameters in place. Tracked for burn-down.
-  preferReadonlyParams: "off",
   // Passed to the shared config rather than declared here, because flat config replaces a same-key rule instead of merging it: a second no-restricted-imports over runtime src would silently drop the Worker-isomorphism Node-builtin ban while still reporting these.
   //
   // This package hand-writes its own CommonMark+GFM scanner, parser, and renderer, the same bet pdf-codec makes against pdf-lib and pdfjs-dist. Depending on any existing markdown library would defeat the entire reason it exists, so each one is banned by name rather than by guessing at specifiers — every module of every library, not just its main entry point.

@@ -116,11 +116,11 @@ function decorateParagraph(
 
 // Splices a lowered inline sequence's run-level construct extents (a titled link's annotation extent, a footnote reference's point anchor) onto the paragraph being built, as that paragraph's own constructs field — absent when the sequence opened none, which is the overwhelming common case.
 function paragraphWithConstructs(
-  runs: ContentRun[],
+  runs: readonly ContentRun[],
   runConstructExtents: readonly RunConstructExtent[],
 ): Pick<ContentParagraph, "runs" | "constructs"> {
   return {
-    runs,
+    runs: [...runs],
     ...(runConstructExtents.length > 0
       ? { constructs: [...runConstructExtents] }
       : {}),
