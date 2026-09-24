@@ -44,7 +44,7 @@ describe("round trip: contentControl form fields", () => {
     );
   });
 
-  // A dropDown minted with no recorded selection round-trips with no `value` at all, not a fabricated first-entry default: this writer mints neither \ffres nor \ffdefres for exactly this case (see "writes \ffhaslistbox for a dropDown with options but no recorded selection" above), and the reader leaves `value` unset when it finds neither control word (see read.test.ts's "leaves a FORMDROPDOWN's value unset..."). This is the genuine stable fixed point — writing this descriptor again reproduces byte-identical output, with nothing to drift.
+  // A dropDown minted with no recorded selection round-trips with no `value` at all, not a fabricated first-entry default: this writer mints neither \ffres nor \ffdefres for exactly this case (see "writes \ffhaslistbox for a dropDown with options but no recorded selection" above), and the reader leaves `value` unset when it finds neither control word (see read-form-fields.test.ts's "leaves a FORMDROPDOWN's value unset..."). This is the genuine stable fixed point — writing this descriptor again reproduces byte-identical output, with nothing to drift.
   it("round-trips a dropDown contentControl's options back onto the runs it wraps, with no fabricated default selection", () => {
     const back = roundTrip(
       wordprocessing([
