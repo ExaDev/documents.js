@@ -4,6 +4,16 @@ import type { EpubDiagnostic } from "../diagnostics";
 import { readXhtmlBody, scanXhtmlAnchors } from "./read";
 
 const CONTENT_WIDTH_PT = 451.28; // A4 minus 1in margins each side, matching src/read.ts's own default section geometry
+// The pixel dimensions fakePng() (defined further down this file) builds its fixtures at, shared across every test that only cares a resolved image round-trips, not its exact size.
+const FAKE_IMAGE_WIDTH_PX = 96;
+const FAKE_TALL_IMAGE_HEIGHT_PX = 192;
+
+// The first four bytes of a GIF signature ("GIF8", common to both GIF87a and GIF89a): neither PNG nor JPEG, so detectImageFormat rejects it, exactly what these fixtures test for.
+const GIF_SIG_G = 0x47;
+const GIF_SIG_I = 0x49;
+const GIF_SIG_F = 0x46;
+const GIF_SIG_8 = 0x38;
+const GIF_SIG_PREFIX = [GIF_SIG_G, GIF_SIG_I, GIF_SIG_F, GIF_SIG_8];
 
 function body(inner: string, attrs = ""): string {
   return `<?xml version="1.0" encoding="utf-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"${attrs}><body>${inner}</body></html>`;
@@ -578,7 +588,7 @@ describe("lists", () => {
 
   // Regression coverage for the emptiness-probe defect: flushListStrayContent used to decide whether to recover its collected stray nodes by building their inline runs (buildInlineRuns, which only ever produces TEXT) and checking whether that text was blank — so any stray block-level content whose text projection happens to be empty (a resolved image with no alt text, an <hr>, a table or nested list whose only content is such an image) was misjudged as "whitespace-only" and silently dropped, with no diagnostic, exactly like real pretty-printed whitespace. The fix asks the real question instead: does readContainerChildren's own result carry any blocks at all. Each case below recovers a resolved image inline PNG (fakePng, defined further down this file — a function declaration, hoisted) so the stray content's own text projection is genuinely empty while its block projection is not.
   it("recovers a stray, resolved <img> with no alt attribute as a real image block, not judging it whitespace-only by its absent text projection", () => {
-    const bytes = fakePng(96, 96);
+    const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_IMAGE_WIDTH_PX);
     const sink = vi.fn();
     const { blocks } = readXhtmlBody(
       body('<ul><li>a</li><img src="a.png"/></ul>'),
@@ -597,7 +607,7 @@ describe("lists", () => {
   });
 
   it('recovers a stray, resolved <img alt=""> as a real image block', () => {
-    const bytes = fakePng(96, 96);
+    const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_IMAGE_WIDTH_PX);
     const sink = vi.fn();
     const { blocks } = readXhtmlBody(
       body('<ul><li>a</li><img src="a.png" alt=""/></ul>'),
@@ -616,7 +626,7 @@ describe("lists", () => {
   });
 
   it("recovers a nested <ul> stray sibling whose only <li> content is a resolved image with no text — issue #994's own headline shape, which the emptiness-probe regression defeated", () => {
-    const bytes = fakePng(96, 96);
+    const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_IMAGE_WIDTH_PX);
     const sink = vi.fn();
     const { blocks } = readXhtmlBody(
       body('<ul><li>a</li><ul><li><img src="a.png" alt=""/></li></ul></ul>'),
@@ -660,7 +670,7 @@ describe("lists", () => {
   });
 
   it("recovers a stray <table> whose only cell content is a resolved image with no alt text — readTable always yields a real table block regardless of its cells' own text", () => {
-    const bytes = fakePng(96, 96);
+    const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_IMAGE_WIDTH_PX);
     const sink = vi.fn();
     const { blocks } = readXhtmlBody(
       body(
@@ -680,14 +690,21 @@ describe("lists", () => {
     );
   });
 
+  // division constructStart + image + constructEnd, plus the preceding <li>'s own paragraph.
+  const blockquoteConstructBlockCount = 4;
+
   it.each([
     ["figure", '<figure><img src="a.png" alt=""/></figure>', 2],
     ["p", '<p><img src="a.png" alt=""/></p>', 2],
-    ["blockquote", '<blockquote><img src="a.png" alt=""/></blockquote>', 4], // division constructStart + image + constructEnd, plus the preceding <li>'s own paragraph
+    [
+      "blockquote",
+      '<blockquote><img src="a.png" alt=""/></blockquote>',
+      blockquoteConstructBlockCount,
+    ],
   ] as const)(
     "recovers a stray <%s> wrapping only a resolved, alt-less image",
     (_tag, fragment, expectedBlockCount) => {
-      const bytes = fakePng(96, 96);
+      const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_IMAGE_WIDTH_PX);
       const sink = vi.fn();
       const { blocks } = readXhtmlBody(body(`<ul><li>a</li>${fragment}</ul>`), {
         resolveImage: (href) => (href === "a.png" ? bytes : undefined),
@@ -874,7 +891,8 @@ describe("definition lists", () => {
 
   // <dt>/<dd> are Flow content (ExaDev/documents.js#1023): a direct-child <img> now splits into its own real ContentImageBlock via readContainerChildren, the same treatment a <p>'s own direct-child <img> already gets, rather than being flattened to alt text inline as if <dt>/<dd> had no block list of their own to insert it into.
   it("splits a dt's own direct-child <img> into its own real image block, not flattened to alt text", () => {
-    const bytes = fakePng(96, 96);
+    const expectedBlockCount = 3;
+    const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_IMAGE_WIDTH_PX);
     const { blocks } = readXhtmlBody(
       body(
         '<dl><dt>Term <img src="a.png" alt="term pic"/></dt><dd>Definition</dd></dl>',
@@ -886,7 +904,7 @@ describe("definition lists", () => {
         contentWidthPt: CONTENT_WIDTH_PT,
       },
     );
-    expect(blocks).toHaveLength(3);
+    expect(blocks).toHaveLength(expectedBlockCount);
     expect(blocks[0]).toEqual({
       kind: "paragraph",
       runs: [{ text: "Term " }],
@@ -900,7 +918,8 @@ describe("definition lists", () => {
   });
 
   it("splits a dd's own direct-child <img> into its own real image block, indented like the rest of the dd's own content", () => {
-    const bytes = fakePng(96, 96);
+    const expectedBlockCount = 3;
+    const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_IMAGE_WIDTH_PX);
     const { blocks } = readXhtmlBody(
       body(
         '<dl><dt>Term</dt><dd>Definition <img src="a.png" alt="def pic"/></dd></dl>',
@@ -912,7 +931,7 @@ describe("definition lists", () => {
         contentWidthPt: CONTENT_WIDTH_PT,
       },
     );
-    expect(blocks).toHaveLength(3);
+    expect(blocks).toHaveLength(expectedBlockCount);
     expect(blocks[0]).toEqual({ kind: "paragraph", runs: [{ text: "Term" }] });
     expect(blocks[1]).toEqual({
       kind: "paragraph",
@@ -1033,7 +1052,7 @@ describe("definition lists", () => {
   });
 
   it("recovers a stray, resolved <img> sitting directly inside a <dl> as a real image block, with a diagnostic", () => {
-    const bytes = fakePng(96, 96);
+    const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_IMAGE_WIDTH_PX);
     const sink = vi.fn();
     const { blocks } = readXhtmlBody(
       body('<dl><dt>Term</dt><img src="a.png" alt="pic"/></dl>'),
@@ -1180,14 +1199,15 @@ describe("tables", () => {
   });
 
   it("derives the column count from the dense width, so a lone colspan cell still declares every column it spans", () => {
+    const columnCount = 3;
     const { grid, columnWidthsPt } = readTableGrid(
       '<table><tr><td colspan="3">wide</td></tr></table>',
     );
     expect(grid).toEqual([["wide|c3", "", ""]]);
     expect(columnWidthsPt).toEqual([
-      CONTENT_WIDTH_PT / 3,
-      CONTENT_WIDTH_PT / 3,
-      CONTENT_WIDTH_PT / 3,
+      CONTENT_WIDTH_PT / columnCount,
+      CONTENT_WIDTH_PT / columnCount,
+      CONTENT_WIDTH_PT / columnCount,
     ]);
   });
 
@@ -1224,11 +1244,13 @@ describe("tables", () => {
       ["h|r2", "", ""],
       ["", "a", "b"],
     ]);
-    expect(columnWidthsPt).toHaveLength(3);
+    const expectedColumnCount = 3;
+    expect(columnWidthsPt).toHaveLength(expectedColumnCount);
   });
 
   it("treats a zero or negative colspan or rowspan as absent, rather than a real span", () => {
     // One cell per row, so that a wrongly retained zero span could not be masked by a neighbouring cell being placed over the same grid column.
+    const expectedRowCount = 4;
     const table = read(
       body(
         '<table><tr><td colspan="0">a</td></tr><tr><td colspan="-1">b</td></tr><tr><td rowspan="0">c</td></tr><tr><td rowspan="-1">d</td></tr></table>',
@@ -1237,7 +1259,7 @@ describe("tables", () => {
     if (table === undefined) {
       throw new Error("expected a table block");
     }
-    expect(table.rows).toHaveLength(4);
+    expect(table.rows).toHaveLength(expectedRowCount);
     for (const row of table.rows) {
       expect(row.cells).toHaveLength(1);
       for (const cell of row.cells) {
@@ -1248,6 +1270,7 @@ describe("tables", () => {
   });
 
   it("honours a cell's own rowspan attribute, distinctly from colspan", () => {
+    const expectedRowSpan = 3;
     const table = read(
       body('<table><tr><td rowspan="3">tall</td></tr></table>'),
     ).find((b) => b.kind === "table");
@@ -1255,7 +1278,7 @@ describe("tables", () => {
       throw new Error("expected a table block");
     }
     const cell = table.rows[0]?.cells[0];
-    expect(cell?.rowSpan).toBe(3);
+    expect(cell?.rowSpan).toBe(expectedRowSpan);
     expect(
       cell === undefined ? undefined : Object.hasOwn(cell, "colSpan"),
     ).toBe(false);
@@ -1518,7 +1541,7 @@ describe("tables", () => {
   });
 
   it("recovers a stray, resolved <img> sitting directly inside a <tfoot> outside any <tr>, as a real image block, with a diagnostic", () => {
-    const bytes = fakePng(96, 96);
+    const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_IMAGE_WIDTH_PX);
     const sink = vi.fn();
     const { blocks } = readXhtmlBody(
       body(
@@ -1570,7 +1593,7 @@ describe("tables", () => {
 
   // <td>/<th> are Flow content (ExaDev/documents.js#1023): a direct-child <img> now splits into its own real ContentImageBlock in the cell's own blocks array via readContainerChildren, rather than being flattened to alt text as if a cell had no block list of its own to insert it into.
   it("splits a table cell's own direct-child <img> into its own real image block in the cell's blocks", () => {
-    const bytes = fakePng(96, 96);
+    const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_IMAGE_WIDTH_PX);
     const { blocks } = readXhtmlBody(
       body(
         '<table><tr><td><img src="a.png" alt="cell pic"/></td></tr></table>',
@@ -1591,7 +1614,8 @@ describe("tables", () => {
   });
 
   it("reads a <caption> as one or more paragraphs before the table, splitting a direct-child <img> into its own real image block, with a diagnostic", () => {
-    const bytes = fakePng(96, 96);
+    const expectedBlockCount = 3;
+    const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_IMAGE_WIDTH_PX);
     const sink = vi.fn();
     const { blocks } = readXhtmlBody(
       body(
@@ -1604,7 +1628,7 @@ describe("tables", () => {
         contentWidthPt: CONTENT_WIDTH_PT,
       },
     );
-    expect(blocks).toHaveLength(3);
+    expect(blocks).toHaveLength(expectedBlockCount);
     expect(blocks[0]).toEqual({ kind: "paragraph", runs: [{ text: "Cap " }] });
     expect(blocks[1]).toMatchObject({ kind: "image" });
     expect(blocks[2]).toEqual({
@@ -1899,7 +1923,7 @@ describe("tables", () => {
 
   it("recovers a stray <img> sitting directly inside a <colgroup> as its own real image block, not degraded to alt text", () => {
     // Distinguishes routing a <colgroup>'s own stray content through collectColgroupStrayContent (a flat list of the colgroup's OWN children, so a stray <img> reaches readContainerChildren's block-level dispatch and becomes a real ContentImageBlock) from mistakenly treating the whole <colgroup> element itself as one inline stray node (which would instead degrade the same <img> to alt text via buildInlineRuns' own inline-image fallback).
-    const bytes = fakePng(96, 96);
+    const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_IMAGE_WIDTH_PX);
     const sink = vi.fn();
     const { blocks } = readXhtmlBody(
       body(
@@ -2514,22 +2538,61 @@ describe("hr", () => {
   });
 });
 
+// Mirrors dimensions.ts's own private layout constants (see image/dimensions.test.ts, which names these identically) so this duplicate fixture builder stays tied to the format's real structure rather than restating its offsets as independent literals.
+const PNG_SIG_HIGH_BIT_MARKER = 0x89;
+const PNG_SIG_P = 0x50;
+const PNG_SIG_N = 0x4e;
+const PNG_SIG_G = 0x47;
+const PNG_SIG_CR = 0x0d;
+const PNG_SIG_LF = 0x0a;
+const PNG_SIG_LINE_ENDING_DETECTOR = 0x1a;
+const PNG_SIG = [
+  PNG_SIG_HIGH_BIT_MARKER,
+  PNG_SIG_P,
+  PNG_SIG_N,
+  PNG_SIG_G,
+  PNG_SIG_CR,
+  PNG_SIG_LF,
+  PNG_SIG_LINE_ENDING_DETECTOR,
+  PNG_SIG_LF,
+];
+const IHDR_TAG_I = 0x49;
+const IHDR_TAG_H = 0x48;
+const IHDR_TAG_D = 0x44;
+const IHDR_TAG_R = 0x52;
+const IHDR_TAG_BYTES = [IHDR_TAG_I, IHDR_TAG_H, IHDR_TAG_D, IHDR_TAG_R];
+const UINT32_BYTES = 4;
+const PNG_CHUNK_TYPE_OFFSET = PNG_SIG.length + UINT32_BYTES; // 12
+const PNG_IHDR_WIDTH_OFFSET = PNG_CHUNK_TYPE_OFFSET + UINT32_BYTES; // 16
+const PNG_IHDR_HEIGHT_OFFSET = PNG_IHDR_WIDTH_OFFSET + UINT32_BYTES; // 20
+const PNG_HEADER_BYTES = PNG_IHDR_HEIGHT_OFFSET + UINT32_BYTES; // 24
+const IHDR_TRAILING_FIELD_BYTES = 5;
+const PNG_IHDR_CHUNK_DATA_BYTES =
+  UINT32_BYTES + UINT32_BYTES + IHDR_TRAILING_FIELD_BYTES; // 13
+const FAKE_PNG_TOTAL_BYTES =
+  PNG_HEADER_BYTES + IHDR_TRAILING_FIELD_BYTES + UINT32_BYTES; // 33
+const PNG_BIT_DEPTH_8 = 8;
+const PNG_COLOUR_TYPE_TRUECOLOR_ALPHA = 6;
+
 // A minimal PNG carrying only what src/image/dimensions.ts reads: the 8-byte signature plus an IHDR chunk.
 function fakePng(widthPx: number, heightPx: number): Uint8Array<ArrayBuffer> {
-  const bytes = new Uint8Array(33);
-  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
+  const bytes = new Uint8Array(FAKE_PNG_TOTAL_BYTES);
+  bytes.set(PNG_SIG, 0);
   const view = new DataView(bytes.buffer);
-  view.setUint32(8, 13);
-  bytes.set([0x49, 0x48, 0x44, 0x52], 12);
-  view.setUint32(16, widthPx);
-  view.setUint32(20, heightPx);
-  bytes.set([8, 6, 0, 0, 0], 24);
+  view.setUint32(PNG_SIG.length, PNG_IHDR_CHUNK_DATA_BYTES);
+  bytes.set(IHDR_TAG_BYTES, PNG_CHUNK_TYPE_OFFSET);
+  view.setUint32(PNG_IHDR_WIDTH_OFFSET, widthPx);
+  view.setUint32(PNG_IHDR_HEIGHT_OFFSET, heightPx);
+  bytes.set(
+    [PNG_BIT_DEPTH_8, PNG_COLOUR_TYPE_TRUECOLOR_ALPHA, 0, 0, 0],
+    PNG_HEADER_BYTES,
+  );
   return bytes;
 }
 
 describe("images", () => {
   it("resolves a manifest image to base64 with pt dimensions derived from its pixel size", () => {
-    const bytes = fakePng(96, 192);
+    const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_TALL_IMAGE_HEIGHT_PX);
     const { blocks } = readXhtmlBody(
       body('<p><img src="a.png" alt="a picture"/></p>'),
       {
@@ -2556,7 +2619,7 @@ describe("images", () => {
   });
 
   it("carries no altText key at all for a resolved image with an empty alt attribute", () => {
-    const bytes = fakePng(96, 192);
+    const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_TALL_IMAGE_HEIGHT_PX);
     const { blocks } = readXhtmlBody(body('<p><img src="a.png" alt=""/></p>'), {
       resolveImage: (href) => (href === "a.png" ? bytes : undefined),
       sink: () => undefined,
@@ -2596,7 +2659,7 @@ describe("images", () => {
   it("degrades to alt text with a diagnostic for a resolved but unsupported format", () => {
     const sink = vi.fn();
     const { blocks } = readXhtmlBody(body('<img src="a.gif" alt="a gif"/>'), {
-      resolveImage: () => new Uint8Array([0x47, 0x49, 0x46, 0x38]),
+      resolveImage: () => new Uint8Array(GIF_SIG_PREFIX),
       sink,
       sourceHref: "chapter1.xhtml",
       contentWidthPt: CONTENT_WIDTH_PT,
@@ -2613,7 +2676,7 @@ describe("images", () => {
 
   it("drops a resolved but unsupported-format image with an empty alt attribute entirely, rather than an empty paragraph", () => {
     const { blocks } = readXhtmlBody(body('<img src="a.gif" alt=""/>'), {
-      resolveImage: () => new Uint8Array([0x47, 0x49, 0x46, 0x38]),
+      resolveImage: () => new Uint8Array(GIF_SIG_PREFIX),
       sink: () => undefined,
       sourceHref: "chapter1.xhtml",
       contentWidthPt: CONTENT_WIDTH_PT,
@@ -2711,7 +2774,7 @@ describe("figure/figcaption", () => {
 
   // <figcaption> is Flow content (ExaDev/documents.js#1023): a direct-child <img> now splits into its own real ContentImageBlock via readContainerChildren, the same treatment a <p>'s own direct-child <img> already gets, rather than being flattened to alt text as if <figcaption> had no block list of its own to insert it into.
   it("splits a figcaption's own direct-child <img> into its own real image block, not flattened to alt text", () => {
-    const bytes = fakePng(96, 96);
+    const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_IMAGE_WIDTH_PX);
     const { blocks } = readXhtmlBody(
       body(
         '<figure><figcaption>Caption <img src="a.png" alt="inline pic"/></figcaption></figure>',
