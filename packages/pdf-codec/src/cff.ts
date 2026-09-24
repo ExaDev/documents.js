@@ -51,7 +51,6 @@ const REAL_NIBBLE_DECIMAL_POINT = 0xa;
 const REAL_NIBBLE_EXPONENT = 0xb;
 const REAL_NIBBLE_NEGATIVE_EXPONENT = 0xc;
 const REAL_NIBBLE_RESERVED = 0xd;
-const REAL_NIBBLE_MINUS = 0xe;
 const REAL_NIBBLE_TERMINATOR = 0xf;
 const NIBBLES_PER_BYTE = 2;
 const HIGH_NIBBLE_SHIFT = 4;
@@ -167,7 +166,8 @@ function readRealOperand(
         text += "E";
       } else if (nibble === REAL_NIBBLE_NEGATIVE_EXPONENT) {
         text += "E-";
-      } else if (nibble === REAL_NIBBLE_MINUS) {
+      } else {
+        // The only nibble left is the minus: the terminator returned above, the reserved nibble returned above it, and every digit and punctuation form has its own branch.
         text += "-";
       }
     }
