@@ -4,6 +4,10 @@ import {
   boundingBoxOf,
   relativeCellRef,
   textRuleFormula,
+  assertNeverSheetRuleOperator,
+  assertNeverConditionalFormatValueType,
+  assertNeverSimpleConditionalFormatKind,
+  assertNeverTextConditionalFormatKind,
 } from "./conditional-format-write";
 
 const ANCHOR = { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 };
@@ -74,5 +78,65 @@ describe("textRuleFormula", () => {
         ANCHOR,
       ),
     ).toBe('RIGHT(A1,LEN("needle"))="needle"');
+  });
+});
+
+describe("assertNeverSheetRuleOperator", () => {
+  it("throws naming the unhandled operator, proving cpOf's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverSheetRuleOperator("bogus" as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'cpOf: unhandled SheetRuleOperator "bogus"',
+    );
+  });
+});
+
+describe("assertNeverConditionalFormatValueType", () => {
+  it("throws naming the unhandled type, proving cfvoTypeCodeOf's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverConditionalFormatValueType("bogus" as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'cfvoTypeCodeOf: unhandled ContentSheetConditionalFormatValue type "bogus"',
+    );
+  });
+});
+
+describe("assertNeverSimpleConditionalFormatKind", () => {
+  it("throws naming the unhandled kind, proving simpleKindIcfTemplate's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverSimpleConditionalFormatKind("bogus" as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'simpleKindIcfTemplate: unhandled rule kind "bogus"',
+    );
+  });
+});
+
+describe("assertNeverTextConditionalFormatKind", () => {
+  it("throws naming the unhandled kind, proving ctpOf's and textRuleFormula's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverTextConditionalFormatKind("bogus" as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'ctpOf: unhandled rule kind "bogus"',
+    );
   });
 });

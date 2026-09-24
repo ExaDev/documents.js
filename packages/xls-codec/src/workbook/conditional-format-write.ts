@@ -20,6 +20,11 @@ import type { SheetRuleOperator } from "document-schema.js";
 
 // The write-side inverse of conditional-format.ts's readCondFmtGroup/readCf and conditional-format-12.ts's readCondFmt12Group/readCf12: a 'cellIs' rule writes as one CondFmt record ([MS-XLS] 2.4.56) carrying exactly one CF record ([MS-XLS] 2.4.42) — the schema models a rule's ranges per rule, so there is nothing to group the way a multi-rule CondFmt would — while every other variant the schema models writes as one CondFmt12 ([MS-XLS] 2.4.57) carrying exactly one CF12 ([MS-XLS] 2.4.43), the CF12-era spelling those rule types have no base-CF record for at all. The two families are emitted base-first within one sheet's CONDFMTS section, whose own ABNF (`*(CONDFMT / CONDFMT12) *(CFEx [CF12])`, [MS-XLS] 2.1.7.20.6) admits them interleaved or grouped; the CFEx compatibility spelling — a legacy CF-plus-extension pair keeping a pre-2007 Excel able to evaluate the rule — is deliberately not written, the CF12 spelling being the one this package's own reader resolves either way.
 
+// Reached only if SheetRuleOperator ever gains a member cpOf's own switch does not match: every current member is covered there, so `value` narrows to `never` at the real call site, and adding an uncovered operator makes that narrowing fail and this call stop compiling. That is the real safety net. Exported so conditional-format-write.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real SheetRuleOperator is already handled by a case in cpOf.
+export function assertNeverSheetRuleOperator(value: never): never {
+  throw new Error(`cpOf: unhandled SheetRuleOperator ${JSON.stringify(value)}`);
+}
+
 // The CF record's own cp table ([MS-XLS] 2.5.16's own Cpt), the inverse of conditional-format.ts's OPERATOR_BY_CP — a real exhaustive switch over SheetRuleOperator's closed eight-member union rather than a Map, so the compiler itself proves every operator has a cp value and this never needs an "operator has no cp" fallback to guard a lookup that cannot miss.
 function cpOf(operator: SheetRuleOperator): number {
   switch (operator) {
@@ -40,6 +45,7 @@ function cpOf(operator: SheetRuleOperator): number {
     case "lessThanOrEqual":
       return 0x8;
   }
+  return assertNeverSheetRuleOperator(operator);
 }
 
 // DXFFNTD's own fixed length ([MS-XLS] 2.4.97), mirrored from parseDxfStyle's own constant: everything this writer states in the block is zero but icvFore.
@@ -155,6 +161,13 @@ const ICF_TEMPLATE_BELOW_OR_EQUAL_AVERAGE = 0x001e;
 // CFExTemplateParams is a fixed 16-byte block CF12 always carries between cbTemplateParm and rgbCT; only its first bytes are meaningful, and which bytes those are depends on the template ([MS-XLS] 2.5.23-2.5.27).
 const TEMPLATE_PARAMS_SIZE = 16;
 
+// Reached only if ContentSheetConditionalFormatValue's own type ever gains a member cfvoTypeCodeOf's own switch does not match: every current member is covered there, so `value` narrows to `never` at the real call site, and adding an uncovered type makes that narrowing fail and this call stop compiling. That is the real safety net. Exported so conditional-format-write.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real type is already handled by a case in cfvoTypeCodeOf.
+export function assertNeverConditionalFormatValueType(value: never): never {
+  throw new Error(
+    `cfvoTypeCodeOf: unhandled ContentSheetConditionalFormatValue type ${JSON.stringify(value)}`,
+  );
+}
+
 // The CFVO type codes' inverse ([MS-XLS] 2.5.40's own cfvoType table), mirrored from conditional-format-12.ts's CFVO_TYPE_TO_VALUE_TYPE.
 function cfvoTypeCodeOf(
   value: Readonly<ContentSheetConditionalFormatValue>,
@@ -173,6 +186,7 @@ function cfvoTypeCodeOf(
     case "formula":
       return 0x07;
   }
+  return assertNeverConditionalFormatValueType(value.type);
 }
 
 // One CFVO ([MS-XLS] 2.5.40): cfvoType, a CFVOParsedFormula (cce + rgce, no unused word — the one Ptg-carrying formula structure in this family that omits it), then an Xnum numValue present only when the formula is empty and the type names a value rather than a bound. Every value-bearing type is written through its rgce rather than its numValue: a type-0x04/0x05 numValue is constrained to 0..100 and a type-0x07 one is forbidden outright ([MS-XLS] 2.5.40's own numValue rules), while the compiled-form carrier is legal for every type and is the one spelling a value of any shape (a bare number or a genuine formula) round-trips through losslessly.
@@ -332,6 +346,13 @@ const TIME_PERIOD_TO_ICF_TEMPLATE: ReadonlyMap<
   ["thisMonth", 0x0018],
 ]);
 
+// Reached only if this operand-free rule-kind union ever gains a member simpleKindIcfTemplate's own switch does not match: every current member is covered there, so `value` narrows to `never` at the real call site, and adding an uncovered kind makes that narrowing fail and this call stop compiling. That is the real safety net. Exported so conditional-format-write.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real member is already handled by a case in simpleKindIcfTemplate.
+export function assertNeverSimpleConditionalFormatKind(value: never): never {
+  throw new Error(
+    `simpleKindIcfTemplate: unhandled rule kind ${JSON.stringify(value)}`,
+  );
+}
+
 // The operand-free family's icfTemplate values, the inverse of conditional-format-12.ts's SIMPLE_ICF_TEMPLATE_KIND: CFExDefaultTemplateParams is 16 reserved bytes, so the template value is the whole rule. A real exhaustive switch over the six-member union rather than a Map, so the compiler proves every one of these rule types has an icfTemplate value.
 function simpleKindIcfTemplate(
   type: Extract<
@@ -361,6 +382,12 @@ function simpleKindIcfTemplate(
     case "duplicateValues":
       return ICF_TEMPLATE_DUPLICATE_VALUES;
   }
+  return assertNeverSimpleConditionalFormatKind(type);
+}
+
+// Reached only if this text-rule-kind union ever gains a member a switch over it does not match: every current member is covered wherever this is called, so `value` narrows to `never` at each real call site, and adding an uncovered kind makes that narrowing fail and those calls stop compiling. That is the real safety net. Shared between this module's own ctpOf and textRuleFormula, both of which switch over the identical containsText/notContainsText/beginsWith/endsWith union, rather than each keeping a byte-identical copy. Exported so conditional-format-write.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real member is already handled by a case in both.
+export function assertNeverTextConditionalFormatKind(value: never): never {
+  throw new Error(`ctpOf: unhandled rule kind ${JSON.stringify(value)}`);
 }
 
 // ctp ([MS-XLS] 2.5.27's CFExTextTemplateParams table): which of the four text sub-types a containsText-family rule is, the inverse of conditional-format-12.ts's CTP_TO_TEXT_KIND. A real exhaustive switch rather than a Map, for the same reason simpleKindIcfTemplate above is.
@@ -380,6 +407,7 @@ function ctpOf(
     case "endsWith":
       return 0x0003;
   }
+  return assertNeverTextConditionalFormatKind(type);
 }
 
 // The formula a text-predicate rule carries as its ct 0x02 condition: neither CFExTextTemplateParams nor CFFilter has anywhere to state the literal search text, so it lives only as the PtgStr operand of the formula itself — written in the shape Excel's own rule generator and LibreOffice's own GetFixedFormula both produce (sc/source/filter/excel/xestyle... and xcl97... confirmed shapes; see conditional-format-12.ts's own top comment for the reader-side citation), referencing the rule's own first anchor cell relatively. The first string literal of each shape is the search text, which is exactly what the reader's extractFirstStringLiteral recovers.
@@ -403,6 +431,7 @@ export function textRuleFormula(
     case "endsWith":
       return `RIGHT(${cell},LEN(${text}))=${text}`;
   }
+  return assertNeverTextConditionalFormatKind(rule.type);
 }
 
 // A relative A1 reference (no $ markers) for the anchor a text rule's formula evaluates each cell against — relative, because Excel's own generated formulas spell it that way and the anchor names the range's first cell, not a fixed reference the rule means to keep.
