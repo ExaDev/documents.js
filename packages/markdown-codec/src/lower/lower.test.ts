@@ -5,6 +5,7 @@ import { ContentDocumentSchema } from "document-schema.js";
 import type { ContentBlock, ContentParagraph } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { MarkdownDiagnosticCodes } from "../diagnostics/diagnostics";
+import { QUOTE_INDENT_PT } from "../shared/style-constants";
 import { createDiagnosticCollector } from "../test-support/diagnostics";
 import { lowerMarkdown } from "./lower";
 
@@ -62,9 +63,10 @@ describe("document envelope", () => {
 
 describe("headings", () => {
   it('maps an ATX heading level to a "Heading{N}" styleId plus the canonical headingLevel', () => {
+    const headingLevel = 3; // "### foo" has three hashes
     const heading = paragraph(blocks("### foo")[0]);
-    expect(heading.styleId).toBe("Heading3");
-    expect(heading.headingLevel).toBe(3);
+    expect(heading.styleId).toBe(`Heading${String(headingLevel)}`);
+    expect(heading.headingLevel).toBe(headingLevel);
   });
 
   it("maps a setext heading the same way", () => {
@@ -267,7 +269,7 @@ describe("blockquotes", () => {
   it("maps a blockquote paragraph to styleId Quote plus indentLeftPt", () => {
     const block = paragraph(blocks("> foo")[1]);
     expect(block.styleId).toBe("Quote");
-    expect(block.indentLeftPt).toBe(36);
+    expect(block.indentLeftPt).toBe(QUOTE_INDENT_PT);
   });
 
   it("wraps a blockquote's blocks in a division construct pair, keeping the indent and Quote styleId as the materialised formatting", () => {
@@ -311,7 +313,7 @@ describe("blockquotes", () => {
     const heading = result[1];
     expect(paragraph(heading).styleId).toBe("Heading1");
     expect(paragraph(heading).headingLevel).toBe(1);
-    expect(paragraph(heading).indentLeftPt).toBe(36);
+    expect(paragraph(heading).indentLeftPt).toBe(QUOTE_INDENT_PT);
   });
 
   it("carries the pair for a quote containing a heading anywhere in its subtree, including inside a nested list", () => {
@@ -336,7 +338,7 @@ describe("blockquotes", () => {
     const placeholder = paragraph(result[1]);
     expect(placeholder.runs).toEqual([]);
     expect(placeholder.styleId).toBe("Quote");
-    expect(placeholder.indentLeftPt).toBe(36);
+    expect(placeholder.indentLeftPt).toBe(QUOTE_INDENT_PT);
   });
 
   it("wraps a quote inside a list item, the pair sitting among the item's own membership-carrying blocks", () => {
@@ -461,7 +463,11 @@ describe("GFM tables", () => {
       margins: { topPt: 72, rightPt: 10, bottomPt: 72, leftPt: 10 },
     });
     if (table?.kind !== "table") throw new Error("expected a table block");
-    expect(table.columns.map((c) => c.widthPt)).toEqual([100, 100]);
+    const columnWidthPt = 100;
+    expect(table.columns.map((c) => c.widthPt)).toEqual([
+      columnWidthPt,
+      columnWidthPt,
+    ]);
   });
 
   it("carries no constructs key on a cell with no run-level constructs of its own", () => {
@@ -491,7 +497,10 @@ describe("images", () => {
     const image = result[1];
     if (image?.kind !== "image") throw new Error("expected an image block");
     expect(image.format).toBe("png");
-    expect(image.widthPt).toBeCloseTo(0.75);
+    // A 1x1 PNG measures one CSS reference pixel each way: POINTS_PER_INCH/CSS_PIXELS_PER_INCH pt.
+    const pointsPerInch = 72;
+    const cssPixelsPerInch = 96;
+    expect(image.widthPt).toBeCloseTo(pointsPerInch / cssPixelsPerInch);
   });
 
   it("carries the alt text as the image block's own altText, and omits the key outright for an empty alt", () => {

@@ -94,7 +94,12 @@ const SETEXT_LEVEL_1 = 1;
 const SETEXT_LEVEL_2 = 2;
 
 // The two HTML block types whose end condition is a blank line rather than anything in the line's own text (spec 0.31.2, conditions 6 and 7).
-const HTML_BLOCK_BLANK_LINE_END_TYPES: readonly number[] = [6, 7];
+const HTML_BLOCK_TYPE_CONDITION_6 = 6;
+const HTML_BLOCK_TYPE_CONDITION_7 = 7;
+const HTML_BLOCK_BLANK_LINE_END_TYPES: readonly number[] = [
+  HTML_BLOCK_TYPE_CONDITION_6,
+  HTML_BLOCK_TYPE_CONDITION_7,
+];
 
 type BlockStartResult = "none" | "container" | "leaf";
 // 'finished' is a fenced code block consuming its own closing fence: the line is fully accounted for and the block is already closed, so the line's processing ends there.
@@ -125,20 +130,12 @@ function isBlankContent(content: string): boolean {
 }
 
 function headingLevelOf(hashes: number): BlockHeadingLevel {
-  switch (hashes) {
-    case 1:
-      return 1;
-    case 2:
-      return 2;
-    case 3:
-      return 3;
-    case 4:
-      return 4;
-    case 5:
-      return 5;
-    default:
-      return MAX_HEADING_LEVEL;
+  // Below MAX_HEADING_LEVEL (6), hashes maps to its own level 1:1; MAX_HEADING_LEVEL itself and anything outside the 1..5 range both collapse to MAX_HEADING_LEVEL, matching this function's original switch-per-level shape.
+  if (hashes >= 1 && hashes < MAX_HEADING_LEVEL) {
+    // hashes is now known to be 1-5 inclusive, exactly one of BlockHeadingLevel's own remaining members. The assertion is unavoidable, since no runtime range check narrows a plain `number` to a literal union on its own.
+    return hashes as BlockHeadingLevel;
   }
+  return MAX_HEADING_LEVEL;
 }
 
 class BlockParser {
@@ -617,7 +614,8 @@ class BlockParser {
     }
     const lines = paragraph.content.split("\n");
     // A paragraph's content always ends with a line ending, so the last element is empty and the header is the one before it.
-    const headerLine = lines.at(-2);
+    const secondToLastLineOffset = -2;
+    const headerLine = lines.at(secondToLastLineOffset);
     if (
       headerLine === undefined ||
       splitTableRow(headerLine).length !== alignments.length
@@ -626,7 +624,7 @@ class BlockParser {
     }
 
     paragraph.content = lines
-      .slice(0, -2)
+      .slice(0, secondToLastLineOffset)
       .map((text) => `${text}\n`)
       .join("");
     // The paragraph is closed by addChild rather than here: a paragraph cannot contain a table, so the table's own start walks the tip up past it, finalising it on the way and leaving whatever is left of the paragraph as the table's preceding sibling.

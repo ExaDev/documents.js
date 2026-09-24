@@ -10,8 +10,10 @@ const CONTENT_WIDTH_PT = 451.28;
 const ONE_PIXEL_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
-// That fixture measures one CSS reference pixel each way, which document-schema.js's own point-based geometry records as 72/96 pt.
-const ONE_PIXEL_PT = 72 / 96;
+// That fixture measures one CSS reference pixel each way, which document-schema.js's own point-based geometry records as POINTS_PER_INCH/CSS_PIXELS_PER_INCH pt.
+const POINTS_PER_INCH = 72;
+const CSS_PIXELS_PER_INCH = 96;
+const ONE_PIXEL_PT = POINTS_PER_INCH / CSS_PIXELS_PER_INCH;
 
 const ONE_PIXEL_DATA_URI = `data:image/png;base64,${ONE_PIXEL_PNG_BASE64}`;
 
@@ -67,11 +69,13 @@ describe("parseHtmlTable", () => {
   });
 
   it("reads colspan/rowspan as positive integers, and omits them when absent", () => {
+    const colSpan = 2;
+    const rowSpan = 3;
     const table = parse(
-      '<table>\n<tr><td colspan="2" rowspan="3">x</td><td>y</td></tr>\n</table>',
+      `<table>\n<tr><td colspan="${String(colSpan)}" rowspan="${String(rowSpan)}">x</td><td>y</td></tr>\n</table>`,
     );
-    expect(table?.rows[0]?.cells[0]?.colSpan).toBe(2);
-    expect(table?.rows[0]?.cells[0]?.rowSpan).toBe(3);
+    expect(table?.rows[0]?.cells[0]?.colSpan).toBe(colSpan);
+    expect(table?.rows[0]?.cells[0]?.rowSpan).toBe(rowSpan);
     expect(table?.rows[0]?.cells[2]?.colSpan).toBeUndefined();
     expect(table?.rows[0]?.cells[2]?.rowSpan).toBeUndefined();
   });
@@ -85,10 +89,12 @@ describe("parseHtmlTable", () => {
       ["a", "b", "c"],
     ]);
     expect(table?.rows[0]?.cells[1]).toEqual({ blocks: [] });
+    const columnCount = 3;
+    const evenColumnWidth = CONTENT_WIDTH_PT / columnCount;
     expect(table?.columns.map((c) => c.widthPt)).toEqual([
-      CONTENT_WIDTH_PT / 3,
-      CONTENT_WIDTH_PT / 3,
-      CONTENT_WIDTH_PT / 3,
+      evenColumnWidth,
+      evenColumnWidth,
+      evenColumnWidth,
     ]);
   });
 
@@ -121,7 +127,8 @@ describe("parseHtmlTable", () => {
       ["h|r2", "", ""],
       ["", "a", "b"],
     ]);
-    expect(table?.columns).toHaveLength(3);
+    const rowspanColumnCount = 3;
+    expect(table?.columns).toHaveLength(rowspanColumnCount);
   });
 
   it("sizes the columns from a header whose own colspan already exceeds every later row", () => {
@@ -132,7 +139,8 @@ describe("parseHtmlTable", () => {
       ["h|c3", "", ""],
       ["a", "", ""],
     ]);
-    expect(table?.columns).toHaveLength(3);
+    const colspanColumnCount = 3;
+    expect(table?.columns).toHaveLength(colspanColumnCount);
   });
 
   it("ignores a non-positive or non-numeric colspan/rowspan rather than guessing", () => {
