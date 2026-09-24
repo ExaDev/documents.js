@@ -126,14 +126,17 @@ export interface MathFontMetrics {
   // Line thickness for a plain (non-fraction) rule — derived by the implementation from FractionRuleThickness, the nearest genuine spec field, since most math fonts use the same nominal rule weight for both.
   readonly defaultRuleThicknessPt: number;
 
-  glyph(codePoint: number, sizePt: number): MathGlyphMetrics | undefined;
+  readonly glyph: (
+    codePoint: number,
+    sizePt: number,
+  ) => MathGlyphMetrics | undefined;
 
-  stretch(
+  readonly stretch: (
     codePoint: number,
     axis: MathStretchAxis,
     targetSizePt: number,
     sizePt: number,
-  ): MathStretchResult | undefined;
+  ) => MathStretchResult | undefined;
 }
 
 // A formula laid out to a MathBox, positioned on a PDF page (page index + x/y). The bridge between a layout engine's output and a writer that renders it; the writer takes PositionedFormula[] so a formula's CID-font glyph runs (which have no LayoutItem kind of their own) travel beside the LayoutDocument rather than inside it.
