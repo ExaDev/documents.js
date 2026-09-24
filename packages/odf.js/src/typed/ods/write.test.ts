@@ -33,6 +33,7 @@ import {
   canonicalDataValidations,
   canonicalConditionalFormatStyle,
   canonicalConditionalFormats,
+  assertNeverContentCellValueKind,
 } from "./write";
 
 // The write side's XML-shape suite: what writeOdsContent actually emits, construct by construct — the sibling suite (write-round-trip.test.ts) proves the output reads back as the document it came from; this one proves the output is the ODF a real consumer expects, which a round trip through this package's own reader cannot (a writer and reader that agreed on the same wrong spelling would round-trip perfectly and open nowhere). This mirrors typed/odt/write.test.ts's own stated split of responsibility.
@@ -2450,5 +2451,20 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
       conditionalFormats: [{ type: "uniqueValues", ranges: CF_RANGES }],
     } as never);
     expect(bare?.[0]).not.toHaveProperty("style");
+  });
+});
+
+describe("assertNeverContentCellValueKind", () => {
+  it("throws naming the unhandled kind, proving writeCellValueAttributes's and canonicalCellValue's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverContentCellValueKind({ kind: "bogus" } as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'writeCellValueAttributes: unhandled ContentCellValue kind {"kind":"bogus"}',
+    );
   });
 });

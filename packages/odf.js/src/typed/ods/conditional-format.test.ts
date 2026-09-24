@@ -14,6 +14,8 @@ import {
   readConditionalFormats,
   readTargetRangeList,
   synthesiseConditionValue,
+  assertNeverConditionMode,
+  assertNeverConditionalFormatType,
 } from "./conditional-format";
 
 // calcext:conditional-formats has no OASIS-published grammar at all — every value/attribute name exercised here is transcribed from LibreOffice's own real reader (sc/source/filter/xml/xmlcondformat.cxx), see conditional-format.ts's own top-of-file note for the exact source functions. A real LibreOffice-produced fixture (fixtures/conditional-format.ods) exists and is exercised in read.test.ts's own "conditional-format.ods (real LibreOffice output)" describe block — it directly caught a real entity-decoding bug this file's own synthetic cases below could not have found on their own (a producer that escapes '>' as '&gt;' in calcext:value), since a hand-built package only ever contains what its author thought to escape. Every OTHER variant exercised here (colour-scale, data-bar, icon-set, date-is, every condition mode) has no real fixture available, so those packages are hand-built (el/txt) to the identical wire shape xmlcondformat.cxx establishes, matching data-validation.test.ts's own established fallback for a producer-specific mini-language a real fixture wasn't available for.
@@ -1580,5 +1582,35 @@ describe("synthesiseConditionValue", () => {
         timePeriod: "today",
       }),
     ).toBeUndefined();
+  });
+});
+
+describe("assertNeverConditionMode", () => {
+  it("throws naming the unhandled mode, proving readCondition's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverConditionMode("bogus" as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'readCondition: unhandled ConditionMode "bogus"',
+    );
+  });
+});
+
+describe("assertNeverConditionalFormatType", () => {
+  it("throws naming the unhandled type, proving synthesiseConditionValue's and canonicalConditionalFormats's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverConditionalFormatType({ type: "bogus" } as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'synthesiseConditionValue: unhandled ContentSheetConditionalFormat type {"type":"bogus"}',
+    );
   });
 });

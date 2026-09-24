@@ -5,6 +5,7 @@ import {
   readContentValidationDefinitions,
   resolveSheetDataValidations,
   synthesiseContentValidationCondition,
+  assertNeverConditionKind,
 } from "./data-validation";
 
 // table:condition's own grammar is transcribed from LibreOffice's real reader (sc/source/filter/xml/xmlcvali.cxx, XMLConverter.cxx) — see data-validation.ts's own top-of-file note. Every example here is either lifted verbatim from a real LibreOffice-produced .fods fixture (sc/qa/unit/data/functions/logical/fods/if.fods) or hand-built to the identical grammar that source establishes.
@@ -687,5 +688,20 @@ describe("synthesiseContentValidationCondition", () => {
         type: "bogus" as never,
       }),
     ).toBeUndefined();
+  });
+});
+
+describe("assertNeverConditionKind", () => {
+  it("throws naming the unhandled kind, proving parseToken's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverConditionKind("bogus" as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'parseToken: unhandled ConditionKind "bogus"',
+    );
   });
 });
