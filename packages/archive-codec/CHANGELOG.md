@@ -1,3 +1,9 @@
+## [1.11.15](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.14...archive-codec%401.11.15) (2026-09-24)
+
+### Bug Fixes
+
+* **archive-codec:** rename the recursive directory-record builder ([e3cb65b](https://github.com/ExaDev/documents.js/commit/e3cb65b152a64d8ae8749231e741a8c37a0cb0e6))
+
 ## [1.11.14](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.13...archive-codec%401.11.14) (2026-09-24)
 
 ### Bug Fixes

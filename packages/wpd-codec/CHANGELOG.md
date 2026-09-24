@@ -1,3 +1,14 @@
+## [5.1.8](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.1.7...wpd-codec%405.1.8) (2026-09-24)
+
+### Bug Fixes
+
+* **wpd-codec:** handle two nullable booleans explicitly ([12ccedf](https://github.com/ExaDev/documents.js/commit/12ccedff35e342a968ac76bdb46842ef38bbcac2))
+
+
+### Dependencies
+
+- Updated archive-codec to 1.11.15
+
 ## [5.1.7](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.1.6...wpd-codec%405.1.7) (2026-09-24)
 
 

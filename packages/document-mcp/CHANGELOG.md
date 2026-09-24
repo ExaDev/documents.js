@@ -1,3 +1,16 @@
+## [4.14.81](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.80...document-mcp%404.14.81) (2026-09-24)
+
+### Bug Fixes
+
+* **document-operations:** validate run's input at the type boundary it already claimed ([106765f](https://github.com/ExaDev/documents.js/commit/106765fb5fbd84c5e564686610cdfc578b5ed75e))
+
+
+### Dependencies
+
+- Updated wpd-codec to 5.1.8
+- Updated documents.js to 14.4.17
+- Updated document-operations to 1.1.78
+
 ## [4.14.80](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.79...document-mcp%404.14.80) (2026-09-24)
 
 
