@@ -88,12 +88,12 @@ describe("POINTS_PER_PIXEL", () => {
 });
 
 // A generic JPEG marker segment: FF, the marker byte, then a big-endian length (including these two length bytes themselves) followed by (length - 2) payload bytes. Used to build multi-segment streams the fixed-shape fakeJpeg() above can't express.
-function jpegSegment(marker: number, payload: number[]): number[] {
+function jpegSegment(marker: number, payload: readonly number[]): number[] {
   const length = payload.length + 2;
   return [0xff, marker, (length >> 8) & 0xff, length & 0xff, ...payload];
 }
 
-function concatBytes(...chunks: number[][]): Uint8Array {
+function concatBytes(...chunks: readonly number[][]): Uint8Array {
   return new Uint8Array(chunks.flat());
 }
 
