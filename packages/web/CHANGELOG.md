@@ -1,3 +1,15 @@
+## [2.13.29](https://github.com/ExaDev/documents.js/compare/web%402.13.28...web%402.13.29) (2026-09-24)
+
+### Bug Fixes
+
+* **web:** clear the last preferReadonlyParams exceptions ([48d5d46](https://github.com/ExaDev/documents.js/commit/48d5d46d570d6dd289adf465d63543911c35b96f))
+
+
+### Dependencies
+
+- Updated ooxml.js to 12.2.15
+- Updated documents.js to 14.4.22
+
 ## [2.13.28](https://github.com/ExaDev/documents.js/compare/web%402.13.27...web%402.13.28) (2026-09-24)
 
 

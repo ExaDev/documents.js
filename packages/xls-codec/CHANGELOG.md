@@ -1,3 +1,9 @@
+## [4.15.29](https://github.com/ExaDev/documents.js/compare/xls-codec%404.15.28...xls-codec%404.15.29) (2026-09-24)
+
+### Bug Fixes
+
+* **xls-codec:** clear the last preferReadonlyParams exceptions ([2038e9f](https://github.com/ExaDev/documents.js/commit/2038e9fe661817addf8704ab7598301486d34927))
+
 ## [4.15.28](https://github.com/ExaDev/documents.js/compare/xls-codec%404.15.27...xls-codec%404.15.28) (2026-09-24)
 
 
