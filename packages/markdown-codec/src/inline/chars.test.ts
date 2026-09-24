@@ -75,8 +75,9 @@ describe("codePointBefore", () => {
   });
 
   it("returns the full surrogate pair when a genuine astral character precedes the index", () => {
-    // U+1F600 (grinning face) is the high/low surrogate pair 😀.
-    expect(codePointBefore("a😀", 3)).toBe("😀");
+    // U+1F600 (grinning face) is the high/low surrogate pair 😀, two UTF-16 code units.
+    const afterAstralChar = 3;
+    expect(codePointBefore("a😀", afterAstralChar)).toBe("😀");
   });
 
   it("returns only the low surrogate when it is not preceded by a valid high surrogate", () => {
@@ -84,63 +85,71 @@ describe("codePointBefore", () => {
     expect(codePointBefore("a\uDE00", 2)).toBe("\uDE00");
   });
 
+  // Mirrors chars.ts's own private surrogate-pair boundary constants.
+  const LOW_SURROGATE_START = 0xdc00;
+  const LOW_SURROGATE_END = 0xdfff;
+  const HIGH_SURROGATE_START = 0xd800;
+  const HIGH_SURROGATE_END = 0xdbff;
+  const afterPair = 2;
+
   describe("low-surrogate range boundary (0xdc00-0xdfff)", () => {
     it("treats 0xdc00 (the lower bound) as a low surrogate", () => {
-      const low = String.fromCharCode(0xdc00);
-      const text = String.fromCharCode(0xd800) + low;
-      expect(codePointBefore(text, 2)).toBe(text);
+      const low = String.fromCharCode(LOW_SURROGATE_START);
+      const text = String.fromCharCode(HIGH_SURROGATE_START) + low;
+      expect(codePointBefore(text, afterPair)).toBe(text);
     });
 
     it("does not treat 0xdbff (one below the lower bound) as a low surrogate", () => {
-      const notLow = String.fromCharCode(0xdbff);
-      const text = String.fromCharCode(0xd800) + notLow;
-      expect(codePointBefore(text, 2)).toBe(notLow);
+      const notLow = String.fromCharCode(LOW_SURROGATE_START - 1);
+      const text = String.fromCharCode(HIGH_SURROGATE_START) + notLow;
+      expect(codePointBefore(text, afterPair)).toBe(notLow);
     });
 
     it("treats 0xdfff (the upper bound) as a low surrogate", () => {
-      const low = String.fromCharCode(0xdfff);
-      const text = String.fromCharCode(0xd800) + low;
-      expect(codePointBefore(text, 2)).toBe(text);
+      const low = String.fromCharCode(LOW_SURROGATE_END);
+      const text = String.fromCharCode(HIGH_SURROGATE_START) + low;
+      expect(codePointBefore(text, afterPair)).toBe(text);
     });
 
     it("does not treat 0xe000 (one above the upper bound) as a low surrogate", () => {
-      const notLow = String.fromCharCode(0xe000);
-      const text = String.fromCharCode(0xd800) + notLow;
-      expect(codePointBefore(text, 2)).toBe(notLow);
+      const notLow = String.fromCharCode(LOW_SURROGATE_END + 1);
+      const text = String.fromCharCode(HIGH_SURROGATE_START) + notLow;
+      expect(codePointBefore(text, afterPair)).toBe(notLow);
     });
   });
 
   describe("high-surrogate range boundary (0xd800-0xdbff)", () => {
     it("treats 0xd800 (the lower bound) as a valid high surrogate", () => {
-      const high = String.fromCharCode(0xd800);
-      const low = String.fromCharCode(0xdc00);
-      expect(codePointBefore(high + low, 2)).toBe(high + low);
+      const high = String.fromCharCode(HIGH_SURROGATE_START);
+      const low = String.fromCharCode(LOW_SURROGATE_START);
+      expect(codePointBefore(high + low, afterPair)).toBe(high + low);
     });
 
     it("does not treat 0xd7ff (one below the lower bound) as a valid high surrogate", () => {
-      const notHigh = String.fromCharCode(0xd7ff);
-      const low = String.fromCharCode(0xdc00);
-      expect(codePointBefore(notHigh + low, 2)).toBe(low);
+      const notHigh = String.fromCharCode(HIGH_SURROGATE_START - 1);
+      const low = String.fromCharCode(LOW_SURROGATE_START);
+      expect(codePointBefore(notHigh + low, afterPair)).toBe(low);
     });
 
     it("treats 0xdbff (the upper bound) as a valid high surrogate", () => {
-      const high = String.fromCharCode(0xdbff);
-      const low = String.fromCharCode(0xdc00);
-      expect(codePointBefore(high + low, 2)).toBe(high + low);
+      const high = String.fromCharCode(HIGH_SURROGATE_END);
+      const low = String.fromCharCode(LOW_SURROGATE_START);
+      expect(codePointBefore(high + low, afterPair)).toBe(high + low);
     });
 
     it("does not treat 0xdc00 (one above the upper bound) as a valid high surrogate", () => {
-      const notHigh = String.fromCharCode(0xdc00);
-      const low = String.fromCharCode(0xdc00);
-      expect(codePointBefore(notHigh + low, 2)).toBe(low);
+      const notHigh = String.fromCharCode(HIGH_SURROGATE_END + 1);
+      const low = String.fromCharCode(LOW_SURROGATE_START);
+      expect(codePointBefore(notHigh + low, afterPair)).toBe(low);
     });
   });
 });
 
 describe("codePointAt", () => {
   it("returns a bare newline at or past the end of the string", () => {
-    expect(codePointAt("abc", 3)).toBe("\n");
-    expect(codePointAt("abc", 4)).toBe("\n");
+    const atEnd = 3; // "abc".length
+    expect(codePointAt("abc", atEnd)).toBe("\n");
+    expect(codePointAt("abc", atEnd + 1)).toBe("\n");
   });
 
   it("returns the single character at a normal index", () => {
