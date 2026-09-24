@@ -8,21 +8,36 @@ import { fixtureEpub2MultichapterBytes } from "./epub2-multichapter-fixture";
 import { fixtureEpubMultichapterBytes } from "./epub-multichapter-fixture";
 import { fixtureEpub3Bytes } from "./epub3-fixture";
 
-// These fixture builders assemble a real zip byte-for-byte, entry path by entry path — a wrong path or a mimetype entry that isn't genuinely stored uncompressed would still let most reading tests pass, since readEpubContent resolves paths through the OPF manifest rather than by any fixed position. Verified directly here against the fixture's own real byte output, the same way the pipeline-level "OCF-mandated mimetype-first/stored byte layout" test verifies the writer's output.
+// These fixture builders assemble a real zip byte-for-byte, entry path by entry path — a wrong path or a mimetype entry that isn't genuinely stored uncompressed would still let most reading tests pass, since readEpubContent resolves paths through the OPF manifest rather than by any fixed position. Verified directly here against the fixture's own real byte output, the same way the pipeline-level "OCF-mandated mimetype-first/stored byte layout" test verifies the writer's output. Each fixture's own real entry count: mimetype, container.xml, content.opf/ncx, nav/toc, plus its chapter(s) and any cover image.
+const EPUB3_ENTRY_COUNT = 6;
+const EPUB2_ENTRY_COUNT = 5;
+const EPUB_MULTICHAPTER_ENTRY_COUNT = 6;
+const EPUB2_MULTICHAPTER_ENTRY_COUNT = 6;
+
 describe.each([
-  ["fixtureEpub3Bytes", fixtureEpub3Bytes, ["OEBPS/nav.xhtml"], 6],
-  ["fixtureEpub2Bytes", fixtureEpub2Bytes, ["OEBPS/toc.ncx"], 5],
+  [
+    "fixtureEpub3Bytes",
+    fixtureEpub3Bytes,
+    ["OEBPS/nav.xhtml"],
+    EPUB3_ENTRY_COUNT,
+  ],
+  [
+    "fixtureEpub2Bytes",
+    fixtureEpub2Bytes,
+    ["OEBPS/toc.ncx"],
+    EPUB2_ENTRY_COUNT,
+  ],
   [
     "fixtureEpubMultichapterBytes",
     fixtureEpubMultichapterBytes,
     ["OEBPS/nav.xhtml", "OEBPS/chapter2.xhtml"],
-    6,
+    EPUB_MULTICHAPTER_ENTRY_COUNT,
   ],
   [
     "fixtureEpub2MultichapterBytes",
     fixtureEpub2MultichapterBytes,
     ["OEBPS/toc.ncx", "OEBPS/chapter2.xhtml"],
-    6,
+    EPUB2_MULTICHAPTER_ENTRY_COUNT,
   ],
 ] as const)("%s", (_name, buildBytes, expectedPaths, expectedEntryCount) => {
   it("stores the mimetype entry first and genuinely uncompressed", () => {

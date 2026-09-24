@@ -11,8 +11,9 @@ describe("isXmlNode", () => {
   });
 
   it("rejects a non-object primitive", () => {
+    const arbitraryNumber = 5;
     expect(isXmlNode("not a node")).toBe(false);
-    expect(isXmlNode(5)).toBe(false);
+    expect(isXmlNode(arbitraryNumber)).toBe(false);
   });
 
   it("rejects an object with an unrecognised type", () => {

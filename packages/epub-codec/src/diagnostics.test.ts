@@ -85,11 +85,15 @@ describe("error classes", () => {
   });
 
   it("EpubUnbalancedConstructMarkersError describes an unmatchedEnd", () => {
-    const error = new EpubUnbalancedConstructMarkersError("unmatchedEnd", 3);
+    const arbitraryBlockIndex = 3;
+    const error = new EpubUnbalancedConstructMarkersError(
+      "unmatchedEnd",
+      arbitraryBlockIndex,
+    );
     expect(error.code).toBe("epub/unbalanced-construct-markers");
     expect(error.name).toBe("EpubUnbalancedConstructMarkersError");
     expect(error.imbalanceKind).toBe("unmatchedEnd");
-    expect(error.blockIndex).toBe(3);
+    expect(error.blockIndex).toBe(arbitraryBlockIndex);
     expect(error.message).toContain(
       "a constructEnd marker closes no open construct",
     );
