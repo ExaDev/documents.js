@@ -3,6 +3,7 @@ import type { Package } from "../../model/package";
 import type { XmlElement } from "../../model/node";
 import { el, txt } from "../../xml/fragment";
 import {
+  assertNeverEmbeddedDocumentKind,
   normaliseObjectHref,
   readDrawObjectReference,
   readEmbeddedObjectDocument,
@@ -343,5 +344,20 @@ describe("readEmbeddedObjectDocument", () => {
     );
     expect(document.kind).toBe("drawing");
     expect(residue).not.toBeUndefined();
+  });
+});
+
+describe("assertNeverEmbeddedDocumentKind", () => {
+  it("throws naming the unhandled kind, proving readEmbeddedObjectDocument's and writeEmbeddedObjectPackage's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverEmbeddedDocumentKind("bogus" as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'readEmbeddedObjectDocument: unhandled EmbeddedDocumentKind "bogus"',
+    );
   });
 });
