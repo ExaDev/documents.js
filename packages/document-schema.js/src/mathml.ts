@@ -104,11 +104,15 @@ export function isMathMlNode(value: unknown): value is MathMlNode {
 }
 
 // Defined before MathMlNodeSchema, and deliberately left with no z.ZodType<MathMlElement> annotation of its own — ExaDev/documents.js#937's spike (see the README's "z.custom() vs z.lazy() for recursive schemas" section) found that annotating a discriminated union's own member schemas widens them so z.discriminatedUnion (which needs each member's internal propValues) rejects the union, while dropping every annotation entirely hits TypeScript's circular-inference error. The fix is annotating only the outer union's own binding below, leaving MathMlElementSchema (and every other member) unannotated and fully inferred. children recurses back to MathMlNodeSchema through z.lazy() rather than a direct reference, since MathMlNodeSchema's own binding is not yet initialised at this point in the module.
+//
+// A private box for MathMlNodeSchema's own not-yet-built value, read from inside the z.lazy() thunk below, matching MathExpressionSchema's own identical box in src/math.ts. @typescript-eslint/no-use-before-define flags any textual reference to a not-yet-declared variable, even one read only from inside a thunk that cannot possibly run before module evaluation finishes and the real value further down has already been built, and forward-declaring MathMlNodeSchema itself with `let` trips `prefer-const` the other way instead (a `let` assigned its value exactly once, in a later statement, is exactly what that rule flags). A boxed value sidesteps both: the box is a `const` declared up front, so nothing references it before its own declaration, and writing its `.value` property later is a mutation, not a variable reassignment. The non-null assertion on the read is exactly the case this package's own eslint config turns nonNullAssertion off for: the thunk cannot run before `mathMlNodeSchemaBox.value` is set below.
+const mathMlNodeSchemaBox: { value?: z.ZodType<MathMlNode, MathMlNode> } = {};
+
 export const MathMlElementSchema = z.object({
   type: z.literal("element"),
   tag: z.string(),
   attributes: z.array(MathMlAttributeSchema),
-  children: z.lazy(() => z.array(MathMlNodeSchema)),
+  children: z.lazy(() => z.array(mathMlNodeSchemaBox.value!)),
 });
 
 // Both z.ZodType type arguments are MathMlNode — not just the first (Output). Supplying only one, `z.ZodType<MathMlNode>`, leaves the second (Input) at its own default of `unknown`, which is invisible in this file (z.infer<> and every test here reads Output alone) but surfaces downstream: z.codec()'s own encode() callback is typed against a schema's *input*, so a package consuming this schema through z.codec() (markdown-codec's markdownCodec/markdownContentCodec) would see `mathml: unknown[]` in the value it hands to its own encode function, a real type-checking regression a same-package test run cannot catch since it never calls z.codec() over this schema itself. MathMlNodeSchema has no transform, so Input and Output are genuinely identical — annotating both is correct, not just defensive.
@@ -121,3 +125,4 @@ export const MathMlNodeSchema: z.ZodType<MathMlNode, MathMlNode> =
     MathMlPiSchema,
     MathMlElementSchema,
   ]);
+mathMlNodeSchemaBox.value = MathMlNodeSchema;

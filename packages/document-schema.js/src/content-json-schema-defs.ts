@@ -64,12 +64,13 @@ function mathMlDef(
   return stripped;
 }
 
-// Called from each of CONTENT_DEFS's own `get MathMlAttribute()`/`get MathMlElement()`/`get MathMlNode()` accessors (see that object literal further down), never before CONTENT_DEFS itself has finished being constructed: a getter's body only runs when something later reads the property, strictly after the `export const CONTENT_DEFS = {...}` statement below has completed, so referencing CONTENT_DEFS by name here is safe despite this function being declared above it — the same forward-reference-inside-a-deferred-closure pattern ordinary mutual recursion between top-level functions already relies on. Redefines CONTENT_DEFS's own property as a plain cached value on first call so the underlying z.toJSONSchema() call and this stripping work run at most once per id, and every read after the first is a plain property lookup with no getter overhead at all.
+// Called from each of CONTENT_DEFS's own `get MathMlAttribute()`/`get MathMlElement()`/`get MathMlNode()` accessors (see that object literal further down) as `cacheMathMlDef(this, id)`, so `target` is always CONTENT_DEFS itself — a getter's `this` is bound to the object it was read from, not to whatever value was in scope when the getter was declared, so this takes CONTENT_DEFS as a parameter rather than closing over the module-level binding by name: the binding is declared after this function and referencing it directly would be a forward reference to a value that has not finished being constructed yet at the point this function is declared, even though the getter itself only ever runs later. Redefines the target's own property as a plain cached value on first call so the underlying z.toJSONSchema() call and this stripping work run at most once per id, and every read after the first is a plain property lookup with no getter overhead at all.
 function cacheMathMlDef(
+  target: Record<string, JsonSchema>,
   id: "MathMlAttribute" | "MathMlElement" | "MathMlNode",
 ): JsonSchema {
   const value = mathMlDef(id);
-  Object.defineProperty(CONTENT_DEFS, id, {
+  Object.defineProperty(target, id, {
     value,
     enumerable: true,
     configurable: true,
@@ -2071,15 +2072,15 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ["kind"],
     additionalProperties: {},
   },
-  // The MathML node tree carried by the ContentDocument 'formula' variant's own ContentFormulaSchema.mathml (src/content.ts) — MathMlAttribute/MathMlElement/MathMlNode, rather than transcribed by hand, since MathMlNodeSchema stopped being a z.custom() node in ExaDev/documents.js#937 and z.toJSONSchema() can introspect it directly now. Declared as `get` accessors here, in their own field position, rather than spread in as plain values from a separately-built object: a getter fires only when the property is actually read, so cacheMathMlDef()'s z.toJSONSchema() call happens on first access to any of the three, not the moment this object literal is constructed — and declaring them in place (rather than via Object.defineProperty after this literal closes) keeps CONTENT_DEFS's own key order exactly where it always was, so the generated content-document.schema.json/document-tree.schema.json's own $defs key order is unaffected by the deferral. See cacheMathMlDef's own comment above for the self-caching mechanism and why referencing CONTENT_DEFS from inside it is safe.
+  // The MathML node tree carried by the ContentDocument 'formula' variant's own ContentFormulaSchema.mathml (src/content.ts) — MathMlAttribute/MathMlElement/MathMlNode, rather than transcribed by hand, since MathMlNodeSchema stopped being a z.custom() node in ExaDev/documents.js#937 and z.toJSONSchema() can introspect it directly now. Declared as `get` accessors here, in their own field position, rather than spread in as plain values from a separately-built object: a getter fires only when the property is actually read, so cacheMathMlDef()'s z.toJSONSchema() call happens on first access to any of the three, not the moment this object literal is constructed — and declaring them in place (rather than via Object.defineProperty after this literal closes) keeps CONTENT_DEFS's own key order exactly where it always was, so the generated content-document.schema.json/document-tree.schema.json's own $defs key order is unaffected by the deferral. See cacheMathMlDef's own comment above for the self-caching mechanism and why it takes its target as a `this` parameter rather than referencing CONTENT_DEFS by name.
   get MathMlAttribute(): JsonSchema {
-    return cacheMathMlDef("MathMlAttribute");
+    return cacheMathMlDef(this, "MathMlAttribute");
   },
   get MathMlElement(): JsonSchema {
-    return cacheMathMlDef("MathMlElement");
+    return cacheMathMlDef(this, "MathMlElement");
   },
   get MathMlNode(): JsonSchema {
-    return cacheMathMlDef("MathMlNode");
+    return cacheMathMlDef(this, "MathMlNode");
   },
   //
   // — The math value schemas (src/math.ts) --
