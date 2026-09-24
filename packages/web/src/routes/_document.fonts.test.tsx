@@ -117,6 +117,50 @@ describe("FontsPage", () => {
     mounted.unmount();
   });
 
+  it("clears the previous document's font list before the next document's extraction resolves", async () => {
+    const client = createMockRpcClient();
+    vi.mocked(client.fonts.extractSourceFonts).mockResolvedValueOnce([
+      { family: "First Doc Font", bold: false, italic: false },
+    ]);
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountFontsPage();
+
+    act(() => {
+      openDocument(openedFile("a.docx"));
+    });
+    await vi.waitFor(() => {
+      expect(mounted.container.textContent).toContain("First Doc Font");
+    });
+
+    type ExtractedFonts = Awaited<
+      ReturnType<typeof client.fonts.extractSourceFonts>
+    >;
+    let resolveSecond: (fonts: ExtractedFonts) => void = () => {};
+    vi.mocked(client.fonts.extractSourceFonts).mockReturnValueOnce(
+      new Promise<ExtractedFonts>((resolve) => {
+        resolveSecond = resolve;
+      }),
+    );
+    act(() => {
+      openDocument(openedFile("b.docx"));
+    });
+
+    await vi.waitFor(() => {
+      expect(mounted.container.textContent).not.toContain("First Doc Font");
+    });
+    expect(mounted.container.querySelector("table")).toBeNull();
+
+    act(() => {
+      resolveSecond([]);
+    });
+    await vi.waitFor(() => {
+      expect(mounted.container.textContent).toContain(
+        "No embedded fonts found.",
+      );
+    });
+    mounted.unmount();
+  });
+
   it("shows a 'no fonts found' message when the document has none embedded", async () => {
     const client = createMockRpcClient();
     vi.mocked(client.fonts.extractSourceFonts).mockResolvedValue([]);
