@@ -4,7 +4,7 @@ import { createRestServer } from "./server";
 export const DEFAULT_PORT = 3100;
 
 // Reads a `--name value` or `--name=value` flag from argv, whichever form the caller used. Mirrors document-mcp's own src/bin.ts readFlag exactly.
-function readFlag(args: string[], name: string): string | undefined {
+function readFlag(args: readonly string[], name: string): string | undefined {
   const prefix = `--${name}=`;
   for (const [index, arg] of args.entries()) {
     if (arg.startsWith(prefix)) {
