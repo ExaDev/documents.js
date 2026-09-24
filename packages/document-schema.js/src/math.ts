@@ -268,19 +268,24 @@ export function isMathExpression(value: unknown): value is MathExpression {
   return false;
 }
 
-// The per-variant schemas for the recursive kinds, defined before MathExpressionSchema (their child fields reach it only through z.lazy(), so MathExpressionSchema's own binding does not need to exist yet at this point in the module) — matching MathMlElementSchema's own placement before MathMlNodeSchema (src/mathml.ts). The non-recursive variants' schemas sit with the leaves above. Deliberately left with no z.ZodType<MathApp>/etc. annotation of their own — ExaDev/documents.js#937's spike (see the README's "z.custom() vs z.lazy() for recursive schemas" section) found that annotating a discriminated union's own member schemas widens them so z.discriminatedUnion (which needs each member's internal propValues) rejects the union, while dropping every annotation entirely hits TypeScript's circular-inference error. The fix is annotating only the outer union's own binding below, leaving every member unannotated and fully inferred.
+// The per-variant schemas for the recursive kinds, defined before MathExpressionSchema's own value is assigned (their child fields reach it only through z.lazy(), so MathExpressionSchema does not need to hold its actual discriminated-union value yet at this point in the module), matching MathMlElementSchema's own placement before MathMlNodeSchema (src/mathml.ts). The non-recursive variants' schemas sit with the leaves above. Deliberately left with no z.ZodType<MathApp>/etc. annotation of their own: ExaDev/documents.js#937's spike (see the README's "z.custom() vs z.lazy() for recursive schemas" section) found that annotating a discriminated union's own member schemas widens them so z.discriminatedUnion (which needs each member's internal propValues) rejects the union, while dropping every annotation entirely hits TypeScript's circular-inference error. The fix is annotating only the outer union's own binding below, leaving every member unannotated and fully inferred.
+
+// A private box for MathExpressionSchema's own not-yet-built value, read from inside the z.lazy() thunks below. @typescript-eslint/no-use-before-define flags any textual reference to a not-yet-declared variable, even one read only from inside a thunk that cannot possibly run before module evaluation finishes and the real value further down has already been built, and there is no way to satisfy it by simply forward-declaring `MathExpressionSchema` itself with `let`: a `let` assigned its value exactly once, in a later statement, trips `prefer-const` the other way (a real conflict between the two rules for this exact shape, confirmed directly). A boxed value sidesteps both: the box is a `const` declared up front, so nothing references it before its own declaration, and writing its `.value` property later is a mutation, not a variable reassignment, so `prefer-const` has nothing to flag either. The non-null assertion on each read is exactly the case this package's own eslint config turns nonNullAssertion off for: every read happens from inside a thunk, and by the time any thunk actually runs, `mathExpressionSchemaBox.value` has already been set below.
+const mathExpressionSchemaBox: {
+  value?: z.ZodType<MathExpression, MathExpression>;
+} = {};
 
 export const MathAppSchema = z.object({
   kind: z.literal("app"),
   operator: z.string(), // namespaced operator-registry id, e.g. 'math:divide'
-  args: z.lazy(() => z.array(MathExpressionSchema)),
+  args: z.lazy(() => z.array(mathExpressionSchemaBox.value!)),
 });
 
 const BINDER_SCHEMA_FIELDS = {
   binder: z.string(),
-  lower: z.lazy(() => MathExpressionSchema),
-  upper: z.lazy(() => MathExpressionSchema),
-  body: z.lazy(() => MathExpressionSchema),
+  lower: z.lazy(() => mathExpressionSchemaBox.value!),
+  upper: z.lazy(() => mathExpressionSchemaBox.value!),
+  body: z.lazy(() => mathExpressionSchemaBox.value!),
 };
 
 // sum and prod are two variants of one shape rather than one 'binder' variant with an op field, so a consumer's exhaustive switch over the grammar distinguishes them at the discriminant like every other kind.
@@ -298,13 +303,13 @@ export const MathProdSchema = z.object({
 export const MathMatrixSchema = z
   .object({
     kind: z.literal("matrix"),
-    rows: z.lazy(() => z.array(z.array(MathExpressionSchema))),
+    rows: z.lazy(() => z.array(z.array(mathExpressionSchemaBox.value!))),
   })
   .refine((matrix) => new Set(matrix.rows.map((row) => row.length)).size <= 1, {
     message: "matrix rows must all have the same number of columns",
   });
 
-// Both z.ZodType type arguments are MathExpression — not just the first (Output). Supplying only one, `z.ZodType<MathExpression>`, leaves the second (Input) at its own default of `unknown`, which is invisible in this file (z.infer<> and every test here reads Output alone) but surfaces downstream: z.codec()'s own encode() callback is typed against a schema's *input*, so a package consuming this schema through z.codec() would see `content: unknown` (ContentFormulaSchema's own optional field) in the value it hands to its own encode function, a real type-checking regression a same-package test run cannot catch since it never calls z.codec() over this schema itself — exactly what broke markdown-codec's typecheck for MathMlNodeSchema in #937. MathExpressionSchema has no transform, so Input and Output are genuinely identical — annotating both is correct, not just defensive.
+// Both z.ZodType type arguments are MathExpression, not just the first (Output). Supplying only one, `z.ZodType<MathExpression>`, leaves the second (Input) at its own default of `unknown`, which is invisible in this file (z.infer<> and every test here reads Output alone) but surfaces downstream: z.codec()'s own encode() callback is typed against a schema's *input*, so a package consuming this schema through z.codec() would see `content: unknown` (ContentFormulaSchema's own optional field) in the value it hands to its own encode function, a real type-checking regression a same-package test run cannot catch since it never calls z.codec() over this schema itself: exactly what broke markdown-codec's typecheck for MathMlNodeSchema in #937. MathExpressionSchema has no transform, so Input and Output are genuinely identical, and annotating both is correct, not just defensive.
 export const MathExpressionSchema: z.ZodType<MathExpression, MathExpression> =
   z.discriminatedUnion("kind", [
     MathNumSchema,
@@ -316,6 +321,7 @@ export const MathExpressionSchema: z.ZodType<MathExpression, MathExpression> =
     MathMatrixSchema,
     MathUnparsedSchema,
   ]);
+mathExpressionSchemaBox.value = MathExpressionSchema;
 
 // — Evaluation runtime values --
 //

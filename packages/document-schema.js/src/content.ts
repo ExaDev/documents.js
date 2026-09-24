@@ -457,7 +457,12 @@ function isContentEmbeddedObjectKind(
   );
 }
 
-// Delegates document validation to ContentDocumentSchema itself (defined further down this file) instead of hand-rolling a second, parallel structural guard for every ContentDocument variant — ContentDocumentSchema is a plain Zod discriminated union of ordinary object schemas, not a self-referential z.lazy schema, so one already-built schema value validating another already-built schema value at runtime carries none of the "collapses to unknown" risk that motivates the z.custom pattern in the first place; that risk is specific to Zod's own static type inference over a self-referential schema *definition*. ContentDocumentSchema is referenced here only inside this function's body (a closure), and by the time this function is ever called the whole module — including ContentDocumentSchema's own const assignment later in this file — has already finished evaluating.
+// A private box for ContentDocumentSchema's own not-yet-built value, read from both here and from ContentEmbeddedObjectSchema's own `document` field below, matching ContentBlockSchema's own identical box above. @typescript-eslint/no-use-before-define flags any textual reference to a not-yet-declared variable, even one read only from inside a closure that cannot possibly run before module evaluation finishes and the real value further down has already been built, and forward-declaring ContentDocumentSchema itself with `let` trips `prefer-const` the other way instead (a `let` assigned its value exactly once, in a later statement, is exactly what that rule flags). A boxed value sidesteps both: the box is a `const` declared up front, so nothing references it before its own declaration, and writing its `.value` property later is a mutation, not a variable reassignment. The non-null assertion on each read is exactly the case this package's own eslint config turns nonNullAssertion off for: neither reader can run before `contentDocumentSchemaBox.value` is set below.
+const contentDocumentSchemaBox: {
+  value?: z.ZodType<ContentDocument, ContentDocument>;
+} = {};
+
+// Delegates document validation to ContentDocumentSchema itself (via the box above) instead of hand-rolling a second, parallel structural guard for every ContentDocument variant — ContentDocumentSchema is a plain Zod discriminated union of ordinary object schemas, not a self-referential z.lazy schema, so one already-built schema value validating another already-built schema value at runtime carries none of the "collapses to unknown" risk that motivates the z.custom pattern in the first place; that risk is specific to Zod's own static type inference over a self-referential schema *definition*. contentDocumentSchemaBox.value is read here only inside this function's body (a closure), and by the time this function is ever called the whole module, including the box's own population further down this file, has already finished evaluating.
 function isContentEmbeddedObject(
   value: unknown,
 ): value is ContentEmbeddedObject {
@@ -465,7 +470,7 @@ function isContentEmbeddedObject(
     isRecord(value) &&
     isContentEmbeddedObjectKind(value.objectKind) &&
     BoxSchema.safeParse(value.frame).success &&
-    ContentDocumentSchema.safeParse(value.document).success &&
+    contentDocumentSchemaBox.value!.safeParse(value.document).success &&
     (value.anchorRow === undefined ||
       (typeof value.anchorRow === "number" &&
         Number.isInteger(value.anchorRow) &&
@@ -558,7 +563,7 @@ export function isContentBlock(value: unknown): value is ContentBlock {
 
 // ContentBlockSchema itself is defined further down this file (after ContentTableSchema, one of its own recursive members) as a real, self-recursive z.discriminatedUnion() — ExaDev/documents.js#1009's z.lazy() rewrite, the identical treatment #937 already applied to MathMlNodeSchema (src/mathml.ts) and this file's own MathExpressionSchema import now shares (src/math.ts). isContentBlock (above) stays exported as a standalone type guard regardless, the same "kept, no longer backing a z.custom() node" treatment isMathExpression/isMathMlNode already got.
 
-// The shared field set between ContentEmbeddedObjectSchema (the standalone schema ContentSheetSchema.embeddedObjects validates each entry against — a sheet has no block-flow concept to anchor an embedded object into) and ContentEmbeddedObjectBlockSchema (the ContentBlock 'embeddedObject' variant, which reuses these fields directly rather than nesting a separate `embeddedObject` field, mirroring the ContentEmbeddedObjectBlock interface's own `extends` relationship above). document is the genuine mutual-recursion edge back to a whole ContentDocument (an embedded object can carry another embedded object nested inside it), so it goes through z.lazy() exactly like ContentTableCellSchema's own `blocks` field below — ContentDocumentSchema is not yet a binding at this point in the module, and by the time either lazy thunk is actually called to validate something, the whole module has finished evaluating.
+// The shared field set between ContentEmbeddedObjectSchema (the standalone schema ContentSheetSchema.embeddedObjects validates each entry against — a sheet has no block-flow concept to anchor an embedded object into) and ContentEmbeddedObjectBlockSchema (the ContentBlock 'embeddedObject' variant, which reuses these fields directly rather than nesting a separate `embeddedObject` field, mirroring the ContentEmbeddedObjectBlock interface's own `extends` relationship above). document is the genuine mutual-recursion edge back to a whole ContentDocument (an embedded object can carry another embedded object nested inside it), so it goes through z.lazy() exactly like ContentTableCellSchema's own `blocks` field below, reading contentDocumentSchemaBox.value (see that box's own comment above isContentEmbeddedObject) rather than ContentDocumentSchema directly, since ContentDocumentSchema itself is not yet a binding at this point in the module, and by the time either lazy thunk is actually called to validate something, the whole module has finished evaluating and the box has been populated.
 const CONTENT_EMBEDDED_OBJECT_FIELDS = {
   objectKind: z.enum([
     "formula",
@@ -568,7 +573,7 @@ const CONTENT_EMBEDDED_OBJECT_FIELDS = {
     "drawing",
     "chart",
   ]),
-  document: z.lazy(() => ContentDocumentSchema),
+  document: z.lazy(() => contentDocumentSchemaBox.value!),
   frame: BoxSchema,
   anchorRow: z.number().int().nonnegative().optional(),
   anchorColumn: z.number().int().nonnegative().optional(),
@@ -736,8 +741,12 @@ export function unrecognizedFillKind(fill: { kind?: unknown }): string {
   return String(fill.kind);
 }
 
+// A private box for ContentBlockSchema's own not-yet-built value, read from inside the z.lazy() thunk below, matching MathExpressionSchema's own identical box in src/math.ts. @typescript-eslint/no-use-before-define flags any textual reference to a not-yet-declared variable, even one read only from inside a thunk that cannot possibly run before module evaluation finishes and the real value further down (after ContentTableSchema, once every discriminated-union member it needs exists) has already been built, and forward-declaring ContentBlockSchema itself with `let` trips `prefer-const` the other way instead (a `let` assigned its value exactly once, in a later statement, is exactly what that rule flags). A boxed value sidesteps both: the box is a `const` declared up front, so nothing references it before its own declaration, and writing its `.value` property later is a mutation, not a variable reassignment. The non-null assertion on the read is exactly the case this package's own eslint config turns nonNullAssertion off for: the thunk cannot run before `contentBlockSchemaBox.value` is set below.
+const contentBlockSchemaBox: { value?: z.ZodType<ContentBlock, ContentBlock> } =
+  {};
+
 export const ContentTableCellSchema = z.object({
-  blocks: z.lazy(() => z.array(ContentBlockSchema)),
+  blocks: z.lazy(() => z.array(contentBlockSchemaBox.value!)),
   colSpan: z.number().int().positive().optional(),
   rowSpan: z.number().int().positive().optional(),
   background: ContentCellFillSchema.optional(),
@@ -786,6 +795,7 @@ export const ContentBlockSchema: z.ZodType<ContentBlock, ContentBlock> =
     ContentConstructStartSchema,
     ContentConstructEndSchema,
   ]);
+contentBlockSchemaBox.value = ContentBlockSchema;
 
 // One furniture kind's per-slot block flows — see ContentSectionSchema's own headers/footers comment for the slot vocabulary's format evidence. A slot is absent when the section states no furniture for it: an absent default slot with a present even slot is the even/odd-headers shape, not a gap (ExaDev/documents.js#1128).
 export const ContentPageFurnitureSchema = z.object({
@@ -1435,4 +1445,5 @@ export const ContentDocumentSchema = z.discriminatedUnion("kind", [
     formula: ContentFormulaSchema,
   }),
 ]);
+contentDocumentSchemaBox.value = ContentDocumentSchema;
 export type ContentDocument = z.infer<typeof ContentDocumentSchema>;
