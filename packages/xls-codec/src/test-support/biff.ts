@@ -229,7 +229,7 @@ export function otherObjRecord(
 /**
  * A TxO record ([MS-XLS] 2.4.329) plus the Continue record carrying its text.
  *
- * cbRuns is left at 0 (no TxORuns bytes at all) rather than the >=16-and-a-multiple-of-8 a real producer always writes — workbook/comments.ts only ever skips cbRuns bytes verbatim, never validates the constraint, so a shorter run table exercises the same code path with a simpler fixture.
+ * cbRuns is left at 0 (no TxORuns bytes at all) rather than the `>=16`-and-a-multiple-of-8 a real producer always writes — workbook/comments.ts only ever skips cbRuns bytes verbatim, never validates the constraint, so a shorter run table exercises the same code path with a simpler fixture.
  */
 export function noteTxoRecords(
   text: string,

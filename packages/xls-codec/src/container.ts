@@ -20,7 +20,7 @@ const EMBEDDING_STORAGE_PATTERN = /^MBD([0-9A-F]{8})\/Package$/;
 
 export interface WorkbookStreams {
   readonly workbook: Uint8Array<ArrayBuffer>;
-  /** The raw "\x05SummaryInformation" stream bytes, or undefined when the container carries none. */
+  /** The raw `"\x05SummaryInformation"` stream bytes, or undefined when the container carries none. */
   readonly metadata: Uint8Array<ArrayBuffer> | undefined;
   /** Every "MBD<hex>/Package" Embedding Storage's own Package-stream bytes, keyed by the storage id its directory name spells — an embedded object's own FtPictFmla names this same id (workbook/drawing.ts's own readEmbeddedObjectPackage resolves it). Empty when the workbook embeds no OLE object at all. */
   readonly embeddingStreams: ReadonlyMap<number, Uint8Array<ArrayBuffer>>;

@@ -86,7 +86,7 @@ export interface WorkbookGlobalsPlan {
   readonly sheetNames: readonly string[];
   /** The workbook's font table, in the order its Font records are written: entry 0 is always the Normal font (a cell stating no font of its own references it), and every later entry is one distinct cell font the workbook's cells actually state — write.ts's own font-interning pass assigns those. */
   readonly fonts: readonly XfFontFields[];
-  /** Custom number-format codes needing their own Format record, each with the identifier already assigned to it (always >= 164, [MS-XLS] 2.4.126's own custom-identifier floor). A code equal to one of the built-in table's own strings needs no Format record here — number-format.ts's BUILTIN_NUMBER_FORMATS already covers ids 0-49 for both this package's reader and any other. */
+  /** Custom number-format codes needing their own Format record, each with the identifier already assigned to it (always `>= 164`, [MS-XLS] 2.4.126's own custom-identifier floor). A code equal to one of the built-in table's own strings needs no Format record here — number-format.ts's BUILTIN_NUMBER_FORMATS already covers ids 0-49 for both this package's reader and any other. */
   readonly customFormats: readonly {
     readonly id: number;
     readonly code: string;

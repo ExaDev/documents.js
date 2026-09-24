@@ -138,7 +138,7 @@ function pictureObjGroup(storageId: number): RecordGroup {
   return group;
 }
 
-/** An anchor whose own placement collapses to exactly zero width, at a real (non-zero) height — isolating widthPt<=0 from heightPt<=0 in every one of the three shape-to-content functions that share the identical guard. */
+/** An anchor whose own placement collapses to exactly zero width, at a real (non-zero) height — isolating `widthPt<=0` from `heightPt<=0` in every one of the three shape-to-content functions that share the identical guard. */
 const ZERO_WIDTH_ANCHOR = {
   colL: 0,
   dxL: 0,
