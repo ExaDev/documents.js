@@ -1,5 +1,9 @@
 import { XMLBuilder } from "fast-xml-parser";
-import type { Attribute, XmlNode } from "../model/node";
+import {
+  assertNeverXmlNodeType,
+  type Attribute,
+  type XmlNode,
+} from "../model/node";
 
 // Shared, module-level rather than a fresh `[]` literal per "pi"/"declaration" case below: fast-xml-parser's own builder ignores the array's content entirely for both of these ordered-node shapes (verified directly — see each case's own comment), so a per-call literal there is a live mutation target with no test able to observe a difference. Hoisting it to one array built once at import time keeps the exact same runtime value while making it a static (module-load-time) mutant instead, which this workspace's shared Stryker config already excludes from the valid-mutant count for exactly this reason (see stryker.shared.ts's own ignoreStatic comment).
 const BUILDER_IGNORES_THIS_CHILD_ARRAY: unknown[] = [];
@@ -64,4 +68,5 @@ function toOrderedNode(node: XmlNode): Record<string, unknown> {
         ":@": attrsObject(node.attributes),
       };
   }
+  return assertNeverXmlNodeType(node);
 }
