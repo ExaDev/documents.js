@@ -138,6 +138,44 @@ export function docxWithTableCellEquationPackage(): Package {
   );
 }
 
+// A body-authored docx for the embedded-object splice pass's own tests: the caller writes the
+// w:body's inner XML (paragraphs, tables, w:object runs) and optionally overrides the document
+// part's own relationships (a w:object's r:id has to resolve through them) and adds further parts
+// (an embeddings payload, say). The body element carries the m namespace so equations need no
+// per-element declaration, and the sectPr every real body ends with is appended by the builder so
+// a caller cannot forget it.
+const BODY_NAMESPACES =
+  'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:o="urn:schemas-microsoft-com:office:office"';
+const BODY_SECT_PR =
+  '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>';
+
+export interface BodyDocxOptions {
+  readonly documentRelsXml?: string;
+  readonly extraContentTypesXml?: string;
+  readonly parts?: Record<string, Uint8Array<ArrayBuffer>>;
+}
+
+export function docxPackageOfBodyXml(
+  bodyXml: string,
+  options: BodyDocxOptions = {},
+): Package {
+  const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>${options.extraContentTypesXml ?? ""}<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>`;
+  return decodePackage(
+    zipPackage({
+      "[Content_Types].xml": enc(contentTypes),
+      "_rels/.rels": ROOT_RELS_XML,
+      "word/document.xml": enc(
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document ${BODY_NAMESPACES}><w:body>${bodyXml}${BODY_SECT_PR}</w:body></w:document>`,
+      ),
+      "word/_rels/document.xml.rels": options.documentRelsXml
+        ? enc(options.documentRelsXml)
+        : DOCUMENT_RELS_XML,
+      "word/styles.xml": STYLES_XML,
+      ...options.parts,
+    }),
+  );
+}
+
 // The same content as docxWithTableCellEquationPackage, with the body and its companion parts renamed and reached only through the package's own relationships: a producer is free to call the body anything, and OPC names it through the root officeDocument relationship (ExaDev/documents.js#1314). The styles Target is package-rooted on purpose, so a reader resolving it against the body part's own directory would look for word/word/styles2.xml and find nothing.
 const RENAMED_ROOT_RELS_XML = enc(
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document2.xml"/></Relationships>',
