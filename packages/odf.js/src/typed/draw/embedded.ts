@@ -129,6 +129,13 @@ export interface EmbeddedDocumentRead {
 }
 
 // An embedded sub-document reference -> the ContentDocument its own typed reader produces, plus any residue that reader quarantines. This is the ONE kind -> reader dispatch table for the whole package (see this module's own top-of-file note for why it lives here rather than in each format reader): both frame-reading formats (odt's text-flow lift, ods's cell/page anchoring) hand every reference they resolve to this function, so a spreadsheet embedded in a Writer document and a Writer document embedded in a spreadsheet traverse the same table, and no format reader ever imports a sibling reader. A spreadsheet embedded inside a spreadsheet is plain self-recursion through the table's own 'spreadsheet' arm. `format` names the EMBEDDING format (the reader whose frame walk made the call), because the one arm that cares — chart residue, so a same-format restorer knows whose serialisation it is reading — is a property of where the object was found, not of what the object is. Every EmbeddedDocumentKind resolves: the reference itself already refused the unrepresentable shapes (a linked object, a .odb front-end), so a caller never needs an undefined arm to handle.
+// Reached only if EmbeddedDocumentKind (an alias of document-schema.js's own ContentEmbeddedObjectKind) ever gains a member a switch over it does not match: every current member is covered wherever this is called, so `value` narrows to `never` at each real call site, and adding an uncovered kind makes that narrowing fail and those calls stop compiling. That is the real safety net. Shared between this module's own readEmbeddedObjectDocument and embedded-write.ts's writeEmbeddedObjectPackage, both of which switch over the identical union, rather than each keeping a byte-identical copy. Exported so embedded.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real kind is already handled by a case in both.
+export function assertNeverEmbeddedDocumentKind(value: never): never {
+  throw new Error(
+    `readEmbeddedObjectDocument: unhandled EmbeddedDocumentKind ${JSON.stringify(value)}`,
+  );
+}
+
 export function readEmbeddedObjectDocument(
   reference: EmbeddedDrawObject,
   frame: Readonly<Box>,
@@ -173,6 +180,7 @@ export function readEmbeddedObjectDocument(
       // A chart's document is the frame-sized drawing page carrying the chart's local data cache (see readOdfChartContent's own note above), and the chart element quarantines into the residue this return carries alongside it.
       return readOdfChartContent(reference.package, frame, format);
   }
+  return assertNeverEmbeddedDocumentKind(reference.objectKind);
 }
 
 // A sub-document's own content.xml -> the kind it is, across BOTH structural shapes: office:body's content child for an ordinary embedded document, and a bare MathML root for an embedded formula. The office:body path is tried first and the math-root path only when it yields nothing, so a document that genuinely has an office:body is never re-examined as a formula.

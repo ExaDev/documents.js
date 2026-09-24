@@ -1,6 +1,7 @@
 import type { ContentEmbeddedObject } from "document-schema.js";
 import type { Package } from "../../model/package";
 import type { XmlElement } from "../../model/node";
+import { assertNeverEmbeddedDocumentKind } from "./embedded";
 import { el } from "../../xml/fragment";
 import { encodeXmlText } from "../../xml/entities";
 import { syncManifest } from "../../manifest";
@@ -34,6 +35,7 @@ export function writeEmbeddedObjectPackage(
         "writeEmbeddedObjectPackage: an embedded chart has no write-side serialiser — a chart's own part is quarantined residue by the family's own #719 decision, and this writer refuses to fabricate one",
       );
   }
+  return assertNeverEmbeddedDocumentKind(object.objectKind);
 }
 
 // Keys every part of the sub-package under its embedding directory and adds the parts to the outer package: "Object 1/" + "content.xml" -> "Object 1/content.xml". The sub-package's own manifest travels with it verbatim (an embedded package's manifest lists ITS parts relative to ITS root — exactly what the reader expects to find when it re-keys them back), and syncManifest on the outer package derives the directory entry from the part paths, so no separate manifest bookkeeping happens here.
