@@ -1,3 +1,9 @@
+## [5.12.37](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.36...document-cli%405.12.37) (2026-09-24)
+
+### Tests
+
+* **document-cli:** cover spreadsheet-grid's wizards, paging and guard-key flows ([c8b8552](https://github.com/ExaDev/documents.js/commit/c8b8552c310182ecb843a3b9ecd48e54f54fa8f0))
+
 ## [5.12.36](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.35...document-cli%405.12.36) (2026-09-24)
 
 
