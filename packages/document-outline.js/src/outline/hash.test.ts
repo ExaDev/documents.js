@@ -13,12 +13,15 @@ import {
   writeScheduleWord,
 } from "./hash";
 
+const HEX_RADIX = 16;
+const HEX_DIGITS_PER_BYTE = 2;
+
 // The SHA-256 implementation is pinned against the specification's own published digests (FIPS 180-4 example vectors): the empty string exercises the single-block padding, 'abc' a short message, and the 55-character string forces exactly two padded blocks with the length word in the second — the padding edge a hand-rolled implementation most easily gets wrong.
 describe("sha256", () => {
   const digest = (text: string): string => {
     const bytes = new TextEncoder().encode(text);
     return Array.from(sha256(bytes), (byte) =>
-      byte.toString(16).padStart(2, "0"),
+      byte.toString(HEX_RADIX).padStart(HEX_DIGITS_PER_BYTE, "0"),
     ).join("");
   };
 
@@ -35,37 +38,49 @@ describe("sha256", () => {
   });
 });
 
+const UINT64_LENGTH_SUFFIX_BYTES = 8;
+const UINT32_MODULUS = 4294967296;
+
 describe("writeBitLength", () => {
   // The high 32 bits only become nonzero once bitLength reaches 2^32 (a ~512 MiB message no unit test can afford to actually hash), so this is exercised directly against a synthetic bitLength rather than a real byte array reaching that size.
   it("writes the high and low 32 bits of a 64-bit big-endian bit length", () => {
-    const buffer = new ArrayBuffer(8);
+    const buffer = new ArrayBuffer(UINT64_LENGTH_SUFFIX_BYTES);
     const view = new DataView(buffer);
-    const bitLength = 4294967296 * 3 + 123; // 3 full 2^32 wraps plus a low remainder
+    const highWordWraps = 3;
+    const lowRemainder = 123;
+    const bitLength = UINT32_MODULUS * highWordWraps + lowRemainder; // 3 full 2^32 wraps plus a low remainder
+    const lowWordOffset = 4;
     writeBitLength(view, 0, bitLength);
-    expect(view.getUint32(0)).toBe(3);
-    expect(view.getUint32(4)).toBe(123);
+    expect(view.getUint32(0)).toBe(highWordWraps);
+    expect(view.getUint32(lowWordOffset)).toBe(lowRemainder);
   });
 
   it("writes zero into the high 32 bits for any realistic (sub-2^32) bit length", () => {
-    const buffer = new ArrayBuffer(8);
+    const buffer = new ArrayBuffer(UINT64_LENGTH_SUFFIX_BYTES);
     const view = new DataView(buffer);
-    writeBitLength(view, 0, 512);
+    const realisticBitLength = 512;
+    const lowWordOffset = 4;
+    writeBitLength(view, 0, realisticBitLength);
     expect(view.getUint32(0)).toBe(0);
-    expect(view.getUint32(4)).toBe(512);
+    expect(view.getUint32(lowWordOffset)).toBe(realisticBitLength);
   });
 });
 
 describe("writeScheduleWord", () => {
+  const scheduleWords = 64;
+
   it("writes the value at a valid index", () => {
-    const w = new Uint32Array(64);
-    writeScheduleWord(w, 20, 0xdeadbeef);
-    expect(w[20]).toBe(0xdeadbeef);
+    const w = new Uint32Array(scheduleWords);
+    const validIndex = 20;
+    const placeholderValue = 0xdeadbeef;
+    writeScheduleWord(w, validIndex, placeholderValue);
+    expect(w[validIndex]).toBe(placeholderValue);
   });
 
   it("throws with the exact out-of-bounds message for an index at the array's own length", () => {
-    const w = new Uint32Array(64);
+    const w = new Uint32Array(scheduleWords);
     expect(() => {
-      writeScheduleWord(w, 64, 1);
+      writeScheduleWord(w, scheduleWords, 1);
     }).toThrow("sha256: message schedule index 64 out of bounds (0..63)");
   });
 });
@@ -119,7 +134,11 @@ describe("canonicalise", () => {
     expect(canonicalise({ b: 2, a: 1 })).toEqual({ a: 1, b: 2 });
     const nested = { z: [{ y: 1, x: 2 }] };
     expect(canonicalise(nested)).toEqual({ z: [{ x: 2, y: 1 }] });
-    expect(canonicalise([3, 1, 2])).toEqual([3, 1, 2]);
+    const first = 3;
+    const second = 1;
+    const third = 2;
+    const unsortedOrder = [first, second, third];
+    expect(canonicalise(unsortedOrder)).toEqual(unsortedOrder);
   });
 
   // isRecord's own `value !== null` guard: typeof null === "object", so without this guard canonicalise's isRecord branch would be taken for null and Object.keys(null) would throw. A bare null and a null nested inside a record both have to pass through untouched rather than being treated as a record.
