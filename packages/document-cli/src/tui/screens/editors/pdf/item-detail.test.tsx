@@ -25,6 +25,9 @@ const ENTER = "\r";
 const ESCAPE = "\u001B";
 const BACKSPACE = "\x7f";
 
+// The item-detail screen's own header row renders a genuine em dash (U+2014) between the item index and its kind; asserting against the same code point (rather than a literal character in this source file) keeps the fixture unambiguous in any editor or terminal.
+const EM_DASH = "\u2014";
+
 // A real, minimal 1x1 PNG, registered under imageId "logo" — writePdf (called by mutate()'s own undo-snapshot step on every dispatch, not just an explicit save) throws "LayoutDocument references image ... but it is not present in images" for an image item whose imageId has no matching registry entry, so any test that DISPATCHES against an image item (not merely renders its read-only dump) needs a genuine entry here, not an empty `images: {}`.
 const LOGO_IMAGE_ASSET: LayoutImageAsset = {
   format: "png",
@@ -653,6 +656,80 @@ describe("PdfItemDetailScreen editable field editor — ellipse, line, path, ima
     expect(after).toContain("top:pdfPageList");
   });
 
+  it("edits a rect's frame, fill, and stroke fields", async () => {
+    const layout: LayoutDocument = {
+      formatVersion: 1,
+      metadata: {},
+      images: {},
+      pages: [
+        {
+          widthPt: 612,
+          heightPt: 792,
+          items: [
+            {
+              kind: "rect",
+              xPt: 0,
+              yPt: 0,
+              widthPt: 10,
+              heightPt: 10,
+              fill: { r: 1, g: 0, b: 0 },
+              stroke: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 },
+            },
+          ],
+        },
+      ],
+    };
+    const rendered = render(
+      <AppStateProvider>
+        <Harness layout={layout} />
+      </AppStateProvider>,
+    );
+    const { stdin } = rendered;
+    const frame = await waitForTop(rendered, "pdfItemDetail");
+    expect(frame).toContain(`Page 1, item 1 ${EM_DASH} rect`);
+    expect(frame).toContain("Fill: #ff0000");
+    expect(frame).toContain("Stroke: #000000 @ 1.0pt");
+
+    // Width is row 2 (X, Y, Width, Height, Fill, Stroke).
+    stdin.write("j");
+    await settle();
+    stdin.write("j");
+    await settle();
+    stdin.write(ENTER);
+    await settle();
+    await clearAndType(stdin, rendered, "10".length, "50");
+    stdin.write(ENTER);
+    const widthFrame = await waitForFlatFrame(rendered, (candidate) =>
+      candidate.includes("Width: 50.0pt"),
+    );
+    expect(widthFrame).toContain("Width: 50.0pt");
+
+    // Fill is row 4 from Width, two more downs.
+    stdin.write("j");
+    await settle();
+    stdin.write("j");
+    await settle();
+    stdin.write(ENTER);
+    await settle();
+    await clearAndType(stdin, rendered, "1 0 0".length, "0 1 0");
+    stdin.write(ENTER);
+    const fillFrame = await waitForFlatFrame(rendered, (candidate) =>
+      candidate.includes("Fill: #00ff00"),
+    );
+    expect(fillFrame).toContain("Fill: #00ff00");
+
+    stdin.write("j");
+    await settle();
+    stdin.write(ENTER);
+    await settle();
+    await clearAndType(stdin, rendered, "0 0 0 1".length, "0 0 1 3");
+    stdin.write(ENTER);
+    const strokeFrame = await waitForFlatFrame(rendered, (candidate) =>
+      candidate.includes("Stroke: #0000ff @ 3.0pt"),
+    );
+    expect(strokeFrame).toContain("Stroke: #0000ff @ 3.0pt");
+  }, 20000);
+
   it("edits an ellipse's frame, fill, and stroke fields, and shows 'none' for an unset fill", async () => {
     const layout: LayoutDocument = {
       formatVersion: 1,
@@ -996,15 +1073,25 @@ describe("PdfItemDetailScreen editable field editor — ellipse, line, path, ima
     );
     const { stdin } = rendered;
     const frame = await waitForTop(rendered, "pdfItemDetail");
-    expect(frame).toContain("Page 1, item 1 — image");
+    expect(frame).toContain(`Page 1, item 1 ${EM_DASH} image`);
     expect(frame).toContain("Image ID: logo");
     expect(frame).toContain("Rotation: unset");
 
-    // Rotation is row 4 (X, Y, Width, Height, Rotation, Replace image...).
+    // Width is row 2 (X, Y, Width, Height, Rotation, Replace image...).
     stdin.write("j");
     await settle();
     stdin.write("j");
     await settle();
+    stdin.write(ENTER);
+    await settle();
+    await clearAndType(stdin, rendered, "20".length, "45");
+    stdin.write(ENTER);
+    const widthFrame = await waitForFlatFrame(rendered, (candidate) =>
+      candidate.includes("Width: 45.0pt"),
+    );
+    expect(widthFrame).toContain("Width: 45.0pt");
+
+    // Rotation is two more rows down from Width.
     stdin.write("j");
     await settle();
     stdin.write("j");
@@ -1090,11 +1177,14 @@ describe("PdfItemDetailScreen editable field editor — ellipse, line, path, ima
       );
       stdin.write(ENTER);
 
-      await waitForFlatFrame(
+      const after = await waitForFlatFrame(
         rendered,
         (candidate) =>
           candidate.includes("imageId:") && !candidate.includes("imageId:logo"),
       );
+      // Proves the wizard's own onComplete callback actually ran setReplacingImage(false) after the dispatch resolved, not merely that the dispatch itself landed: the wizard's own path-input box would still be showing here otherwise.
+      expect(after).toContain("Enter to edit a field, Esc to go back");
+      expect(after).not.toContain("Image file path");
     }, 20000);
 
     it("warns and does not replace the image for a non-image file extension", async () => {
