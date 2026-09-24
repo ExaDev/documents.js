@@ -2,6 +2,8 @@
 export * from "./outline/build";
 export * from "./outline/effective";
 export * from "./outline/graph";
+// The write side of the property-graph projection above (ExaDev/documents.js#935): insertNode/insertEdge/removeEdge/replaceEdge and their supporting types/errors live in their own module rather than outline/graph.ts itself, split apart once that module's combined read and write content passed this workspace's max-lines limit. See the module doc on outline/graph-edit.ts.
+export * from "./outline/graph-edit";
 // Sheet region segmentation and neighbour-derived labels (ExaDev/documents.js#823, "Ask 2"): both are purely additional artefacts a consumer opts into over a sheet's own cell array, never wired into buildOutline or any other existing entry point — see the module docs on outline/regions.ts and outline/labels.ts.
 export * from "./outline/regions";
 export * from "./outline/labels";
