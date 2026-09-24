@@ -8,6 +8,7 @@ import type {
 } from "document-schema.js";
 import type { WorkedExampleReport } from "./worked-example";
 import {
+  assertNeverOutcome,
   collectFormulas,
   formatCorpusReport,
   runCorpus,
@@ -380,5 +381,13 @@ describe("runCorpus: coverage aggregation", () => {
     expect(report.coverage).toBeUndefined();
     expect(report.matched).toBe(0);
     expect(report.mismatched).toBe(0);
+  });
+});
+
+describe("assertNeverOutcome", () => {
+  it("throws naming the unhandled outcome, proving formatOutcome's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverOutcome({ outcome: "bogus" } as never);
+    }).toThrow('formatOutcome: unhandled outcome {"outcome":"bogus"}');
   });
 });

@@ -131,6 +131,14 @@ function formatOutcome(outcome: NonMatchOutcome): string {
     case "unresolved":
       return `unresolved: ${outcome.targetSymbol} — ${outcome.message}`;
   }
+  return assertNeverOutcome(outcome);
+}
+
+// Reached only if NonMatchOutcome ever gains a member formatOutcome's own switch does not match: all three current members have a case there, so `outcome` narrows to `never` at that call, and widening the union without adding a case makes the narrowing fail and this call stop compiling. Exists so the switch's own exhaustiveness, proven by the type checker rather than by a catch-all default, still gives consistent-return an explicit statement to see past the switch. Exported so corpus.test.ts can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable through formatOutcome.
+export function assertNeverOutcome(outcome: never): never {
+  throw new Error(
+    `formatOutcome: unhandled outcome ${JSON.stringify(outcome)}`,
+  );
 }
 
 // Takes a Quantity specifically, not the broader EvaluationResult (Quantity | Interval) — its only call site is formatOutcome's "mismatch" case, formatting WorkedExampleMismatch's own `expected`/`actual` fields, which are typed as Quantity (this harness is scoped to point-valued answers only, per worked-example.ts's own module header comment), so there is no Interval case to render here.
