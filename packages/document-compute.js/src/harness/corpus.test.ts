@@ -62,8 +62,9 @@ describe("collectFormulas + runWorkedExampleSequence, over real markdown text", 
       mathBlock("a = 3"),
       mathBlock("F = 6"),
     ].join("\n\n");
+    const FORMULA_COUNT = 4;
     const formulas = collectFormulas(lowerDocument(markdown));
-    expect(formulas.length).toBe(4);
+    expect(formulas.length).toBe(FORMULA_COUNT);
     const report = runCorpus([
       { label: "inline.md", document: lowerDocument(markdown) },
     ]);
@@ -104,9 +105,10 @@ describe("collectFormulas + runWorkedExampleSequence, over real markdown text", 
       { label: "good.md", document: lowerDocument(good) },
       { label: "bad.md", document: lowerDocument(bad) },
     ]);
+    const HALF_COVERAGE = 0.5; // 1 matched of 2 documents
     expect(report.matched).toBe(1);
     expect(report.mismatched).toBe(1);
-    expect(report.coverage).toBe(0.5);
+    expect(report.coverage).toBe(HALF_COVERAGE);
     expect(report.documents.map((d) => d.label)).toEqual(["good.md", "bad.md"]);
   });
 
@@ -362,7 +364,8 @@ describe("formatCorpusReport: exact text formatting", () => {
       }),
     );
     // 1 document-coverage line + 2 outcome lines + 1 TOTAL line, each on its own line.
-    expect(text.split("\n").length).toBe(4);
+    const EXPECTED_LINE_COUNT = 4;
+    expect(text.split("\n").length).toBe(EXPECTED_LINE_COUNT);
   });
 });
 
