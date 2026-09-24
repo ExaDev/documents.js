@@ -1,3 +1,21 @@
+## [5.12.35](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.34...document-cli%405.12.35) (2026-09-24)
+
+### Bug Fixes
+
+* **document-cli:** stop a pdf item's frame edit from wiping its other three coordinates ([5eca7bc](https://github.com/ExaDev/documents.js/commit/5eca7bce508a32428fd3d1af413362cebd65ab67))
+
+### Tests
+
+* **document-cli:** cover pdf item-detail rect frame edits and strengthen image-wizard assertions ([6df172b](https://github.com/ExaDev/documents.js/commit/6df172b125431949c19090922d25dfc12288eff8))
+* **document-cli:** cover pdf item-detail's non-text, non-rect item kinds ([de2fcb0](https://github.com/ExaDev/documents.js/commit/de2fcb0dfc19cf0728156cbcbe682d07255a95ee))
+* **document-cli:** extend pdf item-detail frame and wizard coverage ([b0e5479](https://github.com/ExaDev/documents.js/commit/b0e547993a6c75b8a316329ead1e8217c5c552f2))
+
+
+### Dependencies
+
+- Updated odf.js to 11.1.6
+- Updated documents.js to 14.4.26
+
 ## [5.12.34](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.33...document-cli%405.12.34) (2026-09-24)
 
 

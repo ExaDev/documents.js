@@ -1,3 +1,9 @@
+## [1.2.9](https://github.com/ExaDev/documents.js/compare/excel-number-format%401.2.8...excel-number-format%401.2.9) (2026-09-24)
+
+### Bug Fixes
+
+* **excel-number-format:** name every magic number the no-magic-numbers rule flags ([6971d11](https://github.com/ExaDev/documents.js/commit/6971d11d491efa37b5b62ca6fadfd7956c970535)), references [ExaDev/documents.js#1275](https://github.com/ExaDev/documents.js/issues/1275)
+
 ## [1.2.8](https://github.com/ExaDev/documents.js/compare/excel-number-format%401.2.7...excel-number-format%401.2.8) (2026-09-24)
 
 ### Miscellaneous Chores
