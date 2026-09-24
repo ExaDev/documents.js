@@ -68,7 +68,7 @@ function writeObjRecordForNote(objId: number): Uint8Array<ArrayBuffer> {
   return writeRecord(RECORD_OBJ, data);
 }
 
-/** TxORuns' own minimal shape for plain, unformatted text ([MS-XLS] 2.5.31cd7d1e/d738ffef/6fb4c0e3): one Run (an all-default FormatRun — ich 0, ifnt 0 — plus its own six reserved bytes) followed by the mandatory TxOLastRun sentinel naming cchText again. 16 bytes total, the minimum [MS-XLS]'s own "cbRuns MUST be >= 16 and a multiple of 8" rule allows — this writer never carries real per-character formatting for a comment's text (workbook/comments.ts's own read side does not model TxORuns either, for the identical reason). */
+/** TxORuns' own minimal shape for plain, unformatted text ([MS-XLS] 2.5.31cd7d1e/d738ffef/6fb4c0e3): one Run (an all-default FormatRun — ich 0, ifnt 0 — plus its own six reserved bytes) followed by the mandatory TxOLastRun sentinel naming cchText again. 16 bytes total, the minimum [MS-XLS]'s own "cbRuns MUST be `>= 16` and a multiple of 8" rule allows — this writer never carries real per-character formatting for a comment's text (workbook/comments.ts's own read side does not model TxORuns either, for the identical reason). */
 function writeMinimalTxoRuns(cchText: number): Uint8Array<ArrayBuffer> {
   return new RecordBuilder()
     .u16(0) // Run.formatRun.ich

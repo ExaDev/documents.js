@@ -273,7 +273,7 @@ function resolvePoints(
   return points;
 }
 
-/** The Nth cell of a range, in reading order — row-major: a single row walks across its columns, a single column (the common vertical-series case) walks down its rows, and a genuine rectangular box walks a full row before moving to the next, all through the identical formula below. A single-row or single-column range needs no case of its own: with width the range's own total column count, index (always < the range's own cell count for a well-formed chart) never reaches a second row when the range is one row tall (Math.floor(index / width) stays 0 throughout, since index < width), and never advances past column zero when the range is one column wide (index % 1 is always 0) — the general formula already reduces to exactly the row-only or column-only walk each of those shapes needs. */
+/** The Nth cell of a range, in reading order — row-major: a single row walks across its columns, a single column (the common vertical-series case) walks down its rows, and a genuine rectangular box walks a full row before moving to the next, all through the identical formula below. A single-row or single-column range needs no case of its own: with width the range's own total column count, index (always `< the range's own cell count` for a well-formed chart) never reaches a second row when the range is one row tall (Math.floor(index / width) stays 0 throughout, since `index < width`), and never advances past column zero when the range is one column wide (index % 1 is always 0) — the general formula already reduces to exactly the row-only or column-only walk each of those shapes needs. */
 function pointInRange(
   range: OwnSheetRange,
   index: number,
@@ -318,7 +318,7 @@ function readLiteralToken(rgce: Uint8Array<ArrayBuffer>): string | undefined {
   }
 }
 
-/** A range-reference AI value: PtgRef3d/PtgArea3d only, restricted to a reference INTO THE CHART'S OWN OWNING SHEET (see this module's own top comment for why a cross-sheet reference has no shortcut here) — every other token this restricted BRAI grammar permits (PtgUnion, PtgNameX, PtgMemFunc, the RefErr/AreaErr variants) is a construct this reader does not resolve, matching biff/ptg.ts's own "unsupported construct -> absent" convention for a worksheet cell's ordinary Formula record. */
+/** A range-reference AI value: PtgRef3d/PtgArea3d only, restricted to a reference INTO THE CHART'S OWN OWNING SHEET (see this module's own top comment for why a cross-sheet reference has no shortcut here) — every other token this restricted BRAI grammar permits (PtgUnion, PtgNameX, PtgMemFunc, the RefErr/AreaErr variants) is a construct this reader does not resolve, matching biff/ptg.ts's own "unsupported construct -\> absent" convention for a worksheet cell's ordinary Formula record. */
 function readRangeToken(
   rgce: Uint8Array<ArrayBuffer>,
   context: ChartRangeContext,

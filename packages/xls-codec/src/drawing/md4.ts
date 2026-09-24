@@ -51,7 +51,7 @@ function h(x: number, y: number, z: number): number {
   return x ^ y ^ z;
 }
 
-/** A 32-bit rotate left; the final >>> 0 keeps the result unsigned where << would sign it. */
+/** A 32-bit rotate left; the final `>>> 0` keeps the result unsigned where `<<` would sign it. */
 function rotateLeft(x: number, count: number): number {
   return ((x << count) | (x >>> (32 - count))) >>> 0;
 }
