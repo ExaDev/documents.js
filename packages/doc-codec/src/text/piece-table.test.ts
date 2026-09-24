@@ -3,12 +3,14 @@ import { DocFormatError } from "../errors";
 import { characterOffset, parseClx } from "./piece-table";
 
 // Assembles a Pcd's 8 bytes from [MS-DOC] 2.8.35's own field table: a 2-byte bit field (fNoParaLast, fR1, fDirty, fR2), then a 4-byte FcCompressed (fc in the low 30 bits, fCompressed at bit 30, r1 at bit 31), then a 2-byte Prm.
-function pcd(options: {
-  fc: number;
-  compressed?: boolean;
-  noParaLast?: boolean;
-  prm?: number;
-}): number[] {
+function pcd(
+  options: Readonly<{
+    fc: number;
+    compressed?: boolean;
+    noParaLast?: boolean;
+    prm?: number;
+  }>,
+): number[] {
   const bytes = new Uint8Array(8);
   const view = new DataView(bytes.buffer);
   view.setUint16(0, options.noParaLast === true ? 0x0001 : 0x0000, true);

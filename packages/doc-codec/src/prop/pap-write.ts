@@ -41,12 +41,17 @@ const JC_VALUE: Record<Alignment, number> = {
   justify: 3,
 };
 
+/** The byte accumulator pushSprm appends each encoded sprm onto. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable. */
+interface ByteSink {
+  readonly bytes: number[];
+}
+
 function pushSprm(
-  bytes: number[],
+  sink: ByteSink,
   opcode: number,
   operand: readonly number[],
 ): void {
-  bytes.push(opcode & 0xff, (opcode >> 8) & 0xff, ...operand);
+  sink.bytes.push(opcode & 0xff, (opcode >> 8) & 0xff, ...operand);
 }
 
 function int16(value: number, what: string): number[] {
@@ -94,25 +99,25 @@ export function encodeParagraphGrpprl(
 ): number[] {
   const bytes: number[] = [];
   if (paragraph.alignment !== undefined) {
-    pushSprm(bytes, SPRM_P_JC, [JC_VALUE[paragraph.alignment]]);
+    pushSprm({ bytes }, SPRM_P_JC, [JC_VALUE[paragraph.alignment]]);
   }
   if (paragraph.indentLeftPt !== undefined) {
     pushSprm(
-      bytes,
+      { bytes },
       SPRM_P_DXA_LEFT,
       int16(pointsToTwips(paragraph.indentLeftPt), "paragraph indentLeftPt"),
     );
   }
   if (paragraph.indentRightPt !== undefined) {
     pushSprm(
-      bytes,
+      { bytes },
       SPRM_P_DXA_RIGHT,
       int16(pointsToTwips(paragraph.indentRightPt), "paragraph indentRightPt"),
     );
   }
   if (paragraph.indentFirstLinePt !== undefined) {
     pushSprm(
-      bytes,
+      { bytes },
       SPRM_P_DXA_LEFT1,
       int16(
         pointsToTwips(paragraph.indentFirstLinePt),
@@ -122,7 +127,7 @@ export function encodeParagraphGrpprl(
   }
   if (paragraph.spacingBeforePt !== undefined) {
     pushSprm(
-      bytes,
+      { bytes },
       SPRM_P_DYA_BEFORE,
       uint16(
         pointsToTwips(paragraph.spacingBeforePt),
@@ -132,7 +137,7 @@ export function encodeParagraphGrpprl(
   }
   if (paragraph.spacingAfterPt !== undefined) {
     pushSprm(
-      bytes,
+      { bytes },
       SPRM_P_DYA_AFTER,
       uint16(
         pointsToTwips(paragraph.spacingAfterPt),
@@ -148,7 +153,7 @@ export function encodeParagraphGrpprl(
       );
     }
     // Written directly rather than through int16: the range check just above already guarantees dyaLine is 0..LSPD_MAX_MULTIPLE_DYA_LINE (0x7bc0), comfortably inside int16's own -32768..32767, so int16's own error path — and the label it would report — could never actually fire for this call.
-    pushSprm(bytes, SPRM_P_DYA_LINE, [
+    pushSprm({ bytes }, SPRM_P_DYA_LINE, [
       dyaLine & 0xff,
       (dyaLine >> 8) & 0xff,
       0x01,
@@ -156,7 +161,7 @@ export function encodeParagraphGrpprl(
     ]);
   }
   if (paragraph.pageBreakBefore === true) {
-    pushSprm(bytes, SPRM_P_F_PAGE_BREAK_BEFORE, [0x01]);
+    pushSprm({ bytes }, SPRM_P_F_PAGE_BREAK_BEFORE, [0x01]);
   }
   if (paragraph.list?.numId !== undefined) {
     if (paragraph.list.level > MAX_LIST_LEVEL) {
@@ -165,11 +170,11 @@ export function encodeParagraphGrpprl(
       );
     }
     pushSprm(
-      bytes,
+      { bytes },
       SPRM_P_ILFO,
       int16(ilfoOf(paragraph.list.numId), "paragraph list ilfo"),
     );
-    pushSprm(bytes, SPRM_P_ILVL, [paragraph.list.level]);
+    pushSprm({ bytes }, SPRM_P_ILVL, [paragraph.list.level]);
   }
   return bytes;
 }

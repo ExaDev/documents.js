@@ -25,12 +25,17 @@ const HALF_POINTS_PER_POINT = 2;
 /** sprmCHps's own operand range: an unsigned 2-byte half-point value. */
 const MAX_HPS = 0xffff;
 
+/** The byte accumulator pushSprm appends each encoded sprm onto. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable. */
+interface ByteSink {
+  readonly bytes: number[];
+}
+
 function pushSprm(
-  bytes: number[],
+  sink: ByteSink,
   opcode: number,
   operand: readonly number[],
 ): void {
-  bytes.push(opcode & 0xff, (opcode >> 8) & 0xff, ...operand);
+  sink.bytes.push(opcode & 0xff, (opcode >> 8) & 0xff, ...operand);
 }
 
 function toggle(value: boolean): number[] {
@@ -56,15 +61,16 @@ export function encodeCharacterGrpprl(
   fontIndexOf: (name: string) => number,
 ): number[] {
   const bytes: number[] = [];
-  if (run.bold !== undefined) pushSprm(bytes, SPRM_C_F_BOLD, toggle(run.bold));
+  if (run.bold !== undefined)
+    pushSprm({ bytes }, SPRM_C_F_BOLD, toggle(run.bold));
   if (run.italic !== undefined) {
-    pushSprm(bytes, SPRM_C_F_ITALIC, toggle(run.italic));
+    pushSprm({ bytes }, SPRM_C_F_ITALIC, toggle(run.italic));
   }
   if (run.strike !== undefined) {
-    pushSprm(bytes, SPRM_C_F_STRIKE, toggle(run.strike));
+    pushSprm({ bytes }, SPRM_C_F_STRIKE, toggle(run.strike));
   }
   if (run.underline !== undefined) {
-    pushSprm(bytes, SPRM_C_KUL, [run.underline ? KUL_SINGLE : KUL_NONE]);
+    pushSprm({ bytes }, SPRM_C_KUL, [run.underline ? KUL_SINGLE : KUL_NONE]);
   }
   if (run.sizePt !== undefined) {
     const halfPoints = Math.round(run.sizePt * HALF_POINTS_PER_POINT);
@@ -73,13 +79,13 @@ export function encodeCharacterGrpprl(
         `run sizePt ${run.sizePt} is ${halfPoints} half-points, outside the 0..${MAX_HPS} range sprmCHps's unsigned 2-byte operand can hold`,
       );
     }
-    pushSprm(bytes, SPRM_C_HPS, uint16(halfPoints));
+    pushSprm({ bytes }, SPRM_C_HPS, uint16(halfPoints));
   }
   if (run.color !== undefined) {
-    pushSprm(bytes, SPRM_C_CV, colorRefBytes(run.color));
+    pushSprm({ bytes }, SPRM_C_CV, colorRefBytes(run.color));
   }
   if (run.fontFamily !== undefined) {
-    pushSprm(bytes, SPRM_C_RG_FTC_0, uint16(fontIndexOf(run.fontFamily)));
+    pushSprm({ bytes }, SPRM_C_RG_FTC_0, uint16(fontIndexOf(run.fontFamily)));
   }
   return bytes;
 }

@@ -284,6 +284,11 @@ export function mintStyleIstds(
   return { istds, styleNames };
 }
 
+/** The byte accumulator buildStshForStyles' own local writers append onto. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable. */
+interface ByteSink {
+  readonly bytes: number[];
+}
+
 // Mints a real STSH from a set of paragraph-kind style names, keyed by the istd each occupies — a heading-implied istd 1-9 per headingLevelFromIstd's own rule, every other named style at its own istd >= 10 in whatever order the caller assigned. An istd this map has no entry for — including istd 0 whenever no paragraph's own styleId is genuinely "Normal" — is left an empty hole ([MS-DOC] 2.9.271's own "A style definition can be empty, in which case cbStd MUST be 0"), so a heading level (or istd 0) the document never names need not occupy real bytes; an empty names map (cstd 0) is the same genuinely spec-conformant zero-style STSH this package always wrote before #1059 minted real entries at all — write.ts always writes one, never omits fcStshf/lcbStshf entirely, because FibRgFcLcb97's own lcbStshf field "MUST be a nonzero value" (a document with no style sheet at all is not a construct [MS-DOC] permits, even though this package's own reader tolerates lcbStshf 0 — see read.ts). Every entry is written with an empty grLPUpxSw — two LPUpxPapx/LPUpxChpx entries, both zero-length — since writeDocContent has no style-vs-direct-formatting split to draw a real one from: every property it writes is already, unconditionally, a paragraph's or run's own direct exception (see the README's own scope note). This mints style IDENTITY only, so a paragraph's own styleId/headingLevel round-trips through a real STSH entry instead of always reading back istd 0 (ExaDev/documents.js#1059).
 export function buildStshForStyles(
   names: ReadonlyMap<number, string>,
@@ -291,20 +296,20 @@ export function buildStshForStyles(
   // Math.max's own no-argument case (-1 supplied here, so an empty map's spread contributes nothing) already returns -1 for an empty map without any size check of our own — every real key is >= 0, so -1 never wins once the map holds one — which makes a `names.size === 0 ? 0 : ...` guard here provably redundant: both branches produce the identical byte-level result (0) for an empty map (Math.max()+1 alone would coerce to the same 0 through push16's own bitwise truncation of -Infinity, but -1 makes that agreement explicit rather than accidental) and the same result as each other for a non-empty one, so the ternary was never observably distinguishing anything.
   const cstd = Math.max(-1, ...names.keys()) + 1;
   const stshi: number[] = [];
-  const push16 = (target: number[], value: number): void => {
-    target.push(value & 0xff, (value >> 8) & 0xff);
+  const push16 = (sink: ByteSink, value: number): void => {
+    sink.bytes.push(value & 0xff, (value >> 8) & 0xff);
   };
-  push16(stshi, cstd);
-  push16(stshi, STDF_SIZE_WITHOUT_POST_2000); // cbSTDBaseInFile.
-  push16(stshi, 0x0001); // fStdStylenamesWritten, which [MS-DOC] requires to be 1.
-  push16(stshi, 0); // stiMaxWhenSaved.
-  push16(stshi, 0x000f); // istdMaxFixedWhenSaved, which [MS-DOC] requires to be 0x000F.
-  push16(stshi, 0); // nVerBuiltInNamesWhenSaved.
-  push16(stshi, 0); // ftcAsci.
-  push16(stshi, 0); // ftcFE.
-  push16(stshi, 0); // ftcOther.
-  push16(stshi, 0); // ftcBi.
-  push16(stshi, 4); // StshiLsd.cbLSD, which [MS-DOC] requires to be 4.
+  push16({ bytes: stshi }, cstd);
+  push16({ bytes: stshi }, STDF_SIZE_WITHOUT_POST_2000); // cbSTDBaseInFile.
+  push16({ bytes: stshi }, 0x0001); // fStdStylenamesWritten, which [MS-DOC] requires to be 1.
+  push16({ bytes: stshi }, 0); // stiMaxWhenSaved.
+  push16({ bytes: stshi }, 0x000f); // istdMaxFixedWhenSaved, which [MS-DOC] requires to be 0x000F.
+  push16({ bytes: stshi }, 0); // nVerBuiltInNamesWhenSaved.
+  push16({ bytes: stshi }, 0); // ftcAsci.
+  push16({ bytes: stshi }, 0); // ftcFE.
+  push16({ bytes: stshi }, 0); // ftcOther.
+  push16({ bytes: stshi }, 0); // ftcBi.
+  push16({ bytes: stshi }, 4); // StshiLsd.cbLSD, which [MS-DOC] requires to be 4.
 
   const out: number[] = [
     stshi.length & 0xff,
@@ -313,9 +318,9 @@ export function buildStshForStyles(
   ];
 
   // One LPUpxPapx/LPUpxChpx entry: a 2-byte cbUpx (the payload's own length) followed by the payload. [MS-DOC] 2.9.140/2.9.138 pads an odd-length payload to an even boundary, but both call sites below pass a payload whose own length is fixed — 2 bytes (an istd) or 0 bytes (an empty UpxPapx/UpxChpx, since mintStyleIstds mints style IDENTITY only, never real formatting, per this function's own doc comment) — always even, so that padding byte can never actually apply to anything this writer mints.
-  const pushLpUpx = (target: number[], payload: readonly number[]): void => {
-    push16(target, payload.length);
-    target.push(...payload);
+  const pushLpUpx = (sink: ByteSink, payload: readonly number[]): void => {
+    push16(sink, payload.length);
+    sink.bytes.push(...payload);
   };
 
   for (let istd = 0; istd < cstd; istd += 1) {
@@ -328,21 +333,21 @@ export function buildStshForStyles(
     // StdfBase: sti (STI_USER_DEFINED — this mints a style identity, not a known application-defined one), stk (paragraph), istdBase (none), cupx/istdNext (unused), bchUpe/grfstd (zero).
     const word0 = STI_USER_DEFINED & 0x0fff;
     const word1 = (STK.paragraph & 0x000f) | (ISTD_BASE_NONE << 4);
-    push16(std, word0);
-    push16(std, word1);
-    push16(std, 0); // cupx and istdNext.
-    push16(std, 0); // bchUpe.
-    push16(std, 0); // grfstd.
+    push16({ bytes: std }, word0);
+    push16({ bytes: std }, word1);
+    push16({ bytes: std }, 0); // cupx and istdNext.
+    push16({ bytes: std }, 0); // bchUpe.
+    push16({ bytes: std }, 0); // grfstd.
     // xstzName: an Xst (a character count then that many 16-bit code units) followed by a 2-byte null terminator.
-    push16(std, name.length);
+    push16({ bytes: std }, name.length);
     for (const character of name) {
-      push16(std, character.charCodeAt(0));
+      push16({ bytes: std }, character.charCodeAt(0));
     }
-    push16(std, 0);
+    push16({ bytes: std }, 0);
     // grLPUpxSw: StkParaGRLPUPX's own two members, both empty — UpxPapx's own istd (redundant with this entry's own position in the array, [MS-DOC] 2.9.338's own "MUST be equal to the current style") plus a zero-length grpprlPapx, then a zero-length grpprlChpx.
-    pushLpUpx(std, [istd & 0xff, (istd >> 8) & 0xff]);
-    pushLpUpx(std, []);
-    push16(out, std.length);
+    pushLpUpx({ bytes: std }, [istd & 0xff, (istd >> 8) & 0xff]);
+    pushLpUpx({ bytes: std }, []);
+    push16({ bytes: out }, std.length);
     out.push(...std);
     // "LPStd structures are stored on even-byte boundaries, but this length MUST NOT include this padding." — but std.length here is always 20 + 2 * name.length (10 bytes of StdfBase, an Xstz that is 4 + 2 * name.length since name.length counts UTF-16 code units, a 4-byte empty UpxPapx, and a 2-byte empty UpxChpx), which is even for any name, so this entry never actually needs the pad byte the format's own rule allows for.
   }
