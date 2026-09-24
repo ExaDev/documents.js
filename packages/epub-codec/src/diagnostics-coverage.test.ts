@@ -458,8 +458,13 @@ describe("every EpubDiagnosticCodes entry is reachable from real input", () => {
 
   it("IMAGE_FORMAT_UNSUPPORTED fires for a resolved but non-PNG/JPEG image", () => {
     const { sink, codes } = collect();
+    // The first four bytes of a GIF signature ("GIF8", common to both GIF87a and GIF89a): neither PNG nor JPEG.
+    const gifSigG = 0x47;
+    const gifSigI = 0x49;
+    const gifSigF = 0x46;
+    const gifSig8 = 0x38;
     readXhtmlBody('<html><body><img src="a.gif" alt="a"/></body></html>', {
-      resolveImage: () => new Uint8Array([0x47, 0x49, 0x46, 0x38]),
+      resolveImage: () => new Uint8Array([gifSigG, gifSigI, gifSigF, gifSig8]),
       sink,
       sourceHref: "chapter1.xhtml",
       contentWidthPt: CONTENT_WIDTH_PT,
