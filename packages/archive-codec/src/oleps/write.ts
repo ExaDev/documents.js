@@ -41,8 +41,8 @@ function padTo4(length: number): number {
   return Math.ceil(length / 4) * 4;
 }
 
-// Reached only if PropertyValue ever gains a variant encodeTypedPropertyValue's own switch does not match: every current member is covered by a case there, so `value` narrows to `never` at every real call site, and adding an uncovered variant makes that narrowing fail and this call stop compiling — the real safety net. Exists so the switch's own exhaustiveness (proven by the type checker, not by a catch-all default that would silently swallow a genuinely new variant) still gives consistent-return an explicit statement to see past the switch.
-function assertNever(value: never): never {
+// Reached only if PropertyValue ever gains a variant encodeTypedPropertyValue's own switch does not match: every current member is covered by a case there, so `value` narrows to `never` at every real call site, and adding an uncovered variant makes that narrowing fail and this call stop compiling — the real safety net. Exists so the switch's own exhaustiveness (proven by the type checker, not by a catch-all default that would silently swallow a genuinely new variant) still gives consistent-return an explicit statement to see past the switch. Exported so write.test.ts can exercise the throw directly with a forced-invalid cast — it is otherwise unreachable through encodeTypedPropertyValue, since every real PropertyValue variant is already handled by a case above.
+export function assertNever(value: never): never {
   throw new PropertySetWriteError(
     `encodeTypedPropertyValue: unhandled property value type ${JSON.stringify(value)}`,
   );

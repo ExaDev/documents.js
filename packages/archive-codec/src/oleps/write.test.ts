@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { readPropertySetStream } from "./read";
 import type { PropertyValue } from "./wire";
-import { PropertySetWriteError, writePropertySetStream } from "./write";
+import {
+  assertNever,
+  PropertySetWriteError,
+  writePropertySetStream,
+} from "./write";
 
 // Coverage for the generic [MS-OLEPS] Property Set Stream writer (src/oleps/write.ts): round trips through this package's own reader (matching how every other write-side feature in this session is verified — against the package's own reader, proving genuine conformance rather than internal self-consistency alone) for every type the writer supports, plus the deliberate VT_LPSTR refusal.
 
@@ -140,6 +144,21 @@ describe("writePropertySetStream", () => {
     expect((caught as Error).name).toBe("PropertySetWriteError");
     expect((caught as Error).message).toBe(
       "writePropertySetStream cannot write a VT_LPSTR property: this writer emits Unicode (VT_LPWSTR) strings only, since encoding to an arbitrary ANSI codepage is out of scope — see the package README's OLEPS scope note",
+    );
+  });
+});
+
+describe("assertNever", () => {
+  it("throws naming the unhandled value, proving encodeTypedPropertyValue's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNever({ type: "VT_BOGUS" } as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(PropertySetWriteError);
+    expect((caught as Error).message).toBe(
+      'encodeTypedPropertyValue: unhandled property value type {"type":"VT_BOGUS"}',
     );
   });
 });
