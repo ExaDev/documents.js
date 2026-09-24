@@ -37,7 +37,7 @@ import type {
 
 export function textRun(
   text: string,
-  options: { bold?: boolean } = {},
+  options: Readonly<{ bold?: boolean }> = {},
 ): ContentRun {
   return {
     text,
@@ -56,7 +56,7 @@ export interface ParagraphOptions {
 // A bare paragraph LEAF (ContentParagraph): no headingLevel, no list membership — exactly the payload that sits at a leaf position in a tree. The heading/list anchors are separate builders below, because in the tree vocabulary an anchored paragraph lives on its group's node, never as a leaf.
 export function paragraph(
   text: string,
-  options: ParagraphOptions = {},
+  options: Readonly<ParagraphOptions> = {},
 ): ContentParagraph {
   return {
     kind: "paragraph",
@@ -76,7 +76,7 @@ export function paragraph(
   };
 }
 
-export function table(rows: string[][]): ContentTable {
+export function table(rows: readonly string[][]): ContentTable {
   return {
     kind: "table",
     rows: rows.map((cells) => ({
@@ -115,9 +115,9 @@ export function layoutFrame(
 // A paragraph whose single run carries more than one frame — the wrapped-run case: the run's content renders in two places without the node being split or duplicated.
 export function wrappedRunParagraph(
   text: string,
-  frames: LayoutFrame[],
+  frames: readonly LayoutFrame[],
 ): ContentParagraph {
-  return { kind: "paragraph", runs: [{ text, frames }] };
+  return { kind: "paragraph", runs: [{ text, frames: [...frames] }] };
 }
 
 export function sheetImage(altText?: string): ContentSheetImage {
@@ -222,49 +222,49 @@ interface GroupOptions {
 export function headingGroup(
   text: string,
   headingLevel: number,
-  children: SectionChild[] = [],
-  options: GroupOptions = {},
+  children: readonly SectionChild[] = [],
+  options: Readonly<GroupOptions> = {},
 ): HeadingGroupNode {
   return {
     node: { ...paragraph(text), headingLevel },
     ...(options.style !== undefined ? { style: options.style } : {}),
-    children,
+    children: [...children],
   };
 }
 
 export function listGroup(
   text: string,
   level: number,
-  children: ListChild[] = [],
-  options: GroupOptions = {},
+  children: readonly ListChild[] = [],
+  options: Readonly<GroupOptions> = {},
 ): ListGroupNode {
   return {
     node: { ...paragraph(text), list: { level } },
     ...(options.style !== undefined ? { style: options.style } : {}),
-    children,
+    children: [...children],
   };
 }
 
 // A construct group's node is a ConstructDescriptor, never a paragraph — richText is the simplest member of the discriminated union (kind + controlType only), which is all these fixtures need since the outline builder never reads a construct's descriptor fields, only its kind (to recognise the wrapper) and its children.
 export function sectionConstructGroup(
-  children: SectionChild[],
-  options: GroupOptions = {},
+  children: readonly SectionChild[],
+  options: Readonly<GroupOptions> = {},
 ): SectionConstructGroupNode {
   return {
     node: { kind: "contentControl", controlType: "richText" },
     ...(options.style !== undefined ? { style: options.style } : {}),
-    children,
+    children: [...children],
   };
 }
 
 export function shapeConstructGroup(
-  children: ShapeChild[],
-  options: GroupOptions = {},
+  children: readonly ShapeChild[],
+  options: Readonly<GroupOptions> = {},
 ): ShapeConstructGroupNode {
   return {
     node: { kind: "contentControl", controlType: "richText" },
     ...(options.style !== undefined ? { style: options.style } : {}),
-    children,
+    children: [...children],
   };
 }
 
@@ -277,7 +277,7 @@ export interface SectionGroupOptions extends GroupOptions {
 }
 
 export function sectionGroup(
-  children: SectionChild[],
+  children: readonly SectionChild[],
   options: SectionGroupOptions = {},
 ): SectionGroupNode {
   return {
@@ -287,13 +287,13 @@ export function sectionGroup(
       kind: "section",
     },
     ...(options.style !== undefined ? { style: options.style } : {}),
-    children,
+    children: [...children],
   };
 }
 
 export function shapeGroup(
-  children: ShapeChild[],
-  options: GroupOptions = {},
+  children: readonly ShapeChild[],
+  options: Readonly<GroupOptions> = {},
 ): ShapeGroupNode {
   return {
     node: {
@@ -304,7 +304,7 @@ export function shapeGroup(
       insetBottomPt: 0,
     },
     ...(options.style !== undefined ? { style: options.style } : {}),
-    children,
+    children: [...children],
   };
 }
 
@@ -313,8 +313,8 @@ export interface SlideGroupOptions extends GroupOptions {
 }
 
 export function slideGroup(
-  shapes: ShapeGroupNode[],
-  options: SlideGroupOptions = {},
+  shapes: readonly ShapeGroupNode[],
+  options: Readonly<SlideGroupOptions> = {},
 ): SlideGroupNode {
   return {
     node: {
@@ -323,7 +323,7 @@ export function slideGroup(
       kind: "slide",
     },
     ...(options.style !== undefined ? { style: options.style } : {}),
-    children: shapes,
+    children: [...shapes],
   };
 }
 
@@ -360,13 +360,13 @@ export function sheetGroup(options: SheetGroupOptions): SheetGroupNode {
 }
 
 export function drawPageGroup(
-  children: DrawPageChild[],
-  options: GroupOptions = {},
+  children: readonly DrawPageChild[],
+  options: Readonly<GroupOptions> = {},
 ): DrawPageGroupNode {
   return {
     node: { size: { widthPt: 960, heightPt: 540 }, kind: "drawPage" },
     ...(options.style !== undefined ? { style: options.style } : {}),
-    children,
+    children: [...children],
   };
 }
 
@@ -399,7 +399,7 @@ function genericTableOptions(options: PackageOptions): Record<string, unknown> {
 }
 
 export function wordprocessingPackage(
-  children: SectionGroupNode[],
+  children: readonly SectionGroupNode[],
   options: PackageOptions = {},
 ): DocumentTree {
   return {
@@ -411,12 +411,12 @@ export function wordprocessingPackage(
     ...(options.pages !== undefined ? { pages: options.pages } : {}),
     ...(options.styles !== undefined ? { styles: options.styles } : {}),
     ...genericTableOptions(options),
-    children,
+    children: [...children],
   };
 }
 
 export function presentationPackage(
-  children: SlideGroupNode[],
+  children: readonly SlideGroupNode[],
   options: PackageOptions = {},
 ): DocumentTree {
   return {
@@ -428,12 +428,12 @@ export function presentationPackage(
     ...(options.pages !== undefined ? { pages: options.pages } : {}),
     ...(options.styles !== undefined ? { styles: options.styles } : {}),
     ...genericTableOptions(options),
-    children,
+    children: [...children],
   };
 }
 
 export function spreadsheetPackage(
-  children: SheetGroupNode[],
+  children: readonly SheetGroupNode[],
   options: PackageOptions = {},
 ): DocumentTree {
   return {
@@ -445,12 +445,12 @@ export function spreadsheetPackage(
     ...(options.pages !== undefined ? { pages: options.pages } : {}),
     ...(options.styles !== undefined ? { styles: options.styles } : {}),
     ...genericTableOptions(options),
-    children,
+    children: [...children],
   };
 }
 
 export function drawingPackage(
-  children: DrawPageGroupNode[],
+  children: readonly DrawPageGroupNode[],
   options: PackageOptions = {},
 ): DocumentTree {
   return {
@@ -462,7 +462,7 @@ export function drawingPackage(
     ...(options.pages !== undefined ? { pages: options.pages } : {}),
     ...(options.styles !== undefined ? { styles: options.styles } : {}),
     ...genericTableOptions(options),
-    children,
+    children: [...children],
   };
 }
 

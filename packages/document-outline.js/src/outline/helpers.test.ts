@@ -106,7 +106,7 @@ describe("outlineLeafText", () => {
     const covered = { blocks: [] };
     const anchorCell = (
       text: string,
-      spans: { colSpan?: number; rowSpan?: number } = {},
+      spans: Readonly<{ colSpan?: number; rowSpan?: number }> = {},
     ) => ({ blocks: [paragraph(text)], ...spans });
 
     it("adds no separator for the covered positions of a horizontal merge", () => {
