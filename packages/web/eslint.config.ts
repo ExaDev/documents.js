@@ -31,8 +31,6 @@ export default tseslint.config(
     ],
     // Not Worker-isomorphic: this is a browser app, and its own RPC import boundary below is what keeps the conversion engine out of the main bundle.
     isomorphic: false,
-    // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why — this app's own UI state/reducer helpers genuinely mutate a handful of array/object parameters in place. Tracked for burn-down.
-    preferReadonlyParams: "off",
     // No npm exports map and no public entry point, so the rule's default stays right rather than being relaxed to 'single'.
     barrelPolicy: "banned",
     // Globals are scoped per layer below instead. Node globals everywhere would let a `process.env` read in browser code lint clean.

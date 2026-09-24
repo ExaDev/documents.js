@@ -15,6 +15,6 @@ export interface FileAccessPort {
   }): Promise<OpenedFile | undefined>;
   saveFile(
     bytes: Uint8Array<ArrayBuffer>,
-    options: { suggestedName: string; mimeType: MIMEType },
+    options: Readonly<{ suggestedName: string; mimeType: MIMEType }>,
   ): Promise<SaveResult>;
 }

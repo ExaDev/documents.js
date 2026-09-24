@@ -513,7 +513,7 @@ describe("renderTable", () => {
 
   function textCell(
     text: string,
-    spans: { colSpan?: number; rowSpan?: number } = {},
+    spans: Readonly<{ colSpan?: number; rowSpan?: number }> = {},
   ) {
     return { blocks: [paragraph({ runs: [{ text }] })], ...spans };
   }

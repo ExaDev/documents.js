@@ -13,11 +13,11 @@ vi.mock("../adapters/fileAccess/createFileAccess", () => ({
 }));
 
 // Stands in for the real @mantine/dropzone Dropzone: FileUpload.tsx's own logic (handleDrop, handleClick, the accept/activateOnClick wiring) is what this test exercises, not the third-party drag-and-drop machinery Dropzone itself provides — that library's internals are out of this package's mutate glob entirely. Exposes onDrop/onClick as plain props a test can call directly (onDrop via the module-scope holder below, since nothing in the rendered output can trigger it the way a real click event triggers onClick), and renders every child (including the Accept/Reject/Idle slots) unconditionally so their content is always inspectable.
-let latestOnDrop: ((files: FileWithPath[]) => void) | undefined;
+let latestOnDrop: ((files: readonly FileWithPath[]) => void) | undefined;
 
 vi.mock("@mantine/dropzone", () => {
   function MockDropzone(props: {
-    onDrop: (files: FileWithPath[]) => void;
+    onDrop: (files: readonly FileWithPath[]) => void;
     onClick: (() => void) | undefined;
     activateOnClick: boolean;
     disabled: boolean | undefined;
@@ -67,7 +67,7 @@ afterEach(() => {
 });
 
 function fileAccessStub(
-  overrides: Partial<FileAccessPort> = {},
+  overrides: Readonly<Partial<FileAccessPort>> = {},
 ): FileAccessPort {
   return {
     supportsNativePicker: () => false,
@@ -81,7 +81,7 @@ interface RenderedUpload {
   html: () => string;
   container: HTMLElement;
   click: () => void;
-  drop: (files: FileWithPath[]) => void;
+  drop: (files: readonly FileWithPath[]) => void;
   rerender: (props: Partial<Parameters<typeof FileUpload>[0]>) => void;
 }
 
@@ -102,7 +102,7 @@ function renderUpload(
         .querySelector<HTMLButtonElement>('[data-testid="dropzone"]')
         ?.click();
     },
-    drop: (files: FileWithPath[]) => {
+    drop: (files: readonly FileWithPath[]) => {
       latestOnDrop?.(files);
     },
     rerender: (nextProps) => {

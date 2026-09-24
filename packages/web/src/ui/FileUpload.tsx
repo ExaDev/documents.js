@@ -61,7 +61,7 @@ export function FileUpload({
     return normalised;
   }, [accept]);
 
-  const handleDrop = (files: FileWithPath[]) => {
+  const handleDrop = (files: readonly FileWithPath[]) => {
     const [dropped] = files;
     if (dropped === undefined) return;
     void toOpenedFile(dropped).then((opened) => {
