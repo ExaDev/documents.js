@@ -1,4 +1,4 @@
-import { Group, Text, useMantineTheme } from "@mantine/core";
+import { ActionIcon, Group, Text, useMantineTheme } from "@mantine/core";
 import { Dropzone } from "@mantine/dropzone";
 import type { FileWithPath } from "@mantine/dropzone";
 import { IconCheck, IconFile, IconUpload, IconX } from "@tabler/icons-react";
@@ -8,7 +8,8 @@ import { createFileAccess } from "../adapters/fileAccess/createFileAccess";
 import { recordRecentFile } from "../hooks/useRecentFiles";
 import type { OpenedFile } from "../ports/fileAccess";
 import { inferFormatFromFilename } from "../shared/extensionToFormat";
-import { dropzoneContent } from "./FileUpload.css";
+import { closeButton, dropzoneContent } from "./FileUpload.css";
+import { iconFlexShrink, minWidthZero } from "./layout.css";
 
 export interface FileUploadProps {
   /** Passed straight through to FileAccessPort.openFile's `accept` — normalised below into Dropzone's own (looser) Accept shape, so both consumers stay driven by a single value with no risk of drift. */
@@ -17,6 +18,8 @@ export interface FileUploadProps {
   formatHint?: string;
   file?: OpenedFile;
   onFile: (file: OpenedFile) => void;
+  /** Renders a close button alongside the current file's name once one is present, calling this rather than onFile. Omitted (the default) leaves the file-present state with no close affordance, which suits a repeatable picker like Odm's chapter upload, where there is no single "current" file to close back out of. */
+  onClose?: () => void;
   disabled?: boolean;
   loading?: boolean;
 }
@@ -44,6 +47,7 @@ export function FileUpload({
   formatHint,
   file,
   onFile,
+  onClose,
   disabled,
   loading,
 }: FileUploadProps) {
@@ -89,34 +93,65 @@ export function FileUpload({
       loading={loading}
       disabled={disabled}
     >
-      <Group justify="center" gap="md" mih={120} className={dropzoneContent}>
-        <Dropzone.Accept>
-          <IconCheck size={36} color={theme.colors.teal[6]} />
-        </Dropzone.Accept>
-        <Dropzone.Reject>
-          <IconX size={36} color={theme.colors.red[6]} />
-        </Dropzone.Reject>
-        <Dropzone.Idle>
-          {file !== undefined ? (
-            <IconFile size={36} />
-          ) : (
-            <IconUpload size={36} />
-          )}
-        </Dropzone.Idle>
-
-        <div>
-          <Text size="sm" fw={500}>
-            {file !== undefined
-              ? file.name
-              : "Drag a file here or click to browse"}
-          </Text>
-          {file === undefined && formatHint !== undefined && (
-            <Text size="xs" c="dimmed">
-              {formatHint}
+      {file !== undefined ? (
+        <Group
+          justify="space-between"
+          wrap="nowrap"
+          gap="sm"
+          className={dropzoneContent}
+        >
+          <Group gap="sm" wrap="nowrap" className={minWidthZero}>
+            <Dropzone.Accept>
+              <IconCheck size={20} color={theme.colors.teal[6]} />
+            </Dropzone.Accept>
+            <Dropzone.Reject>
+              <IconX size={20} color={theme.colors.red[6]} />
+            </Dropzone.Reject>
+            <Dropzone.Idle>
+              <IconFile size={20} className={iconFlexShrink} />
+            </Dropzone.Idle>
+            <Text size="sm" fw={500} truncate>
+              {file.name}
             </Text>
+          </Group>
+          {onClose !== undefined && (
+            <ActionIcon
+              variant="subtle"
+              aria-label={`Close ${file.name}`}
+              className={closeButton}
+              onClick={(event) => {
+                event.stopPropagation();
+                onClose();
+              }}
+            >
+              <IconX size={16} />
+            </ActionIcon>
           )}
-        </div>
-      </Group>
+        </Group>
+      ) : (
+        <Group justify="center" gap="md" mih={120} className={dropzoneContent}>
+          <Dropzone.Accept>
+            <IconCheck size={36} color={theme.colors.teal[6]} />
+          </Dropzone.Accept>
+          <Dropzone.Reject>
+            <IconX size={36} color={theme.colors.red[6]} />
+          </Dropzone.Reject>
+          <Dropzone.Idle>
+            <IconUpload size={36} />
+          </Dropzone.Idle>
+
+          <div>
+            <Text size="sm" fw={500}>
+              Drag a file here or click to browse
+            </Text>
+            {formatHint !== undefined && (
+              <Text size="xs" c="dimmed">
+                {formatHint}
+              </Text>
+            )}
+          </div>
+        </Group>
+      )}
     </Dropzone>
   );
 }
