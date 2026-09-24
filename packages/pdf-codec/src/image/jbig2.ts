@@ -420,16 +420,14 @@ class Jbig2Decoder {
     const at = template === 0 ? readAtPixels(cursor, 2) : NOMINAL_REFINEMENT_AT;
     const page = this.requirePage();
 
-    // With no intermediate buffers in play, T.88 7.4.7.2 makes the reference the page region the refinement covers.
+    // With no intermediate buffers in play, T.88 7.4.7.2 makes the reference the page region the refinement covers. Walked as a single pass over the destination bitmap's own entries, so the copy is bounded by the array it fills rather than by an index pair a miscount could push past its end.
     const reference = createBitmap(region.width, region.height);
-    for (let y = 0; y < region.height; y++) {
-      for (let x = 0; x < region.width; x++) {
-        reference.data[y * region.width + x] = getPixel(
-          page.bitmap,
-          region.x + x,
-          region.y + y,
-        );
-      }
+    for (const [index] of reference.data.entries()) {
+      reference.data[index] = getPixel(
+        page.bitmap,
+        region.x + (index % reference.width),
+        region.y + Math.floor(index / reference.width),
+      );
     }
 
     const mq = new MqDecoder(cursor.data, cursor.position, dataEnd);
