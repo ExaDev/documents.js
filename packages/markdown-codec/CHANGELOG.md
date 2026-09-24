@@ -1,3 +1,9 @@
+## [11.1.8](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.1.7...markdown-codec%4011.1.8) (2026-09-24)
+
+### Code Refactoring
+
+* **markdown-codec:** make the AST and render switches exhaustive ([996e342](https://github.com/ExaDev/documents.js/commit/996e34245bdabd31d2d9f8cb1de2e32128ffafca))
+
 ## [11.1.7](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.1.6...markdown-codec%4011.1.7) (2026-09-24)
 
 

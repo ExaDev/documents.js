@@ -1,3 +1,12 @@
+## [14.4.31](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.30...documents.js%4014.4.31) (2026-09-24)
+
+
+### Dependencies
+
+- Updated markdown-codec to 11.1.8
+- Updated doc-codec to 6.1.15
+- Updated ppt-codec to 2.2.14
+
 ## [14.4.30](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.29...documents.js%4014.4.30) (2026-09-24)
 
 

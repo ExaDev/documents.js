@@ -1,3 +1,9 @@
+## [6.1.15](https://github.com/ExaDev/documents.js/compare/doc-codec%406.1.14...doc-codec%406.1.15) (2026-09-24)
+
+### Code Refactoring
+
+* **doc-codec:** give Plc and the FKP readers function-property signatures ([bf45658](https://github.com/ExaDev/documents.js/commit/bf456582445cdec88a19f1ce662fb9de4407bdbf))
+
 ## [6.1.14](https://github.com/ExaDev/documents.js/compare/doc-codec%406.1.13...doc-codec%406.1.14) (2026-09-24)
 
 
