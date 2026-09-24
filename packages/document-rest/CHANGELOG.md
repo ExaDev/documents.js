@@ -1,3 +1,16 @@
+## [1.4.91](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.90...document-rest%401.4.91) (2026-09-24)
+
+### Bug Fixes
+
+* **document-rest:** name every HTTP status code and the max TCP port ([0817355](https://github.com/ExaDev/documents.js/commit/0817355c38a2ef81478eeafc117379129f0b9486))
+
+
+### Dependencies
+
+- Updated odf.js to 11.1.6
+- Updated documents.js to 14.4.26
+- Updated document-operations to 1.1.88
+
 ## [1.4.90](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.89...document-rest%401.4.90) (2026-09-24)
 
 
