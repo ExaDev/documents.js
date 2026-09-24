@@ -5,6 +5,7 @@ import {
   isLengthUnit,
   parseOdfAngleDeg,
   expandExponential,
+  assertNeverLengthUnit,
 } from "./units";
 
 // The cm-based fixtures below ("real LibreOffice output") are copied verbatim from a real style:paragraph-properties element produced by `soffice --headless --convert-to odt` (LibreOffice 26.2.5.2), the same fixture referenced by src/styles/properties.test.ts — see that file's own top-of-file note.
@@ -208,5 +209,20 @@ describe("formatOdfLength: fixed-point decimal only, never exponent notation", (
         }
       }
     }
+  });
+});
+
+describe("assertNeverLengthUnit", () => {
+  it("throws naming the unhandled unit, proving unitToPtFactor's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverLengthUnit("bogus" as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'unitToPtFactor: unhandled LengthUnit "bogus"',
+    );
   });
 });

@@ -993,7 +993,7 @@ function writeOdfNoteElement(
   openNoteKeys: Set<string> | undefined,
 ): XmlElement {
   const key = descriptor.definition ?? descriptor.name;
-  if (openNoteKeys?.has(key)) {
+  if (openNoteKeys?.has(key) === true) {
     // A hostile or corrupt document can reuse a text:id inside its own note body: the reader assigns the outer entry AFTER parsing the body, so the inner anchor resolves to the same entry and the write would recurse until the stack is exhausted. Refusing by name beats either crashing or silently dropping the cycle.
     throw new Error(
       `writeOdt: a cyclic note definition—note "${descriptor.name}" whose body refers back to the entry still being written`,
@@ -1155,6 +1155,13 @@ function writeOdfItemFormattedNodes(
   return nodes;
 }
 
+// Reached only if OdfBookmarkMarker's own side ever gains a member writeOdfBookmarkMarker's own switch does not match: every current member is covered there, so `value` narrows to `never` at the real call site, and adding an uncovered side makes that narrowing fail and this call stop compiling. That is the real safety net. Exported so paragraph.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real side is already handled by a case in writeOdfBookmarkMarker.
+export function assertNeverOdfBookmarkMarkerSide(value: never): never {
+  throw new Error(
+    `writeOdfBookmarkMarker: unhandled OdfBookmarkMarker side ${JSON.stringify(value)}`,
+  );
+}
+
 function writeOdfBookmarkMarker(marker: OdfBookmarkMarker): XmlElement {
   switch (marker.side) {
     case "point":
@@ -1164,6 +1171,7 @@ function writeOdfBookmarkMarker(marker: OdfBookmarkMarker): XmlElement {
     case "end":
       return writeOdfBookmarkEnd(marker.name);
   }
+  return assertNeverOdfBookmarkMarkerSide(marker.side);
 }
 
 // A paragraph's own inline children: each maximal stretch of consecutive items sharing one hyperlink target wrapped in a single text:a (a field item never carries a hyperlink of its own, so it always breaks a hyperlink group open around it), with the formatting grouping above running inside it, and every run-level construct the paragraph carries spliced in at its own exact boundary — a field consuming its own run range as one element (buildOdfParagraphItems), a bookmark point/start/end sitting as a bare sibling exactly where its extent's boundary maps to. Refusing a construct this function does not resolve is assertWritableParagraph's job (typed/odt/write.ts), called before this ever runs; every extent reaching here has already passed odfRunConstructWriteKind.

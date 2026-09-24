@@ -9,6 +9,7 @@ import {
   decodeOdfText,
   segmentOdfText,
   buildOdfInlineNodes,
+  assertNeverOdfTextSegmentKind,
 } from "./text";
 
 function paragraphOf(...children: XmlElement["children"]): XmlElement {
@@ -286,5 +287,20 @@ describe("buildOdfInlineNodes", () => {
     expect(
       buildXml(buildOdfInlineNodes(segmentOdfText("a & b < c", false, false))),
     ).toBe("a &amp; b &lt; c");
+  });
+});
+
+describe("assertNeverOdfTextSegmentKind", () => {
+  it("throws naming the unhandled kind, proving buildOdfInlineNodes's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverOdfTextSegmentKind("bogus" as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'buildOdfInlineNodes: unhandled OdfTextSegment kind "bogus"',
+    );
   });
 });
