@@ -11,4 +11,5 @@ export default packageLintConfig({
   // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why — this package's own diagnostic/report builders genuinely mutate a handful of array/object parameters in place. Tracked for burn-down.
   preferReadonlyParams: "off",
   magicNumbers: "error",
+  maxLines: "error",
 });
