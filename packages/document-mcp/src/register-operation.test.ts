@@ -1,6 +1,9 @@
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { McpServer } from "@modelcontextprotocol/server";
-import type { DocumentOperation } from "document-operations";
+import type {
+  DocumentOperation,
+  DocumentOperationContext,
+} from "document-operations";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { registerOperation } from "./register-operation";
@@ -34,18 +37,25 @@ describe("registerOperation", () => {
     ]);
   }
 
+  // Builds the operation the same way document-operations' own defineOperation does: a run that validates its own input via inputSchema before delegating, rather than passing the caller's argument straight through, since a narrower run(input: { value: string }, ...) is only soundly assignable to registerOperation's DocumentOperation<unknown, unknown> parameter if the exposed run genuinely accepts unknown. Not going through defineOperation itself, since its signature requires (or entirely omits) outputSchema rather than the optional-per-test shape these overrides need. Returns the general DocumentOperation (In/Out default to unknown), not the specific DocumentOperation<{ value: string }, { echoed: string }> overrides is typed against, because that specific instantiation is exactly what stops being assignable to registerOperation's own parameter once run is a property rather than a method.
   function operationOf(
-    overrides: Partial<
-      DocumentOperation<{ value: string }, { echoed: string }>
+    overrides: Readonly<
+      Partial<DocumentOperation<{ value: string }, { echoed: string }>>
     >,
-  ): DocumentOperation<{ value: string }, { echoed: string }> {
-    return {
+  ): DocumentOperation {
+    const operation = {
       name: "echo",
       title: "Echo",
       description: "Echoes its input back",
       inputSchema: z.object({ value: z.string() }),
-      run: async (input) => Promise.resolve({ echoed: input.value }),
+      run: async (input: Readonly<{ value: string }>) =>
+        Promise.resolve({ echoed: input.value }),
       ...overrides,
+    };
+    return {
+      ...operation,
+      run: async (input: unknown, context?: DocumentOperationContext) =>
+        operation.run(operation.inputSchema.parse(input), context),
     };
   }
 

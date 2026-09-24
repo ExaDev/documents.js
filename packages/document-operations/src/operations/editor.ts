@@ -129,7 +129,7 @@ const MARKDOWN_UNSUPPORTED_PARAGRAPH_FIELDS: readonly (keyof ParagraphInput)[] =
   ["headingLevel", "alignment"];
 
 interface WordprocessingParagraph {
-  appendRun(init: {
+  appendRun: (init: {
     readonly text?: string;
     readonly bold?: boolean;
     readonly italic?: boolean;
@@ -138,16 +138,16 @@ interface WordprocessingParagraph {
     readonly fontFamily?: string;
     readonly sizePt?: number;
     readonly color?: ReturnType<typeof rgbHexToColor>;
-  }): unknown;
+  }) => unknown;
 }
 
 interface WordprocessingBody {
-  appendParagraph(init: {
+  appendParagraph: (init: {
     readonly text?: string;
     readonly styleId?: string;
     readonly headingLevel?: number;
     readonly alignment?: "left" | "center" | "right" | "justify";
-  }): WordprocessingParagraph;
+  }) => WordprocessingParagraph;
 }
 
 function appendDocxOdtRun(
@@ -190,21 +190,21 @@ function appendDocxOdtParagraphs(
 }
 
 interface MarkdownWordprocessingParagraph {
-  appendRun(init: {
+  appendRun: (init: {
     readonly text?: string;
     readonly bold?: boolean;
     readonly italic?: boolean;
     readonly strike?: boolean;
     readonly hyperlink?: string;
     readonly code?: boolean;
-  }): unknown;
+  }) => unknown;
 }
 
 interface MarkdownWordprocessingBody {
-  appendParagraph(init: {
+  appendParagraph: (init: {
     readonly text?: string;
     readonly styleId?: string;
-  }): MarkdownWordprocessingParagraph;
+  }) => MarkdownWordprocessingParagraph;
 }
 
 function appendMarkdownParagraphs(

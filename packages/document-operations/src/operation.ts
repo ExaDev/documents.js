@@ -17,13 +17,15 @@ export interface DocumentOperation<In = unknown, Out = unknown> {
   readonly inputSchema: z.ZodType<In>;
   // Optional: a handful of operations (list_document_conversions' own input, metadata_read's own output) have no schema in the original MCP tool registration to derive one from — adding a guessed schema here would risk introducing MCP output validation that did not exist before and could reject a genuine value the guess did not anticipate. Only set when the original tool declared one.
   readonly outputSchema?: z.ZodType<Out>;
-  run(input: In, context?: DocumentOperationContext): Promise<Out>;
+  run: (input: In, context?: DocumentOperationContext) => Promise<Out>;
 }
 
 /**
  * Builds a DocumentOperation whose input and output types are both inferred from real Zod schemas, so a call site never has to repeat `z.infer<typeof Schema>` itself. Use `defineOperationWithoutOutputSchema` instead for the rare operation whose original MCP tool registration declared no outputSchema at all.
  *
  * Deliberately returns the parameter object's own inferred literal type rather than an explicit `DocumentOperation<...>` return annotation. Zod 4's ZodType carries its own output type as one of three generic parameters (`ZodType<Output, Input, Internals>`), and TypeScript cannot prove, from inside this function body, that a generic `InputSchema extends z.ZodType` also extends `z.ZodType<z.infer<InputSchema>>` — the two-step indirection through an abstract type parameter defeats it even though it is true for every concrete schema. Letting the literal's own type flow out instead sidesteps that: a caller's own concrete schema (e.g. `ConvertDocumentInputSchema`) is trivially assignable to `DocumentOperation<In, Out>`'s `z.ZodType<In>` field wherever that supertype is actually needed (the registry array below, or a future MCP/REST/CLI adapter parameter), because widening a CONCRETE schema's output type to line up is a normal covariant check, not the same self-referential generic one.
+ *
+ * The returned `run` re-validates `input` against `inputSchema` before calling the operation's own implementation, rather than passing the caller's argument straight through. This is not merely defensive: `run`'s own parameter is contravariant, so a caller-supplied `run(input: z.infer<InputSchema>, ...)` is only soundly assignable to `DocumentOperation<unknown, unknown>["run"]` (what `DOCUMENT_OPERATIONS` holds every operation as) if the exposed `run` genuinely accepts `unknown` — parsing here, rather than trusting whichever transport calls it to have validated first, is what actually makes that true. `inputSchema.parse` throws a ZodError for anything that does not conform, giving every transport (MCP, REST, the CLI) the same well-typed input, or the same failure, an external validation step would have produced anyway wherever one already existed.
  */
 export function defineOperation<
   InputSchema extends z.ZodType,
@@ -34,16 +36,20 @@ export function defineOperation<
   readonly description: string;
   readonly inputSchema: InputSchema;
   readonly outputSchema: OutputSchema;
-  run(
+  run: (
     input: z.infer<InputSchema>,
     context?: DocumentOperationContext,
-  ): Promise<z.infer<OutputSchema>>;
+  ) => Promise<z.infer<OutputSchema>>;
 }) {
-  return operation;
+  return {
+    ...operation,
+    run: async (input: unknown, context?: DocumentOperationContext) =>
+      operation.run(operation.inputSchema.parse(input), context),
+  };
 }
 
 /**
- * The `defineOperation` counterpart for an operation with no output schema to infer from (the original MCP tool registration declared none) — `Out` is inferred from `run`'s own return type instead. See `defineOperation`'s own comment for why this returns the parameter object's inferred literal type rather than an explicit `DocumentOperation<...>` annotation.
+ * The `defineOperation` counterpart for an operation with no output schema to infer from (the original MCP tool registration declared none) — `Out` is inferred from `run`'s own return type instead. See `defineOperation`'s own comment for why this returns the parameter object's inferred literal type rather than an explicit `DocumentOperation<...>` annotation, and why the returned `run` validates `input` against `inputSchema` itself.
  */
 export function defineOperationWithoutOutputSchema<
   InputSchema extends z.ZodType,
@@ -53,10 +59,14 @@ export function defineOperationWithoutOutputSchema<
   readonly title: string;
   readonly description: string;
   readonly inputSchema: InputSchema;
-  run(
+  run: (
     input: z.infer<InputSchema>,
     context?: DocumentOperationContext,
-  ): Promise<Out>;
+  ) => Promise<Out>;
 }) {
-  return operation;
+  return {
+    ...operation,
+    run: async (input: unknown, context?: DocumentOperationContext) =>
+      operation.run(operation.inputSchema.parse(input), context),
+  };
 }
