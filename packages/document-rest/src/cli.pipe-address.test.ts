@@ -8,6 +8,9 @@ const state = vi.hoisted(() => ({
   createdServer: undefined as Server | undefined,
 }));
 
+// Raised from the suite's own 30s default (see vitest.config.ts's UNIT_TEST_TIMEOUT_MS) to 60s, after repeated observed failures at 23 to 27s wall time under sustained shared-machine load averages of 160-200+. See the test's own comment below for why this is the one test in the suite that needs it.
+const REAL_SOCKET_TEST_TIMEOUT_MS = 60_000;
+
 vi.mock("node:http", async (importOriginal) => {
   const actual = await importOriginal<typeof http>();
   return {
@@ -39,12 +42,16 @@ describe("main", () => {
     }
   });
 
-  it("throws when the underlying server binds a pipe/Unix socket address instead of a TCP one", async () => {
-    state.forcePipeAddress = true;
-    const { main } = await import("./cli");
-    process.argv = ["node", "bin.js", "--port", "0"];
-    await expect(main()).rejects.toThrow(
-      "Expected the HTTP server to bind a TCP address, not a pipe or Unix socket",
-    );
-  }, 60_000); // This is the one test in the suite that binds a real, listening TCP socket rather than exercising pure in-process logic, so it is uniquely exposed to host scheduler contention — the shared UNIT_TEST_TIMEOUT_MS budget in vitest.config.ts is tuned for logic-only tests and is too tight for it under heavy concurrent load. Raised from 30s to 60s after repeated observed failures at 23-27s wall time under sustained shared-machine load averages of 160-200+.
+  it(
+    "throws when the underlying server binds a pipe/Unix socket address instead of a TCP one",
+    async () => {
+      state.forcePipeAddress = true;
+      const { main } = await import("./cli");
+      process.argv = ["node", "bin.js", "--port", "0"];
+      await expect(main()).rejects.toThrow(
+        "Expected the HTTP server to bind a TCP address, not a pipe or Unix socket",
+      );
+    },
+    REAL_SOCKET_TEST_TIMEOUT_MS,
+  ); // This is the one test in the suite that binds a real, listening TCP socket rather than exercising pure in-process logic, so it is uniquely exposed to host scheduler contention: the shared UNIT_TEST_TIMEOUT_MS budget in vitest.config.ts is tuned for logic-only tests and is too tight for it under heavy concurrent load.
 });

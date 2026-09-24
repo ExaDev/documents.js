@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { describe, expect, it, vi } from "vitest";
-import { createRestServer } from "./server";
+import { createRestServer, HTTP_STATUS } from "./server";
 
 // createHttpServer(callback) attaches `callback` as a listener for the server's own "request" event (see Node's node:http docs), so emitting that event directly drives the real request handler with a request object we control — the only way to reach the "no url or method" guard, since neither a real client nor Node's own http module can ever produce a genuine IncomingMessage missing either field.
 function emitFakeRequest(
@@ -31,7 +31,7 @@ describe("createRestServer malformed request handling", () => {
     const server = createRestServer();
     const result = emitFakeRequest(server, { url: undefined });
     await vi.waitFor(() => {
-      expect(result.status()).toBe(400);
+      expect(result.status()).toBe(HTTP_STATUS.badRequest);
     });
     expect(JSON.parse(result.body() ?? "")).toEqual({
       error: "Malformed request: no url or method.",
@@ -42,7 +42,7 @@ describe("createRestServer malformed request handling", () => {
     const server = createRestServer();
     const result = emitFakeRequest(server, { method: undefined });
     await vi.waitFor(() => {
-      expect(result.status()).toBe(400);
+      expect(result.status()).toBe(HTTP_STATUS.badRequest);
     });
     expect(JSON.parse(result.body() ?? "")).toEqual({
       error: "Malformed request: no url or method.",

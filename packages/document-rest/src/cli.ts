@@ -3,6 +3,9 @@ import { createRestServer } from "./server";
 
 export const DEFAULT_PORT = 3100;
 
+/** The highest valid TCP port number (16 bits, so 2^16 - 1). */
+export const MAX_TCP_PORT = 65535;
+
 // Reads a `--name value` or `--name=value` flag from argv, whichever form the caller used. Mirrors document-mcp's own src/bin.ts readFlag exactly.
 function readFlag(args: readonly string[], name: string): string | undefined {
   const prefix = `--${name}=`;
@@ -27,10 +30,10 @@ function parsePort(raw: string): number {
     !Number.isInteger(port) ||
     String(port) !== raw.trim() ||
     port < 0 ||
-    port > 65535
+    port > MAX_TCP_PORT
   ) {
     throw new Error(
-      `--port must be an integer between 0 and 65535, got "${raw}"`,
+      `--port must be an integer between 0 and ${String(MAX_TCP_PORT)}, got "${raw}"`,
     );
   }
   return port;
