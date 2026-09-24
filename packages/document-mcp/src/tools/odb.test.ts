@@ -106,6 +106,9 @@ function packageContainsText(pkg: Package, needle: string): boolean {
   );
 }
 
+// The real, fixed row count of the SALES table in form-and-report.odb's own fixture data.
+const SALES_TABLE_ROW_COUNT = 6;
+
 describe("odb tools", () => {
   let workspace: string;
   let pair: ConnectedPair;
@@ -150,7 +153,7 @@ describe("odb tools", () => {
         "QUARTER",
         "CUSTOMER",
       ]);
-      expect(table.rows).toHaveLength(6);
+      expect(table.rows).toHaveLength(SALES_TABLE_ROW_COUNT);
 
       // content's own JSON text is the bare, unwrapped array the callback itself returned — SEP-2106's object-root wrapping (see arrayStructuredContentSchema above) applies only to the wire-level structuredContent projection, never to content. Re-parsed with z.unknown() items (rather than TableSummarySchema) so this comparison is lossless — unlike `tables` above, nothing here should be stripped to just the fields this suite happens to assert on.
       const [block] = result.content;
@@ -384,7 +387,8 @@ describe("odb tools", () => {
         "utf-8",
       );
       const lines = csvText.split("\r\n").filter((line) => line.length > 0);
-      expect(lines).toHaveLength(7);
+      const HEADER_LINE_COUNT = 1;
+      expect(lines).toHaveLength(SALES_TABLE_ROW_COUNT + HEADER_LINE_COUNT);
       expect(lines[0]).toBe("AMOUNT,ID,REGION,QUARTER,CUSTOMER");
       expect(csvText).toContain("Acme Ltd");
     });

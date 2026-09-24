@@ -194,8 +194,10 @@ describe("metadata_read / metadata_write", () => {
       throw new Error("createOds() did not produce a default sheet");
     }
     sheet.cell(0, 0).value = { kind: "string", value: sheetCellText };
-    sheet.setColumnWidth(0, 72);
-    sheet.setRowHeight(0, 14);
+    const nonZeroColumnWidthPt = 72;
+    const nonZeroRowHeightPt = 14;
+    sheet.setColumnWidth(0, nonZeroColumnWidthPt);
+    sheet.setRowHeight(0, nonZeroRowHeightPt);
     const xlsxBytes = odsToXlsx(odsEditor.toBytes());
 
     const result = await pair.client.callTool({

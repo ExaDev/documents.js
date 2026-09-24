@@ -1,6 +1,7 @@
 import type { Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { main, parsePort, readFlag } from "./cli";
+import { main, MAX_TCP_PORT, parsePort, readFlag } from "./cli";
+import { HTTP_NOT_FOUND } from "./serve-http";
 
 vi.mock("@modelcontextprotocol/server/stdio", () => ({ serveStdio: vi.fn() }));
 
@@ -68,7 +69,7 @@ describe("main", () => {
 
     // No Accept header / body is a deliberately malformed MCP request — this only confirms something is actually listening and routes /mcp through the MCP SDK's own handler (a non-2xx JSON-RPC-shaped response), not a full protocol round trip, which src/tools/*.test.ts and test/smoke.test.mjs already cover via a real client.
     const response = await fetch(`http://127.0.0.1:${String(port)}/mcp`);
-    expect(response.status).not.toBe(404);
+    expect(response.status).not.toBe(HTTP_NOT_FOUND);
   });
 
   it("accepts --transport=http form", async () => {
@@ -84,7 +85,7 @@ describe("main", () => {
     const port = Number(/:(\d+)\/mcp$/.exec(message)?.[1]);
 
     const response = await fetch(`http://127.0.0.1:${String(port)}/other`);
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(HTTP_NOT_FOUND);
   });
 
   it("rejects an unknown --transport", async () => {
@@ -170,7 +171,7 @@ describe("parsePort", () => {
   });
 
   it("accepts the upper boundary", () => {
-    expect(parsePort("65535")).toBe(65535);
+    expect(parsePort("65535")).toBe(MAX_TCP_PORT);
   });
 
   it("rejects one above the upper boundary", () => {
@@ -207,6 +208,7 @@ describe("parsePort", () => {
   });
 
   it("accepts a port padded with whitespace, trimmed before the round-trip comparison", () => {
-    expect(parsePort(" 80")).toBe(80);
+    const ordinaryPort = 80;
+    expect(parsePort(` ${String(ordinaryPort)}`)).toBe(ordinaryPort);
   });
 });

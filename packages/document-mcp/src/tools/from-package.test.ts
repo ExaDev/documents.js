@@ -94,8 +94,10 @@ describe("from_package", () => {
     }
     sheet.cell(0, 0).value = { kind: "string", value: SHEET_CELL_TEXT };
     // A cell()-materialized column/row otherwise reads back with no width/height style at all (widthPt/heightPt 0), which fails DocumentTree's own schema validation once the dumped package round-trips through JSON below.
-    sheet.setColumnWidth(0, 72);
-    sheet.setRowHeight(0, 14);
+    const nonZeroColumnWidthPt = 72;
+    const nonZeroRowHeightPt = 14;
+    sheet.setColumnWidth(0, nonZeroColumnWidthPt);
+    sheet.setRowHeight(0, nonZeroRowHeightPt);
 
     let capturedSheetPackage: DocumentTree | undefined;
     odsToPdf(odsEditor.toBytes(), {

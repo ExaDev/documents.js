@@ -7,7 +7,8 @@ import {
   requireOdtContentRoot,
 } from "./embedded-font-fixture";
 
-const FONT_BYTES = new Uint8Array([1, 2, 3, 4]);
+// Arbitrary, non-decodable bytes: this fixture exercises the embedding machinery (part creation, href wiring, font-face declarations), never a real font parser, so the content only needs to be present, not valid font data.
+const FONT_BYTES = Uint8Array.from({ length: 4 }, (_, index) => index + 1);
 
 describe("buildFontFaceDeclsElement", () => {
   it("declares one style:font-face referencing the embedded font part by href", () => {

@@ -165,11 +165,13 @@ describe("pdf_inspect", () => {
   });
 
   it("rejects a non-PDF source", async () => {
+    // Not a real docx, just enough arbitrary bytes to prove the format-mismatch rejection itself, not any specific docx-parsing behaviour.
+    const notADocx = Uint8Array.from({ length: 3 }, (_, index) => index + 1);
     const result = await pair.client.callTool({
       name: "pdf_inspect",
       arguments: {
         source: {
-          bytesBase64: bytesToBase64(new Uint8Array([1, 2, 3])),
+          bytesBase64: bytesToBase64(notADocx),
           format: "docx",
         },
       },

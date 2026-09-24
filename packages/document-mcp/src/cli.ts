@@ -6,6 +6,9 @@ import { createServer } from "./server";
 
 const DEFAULT_HTTP_PORT = 3000;
 
+/** The highest valid TCP port number (16 bits, so 2^16 - 1). */
+export const MAX_TCP_PORT = 65535;
+
 // Reads a `--name value` or `--name=value` flag from argv, whichever form the caller used. Returns undefined when the flag is absent at all, distinct from a flag present with no value (an empty string), so a caller can tell "not given" from "given empty" rather than the two collapsing into one absent case. Exported for direct unit testing rather than only through main()'s own argv handling.
 export function readFlag(
   args: readonly string[],
@@ -27,17 +30,17 @@ export function readFlag(
   return undefined;
 }
 
-// Exported for direct unit testing of every boundary (negative, above 65535, non-integer, and the exact upper bound) rather than only through main()'s own --transport http path, which would otherwise need a real bound socket at each boundary to distinguish them.
+// Exported for direct unit testing of every boundary (negative, above MAX_TCP_PORT, non-integer, and the exact upper bound) rather than only through main()'s own --transport http path, which would otherwise need a real bound socket at each boundary to distinguish them.
 export function parsePort(raw: string): number {
   const port = Number.parseInt(raw, 10);
   if (
     !Number.isInteger(port) ||
     String(port) !== raw.trim() ||
     port < 0 ||
-    port > 65535
+    port > MAX_TCP_PORT
   ) {
     throw new Error(
-      `--port must be an integer between 0 and 65535, got "${raw}"`,
+      `--port must be an integer between 0 and ${String(MAX_TCP_PORT)}, got "${raw}"`,
     );
   }
   return port;
