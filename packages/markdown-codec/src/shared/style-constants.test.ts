@@ -3,12 +3,14 @@ import { headingStyleId, parseHeadingStyleId } from "./style-constants";
 
 describe("headingStyleId / parseHeadingStyleId", () => {
   it("mints and parses a heading styleId for an ordinary level", () => {
-    expect(headingStyleId(3)).toBe("Heading3");
-    expect(parseHeadingStyleId("Heading3")).toBe(3);
+    const ordinaryLevel = 3;
+    expect(headingStyleId(ordinaryLevel)).toBe("Heading3");
+    expect(parseHeadingStyleId("Heading3")).toBe(ordinaryLevel);
   });
 
   it("parses a level past the markdown-reachable 1-6 ceiling, since ContentDocument is a shared cross-format pivot", () => {
-    expect(parseHeadingStyleId("Heading7")).toBe(7);
+    const pastCeilingLevel = 7;
+    expect(parseHeadingStyleId("Heading7")).toBe(pastCeilingLevel);
   });
 
   it("rejects a shape this exact pattern does not match", () => {
@@ -22,6 +24,9 @@ describe("headingStyleId / parseHeadingStyleId", () => {
   });
 
   it("rejects a digit run so long it parses to a non-integer (Infinity), rather than reporting a bogus level", () => {
-    expect(parseHeadingStyleId(`Heading${"9".repeat(400)}`)).toBeUndefined();
+    const digitRunLength = 400;
+    expect(
+      parseHeadingStyleId(`Heading${"9".repeat(digitRunLength)}`),
+    ).toBeUndefined();
   });
 });
