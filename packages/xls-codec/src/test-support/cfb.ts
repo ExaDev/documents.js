@@ -392,10 +392,10 @@ export function compoundFile(
       directory.subarray(i * sectorSize, (i + 1) * sectorSize),
     );
   }
-  for (const record of bigStreamRecords) {
+  for (const bigStreamRecord of bigStreamRecords) {
     copySector(
-      requiredSectorStart(bigStartOf, record.id),
-      padToMultiple(record.node.stream, sectorSize),
+      requiredSectorStart(bigStartOf, bigStreamRecord.id),
+      padToMultiple(bigStreamRecord.node.stream, sectorSize),
     );
   }
   // No length guard: an empty mini stream sets zero bytes at its own start sector either way, so a guard here would only ever skip a call that was already a no-op.
