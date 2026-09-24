@@ -72,8 +72,9 @@ describe("paragraph", () => {
   });
 
   it("includes indentLeftPt with its exact value when set, and omits it entirely otherwise", () => {
-    const withIndent = paragraph("hi", { indentLeftPt: 12 });
-    expect(withIndent.indentLeftPt).toBe(12);
+    const indentPt = 12;
+    const withIndent = paragraph("hi", { indentLeftPt: indentPt });
+    expect(withIndent.indentLeftPt).toBe(indentPt);
     const without = paragraph("hi");
     expect("indentLeftPt" in without).toBe(false);
   });
@@ -138,19 +139,42 @@ describe("pageBreak", () => {
 
 describe("layoutFrame", () => {
   it("carries all five fields through unchanged, positionally", () => {
-    expect(layoutFrame(1, 2, 3, 4, 5)).toStrictEqual({
-      pageIndex: 1,
-      xPt: 2,
-      yPt: 3,
-      widthPt: 4,
-      heightPt: 5,
+    const pageIndex = 1;
+    const xPt = 2;
+    const yPt = 3;
+    const widthPt = 4;
+    const heightPt = 5;
+    expect(layoutFrame(pageIndex, xPt, yPt, widthPt, heightPt)).toStrictEqual({
+      pageIndex,
+      xPt,
+      yPt,
+      widthPt,
+      heightPt,
     });
   });
 });
 
 describe("wrappedRunParagraph", () => {
   it("wraps the text and frames into a single run on a bare paragraph", () => {
-    const frames = [layoutFrame(0, 1, 2, 3, 4), layoutFrame(1, 5, 6, 7, 8)];
+    // Two frames with disjoint value sets, so a test failure that swapped or conflated them would be immediately visible.
+    const firstFramePage = 0;
+    const firstFrameWidthPt = 3;
+    const firstFrameHeightPt = 4;
+    const secondFramePage = 1;
+    const secondFrameXPt = 5;
+    const secondFrameYPt = 6;
+    const secondFrameWidthPt = 7;
+    const secondFrameHeightPt = 8;
+    const frames = [
+      layoutFrame(firstFramePage, 1, 2, firstFrameWidthPt, firstFrameHeightPt),
+      layoutFrame(
+        secondFramePage,
+        secondFrameXPt,
+        secondFrameYPt,
+        secondFrameWidthPt,
+        secondFrameHeightPt,
+      ),
+    ];
     expect(wrappedRunParagraph("split text", frames)).toStrictEqual({
       kind: "paragraph",
       runs: [{ text: "split text", frames }],
