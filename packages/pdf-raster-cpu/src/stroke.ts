@@ -74,7 +74,10 @@ export function strokeOutlinePolygons(
       if (before === undefined || after === undefined) {
         continue; // the piece's own two end points have no interior join
       }
-      emitJoinWedge(polygons, vertex, before, after, half);
+      const wedge = emitJoinWedge(vertex, before, after, half);
+      if (wedge !== undefined) {
+        polygons.push(wedge);
+      }
     }
   };
   if (dashPx === undefined) {
@@ -90,7 +93,10 @@ export function strokeOutlinePolygons(
         const last = subpath.points[subpath.points.length - 1];
         const second = subpath.points[1];
         if (last !== undefined && second !== undefined) {
-          emitJoinWedge(polygons, first, last, second, half);
+          const wedge = emitJoinWedge(first, last, second, half);
+          if (wedge !== undefined) {
+            polygons.push(wedge);
+          }
         }
       }
     }
@@ -104,22 +110,21 @@ export function strokeOutlinePolygons(
   return polygons;
 }
 
-// The miter-or-bevel join at one vertex. The miter point is the standard offset-line intersection m = v + (n1 + n2) * (h / (1 + n1 . n2)), which degenerates to the offset line itself for a straight continuation; the join is the quadrilateral (a1, m, a2, v) — outer offset point to miter point to the other offset point to the vertex itself, the full notch a mitered corner fills. Beyond DEFAULT_MITER_LIMIT half-widths of miter length the join falls back to a bevel: the triangle (a1, v, a2), the flat cut between the two outer offset points. Either polygon is emitted in whichever vertex order carries the same winding orientation as the quads — mixed orientations could cancel to a hole inside the union.
+// The miter-or-bevel join at one vertex, returned as the wedge polygon to push (or undefined for a straight continuation, where no wedge exists) rather than pushed directly, so this function owns no accumulator of its own and the caller decides what becomes of the result. The miter point is the standard offset-line intersection m = v + (n1 + n2) * (h / (1 + n1 . n2)), which degenerates to the offset line itself for a straight continuation; the join is the quadrilateral (a1, m, a2, v) — outer offset point to miter point to the other offset point to the vertex itself, the full notch a mitered corner fills. Beyond DEFAULT_MITER_LIMIT half-widths of miter length the join falls back to a bevel: the triangle (a1, v, a2), the flat cut between the two outer offset points. Either polygon is returned in whichever vertex order carries the same winding orientation as the quads — mixed orientations could cancel to a hole inside the union.
 function emitJoinWedge(
-  polygons: Pt[][],
   vertex: Pt,
   before: Pt,
   after: Pt,
   half: number,
-): void {
+): Pt[] | undefined {
   const d1 = unitDirection(before, vertex);
   const d2 = unitDirection(vertex, after);
   if (d1 === undefined || d2 === undefined) {
-    return;
+    return undefined;
   }
   const cross = d1.x * d2.y - d1.y * d2.x;
   if (Math.abs(cross) < 1e-12) {
-    return; // straight continuation (or exact reversal, where the format leaves the join undefined): the quads meet edge to edge and no wedge exists
+    return undefined; // straight continuation (or exact reversal, where the format leaves the join undefined): the quads meet edge to edge and no wedge exists
   }
   // The outward normal for each direction is the left normal (-d.y, d.x) or its own negation, whichever side the cross product names as "outside" this turn. Naming the two full normals directly, one branch per side, rather than computing a shared +-1 factor and multiplying every component by it, means a mutation to one branch's own sign can no longer be absorbed as a uniform, undetectable rescaling of both normals at once — it misdirects only that one normal, which the wedge's own exact-coordinate tests below catch as a wrong offset point.
   const outward = turnsOutwardPositive(cross);
@@ -140,7 +145,7 @@ function emitJoinWedge(
   } else {
     wedge = [a1, vertex, a2];
   }
-  polygons.push(withNegativeWinding(wedge));
+  return withNegativeWinding(wedge);
 }
 
 // Whether cross (the two directions' own cross product) names this turn's outward side positive, deciding which of a direction's two perpendiculars is the wedge's own outward normal. Exported purely for testing: cross is a difference of products of already-rounded unit-vector components, so real corner geometry can get arbitrarily close to its zero boundary (the straight-continuation guard above stops it within 1e-12) but next to never lands exactly on it — landing exactly on 0 here (crossing from "positive" to "negative or zero") is trivial to drive directly with a literal, the same reason takesMiterBranch below takes its own already-reduced denominator rather than a constructed dot product.
