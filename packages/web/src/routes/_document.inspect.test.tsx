@@ -231,6 +231,24 @@ describe("InspectPage", () => {
     mounted.unmount();
   });
 
+  it("lists the format Select's options alphabetically, not in the server's own order", async () => {
+    const client = createMockRpcClient();
+    vi.mocked(client.formats.list).mockResolvedValue(["pdf", "docx", "csv"]);
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountInspectPage();
+
+    act(() => {
+      openDocument(openedFile("notes.xyz"));
+    });
+    await vi.waitFor(() => {
+      const select = mounted.container.querySelector(
+        '[data-testid="format-select"]',
+      );
+      expect(select?.getAttribute("data-options")).toBe("csv,docx,pdf");
+    });
+    mounted.unmount();
+  });
+
   it("runs inspection for the format picked from the Select after an unrecognised extension", async () => {
     const client = createMockRpcClient();
     vi.mocked(client.formats.list).mockResolvedValue(["docx", "pdf"]);
