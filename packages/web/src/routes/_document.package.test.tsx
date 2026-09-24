@@ -275,6 +275,29 @@ describe("PackagePage", () => {
     mounted.unmount();
   });
 
+  it("reads the document's content only once, not again on every re-render an edit triggers", async () => {
+    const client = createMockRpcClient();
+    vi.mocked(client.content.read).mockResolvedValue({
+      content: sampleContent,
+      package: samplePackage,
+    });
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountPackagePage();
+
+    act(() => {
+      openDocument(openedFile("report.docx"));
+    });
+    await vi.waitFor(() => {
+      expect(jsonTextarea(mounted.container)).toBeDefined();
+    });
+    expect(client.content.read).toHaveBeenCalledTimes(1);
+
+    typeInto(jsonTextarea(mounted.container)!, '{"kind":"edited"}');
+    typeInto(jsonTextarea(mounted.container)!, '{"kind":"edited again"}');
+    expect(client.content.read).toHaveBeenCalledTimes(1);
+    mounted.unmount();
+  });
+
   it("restores the edited JSON, notifies success, and downloads the written bytes", async () => {
     const client = createMockRpcClient();
     vi.mocked(client.content.read).mockResolvedValue({
