@@ -41,7 +41,7 @@ function OdmPage() {
             Open an .odm master document above to render it.
           </NoDocumentOpen>
         ) : (
-          // Keyed by the document's own open sequence: a fresh master document remounts this panel from scratch, dropping any chapters picked for the previous master without calling its setter directly inside an effect (react-hooks/set-state-in-effect) -- a chapter file is only ever meaningful relative to the master that links it.
+          // Keyed by the document's own open sequence: a fresh master document remounts this panel from scratch, dropping any chapters picked for the previous master without calling its setter directly inside an effect (react-hooks/set-state-in-effect). A chapter file is only ever meaningful relative to the master that links it.
           <OdmPanel key={document.id} master={document.file} />
         )}
       </Stack>
@@ -60,7 +60,7 @@ function OdmPanel({ master }: { master: OpenedFile }) {
     renderOdm.data?.ok === false ? renderOdm.data.unresolved : undefined;
 
   const { mutate: renderOdmMutate } = renderOdm;
-  // Runs once at mount, then again on every subsequent chapter pick via handleChapter's own direct call below -- not re-triggered by this effect, since `master` never changes for a given panel instance (see the key above).
+  // Runs once at mount, then again on every subsequent chapter pick via handleChapter's own direct call below, not re-triggered by this effect, since `master` never changes for a given panel instance (see the key above).
   useEffect(() => {
     renderOdmMutate(
       { master: master.bytes, chapters: [] },

@@ -58,7 +58,7 @@ function InspectionPanel({
 
   const format = formatOverride ?? detectedFormat;
 
-  // Runs once, for the one document this panel instance will ever see -- a fresh open remounts a whole new instance (see the key above) rather than this effect re-running to reset anything. Skips inspecting outright when there is no detected format yet: handleFormatChange below is what runs inspection once the user picks one manually.
+  // Runs once, for the one document this panel instance will ever see: a fresh open remounts a whole new instance (see the key above) rather than this effect re-running to reset anything. Skips inspecting outright when there is no detected format yet: handleFormatChange below is what runs inspection once the user picks one manually.
   const { mutate: inspectMutate } = inspect;
   useEffect(() => {
     if (detectedFormat === undefined) return;
@@ -93,8 +93,8 @@ function InspectionPanel({
         <Stack gap="sm">
           {format === undefined && (
             <Alert color="yellow">
-              Could not detect "{file.name}"'s format from its extension -- pick
-              it below.
+              Could not detect "{file.name}"'s format from its extension, so
+              pick it below.
             </Alert>
           )}
           <Select

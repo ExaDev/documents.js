@@ -79,7 +79,7 @@ describe("useOpenDocument", () => {
     mounted.unmount();
   });
 
-  it("assigns each open a distinct, increasing id -- even re-opening the identical file", () => {
+  it("assigns each open a distinct, increasing id, even when re-opening the identical file", () => {
     const mounted = mountProbe();
     open("same.docx");
     const firstId = latestValue?.document?.id;

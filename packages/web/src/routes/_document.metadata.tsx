@@ -38,7 +38,7 @@ function MetadataPage() {
         ) : document.format === undefined ? (
           <UnrecognisedFormatAlert fileName={document.file.name} />
         ) : (
-          // Keyed by the document's own open sequence: a fresh open (even re-picking the identical file) remounts this panel from scratch, which is what resets title/author overrides -- calling their setters directly inside an effect is exactly the pattern this project's eslint config (react-hooks/set-state-in-effect) steers away from.
+          // Keyed by the document's own open sequence: a fresh open (even re-picking the identical file) remounts this panel from scratch, which is what resets title/author overrides. Calling their setters directly inside an effect is exactly the pattern this project's eslint config (react-hooks/set-state-in-effect) steers away from.
           <MetadataPanel
             key={document.id}
             file={document.file}
@@ -71,7 +71,7 @@ function MetadataPanel({
   const title = titleOverride ?? readMetadata.data?.title ?? "";
   const author = authorOverride ?? readMetadata.data?.author ?? "";
 
-  // Runs once, for the one document this panel instance will ever see -- a fresh open remounts a whole new instance (see the key above) rather than this effect re-running to reset anything.
+  // Runs once, for the one document this panel instance will ever see: a fresh open remounts a whole new instance (see the key above) rather than this effect re-running to reset anything.
   const { mutate: readMetadataMutate } = readMetadata;
   useEffect(() => {
     readMetadataMutate(

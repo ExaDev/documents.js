@@ -64,7 +64,7 @@ function PackagePanel({
   const restoreContent = useRestoreContent();
   const fileAccess = createFileAccess();
 
-  // Runs once, for the one document this panel instance will ever see -- a fresh open remounts a whole new instance (see the key above) rather than this effect re-running to reset anything.
+  // Runs once, for the one document this panel instance will ever see: a fresh open remounts a whole new instance (see the key above) rather than this effect re-running to reset anything.
   const { mutate: readContentMutate } = readContent;
   useEffect(() => {
     readContentMutate(
