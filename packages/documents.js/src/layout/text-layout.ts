@@ -100,7 +100,7 @@ function fragmentsWidth(
   return total;
 }
 
-// Splits `text` at the largest character prefix that fits within `maxWidthPt`, guaranteeing at least one character of progress (so an emergency split of a single, over-long word can never spin forever even in a pathologically narrow column).
+// Splits `text` at the largest character prefix that fits within `maxWidthPt`, guaranteeing at least one character of progress (so an emergency split of a single, over-long word can never spin forever even in a pathologically narrow column). The progress guarantee is delivered by the break condition's own `splitIndex > 0` clause: the loop never breaks before the first character is taken, so for non-empty input splitIndex is always at least 1 by the time the loop ends.
 function splitTextToWidth(
   text: string,
   font: LayoutFont,
@@ -118,9 +118,6 @@ function splitTextToWidth(
     }
     width += charWidth;
     splitIndex = i + 1;
-  }
-  if (splitIndex === 0 && chars.length > 0) {
-    splitIndex = 1;
   }
   return {
     fitText: chars.slice(0, splitIndex).join(""),
