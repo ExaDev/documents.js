@@ -97,6 +97,9 @@ export function powQuantity(base: Quantity, exponent: Quantity): Quantity {
   );
 }
 
+// Dimensions scale multiplicatively under exponentiation, so taking a square root scales every dimension exponent by one half.
+const SQUARE_ROOT_EXPONENT = 0.5;
+
 export function sqrtQuantity(a: Quantity): Quantity {
   if (a.magnitude < 0) {
     throw new NumericDomainError(
@@ -106,7 +109,7 @@ export function sqrtQuantity(a: Quantity): Quantity {
   }
   let dimension: DimensionVector;
   try {
-    dimension = scaleDimension(a.dimension, 0.5);
+    dimension = scaleDimension(a.dimension, SQUARE_ROOT_EXPONENT);
   } catch {
     throw new IncompatibleDimensionsError(
       "math:sqrt",

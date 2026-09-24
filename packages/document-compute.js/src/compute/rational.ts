@@ -6,6 +6,9 @@ export interface Rational {
   readonly d: bigint; // denominator, always > 0
 }
 
+// The additive identity in this module's BigInt domain: a GCD remainder of ZERO ends the Euclidean loop, a ZERO denominator is the one value reduce() must reject, and a ZERO numerator on a division's divisor is a division by the rational zero.
+const ZERO = 0n;
+
 function bigintOfCanonicalDigits(digits: string): bigint {
   return BigInt(digits);
 }
@@ -23,7 +26,7 @@ export function toRational(value: Readonly<ExactRational>): Rational {
 function gcd(a: bigint, b: bigint): bigint {
   let x = b;
   let y = ((a % b) + b) % b;
-  while (y !== 0n) {
+  while (y !== ZERO) {
     [x, y] = [y, x % y];
   }
   return x;
@@ -31,7 +34,7 @@ function gcd(a: bigint, b: bigint): bigint {
 
 // Reduces to lowest terms and canonicalises to document-schema.js's own spelling (ExactRationalSchema in that package's src/math.ts): '0'/'1' for zero, otherwise the sign carried on the numerator and a strictly positive denominator with no leading zeros — which a reduced BigInt's decimal .toString() already produces. Both canonicalisation steps fall out of the one division: gcd() above returns d's own sign, so n / g and d / g reduce the fraction and migrate a negative denominator's sign onto the numerator in the same operation. There is no n === 0n fast path either: gcd(0n, d) is d itself (standard Euclidean identity), so the general path already reduces 0/d to 0/1 for either sign of d.
 function reduce(n: bigint, d: bigint): Rational {
-  if (d === 0n) {
+  if (d === ZERO) {
     throw new RangeError("rational.ts: denominator must not be zero");
   }
   const g = gcd(n, d);
@@ -56,7 +59,7 @@ export function multiplyRational(a: Rational, b: Rational): Rational {
 }
 
 export function divideRational(a: Rational, b: Rational): Rational {
-  if (b.n === 0n) {
+  if (b.n === ZERO) {
     throw new RangeError("rational.ts: division by zero");
   }
   return reduce(a.n * b.d, a.d * b.n);
