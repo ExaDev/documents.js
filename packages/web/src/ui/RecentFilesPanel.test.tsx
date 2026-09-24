@@ -171,6 +171,16 @@ describe("RecentFilesPanel", () => {
     expect(removeRecentFile).toHaveBeenCalledWith(42);
   });
 
+  it("names each action button with the record's own file name", () => {
+    useRecentFiles.mockReturnValue([record({ name: "report.docx" })]);
+    const { container } = renderPanel();
+    const buttons = container.querySelectorAll("button");
+    expect(buttons[0]!.getAttribute("aria-label")).toBe("Reopen report.docx");
+    expect(buttons[1]!.getAttribute("aria-label")).toBe(
+      "Remove report.docx from recent files",
+    );
+  });
+
   it("does nothing when the remove action is clicked on a record with no id yet", () => {
     useRecentFiles.mockReturnValue([record({ id: undefined })]);
     const { container } = renderPanel();
