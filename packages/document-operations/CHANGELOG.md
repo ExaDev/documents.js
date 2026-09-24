@@ -1,3 +1,9 @@
+## [1.1.85](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.84...document-operations%401.1.85) (2026-09-24)
+
+### Bug Fixes
+
+* **document-operations:** enable max-lines ([458628f](https://github.com/ExaDev/documents.js/commit/458628f4f2692d21eda87c0f795536c48d88e229))
+
 ## [1.1.84](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.83...document-operations%401.1.84) (2026-09-24)
 
 
