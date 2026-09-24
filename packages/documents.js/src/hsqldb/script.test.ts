@@ -1,3 +1,4 @@
+import { assertNeverValueKind } from "./script";
 import { describe, expect, it } from "vitest";
 import {
   displayTextFor,
@@ -799,5 +800,13 @@ describe("displayTextFor: the remaining value kinds", () => {
       displayTextFor({ kind: "dateTime", value: "2024-01-15T13:45:00" }),
     ).toBe("2024-01-15T13:45:00");
     expect(displayTextFor({ kind: "error", value: "#DIV/0!" })).toBe("#DIV/0!");
+  });
+});
+
+describe("assertNeverValueKind", () => {
+  it("throws naming the unhandled value, proving the switch's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverValueKind({ kind: "bogus" } as never);
+    }).toThrow('documents.js: unhandled value {"kind":"bogus"}');
   });
 });

@@ -1,3 +1,4 @@
+import { assertNeverDocumentKind } from "./render";
 import type {
   ContentBlock,
   ContentDocument,
@@ -396,5 +397,13 @@ describe("renderContentDocumentToMarkdown", () => {
         { signal: controller.signal },
       ),
     ).toThrow();
+  });
+});
+
+describe("assertNeverDocumentKind", () => {
+  it("throws naming the unhandled document, proving the switch's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverDocumentKind({ kind: "bogus" } as never);
+    }).toThrow('documents.js: unhandled document {"kind":"bogus"}');
   });
 });

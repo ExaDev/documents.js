@@ -695,6 +695,7 @@ function fixtureBytes(format: DocumentFormat): Uint8Array<ArrayBuffer> {
       // Generate a minimal PDF from a docx so the sweep has real PDF bytes for every pdf-sourced pair.
       return docxToPdf(minimalDocxBytes());
   }
+  return assertNeverFormat(format);
 }
 
 // No default branch, matching fixtureBytes above: a DocumentFormat member with no case here is a compile error ("not all code paths return a value"), not a silent fall-through to a default result — confirmed directly by adding "rtf" to DocumentFormatSchema before this case existed, per this file's own TDD note (this switch, unlike fixtureBytes, previously carried a `default: return false;` that would have masked exactly that failure at every rtf-targeted sweep pair with a wrong-but-not-red "output isn't valid" result instead of a compile error, so the default was removed as part of adding the rtf case rather than merely added alongside it).
@@ -741,6 +742,7 @@ function isValidOutput(
       // wpd is read-only (READ_ONLY_FORMATS) and is never a sweep target for the identical reason odf above is not — ALL_SUPPORTED_PAIRS excludes every wpd-target pair since wpd-codec ships no writer. Present here only for the same exhaustiveness reason as odf's own case.
       return false;
   }
+  return assertNeverFormat2(format);
 }
 
 const ALL_SUPPORTED_PAIRS = createLocalDocumentConverter().conversions;
@@ -797,3 +799,13 @@ describe.each(MATRIX_ENTRIES.map((entry) => [entry.name, entry] as const))(
     });
   },
 );
+
+// Reached only if the union behind `format` ever gains a member the switch above does not match: every current member has a case there, so `format` narrows to `never` at the call, and adding an uncovered member makes that narrowing fail and the call stop compiling. Exists so the switch's own exhaustiveness, proven by the type checker rather than by a catch-all default that would silently accept a genuinely new member, still gives consistent-return an explicit statement to see past the switch. Exported so a test can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable.
+export function assertNeverFormat(value: never): never {
+  throw new Error(`documents.js: unhandled format ${JSON.stringify(value)}`);
+}
+
+// Reached only if the union behind `format` ever gains a member the switch above does not match: every current member has a case there, so `format` narrows to `never` at the call, and adding an uncovered member makes that narrowing fail and the call stop compiling. Exists so the switch's own exhaustiveness, proven by the type checker rather than by a catch-all default that would silently accept a genuinely new member, still gives consistent-return an explicit statement to see past the switch. Exported so a test can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable.
+export function assertNeverFormat2(value: never): never {
+  throw new Error(`documents.js: unhandled format ${JSON.stringify(value)}`);
+}

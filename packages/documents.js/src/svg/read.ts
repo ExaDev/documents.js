@@ -168,8 +168,8 @@ function resolveStroke(
   if (color === undefined) {
     return undefined;
   }
-  const userUnits = parseSvgUserUnits(paint.strokeWidthSpec) ?? 1;
-  const widthPt = userUnits * meanScaleFactor(ctm);
+  const strokeUserUnits = parseSvgUserUnits(paint.strokeWidthSpec) ?? 1;
+  const widthPt = strokeUserUnits * meanScaleFactor(ctm);
   if (!(widthPt > 0)) {
     return undefined;
   }

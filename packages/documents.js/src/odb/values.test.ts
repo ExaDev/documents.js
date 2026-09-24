@@ -1,3 +1,4 @@
+import { assertNeverValueKind } from "./values";
 import type { ContentCellValue } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import {
@@ -210,5 +211,13 @@ describe("aggregateCellValues", () => {
     };
     expect(aggregateCellValues("MIN", [first, second], fail)).toBe(first);
     expect(aggregateCellValues("MAX", [first, second], fail)).toBe(first);
+  });
+});
+
+describe("assertNeverValueKind", () => {
+  it("throws naming the unhandled value, proving the switch's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverValueKind({ kind: "bogus" } as never);
+    }).toThrow('documents.js: unhandled value {"kind":"bogus"}');
   });
 });

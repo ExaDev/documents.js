@@ -285,6 +285,7 @@ function degradedBlocksFor(
     case "formula":
       return formulaBlocks(document, sink);
   }
+  return assertNeverDocumentKind(document);
 }
 
 // The one entry point this module exists to add: ContentDocument (any of its five kinds) -> Markdown text. A 'wordprocessing' document goes straight to buildMarkdownText/markdown-codec's writeMarkdownContent — markdown-codec already understands that shape natively, so there is nothing this module should do differently. Every other kind is flattened first (see the per-kind functions above) into a synthetic 'wordprocessing' document built from the real blocks it carries, then handed to the exact same buildMarkdownText call — so a flattened presentation/spreadsheet/drawing gets every ordinary wordprocessing-side behaviour (list rendering, table-cell formatting diagnostics, front matter, style options) for free, with zero duplicated emission logic.
@@ -301,4 +302,9 @@ export function renderContentDocumentToMarkdown(
     wrapAsWordprocessing(document.metadata, blocks),
     options,
   );
+}
+
+// Reached only if the union behind `document.kind` ever gains a member the switch above does not match: every current member has a case there, so `document.kind` narrows to `never` at the call, and adding an uncovered member makes that narrowing fail and the call stop compiling. Exists so the switch's own exhaustiveness, proven by the type checker rather than by a catch-all default that would silently accept a genuinely new member, still gives consistent-return an explicit statement to see past the switch. Exported so a test can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable.
+export function assertNeverDocumentKind(value: never): never {
+  throw new Error(`documents.js: unhandled document ${JSON.stringify(value)}`);
 }

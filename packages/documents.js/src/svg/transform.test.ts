@@ -1,3 +1,4 @@
+import { assertNeverName } from "./transform";
 import { describe, expect, it } from "vitest";
 import {
   applyMatrix,
@@ -111,5 +112,13 @@ describe("meanScaleFactor", () => {
     expect(
       meanScaleFactor(parseSvgTransform("matrix(1 0 1 1 0 0)")!),
     ).toBeCloseTo((1 + Math.SQRT2) / 2, 12);
+  });
+});
+
+describe("assertNeverName", () => {
+  it("throws naming the unhandled name, proving the switch's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverName("bogus" as never);
+    }).toThrow('documents.js: unhandled name "bogus"');
   });
 });

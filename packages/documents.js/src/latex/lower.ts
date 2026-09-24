@@ -222,8 +222,8 @@ function lowerNodeList(
     diagnose(context, "latex/operator-unmapped", detail);
     return unparsed(detail);
   }
-  const wrapped: FoldSegment[] = segments.map((nodes) => ({
-    nodes,
+  const wrapped: FoldSegment[] = segments.map((segmentNodes) => ({
+    nodes: segmentNodes,
     negated: false,
   }));
   const normalised = normaliseUnaryMinus(operators, wrapped);

@@ -1,9 +1,29 @@
+import {
+  assertNeverLiteralKind,
+  assertNeverOperator,
+  assertNeverPredicateKind,
+  assertNeverValueKind,
+} from "./evaluate";
 import type { ContentCellValue } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import type { HsqldbTable } from "../../hsqldb/script";
 import { HsqldbSqlEvaluationError } from "./errors";
 import { evaluateSelect } from "./evaluate";
 import { parseSelect } from "./parser";
+
+// A second table sharing a column NAME with EMPLOYEES on purpose — both the deliberate ambiguity trap (an unqualified reference to NAME after a JOIN) and the ordinary disambiguation path (EMPLOYEES.NAME vs DEPARTMENTS.NAME) need a real name collision to exercise, not two tables that happen never to clash. MARKETING has no matching employee at all, which is what proves INNER JOIN excludes an unmatched row on either side rather than padding it with NULLs.
+const DEPARTMENTS: HsqldbTable = {
+  tableName: "DEPARTMENTS",
+  columns: [
+    { name: "NAME", type: "VARCHAR(20)" },
+    { name: "BUDGET", type: "DECIMAL(10,2)" },
+  ],
+  rows: [
+    [text("Sales"), num(50000)],
+    [text("Eng"), num(80000)],
+    [text("Marketing"), num(30000)],
+  ],
+};
 
 // One hand-built table covering every value shape this engine has to reason about: text, numeric, boolean, and date columns, with a deliberate NULL in each nullable one — SALARY on Bob, ACTIVE on Dave, HIRED on Carol and Frank, DEPT on Erin and Frank (two rows, so GROUP BY's own "all NULLs are one group" rule has something to prove). The real-fixture end-to-end test lives in src/odb/sql/query.test.ts; this file is the semantics suite.
 const NULL_VALUE: ContentCellValue = { kind: "empty" };
@@ -577,20 +597,6 @@ describe("evaluateSelect: GROUP BY and aggregates", () => {
     ).toEqual([NULL_VALUE, text("Sales"), text("Eng")]);
   });
 });
-
-// A second table sharing a column NAME with EMPLOYEES on purpose — both the deliberate ambiguity trap (an unqualified reference to NAME after a JOIN) and the ordinary disambiguation path (EMPLOYEES.NAME vs DEPARTMENTS.NAME) need a real name collision to exercise, not two tables that happen never to clash. MARKETING has no matching employee at all, which is what proves INNER JOIN excludes an unmatched row on either side rather than padding it with NULLs.
-const DEPARTMENTS: HsqldbTable = {
-  tableName: "DEPARTMENTS",
-  columns: [
-    { name: "NAME", type: "VARCHAR(20)" },
-    { name: "BUDGET", type: "DECIMAL(10,2)" },
-  ],
-  rows: [
-    [text("Sales"), num(50000)],
-    [text("Eng"), num(80000)],
-    [text("Marketing"), num(30000)],
-  ],
-};
 
 const JOIN_TABLES: readonly HsqldbTable[] = [EMPLOYEES, DEPARTMENTS];
 
@@ -1227,5 +1233,37 @@ describe("evaluateSelect: failures that must never become a wrong answer", () =>
     expect(() => run("SELECT B FROM MALFORMED", [malformed])).toThrow(
       "malformed joined row",
     );
+  });
+});
+
+describe("assertNeverOperator", () => {
+  it("throws naming the unhandled operator, proving the switch's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverOperator("bogus" as never);
+    }).toThrow('documents.js: unhandled operator "bogus"');
+  });
+});
+
+describe("assertNeverLiteralKind", () => {
+  it("throws naming the unhandled literal, proving the switch's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverLiteralKind({ kind: "bogus" } as never);
+    }).toThrow('documents.js: unhandled literal {"kind":"bogus"}');
+  });
+});
+
+describe("assertNeverPredicateKind", () => {
+  it("throws naming the unhandled predicate, proving the switch's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverPredicateKind({ kind: "bogus" } as never);
+    }).toThrow('documents.js: unhandled predicate {"kind":"bogus"}');
+  });
+});
+
+describe("assertNeverValueKind", () => {
+  it("throws naming the unhandled value, proving the switch's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverValueKind({ kind: "bogus" } as never);
+    }).toThrow('documents.js: unhandled value {"kind":"bogus"}');
   });
 });

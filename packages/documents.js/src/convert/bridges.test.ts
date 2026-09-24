@@ -1015,12 +1015,12 @@ describe("docx <-> markdown: docx -> markdown -> docx", () => {
     );
 
     const styledBlock = roundTripped.sections[0]!.blocks.find(
-      (b) => b.kind === "paragraph" && b.runs.some((r) => r.bold),
+      (b) => b.kind === "paragraph" && b.runs.some((r) => r.bold === true),
     );
     expect(styledBlock?.kind).toBe("paragraph");
     const styledRun =
       styledBlock?.kind === "paragraph"
-        ? styledBlock.runs.find((r) => r.bold)
+        ? styledBlock.runs.find((r) => r.bold === true)
         : undefined;
     expect(styledRun?.bold).toBe(true);
     expect(styledRun?.italic).toBe(true);
