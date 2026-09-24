@@ -553,6 +553,28 @@ describe("PdfItemDetailScreen read-only field dump (an xlsx/csv/svg/... preview,
       expect(after).toContain("Page 1 items");
     },
   );
+
+  it("does not pop the screen on an unrelated key from the read-only dump", async () => {
+    const layout: LayoutDocument = {
+      formatVersion: 1,
+      metadata: {},
+      images: {},
+      pages: [
+        {
+          widthPt: 612,
+          heightPt: 792,
+          items: [{ kind: "rect", xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }],
+        },
+      ],
+    };
+    const { lastFrame, stdin } = render(
+      <PdfHarness layout={layout} format="xlsx" />,
+    );
+    const frame = await openReadOnlyDetail(stdin, lastFrame);
+    stdin.write("x");
+    await settle();
+    expect(lastFrame()).toBe(frame);
+  });
 });
 
 // --- real field editor, for a genuine 'pdf'-format document ---------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -830,6 +852,17 @@ describe("PdfItemDetailScreen editable field editor — ellipse, line, path, ima
     const frame = await waitForTop(rendered, "pdfItemDetail");
     expect(frame).toContain("From X: 0.0pt");
     expect(frame).toContain("To X: 100.0pt");
+    expect(frame).toContain("To Y: 0.0pt");
+
+    // From X is row 0.
+    stdin.write(ENTER);
+    await settle();
+    await clearAndType(stdin, rendered, "0".length, "10");
+    stdin.write(ENTER);
+    const fromXFrame = await waitForFlatFrame(rendered, (candidate) =>
+      candidate.includes("From X: 10.0pt"),
+    );
+    expect(fromXFrame).toContain("From X: 10.0pt");
 
     // From Y is row 1.
     stdin.write("j");
@@ -843,15 +876,39 @@ describe("PdfItemDetailScreen editable field editor — ellipse, line, path, ima
     );
     expect(fromYFrame).toContain("From Y: 25.0pt");
 
-    // Colour is row 4 from From Y.
-    stdin.write("j");
-    await settle();
-    stdin.write("j");
-    await settle();
+    // To X is row 2.
     stdin.write("j");
     await settle();
     stdin.write(ENTER);
     await settle();
+    await clearAndType(stdin, rendered, "100".length, "150");
+    stdin.write(ENTER);
+    const toXFrame = await waitForFlatFrame(rendered, (candidate) =>
+      candidate.includes("To X: 150.0pt"),
+    );
+    expect(toXFrame).toContain("To X: 150.0pt");
+
+    // To Y is row 3.
+    stdin.write("j");
+    await settle();
+    stdin.write(ENTER);
+    await settle();
+    await clearAndType(stdin, rendered, "0".length, "40");
+    stdin.write(ENTER);
+    const toYFrame = await waitForFlatFrame(rendered, (candidate) =>
+      candidate.includes("To Y: 40.0pt"),
+    );
+    expect(toYFrame).toContain("To Y: 40.0pt");
+
+    // Colour is row 4.
+    stdin.write("j");
+    await settle();
+    stdin.write(ENTER);
+    await settle();
+    const colourDraftFrame = await waitForFlatFrame(rendered, (candidate) =>
+      candidate.includes("0 0 0"),
+    );
+    expect(colourDraftFrame).toContain("0 0 0");
     await clearAndType(stdin, rendered, "0 0 0".length, "0 1 0");
     stdin.write(ENTER);
     const colourFrame = await waitForFlatFrame(rendered, (candidate) =>
@@ -1106,10 +1163,21 @@ describe("PdfItemDetailScreen editable field editor — ellipse, line, path, ima
     );
     expect(rotationFrame).toContain("Rotation: 30°");
 
+    // Appending "5" with no prior clear proves the draft was genuinely pre-filled with "30" (the set rotation's own currentValue): the cursor sits after seeded text, so typing appends onto it, producing "305" rather than a bare "5" a wrongly-blank pre-fill would leave.
+    stdin.write(ENTER);
+    await settle();
+    stdin.write("5");
+    await waitForFlatFrame(rendered, (candidate) => candidate.includes("305"));
+    stdin.write(ENTER);
+    const appendedFrame = await waitForFlatFrame(rendered, (candidate) =>
+      candidate.includes("Rotation: 305°"),
+    );
+    expect(appendedFrame).toContain("Rotation: 305°");
+
     // Clearing it back to blank restores 'unset'.
     stdin.write(ENTER);
     await settle();
-    await clearAndType(rendered.stdin, rendered, "30".length, "");
+    await clearAndType(rendered.stdin, rendered, "305".length, "");
     stdin.write(ENTER);
     const clearedFrame = await waitForFlatFrame(rendered, (candidate) =>
       candidate.includes("Rotation: unset"),
