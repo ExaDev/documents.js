@@ -1,3 +1,15 @@
+## [1.1.78](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.77...document-operations%401.1.78) (2026-09-24)
+
+### Bug Fixes
+
+* **document-operations:** validate run's input at the type boundary it already claimed ([106765f](https://github.com/ExaDev/documents.js/commit/106765fb5fbd84c5e564686610cdfc578b5ed75e))
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.17
+- Updated document-compute.js to 1.6.26
+
 ## [1.1.77](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.76...document-operations%401.1.77) (2026-09-24)
 
 

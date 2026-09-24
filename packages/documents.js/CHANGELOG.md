@@ -1,3 +1,24 @@
+## [14.4.17](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.16...documents.js%4014.4.17) (2026-09-24)
+
+### Code Refactoring
+
+* **documents.js:** drop the unreachable forced-progress fallback in splitTextToWidth ([97e2820](https://github.com/ExaDev/documents.js/commit/97e28204426adb705152c77f4b73e119c5f08e71))
+
+### Tests
+
+* **documents.js:** pin text-layout's wrapping, splitting and degenerate branches ([b1611bb](https://github.com/ExaDev/documents.js/commit/b1611bbf00245595c60eef301d307149a8e86d68))
+
+
+### Dependencies
+
+- Updated archive-codec to 1.11.15
+- Updated doc-codec to 6.1.6
+- Updated ooxml.js to 12.2.11
+- Updated ppt-codec to 2.2.6
+- Updated rtf-codec to 8.1.6
+- Updated wpd-codec to 5.1.8
+- Updated xls-codec to 4.15.25
+
 ## [14.4.16](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.15...documents.js%4014.4.16) (2026-09-24)
 
 ### Code Refactoring
