@@ -22,7 +22,8 @@ describe("normalizeLinkLabel", () => {
 
 describe("matchLinkLabel", () => {
   it("returns the length including both brackets", () => {
-    expect(matchLinkLabel("[foo]", 0)).toBe(5);
+    const label = "[foo]";
+    expect(matchLinkLabel(label, 0)).toBe(label.length);
   });
 
   it("matches an empty label, which the caller reads as the collapsed form", () => {
@@ -30,13 +31,16 @@ describe("matchLinkLabel", () => {
   });
 
   it("allows an escaped bracket but rejects an unescaped one", () => {
-    expect(matchLinkLabel("[a\\]b]", 0)).toBe(6);
+    const label = "[a\\]b]";
+    expect(matchLinkLabel(label, 0)).toBe(label.length);
     expect(matchLinkLabel("[a[b]", 0)).toBe(0);
   });
 
   it("rejects a label longer than the 999-character maximum", () => {
-    expect(matchLinkLabel(`[${"a".repeat(999)}]`, 0)).toBe(1001);
-    expect(matchLinkLabel(`[${"a".repeat(1000)}]`, 0)).toBe(0);
+    const maxLabelLength = 999;
+    const atMaxLabel = `[${"a".repeat(maxLabelLength)}]`;
+    expect(matchLinkLabel(atMaxLabel, 0)).toBe(atMaxLabel.length);
+    expect(matchLinkLabel(`[${"a".repeat(maxLabelLength + 1)}]`, 0)).toBe(0);
   });
 
   it("returns 0 for text that does not open with '[' at all, even when a ']' appears later", () => {
@@ -114,11 +118,15 @@ describe("parseLinkTitle", () => {
 
 describe("skipInlineWhitespace", () => {
   it("skips spaces and tabs and at most one line ending", () => {
-    expect(skipInlineWhitespace("  \t \n  x", 0)).toBe(7);
+    const whitespaceRun = "  \t \n  ";
+    expect(skipInlineWhitespace(`${whitespaceRun}x`, 0)).toBe(
+      whitespaceRun.length,
+    );
   });
 
   it("stops at a blank line, which can never appear inside one inline construct", () => {
-    expect(skipInlineWhitespace(" \n \n x", 0)).toBe(3);
+    const stopOffset = 3; // " \n \n x": stops right after the first line ending, before the blank second line
+    expect(skipInlineWhitespace(" \n \n x", 0)).toBe(stopOffset);
   });
 });
 
