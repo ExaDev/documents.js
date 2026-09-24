@@ -649,9 +649,18 @@ describe("evaluateQuantity", () => {
 });
 
 describe("assertNever", () => {
-  it("throws naming the unhandled node, proving evaluate's own exhaustiveness guard fires at runtime", () => {
-    expect(() => {
+  it("throws naming both the operation and the unhandled node, proving evaluate's own exhaustiveness guard fires at runtime", () => {
+    let caught: unknown;
+    try {
       assertNever({ kind: "bogus" } as never);
-    }).toThrow('unhandled expression node {"kind":"bogus"}');
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(UnsupportedExpressionError);
+    // The whole message, not a fragment of it: the context is a separate constructor argument from the detail, so asserting only the detail leaves the context unpinned.
+    expect((caught as Error).message).toBe(
+      'evaluate: unhandled expression node {"kind":"bogus"}.',
+    );
+    expect((caught as UnsupportedExpressionError).context).toBe("evaluate");
   });
 });
