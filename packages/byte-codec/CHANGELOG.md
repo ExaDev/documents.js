@@ -1,3 +1,13 @@
+## [2.0.1](https://github.com/ExaDev/documents.js/compare/byte-codec%402.0.0...byte-codec%402.0.1) (2026-09-24)
+
+### Bug Fixes
+
+* **byte-codec:** enable max-lines ([926148c](https://github.com/ExaDev/documents.js/commit/926148cdeeaed388274f689a1ca53c1c46e05959))
+
+### Tests
+
+* **byte-codec:** cover expectMalformed and the pointer boundary search helpers directly ([019e0e5](https://github.com/ExaDev/documents.js/commit/019e0e581ec1a8d83236732a8798ea48efefa986))
+
 ## [2.0.0](https://github.com/ExaDev/documents.js/compare/byte-codec%401.10.1...byte-codec%402.0.0) (2026-09-24)
 
 ### ⚠ BREAKING CHANGES
