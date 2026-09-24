@@ -41,6 +41,13 @@ function padTo4(length: number): number {
   return Math.ceil(length / 4) * 4;
 }
 
+// Reached only if PropertyValue ever gains a variant encodeTypedPropertyValue's own switch does not match: every current member is covered by a case there, so `value` narrows to `never` at every real call site, and adding an uncovered variant makes that narrowing fail and this call stop compiling — the real safety net. Exists so the switch's own exhaustiveness (proven by the type checker, not by a catch-all default that would silently swallow a genuinely new variant) still gives consistent-return an explicit statement to see past the switch.
+function assertNever(value: never): never {
+  throw new PropertySetWriteError(
+    `encodeTypedPropertyValue: unhandled property value type ${JSON.stringify(value)}`,
+  );
+}
+
 // Encodes one property's TypedPropertyValue: Type(2) + Padding(2), then the Value field per [MS-OLEPS] 2.15. Every branch's total length is already a multiple of 4 bytes (VT_I2/VT_I4 pad their 2-/4-byte value out to 4; VT_FILETIME's 8-byte value needs none; VT_LPWSTR's own padding rule ensures it), so packing successive properties back-to-back keeps every later property's own offset naturally 4-byte aligned without extra bookkeeping.
 function encodeTypedPropertyValue(
   value: PropertyValue,
@@ -88,6 +95,7 @@ function encodeTypedPropertyValue(
         "writePropertySetStream cannot write a VT_LPSTR property: this writer emits Unicode (VT_LPWSTR) strings only, since encoding to an arbitrary ANSI codepage is out of scope — see the package README's OLEPS scope note",
       );
   }
+  return assertNever(value);
 }
 
 // Writes a conformant [MS-OLEPS] Property Set Stream carrying exactly one property set, in the shape readPropertySetStream returns.

@@ -29,6 +29,13 @@ function padTo4(length: number): number {
   return Math.ceil(length / 4) * 4;
 }
 
+// Reached only if FieldValue ever gains a variant encodeValue's own switch does not match: every current member is covered by a case there, so `value` narrows to `never` at every real call site, and adding an uncovered variant makes that narrowing fail and this call stop compiling — the real safety net. Exists so the switch's own exhaustiveness (proven by the type checker, not by a catch-all default that would silently swallow a genuinely new variant) still gives consistent-return an explicit statement to see past the switch.
+function assertNever(value: never): never {
+  throw new Error(
+    `encodeValue: unhandled field value type ${JSON.stringify(value)}`,
+  );
+}
+
 // One Data4 byte's own two hex characters, starting at charIndex: kept as a single shared expression (rather than writeGuid computing a start and an independently-derived end) so a wrong charIndex always extracts a genuinely different two-character window, never one that merely gains extra leading digits setUint8's own mod-256 truncation would silently discard.
 function hexByte(digits: string, charIndex: number): number {
   return Number.parseInt(digits.slice(charIndex, charIndex + 2), 16);
@@ -122,6 +129,7 @@ function encodeValue(value: FieldValue): Uint8Array<ArrayBuffer> {
       return bytes;
     }
   }
+  return assertNever(value);
 }
 
 /** Builds a single-property-set [MS-OLEPS] PropertySetStream: header (ByteOrder/Version/SystemIdentifier/CLSID=GUID_NULL/NumPropertySets=1/FMTID0/Offset0), then the PropertySet packet — fields emitted in the given order, each entry's PropertyIdentifierAndOffset pointing at its own value, immediately after the dictionary. */
