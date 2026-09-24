@@ -241,7 +241,13 @@ describe("documentFromJson dispatches on the $schema URI", () => {
   });
 
   it("tombstones a layout-document URI from any release with the pointer to pdf-codec", () => {
-    for (const version of [1, 2, 3, installedMajor, installedMajorPlusOne]) {
+    // The first three historical majors this schema ever shipped under, sampled alongside the installed one and the next.
+    const earlyHistoricalMajors = Array.from({ length: 3 }, (_, i) => i + 1);
+    for (const version of [
+      ...earlyHistoricalMajors,
+      installedMajor,
+      installedMajorPlusOne,
+    ]) {
       const layoutDump = {
         $schema: uriForVersion(version, "layout-document"),
         pages: [],
@@ -260,7 +266,13 @@ describe("documentFromJson dispatches on the $schema URI", () => {
   });
 
   it("tombstones a document-package URI from any release with the pointer renaming it to document-tree", () => {
-    for (const version of [1, 2, 3, 4, installedMajor, installedMajorPlusOne]) {
+    // The first four historical majors this schema ever shipped under, sampled alongside the installed one and the next.
+    const earlyHistoricalMajors = Array.from({ length: 4 }, (_, i) => i + 1);
+    for (const version of [
+      ...earlyHistoricalMajors,
+      installedMajor,
+      installedMajorPlusOne,
+    ]) {
       const packageDump = {
         $schema: uriForVersion(version, "document-package"),
       };
@@ -326,8 +338,9 @@ describe("documentFromJson dispatches on the $schema URI", () => {
 
   it("captures every leading digit of the major, not just the first one", () => {
     // A two-digit major well past the installed one: if only the first digit were captured, "12" would be misread as "1", which is OLDER than the installed major(7) rather than newer.
+    const twoDigitMajor = 12;
     const dump = {
-      $schema: uriForVersion(12, "document-tree"),
+      $schema: uriForVersion(twoDigitMajor, "document-tree"),
     };
     try {
       documentFromJson(dump);
