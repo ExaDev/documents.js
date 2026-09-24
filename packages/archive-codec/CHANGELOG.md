@@ -1,3 +1,9 @@
+## [1.11.19](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.18...archive-codec%401.11.19) (2026-09-24)
+
+### Bug Fixes
+
+* **archive-codec:** enable max-lines ([62ddbf6](https://github.com/ExaDev/documents.js/commit/62ddbf6afce8bc009fa73047bd642c9094a6ff7e))
+
 ## [1.11.18](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.17...archive-codec%401.11.18) (2026-09-24)
 
 
