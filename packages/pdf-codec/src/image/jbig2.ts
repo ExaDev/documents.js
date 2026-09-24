@@ -18,12 +18,11 @@ import {
   decodeGenericRegion,
   decodeRefinementRegion,
 } from "./jbig2-generic";
-import type { TextRegionParams } from "./jbig2-text";
+import type { Jbig2ReferenceCorner, TextRegionParams } from "./jbig2-text";
 import {
   createTextArithContexts,
   decodeSymbolDictionary,
   decodeTextRegion,
-  referenceCornerFromCode,
   symbolCodeLength,
 } from "./jbig2-text";
 
@@ -198,6 +197,22 @@ function readAtPixels(cursor: ByteCursor, count: number): Jbig2AtPixel[] {
   return at;
 }
 
+// T.88 packs OR, AND, XOR and XNOR into two bits wherever an operator field is only two bits wide — the page information segment's default combination operator (7.4.8.1) and a text region's SBCOMBOP (7.4.4.1.1) — and every value a two-bit field can hold is one of those four, unlike readRegionInfo's three-bit external operator above, where codes 5-7 genuinely fall outside Table 12. Mapping the four codes directly states that totality outright rather than routing through a lookup that can fail and a guard that can never fire.
+function twoBitCombinationOperator(bits: number): Jbig2CombinationOperator {
+  return bits === 0 ? "or" : bits === 1 ? "and" : bits === 2 ? "xor" : "xnor";
+}
+
+// REFCORNER is two bits as well (7.4.4.1.1), and all four codes name one of Table 34's corners, so it is total the same way and mapped the same way. Table 34's own ordering is BOTTOMLEFT, TOPLEFT, BOTTOMRIGHT, TOPRIGHT.
+function twoBitReferenceCorner(bits: number): Jbig2ReferenceCorner {
+  return bits === 0
+    ? { right: false, bottom: true } // BOTTOMLEFT
+    : bits === 1
+      ? { right: false, bottom: false } // TOPLEFT
+      : bits === 2
+        ? { right: true, bottom: true } // BOTTOMRIGHT
+        : { right: true, bottom: false }; // TOPRIGHT
+}
+
 interface PageState {
   bitmap: Jbig2Bitmap;
   readonly defaultCombinationOperator: Jbig2CombinationOperator;
@@ -317,17 +332,11 @@ class Jbig2Decoder {
     }
 
     const defaultPixel = (flags >> 2) & 1;
-    const defaultCombinationOperator = combinationOperatorFromCode(
-      (flags >> 3) & 0x03,
-    );
-    if (defaultCombinationOperator === undefined) {
-      throw new Jbig2ParseError(
-        "JBIG2 page information declares an unrecognised default combination operator",
-      );
-    }
     this.page = {
       bitmap: createBitmap(width, declaredOrHintedHeight, defaultPixel),
-      defaultCombinationOperator,
+      defaultCombinationOperator: twoBitCombinationOperator(
+        (flags >> 3) & 0x03,
+      ),
       combinationOperatorOverridden: (flags & 0x40) !== 0,
     };
   }
@@ -407,8 +416,8 @@ class Jbig2Decoder {
     const flags = cursor.uint8();
     const template = flags & 0x01;
     const tpgron = (flags & 0x02) !== 0;
-    const at =
-      template === 0 ? readAtPixels(cursor, 2) : [...NOMINAL_REFINEMENT_AT];
+    // The nominal offsets are handed on as the one shared constant: every consumer of an AT list reads it and none mutates it, so per-call copies would buy nothing.
+    const at = template === 0 ? readAtPixels(cursor, 2) : NOMINAL_REFINEMENT_AT;
     const page = this.requirePage();
 
     // With no intermediate buffers in play, T.88 7.4.7.2 makes the reference the page region the refinement covers.
@@ -467,7 +476,7 @@ class Jbig2Decoder {
     const refinementAt =
       refinementAggregate && refinementTemplate === 0
         ? readAtPixels(cursor, 2)
-        : [...NOMINAL_REFINEMENT_AT];
+        : NOMINAL_REFINEMENT_AT;
     const exportedSymbolCount = cursor.uint32();
     const newSymbolCount = cursor.uint32();
 
@@ -507,21 +516,9 @@ class Jbig2Decoder {
     }
     const refine = (flags & 0x02) !== 0;
     const stripSize = 1 << ((flags >> 2) & 0x03);
-    const referenceCorner = referenceCornerFromCode((flags >> 4) & 0x03);
-    if (referenceCorner === undefined) {
-      throw new Jbig2ParseError(
-        "JBIG2 text region declares an unrecognised REFCORNER",
-      );
-    }
+    const referenceCorner = twoBitReferenceCorner((flags >> 4) & 0x03);
     const transposed = (flags & 0x40) !== 0;
-    const combinationOperator = combinationOperatorFromCode(
-      (flags >> 7) & 0x03,
-    );
-    if (combinationOperator === undefined) {
-      throw new Jbig2ParseError(
-        "JBIG2 text region declares an unrecognised SBCOMBOP",
-      );
-    }
+    const combinationOperator = twoBitCombinationOperator((flags >> 7) & 0x03);
     const defaultPixel = (flags >> 9) & 0x01;
     // SBDSOFFSET is a signed five-bit field at bits 10-14 (T.88 7.4.4.1.1), sign-extended here by shifting it to the top of a 32-bit word and back.
     const dsOffset = ((flags << 17) >> 27) | 0;
@@ -529,7 +526,7 @@ class Jbig2Decoder {
     const refinementAt =
       refine && refinementTemplate === 0
         ? readAtPixels(cursor, 2)
-        : [...NOMINAL_REFINEMENT_AT];
+        : NOMINAL_REFINEMENT_AT;
     const instanceCount = cursor.uint32();
 
     const symbols = this.gatherSymbols(header.referredTo);
