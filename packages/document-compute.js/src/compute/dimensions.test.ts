@@ -8,6 +8,11 @@ import {
   scaleDimension,
 } from "./dimensions";
 
+// Scaling every dimension exponent by this factor is what sqrt() does to a Quantity's dimension vector.
+const SQUARE_ROOT_EXPONENT = 0.5;
+// An arbitrary non-half scale factor, exercised to prove scaleDimension isn't special-cased to square roots.
+const CUBE_EXPONENT = 3;
+
 describe("dimensions", () => {
   it("treats an omitted exponent and an explicit zero exponent as equal", () => {
     expect(dimensionsEqual({ length: 1 }, { length: 1, time: 0 })).toBe(true);
@@ -45,17 +50,23 @@ describe("dimensions", () => {
   });
 
   it("scales every exponent for pow/sqrt", () => {
-    expect(scaleDimension({ length: 2, mass: 4 }, 0.5)).toEqual({
+    expect(
+      scaleDimension({ length: 2, mass: 4 }, SQUARE_ROOT_EXPONENT),
+    ).toEqual({
       length: 1,
       mass: 2,
     });
-    expect(scaleDimension({ length: 1 }, 3)).toEqual({ length: 3 });
+    expect(scaleDimension({ length: 1 }, CUBE_EXPONENT)).toEqual({
+      length: CUBE_EXPONENT,
+    });
   });
 
   it("throws when scaling would not land on an integer exponent", () => {
     // length^1 has no square root dimension: 1 * 0.5 = 0.5 is not representable.
-    expect(() => scaleDimension({ length: 1 }, 0.5)).toThrow(RangeError);
-    expect(() => scaleDimension({ length: 1 }, 0.5)).toThrow(
+    expect(() => scaleDimension({ length: 1 }, SQUARE_ROOT_EXPONENT)).toThrow(
+      RangeError,
+    );
+    expect(() => scaleDimension({ length: 1 }, SQUARE_ROOT_EXPONENT)).toThrow(
       "dimensions.ts: scaling 'length' by 0.5 does not land on an integer exponent",
     );
   });
