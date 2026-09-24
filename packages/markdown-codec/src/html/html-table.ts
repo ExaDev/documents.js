@@ -176,7 +176,7 @@ type RunStyle = Pick<
 const INLINE_TAG_PATTERN = /<(a|strong|b|em|i|del|s|strike|code)\b([^>]*)>/i;
 
 function applyTagStyle(
-  style: RunStyle,
+  style: Readonly<RunStyle>,
   tagName: string,
   attrs: string,
 ): RunStyle {
@@ -204,21 +204,33 @@ function applyTagStyle(
   }
 }
 
-function pushPlainRun(runs: ContentRun[], text: string, style: RunStyle): void {
+interface RunSink {
+  readonly runs: ContentRun[];
+}
+
+function pushPlainRun(
+  sink: RunSink,
+  text: string,
+  style: Readonly<RunStyle>,
+): void {
   if (text.length === 0) {
     return;
   }
-  runs.push({ text: unescapeHtml(text), ...style });
+  sink.runs.push({ text: unescapeHtml(text), ...style });
 }
 
-function parseInlineHtml(text: string, style: RunStyle): ContentRun[] {
+function parseInlineHtml(
+  text: string,
+  style: Readonly<RunStyle>,
+): ContentRun[] {
   const runs: ContentRun[] = [];
+  const sink: RunSink = { runs };
   let pos = 0;
   for (;;) {
     const rest = text.slice(pos);
     const match = INLINE_TAG_PATTERN.exec(rest);
     if (match === null) {
-      pushPlainRun(runs, rest, style);
+      pushPlainRun(sink, rest, style);
       return runs;
     }
     const tagName = match[1]!.toLowerCase();
@@ -228,10 +240,10 @@ function parseInlineHtml(text: string, style: RunStyle): ContentRun[] {
     const close = findBalancedClose(text, openEnd, [tagName]);
     if (close === undefined) {
       // An unterminated recognised tag is not a shape worth guessing about: everything from here to the end of this cell stays literal, this tag's own markup included, exactly as an unrecognised construct elsewhere in this package degrades to its own escaped/literal spelling rather than a best-effort repair. The text preceding the tag is pushed AFTER this check rather than before it precisely so that literal remainder is one run spanning the whole of `rest`, not a second run repeating text a first run already carried.
-      pushPlainRun(runs, rest, style);
+      pushPlainRun(sink, rest, style);
       return runs;
     }
-    pushPlainRun(runs, rest.slice(0, match.index), style);
+    pushPlainRun(sink, rest.slice(0, match.index), style);
     runs.push(
       ...parseInlineHtml(
         text.slice(openEnd, close.start),
@@ -295,12 +307,12 @@ function parseCellBlocks(
 
 // Applies a cell's own `text-align` (see readTextAlign above) onto its first block, when that block is a paragraph — the same "first block only" scope src/emit/html-table.ts's own textAlignStyleAttr reads from on the way out, so this is a genuine inverse rather than a wider or narrower one.
 function applyTextAlign(
-  blocks: ContentBlock[],
+  blocks: readonly ContentBlock[],
   alignment: Alignment | undefined,
 ): ContentBlock[] {
   const first = blocks[0];
   if (alignment === undefined || first?.kind !== "paragraph") {
-    return blocks;
+    return [...blocks];
   }
   return [{ ...first, alignment }, ...blocks.slice(1)];
 }
@@ -358,14 +370,14 @@ function parseTableRows(
 
 // Column count and evenly-distributed column widths read from the dense grid width: every row of a dense table has one cell per grid column, so the first row's own length is the column count whichever rows carry spans, including a later row wider than the header or a header rowspan consuming a column below it. Absolute widths were never something either grammar carries, so this is the same even distribution src/lower/table.ts's own lowerTable uses for a plain GFM table. No column ever reads as a header column: neither GFM nor this reader's own HTML subset states table:table-header-columns' page-repetition concept at all (ExaDev/documents.js#1381), so every column here states a width alone.
 function buildContentTable(
-  rows: ContentTableRow[],
+  rows: readonly ContentTableRow[],
   contentWidthPt: number,
 ): ContentTable {
   const columnCount = rows[0]!.cells.length;
   const columns = Array.from({ length: columnCount }, () => ({
     widthPt: contentWidthPt / columnCount,
   }));
-  return { kind: "table", rows, columns };
+  return { kind: "table", rows: [...rows], columns };
 }
 
 // Whether `text`, in its ENTIRETY (only surrounding whitespace tolerated), is exactly one <table>...</table> element — shared by parseHtmlTable's own top-level entry point and parseCellBlocks' "is this cell's whole content one nested table" check above, since both ask the identical question.

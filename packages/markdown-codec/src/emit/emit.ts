@@ -1120,7 +1120,7 @@ function constructCarriesListItemId(
 
 // Whether a paragraph's own list membership is INHERITED pass-through rather than a list identity of its own — true exactly when its itemId matches context.enclosingItemId (see that field's own comment): the paragraph sits inside a construct whose extent was absorbed into an already-open list item purely so that item could be recognised as such, not because the paragraph is itself a fresh list item. renderItems checks this before treating a .list-carrying paragraph as the start (or continuation) of a marker-bearing list region — rendering one as a marker line would invent a bullet the source never had.
 function isInheritedListMembership(
-  list: ContentListMembership,
+  list: Readonly<ContentListMembership>,
   context: EmitContext,
 ): boolean {
   return list.itemId !== undefined && list.itemId === context.enclosingItemId;
