@@ -6,7 +6,6 @@ export default packageLintConfig({
   newRuleDebt: [
     "@typescript-eslint/consistent-return",
     "@typescript-eslint/method-signature-style",
-    "@typescript-eslint/promise-function-async",
     "@typescript-eslint/strict-void-return",
     "tsdoc/syntax",
   ],
