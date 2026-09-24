@@ -77,7 +77,7 @@ export function filetimeToDate(low: number, high: number): Date {
   return new Date(Number(ms));
 }
 
-export function dateToFiletime(date: Date): {
+export function dateToFiletime(date: Readonly<Date>): {
   readonly low: number;
   readonly high: number;
 } {
