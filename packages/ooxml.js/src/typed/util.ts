@@ -110,13 +110,21 @@ export function relsPathFor(partPath: string): string {
   return `${partPath.slice(0, lastSlash)}/_rels/${fileName}.rels`;
 }
 
-// Resolve a relationship Target (relative to the subject part's directory, or package-rooted with a leading slash) to a package-relative part path. Exported purely for direct unit coverage — resolveRelationships is its only real caller.
-export function resolveRelTarget(partPath: string, target: string): string {
+// A part path's own directory: everything up to its last slash, or no directory at all for a root-level part path with none.
+function dirnameOf(partPath: string): string {
+  const lastSlash = partPath.lastIndexOf("/");
+  return lastSlash === -1 ? "" : partPath.slice(0, lastSlash);
+}
+
+// Resolve a relationship Target (relative to the subject part's directory, or package-rooted with a leading slash) to a package-relative part path. `partPath` is undefined for the package root, which has no directory of its own to resolve against — the same empty directory a root-level part's own path (no slash) already resolves to via dirnameOf. Exported purely for direct unit coverage — resolveRelationships is its only real caller.
+export function resolveRelTarget(
+  partPath: string | undefined,
+  target: string,
+): string {
   if (target.startsWith("/")) {
     return target.slice(1);
   }
-  const lastSlash = partPath.lastIndexOf("/");
-  const baseDir = lastSlash === -1 ? "" : partPath.slice(0, lastSlash);
+  const baseDir = partPath === undefined ? "" : dirnameOf(partPath);
   const resolved: string[] = [];
   for (const segment of `${baseDir}/${target}`.split("/")) {
     if (segment === "" || segment === ".") {
@@ -141,20 +149,18 @@ export function resolveRelationships(
   return relationshipsFrom(pkg, relsPathFor(partPath), partPath);
 }
 
-// The package root's own relationships, read from the fixed "_rels/.rels". The root is not itself a part, so its .rels path is stated rather than derived, and its targets resolve against the package root — which is exactly what an empty base path makes resolveRelTarget do, so a root Relationship spelling "/word/document.xml", "word/document.xml" or even "./word/document.xml" all land on the same part key.
-//
-// The empty base path is an irreducible equivalent-mutation site, not an untested one: resolveRelTarget reads a base path only up to its last "/", so EVERY slash-free string it could be replaced with — "" included — yields the identical package-root resolution, and no test built on this function's observable output can tell one from another. Naming it as a constant would move the same literal rather than remove it.
+// The package root's own relationships, read from the fixed "_rels/.rels". The root is not itself a part, so its .rels path is stated rather than derived, and it has no directory of its own for its targets to resolve against — modelled as an absent base path, not an empty one, so a root Relationship spelling "/word/document.xml", "word/document.xml" or even "./word/document.xml" all land on the same part key via resolveRelTarget's own undefined-partPath branch.
 export function resolveRootRelationships(
   pkg: Package,
 ): Map<string, Relationship> {
-  return relationshipsFrom(pkg, ROOT_RELS_PART_PATH, "");
+  return relationshipsFrom(pkg, ROOT_RELS_PART_PATH, undefined);
 }
 
-// Shared body of the two resolvers above: `relsPartPath` says which .rels part to read, `basePartPath` says what its Targets resolve against. The two differ only for the package root, whose rels part is not derivable from its (non-existent) own path.
+// Shared body of the two resolvers above: `relsPartPath` says which .rels part to read, `basePartPath` says what its Targets resolve against — undefined for the package root, which has none.
 function relationshipsFrom(
   pkg: Package,
   relsPartPath: string,
-  basePartPath: string,
+  basePartPath: string | undefined,
 ): Map<string, Relationship> {
   const map = new Map<string, Relationship>();
   const rels = rootElement(pkg.parts[relsPartPath]);
