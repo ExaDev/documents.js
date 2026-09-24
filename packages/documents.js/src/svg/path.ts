@@ -287,7 +287,8 @@ const COMMAND_ARITY: Record<string, number> = {
 export function parseSvgPathData(
   d: string,
 ): readonly ParsedPathSubpath[] | undefined {
-  const scanner = new PathScanner(d.trim());
+  // No trim of the input: the scanner's own skipSeparators runs before every token read and in atEnd, so leading and trailing separators are handled uniformly there.
+  const scanner = new PathScanner(d);
   const cursor: PathCursor = { x: 0, y: 0, subpathStartX: 0, subpathStartY: 0 };
   const acc: PathAccumulator = { subpaths: [] };
   let command: string | undefined;
@@ -347,7 +348,7 @@ export function parseSvgPathData(
     }
 
     // One command letter's argument stream is a series of full coordinate groups (implicit repetition); the first group of M/m is the moveto itself and every later group degenerates to a lineto per the grammar.
-    let groupIndex = 0;
+    let firstGroup = true;
     for (;;) {
       if (active === "A" || active === "a") {
         // Arc arguments are not plain numbers: the two flags are single chars that may legally fuse with adjacent numbers, so they are read positionally rather than through nextNumber.
@@ -393,14 +394,14 @@ export function parseSvgPathData(
           }
           args.push(value);
         }
-        const relative =
-          active === active.toLowerCase() && active !== active.toUpperCase();
+        // active is always a letter (COMMAND_ARITY's keys, or the Z/z pair handled above), so comparing against its own lowercase form alone decides relativeness.
+        const relative = active === active.toLowerCase();
         const point = (x: number, y: number): ParsedPathPoint =>
           relative ? { x: cursor.x + x, y: cursor.y + y } : { x, y };
         const upper = active.toUpperCase();
 
         if (upper === "M") {
-          if (groupIndex === 0) {
+          if (firstGroup) {
             startSubpath(point(args[0]!, args[1]!));
           } else {
             if (acc.current === undefined) {
@@ -486,7 +487,7 @@ export function parseSvgPathData(
           }
         }
       }
-      groupIndex++;
+      firstGroup = false;
       // A further group follows only if the scanner sits on a number or sign (a command letter ends the stream); atEnd() consumes trailing separators, and nextNumber() would over-read a following letter's arguments as this command's, so the boundary is probed exactly here.
       if (!hasNextNumberToken(scanner)) {
         break;
