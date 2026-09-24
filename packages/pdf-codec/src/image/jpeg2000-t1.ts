@@ -115,28 +115,19 @@ function zeroCodingContext(
   return diagonal >= 2 ? 2 : diagonal === 1 ? 1 : 0;
 }
 
-// T.800 Table D.3, indexed by the clamped horizontal and vertical sign contributions offset to 0..2. The value packs the context label in its low bits and the XOR bit — the sign the decoded decision is to be flipped by — in bit 3.
-const SIGN_CONTEXT_TABLE: readonly number[] = (() => {
-  // Table D.3 rows, as (horizontal, vertical, contextOffset, xorBit). The offsets are relative to SIGN_CONTEXT_BASE, i.e. context 9 is offset 0.
-  const rows: readonly (readonly [number, number, number, number])[] = [
-    [1, 1, 4, 0],
-    [1, 0, 3, 0],
-    [1, -1, 2, 0],
-    [0, 1, 1, 0],
-    [0, 0, 0, 0],
-    [0, -1, 1, 1],
-    [-1, 1, 2, 1],
-    [-1, 0, 3, 1],
-    [-1, -1, 4, 1],
-  ];
-  const table = new Array<number>(9).fill(0);
-  for (const [horizontal, vertical, offset, xorBit] of rows) {
-    table[(horizontal + 1) * 3 + (vertical + 1)] = offset | (xorBit << 3);
-  }
-  return table;
-})();
-
+// T.800 Table D.3, indexed by the clamped horizontal and vertical sign contributions offset to 0..2, i.e. by (horizontal + 1) * 3 + (vertical + 1). Each value packs the context label's offset from SIGN_CONTEXT_BASE in its low bits and the XOR bit — the sign the decoded decision is to be flipped by — in bit 3.
 const SIGN_XOR_FLAG = 0x08;
+const SIGN_CONTEXT_TABLE: readonly number[] = [
+  /* (horizontal, vertical) = (-1, -1) */ 4 | SIGN_XOR_FLAG,
+  /* (-1, 0) */ 3 | SIGN_XOR_FLAG,
+  /* (-1, 1) */ 2 | SIGN_XOR_FLAG,
+  /* (0, -1) */ 1 | SIGN_XOR_FLAG,
+  /* (0, 0) */ 0,
+  /* (0, 1) */ 1,
+  /* (1, -1) */ 2,
+  /* (1, 0) */ 3,
+  /* (1, 1) */ 4,
+];
 
 export function decodeJpeg2000CodeBlock(
   options: Jpeg2000CodeBlockDecodeOptions,
@@ -154,13 +145,8 @@ export function decodeJpeg2000CodeBlock(
   throwForUnsupportedStyle(codeBlockStyle);
   const values = new Int32Array(Math.max(width * height, 0));
   const codedBitPlanes = maxBitPlanes - zeroBitPlanes;
-  if (
-    width <= 0 ||
-    height <= 0 ||
-    codedBitPlanes <= 0 ||
-    totalPasses <= 0 ||
-    data.length === 0
-  ) {
+  // A non-positive plane count or pass count needs no clause of its own: the pass loop below runs zero passes for either, leaving `values` untouched exactly as this early return does. The dimensions and the data do need refusing, because the cleanup pass reads segmentation symbols (and, given data, the entropy coder) even when its stripe loops visit nothing.
+  if (width <= 0 || height <= 0 || data.length === 0) {
     return { values };
   }
 
@@ -172,6 +158,7 @@ export function decodeJpeg2000CodeBlock(
   const codedThisPlane = new Uint8Array(cellCount);
   const everRefined = new Uint8Array(cellCount);
   const magnitude = new Int32Array(cellCount);
+  // Written only by becomeSignificant and the refinement pass, the two paths a coefficient that is or becomes significant goes through: the reconstruction below reads it for significant coefficients alone, and every such coefficient's last write happens at its significance or its latest refinement, so a plane that codes a coefficient as merely insignificant leaves nothing the result can observe.
   const lastCodedPlane = new Int32Array(cellCount);
 
   const contexts = createArithContexts(CONTEXT_COUNT_BITS);
@@ -288,8 +275,6 @@ export function decodeJpeg2000CodeBlock(
           }
           if (mq.decode(contexts, context) === 1) {
             becomeSignificant(x, y, plane, stripeEnd);
-          } else {
-            lastCodedPlane[n] = plane;
           }
           codedThisPlane[n] = 1;
         }
@@ -331,18 +316,12 @@ export function decodeJpeg2000CodeBlock(
         // D.3.4's run-length mode: a full four-row column in which every coefficient is still insignificant, none was coded earlier in this bit-plane, and none has a significant neighbour is coded as a single decision saying whether any of the four becomes significant at all.
         if (fullStripe && columnIsRunLengthEligible(x, stripe, stripeEnd)) {
           if (mq.decode(contexts, RUN_LENGTH_CONTEXT) === 0) {
-            for (let row = stripe; row < stripeEnd; row++) {
-              lastCodedPlane[at(x, row)] = plane;
-            }
             continue;
           }
           // Two bits in the uniform context give the index of the first coefficient in the column that does become significant; the ones above it are known insignificant and are not coded at all.
           const firstSignificant =
             (mq.decode(contexts, UNIFORM_CONTEXT) << 1) |
             mq.decode(contexts, UNIFORM_CONTEXT);
-          for (let row = stripe; row < stripe + firstSignificant; row++) {
-            lastCodedPlane[at(x, row)] = plane;
-          }
           y = stripe + firstSignificant;
           becomeSignificant(x, y, plane, stripeEnd);
           y++;
@@ -354,8 +333,6 @@ export function decodeJpeg2000CodeBlock(
           }
           if (mq.decode(contexts, significanceContext(x, y, stripeEnd)) === 1) {
             becomeSignificant(x, y, plane, stripeEnd);
-          } else {
-            lastCodedPlane[n] = plane;
           }
         }
       }
@@ -380,11 +357,8 @@ export function decodeJpeg2000CodeBlock(
     stripe: number,
     stripeEnd: number,
   ): boolean {
+    // D.3.4 also requires every coefficient of the column to be insignificant and not yet coded this bit-plane, but both follow from having no significant neighbour: significance is monotonic, so a coefficient this plane's significance pass already coded still has the non-zero context that put it in that pass, and a significant coefficient always has a row-mate within its full four-row stripe whose vertical sum it makes non-zero. The context test below therefore rejects every column the full condition rejects.
     for (let y = stripe; y < stripeEnd; y++) {
-      const n = at(x, y);
-      if ((significant[n] ?? 0) === 1 || (codedThisPlane[n] ?? 0) === 1) {
-        return false;
-      }
       if (significanceContext(x, y, stripeEnd) !== 0) {
         return false;
       }
