@@ -8,4 +8,5 @@ export default packageLintConfig({
     "@typescript-eslint/switch-exhaustiveness-check",
   ],
   isomorphic: true,
+  maxLines: "error",
 });
