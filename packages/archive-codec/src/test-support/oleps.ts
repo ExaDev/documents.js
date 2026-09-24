@@ -30,7 +30,7 @@ function padTo4(length: number): number {
 }
 
 // Reached only if FieldValue ever gains a variant encodeValue's own switch does not match: every current member is covered by a case there, so `value` narrows to `never` at every real call site, and adding an uncovered variant makes that narrowing fail and this call stop compiling — the real safety net. Exists so the switch's own exhaustiveness (proven by the type checker, not by a catch-all default that would silently swallow a genuinely new variant) still gives consistent-return an explicit statement to see past the switch.
-function assertNever(value: never): never {
+export function assertNever(value: never): never {
   throw new Error(
     `encodeValue: unhandled field value type ${JSON.stringify(value)}`,
   );
