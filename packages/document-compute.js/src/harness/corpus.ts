@@ -22,15 +22,20 @@ type NonMatchOutcome =
 //
 // Scoped to wordprocessing documents' own block flow, table cells included — presentation/spreadsheet/drawing formulae (a docx/pptx/xlsx producer's native OMML/MathML equation, as opposed to a markdown-authored LaTeX one) are a different corpus with a different lowering path and are out of scope for this pass, matching #573/#794's own worked-example framing, which was specifically about markdown-sourced formulae.
 
+// The document-order accumulator collectFormulasFromBlocks appends onto as it recurses through a block flow and its table cells. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable — the same pattern byte-codec's CodeUnitSink and ppt-codec's ShapeSink already follow.
+interface FormulaSink {
+  readonly formulas: ContentFormula[];
+}
+
 function collectFormulasFromBlocks(
   blocks: readonly ContentBlock[],
-  out: ContentFormula[],
+  sink: FormulaSink,
 ): void {
   for (const block of blocks) {
     if (block.kind === "table") {
       for (const row of block.rows) {
         for (const cell of row.cells) {
-          collectFormulasFromBlocks(cell.blocks, out);
+          collectFormulasFromBlocks(cell.blocks, sink);
         }
       }
       continue;
@@ -38,7 +43,7 @@ function collectFormulasFromBlocks(
     if (block.kind === "embeddedObject" && block.objectKind === "formula") {
       const embedded = block.document;
       if (embedded.kind === "formula") {
-        out.push(embedded.formula);
+        sink.formulas.push(embedded.formula);
       }
     }
   }
@@ -51,11 +56,11 @@ export function collectFormulas(
   if (document.kind !== "wordprocessing") {
     return [];
   }
-  const out: ContentFormula[] = [];
+  const sink: FormulaSink = { formulas: [] };
   for (const section of document.sections) {
-    collectFormulasFromBlocks(section.blocks, out);
+    collectFormulasFromBlocks(section.blocks, sink);
   }
-  return out;
+  return sink.formulas;
 }
 
 export interface CorpusDocument {

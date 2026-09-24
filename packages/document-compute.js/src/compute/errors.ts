@@ -11,8 +11,8 @@ export class IncompatibleDimensionsError extends Error {
 
   constructor(
     operation: string,
-    left: DimensionVector,
-    right: DimensionVector,
+    left: Readonly<DimensionVector>,
+    right: Readonly<DimensionVector>,
     detail?: string,
   ) {
     super(

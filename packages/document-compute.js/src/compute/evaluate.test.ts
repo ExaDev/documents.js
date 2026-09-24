@@ -25,13 +25,16 @@ function sym(id: string): MathExpression {
   return { kind: "sym", id };
 }
 function qty(
-  value: { numerator: string; denominator: string },
+  value: Readonly<{ numerator: string; denominator: string }>,
   unit: string,
 ): MathExpression {
   return { kind: "qty", value, unit };
 }
-function app(operator: string, args: MathExpression[]): MathExpression {
-  return { kind: "app", operator, args };
+function app(
+  operator: string,
+  args: readonly MathExpression[],
+): MathExpression {
+  return { kind: "app", operator, args: [...args] };
 }
 
 const context: SymbolTable = {

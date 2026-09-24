@@ -20,11 +20,11 @@ const PAGE = {
 };
 
 // A minimal wordprocessing ContentDocument wrapping one section holding the given blocks — for exercising collectFormulas's table/embeddedObject traversal directly, without going through markdown lowering.
-function wordDoc(blocks: ContentBlock[]): ContentDocument {
+function wordDoc(blocks: readonly ContentBlock[]): ContentDocument {
   return {
     kind: "wordprocessing",
     metadata: {},
-    sections: [{ ...PAGE, blocks }],
+    sections: [{ ...PAGE, blocks: [...blocks] }],
   };
 }
 

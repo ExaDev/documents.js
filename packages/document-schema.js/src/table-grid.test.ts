@@ -14,7 +14,7 @@ import {
 
 function cell(
   text: string,
-  spans: { colSpan?: number; rowSpan?: number } = {},
+  spans: Readonly<{ colSpan?: number; rowSpan?: number }> = {},
 ): ContentTableCell {
   return {
     blocks: [{ kind: "paragraph", runs: [{ text }] }],

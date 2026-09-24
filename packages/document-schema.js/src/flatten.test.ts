@@ -26,14 +26,14 @@ function paragraph(
 }
 
 function wordprocessingPackage(
-  children: SectionGroupNode[],
+  children: readonly SectionGroupNode[],
   styles?: StylesTable,
 ): DocumentTree {
   return {
     kind: "wordprocessing",
     metadata: {},
     ...(styles !== undefined ? { styles } : {}),
-    children,
+    children: [...children],
   };
 }
 

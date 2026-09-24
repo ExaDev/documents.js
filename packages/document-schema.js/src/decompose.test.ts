@@ -42,7 +42,7 @@ function run(text: string): { text: string } {
 
 function paragraph(
   text: string,
-  options: { headingLevel?: number; listLevel?: number } = {},
+  options: Readonly<{ headingLevel?: number; listLevel?: number }> = {},
 ): ContentBlock {
   return {
     kind: "paragraph",
@@ -72,7 +72,7 @@ function constructStart(descriptor: ConstructDescriptor): ContentBlock {
 const CONSTRUCT_END: ContentBlock = { kind: "constructEnd" };
 
 function wordprocessingDoc(
-  blocksPerSection: ContentBlock[][],
+  blocksPerSection: readonly ContentBlock[][],
 ): ContentDocument {
   return {
     kind: "wordprocessing",
@@ -84,14 +84,14 @@ function wordprocessingDoc(
   };
 }
 
-function shape(blocks: ContentBlock[]): ContentShape {
+function shape(blocks: readonly ContentBlock[]): ContentShape {
   return {
     frame: { xPt: 0, yPt: 0, widthPt: 600, heightPt: 400 },
     insetLeftPt: 0,
     insetTopPt: 0,
     insetRightPt: 0,
     insetBottomPt: 0,
-    blocks,
+    blocks: [...blocks],
   };
 }
 
