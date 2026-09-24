@@ -2,6 +2,11 @@ import { useMutation } from "@tanstack/react-query";
 
 import { getRpcClient } from "../rpc/client";
 
+// The live paragraph list the worker answers with, derived from the rpc contract itself rather than restated here, so the Editors page's own state type cannot drift from what the worker actually returns.
+export type EditorSnapshot = Awaited<
+  ReturnType<ReturnType<typeof getRpcClient>["editor"]["open"]>
+>;
+
 // The Editors tool's five mutations, one per rpc procedure. All four snapshot-returning mutations answer the whole fresh paragraph list (the worker re-reads its live accessors per call), so the page state is nothing but the latest snapshot — there is no client-side per-paragraph state to keep coherent.
 export function useOpenEditor() {
   return useMutation({

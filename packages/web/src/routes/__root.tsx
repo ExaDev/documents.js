@@ -11,6 +11,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { createRootRoute, Outlet } from "@tanstack/react-router";
 import { IconDeviceDesktop, IconMoon, IconSun } from "@tabler/icons-react";
 
+import { OpenDocumentProvider } from "../document/OpenDocumentContext";
 import { Sidebar } from "./-Sidebar";
 
 export const Route = createRootRoute({
@@ -76,40 +77,43 @@ function RootLayout() {
   };
 
   return (
-    <AppShell
-      header={{ height: 56 }}
-      navbar={navbarConfig(navOpened)}
-      padding="md"
-    >
-      <AppShell.Header>
-        <Group h="100%" px="md" gap="sm" justify="space-between">
-          <Group gap="sm">
-            <Burger
-              opened={navOpened}
-              onClick={toggleNav}
-              hiddenFrom="sm"
-              size="sm"
-            />
-            <Title order={4}>documents</Title>
+    // The open document is provided here, at the root, rather than inside the '/_document' layout: Recent Files sits outside that layout and opens into the same document, and a provider mounted inside the layout is unmounted (losing the open document) the moment a route outside it is visited.
+    <OpenDocumentProvider>
+      <AppShell
+        header={{ height: 56 }}
+        navbar={navbarConfig(navOpened)}
+        padding="md"
+      >
+        <AppShell.Header>
+          <Group h="100%" px="md" gap="sm" justify="space-between">
+            <Group gap="sm">
+              <Burger
+                opened={navOpened}
+                onClick={toggleNav}
+                hiddenFrom="sm"
+                size="sm"
+              />
+              <Title order={4}>documents</Title>
+            </Group>
+            <Tooltip label={colorSchemeTooltipLabel(activeOption, nextOption)}>
+              <ActionIcon
+                variant="subtle"
+                size="lg"
+                aria-label={`Color scheme: ${activeOption.label}. Click to switch to ${nextOption.label}.`}
+                onClick={cycleColorScheme}
+              >
+                <activeOption.icon size={18} />
+              </ActionIcon>
+            </Tooltip>
           </Group>
-          <Tooltip label={colorSchemeTooltipLabel(activeOption, nextOption)}>
-            <ActionIcon
-              variant="subtle"
-              size="lg"
-              aria-label={`Color scheme: ${activeOption.label}. Click to switch to ${nextOption.label}.`}
-              onClick={cycleColorScheme}
-            >
-              <activeOption.icon size={18} />
-            </ActionIcon>
-          </Tooltip>
-        </Group>
-      </AppShell.Header>
-      <AppShell.Navbar p="xs">
-        <Sidebar />
-      </AppShell.Navbar>
-      <AppShell.Main>
-        <Outlet />
-      </AppShell.Main>
-    </AppShell>
+        </AppShell.Header>
+        <AppShell.Navbar p="xs">
+          <Sidebar />
+        </AppShell.Navbar>
+        <AppShell.Main>
+          <Outlet />
+        </AppShell.Main>
+      </AppShell>
+    </OpenDocumentProvider>
   );
 }

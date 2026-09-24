@@ -22,17 +22,15 @@ vi.mock("./notify", () => ({
   },
 }));
 
-const setPendingReopen = vi.fn<(entry: unknown) => void>();
-vi.mock("./reopenMailbox", () => ({
-  setPendingReopen: (entry: unknown) => {
-    setPendingReopen(entry);
-  },
+const openDocument = vi.fn<(file: Readonly<{ name: string }>) => void>();
+vi.mock("../document/OpenDocumentContext", () => ({
+  useOpenDocument: () => ({ document: undefined, openDocument }),
 }));
 
 const { formatBytes, reopenTooltipLabel, RecentFilesPanel } =
   await import("./RecentFilesPanel");
 
-// handleReopen chains several real awaits (queryPermission, maybe requestPermission, getFile, arrayBuffer) before it calls setPendingReopen/navigate, so a fixed count of Promise.resolve() ticks is fragile against a chain this long — flushing on a real macrotask boundary (setTimeout) guarantees every already-queued microtask has drained first, regardless of how many awaits the chain happens to have.
+// handleReopen chains several real awaits (queryPermission, maybe requestPermission, getFile, arrayBuffer) before it calls openDocument/navigate, so a fixed count of Promise.resolve() ticks is fragile against a chain this long — flushing on a real macrotask boundary (setTimeout) guarantees every already-queued microtask has drained first, regardless of how many awaits the chain happens to have.
 function flushPromises(): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, 0);
@@ -48,7 +46,7 @@ afterEach(() => {
   removeRecentFile.mockReset();
   navigate.mockReset();
   notifyError.mockReset();
-  setPendingReopen.mockReset();
+  openDocument.mockReset();
 });
 
 function renderPanel(): { html: () => string; container: HTMLElement } {
@@ -173,7 +171,7 @@ describe("RecentFilesPanel", () => {
     expect(removeRecentFile).toHaveBeenCalledWith(42);
   });
 
-  it("reopens a file with a granted permission: reads its bytes, stages the pending reopen, and navigates to /convert", async () => {
+  it("reopens a file with a granted permission: reads its bytes, opens it as the shared document, and navigates to /convert", async () => {
     const handle = fakeHandle();
     useRecentFiles.mockReturnValue([
       record({ id: 7, format: "docx", name: "report.docx", handle }),
@@ -182,8 +180,8 @@ describe("RecentFilesPanel", () => {
     const buttons = container.querySelectorAll("button");
     buttons[0]!.click();
     await flushPromises();
-    expect(setPendingReopen).toHaveBeenCalledWith(
-      expect.objectContaining({ format: "docx" }),
+    expect(openDocument).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "report.docx", handle }),
     );
     expect(navigate).toHaveBeenCalledWith({ to: "/convert" });
   });
@@ -216,7 +214,7 @@ describe("RecentFilesPanel", () => {
     container.querySelectorAll("button")[0]!.click();
     await flushPromises();
     expect(navigate).not.toHaveBeenCalled();
-    expect(setPendingReopen).not.toHaveBeenCalled();
+    expect(openDocument).not.toHaveBeenCalled();
     expect(notifyError).toHaveBeenCalledWith(
       "Permission needed",
       expect.any(Error),
@@ -238,15 +236,18 @@ describe("RecentFilesPanel", () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
-  it("does nothing when the record's format is not a recognised DocumentFormat", async () => {
+  it("opens on the strength of the filename, so a record whose stored format string is stale still reopens", async () => {
     const handle = fakeHandle();
     useRecentFiles.mockReturnValue([
-      record({ format: "not-a-real-format", handle }),
+      record({ format: "not-a-real-format", name: "report.docx", handle }),
     ]);
     const { container } = renderPanel();
     container.querySelectorAll("button")[0]!.click();
     await flushPromises();
-    expect(navigate).not.toHaveBeenCalled();
+    expect(openDocument).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "report.docx" }),
+    );
+    expect(navigate).toHaveBeenCalledWith({ to: "/convert" });
     expect(notifyError).not.toHaveBeenCalled();
   });
 
