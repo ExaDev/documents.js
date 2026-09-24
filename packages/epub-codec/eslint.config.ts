@@ -13,8 +13,6 @@ export default tseslint.config(
       "@typescript-eslint/strict-void-return",
     ],
     isomorphic: true,
-    // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why — this package's own OCF/OPF/XHTML readers and writers genuinely mutate several array/object parameters in place. Tracked for burn-down.
-    preferReadonlyParams: "off",
     // This package hand-writes its own OCF/OPF/nav/XHTML mapping against fast-xml-parser and fflate directly, the same bet every sibling codec here makes against a heavyweight format library. Depending on an existing EPUB library would defeat the entire reason it exists as a hand-written, dependency-minimal codec — see README Architecture for the archive-codec/byte-codec reuse decisions this package did make.
     additionalRestrictedImportPatterns: [
       {

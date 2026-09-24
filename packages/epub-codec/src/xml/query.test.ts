@@ -10,8 +10,8 @@ function cdata(value: string): XmlNode {
   return { type: "cdata", value };
 }
 
-function el(tag: string, children: XmlNode[]): XmlNode {
-  return { type: "element", tag, attributes: [], children };
+function el(tag: string, children: readonly XmlNode[]): XmlNode {
+  return { type: "element", tag, attributes: [], children: [...children] };
 }
 
 // ExaDev/documents.js#994's round-9 finding: textContent is a real published export (re-exported from the package's own barrel), and this package's own internal code — opf/metadata.ts, before this fix — used to decode its result with decodeEntities itself. A stale external caller doing the identical decodeEntities(textContent(x)) must keep getting the raw, undecoded text it always got, or that caller silently double-decodes.

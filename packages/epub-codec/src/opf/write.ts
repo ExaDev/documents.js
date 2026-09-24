@@ -15,8 +15,8 @@ export interface WriteOpfInput {
 
 function element(
   tag: string,
-  attrs: Record<string, string> = {},
-  children: XmlNode[] = [],
+  attrs: Readonly<Record<string, string>> = {},
+  children: readonly XmlNode[] = [],
 ): XmlElement {
   const attributes: Attribute[] = Object.entries(attrs).map(
     ([name, value]) => ({
@@ -24,7 +24,7 @@ function element(
       value,
     }),
   );
-  return { type: "element", tag, attributes, children };
+  return { type: "element", tag, attributes, children: [...children] };
 }
 
 function text(value: string): XmlNode {

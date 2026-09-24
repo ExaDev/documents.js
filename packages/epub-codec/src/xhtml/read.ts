@@ -196,12 +196,14 @@ function elementsWithTagSkippingInert(
 
 export interface ReadXhtmlBodyOptions {
   readonly resolveImage: (href: string) => Uint8Array<ArrayBuffer> | undefined;
-  readonly sink: (diagnostic: {
-    code: string;
-    severity: "info" | "warning";
-    message: string;
-    href?: string;
-  }) => void;
+  readonly sink: (
+    diagnostic: Readonly<{
+      code: string;
+      severity: "info" | "warning";
+      message: string;
+      href?: string;
+    }>,
+  ) => void;
   readonly sourceHref: string;
   readonly contentWidthPt: number;
   // Ids in THIS document a caller reading the whole spine already discovered are targeted by ANOTHER document's own href (a footnote reference or an ordinary internal link, src/xhtml/context.ts's own ResolvedAnchorTarget), keyed by fragment — merged with this function's own local (same-document) prescan of this document's own <a> elements, which defers to an entry already present here rather than minting its own bare-fragment reading of the same id. Absent when a caller reads exactly one document in isolation (every direct call site in this package's own test suite), in which case only same-document anchor targets are ever recognised.
@@ -860,7 +862,7 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
       continue;
     }
     if (section.tag === "colgroup") {
-      collectColgroupStrayContent(section, strayNodes);
+      collectColgroupStrayContent(section, { strayNodes });
       continue;
     }
     // No isInertElement pre-filter is needed here: an inert <script>/<template>/<style>/<noscript> direct child falls through to the rowContainers===undefined branch below just like any other non-row-group section, and readContainerChildren's own buildInlineRuns call (invoked over strayNodes further down) already carries the identical check, contributing zero runs and firing reportInertElementSkip's own <noscript> diagnostic from that deeper point instead.
@@ -870,7 +872,7 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
         : section.tag === "thead" ||
             section.tag === "tbody" ||
             section.tag === "tfoot"
-          ? collectRowGroupRows(section, strayNodes)
+          ? collectRowGroupRows(section, { strayNodes })
           : undefined;
     if (rowContainers === undefined) {
       strayNodes.push(section);
@@ -967,11 +969,17 @@ function readTable(element: XmlElement, state: BuildState): ContentBlock[] {
   return [...strayBlocks, ...captionBlocks, table];
 }
 
+// The shared stray-content accumulator readTable threads through its row-group and colgroup collectors, so malformed content anywhere inside a table is recovered and reported exactly once at the table level. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable.
+interface StrayNodeSink {
+  readonly strayNodes: XmlNode[];
+}
+
 // The <thead>/<tbody>/<tfoot> twin of readTable's own table-direct stray-content collection above: a row group's content model per the HTML Standard is "zero or more tr and script-supporting elements" only, so anything else sitting directly inside one — stray text, a stray <p>, a stray <img>, a whole nested list — is not valid HTML5, but shares the identical malformed shape and identical most-likely producer intent as content sitting directly inside the <table> one level up. Rather than a separate recovery path (and a separate diagnostic positioned somewhere inside the table's own row sequence, which would misrepresent it as belonging to a particular row when it does not), this feeds the caller's own shared strayNodes accumulator directly, so it is recovered and reported exactly once, in exactly the same place, via readTable's own TABLE_CONTENT_UNRECOGNIZED diagnostic and readContainerChildren call.
 function collectRowGroupRows(
   section: XmlElement,
-  strayNodes: XmlNode[],
+  sink: StrayNodeSink,
 ): XmlElement[] {
+  const strayNodes = sink.strayNodes;
   const trs: XmlElement[] = [];
   for (const child of section.children) {
     if (child.type === "element" && child.tag === "tr") {
@@ -987,8 +995,9 @@ function collectRowGroupRows(
 // The <colgroup> twin of collectRowGroupRows immediately above: a <colgroup>'s own content model per the HTML Standard is "zero or more <col> and <template> elements" (nothing at all when the <colgroup> itself carries a span attribute), narrower than the "script-supporting elements" category (<script> and <template>) this file's other content-model comments cite, since a <colgroup> admits <template> alone, not <script>. Conforming content here carries nothing document-schema.js's own vocabulary can represent either way (a column's own width/span/header state belongs on ContentTable.columns[n], not a per-column node, and standard HTML has no attribute on <col> stating a header column in the first place), so a <col> is silently skipped here exactly like an inert element is; a stray <script>, though non-conformant in this position, is skipped by the same isInertElement guard as any other inert element, so the narrower spec model has no behavioural consequence here. Anything else, a stray <p>, stray text, a stray <img>, is not valid HTML5 but shares the identical malformed shape and identical most-likely producer intent as content sitting directly inside the <table> one level up, so it feeds the caller's own shared strayNodes accumulator directly, mirroring collectRowGroupRows' own reasoning: recovered and reported exactly once, via readTable's own TABLE_CONTENT_UNRECOGNIZED diagnostic and readContainerChildren call, rather than a separate recovery path that would misrepresent it as belonging to a particular column.
 function collectColgroupStrayContent(
   section: XmlElement,
-  strayNodes: XmlNode[],
+  sink: StrayNodeSink,
 ): void {
+  const strayNodes = sink.strayNodes;
   for (const child of section.children) {
     if (child.type === "element" && child.tag === "col") {
       continue;

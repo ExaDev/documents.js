@@ -22,8 +22,8 @@ function section(blocks: ContentSection["blocks"]): ContentSection {
   return { pageSize: PAGE, margins: MARGINS, blocks };
 }
 
-function doc(sections: ContentSection[]): ContentDocument {
-  return { kind: "wordprocessing", metadata: {}, sections };
+function doc(sections: readonly ContentSection[]): ContentDocument {
+  return { kind: "wordprocessing", metadata: {}, sections: [...sections] };
 }
 
 function decode(bytes: Uint8Array): string {

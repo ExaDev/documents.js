@@ -14,15 +14,15 @@ const BUILDER = new XMLBuilder({
 });
 
 // XMLBuilder#build's own type declaration already returns `string` unconditionally (fast-xml-parser's fxp.d.ts: `build(jObj: any): string`), so no runtime check is needed here to narrow it.
-export function buildXml(nodes: XmlNode[]): string {
+export function buildXml(nodes: readonly XmlNode[]): string {
   return BUILDER.build(toOrdered(nodes));
 }
 
-function toOrdered(nodes: XmlNode[]): unknown[] {
+function toOrdered(nodes: readonly XmlNode[]): unknown[] {
   return nodes.map(toOrderedNode);
 }
 
-function attrsObject(attributes: Attribute[]): Record<string, string> {
+function attrsObject(attributes: readonly Attribute[]): Record<string, string> {
   const obj: Record<string, string> = {};
   for (const a of attributes) {
     obj[`@_${a.name}`] = a.value;

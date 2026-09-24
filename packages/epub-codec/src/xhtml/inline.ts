@@ -55,34 +55,33 @@ export function buildInlineRuns(
   style: InlineStyle,
   context: XhtmlReadContext,
 ): InlineResult {
-  const runs: ContentRun[] = [];
-  const constructs: RunConstructExtent[] = [];
+  const acc: InlineResult = { runs: [], constructs: [] };
 
   for (const node of nodes) {
     if (isTextLikeNode(node)) {
       // A text node and a CDATA section (xml/node.ts's own isTextLikeNode) are both real, extractable inline content — a producer reaches for CDATA only when its own literal text would otherwise need escaping, never as a distinct kind of content — decoded identically to how a text node has always been decoded here, except CDATA never through decodeEntities (xml/entities.ts's own decodeTextLikeNode comment: CDATA content was never entity-encoded to begin with).
       const text = normalizeWhitespace(decodeTextLikeNode(node));
       if (text.length > 0) {
-        runs.push(styledRun(text, style));
+        acc.runs.push(styledRun(text, style));
       }
       continue;
     }
     if (node.type !== "element") {
       continue;
     }
-    appendElement(node, style, context, runs, constructs);
+    appendElement(node, style, context, acc);
   }
 
-  return { runs, constructs };
+  return acc;
 }
 
 function appendElement(
   element: XmlElement,
   style: InlineStyle,
   context: XhtmlReadContext,
-  runs: ContentRun[],
-  constructs: RunConstructExtent[],
+  acc: InlineResult,
 ): void {
+  const { runs } = acc;
   if (isInertElement(element.tag)) {
     // Never legitimate document text — see context.ts's own isInertElement for why <script>/<template>/<style>/<noscript> all share this treatment. This is the universal safety net: it fires regardless of where one of these is reached from — directly inside a <p>/<td>/<figcaption>, or several levels deep inside a stray <div> a container's own recovery path (e.g. src/xhtml/read.ts's readList/flushListStrayContent) has recursed into — rather than only the single position a narrower, call-site-specific check would guard against.
     reportInertElementSkip(element.tag, context);
@@ -93,43 +92,24 @@ function appendElement(
   switch (element.tag) {
     case "strong":
     case "b":
-      appendNested(
-        element,
-        mergeStyle(styled, { bold: true }),
-        context,
-        runs,
-        constructs,
-      );
+      appendNested(element, mergeStyle(styled, { bold: true }), context, acc);
       return;
     case "em":
     case "i":
-      appendNested(
-        element,
-        mergeStyle(styled, { italic: true }),
-        context,
-        runs,
-        constructs,
-      );
+      appendNested(element, mergeStyle(styled, { italic: true }), context, acc);
       return;
     case "u":
       appendNested(
         element,
         mergeStyle(styled, { underline: true }),
         context,
-        runs,
-        constructs,
+        acc,
       );
       return;
     case "s":
     case "strike":
     case "del":
-      appendNested(
-        element,
-        mergeStyle(styled, { strike: true }),
-        context,
-        runs,
-        constructs,
-      );
+      appendNested(element, mergeStyle(styled, { strike: true }), context, acc);
       return;
     case "code":
     case "kbd":
@@ -138,8 +118,7 @@ function appendElement(
         element,
         mergeStyle(styled, { fontFamily: MONOSPACE_FONT_FAMILY }),
         context,
-        runs,
-        constructs,
+        acc,
       );
       return;
     case "sub":
@@ -151,8 +130,7 @@ function appendElement(
           verticalAlign: element.tag === "sup" ? "superscript" : "subscript",
         }),
         context,
-        runs,
-        constructs,
+        acc,
       );
       return;
     }
@@ -160,16 +138,16 @@ function appendElement(
       runs.push(styledRun("\n", styled));
       return;
     case "a": {
-      appendAnchor(element, styled, context, runs, constructs);
+      appendAnchor(element, styled, context, acc);
       return;
     }
     case "img": {
-      appendImageFallback(element, styled, context, runs);
+      appendImageFallback(element, styled, context, acc);
       return;
     }
     default:
       // Covers "span" (no formatting of its own) along with every tag this switch does not name explicitly.
-      appendNested(element, styled, context, runs, constructs);
+      appendNested(element, styled, context, acc);
   }
 }
 
@@ -178,8 +156,9 @@ function appendImageFallback(
   element: XmlElement,
   style: InlineStyle,
   context: XhtmlReadContext,
-  runs: ContentRun[],
+  acc: InlineResult,
 ): void {
+  const { runs } = acc;
   const src = attrValue(element, "src");
   const alt = attrValue(element, "alt");
   const label = src === undefined ? "<img>" : `<img src="${src}">`;
@@ -210,9 +189,9 @@ function appendNested(
   element: XmlElement,
   style: InlineStyle,
   context: XhtmlReadContext,
-  runs: ContentRun[],
-  constructs: RunConstructExtent[],
+  acc: InlineResult,
 ): void {
+  const { runs, constructs } = acc;
   const offset = runs.length;
   const nested = buildInlineRuns(element.children, style, context);
   runs.push(...nested.runs);
@@ -223,9 +202,9 @@ function appendAnchor(
   element: XmlElement,
   style: InlineStyle,
   context: XhtmlReadContext,
-  runs: ContentRun[],
-  constructs: RunConstructExtent[],
+  acc: InlineResult,
 ): void {
+  const { runs, constructs } = acc;
   const href = attrValue(element, "href");
   // A same-/cross-document href resolving to a real, block-level element anywhere in the spine (ExaDev/documents.js#963): a footnote/endnote reference, or an ordinary internal link target (document-schema.js's own `link` construct, README Architecture) otherwise — rather than the plain ContentRun.hyperlink degrade below. context.resolveAnchorHref (src/xhtml/read.ts's own whole-document, and src/read.ts's own whole-spine, prescan) is the single place same-document vs. cross-document resolution, footnote-vs-bookmark classification, and eligibility (BLOCK_LEVEL_TAGS membership) are all decided; this call site only builds the run-level construct extent once it already has a target to build one with.
   const target =
@@ -250,7 +229,7 @@ function appendAnchor(
   }
 
   if (href === undefined || href.length === 0) {
-    appendNested(element, style, context, runs, constructs);
+    appendNested(element, style, context, acc);
     return;
   }
   // Every href this package cannot resolve to a real, addressable in-package element — an external URI, or an internal-looking href naming no element this package's own read pass ever wraps in an anchor marker — rides ContentRun.hyperlink verbatim; every href still restores byte-for-byte either way. A same-/cross-document fragment already recognised as a footnote reference or an ordinary internal link target above never reaches this branch.
