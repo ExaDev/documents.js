@@ -109,8 +109,8 @@ export function fontDescriptorPacket(typeface: string): WpdPacketSpec {
   const nameLength = (nameWords.length + 1) * 2;
   const bytes = new Uint8Array(24 + nameLength);
   putUint16(bytes, 22, nameLength);
-  nameWords.forEach((word, index) => {
-    putUint16(bytes, 24 + index * 2, word);
+  nameWords.forEach((charCode, index) => {
+    putUint16(bytes, 24 + index * 2, charCode);
   });
   return { packetType: 0x55, bytes };
 }
