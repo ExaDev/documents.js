@@ -16,9 +16,9 @@ function FontsPage() {
   const { document } = useOpenDocument();
   const extractFonts = useExtractSourceFonts();
 
-  const { mutate: extractFontsMutate, reset: extractFontsReset } = extractFonts;
+  // No explicit reset before a fresh extraction: TanStack Query's own mutate() already clears a mutation's previous data at the moment it dispatches its "pending" state, before the new mutationFn even starts, so a separate reset() call here has nothing left to do. When the newly opened document's format is unrecognised, this effect returns before ever calling mutate() at all, but the render below shows UnrecognisedFormatAlert in that branch regardless of what extractFonts.data still holds, so a stale value sitting unread in the mutation's own state has no observable effect either.
+  const { mutate: extractFontsMutate } = extractFonts;
   useEffect(() => {
-    extractFontsReset();
     if (document?.format === undefined) return;
     extractFontsMutate(
       { format: document.format, bytes: document.file.bytes },
@@ -28,7 +28,7 @@ function FontsPage() {
         },
       },
     );
-  }, [document, extractFontsMutate, extractFontsReset]);
+  }, [document, extractFontsMutate]);
 
   return (
     <Container size="sm" py="xl">
