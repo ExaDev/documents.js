@@ -38,22 +38,28 @@ describe("interval constructor and schema", () => {
   });
 
   it("promotes a point value to a degenerate interval", () => {
-    expect(pointInterval(3, { length: 1 })).toEqual(
-      interval(3, 3, { length: 1 }),
+    const POINT_VALUE = 3;
+    expect(pointInterval(POINT_VALUE, { length: 1 })).toEqual(
+      interval(POINT_VALUE, POINT_VALUE, { length: 1 }),
     );
   });
 });
 
 describe("addIntervals / subtractIntervals", () => {
   it("adds bounds elementwise, representing a compliance region like 0.87 <= cos(phi) <= 1", () => {
-    const cosPhi = interval(0.87, 1, {});
-    const offset = interval(0.1, 0.1, {}); // a point interval mixed with a real one
-    expect(addIntervals(cosPhi, offset)).toEqual(interval(0.97, 1.1, {}));
+    const COS_PHI_MIN = 0.87;
+    const OFFSET = 0.1;
+    const cosPhi = interval(COS_PHI_MIN, 1, {});
+    const offset = interval(OFFSET, OFFSET, {}); // a point interval mixed with a real one
+    expect(addIntervals(cosPhi, offset)).toEqual(
+      interval(COS_PHI_MIN + OFFSET, 1 + OFFSET, {}),
+    );
   });
 
   it("subtracts by combining the widest possible spread of endpoints", () => {
-    expect(subtractIntervals(interval(1, 5), interval(1, 2))).toEqual(
-      interval(-1, 4, {}),
+    const A_MAX = 5;
+    expect(subtractIntervals(interval(1, A_MAX), interval(1, 2))).toEqual(
+      interval(-1, A_MAX - 1, {}),
     );
   });
 
@@ -87,33 +93,46 @@ describe("addIntervals / subtractIntervals", () => {
 
 describe("multiplyIntervals — sign-case coverage", () => {
   it("multiplies two positive intervals (corners at both maxima)", () => {
-    expect(multiplyIntervals(interval(2, 3), interval(4, 5))).toEqual(
-      interval(8, 15, {}),
-    );
+    const X_MAX = 3;
+    const Y_MIN = 4;
+    const Y_MAX = 5;
+    expect(
+      multiplyIntervals(interval(2, X_MAX), interval(Y_MIN, Y_MAX)),
+    ).toEqual(interval(2 * Y_MIN, X_MAX * Y_MAX, {}));
   });
 
   it("multiplies two negative intervals (corners at both minima, in magnitude)", () => {
-    expect(multiplyIntervals(interval(-4, -2), interval(-3, -1))).toEqual(
-      interval(2, 12, {}),
-    );
+    const X_MIN = -4;
+    const X_MAX = -2;
+    const Y_MIN = -3;
+    expect(
+      multiplyIntervals(interval(X_MIN, X_MAX), interval(Y_MIN, -1)),
+    ).toEqual(interval(X_MAX * -1, X_MIN * Y_MIN, {}));
   });
 
   it("multiplies a straddling interval by a straddling interval — the sign-flip case", () => {
+    const X_MIN = -2;
+    const X_MAX = 3;
+    const Y_MAX = 4;
     // x in [-2, 3], y in [-1, 4]: extremes are x=-2,y=4 (-8) and x=3,y=4 (12).
-    expect(multiplyIntervals(interval(-2, 3), interval(-1, 4))).toEqual(
-      interval(-8, 12, {}),
-    );
+    expect(
+      multiplyIntervals(interval(X_MIN, X_MAX), interval(-1, Y_MAX)),
+    ).toEqual(interval(X_MIN * Y_MAX, X_MAX * Y_MAX, {}));
   });
 
   it("multiplies a straddling interval by a strictly positive interval", () => {
-    expect(multiplyIntervals(interval(-2, 3), interval(2, 4))).toEqual(
-      interval(-8, 12, {}),
-    );
+    const X_MIN = -2;
+    const X_MAX = 3;
+    const Y_MAX = 4;
+    expect(
+      multiplyIntervals(interval(X_MIN, X_MAX), interval(2, Y_MAX)),
+    ).toEqual(interval(X_MIN * Y_MAX, X_MAX * Y_MAX, {}));
   });
 
   it("combines dimensions by adding exponents, same as multiplyQuantities", () => {
+    const INVERSE_TIME_MAX = 3;
     const distance = interval(1, 2, { length: 1 });
-    const inverseTime = interval(2, 3, { time: -1 });
+    const inverseTime = interval(2, INVERSE_TIME_MAX, { time: -1 });
     expect(multiplyIntervals(distance, inverseTime).dimension).toEqual({
       length: 1,
       time: -1,
@@ -121,19 +140,32 @@ describe("multiplyIntervals — sign-case coverage", () => {
   });
 });
 
+// Decimal places toBeCloseTo checks divided-interval bounds to below, since the division itself is exact floating point but the constants above involve a repeating fraction.
+const CLOSE_TO_PRECISION = 12;
+
 describe("divideIntervals", () => {
   it("divides two positive intervals", () => {
+    const X_MIN = 4;
+    const X_MAX = 6;
+    const Y_MAX = 3;
     // x in [4,6], y in [2,3]: extremes are 4/3 and 6/2=3.
-    const result = divideIntervals(interval(4, 6), interval(2, 3));
-    expect(result.min).toBeCloseTo(4 / 3, 12);
-    expect(result.max).toBeCloseTo(3, 12);
+    const result = divideIntervals(interval(X_MIN, X_MAX), interval(2, Y_MAX));
+    expect(result.min).toBeCloseTo(X_MIN / Y_MAX, CLOSE_TO_PRECISION);
+    expect(result.max).toBeCloseTo(X_MAX / 2, CLOSE_TO_PRECISION);
   });
 
   it("divides by a strictly negative interval (the reciprocal sign-flip case)", () => {
+    const X_MIN = 4;
+    const X_MAX = 6;
+    const Y_MIN = -3;
+    const Y_MAX = -2;
     // x in [4,6], y in [-3,-2]: x/y ranges from 6/-2=-3 (max magnitude denominator, smallest divisor -> most negative... ) to 4/-3.
-    const result = divideIntervals(interval(4, 6), interval(-3, -2));
-    expect(result.min).toBeCloseTo(-3, 12);
-    expect(result.max).toBeCloseTo(-4 / 3, 12);
+    const result = divideIntervals(
+      interval(X_MIN, X_MAX),
+      interval(Y_MIN, Y_MAX),
+    );
+    expect(result.min).toBeCloseTo(X_MAX / Y_MAX, CLOSE_TO_PRECISION);
+    expect(result.max).toBeCloseTo(X_MIN / Y_MIN, CLOSE_TO_PRECISION);
   });
 
   it("throws DivisionByZeroError when the divisor interval contains zero, naming the operation and the exact divisor bounds", () => {
@@ -144,9 +176,10 @@ describe("divideIntervals", () => {
       DivisionByZeroError,
     );
     // A divisor that only touches zero at its own upper bound (max === 0, not min) — distinguishes b.max >= 0 from a mutated b.max > 0, which would wrongly let this divisor through undetected.
-    expect(() => divideIntervals(interval(1, 2), interval(-2, 0))).toThrow(
-      DivisionByZeroError,
-    );
+    const TOUCHES_ZERO_MIN = -2;
+    expect(() =>
+      divideIntervals(interval(1, 2), interval(TOUCHES_ZERO_MIN, 0)),
+    ).toThrow(DivisionByZeroError);
 
     let caught: unknown;
     try {
@@ -164,12 +197,23 @@ describe("divideIntervals", () => {
 
 describe("negateInterval / absInterval", () => {
   it("negates by flipping and swapping the bounds", () => {
-    expect(negateInterval(interval(1, 3))).toEqual(interval(-3, -1, {}));
+    const MAX = 3;
+    expect(negateInterval(interval(1, MAX))).toEqual(interval(-MAX, -1, {}));
   });
 
   it("takes abs correctly whether the interval is positive, negative, or straddling", () => {
-    expect(absInterval(interval(1, 3))).toEqual(interval(1, 3, {}));
-    expect(absInterval(interval(-5, -2))).toEqual(interval(2, 5, {}));
-    expect(absInterval(interval(-3, 2))).toEqual(interval(0, 3, {}));
+    const POSITIVE_MAX = 3;
+    const NEGATIVE_MIN = -5;
+    const NEGATIVE_MAX = -2;
+    const STRADDLING_MIN = -3;
+    expect(absInterval(interval(1, POSITIVE_MAX))).toEqual(
+      interval(1, POSITIVE_MAX, {}),
+    );
+    expect(absInterval(interval(NEGATIVE_MIN, NEGATIVE_MAX))).toEqual(
+      interval(-NEGATIVE_MAX, -NEGATIVE_MIN, {}),
+    );
+    expect(absInterval(interval(STRADDLING_MIN, 2))).toEqual(
+      interval(0, -STRADDLING_MIN, {}),
+    );
   });
 });
