@@ -103,9 +103,9 @@ export function codePointToText(codePoint: number): string {
 /** The timeout an exhaustive full-table sweep test needs, passed as `it`'s own third argument. Vitest's 5000ms default is sized for an ordinary unit test, not a loop that calls decodeText tens of thousands of times (EUC_KR and GB18030 each define around 24000 pointers, and the GB18030 sweep below calls decodeText twice per pointer to cross-check its gbk alias); under `vitest run --coverage`'s v8 instrumentation on a loaded CI runner this suite's own GB18030 sweep has been observed taking upwards of 7 seconds even though the same sweep completes in under 20ms uninstrumented locally, so the margin here is generous rather than tuned to a single observed figure. */
 export const EXHAUSTIVE_SWEEP_TIMEOUT_MS = 30000;
 
-/** The first pointer in `table` for which {@link pointerCodePoint} returns a defined code point, or -1 if none does. */
+/** The first pointer in `table` for which {@link pointerCodePoint} returns a defined code point, or -1 if none does. Iterates `[...table.codeUnits].keys()` rather than a hand-written `pointer < table.codeUnits.length` bound: a pointer one past the table's own end is indistinguishable from an in-range gap through {@link pointerCodePoint} alone (both resolve `undefined`), so a length comparison here is a genuine off-by-one that no test can observe — letting the string's own iterator protocol bound the loop removes the comparison instead of leaving it as untestable defensive code. */
 export function firstDefinedPointer(table: DbcsTable): number {
-  for (let pointer = 0; pointer < table.codeUnits.length; pointer += 1) {
+  for (const pointer of [...table.codeUnits].keys()) {
     if (pointerCodePoint(table, pointer) !== undefined) {
       return pointer;
     }
@@ -113,9 +113,9 @@ export function firstDefinedPointer(table: DbcsTable): number {
   return -1;
 }
 
-/** The first pointer in `table` for which {@link pointerCodePoint} returns undefined, or -1 if none does. */
+/** The first pointer in `table` for which {@link pointerCodePoint} returns undefined, or -1 if none does. See {@link firstDefinedPointer}'s own doc comment for why this iterates `[...table.codeUnits].keys()` rather than a hand-written length bound. */
 export function firstGapPointer(table: DbcsTable): number {
-  for (let pointer = 0; pointer < table.codeUnits.length; pointer += 1) {
+  for (const pointer of [...table.codeUnits].keys()) {
     if (pointerCodePoint(table, pointer) === undefined) {
       return pointer;
     }
