@@ -907,6 +907,36 @@ describe("evaluateSelect: NATURAL JOIN and JOIN ... USING", () => {
     expect(result.rows).toEqual([[num(1), num(1)]]);
   });
 
+  it("merges every shared column under NATURAL JOIN, laid out left-to-right in the left side's own column order", () => {
+    const leftTable: HsqldbTable = {
+      tableName: "LEFT_T",
+      columns: [
+        { name: "B", type: "VARCHAR(5)" },
+        { name: "A", type: "VARCHAR(5)" },
+        { name: "ONLY_LEFT", type: "VARCHAR(5)" },
+      ],
+      rows: [[text("b1"), text("a1"), text("l1")]],
+    };
+    const rightTable: HsqldbTable = {
+      tableName: "RIGHT_T",
+      columns: [
+        { name: "A", type: "VARCHAR(5)" },
+        { name: "ONLY_RIGHT", type: "VARCHAR(5)" },
+        { name: "B", type: "VARCHAR(5)" },
+      ],
+      rows: [[text("a1"), text("r1"), text("b1")]],
+    };
+    const result = run("SELECT * FROM LEFT_T NATURAL JOIN RIGHT_T", [
+      leftTable,
+      rightTable,
+    ]);
+    // Shared columns B and A come first, in LEFT_T's own column order (B before A, since LEFT_T declares B before A) rather than RIGHT_T's own order (which declares A before B) or alphabetical order, and each side's own remaining column follows.
+    expect(result.columns).toEqual(["B", "A", "ONLY_LEFT", "ONLY_RIGHT"]);
+    expect(result.rows).toEqual([
+      [text("b1"), text("a1"), text("l1"), text("r1")],
+    ]);
+  });
+
   it("produces the unrestricted cartesian product for CROSS JOIN, with no condition and no merging", () => {
     const result = run(
       "SELECT * FROM CUSTOMERS CROSS JOIN ORDERS",
@@ -1105,6 +1135,20 @@ describe("evaluateSelect: EXISTS (SELECT ...)", () => {
     expect(
       runSub(
         "SELECT NAME FROM EMPLOYEES WHERE EXISTS (SELECT NAME FROM DEPARTMENTS WHERE EXISTS (SELECT DEPT FROM REGIONAL_TARGETS WHERE REGIONAL_TARGETS.DEPT = EMPLOYEES.DEPT)) ORDER BY NAME",
+      ).rows,
+    ).toEqual([
+      [text("Alice")],
+      [text("Bob")],
+      [text("Carol")],
+      [text("Dave")],
+    ]);
+  });
+
+  it("resolves a correlated reference from a JOIN's own ON clause inside a subquery, not only from the subquery's WHERE", () => {
+    // The subquery's own JOIN already matches DEPARTMENTS to REGIONAL_TARGETS on department name alone, which finds at least one row for every outer row regardless of DEPT. The ON clause's second, correlated term (REGIONAL_TARGETS.DEPT = EMPLOYEES.DEPT) is therefore the only thing that can make Erin/Frank (DEPT NULL) differ from Alice/Bob/Carol/Dave: without it, or with `outer` not threaded into the JOIN's own resolver, a NULL-comparison-derived UNKNOWN could never turn EXISTS false, and every row would match.
+    expect(
+      runSub(
+        "SELECT NAME FROM EMPLOYEES WHERE EXISTS (SELECT REGIONAL_TARGETS.TARGET_SALARY FROM DEPARTMENTS JOIN REGIONAL_TARGETS ON REGIONAL_TARGETS.DEPT = DEPARTMENTS.NAME AND REGIONAL_TARGETS.DEPT = EMPLOYEES.DEPT) ORDER BY NAME",
       ).rows,
     ).toEqual([
       [text("Alice")],
