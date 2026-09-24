@@ -8,14 +8,16 @@ import type {
 export interface DiagnosticCollector {
   readonly sink: MarkdownDiagnosticSink;
   readonly diagnostics: MarkdownDiagnostic[];
-  codes(): string[];
-  has(code: string): boolean;
+  readonly codes: () => string[];
+  readonly has: (code: string) => boolean;
 }
 
 export function createDiagnosticCollector(): DiagnosticCollector {
   const diagnostics: MarkdownDiagnostic[] = [];
   return {
-    sink: (diagnostic) => diagnostics.push(diagnostic),
+    sink: (diagnostic) => {
+      diagnostics.push(diagnostic);
+    },
     diagnostics,
     codes: () => diagnostics.map((diagnostic) => diagnostic.code),
     has: (code) => diagnostics.some((diagnostic) => diagnostic.code === code),

@@ -523,6 +523,7 @@ function lowerBlock(
       // Unreachable through parseMarkdown's own toAstBlocks — none of these four ever appears as a direct child of document/blockquote/listItem the way this function is called (a list's own items and a table's own rows are walked by lowerList/lowerTable directly, never handed to lowerBlock).
       return [];
   }
+  return assertNeverMarkdownBlock(node);
 }
 
 export function lowerParsedMarkdown(
@@ -613,4 +614,11 @@ export function lowerMarkdown(
   options: ReadMarkdownOptions = {},
 ): ContentDocument {
   return lowerMarkdownDetailed(source, options).document;
+}
+
+// Reached only if MarkdownBlockNode ever gains a member lowerBlock's own switch does not match: every current member has a case there, so `node` narrows to `never` at the call, and adding an uncovered member makes that narrowing fail and the call stop compiling. Exists so the switch's exhaustiveness, proven by the type checker rather than by a catch-all default that would silently drop a genuinely new member, still gives consistent-return an explicit statement to see past the switch. Exported so the tests can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable.
+export function assertNeverMarkdownBlock(node: never): never {
+  throw new Error(
+    `markdown-codec: unhandled markdown block ${JSON.stringify(node)}`,
+  );
 }
