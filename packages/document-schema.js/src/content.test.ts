@@ -275,6 +275,9 @@ function presentationDocument(): ContentDocument {
   };
 }
 
+// The row index of a fixture manual page break, arbitrary beyond sitting past the fixture's own printRange.
+const MANUAL_BREAK_ROW_INDEX = 20;
+
 function spreadsheetDocument(): ContentDocument {
   return {
     kind: "spreadsheet",
@@ -392,7 +395,7 @@ function spreadsheetDocument(): ContentDocument {
           gridlines: true,
           headers: false,
           pageOrder: "downThenOver",
-          manualBreaks: { rows: [20], columns: [] },
+          manualBreaks: { rows: [MANUAL_BREAK_ROW_INDEX], columns: [] },
         },
       },
     ],
@@ -1057,13 +1060,14 @@ describe("ContentParagraphSchema headingLevel", () => {
   });
 
   it("accepts a heading level beyond 6, since the canonical field is not itself clamped (ODF permits ten levels)", () => {
+    const headingLevelBeyondTypicalMax = 9;
     expect(
       ContentParagraphSchema.parse({
         kind: "paragraph",
         runs: [],
-        headingLevel: 9,
+        headingLevel: headingLevelBeyondTypicalMax,
       }).headingLevel,
-    ).toBe(9);
+    ).toBe(headingLevelBeyondTypicalMax);
   });
 
   it("parses with headingLevel omitted, matching every other optional field", () => {
@@ -1298,13 +1302,14 @@ describe("ContentRun verticalAlign and direction", () => {
 
 describe("ContentParagraph indentRightPt and direction", () => {
   it("parses a right indent alongside the existing left/first-line indents", () => {
+    const indentRightPt = 18;
     const parsed = ContentParagraphSchema.parse({
       kind: "paragraph",
       runs: [],
       indentLeftPt: 36,
-      indentRightPt: 18,
+      indentRightPt,
     });
-    expect(parsed.indentRightPt).toBe(18);
+    expect(parsed.indentRightPt).toBe(indentRightPt);
   });
 
   it("parses an rtl paragraph, RTF's own \\rtlpar scope", () => {
@@ -1817,26 +1822,37 @@ describe("ContentParagraph preformatted", () => {
 });
 
 describe("clampHeadingLevel", () => {
+  // The clamp's own bound, mirrored here rather than imported since content.ts keeps it private.
+  const MAX_HEADING_LEVEL = 6;
+
   it("leaves a level already within 1-6 untouched", () => {
+    const midRangeLevel = 3;
     expect(clampHeadingLevel(1)).toBe(1);
-    expect(clampHeadingLevel(3)).toBe(3);
-    expect(clampHeadingLevel(6)).toBe(6);
+    expect(clampHeadingLevel(midRangeLevel)).toBe(midRangeLevel);
+    expect(clampHeadingLevel(MAX_HEADING_LEVEL)).toBe(MAX_HEADING_LEVEL);
   });
 
   it("clamps a level above 6 down to 6", () => {
-    expect(clampHeadingLevel(7)).toBe(6);
-    expect(clampHeadingLevel(10)).toBe(6);
-    expect(clampHeadingLevel(999)).toBe(6);
+    const justAboveMax = 7;
+    const wellAboveMax = 10;
+    const farAboveMax = 999;
+    expect(clampHeadingLevel(justAboveMax)).toBe(MAX_HEADING_LEVEL);
+    expect(clampHeadingLevel(wellAboveMax)).toBe(MAX_HEADING_LEVEL);
+    expect(clampHeadingLevel(farAboveMax)).toBe(MAX_HEADING_LEVEL);
   });
 
   it("clamps a level below 1 up to 1", () => {
+    const wellBelowMin = -5;
     expect(clampHeadingLevel(0)).toBe(1);
-    expect(clampHeadingLevel(-5)).toBe(1);
+    expect(clampHeadingLevel(wellBelowMin)).toBe(1);
   });
 
   it("rounds a fractional level to the nearest integer before clamping", () => {
-    expect(clampHeadingLevel(2.4)).toBe(2);
-    expect(clampHeadingLevel(2.6)).toBe(3);
+    const roundsDown = 2.4;
+    const roundsUp = 2.6;
+    const roundedUpLevel = 3;
+    expect(clampHeadingLevel(roundsDown)).toBe(2);
+    expect(clampHeadingLevel(roundsUp)).toBe(roundedUpLevel);
   });
 });
 
@@ -2172,12 +2188,16 @@ describe("ContentEmbeddedObjectSchema deep recursion", () => {
   });
 
   it("accepts a sheet-anchored embedded object carrying anchorRow/anchorColumn/offsetXPt/offsetYPt", () => {
+    const anchorRow = 3;
+    const anchorColumn = 1;
+    const offsetXPt = 4.5;
+    const offsetYPt = -2;
     const cellAnchoredEmbeddedObject: ContentEmbeddedObject = {
       ...drawingEmbeddedObject,
-      anchorRow: 3,
-      anchorColumn: 1,
-      offsetXPt: 4.5,
-      offsetYPt: -2,
+      anchorRow,
+      anchorColumn,
+      offsetXPt,
+      offsetYPt,
     };
     const sheetWithAnchoredObject: ContentDocument = {
       ...spreadsheetWithDrawing,
@@ -2193,10 +2213,10 @@ describe("ContentEmbeddedObjectSchema deep recursion", () => {
       throw new Error("expected a spreadsheet document");
     }
     const embedded = parsed.sheets[0]?.embeddedObjects?.[0];
-    expect(embedded?.anchorRow).toBe(3);
-    expect(embedded?.anchorColumn).toBe(1);
-    expect(embedded?.offsetXPt).toBe(4.5);
-    expect(embedded?.offsetYPt).toBe(-2);
+    expect(embedded?.anchorRow).toBe(anchorRow);
+    expect(embedded?.anchorColumn).toBe(anchorColumn);
+    expect(embedded?.offsetXPt).toBe(offsetXPt);
+    expect(embedded?.offsetYPt).toBe(offsetYPt);
   });
 
   it("still accepts an embedded object with no cell-anchor fields at all (a wordprocessing/presentation/drawing context, which never sets them)", () => {
