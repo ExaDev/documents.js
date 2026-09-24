@@ -3,7 +3,7 @@ import { packageLintConfig } from "../../eslint.shared.ts";
 export default packageLintConfig({
   tsconfigRootDir: import.meta.dirname,
   // Off: 781 sites across every package are debt from this same @exadev/eslint-config 2.1.2->2.12.1 bump (see PackageLintOptions.newRuleDebt in eslint.shared.ts), not something this bump's own PR fixes. This package's own measured subset:
-  newRuleDebt: ["@typescript-eslint/strict-void-return"],
+  newRuleDebt: [],
   // One program covering src and the config files alike, so there is no second tsconfig to route anything to.
   projects: ["./tsconfig.json"],
   // Resolves document input by filesystem path via node:fs/promises (see src/io/document-input.ts) — the same reason document-mcp, its one current consumer, is not held to Worker isomorphism either.
