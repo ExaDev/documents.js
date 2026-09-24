@@ -1,3 +1,17 @@
+## [3.10.21](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.10.20...document-outline.js%403.10.21) (2026-09-24)
+
+### Bug Fixes
+
+* **document-outline.js:** derive SHA-256's own round constants instead of hardcoding them ([ec6bb91](https://github.com/ExaDev/documents.js/commit/ec6bb9148e72363e1a67b4ec527362ee01e240c5)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **document-outline.js:** name magic numbers across four small test files ([72dfbfb](https://github.com/ExaDev/documents.js/commit/72dfbfbd84ee306b36968768901aba60f45410a4)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **document-outline.js:** name magic numbers in fixtures.test.ts and order-keys.test.ts ([b57ba87](https://github.com/ExaDev/documents.js/commit/b57ba8704b50f48a3b7cd26aac1ba72dadaa5bc4)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **document-outline.js:** name magic numbers in graph.test.ts ([3ace454](https://github.com/ExaDev/documents.js/commit/3ace4542966c18bdc5cc721d70b6618053f33de0)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **document-outline.js:** name magic numbers in labels.test.ts ([84f3c20](https://github.com/ExaDev/documents.js/commit/84f3c2070d83ca5d72f22173a575cca7f24d01d8)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **document-outline.js:** name magic numbers in regions.test.ts ([84b5071](https://github.com/ExaDev/documents.js/commit/84b5071fbe5008cffd450d3a8abc81ba496e0d3b)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **document-outline.js:** name pdf-regions.test.ts magic numbers ([4d7a04c](https://github.com/ExaDev/documents.js/commit/4d7a04c5b5711e52582fbc56f80e8f0d275708dd)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **document-outline.js:** name the scoring weights in regions.ts and pdf-regions.ts ([79cdf2e](https://github.com/ExaDev/documents.js/commit/79cdf2eda0f85741b53ee651aa82e53e46d307b0)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **document-outline.js:** remove shadowed test consts and reorder regions.ts thresholds ([3cb249a](https://github.com/ExaDev/documents.js/commit/3cb249aaf34e3661d0438318f35f419fd65f46ac)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+
 ## [3.10.20](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.10.19...document-outline.js%403.10.20) (2026-09-24)
 
 ### Code Refactoring
