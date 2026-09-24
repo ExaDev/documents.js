@@ -18,7 +18,7 @@ import {
 
 export function quantity(
   magnitude: number,
-  dimension: DimensionVector = {},
+  dimension: Readonly<DimensionVector> = {},
 ): Quantity {
   return { kind: "quantity", magnitude, dimension };
 }
