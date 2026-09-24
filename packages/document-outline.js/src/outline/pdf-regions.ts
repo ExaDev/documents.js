@@ -368,6 +368,20 @@ const SIGNAL_THRESHOLD = 0.35;
 // How close the top two candidates must be, both already past SIGNAL_THRESHOLD, before the leaf is 'mixed' rather than confidently the top candidate — mirrors regions.ts's MIXED_MARGIN.
 const MIXED_MARGIN = 0.15;
 
+// classifyFromLeafSignals' own hand-tuned scoring weights, one group per candidate classification.
+const IMAGE_FIGURE_BONUS = 0.15; // Added to figureScore when the leaf carries a raster image, a stronger figure signal than vector decoration alone.
+const GRID_GRAPHIC_FRACTION_MAX = 0.5; // A ruled table's own grid lines paint only a modest fraction of the leaf; above this, painted content likely dominates for a different reason (a figure, not a table).
+const GRID_GRAPHIC_BONUS = 0.15; // Added to tableScore when graphic content sits in that grid-line range.
+const TABLE_AVG_CELLS_MIN = 1.15; // A leaf must average at least this many cells per line before it is scored as a table at all.
+const TABLE_CELL_COUNT_WEIGHT = 0.5;
+const TABLE_CELL_REGULARITY_WEIGHT = 0.35;
+const COLUMN_AVG_CELLS_MAX = 1.3; // A leaf must average no more than this many cells per line to be scored as flowing column text.
+const COLUMN_X_START_REGULARITY_WEIGHT = 0.7;
+const COLUMN_AVG_CELLS_WEIGHT = 0.3;
+// The confidence assigned to a lone painted item classified as a figure on its own (classifyLeaf's own too-few-items case): higher for a real raster image than for a standalone vector shape.
+const LONE_IMAGE_CONFIDENCE = 0.9;
+const LONE_SHAPE_CONFIDENCE = 0.6;
+
 // The geometric/content measurements classifyFromLeafSignals' heuristics read, split out from classifyLeaf below purely for direct unit testing — the same "extract for testability" rationale regions.ts's own computeSignals/classifyRegion split already follows, since hand-picking these signal VALUES directly is far more precise than reverse-engineering a BoundedItem layout that happens to produce a given avgCells/cellRegularity/xStartRegularity combination.
 export interface LeafSignals {
   readonly graphicFraction: number;
@@ -426,27 +440,34 @@ export function classifyFromLeafSignals(signals: LeafSignals): {
   } = signals;
 
   // figure: dominated by non-text painted content (images, vector art) rather than text — a raster image's presence is a stronger figure signal than vector decoration alone, since a ruled table's grid lines are also non-text but never carry an image.
-  const figureScore = clamp01(graphicFraction + (hasImage ? 0.15 : 0));
+  const figureScore = clamp01(
+    graphicFraction + (hasImage ? IMAGE_FIGURE_BONUS : 0),
+  );
 
   let tableScore = 0;
   let columnScore = 0;
   if (lineCount > 1) {
     // table: most lines split into multiple cells, and that cell count is consistent line to line — the geometric signature of a grid, whether or not it is also ruled with visible border graphics.
     const gridGraphicBonus =
-      graphicFraction > 0 && graphicFraction < 0.5 ? 0.15 : 0;
+      graphicFraction > 0 && graphicFraction < GRID_GRAPHIC_FRACTION_MAX
+        ? GRID_GRAPHIC_BONUS
+        : 0;
     tableScore =
-      avgCells > 1.15
+      avgCells > TABLE_AVG_CELLS_MIN
         ? clamp01(
-            0.5 * clamp01(avgCells - 1) +
-              0.35 * cellRegularity +
+            TABLE_CELL_COUNT_WEIGHT * clamp01(avgCells - 1) +
+              TABLE_CELL_REGULARITY_WEIGHT * cellRegularity +
               gridGraphicBonus,
           )
         : 0;
 
     // column: lines are each essentially one run (avgCells close to 1) starting from a consistent left edge — ordinary flowing body text.
     columnScore =
-      avgCells <= 1.3
-        ? clamp01(0.7 * xStartRegularity + 0.3 * clamp01(2 - avgCells))
+      avgCells <= COLUMN_AVG_CELLS_MAX
+        ? clamp01(
+            COLUMN_X_START_REGULARITY_WEIGHT * xStartRegularity +
+              COLUMN_AVG_CELLS_WEIGHT * clamp01(2 - avgCells),
+          )
         : 0;
   }
 
@@ -489,7 +510,10 @@ export function classifyLeaf(items: readonly BoundedItem[]): {
     if (only !== undefined && only.item.kind !== "text") {
       return {
         classification: "figure",
-        confidence: only.item.kind === "image" ? 0.9 : 0.6,
+        confidence:
+          only.item.kind === "image"
+            ? LONE_IMAGE_CONFIDENCE
+            : LONE_SHAPE_CONFIDENCE,
       };
     }
     return { classification: "unknown", confidence: 1 };

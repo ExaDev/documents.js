@@ -215,7 +215,7 @@ export function computeSignals(
         meanRowCount,
   );
 
-  // Header-row heuristic: the SIGNAL a table's header row actually provides is that it is text where the rows below it are not — so this checks the region's own topmost populated row is predominantly text (>= 80%, tolerating one stray non-text header cell) AND at least one other row in the region is predominantly numeric/formula (>= 50%). Neither threshold is load-bearing on its own; the pair together is what separates "the first row happens to be text" (also true of a single-column prose block) from "the first row is uniquely textual among otherwise-numeric rows" (a real header).
+  // Header-row heuristic: the SIGNAL a table's header row actually provides is that it is text where the rows below it are not — so this checks the region's own topmost populated row is predominantly text (>= HEADER_ROW_TEXT_FRACTION_MIN, tolerating one stray non-text header cell) AND at least one other row in the region is predominantly numeric/formula (>= HEADER_ROW_NUMERIC_OTHER_ROW_MIN). Neither threshold is load-bearing on its own; the pair together is what separates "the first row happens to be text" (also true of a single-column prose block) from "the first row is uniquely textual among otherwise-numeric rows" (a real header).
   const topRowCells = cells.filter((cell) => cell.row === minRow);
   const topRowTextFraction =
     topRowCells.filter((cell) => cell.value.kind === "string").length /
@@ -229,7 +229,7 @@ export function computeSignals(
           NUMERIC_VALUE_KINDS.has(cell.value.kind) ||
           cell.formula !== undefined,
       ).length;
-      return numericLike / rowCells.length >= 0.5;
+      return numericLike / rowCells.length >= HEADER_ROW_NUMERIC_OTHER_ROW_MIN;
     });
 
   return {
@@ -243,7 +243,8 @@ export function computeSignals(
     textFraction: stringCount / cells.length,
     averageTextLength: stringCount === 0 ? 0 : totalTextLength / stringCount,
     rowRegularity,
-    hasHeaderLikeRow: topRowTextFraction >= 0.8 && hasNumericOtherRow,
+    hasHeaderLikeRow:
+      topRowTextFraction >= HEADER_ROW_TEXT_FRACTION_MIN && hasNumericOtherRow,
   };
 }
 
@@ -255,6 +256,15 @@ const SIGNAL_THRESHOLD = 0.35;
 const MIXED_MARGIN = 0.15;
 // A cell whose average string length reaches this many characters is treated as fully "sentence-like" for the prose signal (a short label like a header cell contributes far less prose evidence than a genuine sentence of commentary); chosen as a rough sentence-fragment length, not a corpus-fitted constant.
 const PROSE_LENGTH_NORM = 40;
+// The header-row heuristic's own pair of thresholds, see computeSignals' own comment above for what each half of the pair rules out on its own.
+const HEADER_ROW_TEXT_FRACTION_MIN = 0.8;
+const HEADER_ROW_NUMERIC_OTHER_ROW_MIN = 0.5;
+// classifyRegion's own hand-tuned scoring weights, one group per candidate classification.
+const TABLE_ROW_REGULARITY_WEIGHT = 0.5;
+const TABLE_HEADER_ROW_WEIGHT = 0.3;
+const TABLE_DENSITY_WEIGHT = 0.2;
+const MODEL_FORMULA_WEIGHT = 0.7;
+const MODEL_NUMERIC_WEIGHT = 0.3;
 
 export function classifyRegion(signals: RegionSignals): {
   classification: RegionClassification;
@@ -270,9 +280,9 @@ export function classifyRegion(signals: RegionSignals): {
   const tableScore =
     signals.distinctRows > 1 && signals.distinctColumns > 1
       ? clamp01(
-          0.5 * signals.rowRegularity +
-            0.3 * (signals.hasHeaderLikeRow ? 1 : 0) +
-            0.2 * density,
+          TABLE_ROW_REGULARITY_WEIGHT * signals.rowRegularity +
+            TABLE_HEADER_ROW_WEIGHT * (signals.hasHeaderLikeRow ? 1 : 0) +
+            TABLE_DENSITY_WEIGHT * density,
         )
       : 0;
 
@@ -284,7 +294,8 @@ export function classifyRegion(signals: RegionSignals): {
 
   // model: weighted mostly toward formulas (the actual signal of "this is a calculation", not merely "this is a number" — a plain numeric table full of literal values is still a table) with a smaller numeric contribution, since a region that is heavily formula-driven is virtually always numeric too and a formula-free region of plain numbers alone should not out-score a real table's own structural signal.
   const modelScore = clamp01(
-    0.7 * signals.formulaFraction + 0.3 * signals.numericFraction,
+    MODEL_FORMULA_WEIGHT * signals.formulaFraction +
+      MODEL_NUMERIC_WEIGHT * signals.numericFraction,
   );
 
   // Typed as a fixed 3-tuple, not a general array, so scored[0]/scored[1] below are known-defined at the type level under noUncheckedIndexedAccess — Array.prototype.sort's `this`-typed return preserves the tuple shape through the sort, so there is no "what if the array were some other length" case for TypeScript (or a mutation test) to ever have to guard against.
