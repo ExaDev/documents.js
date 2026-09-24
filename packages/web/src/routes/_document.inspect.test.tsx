@@ -322,4 +322,30 @@ describe("InspectPage", () => {
     });
     mounted.unmount();
   });
+
+  it("notifies when inspection rejects for a format picked manually from the Select", async () => {
+    const client = createMockRpcClient();
+    vi.mocked(client.formats.list).mockResolvedValue(["docx", "pdf"]);
+    vi.mocked(client.pdf.inspect).mockRejectedValue(new Error("corrupt pdf"));
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountInspectPage();
+
+    act(() => {
+      openDocument(openedFile("notes.xyz"));
+    });
+    await vi.waitFor(() => {
+      expect(latestSelect).toBeDefined();
+    });
+
+    act(() => {
+      latestSelect?.onChange("pdf");
+    });
+    await vi.waitFor(() => {
+      expect(notifyError).toHaveBeenCalledWith(
+        "Could not inspect document",
+        expect.any(Error),
+      );
+    });
+    mounted.unmount();
+  });
 });
