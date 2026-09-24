@@ -1,3 +1,15 @@
+## [6.1.5](https://github.com/ExaDev/documents.js/compare/doc-codec%406.1.4...doc-codec%406.1.5) (2026-09-24)
+
+### Bug Fixes
+
+* **doc-codec:** rename two shadowed test-support identifiers ([582fd4f](https://github.com/ExaDev/documents.js/commit/582fd4f869dd16d32513c92ed5f86ae7395bfb57))
+* **doc-codec:** wrap five bare TSDoc-special character sequences in backticks ([4f6a874](https://github.com/ExaDev/documents.js/commit/4f6a87402d2f32854ebd6d58264127ffd4a60c9a))
+
+
+### Dependencies
+
+- Updated archive-codec to 1.11.14
+
 ## [6.1.4](https://github.com/ExaDev/documents.js/compare/doc-codec%406.1.3...doc-codec%406.1.4) (2026-09-24)
 
 

@@ -1,3 +1,17 @@
+## [1.1.76](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.75...document-operations%401.1.76) (2026-09-24)
+
+### Bug Fixes
+
+* **document-operations:** escape two bare TSDoc-special character sequences ([afc2f22](https://github.com/ExaDev/documents.js/commit/afc2f22cdead49be5bd221e3e40caf8fd13f1270))
+* **document-operations:** give an exhaustive switch an explicit trailing throw ([901136f](https://github.com/ExaDev/documents.js/commit/901136f4b2777ba78816e854249ab56f6a6c942d))
+* **document-operations:** mark a Promise-returning run async ([4da1ecd](https://github.com/ExaDev/documents.js/commit/4da1ecda8418d661f232a60ad9f9651a8c50314e))
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.15
+- Updated document-compute.js to 1.6.24
+
 ## [1.1.75](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.74...document-operations%401.1.75) (2026-09-24)
 
 

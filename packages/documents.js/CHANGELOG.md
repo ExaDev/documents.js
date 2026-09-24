@@ -1,3 +1,16 @@
+## [14.4.15](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.14...documents.js%4014.4.15) (2026-09-24)
+
+
+### Dependencies
+
+- Updated archive-codec to 1.11.14
+- Updated doc-codec to 6.1.5
+- Updated ooxml.js to 12.2.10
+- Updated ppt-codec to 2.2.5
+- Updated rtf-codec to 8.1.5
+- Updated wpd-codec to 5.1.7
+- Updated xls-codec to 4.15.24
+
 ## [14.4.14](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.13...documents.js%4014.4.14) (2026-09-24)
 
 

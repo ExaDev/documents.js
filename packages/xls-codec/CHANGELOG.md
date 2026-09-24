@@ -1,3 +1,10 @@
+## [4.15.24](https://github.com/ExaDev/documents.js/compare/xls-codec%404.15.23...xls-codec%404.15.24) (2026-09-24)
+
+
+### Dependencies
+
+- Updated archive-codec to 1.11.14
+
 ## [4.15.23](https://github.com/ExaDev/documents.js/compare/xls-codec%404.15.22...xls-codec%404.15.23) (2026-09-24)
 
 
