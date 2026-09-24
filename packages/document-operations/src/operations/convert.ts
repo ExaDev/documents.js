@@ -172,7 +172,7 @@ export const listDocumentConversionsOperation = defineOperation({
     "Lists every (source, target) format pair convert_document actually supports, straight from documents.js's own DocumentConverter port — the definitive source of truth for what convert_document will and will not accept as a (source, targetFormat) combination.",
   inputSchema: ListDocumentConversionsInputSchema,
   outputSchema: ListDocumentConversionsOutputSchema,
-  run() {
+  async run() {
     return Promise.resolve({
       conversions: converter.conversions.map((conversion) => ({
         source: conversion.source,
