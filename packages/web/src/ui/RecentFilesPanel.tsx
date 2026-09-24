@@ -7,7 +7,7 @@ import { useOpenDocument } from "../document/OpenDocumentContext";
 import { removeRecentFile, useRecentFiles } from "../hooks/useRecentFiles";
 import { relativeTime } from "../shared/relativeTime";
 import { notifyError } from "./notify";
-import { iconFlexShrink, minWidthZero } from "./RecentFilesPanel.css";
+import { iconFlexShrink, minWidthZero } from "./layout.css";
 
 // Exported so a test can pin the exact KB/MB boundary directly, rather than only through rendered text.
 export function formatBytes(bytes: number): string {
@@ -70,12 +70,13 @@ export function RecentFilesPanel() {
   }
 
   return (
-    <Stack gap={4}>
+    <Stack gap={4} role="list">
       {files.map((record) => {
         const hasHandle = record.handle !== undefined;
         return (
           <Group
             key={record.id}
+            role="listitem"
             justify="space-between"
             wrap="nowrap"
             py={6}
