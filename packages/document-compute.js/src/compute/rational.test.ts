@@ -9,6 +9,15 @@ import {
   toRational,
 } from "./rational";
 
+// How many multiply-then-multiply-back steps the long-chain conversion test below runs, in each direction.
+const CHAIN_LENGTH = 10;
+// The fraction the long-chain conversion test multiplies and divides by, and the denominator whose reciprocal is the expected bit-exact round-trip result.
+const CHAIN_DENOMINATOR = 3;
+// The expected result of the long-chain test's bit-exact round trip, and of converting 1/3 to a JS number at rationalToNumber's one controlled boundary.
+const ONE_THIRD = 1 / CHAIN_DENOMINATOR;
+// The expected result of converting 1/2 to a JS number at that same boundary.
+const ONE_HALF = 0.5;
+
 describe("rational", () => {
   it("round-trips document-schema.js ExactRational values through toRational/toExactRational", () => {
     expect(toRational({ numerator: "3", denominator: "4" })).toEqual({
@@ -132,13 +141,13 @@ describe("rational", () => {
   it("performs a long conversion chain without floating-point drift, by staying exact until the final conversion", () => {
     // Multiplying 1/3 by itself 10 times and back down by 3^10 should return exactly to 1/3 — bit-exact, not merely close — because every step stays in BigInt rationals until rationalToNumber's single controlled float conversion at the end.
     let value = toRational({ numerator: "1", denominator: "3" });
-    for (let i = 0; i < 10; i += 1) {
+    for (let i = 0; i < CHAIN_LENGTH; i += 1) {
       value = multiplyRational(
         value,
         toRational({ numerator: "1", denominator: "3" }),
       );
     }
-    for (let i = 0; i < 10; i += 1) {
+    for (let i = 0; i < CHAIN_LENGTH; i += 1) {
       value = multiplyRational(
         value,
         toRational({ numerator: "3", denominator: "1" }),
@@ -148,13 +157,13 @@ describe("rational", () => {
       numerator: "1",
       denominator: "3",
     });
-    expect(rationalToNumber(value)).toBe(1 / 3);
+    expect(rationalToNumber(value)).toBe(ONE_THIRD);
   });
 
   it("converts to a JS number at the one controlled boundary", () => {
     expect(
       rationalToNumber(toRational({ numerator: "1", denominator: "2" })),
-    ).toBe(0.5);
+    ).toBe(ONE_HALF);
     expect(
       rationalToNumber(toRational({ numerator: "0", denominator: "1" })),
     ).toBe(0);
