@@ -53,51 +53,46 @@ export function readOdtContent(pkg: Package): ContentDocument {
         pkg,
       );
 
-      if (
-        formulaPlacements.length > 0 ||
-        vectorPlacements.length > 0 ||
-        imagePlacements.length > 0
-      ) {
-        const combined: BlockPlacement[] = [
-          ...formulaPlacements.map((placement): BlockPlacement => ({
-            index: placement.index,
-            build: (sourcePath) =>
-              buildFormulaBlock(
-                placement.detected.formula,
-                placement.detected.frame,
-                sourcePath,
-              ),
-          })),
-          ...vectorPlacements.map((placement): BlockPlacement => ({
-            index: placement.index,
-            build: (sourcePath) => ({
-              ...buildDrawingBlock(section.pageSize, placement.vectors),
+      // No "did anything get detected?" early-out here, deliberately: a placements list is empty exactly when its own pass's consumed set is too (a consumed index is only ever recorded alongside at least one placement in the same pass), so spliceBlocks with neither is the identity over the blocks array — a guard on the three lengths was behaviourally redundant, and a redundant guard is an unkillable-mutant trap.
+      const combined: BlockPlacement[] = [
+        ...formulaPlacements.map((placement): BlockPlacement => ({
+          index: placement.index,
+          build: (sourcePath) =>
+            buildFormulaBlock(
+              placement.detected.formula,
+              placement.detected.frame,
               sourcePath,
-            }),
-          })),
-          ...imagePlacements.map((placement): BlockPlacement => ({
-            index: placement.index,
-            build: (sourcePath) => ({
-              ...placement.detected.image,
-              sourcePath,
-            }),
-          })),
-        ].sort((a, b) => a.index - b.index);
-        // Images never contribute to the consumed set — see this file's own top-of-file comment.
-        const consumedBlockIndices = new Set<number>([
-          ...formulaConsumed,
-          ...vectorConsumed,
-        ]);
-        odtDoc.sections[0] = {
-          ...section,
-          blocks: spliceBlocks(
-            section.blocks,
-            combined,
-            consumedBlockIndices,
-            (position) => `sections[0].blocks[${position}]`,
-          ),
-        };
-      }
+            ),
+        })),
+        ...vectorPlacements.map((placement): BlockPlacement => ({
+          index: placement.index,
+          build: (sourcePath) => ({
+            ...buildDrawingBlock(section.pageSize, placement.vectors),
+            sourcePath,
+          }),
+        })),
+        ...imagePlacements.map((placement): BlockPlacement => ({
+          index: placement.index,
+          build: (sourcePath) => ({
+            ...placement.detected.image,
+            sourcePath,
+          }),
+        })),
+      ].sort((a, b) => a.index - b.index);
+      // Images never contribute to the consumed set — see this file's own top-of-file comment.
+      const consumedBlockIndices = new Set<number>([
+        ...formulaConsumed,
+        ...vectorConsumed,
+      ]);
+      odtDoc.sections[0] = {
+        ...section,
+        blocks: spliceBlocks(
+          section.blocks,
+          combined,
+          consumedBlockIndices,
+          (position) => `sections[0].blocks[${position}]`,
+        ),
+      };
     }
   }
 
