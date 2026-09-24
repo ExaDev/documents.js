@@ -13,7 +13,7 @@ import {
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { createFileRoute } from "@tanstack/react-router";
 import type { DocumentFormat } from "documents.js";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { createFileAccess } from "../adapters/fileAccess/createFileAccess";
 import { NoDocumentOpen } from "../document/NoDocumentOpen";
@@ -95,9 +95,12 @@ function EditorPanel({
   const saveEditor = useSaveEditor();
   const fileAccess = createFileAccess();
 
-  // Runs once, for the one document this panel instance will ever see. A fresh open remounts a whole new instance (see the key above) rather than this effect re-running to reset anything.
+  // Runs exactly once, for the one document this panel instance will ever see. A fresh open remounts a whole new instance (see the key above) rather than this effect re-running to reset anything. A `hasOpened` ref guard stands in for a dependency array here, not out of preference, but because one is provably impossible to write correctly: `file`, `format`, and `openEditorMutate` are guaranteed stable for this panel's entire lifetime (the key above is what enforces that), so there is no reactive value a dependency list could ever meaningfully name, and nothing for react-hooks/exhaustive-deps to check. The guard still has to exist: the panel re-renders on every `setSnapshot` call below, and without it this effect would call `openEditorMutate` again on each of those, silently reopening the document.
   const { mutate: openEditorMutate } = openEditor;
+  const hasOpened = useRef(false);
   useEffect(() => {
+    if (hasOpened.current) return;
+    hasOpened.current = true;
     openEditorMutate(
       { format, bytes: file.bytes },
       {
@@ -109,7 +112,7 @@ function EditorPanel({
         },
       },
     );
-  }, [file, format, openEditorMutate]);
+  });
 
   // Every paragraph action below is wired only to elements rendered inside the `snapshot !== undefined` panel further down, so by the time any of them can actually run the snapshot is already known to be defined. There is no separate guard to check here.
   const applySet = (index: number, text: string, current: EditorSnapshot) => {
