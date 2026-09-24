@@ -69,7 +69,7 @@ function findStarMathAnnotation(mathRoot: XmlElement): string | undefined {
   for (const tag of ANNOTATION_TAGS) {
     for (const annotation of elementsWithTag(mathRoot.children, tag)) {
       const encoding = attrValue(annotation, "encoding");
-      if (!encoding?.startsWith(STARMATH_ENCODING_PREFIX)) {
+      if (encoding?.startsWith(STARMATH_ENCODING_PREFIX) !== true) {
         continue;
       }
       const text = annotationText(annotation);

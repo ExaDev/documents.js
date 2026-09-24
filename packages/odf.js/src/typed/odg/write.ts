@@ -138,7 +138,7 @@ export function writeOdgContent(
   const version = options.version ?? DEFAULT_ODF_VERSION;
   const drawingElement = el("office:drawing");
   const pkg = createOdfPackage(
-    options.template ? ODF_MEDIA_TYPES.otg : ODF_MEDIA_TYPES.odg,
+    options.template === true ? ODF_MEDIA_TYPES.otg : ODF_MEDIA_TYPES.odg,
     drawingElement,
     version,
   );

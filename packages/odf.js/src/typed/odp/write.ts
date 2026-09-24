@@ -201,7 +201,7 @@ export function writeOdpContent(
   const version = options.version ?? DEFAULT_ODF_VERSION;
   const presentationElement = el("office:presentation");
   const pkg = createOdfPackage(
-    options.template ? ODF_MEDIA_TYPES.otp : ODF_MEDIA_TYPES.odp,
+    options.template === true ? ODF_MEDIA_TYPES.otp : ODF_MEDIA_TYPES.odp,
     presentationElement,
     version,
   );
