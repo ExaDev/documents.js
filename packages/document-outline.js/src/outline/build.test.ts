@@ -42,6 +42,7 @@ function expectSchemaValid(pkg: DocumentTree): void {
 
 describe("wordprocessing outlines", () => {
   it("nests headings deeply with content at each level", () => {
+    const subsectionLevel = 3;
     const lead = paragraph("lead");
     const chapterIntro = paragraph("chapter intro");
     const sectionBody = paragraph("section body");
@@ -53,7 +54,7 @@ describe("wordprocessing outlines", () => {
           chapterIntro,
           headingGroup("Section", 2, [
             sectionBody,
-            headingGroup("Subsection", 3, [subBody]),
+            headingGroup("Subsection", subsectionLevel, [subBody]),
           ]),
         ]),
       ]),
@@ -80,10 +81,11 @@ describe("wordprocessing outlines", () => {
   });
 
   it("keeps the tree shape when an H4 sits under an H2 with no synthetic intermediates", () => {
+    const deepLevel = 4;
     const body = paragraph("body");
     const pkg = wordprocessingPackage([
       sectionGroup([
-        headingGroup("Section", 2, [headingGroup("Deep", 4, [body])]),
+        headingGroup("Section", 2, [headingGroup("Deep", deepLevel, [body])]),
       ]),
     ]);
     expectSchemaValid(pkg);
@@ -97,11 +99,12 @@ describe("wordprocessing outlines", () => {
   });
 
   it("pops exactly the deeper group when an H2 follows an H1 and an H3", () => {
+    const asideLevel = 3;
     const body = paragraph("body");
     const pkg = wordprocessingPackage([
       sectionGroup([
         headingGroup("Chapter", 1, [
-          headingGroup("Aside", 3, []),
+          headingGroup("Aside", asideLevel, []),
           headingGroup("Section", 2, [body]),
         ]),
       ]),
@@ -121,12 +124,14 @@ describe("wordprocessing outlines", () => {
 
   it("pops only the deepest of three open heading groups, keeping the shallower two open", () => {
     // A three-deep open heading stack ([Chapter, Section, Aside]) at the moment 'Follow' arrives is what distinguishes popping from the ACTUAL top of the stack from popping based on some other, shallower element: a check that (wrongly) reads the stack's second element (Section, level 2) would see 2 >= 3 as false and never pop Aside at all, nesting 'Follow' as Aside's own child instead of Aside's sibling under Section.
+    const asideLevel = 4;
+    const followLevel = 3;
     const pkg = wordprocessingPackage([
       sectionGroup([
         headingGroup("Chapter", 1, [
           headingGroup("Section", 2, [
-            headingGroup("Aside", 4, []),
-            headingGroup("Follow", 3, []),
+            headingGroup("Aside", asideLevel, []),
+            headingGroup("Follow", followLevel, []),
           ]),
         ]),
       ]),
@@ -151,11 +156,12 @@ describe("wordprocessing outlines", () => {
   });
 
   it("nests a headingLevel 10 following an H2 as its direct child, level carried verbatim", () => {
+    const unusuallyDeepLevel = 10;
     const body = paragraph("body");
     const pkg = wordprocessingPackage([
       sectionGroup([
         headingGroup("Section", 2, [
-          headingGroup("Unusually deep", 10, [body]),
+          headingGroup("Unusually deep", unusuallyDeepLevel, [body]),
         ]),
       ]),
     ]);
@@ -170,6 +176,7 @@ describe("wordprocessing outlines", () => {
   });
 
   it("pops an H1 after an H3 back to the root across sibling groups", () => {
+    const nestedLevel = 3;
     const firstBody = paragraph("first body");
     const nestedBody = paragraph("nested body");
     const secondBody = paragraph("second body");
@@ -177,7 +184,7 @@ describe("wordprocessing outlines", () => {
       sectionGroup([
         headingGroup("First", 1, [
           firstBody,
-          headingGroup("Nested", 3, [nestedBody]),
+          headingGroup("Nested", nestedLevel, [nestedBody]),
         ]),
         headingGroup("Second", 1, [secondBody]),
       ]),
@@ -274,10 +281,14 @@ describe("wordprocessing outlines", () => {
 
   it("pops only the deepest of three open list groups, keeping the shallower two open", () => {
     // The list-stack mirror of the heading test above: a three-deep open list stack ([A, B, D]) at the moment sibling 'E' arrives is what distinguishes popping from the stack's ACTUAL top from popping based on some other, shallower element — a check that (wrongly) reads the stack's second element (B, level 1) would see 1 >= 2 as false and never pop D, nesting 'E' as D's own child instead of D's sibling under B.
+    const dLevel = 3;
     const pkg = wordprocessingPackage([
       sectionGroup([
         listGroup("A", 0, [
-          listGroup("B", 1, [listGroup("D", 3, []), listGroup("E", 2, [])]),
+          listGroup("B", 1, [
+            listGroup("D", dLevel, []),
+            listGroup("E", 2, []),
+          ]),
         ]),
       ]),
     ]);
@@ -380,11 +391,12 @@ describe("wordprocessing outlines", () => {
   });
 
   it("continues heading nesting opened in one section inside the next", () => {
+    const subsectionLevel = 3;
     const pkg = wordprocessingPackage([
       sectionGroup([
         headingGroup("Chapter", 1, [headingGroup("Section", 2, [])]),
       ]),
-      sectionGroup([headingGroup("Subsection", 3, [])]),
+      sectionGroup([headingGroup("Subsection", subsectionLevel, [])]),
     ]);
     expectSchemaValid(pkg);
     // The deepest open group at the end of section one is the scope the next section's headings nest into — stack semantics applied to anchors in pre-order, exactly as they were on flat content before the tree form existed.

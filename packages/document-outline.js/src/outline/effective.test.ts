@@ -678,6 +678,7 @@ describe("effectivePackage", () => {
 
   it("rebuilds a heading group whose own anchor and inherited entry are both unaffected, but whose children genuinely changed", () => {
     // Parent has no own style but inherits Grandparent's "emptyEntry" chain (a real, non-empty chain that nonetheless resolves to no actual change to Parent's own anchor). Child, nested inside Parent, carries its own REAL style ref and so genuinely changes — which must still rebuild Parent's own children array, and therefore Parent itself, even though Parent's own anchor/style clauses are both trivially satisfied.
+    const childLevel = 3;
     const pkg = wordprocessingPackage(
       [
         sectionGroup([
@@ -686,7 +687,7 @@ describe("effectivePackage", () => {
             1,
             [
               headingGroup("Parent", 2, [
-                headingGroup("Child", 3, [], { style: "outer" }),
+                headingGroup("Child", childLevel, [], { style: "outer" }),
               ]),
             ],
             { style: "emptyEntry" },

@@ -30,6 +30,7 @@ import {
 
 describe("isOutlineNode guard", () => {
   it("accepts builder output for every package kind", () => {
+    const deepHeadingLevel = 4;
     const packages = [
       wordprocessingPackage([
         sectionGroup([
@@ -37,7 +38,7 @@ describe("isOutlineNode guard", () => {
           headingGroup("Chapter", 1, [
             listGroup("A", 0, [listGroup("B", 1, [table([["cell"]])])]),
           ]),
-          headingGroup("Deep", 4, []),
+          headingGroup("Deep", deepHeadingLevel, []),
         ]),
       ]),
       presentationPackage([
@@ -100,11 +101,12 @@ describe("isOutlineNode guard", () => {
       }),
     ).toBe(false);
     // A group nested one level down carrying the defect — the guard must recurse, not check only the top level.
+    const invalidChildValue = 42;
     expect(
       isOutlineNode({
         text: "x",
         level: 1,
-        children: [{ text: "y", level: 2, children: [42] }],
+        children: [{ text: "y", level: 2, children: [invalidChildValue] }],
       }),
     ).toBe(false);
   });
