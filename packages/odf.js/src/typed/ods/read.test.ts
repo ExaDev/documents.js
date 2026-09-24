@@ -758,7 +758,7 @@ describe("readOdsContent: error and fallback paths (synthetic packages — not s
 
 // The ods residue rows (ExaDev/documents.js#769): recalculation semantics are not content, so table:calculation-settings and the non-content parts quarantine at the package tier.
 describe("readOdsContent: residue rows", () => {
-  function spreadsheetPackage(
+  function residueSpreadsheetPackage(
     children: readonly XmlElement[],
     extraParts: Record<string, Package["parts"][string]> = {},
   ): Package {
@@ -778,7 +778,7 @@ describe("readOdsContent: residue rows", () => {
   }
 
   it("quarantines table:calculation-settings at the package tier, keyed calculation-settings", () => {
-    const pkg = spreadsheetPackage([
+    const pkg = residueSpreadsheetPackage([
       el(
         "table:calculation-settings",
         {
@@ -803,7 +803,7 @@ describe("readOdsContent: residue rows", () => {
   });
 
   it("quarantines a non-content XML part at the package tier keyed by its part path, spliced onto readOds's root", () => {
-    const pkg = spreadsheetPackage(
+    const pkg = residueSpreadsheetPackage(
       [el("table:table", { "table:name": "Sheet1" }, [el("table:table-row")])],
       {
         "settings.xml": {
@@ -839,7 +839,7 @@ describe("readOdsContent: residue rows", () => {
   });
 
   it("quarantines a vendor-extension element at the spreadsheet level, keyed by its own tag", () => {
-    const pkg = spreadsheetPackage([
+    const pkg = residueSpreadsheetPackage([
       el("table:table", { "table:name": "Sheet1" }, [el("table:table-row")]),
       el("loext:some-extension", {}, [el("loext:child")]),
     ]);
@@ -850,7 +850,7 @@ describe("readOdsContent: residue rows", () => {
 
   // Real LibreOffice Calc output writes calcext:conditional-formats as the last child of each table:table, never as a child of office:spreadsheet — the placement the conditional-format.ods fixture below pins.
   it("quarantines a vendor-extension element inside a table:table, keyed by its own tag, concatenating same-tag occurrences across tables", () => {
-    const pkg = spreadsheetPackage([
+    const pkg = residueSpreadsheetPackage([
       el("table:table", { "table:name": "Sheet1" }, [
         el("table:table-row"),
         el("calcext:conditional-formats", {}, [

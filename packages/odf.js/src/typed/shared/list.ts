@@ -50,25 +50,25 @@ export function resolveOdfListKind(
       const container = findChildElement(root.children, containerTag);
       if (container === undefined) continue;
       const listStyle = childrenWithTag(container, "text:list-style").find(
-        (el) => attrValue(el, "style:name") === styleName,
+        (style) => attrValue(style, "style:name") === styleName,
       );
       if (listStyle === undefined) continue;
       // Real list-styles are homogeneous across levels; checking level 1 is sufficient.
       if (
         childrenWithTag(listStyle, "text:list-level-style-number").some(
-          (el) => attrValue(el, "text:level") === "1",
+          (level) => attrValue(level, "text:level") === "1",
         )
       )
         return "ordered";
       if (
         childrenWithTag(listStyle, "text:list-level-style-bullet").some(
-          (el) => attrValue(el, "text:level") === "1",
+          (level) => attrValue(level, "text:level") === "1",
         )
       )
         return "bullet";
       if (
         childrenWithTag(listStyle, "text:list-level-style-image").some(
-          (el) => attrValue(el, "text:level") === "1",
+          (level) => attrValue(level, "text:level") === "1",
         )
       )
         return "bullet";
