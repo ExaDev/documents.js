@@ -163,7 +163,9 @@ describe("readPdf: PDFs that open without a password", () => {
   it("reports no diagnostics at all while decrypting", () => {
     const diagnostics: PdfDiagnostic[] = [];
     readPdf(aes256EmptyUserPasswordPdf(), {
-      sink: (diagnostic) => diagnostics.push(diagnostic),
+      sink: (diagnostic) => {
+        diagnostics.push(diagnostic);
+      },
     });
     expect(diagnostics).toEqual([]);
   });

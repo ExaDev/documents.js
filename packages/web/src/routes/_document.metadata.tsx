@@ -1,12 +1,4 @@
-import {
-  Button,
-  Container,
-  Paper,
-  Stack,
-  Table,
-  TextInput,
-  Title,
-} from "@mantine/core";
+import { Button, Paper, Stack, Table, TextInput } from "@mantine/core";
 import { createFileRoute } from "@tanstack/react-router";
 import type { DocumentFormat } from "documents.js";
 import { useEffect, useRef, useState } from "react";
@@ -18,6 +10,7 @@ import { UnrecognisedFormatAlert } from "../document/UnrecognisedFormatAlert";
 import { useReadMetadata, useWriteMetadata } from "../hooks/useMetadata";
 import type { OpenedFile } from "../ports/fileAccess";
 import { notifyError, notifySuccess } from "../ui/notify";
+import { ToolPage } from "../ui/ToolPage";
 
 export const Route = createFileRoute("/_document/metadata")({
   component: MetadataPage,
@@ -27,26 +20,22 @@ function MetadataPage() {
   const { document } = useOpenDocument();
 
   return (
-    <Container size="sm" py="xl">
-      <Stack gap="lg">
-        <Title order={2}>Document metadata</Title>
-
-        {document === undefined ? (
-          <NoDocumentOpen>
-            Open a document above to see its metadata.
-          </NoDocumentOpen>
-        ) : document.format === undefined ? (
-          <UnrecognisedFormatAlert fileName={document.file.name} />
-        ) : (
-          // Keyed by the document's own open sequence: a fresh open (even re-picking the identical file) remounts this panel from scratch, which is what resets title/author overrides. Calling their setters directly inside an effect is exactly the pattern this project's eslint config (react-hooks/set-state-in-effect) steers away from.
-          <MetadataPanel
-            key={document.id}
-            file={document.file}
-            format={document.format}
-          />
-        )}
-      </Stack>
-    </Container>
+    <ToolPage title="Document metadata">
+      {document === undefined ? (
+        <NoDocumentOpen>
+          Open a document above to see its metadata.
+        </NoDocumentOpen>
+      ) : document.format === undefined ? (
+        <UnrecognisedFormatAlert fileName={document.file.name} />
+      ) : (
+        // Keyed by the document's own open sequence: a fresh open (even re-picking the identical file) remounts this panel from scratch, which is what resets title/author overrides. Calling their setters directly inside an effect is exactly the pattern this project's eslint config (react-hooks/set-state-in-effect) steers away from.
+        <MetadataPanel
+          key={document.id}
+          file={document.file}
+          format={document.format}
+        />
+      )}
+    </ToolPage>
   );
 }
 

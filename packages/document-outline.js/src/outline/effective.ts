@@ -24,6 +24,7 @@ import {
   type StylesTable,
   type TreeGroup,
 } from "document-schema.js";
+import { assertNeverPackage } from "./exhaustive";
 
 // Effective-property resolution: the route every consumer that must not care how a package was serialised — resolve-then-compare (the promotion's law ii: a factored and an unfactored serialisation of one document resolve to the same effective tree) and content hashing (hashes ride over resolved properties, so a hash names the document, not the producer's compression choices) — goes through before touching content. A tree group may carry a `style` ref into the package's styles table (ExaDev/document-schema.js#21); this module resolves those refs away using document-schema.js's own overlay helpers (resolveStyleChain / applyParagraphStyleProperties / applyRunStyleProperties — the mechanics are the schema's to own, the same single-authority rule that moved the tree vocabulary there) and returns the package with every ref consumed and the styles table dropped: effectivePackage(factored) deep-equals effectivePackage(unfactored), which is the whole point.
 //
@@ -66,6 +67,7 @@ export function effectivePackage(pkg: DocumentTree): DocumentTree {
       // The single ContentFormula child is a leaf, and refs exist only on group wrappers, so a formula package's effective form is simply itself minus the table.
       return withoutStyles({ ...pkg });
   }
+  return assertNeverPackage(pkg);
 }
 
 // Copy-then-delete rather than destructuring `styles` out of the union: the arms' object types are what make the spread assignable to DocumentTree, and a destructured-away field would also be an unused binding the repo's lint rejects.

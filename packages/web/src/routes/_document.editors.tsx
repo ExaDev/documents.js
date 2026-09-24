@@ -2,13 +2,11 @@ import {
   ActionIcon,
   Alert,
   Button,
-  Container,
   Group,
   Paper,
   Stack,
   Text,
   Textarea,
-  Title,
 } from "@mantine/core";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
 import { createFileRoute } from "@tanstack/react-router";
@@ -28,6 +26,7 @@ import {
 } from "../hooks/useEditorSession";
 import type { OpenedFile } from "../ports/fileAccess";
 import { notifyError, notifySuccess } from "../ui/notify";
+import { ToolPage } from "../ui/ToolPage";
 
 export const Route = createFileRoute("/_document/editors")({
   component: EditorsPage,
@@ -51,28 +50,22 @@ function EditorsPage() {
   const format = editorFormat(document?.format);
 
   return (
-    <Container size="lg" py="xl">
-      <Stack gap="lg">
-        <Title order={2}>Edit a document</Title>
-        <Text c="dimmed">
-          Opens docx, odt, doc, and markdown through live-view editors running
-          in the browser: edits apply to the document itself, and Save writes
-          the whole document back through its format&apos;s own writer.
-        </Text>
-
-        {document === undefined ? (
-          <NoDocumentOpen>Open a document above to edit it.</NoDocumentOpen>
-        ) : format === undefined ? (
-          <Alert color="yellow" title="Not an editable format">
-            Editing opens docx, odt, doc, and markdown documents. &quot;
-            {document.file.name}&quot; is not one of those.
-          </Alert>
-        ) : (
-          // Keyed by the document's own open sequence, so a fresh open (even re-picking the identical file) remounts this panel from scratch. That is what discards the previous document's editor session, rather than calling its setter directly inside an effect (react-hooks/set-state-in-effect).
-          <EditorPanel key={document.id} file={document.file} format={format} />
-        )}
-      </Stack>
-    </Container>
+    <ToolPage
+      title="Edit a document"
+      description="Opens docx, odt, doc, and markdown through live-view editors running in the browser: edits apply to the document itself, and Save writes the whole document back through its format's own writer."
+    >
+      {document === undefined ? (
+        <NoDocumentOpen>Open a document above to edit it.</NoDocumentOpen>
+      ) : format === undefined ? (
+        <Alert color="yellow" title="Not an editable format">
+          Editing opens docx, odt, doc, and markdown documents. &quot;
+          {document.file.name}&quot; is not one of those.
+        </Alert>
+      ) : (
+        // Keyed by the document's own open sequence, so a fresh open (even re-picking the identical file) remounts this panel from scratch. That is what discards the previous document's editor session, rather than calling its setter directly inside an effect (react-hooks/set-state-in-effect).
+        <EditorPanel key={document.id} file={document.file} format={format} />
+      )}
+    </ToolPage>
   );
 }
 

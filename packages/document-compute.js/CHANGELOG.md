@@ -1,3 +1,20 @@
+## [1.6.43](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.6.42...document-compute.js%401.6.43) (2026-09-24)
+
+### Code Refactoring
+
+* **document-compute.js:** make evaluate and formatOutcome exhaustiveness explicit ([daed151](https://github.com/ExaDev/documents.js/commit/daed1512be205c2ccce1710c4e997f3a2cf166ed))
+
+### Tests
+
+* **document-compute.js:** pin the operation name evaluate assertNever throws with ([24821b6](https://github.com/ExaDev/documents.js/commit/24821b6cfc4d315b0e8097847e35030f9c9ecbcd))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.3
+- Updated markdown-codec to 11.1.9
+- Updated documents.js to 14.4.33
+
 ## [1.6.42](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.6.41...document-compute.js%401.6.42) (2026-09-24)
 
 

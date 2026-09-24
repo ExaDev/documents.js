@@ -1,3 +1,17 @@
+## [7.15.3](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.15.2...document-schema.js%407.15.3) (2026-09-24)
+
+### Bug Fixes
+
+* **document-schema.js:** box the forward references z.lazy() self-recursion needs ([690dde9](https://github.com/ExaDev/documents.js/commit/690dde9663e6152bc6c8ed0ef4179913f0756335))
+* **document-schema.js:** convert shorthand interface methods to function properties ([a4083c8](https://github.com/ExaDev/documents.js/commit/a4083c8b7c448d0819eb3c504d4af8ad5206ca07))
+* **document-schema.js:** mark four type-only barrel re-exports as export type ([4e1dc88](https://github.com/ExaDev/documents.js/commit/4e1dc88b73f07c86d5f83b3053de4dce8cc2937f))
+* **document-schema.js:** return through never-typed guards on six exhaustive switches ([46fdaa5](https://github.com/ExaDev/documents.js/commit/46fdaa58492dc9e461673ac191ccabb64b8067c4))
+* **document-schema.js:** stop content.test.ts shadowing its own fixtures ([683156d](https://github.com/ExaDev/documents.js/commit/683156d6e16e0a4a189143744c68fc765c5241b2))
+
+### Miscellaneous Chores
+
+* **document-schema.js:** clear the eslint-config 2.12.1 rule debt list ([6916b1c](https://github.com/ExaDev/documents.js/commit/6916b1cfeb2dda39677cf4ec466a8be9a0effba3))
+
 ## [7.15.2](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.15.1...document-schema.js%407.15.2) (2026-09-24)
 
 ### Bug Fixes

@@ -6,7 +6,12 @@ import type {
   MathUnparsed,
   SymbolTable,
 } from "document-schema.js";
-import { evaluate, evaluateQuantity, isInterval } from "./evaluate";
+import {
+  assertNever,
+  evaluate,
+  evaluateQuantity,
+  isInterval,
+} from "./evaluate";
 import { interval } from "./interval";
 import { quantity } from "./quantity";
 import {
@@ -640,5 +645,22 @@ describe("evaluateQuantity", () => {
     expect((caught as UnsupportedExpressionError).message).toBe(
       "evaluateQuantity: this position requires a plain Quantity, not an Interval.",
     );
+  });
+});
+
+describe("assertNever", () => {
+  it("throws naming both the operation and the unhandled node, proving evaluate's own exhaustiveness guard fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNever({ kind: "bogus" } as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(UnsupportedExpressionError);
+    // The whole message, not a fragment of it: the context is a separate constructor argument from the detail, so asserting only the detail leaves the context unpinned.
+    expect((caught as Error).message).toBe(
+      'evaluate: unhandled expression node {"kind":"bogus"}.',
+    );
+    expect((caught as UnsupportedExpressionError).context).toBe("evaluate");
   });
 });

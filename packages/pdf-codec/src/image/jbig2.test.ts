@@ -33,7 +33,9 @@ describe("decodeJbig2Embedded: real encoder-produced streams", () => {
           fixture.globals === undefined
             ? undefined
             : jbig2FixtureBytes(fixture.globals),
-        onWarning: (message) => warnings.push(message),
+        onWarning: (message) => {
+          warnings.push(message);
+        },
       });
       expect(warnings).toEqual([]);
       expect({ width: result.width, height: result.height }).toEqual({

@@ -9,7 +9,7 @@ export default packageLintConfig({
   // Resolves document input by filesystem path via node:fs/promises (see src/io/document-input.ts) — the same reason document-mcp, its one current consumer, is not held to Worker isomorphism either.
   isomorphic: false,
   // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why — this package's own diagnostic/report builders genuinely mutate a handful of array/object parameters in place. Tracked for burn-down.
-  preferReadonlyParams: "off",
+  preferReadonlyParams: "error",
   magicNumbers: "error",
   maxLines: "error",
 });
