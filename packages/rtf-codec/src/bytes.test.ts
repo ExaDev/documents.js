@@ -30,13 +30,13 @@ describe("asciiStringFromBytes", () => {
 describe("appendBytes", () => {
   it("appends every byte of the input onto the target array, in order", () => {
     const target = [0x01];
-    appendBytes(target, Uint8Array.from([0x02, 0x03, 0x04]));
+    appendBytes({ bytes: target }, Uint8Array.from([0x02, 0x03, 0x04]));
     expect(target).toEqual([0x01, 0x02, 0x03, 0x04]);
   });
 
   it("appends nothing for an empty input", () => {
     const target = [0x01];
-    appendBytes(target, new Uint8Array(0));
+    appendBytes({ bytes: target }, new Uint8Array(0));
     expect(target).toEqual([0x01]);
   });
 });

@@ -37,11 +37,11 @@ const SECTION = {
   margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
 } as const;
 
-function wordprocessing(blocks: ContentBlock[]): ContentDocument {
+function wordprocessing(blocks: readonly ContentBlock[]): ContentDocument {
   return {
     kind: "wordprocessing",
     metadata: {},
-    sections: [{ ...SECTION, blocks }],
+    sections: [{ ...SECTION, blocks: [...blocks] }],
   };
 }
 

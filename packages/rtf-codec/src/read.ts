@@ -330,6 +330,11 @@ interface SectionState {
   breakType: SectionBreakType | undefined;
 }
 
+// Threaded by reference, rather than SectionState passed as a bare object parameter, into the two dispatchers (applyControlWord, applySectionControlWord) that route mutation into it: SectionState is deliberately one persistent mutable record (see its own doc comment above), and every one of its own fields is a primitive, which is exactly what makes a bare SectionState parameter 'flat' under exadev/prefer-readonly-object-param. Wrapping it in a one-field sink whose own section property is not itself a primitive or callback keeps that rule out of scope for it, the same way appendBytes's own ByteSink in bytes.ts does for its unrelated array case. Every other consumer of SectionState (sectionGeometry and the rest) only ever reads it and keeps the plain Readonly<SectionState> parameter type instead.
+interface SectionSink {
+  readonly section: SectionState;
+}
+
 type SectionBreakType = NonNullable<ContentSection["breakType"]>;
 
 // "\sbknone No section break", "\sbkcol Section break starts a new column", "\sbkpage Section break starts a new page", "\sbkeven Section break starts at an even page", "\sbkodd Section break starts at an odd page" (RTF 1.9.1, "Section Formatting Properties"). \sbkpage is RTF's own default and ContentSection's too ("absent means the format's own default break — nextPage in WordprocessingML"), so it maps to `undefined` rather than restating the default as data. \sbkcol is absent from this table on purpose: a column break has no ContentSection.breakType member, so it degrades with a diagnostic rather than being silently rounded to a neighbouring member.
@@ -777,16 +782,21 @@ export function closingBookmarkExtent(
   };
 }
 
-// Appends `text` to `items`' own last entry, in place. A standalone function rather than inlined at emitText's own formFieldListItem branch, so the invariant that entry always already exists (a fresh entry is pushed in the identical group-open branch that sets this destination, so by the time text can arrive there is always at least one) can be exercised directly by a unit test constructing a case that violates it, rather than needing a non-null assertion to state the same invariant with no test able to reach it.
-export function appendToLastListItem(items: string[], text: string): void {
-  const last = items.length - 1;
-  const current = items[last];
+// Threaded by reference rather than passed as a bare array parameter: items is the caller's own list-item accumulator, its last entry rewritten in place, not foreign data this function has no business mutating. Wrapping it in a one-field sink keeps exadev/prefer-readonly-array-param out of scope for it, the same way appendBytes's own ByteSink in bytes.ts does.
+export interface ListItemSink {
+  readonly items: string[];
+}
+
+// Appends `text` to `sink.items`' own last entry, in place. A standalone function rather than inlined at emitText's own formFieldListItem branch, so the invariant that entry always already exists (a fresh entry is pushed in the identical group-open branch that sets this destination, so by the time text can arrive there is always at least one) can be exercised directly by a unit test constructing a case that violates it, rather than needing a non-null assertion to state the same invariant with no test able to reach it.
+export function appendToLastListItem(sink: ListItemSink, text: string): void {
+  const last = sink.items.length - 1;
+  const current = sink.items[last];
   if (current === undefined) {
     throw new Error(
       "internal invariant violated: a form field list item's text arrived with no list item entry to append to",
     );
   }
-  items[last] = current + text;
+  sink.items[last] = current + text;
 }
 
 class ContentBuilder {
@@ -832,7 +842,10 @@ class ContentBuilder {
   ) {}
 
   // "{\*\bkmkstart ...}" — flushing first so the bookmark's boundary is a run boundary, which is what makes the extent expressible at all.
-  startBookmark(bookmark: BookmarkState, para: ParagraphState): void {
+  startBookmark(
+    bookmark: Readonly<BookmarkState>,
+    para: Readonly<ParagraphState>,
+  ): void {
     this.flushRun();
     const name = bookmark.name;
     if (name.length === 0) {
@@ -960,7 +973,7 @@ class ContentBuilder {
   }
 
   // Closes the paragraph currently accumulating. `force` distinguishes an explicit \par (which always produces a paragraph, empty ones included — an empty paragraph is real content in a wordprocessing document) from an implicit boundary such as a \cell or the end of the document, which produces nothing when nothing has accumulated.
-  endParagraph(para: ParagraphState, force: boolean): void {
+  endParagraph(para: Readonly<ParagraphState>, force: boolean): void {
     this.flushRun();
     if (!force && this.runs.length === 0) {
       return;
@@ -980,7 +993,7 @@ class ContentBuilder {
 
   // Once a paragraph has taken its place in a block list, every bookmark that opened inside it learns that index (so a pair closing later knows where to bracket from), and every pair whose end landed in it becomes a block extent. Both are deferred to here rather than recorded at the marker, because closeTable() above can push a table between the marker and the paragraph and shift the index the marker would have guessed.
   private resolveBookmarkPositions(
-    para: ParagraphState,
+    para: Readonly<ParagraphState>,
     blockIndex: number,
   ): void {
     // No `open.blockIndex === undefined` guard: a still-open bookmark's own paragraphSerial is fixed at the paragraph it opened in, and this reader gives every closed paragraph a fresh symbol identity that is never reused, so `open.paragraphSerial === this.paragraphSerial` can hold true for at most one resolveBookmarkPositions call per bookmark — the very call for the paragraph it opened in. A defined blockIndex and a matching serial can therefore never coincide, making the guard permanently redundant rather than a real defensive check.
@@ -1025,7 +1038,7 @@ class ContentBuilder {
     );
   }
 
-  private buildParagraph(para: ParagraphState): ContentParagraph {
+  private buildParagraph(para: Readonly<ParagraphState>): ContentParagraph {
     const style =
       para.styleIndex === undefined
         ? undefined
@@ -1069,7 +1082,9 @@ class ContentBuilder {
   }
 
   // "\slN Space between lines ... If N is a positive value, this size is used only if it is taller than the tallest character ... if N is a negative value, the absolute value of N is used" and "\slmultN Line spacing multiple ... 1 Multiple line spacing, relative to 'Single'". ContentParagraph.lineSpacing is a multiple of single line height, so only the \slmult1 form converts exactly: RTF states its multiple in 240ths of a line, Word's own unit for it. An \sl0 or absent value means automatic spacing and produces no field at all.
-  private lineSpacingFields(para: ParagraphState): { lineSpacing?: number } {
+  private lineSpacingFields(para: Readonly<ParagraphState>): {
+    lineSpacing?: number;
+  } {
     const value = para.lineSpacingTwips;
     // No `value === 0` clause: when value is 0, multiple below is also exactly 0, and the trailing `multiple > 0` check already returns {} for that case — an explicit early check for the same thing here would be an equivalent-mutant-prone duplicate of that guard, not a distinct check.
     if (value === undefined || !para.lineSpacingIsMultiple) {
@@ -1079,7 +1094,7 @@ class ContentBuilder {
     return multiple > 0 ? { lineSpacing: multiple } : {};
   }
 
-  private listFields(para: ParagraphState): {
+  private listFields(para: Readonly<ParagraphState>): {
     list?: { numId: string; level: number };
   } {
     const overrideIndex = para.listOverrideIndex;
@@ -1136,7 +1151,7 @@ class ContentBuilder {
     this.pendingCell = newPendingCell();
   }
 
-  endCell(para: ParagraphState): void {
+  endCell(para: Readonly<ParagraphState>): void {
     this.endParagraph(para, false);
     this.flushClosingBookmarks(true, this.cellBlocks.length);
     this.rowCells.push({
@@ -1150,7 +1165,7 @@ class ContentBuilder {
     this.cellBlockExtents = [];
   }
 
-  endRow(para: ParagraphState): void {
+  endRow(para: Readonly<ParagraphState>): void {
     if (this.cellBlocks.length > 0 || this.pendingRunText.length > 0) {
       this.endCell(para);
     }
@@ -1380,7 +1395,7 @@ class ContentBuilder {
   }
 
   // Ends \result's own scratch rendering: force-closes whatever paragraph it was still accumulating — RTF 1.9.1's own <result> = '{' \result <para>+ '}' lets the group's own closing brace stand in for the final paragraph's \par exactly as a table cell's \cell or the document's own end already do elsewhere in this reader (endParagraph's own force=false is exactly that "implicit boundary" case: it produces nothing new when \result's content already closed with its own explicit \par, and produces the one paragraph still pending when it did not) — then hands back every block \result's content produced, from BOTH of the scratch's own block lists, before restoring the accumulator `beginResultScratch` suspended. Reading both rather than picking one by `para.inTable` matters because that flag can genuinely diverge from where a nested paragraph's own content actually landed: \intbl restated directly on \result's own group sets `para.inTable` here, but a child group nested inside \result (RTF 1.9.1's own <result> grammar admits \intbl among <parfmt>* on \result's own para, so this is spec-legal input, not malformed) can \pard-reset ITS OWN copy back to false before its own \par closes it into `blocks` instead of `cellBlocks` — so `para.inTable` at this group's own end no longer says which list the content actually reached. Concatenating both sidesteps the question entirely: `beginResultScratch` started both empty and nothing outside \result's own content can write to either, so everything either list holds by now belongs to \result regardless of which one it is. `closeTable()` runs unconditionally first (matching endSection's own unconditional call, not gated on `para.inTable` either) so a table that genuinely closed inside \result (a real \trowd/\cellx/\cell/\row run) is already folded into `blocks` before the read, rather than left sitting in `tableRows` where neither returned list would surface it.
-  endResultScratch(para: ParagraphState): ContentBlock[] {
+  endResultScratch(para: Readonly<ParagraphState>): ContentBlock[] {
     this.endParagraph(para, false);
     this.closeTable();
     const blocks = [...this.blocks, ...this.cellBlocks];
@@ -1401,7 +1416,10 @@ class ContentBuilder {
     }
   }
 
-  endSection(section: SectionState, para: ParagraphState): void {
+  endSection(
+    section: Readonly<SectionState>,
+    para: Readonly<ParagraphState>,
+  ): void {
     this.endParagraph(para, false);
     this.closeTable();
     this.flushClosingBookmarks(false, this.blocks.length);
@@ -1440,8 +1458,8 @@ class ContentBuilder {
 
   finish(
     metadata: LayoutMetadata,
-    section: SectionState,
-    para: ParagraphState,
+    section: Readonly<SectionState>,
+    para: Readonly<ParagraphState>,
   ): ContentDocument {
     this.discardUnclosedResultScratches();
     // No `if (this.sections.length === 0) { this.sections.push(...) }` fallback after this call: endSection's own drop condition (`blocks.length === 0 && this.sections.length > 0`) can only ever skip pushing when sections.length is ALREADY at least 1 — its second operand is false whenever sections.length is 0, so THIS call, the one endSection call finish() ever makes, is unconditionally guaranteed to leave sections.length at least 1 regardless of what it was beforehand. A fallback guarding against a state this call can never produce would be genuinely unreachable, not defensive.
@@ -1450,7 +1468,7 @@ class ContentBuilder {
   }
 }
 
-function sectionGeometry(section: SectionState): {
+function sectionGeometry(section: Readonly<SectionState>): {
   pageSize: PageSize;
   margins: Margins;
 } {
@@ -1758,7 +1776,7 @@ function readRtfDetail(
       state.field?.formField !== undefined
     ) {
       // Appends to the LAST item: a \*\ffl group's own open pushed one empty entry per occurrence, so several sibling \*\ffl groups (a dropdown's list) each accumulate into their own slot rather than one shared string.
-      appendToLastListItem(state.field.formField.listItems, text);
+      appendToLastListItem({ items: state.field.formField.listItems }, text);
       return;
     }
     // "picture" text is handled directly at the token site (it is hex, not characters); "skip", "listText", "unicodeWrapper" and "formField" discard — \*\ffdeftext (FFData.xstzTextDef) is one of these now, per SILENT_SKIP_DESTINATIONS above.
@@ -2042,7 +2060,7 @@ function readRtfDetail(
       ) {
         appendObjectDataHexText(state.objectData, asciiStringFromBytes(slice));
       } else {
-        appendBytes(pendingBytes, slice);
+        appendBytes({ bytes: pendingBytes }, slice);
       }
       index += 1;
       textOffset = 0;
@@ -2051,12 +2069,12 @@ function readRtfDetail(
 
     if (token.kind === "binary") {
       if (state.destination === "picture" && state.picture !== undefined) {
-        appendBytes(state.picture.binary, token.bytes);
+        appendBytes({ bytes: state.picture.binary }, token.bytes);
       } else if (
         state.destination === "objectData" &&
         state.objectData !== undefined
       ) {
-        appendBytes(state.objectData.bytes, token.bytes);
+        appendBytes({ bytes: state.objectData.bytes }, token.bytes);
       }
       index += 1;
       continue;
@@ -2117,7 +2135,7 @@ function readRtfDetail(
       state,
       builder,
       header,
-      section,
+      { section },
       sink,
     );
     index += 1;
@@ -2410,15 +2428,15 @@ function applyParagraphControlWord(
   }
 }
 
-// The <secfmt> production's own properties (RTF 1.9.1, "Section Formatting Properties"). Every one of them is a section-scoped twin of a document-level control word the header parser already reads — \pgwsxnN beside \paperwN, \marglsxnN beside \marglN — because RTF states page geometry twice: once for the document and once per section that departs from it.
-// Void for the same reason applyCharacterControlWord above is.
+// The <secfmt> production's own properties (RTF 1.9.1, "Section Formatting Properties"). Every one of them is a section-scoped twin of a document-level control word the header parser already reads — \pgwsxnN beside \paperwN, \marglsxnN beside \marglN — because RTF states page geometry twice: once for the document and once per section that departs from it. Void for the same reason applyCharacterControlWord above is. This is the one function whose entire job is to mutate SectionState in response to each <secfmt> control word, which is exactly why it takes the SectionSink wrapper rather than a bare SectionState (see SectionSink's own note).
 function applySectionControlWord(
   name: string,
   param: number | undefined,
-  section: SectionState,
+  sectionSink: SectionSink,
   header: RtfHeader,
   sink: RtfDiagnosticSink,
 ): void {
+  const section = sectionSink.section;
   if (name === "sectd") {
     Object.assign(section, defaultSectionState(header));
     return;
@@ -2468,7 +2486,7 @@ function applyStructureControlWord(
   param: number | undefined,
   state: GroupState,
   builder: ContentBuilder,
-  section: SectionState,
+  section: Readonly<SectionState>,
   sink: RtfDiagnosticSink,
 ): void {
   // Void, not boolean: this is the last dispatcher in applyControlWord's own chain, called unconditionally with its result never inspected — an unrecognised word simply falls out of the switch as a real no-op, exactly as the spec requires of any control word a reader does not know.
@@ -2533,7 +2551,8 @@ function applyControlWord(
   state: GroupState,
   builder: ContentBuilder,
   header: RtfHeader,
-  section: SectionState,
+  // Wrapped for the same reason applySectionControlWord's own SectionSink parameter is: this function dispatches to it, which genuinely mutates the section it holds. sectionSink.section, a plain mutable SectionState, is still trivially assignable everywhere else this same reference is passed on to a Readonly<SectionState>-typed parameter (applyStructureControlWord below), so nothing downstream loses its own read-only guarantee.
+  sectionSink: SectionSink,
   sink: RtfDiagnosticSink,
 ): void {
   const picture = state.picture;
@@ -2580,8 +2599,15 @@ function applyControlWord(
   // The <celldef> run comes before the paragraph dispatch: several of its members share a prefix with paragraph border words, and a cell definition's own side is the narrower reading whenever one is open.
   builder.applyCellDefinition(name, param);
   applyParagraphControlWord(name, param, state);
-  applySectionControlWord(name, param, section, header, sink);
-  applyStructureControlWord(name, param, state, builder, section, sink);
+  applySectionControlWord(name, param, sectionSink, header, sink);
+  applyStructureControlWord(
+    name,
+    param,
+    state,
+    builder,
+    sectionSink.section,
+    sink,
+  );
 }
 
 export function readRtfContent(
