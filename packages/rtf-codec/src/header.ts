@@ -792,7 +792,9 @@ export function readRtfHeader(
           sink,
         );
         break;
-      // No default case: a destination this module doesn't recognise is simply left for the body reader, which a switch with no matching case and no default already does on its own.
+      // Every other destination, an absent one included, is left for the body reader: this switch only claims the destinations the header itself owns. Stated as a default rather than left implicit so that the intent is the code rather than a comment about the code.
+      default:
+        break;
     }
     if (
       head.destination !== undefined &&
