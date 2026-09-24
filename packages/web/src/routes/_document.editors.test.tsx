@@ -351,12 +351,16 @@ describe("EditorsPage", () => {
       expect.anything(),
     );
 
+    // The server's own snapshot text (rather than the optimistic value already on screen from typeInto above) is what proves the onSuccess callback's setSnapshot call actually ran, rather than the render still showing the pre-existing local state.
     const { onSuccess } = latestCallbacks(setParagraphText);
     act(() => {
-      onSuccess({ id: 1, paragraphs: ["First, edited", "Second"] });
+      onSuccess({
+        id: 1,
+        paragraphs: ["First, edited, normalised by the server", "Second"],
+      });
     });
     expect(paragraphTextarea(mounted.container, 1)?.value).toBe(
-      "First, edited",
+      "First, edited, normalised by the server",
     );
     mounted.unmount();
   });
