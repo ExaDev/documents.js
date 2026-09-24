@@ -1,3 +1,9 @@
+## [12.2.16](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.15...ooxml.js%4012.2.16) (2026-09-24)
+
+### Bug Fixes
+
+* **ooxml.js:** clear the last preferReadonlyParams exceptions ([5a1a224](https://github.com/ExaDev/documents.js/commit/5a1a22401ee50ff81034ac035c1e06c66296abdf))
+
 ## [12.2.15](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.14...ooxml.js%4012.2.15) (2026-09-24)
 
 ### Bug Fixes
