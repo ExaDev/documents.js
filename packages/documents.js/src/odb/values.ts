@@ -44,6 +44,7 @@ export function cellComparisonKey(
     case "empty":
       return undefined;
   }
+  return assertNeverValueKind(value);
 }
 
 export function compareCellKeys(
@@ -158,4 +159,9 @@ export function aggregateCellValues(
         : best,
     first,
   );
+}
+
+// Reached only if the union behind `value.kind` ever gains a member the switch above does not match: every current member has a case there, so `value.kind` narrows to `never` at the call, and adding an uncovered member makes that narrowing fail and the call stop compiling. Exists so the switch's own exhaustiveness, proven by the type checker rather than by a catch-all default that would silently accept a genuinely new member, still gives consistent-return an explicit statement to see past the switch. Exported so a test can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable.
+export function assertNeverValueKind(value: never): never {
+  throw new Error(`documents.js: unhandled value ${JSON.stringify(value)}`);
 }

@@ -167,9 +167,10 @@ export function docxPackageOfBodyXml(
       "word/document.xml": enc(
         `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document ${BODY_NAMESPACES}><w:body>${bodyXml}${BODY_SECT_PR}</w:body></w:document>`,
       ),
-      "word/_rels/document.xml.rels": options.documentRelsXml
-        ? enc(options.documentRelsXml)
-        : DOCUMENT_RELS_XML,
+      "word/_rels/document.xml.rels":
+        options.documentRelsXml === undefined
+          ? DOCUMENT_RELS_XML
+          : enc(options.documentRelsXml),
       "word/styles.xml": STYLES_XML,
       ...options.parts,
     }),

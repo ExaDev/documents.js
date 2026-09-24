@@ -1,3 +1,4 @@
+import { assertNeverFormulaKind } from "./evaluate";
 import type { ContentCellValue } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import type { SqlResultSet } from "../sql/evaluate";
@@ -545,5 +546,13 @@ describe("the failure policy", () => {
     );
 
     expect(bands[0]?.values).toEqual([undefined, text("x"), undefined]);
+  });
+});
+
+describe("assertNeverFormulaKind", () => {
+  it("throws naming the unhandled formula, proving the switch's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverFormulaKind({ kind: "bogus" } as never);
+    }).toThrow('documents.js: unhandled formula {"kind":"bogus"}');
   });
 });

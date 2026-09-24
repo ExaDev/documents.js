@@ -52,7 +52,7 @@ export function nextStyleName(
       continue;
     }
     const name = attr(child, "style:name");
-    if (!name?.startsWith(prefix)) {
+    if (name?.startsWith(prefix) !== true) {
       continue;
     }
     const rest = name.slice(prefix.length);

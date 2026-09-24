@@ -1,3 +1,4 @@
+import { assertNeverVectorKind } from "./vector";
 import type { XmlNode } from "odf.js";
 import { describe, expect, it } from "vitest";
 import { createEmptyOdgPackage } from "./scaffold";
@@ -299,5 +300,13 @@ describe("vector rotation", () => {
     expect(() => {
       vector.rotationDeg = 10;
     }).toThrow(/no resolvable frame/);
+  });
+});
+
+describe("assertNeverVectorKind", () => {
+  it("throws naming the unhandled vector, proving the switch's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverVectorKind({ kind: "bogus" } as never);
+    }).toThrow('documents.js: unhandled vector {"kind":"bogus"}');
   });
 });

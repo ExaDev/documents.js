@@ -82,6 +82,197 @@ import {
 import { type ContentVariant, UnsupportedConversionError } from "./capability";
 import { type DocumentFormat } from "./port";
 
+// The single source of truth for "which primitives does each format use". read/build closures thread their own per-format option subset internally: docx and pptx read/build both pull onMathDiagnostic (mirroring readDocxContent's/readPptxContent's own `{ onMathDiagnostic }` and buildDocxPackage's/buildPptxPackage's own option — ExaDev/documents.js#563 gave pptx the identical OMML degrade-diagnostic channel docx already had), markdown read pulls signal/images (mirroring readMarkdownContent's ReadMarkdownOptions), csv read pulls delimiter/onCellTypeInference and csv build pulls delimiter/sheet (mirroring readCsvContent's ReadCsvContentOptions and buildCsvText's BuildCsvTextOptions), svg read pulls onSvgDiagnostic and svg build pulls page/onSvgDiagnostic (mirroring readSvgContent's ReadSvgContentOptions and buildSvgText's BuildSvgTextOptions), and every other format's read/build accept and ignore the thread. docxToPdf's openDocx(bytes).toPackage() and decodeOoxmlPackage(bytes) produce the identical Package (openDocx wraps decodeOoxmlPackage and toPackage returns it unmutated), so decode uses the package codec directly for uniformity — byte-identical to docxToPdf at every downstream call site.
+export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
+  docx: {
+    variant: "wordprocessing",
+    family: "ooxml",
+    decode: (bytes) => decodeOoxmlPackage(bytes),
+    read: (pkg, options) =>
+      readDocxContent(pkg, { onMathDiagnostic: options?.onMathDiagnostic }),
+    build: (content, options) =>
+      buildDocxPackage(content, {
+        onMathDiagnostic: options?.onMathDiagnostic,
+      }),
+    encode: (pkg) => encodeOoxmlPackage(pkg),
+    hasSourcePackage: true,
+  },
+  pptx: {
+    variant: "presentation",
+    family: "ooxml",
+    decode: (bytes) => decodeOoxmlPackage(bytes),
+    read: (pkg, options) =>
+      readPptxContent(pkg, { onMathDiagnostic: options?.onMathDiagnostic }),
+    build: (content, options) =>
+      buildPptxPackage(content, {
+        onMathDiagnostic: options?.onMathDiagnostic,
+      }),
+    encode: (pkg) => encodeOoxmlPackage(pkg),
+    hasSourcePackage: true,
+  },
+  xlsx: {
+    variant: "spreadsheet",
+    family: "ooxml",
+    decode: (bytes) => decodeOoxmlPackage(bytes),
+    read: (pkg) => readXlsxContent(pkg),
+    build: (content) => buildXlsxPackageFromContent(content),
+    encode: (pkg) => encodeOoxmlPackage(pkg),
+    hasSourcePackage: true,
+  },
+  odt: {
+    variant: "wordprocessing",
+    family: "odf",
+    decode: (bytes) => decodeOdfPackage(bytes),
+    read: (pkg) => readOdtContent(pkg),
+    build: (content) => buildOdtPackage(content),
+    encode: (pkg) => encodeOdfPackage(pkg),
+    hasSourcePackage: true,
+  },
+  odp: {
+    variant: "presentation",
+    family: "odf",
+    decode: (bytes) => decodeOdfPackage(bytes),
+    read: (pkg) => readOdpContent(pkg),
+    build: (content) => buildOdpPackage(content),
+    encode: (pkg) => encodeOdfPackage(pkg),
+    hasSourcePackage: true,
+  },
+  ods: {
+    variant: "spreadsheet",
+    family: "odf",
+    decode: (bytes) => decodeOdfPackage(bytes),
+    read: (pkg) => readOdsContent(pkg),
+    build: (content) => buildOdsPackage(content),
+    encode: (pkg) => encodeOdfPackage(pkg),
+    hasSourcePackage: true,
+  },
+  odg: {
+    variant: "drawing",
+    family: "odf",
+    decode: (bytes) => decodeOdfPackage(bytes),
+    read: (pkg) => readOdgContent(pkg),
+    build: (content) => buildOdgPackage(content),
+    encode: (pkg) => encodeOdfPackage(pkg),
+    hasSourcePackage: true,
+  },
+  // svg reads into the same drawing ContentDocument variant odg does, so the two form a same-variant bridge pair (cost 1) and svg additionally rides the drawing layout engine through its own toPdf/fromPdf edges — a text format with a genuine layout path, the one combination csv's entry does not have. read pulls onSvgDiagnostic and build pulls page/onSvgDiagnostic (mirroring readSvgContent's ReadSvgContentOptions and buildSvgText's BuildSvgTextOptions, src/svg/), so a multi-page drawing reached through the build leg throws SvgMultiPageNotSpecifiedError exactly as a direct buildSvgText call would until a caller selects a page.
+  svg: {
+    variant: "drawing",
+    family: "svg",
+    decode: (bytes) => decodeSvgText(bytes),
+    read: (text, options) =>
+      readSvgContent(text, { onSvgDiagnostic: options?.onSvgDiagnostic }),
+    build: (content, options) =>
+      buildSvgText(content, {
+        page: options?.page,
+        onSvgDiagnostic: options?.onSvgDiagnostic,
+      }),
+    encode: (text) => encodeSvgText(text),
+    hasSourcePackage: false,
+  },
+  markdown: {
+    variant: "wordprocessing",
+    family: "markdown",
+    decode: (bytes) => decodeMarkdownText(bytes),
+    read: (text, options) =>
+      readMarkdownContent(text, {
+        signal: options?.signal,
+        images: options?.images,
+      }),
+    build: (content) => buildMarkdownText(content),
+    encode: (text) => encodeMarkdownText(text),
+    hasSourcePackage: false,
+  },
+  csv: {
+    variant: "spreadsheet",
+    family: "csv",
+    decode: (bytes) => decodeCsvText(bytes),
+    read: (text, options) =>
+      readCsvContent(text, {
+        delimiter: options?.delimiter,
+        onCellTypeInference: options?.onCellTypeInference,
+      }),
+    build: (content, options) =>
+      buildCsvText(content, {
+        delimiter: options?.delimiter,
+        sheet: options?.sheet,
+      }),
+    encode: (text) => encodeCsvText(text),
+    hasSourcePackage: false,
+  },
+  // rtf shares the wordprocessing ContentDocument variant with docx/odt/markdown (readRtfContent/writeRtfContent, rtf-codec), so it same-variant bridges to all three at cost 1 — but it has no layout engine of its own (capability.ts's own FORMAT_CAPABILITIES.rtf), so it is deliberately absent from LAYOUT_CAPABLE below: rtf <-> pdf routes through one of those bridges plus that format's own toPdf/fromPdf edge, never a direct rtf <-> LayoutDocument pipeline. read/build pass only signal through — readRtfContent's/writeRtfContent's own ReadRtfOptions/WriteRtfOptions also carry an RtfDiagnosticSink (and, for read, resource-limit overrides), but UnifiedConversionOptions declares no field for those; a caller wanting them uses rtf-codec's readRtf/writeRtf directly, matching csv/svg's own onCellTypeInference/onSvgDiagnostic precedent of only surfacing options this shared shape already has room for.
+  rtf: {
+    variant: "wordprocessing",
+    family: "rtf",
+    decode: (bytes) => bytesToLatin1(bytes),
+    read: (text, options) =>
+      readRtfContent(text, { signal: options?.signal }).document,
+    build: (content) => bytesToLatin1(writeRtfContent(content)),
+    // rtfBytesFromLatin1's declared return type is the bare Uint8Array (Uint8Array<ArrayBufferLike>, admitting a SharedArrayBuffer-backed view), one step broader than FormatNode's own Uint8Array<ArrayBuffer> convention — requireArrayBufferBytes narrows it with a real runtime check rather than a cast, exactly as every other write-side boundary in this package already does for a builder's returned bytes (see that function's own doc comment in model/bytes.ts).
+    encode: (text) => requireArrayBufferBytes(rtfBytesFromLatin1(text)),
+    hasSourcePackage: false,
+  },
+  // doc reads/writes a real wordprocessing ContentDocument directly (doc-codec's readDocContent/writeDocContent), so it same-variant bridges to docx/odt/markdown/rtf at cost 1 — but it has no layout engine of its own (capability.ts's own FORMAT_CAPABILITIES.doc), so it is deliberately absent from LAYOUT_CAPABLE below: doc <-> pdf routes through one of those bridges plus that format's own toPdf/fromPdf edge, never a direct doc <-> LayoutDocument pipeline. readDocContent takes no options at all (doc-codec's read side has no loop of its own to hook a signal into and no diagnostic sink), so read checks the signal once via throwIfAborted before decoding — the identical no-loop-format shape docx/pptx/odt get from CONTENT_READERS' own convention. writeDocContent's own WriteDocContentOptions does carry a diagnostic sink now (onWarning, for the table writer's lost-boundary-budget fallback — see doc-codec's own README), but UnifiedConversionOptions declares no field for it, matching rtf's own precedent above of only surfacing options this shared shape already has room for; a caller wanting it uses doc-codec's writeDocContent directly. build therefore still ignores options entirely.
+  doc: {
+    variant: "wordprocessing",
+    family: "doc",
+    decode: (bytes) => bytesToLatin1(bytes),
+    read: (text, options) => {
+      throwIfAborted(options?.signal);
+      return readDocContent(latin1ToBytes(text));
+    },
+    build: (content) => bytesToLatin1(writeDocContent(content)),
+    encode: (text) => latin1ToBytes(text),
+    hasSourcePackage: false,
+  },
+  // epub reads/writes a real wordprocessing ContentDocument directly (epub-codec's readEpubContent/writeEpubContent), so it same-variant bridges to docx/odt/markdown/rtf/doc at cost 1 — but it has no layout engine of its own (capability.ts's own FORMAT_CAPABILITIES.epub), so it is deliberately absent from LAYOUT_CAPABLE below: epub <-> pdf routes through one of those bridges plus that format's own toPdf/fromPdf edge, never a direct epub <-> LayoutDocument pipeline. epub's bytes are a zip archive, not text, so it takes doc's own latin1-wrapping route rather than rtf's — epub-codec, like doc-codec/xls-codec/ppt-codec, has no xBytesFromLatin1 export of its own to reuse, so decode/build/encode go through this module's local bytesToLatin1/latin1ToBytes pair instead. readEpubContent/writeEpubContent take no signal at all (unlike readRtfContent/writeRtfContent), so read checks it once via throwIfAborted before decoding — the identical no-loop-format shape doc/xls/ppt get above. epub-codec's own read>write version asymmetry (EPUB 2/3 in, EPUB 3 only out) is entirely internal to writeEpubContent and needs no modelling here: it always succeeds for a wordprocessing ContentDocument regardless of which EPUB version originally produced it.
+  epub: {
+    variant: "wordprocessing",
+    family: "epub",
+    decode: (bytes) => bytesToLatin1(bytes),
+    read: (text, options) => {
+      throwIfAborted(options?.signal);
+      return readEpubContent(latin1ToBytes(text));
+    },
+    build: (content) => bytesToLatin1(writeEpubContent(content)),
+    encode: (text) => latin1ToBytes(text),
+    hasSourcePackage: false,
+  },
+  // xls reads/writes a real spreadsheet ContentDocument directly (xls-codec's readXlsContent/writeXlsContent, over XlsContentDocument — a plain Extract<ContentDocument, {kind:'spreadsheet'}>, fully interchangeable with the shared type at this boundary), so it same-variant bridges to xlsx/ods/csv at cost 1 — but it has no layout engine of its own (capability.ts's own FORMAT_CAPABILITIES.xls), so it follows xlsx/csv's own routing exactly: xls <-> pdf goes through the ods bridge + ods's own layout engine. writeXlsContent's own parameter type is the narrowed XlsContentDocument rather than the bare ContentDocument doc-codec's writeDocContent accepts, so build narrows with a real runtime check (matching this module's own TRANSFORMS narrowing convention) rather than a cast — a throw here is an internal-invariant guard, since executeBridge only ever calls build after confirming the content's variant already matches this node's own.
+  xls: {
+    variant: "spreadsheet",
+    family: "xls",
+    decode: (bytes) => bytesToLatin1(bytes),
+    read: (text, options) => {
+      throwIfAborted(options?.signal);
+      return readXlsContent(latin1ToBytes(text));
+    },
+    build: (content) => {
+      if (content.kind !== "spreadsheet") {
+        throw new Error(
+          "FORMAT_NODES.xls.build: expected a spreadsheet ContentDocument",
+        );
+      }
+      return bytesToLatin1(writeXlsContent(content));
+    },
+    encode: (text) => latin1ToBytes(text),
+    hasSourcePackage: false,
+  },
+  // ppt reads/writes a real presentation ContentDocument, but only via this package's own src/ppt/read.ts+write.ts adapter — ppt-codec's own readPptContent/writePptContent operate on the flat { metadata, slides } shape (mirroring ooxml.js's/odf.js's own upstream flat readers), not the full envelope, exactly as CONTENT_READERS.ppt (src/codecs/read.ts) and DOCUMENT_FORMAT_CODECS.ppt (src/codecs/registry.ts) both go through the identical adapter rather than calling ppt-codec directly. So it same-variant bridges to pptx/odp at cost 1 — but it has no layout engine of its own (capability.ts's own FORMAT_CAPABILITIES.ppt), so it follows rtf/doc's own routing exactly: ppt <-> pdf goes through a same-variant bridge plus that format's own toPdf/fromPdf edge.
+  ppt: {
+    variant: "presentation",
+    family: "ppt",
+    decode: (bytes) => bytesToLatin1(bytes),
+    read: (text, options) => {
+      throwIfAborted(options?.signal);
+      return readPptContent(latin1ToBytes(text));
+    },
+    build: (content) => bytesToLatin1(writePptContent(content)),
+    encode: (text) => latin1ToBytes(text),
+    hasSourcePackage: false,
+  },
+};
+
 // ooxml.js's and odf.js's Package types are structurally identical (src/interop.test.ts is the standing type-level proof, mutually assignable in both directions), so a single canonical alias covers both: every package-format read/build/encode/decode closure below flows an ooxml.js Package through odf.js primitives (and vice versa) without a cast at the boundary. This is the identical structural-typing bet createDocumentFontRegistry's own FontSourcePackage union already rests on.
 type SourcePackage = OoxmlPackage;
 
@@ -283,197 +474,6 @@ function latin1ToBytes(text: string): Uint8Array<ArrayBuffer> {
   }
   return bytes;
 }
-
-// The single source of truth for "which primitives does each format use". read/build closures thread their own per-format option subset internally: docx and pptx read/build both pull onMathDiagnostic (mirroring readDocxContent's/readPptxContent's own `{ onMathDiagnostic }` and buildDocxPackage's/buildPptxPackage's own option — ExaDev/documents.js#563 gave pptx the identical OMML degrade-diagnostic channel docx already had), markdown read pulls signal/images (mirroring readMarkdownContent's ReadMarkdownOptions), csv read pulls delimiter/onCellTypeInference and csv build pulls delimiter/sheet (mirroring readCsvContent's ReadCsvContentOptions and buildCsvText's BuildCsvTextOptions), svg read pulls onSvgDiagnostic and svg build pulls page/onSvgDiagnostic (mirroring readSvgContent's ReadSvgContentOptions and buildSvgText's BuildSvgTextOptions), and every other format's read/build accept and ignore the thread. docxToPdf's openDocx(bytes).toPackage() and decodeOoxmlPackage(bytes) produce the identical Package (openDocx wraps decodeOoxmlPackage and toPackage returns it unmutated), so decode uses the package codec directly for uniformity — byte-identical to docxToPdf at every downstream call site.
-export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
-  docx: {
-    variant: "wordprocessing",
-    family: "ooxml",
-    decode: (bytes) => decodeOoxmlPackage(bytes),
-    read: (pkg, options) =>
-      readDocxContent(pkg, { onMathDiagnostic: options?.onMathDiagnostic }),
-    build: (content, options) =>
-      buildDocxPackage(content, {
-        onMathDiagnostic: options?.onMathDiagnostic,
-      }),
-    encode: (pkg) => encodeOoxmlPackage(pkg),
-    hasSourcePackage: true,
-  },
-  pptx: {
-    variant: "presentation",
-    family: "ooxml",
-    decode: (bytes) => decodeOoxmlPackage(bytes),
-    read: (pkg, options) =>
-      readPptxContent(pkg, { onMathDiagnostic: options?.onMathDiagnostic }),
-    build: (content, options) =>
-      buildPptxPackage(content, {
-        onMathDiagnostic: options?.onMathDiagnostic,
-      }),
-    encode: (pkg) => encodeOoxmlPackage(pkg),
-    hasSourcePackage: true,
-  },
-  xlsx: {
-    variant: "spreadsheet",
-    family: "ooxml",
-    decode: (bytes) => decodeOoxmlPackage(bytes),
-    read: (pkg) => readXlsxContent(pkg),
-    build: (content) => buildXlsxPackageFromContent(content),
-    encode: (pkg) => encodeOoxmlPackage(pkg),
-    hasSourcePackage: true,
-  },
-  odt: {
-    variant: "wordprocessing",
-    family: "odf",
-    decode: (bytes) => decodeOdfPackage(bytes),
-    read: (pkg) => readOdtContent(pkg),
-    build: (content) => buildOdtPackage(content),
-    encode: (pkg) => encodeOdfPackage(pkg),
-    hasSourcePackage: true,
-  },
-  odp: {
-    variant: "presentation",
-    family: "odf",
-    decode: (bytes) => decodeOdfPackage(bytes),
-    read: (pkg) => readOdpContent(pkg),
-    build: (content) => buildOdpPackage(content),
-    encode: (pkg) => encodeOdfPackage(pkg),
-    hasSourcePackage: true,
-  },
-  ods: {
-    variant: "spreadsheet",
-    family: "odf",
-    decode: (bytes) => decodeOdfPackage(bytes),
-    read: (pkg) => readOdsContent(pkg),
-    build: (content) => buildOdsPackage(content),
-    encode: (pkg) => encodeOdfPackage(pkg),
-    hasSourcePackage: true,
-  },
-  odg: {
-    variant: "drawing",
-    family: "odf",
-    decode: (bytes) => decodeOdfPackage(bytes),
-    read: (pkg) => readOdgContent(pkg),
-    build: (content) => buildOdgPackage(content),
-    encode: (pkg) => encodeOdfPackage(pkg),
-    hasSourcePackage: true,
-  },
-  // svg reads into the same drawing ContentDocument variant odg does, so the two form a same-variant bridge pair (cost 1) and svg additionally rides the drawing layout engine through its own toPdf/fromPdf edges — a text format with a genuine layout path, the one combination csv's entry does not have. read pulls onSvgDiagnostic and build pulls page/onSvgDiagnostic (mirroring readSvgContent's ReadSvgContentOptions and buildSvgText's BuildSvgTextOptions, src/svg/), so a multi-page drawing reached through the build leg throws SvgMultiPageNotSpecifiedError exactly as a direct buildSvgText call would until a caller selects a page.
-  svg: {
-    variant: "drawing",
-    family: "svg",
-    decode: (bytes) => decodeSvgText(bytes),
-    read: (text, options) =>
-      readSvgContent(text, { onSvgDiagnostic: options?.onSvgDiagnostic }),
-    build: (content, options) =>
-      buildSvgText(content, {
-        page: options?.page,
-        onSvgDiagnostic: options?.onSvgDiagnostic,
-      }),
-    encode: (text) => encodeSvgText(text),
-    hasSourcePackage: false,
-  },
-  markdown: {
-    variant: "wordprocessing",
-    family: "markdown",
-    decode: (bytes) => decodeMarkdownText(bytes),
-    read: (text, options) =>
-      readMarkdownContent(text, {
-        signal: options?.signal,
-        images: options?.images,
-      }),
-    build: (content) => buildMarkdownText(content),
-    encode: (text) => encodeMarkdownText(text),
-    hasSourcePackage: false,
-  },
-  csv: {
-    variant: "spreadsheet",
-    family: "csv",
-    decode: (bytes) => decodeCsvText(bytes),
-    read: (text, options) =>
-      readCsvContent(text, {
-        delimiter: options?.delimiter,
-        onCellTypeInference: options?.onCellTypeInference,
-      }),
-    build: (content, options) =>
-      buildCsvText(content, {
-        delimiter: options?.delimiter,
-        sheet: options?.sheet,
-      }),
-    encode: (text) => encodeCsvText(text),
-    hasSourcePackage: false,
-  },
-  // rtf shares the wordprocessing ContentDocument variant with docx/odt/markdown (readRtfContent/writeRtfContent, rtf-codec), so it same-variant bridges to all three at cost 1 — but it has no layout engine of its own (capability.ts's own FORMAT_CAPABILITIES.rtf), so it is deliberately absent from LAYOUT_CAPABLE below: rtf <-> pdf routes through one of those bridges plus that format's own toPdf/fromPdf edge, never a direct rtf <-> LayoutDocument pipeline. read/build pass only signal through — readRtfContent's/writeRtfContent's own ReadRtfOptions/WriteRtfOptions also carry an RtfDiagnosticSink (and, for read, resource-limit overrides), but UnifiedConversionOptions declares no field for those; a caller wanting them uses rtf-codec's readRtf/writeRtf directly, matching csv/svg's own onCellTypeInference/onSvgDiagnostic precedent of only surfacing options this shared shape already has room for.
-  rtf: {
-    variant: "wordprocessing",
-    family: "rtf",
-    decode: (bytes) => bytesToLatin1(bytes),
-    read: (text, options) =>
-      readRtfContent(text, { signal: options?.signal }).document,
-    build: (content) => bytesToLatin1(writeRtfContent(content)),
-    // rtfBytesFromLatin1's declared return type is the bare Uint8Array (Uint8Array<ArrayBufferLike>, admitting a SharedArrayBuffer-backed view), one step broader than FormatNode's own Uint8Array<ArrayBuffer> convention — requireArrayBufferBytes narrows it with a real runtime check rather than a cast, exactly as every other write-side boundary in this package already does for a builder's returned bytes (see that function's own doc comment in model/bytes.ts).
-    encode: (text) => requireArrayBufferBytes(rtfBytesFromLatin1(text)),
-    hasSourcePackage: false,
-  },
-  // doc reads/writes a real wordprocessing ContentDocument directly (doc-codec's readDocContent/writeDocContent), so it same-variant bridges to docx/odt/markdown/rtf at cost 1 — but it has no layout engine of its own (capability.ts's own FORMAT_CAPABILITIES.doc), so it is deliberately absent from LAYOUT_CAPABLE below: doc <-> pdf routes through one of those bridges plus that format's own toPdf/fromPdf edge, never a direct doc <-> LayoutDocument pipeline. readDocContent takes no options at all (doc-codec's read side has no loop of its own to hook a signal into and no diagnostic sink), so read checks the signal once via throwIfAborted before decoding — the identical no-loop-format shape docx/pptx/odt get from CONTENT_READERS' own convention. writeDocContent's own WriteDocContentOptions does carry a diagnostic sink now (onWarning, for the table writer's lost-boundary-budget fallback — see doc-codec's own README), but UnifiedConversionOptions declares no field for it, matching rtf's own precedent above of only surfacing options this shared shape already has room for; a caller wanting it uses doc-codec's writeDocContent directly. build therefore still ignores options entirely.
-  doc: {
-    variant: "wordprocessing",
-    family: "doc",
-    decode: (bytes) => bytesToLatin1(bytes),
-    read: (text, options) => {
-      throwIfAborted(options?.signal);
-      return readDocContent(latin1ToBytes(text));
-    },
-    build: (content) => bytesToLatin1(writeDocContent(content)),
-    encode: (text) => latin1ToBytes(text),
-    hasSourcePackage: false,
-  },
-  // epub reads/writes a real wordprocessing ContentDocument directly (epub-codec's readEpubContent/writeEpubContent), so it same-variant bridges to docx/odt/markdown/rtf/doc at cost 1 — but it has no layout engine of its own (capability.ts's own FORMAT_CAPABILITIES.epub), so it is deliberately absent from LAYOUT_CAPABLE below: epub <-> pdf routes through one of those bridges plus that format's own toPdf/fromPdf edge, never a direct epub <-> LayoutDocument pipeline. epub's bytes are a zip archive, not text, so it takes doc's own latin1-wrapping route rather than rtf's — epub-codec, like doc-codec/xls-codec/ppt-codec, has no xBytesFromLatin1 export of its own to reuse, so decode/build/encode go through this module's local bytesToLatin1/latin1ToBytes pair instead. readEpubContent/writeEpubContent take no signal at all (unlike readRtfContent/writeRtfContent), so read checks it once via throwIfAborted before decoding — the identical no-loop-format shape doc/xls/ppt get above. epub-codec's own read>write version asymmetry (EPUB 2/3 in, EPUB 3 only out) is entirely internal to writeEpubContent and needs no modelling here: it always succeeds for a wordprocessing ContentDocument regardless of which EPUB version originally produced it.
-  epub: {
-    variant: "wordprocessing",
-    family: "epub",
-    decode: (bytes) => bytesToLatin1(bytes),
-    read: (text, options) => {
-      throwIfAborted(options?.signal);
-      return readEpubContent(latin1ToBytes(text));
-    },
-    build: (content) => bytesToLatin1(writeEpubContent(content)),
-    encode: (text) => latin1ToBytes(text),
-    hasSourcePackage: false,
-  },
-  // xls reads/writes a real spreadsheet ContentDocument directly (xls-codec's readXlsContent/writeXlsContent, over XlsContentDocument — a plain Extract<ContentDocument, {kind:'spreadsheet'}>, fully interchangeable with the shared type at this boundary), so it same-variant bridges to xlsx/ods/csv at cost 1 — but it has no layout engine of its own (capability.ts's own FORMAT_CAPABILITIES.xls), so it follows xlsx/csv's own routing exactly: xls <-> pdf goes through the ods bridge + ods's own layout engine. writeXlsContent's own parameter type is the narrowed XlsContentDocument rather than the bare ContentDocument doc-codec's writeDocContent accepts, so build narrows with a real runtime check (matching this module's own TRANSFORMS narrowing convention) rather than a cast — a throw here is an internal-invariant guard, since executeBridge only ever calls build after confirming the content's variant already matches this node's own.
-  xls: {
-    variant: "spreadsheet",
-    family: "xls",
-    decode: (bytes) => bytesToLatin1(bytes),
-    read: (text, options) => {
-      throwIfAborted(options?.signal);
-      return readXlsContent(latin1ToBytes(text));
-    },
-    build: (content) => {
-      if (content.kind !== "spreadsheet") {
-        throw new Error(
-          "FORMAT_NODES.xls.build: expected a spreadsheet ContentDocument",
-        );
-      }
-      return bytesToLatin1(writeXlsContent(content));
-    },
-    encode: (text) => latin1ToBytes(text),
-    hasSourcePackage: false,
-  },
-  // ppt reads/writes a real presentation ContentDocument, but only via this package's own src/ppt/read.ts+write.ts adapter — ppt-codec's own readPptContent/writePptContent operate on the flat { metadata, slides } shape (mirroring ooxml.js's/odf.js's own upstream flat readers), not the full envelope, exactly as CONTENT_READERS.ppt (src/codecs/read.ts) and DOCUMENT_FORMAT_CODECS.ppt (src/codecs/registry.ts) both go through the identical adapter rather than calling ppt-codec directly. So it same-variant bridges to pptx/odp at cost 1 — but it has no layout engine of its own (capability.ts's own FORMAT_CAPABILITIES.ppt), so it follows rtf/doc's own routing exactly: ppt <-> pdf goes through a same-variant bridge plus that format's own toPdf/fromPdf edge.
-  ppt: {
-    variant: "presentation",
-    family: "ppt",
-    decode: (bytes) => bytesToLatin1(bytes),
-    read: (text, options) => {
-      throwIfAborted(options?.signal);
-      return readPptContent(latin1ToBytes(text));
-    },
-    build: (content) => bytesToLatin1(writePptContent(content)),
-    encode: (text) => latin1ToBytes(text),
-    hasSourcePackage: false,
-  },
-};
 
 // The formats that have a direct layout-engine path to/from PDF (convertXToLayout + writePdf). xlsx and csv are deliberately absent: neither has a layout engine of its own, so the pathfinder routes each <-> pdf through ods instead (e.g. csv -> ods bridge, then ods -> pdf toPdf), reproducing the composed route xlsxToPdf/pdfToXlsx already hard-code in convert.ts. rtf is absent for the identical reason, routed through a same-variant bridge to docx/odt/markdown instead — and doc/xls/ppt join it there for the same reason again: none of the three legacy binary codecs has a layout engine of its own, so each routes through a same-variant bridge (doc to docx/odt/markdown/rtf, xls to ods, ppt to pptx/odp) plus that bridge target's own toPdf/fromPdf edge. epub joins the same group for the same reason: epub-codec has no layout engine of its own either, so epub <-> pdf routes through a same-variant bridge to docx/odt/markdown/rtf/doc plus that bridge target's own toPdf/fromPdf edge. svg is present: its read half produces a drawing ContentDocument whose page geometry comes from the svg root's own viewBox/width/height, and convertDrawingToLayout renders it unmodified. Exported because composition-to-pdf.ts's executeToPdf is the executor that enforces it.
 //

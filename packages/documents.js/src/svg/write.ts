@@ -190,6 +190,7 @@ function vectorElement(
       return `<path d="${d}"${fillAttr(vector.fill)}${vector.stroke === undefined ? "" : strokeAttr(vector, vector.stroke, sink)}${fillRule}${rotationAttr(vector.rotationDeg, vector.frame)}/>`;
     }
   }
+  return assertNeverVectorKind(vector);
 }
 
 function shapeDetail(shape: ContentShape): string {
@@ -226,4 +227,9 @@ export function buildSvgText(
   }
   lines.push("</svg>");
   return `${lines.join("\n")}\n`;
+}
+
+// Reached only if the union behind `vector.kind` ever gains a member the switch above does not match: every current member has a case there, so `vector.kind` narrows to `never` at the call, and adding an uncovered member makes that narrowing fail and the call stop compiling. Exists so the switch's own exhaustiveness, proven by the type checker rather than by a catch-all default that would silently accept a genuinely new member, still gives consistent-return an explicit statement to see past the switch. Exported so a test can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable.
+export function assertNeverVectorKind(value: never): never {
+  throw new Error(`documents.js: unhandled vector ${JSON.stringify(value)}`);
 }

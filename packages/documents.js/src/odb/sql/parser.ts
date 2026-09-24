@@ -236,6 +236,7 @@ function describeToken(token: SqlToken): string {
     case "end":
       return "end of statement";
   }
+  return assertNeverTokenKind(token);
 }
 
 // The pre-scan half of this module's closed allowlist: walk every token once and reject each recognised out-of-scope construct by name before the grammar below ever runs. Two rules, in the order a reader would want them reported: a named out-of-scope keyword (checked regardless of where in the statement it sits, including inside a derived table's own SELECT — none of these become legal anywhere just because a derived table now is), and an identifier immediately followed by "(" — necessarily a scalar function call, since the only function calls this grammar has are the five aggregates, and those lex as keywords rather than identifiers. A SELECT keyword past the first token is no longer rejected here: a derived table's own SELECT is real grammar now (see this module's own top-of-file note), so whether a nested SELECT is legal is a question the recursive-descent grammar below answers by position — specifically, a derived table's own FROM — rather than something this flat pre-scan can decide. IN and EXISTS still admit only a literal list or a scalar operand respectively, at this grammar's current scope: nothing here yet parses a SELECT in either position, so a construct like `IN (SELECT ...)` still fails, just as a plain parse error (an unexpected keyword where a literal was expected) rather than a named "a subquery" HsqldbSqlUnsupportedError.
@@ -331,7 +332,7 @@ class SqlParser {
   private takeName(what: string): SqlNameRef {
     const token = this.peek();
     if (token.kind !== "identifier") {
-      this.fail(what);
+      return this.fail(what);
     }
     this.advance();
     return { name: token.name, quoted: token.quoted };
@@ -468,7 +469,7 @@ class SqlParser {
       this.advance();
       return { kind: "null" };
     }
-    this.fail("a literal value");
+    return this.fail("a literal value");
   }
 
   private parseOperand(): SqlOperand {
@@ -520,7 +521,7 @@ class SqlParser {
           this.sql,
         );
       }
-      this.fail("a string literal LIKE pattern");
+      return this.fail("a string literal LIKE pattern");
     }
     this.advance();
     return { kind: "like", operand, pattern: token.value, negated };
@@ -547,7 +548,7 @@ class SqlParser {
       this.advance();
       return this.parseBetween(operand, true);
     }
-    this.fail("keyword LIKE, IN or BETWEEN after NOT");
+    return this.fail("keyword LIKE, IN or BETWEEN after NOT");
   }
 
   private parsePostfix(operand: SqlOperand): SqlPredicate {
@@ -593,7 +594,9 @@ class SqlParser {
         return this.parseNegatedPostfix(operand);
       }
     }
-    this.fail("a comparison operator, or keyword IS, LIKE, IN or BETWEEN");
+    return this.fail(
+      "a comparison operator, or keyword IS, LIKE, IN or BETWEEN",
+    );
   }
 
   private parsePrimary(): SqlPredicate {
@@ -824,7 +827,9 @@ class SqlParser {
       const joinKind = this.parseJoinKind();
       if (joinKind === undefined) {
         if (natural) {
-          this.fail("keyword JOIN, INNER, LEFT, RIGHT or FULL after NATURAL");
+          return this.fail(
+            "keyword JOIN, INNER, LEFT, RIGHT or FULL after NATURAL",
+          );
         }
         break;
       }
@@ -875,7 +880,7 @@ class SqlParser {
       this.advance();
     }
     if (this.peek().kind !== "end") {
-      this.fail("end of statement");
+      return this.fail("end of statement");
     }
 
     return statement;
@@ -884,4 +889,9 @@ class SqlParser {
 
 export function parseSelect(sql: string): SqlSelectStatement {
   return new SqlParser(sql).parseStatement();
+}
+
+// Reached only if the union behind `token.kind` ever gains a member the switch above does not match: every current member has a case there, so `token.kind` narrows to `never` at the call, and adding an uncovered member makes that narrowing fail and the call stop compiling. Exists so the switch's own exhaustiveness, proven by the type checker rather than by a catch-all default that would silently accept a genuinely new member, still gives consistent-return an explicit statement to see past the switch. Exported so a test can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable.
+export function assertNeverTokenKind(value: never): never {
+  throw new Error(`documents.js: unhandled token ${JSON.stringify(value)}`);
 }

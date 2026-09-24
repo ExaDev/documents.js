@@ -2,7 +2,6 @@ import { execFileSync } from "node:child_process";
 import { writeFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
 import { unzlibSync } from "fflate";
 import { flattenTree, PAGE_SIZE_A4 } from "document-schema.js";
 import { buildXml as buildOdfXml, zipPackage } from "odf.js";
@@ -61,6 +60,8 @@ import {
   odtToMarkdown,
   odtToPdf,
 } from "./convert";
+
+const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
 
 // End-to-end coverage for the MathML/formula pipeline: odfToPdf (a standalone .odf formula document) for each of the task's own named curated formulas (a simple fraction, a square root, a superscript/subscript combination, a small matrix via mtable), plus the embedded-formula-inside-odt/odp path. Checks the output PDF is well-formed (readable back through this package's own readPdf; also cross-checked with qpdf --check when that binary is available locally — see qpdfCheck below) and that real layout invariants hold, not just "it doesn't crash".
 

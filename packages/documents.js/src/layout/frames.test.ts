@@ -371,8 +371,8 @@ describe("reconstruct frames: wordprocessing (reconstruct.ts)", () => {
     expect(block.runs).toHaveLength(2);
     expect(block.runs[0]!.frames?.[0]?.xPt).toBe(72);
     expect(block.runs[1]!.frames?.[0]?.xPt).toBe(72.5 + 27);
-    for (const run of block.runs) {
-      expect(run.frames?.[0]?.pageIndex).toBe(0);
+    for (const blockRun of block.runs) {
+      expect(blockRun.frames?.[0]?.pageIndex).toBe(0);
     }
   });
 });

@@ -652,7 +652,7 @@ function regionContains(outer: GridRegion, inner: GridRegion): boolean {
 function anchorRegions(grid: LiveTableGrid<OdtTableCell>): GridRegion[] {
   return grid.rows.flatMap((positions, row) =>
     positions.flatMap((position, column) => {
-      if (!position?.isAnchor) {
+      if (position?.isAnchor !== true) {
         return [];
       }
       const spans: ContentTableCell = {

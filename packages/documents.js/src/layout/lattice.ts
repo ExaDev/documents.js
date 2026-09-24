@@ -1,5 +1,8 @@
 import type { LayoutItem } from "pdf-codec";
 
+// The short-axis thickness under which a filled LayoutRect reads as a drawn line rather than a genuinely filled 2D block — see extractLineCandidates' own module comment for the real-world producer pattern this exists for. 3pt comfortably covers the observed 0.12-2.30pt range of real gridline-rect thicknesses while still excluding an ordinary filled cell/shading block, which is wide AND tall, not thin on exactly one axis.
+const RECT_LINE_THICKNESS_TOLERANCE_PT = 3;
+
 // Gridline-lattice detection over a page's recovered geometry: the one place this package decides that a set of drawn strokes genuinely IS a printed grid rather than a scatter of unrelated rules. Lives in its own module because THREE reconstruction directions now share it — reconstructSpreadsheet (where the lattice's own line positions become cell boundaries directly), and reconstructWordprocessing/reconstructPresentation (where an unambiguously detected lattice is the ONLY signal permitted to synthesize a ContentTable; see reconstruct.ts's own table-recovery note for why text alignment alone deliberately is not).
 //
 // Every threshold here is a deliberately conservative one: a false negative leaves content as ordinary paragraphs/cells, which is merely a missed improvement, while a false positive invents a structure the source never had. The bar is therefore "unambiguously a grid", not "plausibly a grid".
@@ -86,9 +89,6 @@ const AXIS_ALIGNMENT_TOLERANCE_PT = 0.5;
 
 // A stray tick mark or cell-border fragment is not evidence of a page-spanning gridline lattice — only a segment at least this long is considered a lattice candidate at all.
 const MIN_GRIDLINE_LENGTH_PT = 4;
-
-// The short-axis thickness under which a filled LayoutRect reads as a drawn line rather than a genuinely filled 2D block — see extractLineCandidates' own module comment for the real-world producer pattern this exists for. 3pt comfortably covers the observed 0.12-2.30pt range of real gridline-rect thicknesses while still excluding an ordinary filled cell/shading block, which is wide AND tall, not thin on exactly one axis.
-const RECT_LINE_THICKNESS_TOLERANCE_PT = 3;
 
 interface AxisSegment {
   readonly axis: "horizontal" | "vertical";

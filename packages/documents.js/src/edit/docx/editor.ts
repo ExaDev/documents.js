@@ -241,6 +241,8 @@ class DocxBodyImpl implements DocxBody {
         );
         break;
       case "richText":
+      case "button":
+        // Neither carries a w: type element of its own: richText is the shape a bare w:sdtPr already describes, and button has no entry in ooxml.js's CONTROL_TYPE_BY_TAG at all, so there is no tag to write for it.
         break;
     }
     const sdtContent = el("w:sdtContent", {}, []);

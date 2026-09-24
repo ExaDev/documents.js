@@ -1,3 +1,4 @@
+import { assertNeverDocumentKind } from "./write";
 import { describe, expect, it } from "vitest";
 import type { ContentDocument, ContentShape } from "document-schema.js";
 import { readPptContent } from "./read";
@@ -159,5 +160,13 @@ describe("writePptContent: constructor guard", () => {
     expect(() => writePptContent(spreadsheet)).toThrow(
       "writePptContent requires a presentation ContentDocument, got 'spreadsheet'",
     );
+  });
+});
+
+describe("assertNeverDocumentKind", () => {
+  it("throws naming the unhandled document, proving the switch's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverDocumentKind({ kind: "bogus" } as never);
+    }).toThrow('documents.js: unhandled document {"kind":"bogus"}');
   });
 });
