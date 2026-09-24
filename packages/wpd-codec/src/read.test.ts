@@ -2449,7 +2449,7 @@ describe("WPG vector graphics embedded in an image box", () => {
       0x16,
       majorVersion,
       0,
-      ...word(options.encrypted ? 1 : 0),
+      ...word(options.encrypted === true ? 1 : 0),
       ...word(26),
       0,
       0,
