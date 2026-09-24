@@ -39,7 +39,17 @@ const FONT: LayoutFont = {
 const BLACK = { r: 0, g: 0, b: 0 };
 
 // A line of text is one LayoutItem, matching how a PDF content stream typically emits one contiguous run per Tj — widthPt is derived from a rough average glyph advance (0.5em per character) rather than hand-computed per fixture, since these tests only care about relative scale (a gutter/gap being comfortably wider or narrower than a line's own font size), not exact glyph metrics.
-function line(xPt: number, yPt: number, text: string, sizePt = 10): LayoutText {
+const DEFAULT_LINE_SIZE_PT = 10;
+// vitest's own toBeCloseTo precision (decimal digits), reused everywhere a floating-point score is checked.
+const PRECISION_DIGITS = 10;
+const GLYPH_ADVANCE_EM = 0.5;
+
+function line(
+  xPt: number,
+  yPt: number,
+  text: string,
+  sizePt = DEFAULT_LINE_SIZE_PT,
+): LayoutText {
   return {
     kind: "text",
     text,
@@ -48,7 +58,7 @@ function line(xPt: number, yPt: number, text: string, sizePt = 10): LayoutText {
     font: FONT,
     sizePt,
     color: BLACK,
-    widthPt: text.length * sizePt * 0.5,
+    widthPt: text.length * sizePt * GLYPH_ADVANCE_EM,
   };
 }
 
@@ -62,15 +72,19 @@ describe("segmentPdfRegions", () => {
   });
 
   it("excludes link/internalLink annotations from segmentation", () => {
+    const leftMargin = 50;
+    const topLine = 700;
+    const secondLine = 686;
+    const linkTop = 680;
     const regions = segmentPdfRegions(
       page([
-        line(50, 700, "Some prose text here to read."),
-        line(50, 686, "Continuing on the very next line below."),
+        line(leftMargin, topLine, "Some prose text here to read."),
+        line(leftMargin, secondLine, "Continuing on the very next line below."),
         {
           kind: "link",
           uri: "https://example.com",
-          xPt: 50,
-          yPt: 680,
+          xPt: leftMargin,
+          yPt: linkTop,
           widthPt: 100,
           heightPt: 20,
         },
@@ -82,26 +96,42 @@ describe("segmentPdfRegions", () => {
   });
 
   it("classifies a single flowing text block as a column", () => {
-    const lines = Array.from({ length: 6 }, (_, index) =>
+    const lineCount = 6;
+    const leftMargin = 50;
+    const topLine = 700;
+    const lineHeight = 14;
+    const lines = Array.from({ length: lineCount }, (_, index) =>
       line(
-        50,
-        700 - index * 14,
+        leftMargin,
+        topLine - index * lineHeight,
         "The quick brown fox jumps over the lazy dog.",
       ),
     );
     const regions = segmentPdfRegions(page(lines));
     expect(regions).toHaveLength(1);
     expect(regions[0]?.classification).toBe("column");
-    expect(regions[0]?.items).toHaveLength(6);
+    expect(regions[0]?.items).toHaveLength(lineCount);
   });
 
   it("splits a two-column layout at the gutter, classifying each column independently", () => {
-    // Short lines, well short of the 200pt gutter, so the gutter is unambiguously wider than either column's own line-height-derived scale. The right column's own line rhythm is deliberately offset from the left's (a different line spacing, 15pt vs 14pt) — two independent flowing-text columns never share a synchronised row-for-row rhythm in practice, and the offset here is what keeps isRowAlignedGrid from mistaking this for one table's rows.
-    const leftColumn = Array.from({ length: 8 }, (_, index) =>
-      line(50, 700 - index * 14, "Left column body text."),
+    // Short lines, well short of the gutter, so the gutter is unambiguously wider than either column's own line-height-derived scale. The right column's own line rhythm is deliberately offset from the left's (a different line spacing) — two independent flowing-text columns never share a synchronised row-for-row rhythm in practice, and the offset here is what keeps isRowAlignedGrid from mistaking this for one table's rows.
+    const leftColumnCount = 8;
+    const rightColumnCount = 7;
+    const leftX = 50;
+    const rightX = 250;
+    const topLine = 700;
+    const rightTopLine = 693;
+    const leftLineHeight = 14;
+    const rightLineHeight = 15;
+    const leftColumn = Array.from({ length: leftColumnCount }, (_, index) =>
+      line(leftX, topLine - index * leftLineHeight, "Left column body text."),
     );
-    const rightColumn = Array.from({ length: 7 }, (_, index) =>
-      line(250, 693 - index * 15, "Right column text."),
+    const rightColumn = Array.from({ length: rightColumnCount }, (_, index) =>
+      line(
+        rightX,
+        rightTopLine - index * rightLineHeight,
+        "Right column text.",
+      ),
     );
     const regions = segmentPdfRegions(page([...leftColumn, ...rightColumn]));
 
@@ -110,9 +140,9 @@ describe("segmentPdfRegions", () => {
       (a, b) => a.bounds.xPt - b.bounds.xPt,
     );
     expect(left?.classification).toBe("column");
-    expect(left?.items).toHaveLength(8);
+    expect(left?.items).toHaveLength(leftColumnCount);
     expect(right?.classification).toBe("column");
-    expect(right?.items).toHaveLength(7);
+    expect(right?.items).toHaveLength(rightColumnCount);
   });
 
   it("classifies a ruled grid of rows and aligned columns as a table, not per-column prose", () => {
@@ -123,10 +153,15 @@ describe("segmentPdfRegions", () => {
       ["Carol", "41", "Hull"],
       ["Dave", "37", "Ripon"],
     ];
-    const columnX = [50, 200, 320];
+    const topLine = 700;
+    const rowHeight = 16;
+    const column0X = 50;
+    const column1X = 200;
+    const column2X = 320;
+    const columnX = [column0X, column1X, column2X];
     const items: LayoutItem[] = [];
     [headers, ...rows].forEach((row, rowIndex) => {
-      const yPt = 700 - rowIndex * 16;
+      const yPt = topLine - rowIndex * rowHeight;
       row.forEach((cell, columnIndex) => {
         const x = columnX[columnIndex];
         if (x !== undefined) items.push(line(x, yPt, cell));
@@ -142,6 +177,7 @@ describe("segmentPdfRegions", () => {
   });
 
   it("classifies an image-dominated block as a figure, and a short adjacent line as its caption", () => {
+    const proseLineCount = 4;
     const figure: LayoutItem = {
       kind: "image",
       imageId: "img-1",
@@ -150,12 +186,21 @@ describe("segmentPdfRegions", () => {
       widthPt: 300,
       heightPt: 200,
     };
+    const captionX = 150;
+    const captionY = 470;
+    const proseX = 100;
+    const proseTopY = 760;
+    const proseLineHeight = 14;
     // A photo this size' own scale (min(300, 200) = 200pt) would swamp a global gap threshold; the caption gap below is well clear of the LOCAL threshold (1.5 * the caption's own ~10pt font size) that this module actually uses.
-    const caption = line(150, 470, "Figure 1: a chart of quarterly results.");
-    const proseAbove = Array.from({ length: 4 }, (_, index) =>
+    const caption = line(
+      captionX,
+      captionY,
+      "Figure 1: a chart of quarterly results.",
+    );
+    const proseAbove = Array.from({ length: proseLineCount }, (_, index) =>
       line(
-        100,
-        760 - index * 14,
+        proseX,
+        proseTopY - index * proseLineHeight,
         "Unrelated body text sits well above the figure.",
       ),
     );
@@ -197,7 +242,7 @@ describe("segmentPdfRegions", () => {
     const proseRegion = regions.find(
       (region) => region.classification === "column",
     );
-    expect(proseRegion?.items).toHaveLength(4);
+    expect(proseRegion?.items).toHaveLength(proseLineCount);
   });
 
   it("gives a figure the nearer of two candidate captions", () => {
@@ -222,8 +267,11 @@ describe("segmentPdfRegions", () => {
     // last-writer-wins would record `below` instead. With the fixture the other way round both rules
     // agree and the test proves nothing — verified by mutating the comparison to `if (true)`, under
     // which the earlier version of this case still passed.
-    const above = line(150, 618, "Figure 2: the nearer caption.");
-    const below = line(150, 368, "Further away, below the figure.");
+    const captionX = 150;
+    const aboveY = 618;
+    const belowY = 368;
+    const above = line(captionX, aboveY, "Figure 2: the nearer caption.");
+    const below = line(captionX, belowY, "Further away, below the figure.");
 
     const regions = segmentPdfRegions(page([above, figure, below]));
     const figureRegion = regions.find(
@@ -242,10 +290,12 @@ describe("segmentPdfRegions", () => {
       widthPt: 300,
       heightPt: 200,
     };
+    const farX = 100;
+    const farY = 100;
     // Far below the figure — well past CAPTION_GAP_PT — so this should stay unclassified rather than being claimed as the figure's caption.
     const farText = line(
-      100,
-      100,
+      farX,
+      farY,
       "An unrelated short line near the bottom of the page.",
     );
 
@@ -257,16 +307,30 @@ describe("segmentPdfRegions", () => {
   });
 
   it("reports a single small item as unknown, carrying no structural signal", () => {
-    const regions = segmentPdfRegions(page([line(50, 700, "x")]));
+    const leftMargin = 50;
+    const topLine = 700;
+    const regions = segmentPdfRegions(page([line(leftMargin, topLine, "x")]));
     expect(regions).toHaveLength(1);
     expect(regions[0]?.classification).toBe("unknown");
     expect(regions[0]?.confidence).toBe(1);
   });
 
   it("sorts regions top to bottom, then left to right, matching reading order", () => {
+    const bottomRightX = 300;
+    const bottomRightY = 500;
+    const topLeftX = 50;
+    const topLeftY = 700;
     const items = [
-      line(300, 500, "Bottom right area of the page with more text here."),
-      line(50, 700, "Top left area of the page with more text here too."),
+      line(
+        bottomRightX,
+        bottomRightY,
+        "Bottom right area of the page with more text here.",
+      ),
+      line(
+        topLeftX,
+        topLeftY,
+        "Top left area of the page with more text here too.",
+      ),
     ];
     const regions = segmentPdfRegions(page(items));
     expect(regions.length).toBeGreaterThanOrEqual(1);
@@ -278,31 +342,57 @@ describe("segmentPdfRegions", () => {
   });
 
   it("breaks a tie in vertical position by sorting left to right", () => {
-    // Two top clusters (A at x=50, B at x=400) sharing the same row band, and one bottom cluster (C) far below both — deliberately listed out of the expected output order (B, C, then A) so the sort must genuinely reorder them, exercising both the primary (y-descending) and tie-break (x-ascending) comparator clauses.
-    const clusterA = Array.from({ length: 3 }, (_, index) =>
-      line(50, 700 - index * 14, "Top left column body text here."),
+    // Two top clusters (A at leftX, B at rightX) sharing the same row band, and one bottom cluster (C) far below both — deliberately listed out of the expected output order (B, C, then A) so the sort must genuinely reorder them, exercising both the primary (y-descending) and tie-break (x-ascending) comparator clauses.
+    const clusterSize = 3;
+    const leftX = 50;
+    const rightX = 400;
+    const topLine = 700;
+    const bottomLine = 100;
+    const leftLineHeight = 14;
+    // A distinctly different line spacing than leftLineHeight keeps this from being mistaken for one row-aligned table's columns (isRowAlignedGrid's own rejection, the same reason the two-column test above offsets its own rhythm) — a smaller offset still falls within LINE_TOLERANCE_PT often enough to accidentally "align".
+    const rightLineHeight = 20;
+    const clusterA = Array.from({ length: clusterSize }, (_, index) =>
+      line(
+        leftX,
+        topLine - index * leftLineHeight,
+        "Top left column body text here.",
+      ),
     );
-    // A distinctly different line spacing (20pt vs clusterA's 14pt) keeps this from being mistaken for one row-aligned table's columns (isRowAlignedGrid's own rejection, the same reason the two-column test above offsets its own rhythm) — a smaller offset still falls within LINE_TOLERANCE_PT often enough to accidentally "align".
-    const clusterB = Array.from({ length: 3 }, (_, index) =>
-      line(400, 700 - index * 20, "Top right column body text here."),
+    const clusterB = Array.from({ length: clusterSize }, (_, index) =>
+      line(
+        rightX,
+        topLine - index * rightLineHeight,
+        "Top right column body text here.",
+      ),
     );
-    const clusterC = Array.from({ length: 3 }, (_, index) =>
-      line(50, 100 - index * 14, "Bottom column body text here too."),
+    const clusterC = Array.from({ length: clusterSize }, (_, index) =>
+      line(
+        leftX,
+        bottomLine - index * leftLineHeight,
+        "Bottom column body text here too.",
+      ),
     );
     const regions = segmentPdfRegions(
       page([...clusterB, ...clusterC, ...clusterA]),
     );
-    expect(regions).toHaveLength(3);
-    expect(regions.map((region) => region.bounds.xPt)).toEqual([50, 400, 50]);
+    expect(regions).toHaveLength(clusterSize);
+    expect(regions.map((region) => region.bounds.xPt)).toEqual([
+      leftX,
+      rightX,
+      leftX,
+    ]);
     expect(regions[0]!.bounds.yPt).toBeGreaterThan(regions[2]!.bounds.yPt);
   });
 
   it("breaks a GENUINE vertical tie (identical bounds.yPt, not merely close) by sorting left to right", () => {
     // Two single-character items at the exact same yPt, far enough apart in x to cut into two leaves whose bounds.yPt are then identical (a single-item leaf's bounds equal the item's own bounds) — this is the one case that actually exercises the sort comparator's second clause, unlike the "close but not equal" tie test above.
-    const items = [line(400, 700, "B"), line(50, 700, "A")]; // listed out of order so a broken (or no-op) tie-break would leave them unsorted
+    const leftX = 50;
+    const rightX = 400;
+    const sharedY = 700;
+    const items = [line(rightX, sharedY, "B"), line(leftX, sharedY, "A")]; // listed out of order so a broken (or no-op) tie-break would leave them unsorted
     const regions = segmentPdfRegions(page(items));
     expect(regions).toHaveLength(2);
-    expect(regions.map((region) => region.bounds.xPt)).toEqual([50, 400]);
+    expect(regions.map((region) => region.bounds.xPt)).toEqual([leftX, rightX]);
   });
 });
 
@@ -315,16 +405,21 @@ describe("regionReadingOrderComparator", () => {
   });
 
   it("sorts top to bottom (descending yPt)", () => {
-    const top = { bounds: boundsAt(0, 700) };
-    const bottom = { bounds: boundsAt(0, 100) };
+    const topY = 700;
+    const bottomY = 100;
+    const top = { bounds: boundsAt(0, topY) };
+    const bottom = { bounds: boundsAt(0, bottomY) };
     expect(regionReadingOrderComparator(top, bottom)).toBeLessThan(0);
     expect(regionReadingOrderComparator(bottom, top)).toBeGreaterThan(0);
   });
 
   it("breaks a genuine vertical tie by sorting left to right, as a subtraction rather than a sum", () => {
     // recursiveXYCut's own internal per-axis sort already fixes which region lands as `a` versus `b` by the time segmentPdfRegions reaches this comparator, so an end-to-end test can never itself control the argument order the tie-break clause receives — only calling the comparator directly, in BOTH argument orders, can prove it is a genuine subtraction. A sum-based tie-break (both xPt values here being positive, the sum is always positive) would report "a sorts after b" for EVERY ordering of this exact pair, which would still happen to look correct for one specific argument order and wrong for the other — checking both orders is what makes that distinguishable from a real subtraction, which correctly reverses sign when the arguments swap.
-    const left = { bounds: boundsAt(50, 700) };
-    const right = { bounds: boundsAt(400, 700) };
+    const leftX = 50;
+    const rightX = 400;
+    const sharedY = 700;
+    const left = { bounds: boundsAt(leftX, sharedY) };
+    const right = { bounds: boundsAt(rightX, sharedY) };
     expect(regionReadingOrderComparator(left, right)).toBeLessThan(0);
     expect(regionReadingOrderComparator(right, left)).toBeGreaterThan(0);
   });
@@ -538,23 +633,41 @@ describe("boundingBox", () => {
 
 describe("itemScale", () => {
   it("returns the smaller of the two axis extents", () => {
-    expect(itemScale({ minX: 0, minY: 0, maxX: 10, maxY: 3 })).toBe(3);
-    expect(itemScale({ minX: 0, minY: 0, maxX: 2, maxY: 10 })).toBe(2);
+    const smallExtent = 3;
+    const largeExtent = 10;
+    expect(
+      itemScale({ minX: 0, minY: 0, maxX: largeExtent, maxY: smallExtent }),
+    ).toBe(smallExtent);
+    const smallerExtent = 2;
+    expect(
+      itemScale({ minX: 0, minY: 0, maxX: smallerExtent, maxY: largeExtent }),
+    ).toBe(smallerExtent);
   });
 
   it("computes each extent as a genuine subtraction, not a sum, when the minimum is nonzero", () => {
     // minX(5) is nonzero: maxX - minX = 3 (the smaller extent), but maxX + minX = 13 — only the subtraction gives the right answer.
-    expect(itemScale({ minX: 5, minY: 0, maxX: 8, maxY: 100 })).toBe(3);
+    const minX = 5;
+    const maxX = 8;
+    const extent = 3;
+    expect(itemScale({ minX, minY: 0, maxX, maxY: 100 })).toBe(extent);
   });
 });
 
 describe("median", () => {
   it("returns the middle value for an odd-length list", () => {
-    expect(median([5, 1, 3])).toBe(3);
+    const a = 5;
+    const b = 1;
+    const c = 3;
+    expect(median([a, b, c])).toBe(c);
   });
 
   it("averages the two middle values for an even-length list", () => {
-    expect(median([1, 2, 3, 4])).toBe(2.5);
+    const a = 1;
+    const b = 2;
+    const c = 3;
+    const d = 4;
+    const expectedMedian = 2.5;
+    expect(median([a, b, c, d])).toBe(expectedMedian);
   });
 });
 
@@ -564,14 +677,19 @@ describe("mean", () => {
   });
 
   it("averages the values", () => {
-    expect(mean([2, 4, 6])).toBe(4);
+    const a = 2;
+    const b = 4;
+    const c = 6;
+    const expectedMean = 4;
+    expect(mean([a, b, c])).toBe(expectedMean);
   });
 });
 
 describe("regularity", () => {
   it("is trivially 1 for zero or one values", () => {
     expect(regularity([])).toBe(1);
-    expect(regularity([5])).toBe(1);
+    const soleValue = 5;
+    expect(regularity([soleValue])).toBe(1);
   });
 
   it("is 1 when the average is 0 because every value genuinely is 0", () => {
@@ -581,19 +699,30 @@ describe("regularity", () => {
   it("is 0 when the average is 0 but the values are not all 0", () => {
     expect(regularity([-1, 1])).toBe(0);
     // At least one value IS 0 here (unlike [-1, 1], where none are) — distinguishes requiring EVERY value to be 0 from merely SOME value being 0.
-    expect(regularity([0, 2, -2])).toBe(0);
+    const positive = 2;
+    const negative = -2;
+    expect(regularity([0, positive, negative])).toBe(0);
   });
 
   it("computes the coefficient-of-variation-derived score precisely", () => {
     // values [2,4]: mean 3, variance ((2-3)^2+(4-3)^2)/2 = 1, so 1 - sqrt(1)/3.
-    expect(regularity([2, 4])).toBeCloseTo(1 - Math.sqrt(1) / 3, 10);
+    const a = 2;
+    const b = 4;
+    const meanValue = 3;
+    expect(regularity([a, b])).toBeCloseTo(
+      1 - Math.sqrt(1) / meanValue,
+      PRECISION_DIGITS,
+    );
   });
 });
 
 describe("groupIntoLines", () => {
   it("clusters items sharing a baseline into one line, sorted left to right", () => {
-    const a = line(50, 700, "a");
-    const b = line(10, 701, "b"); // within tolerance of a (diff 1)
+    const topLine = 700;
+    const aX = 50;
+    const bX = 10;
+    const a = line(aX, topLine, "a");
+    const b = line(bX, topLine + 1, "b"); // within tolerance of a (diff 1)
     const lines = groupIntoLines([a, b]);
     expect(lines).toHaveLength(1);
     expect(lines[0]!.items.map((item) => (item as LayoutText).text)).toEqual([
@@ -603,25 +732,33 @@ describe("groupIntoLines", () => {
   });
 
   it("clusters at exactly the tolerance boundary, but not beyond it", () => {
-    // The tolerance is pdf-codec's own: a fraction of an em of the smaller of the two runs, which at the 10pt default size these helpers use is 20/3 points.
-    const tolerancePt = DEFAULT_BASELINE_TOLERANCE_EM * 10;
-    const a = line(0, 700, "a");
-    const atBoundary = line(0, 700 - tolerancePt, "b");
+    // The tolerance is pdf-codec's own: a fraction of an em of the smaller of the two runs, which at the default line size these helpers use is 20/3 points.
+    const topLine = 700;
+    const tolerancePt = DEFAULT_BASELINE_TOLERANCE_EM * DEFAULT_LINE_SIZE_PT;
+    const epsilon = 0.01;
+    const a = line(0, topLine, "a");
+    const atBoundary = line(0, topLine - tolerancePt, "b");
     expect(groupIntoLines([a, atBoundary])).toHaveLength(1);
-    const beyondBoundary = line(0, 700 - tolerancePt - 0.01, "c");
+    const beyondBoundary = line(0, topLine - tolerancePt - epsilon, "c");
     expect(groupIntoLines([a, beyondBoundary])).toHaveLength(2);
   });
 
   it("takes the tolerance from the smaller of the two runs, so a heading cannot absorb the line under it", () => {
     // 12pt between a 30pt heading's baseline and the 9pt line beneath it: inside the heading's own tolerance, outside the body line's. The smaller run decides (ExaDev/documents.js#1317).
-    const heading = line(0, 700, "Results", 30);
-    const body = line(0, 688, "Measured over four quarters", 9);
+    const topLine = 700;
+    const headingSizePt = 30;
+    const bodyY = 688;
+    const bodySizePt = 9;
+    const heading = line(0, topLine, "Results", headingSizePt);
+    const body = line(0, bodyY, "Measured over four quarters", bodySizePt);
     expect(groupIntoLines([heading, body])).toHaveLength(2);
   });
 
   it("sorts lines top to bottom (descending y), matching PDF's upward-increasing y-axis", () => {
-    const top = line(0, 700, "top");
-    const bottom = line(0, 600, "bottom");
+    const topY = 700;
+    const bottomY = 600;
+    const top = line(0, topY, "top");
+    const bottom = line(0, bottomY, "bottom");
     // Deliberately passed bottom-first, so a broken sort comparator would leave them in input order.
     const lines = groupIntoLines([bottom, top]);
     expect(
@@ -630,10 +767,16 @@ describe("groupIntoLines", () => {
   });
 
   it("sorts a line's own items left to right AFTER grouping, not merely in grouping (descending-y) order", () => {
-    // All three within LINE_TOLERANCE_PT of each other (one line), inserted during grouping in descending-y order (700, 699, 698) — which, by x, is [50, 10, 30], NOT already ascending. Only a genuine final left-to-right sort produces [10, 30, 50] (p2, p3, p1).
-    const p1 = line(50, 700, "p1");
-    const p2 = line(10, 699, "p2");
-    const p3 = line(30, 698, "p3");
+    // All three within LINE_TOLERANCE_PT of each other (one line), inserted during grouping in descending-y order — which, by x, is NOT already ascending. Only a genuine final left-to-right sort produces the ascending order (p2, p3, p1).
+    const y1 = 700;
+    const y2 = 699;
+    const y3 = 698;
+    const p1X = 50;
+    const p2X = 10;
+    const p3X = 30;
+    const p1 = line(p1X, y1, "p1");
+    const p2 = line(p2X, y2, "p2");
+    const p3 = line(p3X, y3, "p3");
     const lines = groupIntoLines([p1, p2, p3]);
     expect(lines).toHaveLength(1);
     expect(lines[0]!.items.map((item) => (item as LayoutText).text)).toEqual([
@@ -646,15 +789,25 @@ describe("groupIntoLines", () => {
 
 describe("cellsInLine", () => {
   it("does not split a cell at a gap exactly at the threshold, only strictly beyond it", () => {
-    const previous = textItem(0, 10, 10); // ends at xPt(0) + widthPt(10) = 10
+    const runWidth = 10;
+    const smallOffset = 5;
+    const gapAtThresholdX = 22;
+    const epsilon = 0.1;
+    const previous = textItem(0, runWidth, DEFAULT_LINE_SIZE_PT); // ends at xPt(0) + widthPt(runWidth) = runWidth
     const atThreshold: TextLine = {
       yPt: 0,
-      items: [previous, textItem(22, 5, 10)], // gap = 22 - 10 = 12 = CELL_GAP_EM(1.2) * sizePt(10) exactly
+      items: [
+        previous,
+        textItem(gapAtThresholdX, smallOffset, DEFAULT_LINE_SIZE_PT),
+      ], // gap = 22 - 10 = 12 = CELL_GAP_EM(1.2) * sizePt(10) exactly
     };
     expect(cellsInLine(atThreshold)).toBe(1);
     const beyondThreshold: TextLine = {
       yPt: 0,
-      items: [previous, textItem(22.1, 5, 10)],
+      items: [
+        previous,
+        textItem(gapAtThresholdX + epsilon, smallOffset, DEFAULT_LINE_SIZE_PT),
+      ],
     };
     expect(cellsInLine(beyondThreshold)).toBe(2);
   });
@@ -667,40 +820,67 @@ describe("cellsInLine", () => {
       xPt: 0,
       yPt: 0,
       font: FONT,
-      sizePt: 10,
+      sizePt: DEFAULT_LINE_SIZE_PT,
       color: BLACK,
     };
+    const nextX = 30;
+    const nextWidth = 5;
     expect(
-      cellsInLine({ yPt: 0, items: [withoutWidth, textItem(30, 5, 10)] }),
+      cellsInLine({
+        yPt: 0,
+        items: [withoutWidth, textItem(nextX, nextWidth, DEFAULT_LINE_SIZE_PT)],
+      }),
     ).toBe(1);
   });
 
   it("takes the cell threshold from the smaller of the two runs", () => {
     // A 13pt gap after a 30pt run, before a 9pt one: beyond a cell boundary at the small run's scale (1.2 x 9 = 10.8), nowhere near one at the large run's.
-    const items = [textItem(0, 20, 30), textItem(33, 5, 9)];
+    const largeRunSizePt = 30;
+    const smallRunSizePt = 9;
+    const largeRunWidth = 20;
+    const smallOffset = 5;
+    const gapX = 33;
+    const items = [
+      textItem(0, largeRunWidth, largeRunSizePt),
+      textItem(gapX, smallOffset, smallRunSizePt),
+    ];
     expect(cellsInLine({ yPt: 0, items })).toBe(2);
   });
 
   it("counts every qualifying internal gap, not just the first", () => {
+    const cellCount = 3;
+    const spacing = 30;
+    const smallOffset = 5;
     const line3: TextLine = {
       yPt: 0,
-      items: [textItem(0, 5, 10), textItem(30, 5, 10), textItem(60, 5, 10)],
+      items: [
+        textItem(0, smallOffset, DEFAULT_LINE_SIZE_PT),
+        textItem(spacing, smallOffset, DEFAULT_LINE_SIZE_PT),
+        textItem(spacing * 2, smallOffset, DEFAULT_LINE_SIZE_PT),
+      ],
     };
-    expect(cellsInLine(line3)).toBe(3);
+    expect(cellsInLine(line3)).toBe(cellCount);
   });
 
   it("skips a position pair where either side is not a text item", () => {
+    const nonTextX = 15;
+    const smallOffset = 5;
     const nonText: LayoutItem = {
       kind: "image",
       imageId: "i1",
-      xPt: 15,
+      xPt: nonTextX,
       yPt: 0,
-      widthPt: 5,
-      heightPt: 5,
+      widthPt: smallOffset,
+      heightPt: smallOffset,
     };
+    const lastX = 40;
     const withNonText: TextLine = {
       yPt: 0,
-      items: [textItem(0, 5, 10), nonText, textItem(40, 5, 10)],
+      items: [
+        textItem(0, smallOffset, DEFAULT_LINE_SIZE_PT),
+        nonText,
+        textItem(lastX, smallOffset, DEFAULT_LINE_SIZE_PT),
+      ],
     };
     // Neither adjacent pair (text, image) nor (image, text) qualifies — only a text-to-text pair is ever compared.
     expect(cellsInLine(withNonText)).toBe(1);
@@ -708,46 +888,87 @@ describe("cellsInLine", () => {
 });
 
 describe("isRowAlignedGrid", () => {
+  const bandAX = 0;
+  const bandBX = 100;
+  const rowTop = 700;
+  const rowSecond = 690;
+  const rowNext = 680;
+
   it("recognises two bands sharing the same row y-positions as a row-aligned grid", () => {
-    const bandA = [boundedText(0, 700), boundedText(0, 680)];
-    const bandB = [boundedText(100, 700), boundedText(100, 680)];
+    const bandA = [boundedText(bandAX, rowTop), boundedText(bandAX, rowNext)];
+    const bandB = [boundedText(bandBX, rowTop), boundedText(bandBX, rowNext)];
     expect(isRowAlignedGrid([bandA, bandB])).toBe(true);
   });
 
   it("is false when fewer than two bands have at least two lines of their own", () => {
-    const bandA = [boundedText(0, 700), boundedText(0, 680)];
-    const bandB = [boundedText(100, 700)]; // only one line
+    const bandA = [boundedText(bandAX, rowTop), boundedText(bandAX, rowNext)];
+    const bandB = [boundedText(bandBX, rowTop)]; // only one line
     expect(isRowAlignedGrid([bandA, bandB])).toBe(false);
   });
 
   it("is false when the bands' own row positions do not recur across bands", () => {
-    const bandA = [boundedText(0, 700), boundedText(0, 680)];
-    const bandB = [boundedText(100, 500), boundedText(100, 480)];
+    const bandA = [boundedText(bandAX, rowTop), boundedText(bandAX, rowNext)];
+    const otherRowTop = 500;
+    const otherRowNext = 480;
+    const bandB = [
+      boundedText(bandBX, otherRowTop),
+      boundedText(bandBX, otherRowNext),
+    ];
     expect(isRowAlignedGrid([bandA, bandB])).toBe(false);
   });
 
   it("hits the row-alignment fraction's own inclusive boundary exactly", () => {
-    // First band has 5 rows; the second band matches exactly 3 of them (700, 690, 680), a hit fraction of precisely 0.6 (ROW_ALIGNMENT_FRACTION).
-    const bandA = [700, 690, 680, 670, 660].map((y) => boundedText(0, y));
-    const bandB = [700, 690, 680, 600, 590].map((y) => boundedText(100, y));
+    // First band has 5 rows; the second band matches exactly 3 of them, a hit fraction of precisely 0.6 (ROW_ALIGNMENT_FRACTION).
+    const row3 = 670;
+    const row4 = 660;
+    const otherRow3 = 600;
+    const otherRow4 = 590;
+    const rowsA = [rowTop, rowSecond, rowNext, row3, row4];
+    const rowsBMatchingThree = [
+      rowTop,
+      rowSecond,
+      rowNext,
+      otherRow3,
+      otherRow4,
+    ];
+    const bandA = rowsA.map((y) => boundedText(bandAX, y));
+    const bandB = rowsBMatchingThree.map((y) => boundedText(bandBX, y));
     expect(isRowAlignedGrid([bandA, bandB])).toBe(true);
     // One fewer match (2 of 5 = 0.4) must fall below the threshold.
-    const bandC = [700, 690, 610, 600, 590].map((y) => boundedText(100, y));
+    const nonMatchingRow = 610;
+    const rowsCMatchingTwo = [
+      rowTop,
+      rowSecond,
+      nonMatchingRow,
+      otherRow3,
+      otherRow4,
+    ];
+    const bandC = rowsCMatchingTwo.map((y) => boundedText(bandBX, y));
     expect(isRowAlignedGrid([bandA, bandC])).toBe(false);
   });
 
   it("requires a first-band row to recur in EVERY other qualifying band, not merely one of them", () => {
     // bandB matches all three of first's rows; bandC matches none. Requiring every band to agree correctly finds zero matches; a check that only required some band to agree would wrongly count all three.
-    const first = [700, 690, 680].map((y) => boundedText(0, y));
-    const bandB = [700, 690, 680].map((y) => boundedText(100, y));
-    const bandC = [500, 490].map((y) => boundedText(200, y));
+    const rows = [rowTop, rowSecond, rowNext];
+    const thirdBandX = 200;
+    const unmatchedRowA = 500;
+    const unmatchedRowB = 490;
+    const first = rows.map((y) => boundedText(bandAX, y));
+    const bandB = rows.map((y) => boundedText(bandBX, y));
+    const bandC = [unmatchedRowA, unmatchedRowB].map((y) =>
+      boundedText(thirdBandX, y),
+    );
     expect(isRowAlignedGrid([first, bandB, bandC])).toBe(false);
   });
 
   it("matches a row at exactly LINE_TOLERANCE_PT away, not only a strictly closer one", () => {
-    const bandA = [boundedText(0, 700), boundedText(0, 690)];
-    // Each row is exactly 2pt (LINE_TOLERANCE_PT) from its bandA counterpart: 702 vs 700, 688 vs 690.
-    const bandB = [boundedText(100, 702), boundedText(100, 688)];
+    const rowSecond = 690;
+    const bandA = [boundedText(bandAX, rowTop), boundedText(bandAX, rowSecond)];
+    // Each row is exactly 2pt (LINE_TOLERANCE_PT) from its bandA counterpart.
+    const bandB = [
+      boundedText(bandBX, rowTop + 2),
+      boundedText(bandBX, rowSecond - 2),
+    ];
     expect(isRowAlignedGrid([bandA, bandB])).toBe(true);
   });
 });
@@ -793,32 +1014,38 @@ describe("findCut", () => {
   });
 
   it("rejects a vertical cut that would fragment a row-aligned grid, but still allows the identical shape on the y-axis", () => {
-    const bandA = [boundedText(0, 700), boundedText(0, 680)];
-    const bandB = [boundedText(100, 700), boundedText(100, 680)];
+    const bandAX = 0;
+    const bandBX = 100;
+    const rowTop = 700;
+    const rowNext = 680;
+    const bandA = [boundedText(bandAX, rowTop), boundedText(bandAX, rowNext)];
+    const bandB = [boundedText(bandBX, rowTop), boundedText(bandBX, rowNext)];
     const items = [...bandA, ...bandB];
     expect(findCut(items, "x")).toBeUndefined();
   });
 
   it("tracks the single widest qualifying gap as maxGap, not merely the last or first", () => {
-    // Three bands: gaps of 20pt then 50pt (each comfortably clearing the small-item threshold) — maxGap must be 50, from the SECOND gap, not the first.
+    // Three bands: gaps of 20pt then 50pt (each comfortably clearing the small-item threshold) — maxGap must be the wider one, from the SECOND gap, not the first.
+    const widerGap = 50;
     const items = [
       boundedAt({ minX: 0, maxX: 5, minY: 0, maxY: 5 }),
       boundedAt({ minX: 25, maxX: 30, minY: 0, maxY: 5 }), // gap of 20 from the first band
       boundedAt({ minX: 80, maxX: 85, minY: 0, maxY: 5 }), // gap of 50 from the second band
     ];
     const cut = findCut(items, "x");
-    expect(cut?.maxGap).toBe(50);
+    expect(cut?.maxGap).toBe(widerGap);
   });
 
   it("never lets a smaller LATER qualifying gap overwrite an already-tracked wider maxGap", () => {
     // Gaps of 50pt then 20pt, both clearing threshold — maxGap must stay 50 even though the 20pt gap is processed second.
+    const widerGap = 50;
     const items = [
       boundedAt({ minX: 0, maxX: 5, minY: 0, maxY: 5 }),
       boundedAt({ minX: 55, maxX: 60, minY: 0, maxY: 5 }), // gap of 50 from the first band
       boundedAt({ minX: 80, maxX: 85, minY: 0, maxY: 5 }), // gap of 20 from the second band
     ];
     const cut = findCut(items, "x");
-    expect(cut?.maxGap).toBe(50);
+    expect(cut?.maxGap).toBe(widerGap);
   });
 
   it("cuts at a gap exactly equal to its own local threshold, not only strictly beyond it", () => {
@@ -881,12 +1108,14 @@ describe("recursiveXYCut", () => {
   });
 
   it("respects the depth bound through actual recursion, not just when passed in already at the limit", () => {
+    // Mirrors pdf-regions.ts's own private MAX_CUT_DEPTH.
+    const maxCutDepth = 16;
     const A = boundedAt({ minX: 0, maxX: 5, minY: 0, maxY: 5 });
     const B = boundedAt({ minX: 0, maxX: 5, minY: 100, maxY: 105 });
     const C = boundedAt({ minX: 200, maxX: 205, minY: 0, maxY: 5 });
     const D = boundedAt({ minX: 200, maxX: 205, minY: 100, maxY: 105 });
-    // Starting one level below MAX_CUT_DEPTH (16): the top-level x-cut (gap 195) is still allowed at depth 15, but the recursive call into each half must land at depth 16 and stop there, leaving {A,B} and {C,D} each as one unsplit leaf even though their own y-gap (95) would otherwise easily clear the cut threshold. A depth computed as `depth - 1` instead of `depth + 1` would never reach the bound, and would keep splitting into four singletons.
-    const result = recursiveXYCut([A, B, C, D], 15);
+    // Starting one level below the max depth: the top-level x-cut (gap 195) is still allowed at that depth, but the recursive call into each half must land at the bound and stop there, leaving {A,B} and {C,D} each as one unsplit leaf even though their own y-gap (95) would otherwise easily clear the cut threshold. A depth computed as `depth - 1` instead of `depth + 1` would never reach the bound, and would keep splitting into four singletons.
+    const result = recursiveXYCut([A, B, C, D], maxCutDepth - 1);
     expect(result).toEqual([
       [A, B],
       [C, D],
@@ -900,16 +1129,27 @@ describe("recursiveXYCut", () => {
   });
 
   it("stops recursing once the depth bound is reached, even with genuinely splittable content", () => {
+    // Mirrors pdf-regions.ts's own private MAX_CUT_DEPTH.
+    const maxCutDepth = 16;
     const items = [
       boundedAt({ minX: 0, maxX: 5, minY: 0, maxY: 5 }),
       boundedAt({ minX: 500, maxX: 505, minY: 0, maxY: 5 }),
     ];
-    const atDepthLimit = recursiveXYCut(items, 16); // MAX_CUT_DEPTH
+    const atDepthLimit = recursiveXYCut(items, maxCutDepth);
     expect(atDepthLimit).toEqual([items]);
   });
 });
 
 describe("classifyFromLeafSignals", () => {
+  // Mirrors pdf-regions.ts's own private classification weights and thresholds.
+  const IMAGE_FIGURE_BONUS = 0.15;
+  const GRID_GRAPHIC_BONUS = 0.15;
+  const TABLE_CELL_COUNT_WEIGHT = 0.5;
+  const TABLE_CELL_REGULARITY_WEIGHT = 0.35;
+  const COLUMN_X_START_REGULARITY_WEIGHT = 0.7;
+  const COLUMN_AVG_CELLS_WEIGHT = 0.3;
+  const MIXED_MARGIN = 0.15;
+
   const baseSignals: LeafSignals = {
     graphicFraction: 0,
     hasImage: false,
@@ -923,13 +1163,17 @@ describe("classifyFromLeafSignals", () => {
     expect(
       classifyFromLeafSignals({ ...baseSignals, graphicFraction: 0.9 }),
     ).toEqual({ classification: "figure", confidence: 0.9 });
+    const graphicFraction = 0.5;
     const withImage = classifyFromLeafSignals({
       ...baseSignals,
-      graphicFraction: 0.5,
+      graphicFraction,
       hasImage: true,
     });
     expect(withImage.classification).toBe("figure");
-    expect(withImage.confidence).toBeCloseTo(0.65, 10); // 0.5 + 0.15
+    expect(withImage.confidence).toBeCloseTo(
+      graphicFraction + IMAGE_FIGURE_BONUS,
+      PRECISION_DIGITS,
+    );
   });
 
   it("never scores table or column from a single line, however cell-like its own signals look", () => {
@@ -945,37 +1189,47 @@ describe("classifyFromLeafSignals", () => {
   });
 
   it("computes tableScore as a weighted blend of cell count, cell regularity, and a grid-graphic bonus", () => {
+    const cellRegularity = 0.8;
     const signals: LeafSignals = {
       graphicFraction: 0.2, // > 0 and < 0.5, so the grid-graphic bonus applies
       hasImage: false,
       lineCount: 2,
       avgCells: 2, // > 1.15
-      cellRegularity: 0.8,
+      cellRegularity,
       xStartRegularity: 0,
     };
     const result = classifyFromLeafSignals(signals);
     expect(result.classification).toBe("table");
-    // 0.5 * clamp01(2-1) + 0.35 * 0.8 + 0.15 (bonus)
-    expect(result.confidence).toBeCloseTo(0.5 * 1 + 0.35 * 0.8 + 0.15, 10);
+    // TABLE_CELL_COUNT_WEIGHT * clamp01(2-1) + TABLE_CELL_REGULARITY_WEIGHT * cellRegularity + GRID_GRAPHIC_BONUS
+    expect(result.confidence).toBeCloseTo(
+      TABLE_CELL_COUNT_WEIGHT * 1 +
+        TABLE_CELL_REGULARITY_WEIGHT * cellRegularity +
+        GRID_GRAPHIC_BONUS,
+      PRECISION_DIGITS,
+    );
   });
 
   it("does not apply the grid-graphic bonus outside (0, 0.5)", () => {
+    const cellRegularity = 0.8;
     const noGraphic: LeafSignals = {
       graphicFraction: 0,
       hasImage: false,
       lineCount: 2,
       avgCells: 2,
-      cellRegularity: 0.8,
+      cellRegularity,
       xStartRegularity: 0,
     };
+    const expectedConfidence =
+      TABLE_CELL_COUNT_WEIGHT * 1 +
+      TABLE_CELL_REGULARITY_WEIGHT * cellRegularity;
     expect(classifyFromLeafSignals(noGraphic).confidence).toBeCloseTo(
-      0.5 * 1 + 0.35 * 0.8,
-      10,
+      expectedConfidence,
+      PRECISION_DIGITS,
     );
     const fullGraphic: LeafSignals = { ...noGraphic, graphicFraction: 0.5 };
     expect(classifyFromLeafSignals(fullGraphic).confidence).toBeCloseTo(
-      0.5 * 1 + 0.35 * 0.8,
-      10,
+      expectedConfidence,
+      PRECISION_DIGITS,
     );
   });
 
@@ -1008,17 +1262,23 @@ describe("classifyFromLeafSignals", () => {
   });
 
   it("computes columnScore from left-edge regularity and closeness to a single run per line", () => {
+    const xStartRegularity = 0.9;
+    const avgCells = 1.1;
     const signals: LeafSignals = {
       graphicFraction: 0,
       hasImage: false,
       lineCount: 2,
-      avgCells: 1.1,
+      avgCells,
       cellRegularity: 1,
-      xStartRegularity: 0.9,
+      xStartRegularity,
     };
     const result = classifyFromLeafSignals(signals);
     expect(result.classification).toBe("column");
-    expect(result.confidence).toBeCloseTo(0.7 * 0.9 + 0.3 * (2 - 1.1), 10);
+    expect(result.confidence).toBeCloseTo(
+      COLUMN_X_START_REGULARITY_WEIGHT * xStartRegularity +
+        COLUMN_AVG_CELLS_WEIGHT * (2 - avgCells),
+      PRECISION_DIGITS,
+    );
   });
 
   it("does not score a column at all once avgCells exceeds the 1.3 boundary", () => {
@@ -1092,8 +1352,9 @@ describe("classifyFromLeafSignals", () => {
 
   it("never calls it mixed just because the two top scores are close, when the second is genuinely below the signal threshold", () => {
     // figureScore = 0.4 (top); columnScore = 0.7*0 + 0.3*clamp01(2-1) = 0.3 (second) — only 0.1 apart (comfortably inside MIXED_MARGIN), but 0.3 itself never clears SIGNAL_THRESHOLD (0.35). A ConditionalExpression forcing this check's own signal-threshold gate to always-true would wrongly call this mixed anyway.
+    const graphicFraction = 0.4;
     const signals: LeafSignals = {
-      graphicFraction: 0.4,
+      graphicFraction,
       hasImage: false,
       lineCount: 2,
       avgCells: 1,
@@ -1102,7 +1363,7 @@ describe("classifyFromLeafSignals", () => {
     };
     const result = classifyFromLeafSignals(signals);
     expect(result.classification).toBe("figure");
-    expect(result.confidence).toBeCloseTo(0.4, 10);
+    expect(result.confidence).toBeCloseTo(graphicFraction, PRECISION_DIGITS);
   });
 
   it("treats a second-highest score exactly at the signal threshold as strong enough to call the region mixed", () => {
@@ -1117,13 +1378,17 @@ describe("classifyFromLeafSignals", () => {
     // tableScore = 0.5*clamp01(0.4) + 0.35*0 + 0.15(bonus) = 0.35 exactly — the SIGNAL_THRESHOLD itself — with a gap of 0.1 from figure's 0.45, comfortably inside MIXED_MARGIN (0.15). Tightening `>=` to `>` would exclude this exact-boundary case and wrongly call it "figure" instead.
     const result = classifyFromLeafSignals(signals);
     expect(result.classification).toBe("mixed");
-    expect(result.confidence).toBeCloseTo(1 - 0.1 / 0.15, 10);
+    // figureScore 0.45 minus tableScore's own SIGNAL_THRESHOLD (0.35), as a fraction of MIXED_MARGIN.
+    const scoreGap = 0.1;
+    expect(result.confidence).toBeCloseTo(
+      1 - scoreGap / MIXED_MARGIN,
+      PRECISION_DIGITS,
+    );
   });
 
   it("does not call it mixed when the top score sits exactly at the second score plus the mixed margin", () => {
     // Constructed so the comparison's two sides are BIT-IDENTICAL, not merely numerically close: tableScore is set via avgCells alone (cellRegularity 0, graphicFraction >= 0.5 so the grid-graphic bonus never applies), and figureScore (graphicFraction, hasImage false) is a pure pass-through — multiplying/dividing by 2 is exact for a normal-range double, so doubling secondValue into avgCells's own "-1" term and later halving it back via tableScore's 0.5 weight recovers secondValue exactly (Sterbenz's lemma also guarantees the intervening `avgCells - 1` is computed with no rounding, since avgCells sits within a factor of 2 of 1). figureScore is then set to literally `secondValue + MIXED_MARGIN`, the identical expression classifyFromLeafSignals' own comparison evaluates. See classifyFromLeafSignals' own comment on why the comparison is written as `top < second + MIXED_MARGIN` rather than a gap-based `top - second < MIXED_MARGIN`, which can never be pinned this precisely.
     const secondValue = 0.35;
-    const MIXED_MARGIN = 0.15;
     const topValue = secondValue + MIXED_MARGIN;
     const signals: LeafSignals = {
       graphicFraction: topValue, // figureScore = topValue exactly; >= 0.5, so no grid-graphic bonus
@@ -1135,11 +1400,15 @@ describe("classifyFromLeafSignals", () => {
     };
     const result = classifyFromLeafSignals(signals);
     expect(result.classification).toBe("figure");
-    expect(result.confidence).toBeCloseTo(topValue, 10);
+    expect(result.confidence).toBeCloseTo(topValue, PRECISION_DIGITS);
   });
 });
 
 describe("classifyLeaf", () => {
+  // Mirrors pdf-regions.ts's own private LONE_IMAGE_CONFIDENCE/LONE_SHAPE_CONFIDENCE.
+  const LONE_IMAGE_CONFIDENCE = 0.9;
+  const LONE_SHAPE_CONFIDENCE = 0.6;
+
   it("is unknown for a single text item, but a figure for a single non-text one", () => {
     expect(classifyLeaf([boundedText(0, 0, "lone")])).toEqual({
       classification: "unknown",
@@ -1168,8 +1437,8 @@ describe("classifyLeaf", () => {
       item: { kind: "rect", xPt: 0, yPt: 0, widthPt: 5, heightPt: 5 },
       bounds: { minX: 0, minY: 0, maxX: 5, maxY: 5 },
     };
-    expect(classifyLeaf([imageItem]).confidence).toBe(0.9);
-    expect(classifyLeaf([rectItem]).confidence).toBe(0.6);
+    expect(classifyLeaf([imageItem]).confidence).toBe(LONE_IMAGE_CONFIDENCE);
+    expect(classifyLeaf([rectItem]).confidence).toBe(LONE_SHAPE_CONFIDENCE);
   });
 
   it("hits the minimum-items-for-signal boundary exactly", () => {
@@ -1177,49 +1446,66 @@ describe("classifyLeaf", () => {
     expect(classifyLeaf([boundedText(0, 0, "a")]).classification).toBe(
       "unknown",
     );
-    const two = [boundedText(0, 700, "a"), boundedText(0, 680, "b")];
+    const rowOneY = 700;
+    const rowTwoY = 680;
+    const two = [boundedText(0, rowOneY, "a"), boundedText(0, rowTwoY, "b")];
     expect(classifyLeaf(two).classification).not.toBe("unknown");
   });
 
   it("recognises hasImage from any item in the set, not by replacing the whole check", () => {
     // A single text item plus one graphic keeps lineCount at 1 (table/column scoring never activates), so figureScore is the only nonzero score in both cases and the image-specific +0.15 bonus shows up directly in the confidence.
+    const rowY = 700;
+    const glyphSize = 5;
+    const rowBottom = rowY + glyphSize;
     const withImage: BoundedItem[] = [
-      boundedText(0, 700, "a"),
+      boundedText(0, rowY, "a"),
       {
         item: {
           kind: "image",
           imageId: "i1",
           xPt: 100,
-          yPt: 700,
-          widthPt: 5,
-          heightPt: 5,
+          yPt: rowY,
+          widthPt: glyphSize,
+          heightPt: glyphSize,
         },
-        bounds: { minX: 100, minY: 700, maxX: 105, maxY: 705 },
+        bounds: { minX: 100, minY: rowY, maxX: 105, maxY: rowBottom },
       },
     ];
     const withoutImage: BoundedItem[] = [
-      boundedText(0, 700, "a"),
+      boundedText(0, rowY, "a"),
       {
-        item: { kind: "rect", xPt: 100, yPt: 700, widthPt: 5, heightPt: 5 },
-        bounds: { minX: 100, minY: 700, maxX: 105, maxY: 705 },
+        item: {
+          kind: "rect",
+          xPt: 100,
+          yPt: rowY,
+          widthPt: glyphSize,
+          heightPt: glyphSize,
+        },
+        bounds: { minX: 100, minY: rowY, maxX: 105, maxY: rowBottom },
       },
     ];
+    const figureConfidence = 0.5;
+    const imageFigureBonus = 0.15;
     expect(classifyLeaf(withImage)).toEqual({
       classification: "figure",
-      confidence: 0.65, // clamp01(0.5 + 0.15)
+      confidence: figureConfidence + imageFigureBonus,
     });
     expect(classifyLeaf(withoutImage)).toEqual({
       classification: "figure",
-      confidence: 0.5,
+      confidence: figureConfidence,
     });
   });
 });
 
 describe("computeLeafSignals", () => {
   it("computes graphicFraction, hasImage, and lineCount from real items", () => {
+    const rowOneY = 700;
+    const rowTwoY = 680;
+    const textItemCount = 2;
+    const totalItemCount = 3; // two text rows plus one image
     const items = [
-      boundedText(0, 700, "row one text"),
-      boundedText(0, 680, "row two text"),
+      boundedText(0, rowOneY, "row one text"),
+      boundedText(0, rowTwoY, "row two text"),
       {
         item: {
           kind: "image" as const,
@@ -1233,13 +1519,21 @@ describe("computeLeafSignals", () => {
       },
     ];
     const signals = computeLeafSignals(items);
-    expect(signals.graphicFraction).toBeCloseTo(1 / 3, 10);
+    expect(signals.graphicFraction).toBeCloseTo(
+      1 / totalItemCount,
+      PRECISION_DIGITS,
+    );
     expect(signals.hasImage).toBe(true);
-    expect(signals.lineCount).toBe(2);
+    expect(signals.lineCount).toBe(textItemCount);
   });
 
   it("leaves avgCells/cellRegularity/xStartRegularity at their trivial defaults when only one line is present", () => {
-    const items = [boundedText(0, 700, "a"), boundedText(20, 700, "b")]; // same line
+    const rowY = 700;
+    const secondColumnX = 20;
+    const items = [
+      boundedText(0, rowY, "a"),
+      boundedText(secondColumnX, rowY, "b"),
+    ]; // same line
     const signals = computeLeafSignals(items);
     expect(signals.lineCount).toBe(1);
     expect(signals.avgCells).toBe(0);
@@ -1249,12 +1543,17 @@ describe("computeLeafSignals", () => {
 });
 
 describe("attachCaptions", () => {
+  // Mirrors pdf-regions.ts's own private CAPTION_MAX_CHARS.
+  const CAPTION_MAX_CHARS = 160;
+
   const figureRegion: PdfRegion = {
     bounds: { xPt: 100, yPt: 400, widthPt: 100, heightPt: 100 },
     items: [],
     classification: "figure",
     confidence: 0.9,
   };
+
+  const captionWidthPt = 10;
 
   function textRegion(
     bounds: PdfRegion["bounds"],
@@ -1263,7 +1562,9 @@ describe("attachCaptions", () => {
   ): PdfRegion {
     return {
       bounds,
-      items: [{ ...textItem(bounds.xPt, 10), text, yPt: bounds.yPt }],
+      items: [
+        { ...textItem(bounds.xPt, captionWidthPt), text, yPt: bounds.yPt },
+      ],
       classification,
       confidence: 0.5,
     };
@@ -1282,7 +1583,7 @@ describe("attachCaptions", () => {
   });
 
   it("does not attach a caption whose own text exceeds the caption length cap", () => {
-    const longText = "x".repeat(161);
+    const longText = "x".repeat(CAPTION_MAX_CHARS + 1);
     const tooLong = textRegion(
       { xPt: 100, yPt: 385, widthPt: 100, heightPt: 10 },
       longText,
@@ -1328,7 +1629,8 @@ describe("attachCaptions", () => {
     const result = results[2]!;
     expect(result.classification).toBe("caption");
     // Confidence derived from the CLOSE figure's small gap should be high, not the far figure's (which wouldn't even qualify within CAPTION_GAP_PT).
-    expect(result.confidence).toBeGreaterThan(0.5);
+    const confidenceFloor = 0.5;
+    expect(result.confidence).toBeGreaterThan(confidenceFloor);
   });
 
   it("only considers genuine figure regions as caption candidates, not every region", () => {
@@ -1347,11 +1649,14 @@ describe("attachCaptions", () => {
   });
 
   it("joins a region's own multiple text items with a space before measuring caption length", () => {
+    const wordOneX = 100;
+    const wordTwoX = 140;
+    const glyphWidth = 5;
     const twoWordCaption: PdfRegion = {
       bounds: { xPt: 100, yPt: 385, widthPt: 100, heightPt: 10 },
       items: [
-        { ...textItem(100, 5), text: "Figure", yPt: 385 },
-        { ...textItem(140, 5), text: "1.", yPt: 385 },
+        { ...textItem(wordOneX, glyphWidth), text: "Figure", yPt: 385 },
+        { ...textItem(wordTwoX, glyphWidth), text: "1.", yPt: 385 },
       ],
       classification: "column",
       confidence: 0.5,
@@ -1363,7 +1668,7 @@ describe("attachCaptions", () => {
   it("still attaches at exactly the caption length cap, only rejecting one character past it", () => {
     const atCap = textRegion(
       { xPt: 100, yPt: 385, widthPt: 100, heightPt: 10 },
-      "x".repeat(160),
+      "x".repeat(CAPTION_MAX_CHARS),
     );
     const result = attachCaptions([figureRegion, atCap])[1]!;
     expect(result.classification).toBe("caption");
@@ -1380,17 +1685,36 @@ describe("attachCaptions", () => {
   });
 
   it("treats a non-text item mixed into a candidate caption region's items as contributing no text at all", () => {
+    const wordOneX = 100;
+    const graphicX = 140;
+    const wordTwoX = 150;
+    const glyphWidth = 5;
+    const wordLength = 77;
     const withGraphic: PdfRegion = {
       bounds: { xPt: 100, yPt: 385, widthPt: 100, heightPt: 10 },
       items: [
-        { ...textItem(100, 5), text: "x".repeat(77), yPt: 385 },
-        { kind: "rect", xPt: 140, yPt: 385, widthPt: 5, heightPt: 5 },
-        { ...textItem(150, 5), text: "x".repeat(77), yPt: 385 },
+        {
+          ...textItem(wordOneX, glyphWidth),
+          text: "x".repeat(wordLength),
+          yPt: 385,
+        },
+        {
+          kind: "rect",
+          xPt: graphicX,
+          yPt: 385,
+          widthPt: glyphWidth,
+          heightPt: glyphWidth,
+        },
+        {
+          ...textItem(wordTwoX, glyphWidth),
+          text: "x".repeat(wordLength),
+          yPt: 385,
+        },
       ],
       classification: "column",
       confidence: 0.5,
     };
-    // Joined length is 77 + 1 + 0 + 1 + 77 = 156 if the rect contributes "" as it should — comfortably under CAPTION_MAX_CHARS (160). If it instead contributed a placeholder string in its place, the joined length would jump past the cap and this would no longer qualify as a caption.
+    // Joined length is wordLength + 1 + 0 + 1 + wordLength = 156 if the rect contributes "" as it should — comfortably under CAPTION_MAX_CHARS. If it instead contributed a placeholder string in its place, the joined length would jump past the cap and this would no longer qualify as a caption.
     const result = attachCaptions([figureRegion, withGraphic])[1]!;
     expect(result.classification).toBe("caption");
   });
@@ -1398,23 +1722,35 @@ describe("attachCaptions", () => {
   it("trims surrounding whitespace before measuring caption length, not just joining", () => {
     const paddedAtCap = textRegion(
       { xPt: 100, yPt: 385, widthPt: 100, heightPt: 10 },
-      `  ${"x".repeat(160)}  `, // untrimmed length 164, but trims down to exactly the 160-char cap
+      `  ${"x".repeat(CAPTION_MAX_CHARS)}  `, // untrimmed length 164, but trims down to exactly the caption cap
     );
     const result = attachCaptions([figureRegion, paddedAtCap])[1]!;
     expect(result.classification).toBe("caption");
   });
 
   it("counts the space between joined text items toward the caption length cap", () => {
+    const wordOneX = 100;
+    const wordTwoX = 200;
+    const glyphWidth = 5;
+    const halfCapWordLength = CAPTION_MAX_CHARS / 2;
     const longTwoWordCaption: PdfRegion = {
       bounds: { xPt: 100, yPt: 385, widthPt: 100, heightPt: 10 },
       items: [
-        { ...textItem(100, 5), text: "a".repeat(80), yPt: 385 },
-        { ...textItem(200, 5), text: "a".repeat(80), yPt: 385 },
+        {
+          ...textItem(wordOneX, glyphWidth),
+          text: "a".repeat(halfCapWordLength),
+          yPt: 385,
+        },
+        {
+          ...textItem(wordTwoX, glyphWidth),
+          text: "a".repeat(halfCapWordLength),
+          yPt: 385,
+        },
       ],
       classification: "column",
       confidence: 0.5,
     };
-    // Joined with the real " " separator this is 161 characters (80 + 1 + 80), one past CAPTION_MAX_CHARS; joined with no separator at all it would be exactly 160, wrongly still qualifying.
+    // Joined with the real " " separator this is CAPTION_MAX_CHARS + 1 characters (halfCapWordLength + 1 + halfCapWordLength), one past the cap; joined with no separator at all it would be exactly at the cap, wrongly still qualifying.
     const result = attachCaptions([figureRegion, longTwoWordCaption])[1]!;
     expect(result.classification).not.toBe("caption");
   });
@@ -1444,7 +1780,12 @@ describe("attachCaptions", () => {
     // nearFigure (gap 5) is checked before farFigure (gap 20); a correct "strictly closer" comparison must keep nearFigure as nearest, not let farFigure unconditionally overwrite it.
     const result = attachCaptions([nearFigure, farFigure, caption])[2]!;
     expect(result.classification).toBe("caption");
-    expect(result.confidence).toBeCloseTo(1 - 5 / 24, 10);
+    const nearGap = 5;
+    const captionGapPt = 24; // Mirrors pdf-regions.ts's own private CAPTION_GAP_PT.
+    expect(result.confidence).toBeCloseTo(
+      1 - nearGap / captionGapPt,
+      PRECISION_DIGITS,
+    );
   });
 
   it("gives a figure the nearer of two caption candidates even when the nearer one is checked second", () => {
@@ -1537,22 +1878,30 @@ describe("horizontallyOverlaps", () => {
 
 describe("verticalGap", () => {
   it("computes the gap when a sits above b", () => {
-    // a: yPt 100, height 10 -> spans [100,110]; b: yPt 50, height 20 -> spans [50,70]. a's bottom (100) is above b's top (70) by 30.
+    const aTop = 100;
+    const aHeight = 10;
+    const bTop = 50;
+    const bHeight = 20;
+    // a spans [aTop, aTop+aHeight]; b spans [bTop, bTop+bHeight]. a's bottom sits above b's top by the gap below.
     expect(
       verticalGap(
-        { xPt: 0, yPt: 100, widthPt: 1, heightPt: 10 },
-        { xPt: 0, yPt: 50, widthPt: 1, heightPt: 20 },
+        { xPt: 0, yPt: aTop, widthPt: 1, heightPt: aHeight },
+        { xPt: 0, yPt: bTop, widthPt: 1, heightPt: bHeight },
       ),
-    ).toBe(30);
+    ).toBe(aTop - (bTop + bHeight));
   });
 
   it("computes the gap when b sits above a", () => {
+    const aTop = 100;
+    const aHeight = 10;
+    const bTop = 50;
+    const bHeight = 20;
     expect(
       verticalGap(
-        { xPt: 0, yPt: 50, widthPt: 1, heightPt: 20 },
-        { xPt: 0, yPt: 100, widthPt: 1, heightPt: 10 },
+        { xPt: 0, yPt: bTop, widthPt: 1, heightPt: bHeight },
+        { xPt: 0, yPt: aTop, widthPt: 1, heightPt: aHeight },
       ),
-    ).toBe(30);
+    ).toBe(aTop - (bTop + bHeight));
   });
 
   it("returns undefined when the two spans overlap on the y-axis", () => {
