@@ -17,6 +17,16 @@ import { writeEpub, writeEpubContent } from "./write";
 
 const PAGE = { widthPt: 595.28, heightPt: 841.89 };
 const MARGINS = { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 };
+// Arbitrary bytes standing in for image content this test never decodes as a real image, only round-trips through base64.
+const PLACEHOLDER_IMAGE_BYTES = Uint8Array.from(
+  { length: 3 },
+  (_, index) => index + 1,
+);
+const SECOND_PLACEHOLDER_IMAGE_START = PLACEHOLDER_IMAGE_BYTES.length + 1;
+const SECOND_PLACEHOLDER_IMAGE_BYTES = Uint8Array.from(
+  { length: 3 },
+  (_, index) => index + SECOND_PLACEHOLDER_IMAGE_START,
+);
 
 function section(blocks: ContentSection["blocks"]): ContentSection {
   return { pageSize: PAGE, margins: MARGINS, blocks };
@@ -81,7 +91,7 @@ describe("imageExtension/imageMediaType: every ContentImageBlock format maps to 
           {
             kind: "image",
             format,
-            base64: bytesToBase64(new Uint8Array([1, 2, 3])),
+            base64: bytesToBase64(PLACEHOLDER_IMAGE_BYTES),
             widthPt: 10,
             heightPt: 10,
           },
@@ -103,7 +113,7 @@ describe("writeEpubContent: registered-image numbering starts at 1, not 0 or -1"
         {
           kind: "image",
           format: "png",
-          base64: bytesToBase64(new Uint8Array([1, 2, 3])),
+          base64: bytesToBase64(PLACEHOLDER_IMAGE_BYTES),
           widthPt: 10,
           heightPt: 10,
         },
@@ -120,14 +130,14 @@ describe("writeEpubContent: registered-image numbering starts at 1, not 0 or -1"
         {
           kind: "image",
           format: "png",
-          base64: bytesToBase64(new Uint8Array([1, 2, 3])),
+          base64: bytesToBase64(PLACEHOLDER_IMAGE_BYTES),
           widthPt: 10,
           heightPt: 10,
         },
         {
           kind: "image",
           format: "png",
-          base64: bytesToBase64(new Uint8Array([4, 5, 6])),
+          base64: bytesToBase64(SECOND_PLACEHOLDER_IMAGE_BYTES),
           widthPt: 10,
           heightPt: 10,
         },
@@ -170,7 +180,7 @@ describe("writeEpubContent: the OPF manifest's image items", () => {
         {
           kind: "image",
           format: "png",
-          base64: bytesToBase64(new Uint8Array([1, 2, 3])),
+          base64: bytesToBase64(PLACEHOLDER_IMAGE_BYTES),
           widthPt: 10,
           heightPt: 10,
         },
