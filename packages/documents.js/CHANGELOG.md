@@ -1,3 +1,13 @@
+## [14.4.7](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.6...documents.js%4014.4.7) (2026-09-24)
+
+### Code Refactoring
+
+* **documents.js:** drop lower.ts guards that restate a callee contract ([93ad7c8](https://github.com/ExaDev/documents.js/commit/93ad7c88cb609c5834ad0c50c8c8e78f508b0284))
+
+### Tests
+
+* **documents.js:** pin lower.ts registries, folds, and degradations ([130aede](https://github.com/ExaDev/documents.js/commit/130aede96d599c40b74c3813e236d06c090453fd))
+
 ## [14.4.6](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.5...documents.js%4014.4.6) (2026-09-23)
 
 ### Code Refactoring
