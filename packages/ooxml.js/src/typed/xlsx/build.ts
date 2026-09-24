@@ -44,6 +44,7 @@ import {
   GENERAL_NUM_FMT_ID,
   RESERVED_BORDER_INDICES,
   RESERVED_FILL_INDICES,
+  assertNeverDeclaredFillKind,
 } from "./styles";
 import {
   COLUMN_WIDTH_CHARS_DECIMAL_PLACES,
@@ -424,18 +425,19 @@ function buildStylesPart(
       }
       case "pattern": {
         // A genuine two-colour pattern fill (ExaDev/documents.js#951): fgColor is the colour the pattern's strokes are drawn in, bgColor the colour its gaps show through — each emitted only when the ContentCellFill actually stated it, left absent (Excel's own "automatic" default) otherwise.
-        const children: XmlElement[] = [];
+        const patternChildren: XmlElement[] = [];
         if (fill.fgRgb !== undefined) {
-          children.push(el("fgColor", { rgb: `FF${fill.fgRgb}` }));
+          patternChildren.push(el("fgColor", { rgb: `FF${fill.fgRgb}` }));
         }
         if (fill.bgRgb !== undefined) {
-          children.push(el("bgColor", { rgb: `FF${fill.bgRgb}` }));
+          patternChildren.push(el("bgColor", { rgb: `FF${fill.bgRgb}` }));
         }
         return el("fill", {}, [
-          el("patternFill", { patternType: fill.patternType }, children),
+          el("patternFill", { patternType: fill.patternType }, patternChildren),
         ]);
       }
     }
+    return assertNeverDeclaredFillKind(fill);
   });
 
   const borderDeclarations = cellFormats.borderDeclarations();
@@ -458,25 +460,25 @@ function buildStylesPart(
   });
 
   const fontElements = cellFormats.fontDeclarations().map((font) => {
-    const children: XmlElement[] = [];
+    const fontChildren: XmlElement[] = [];
     if (font.bold === true) {
-      children.push(el("b"));
+      fontChildren.push(el("b"));
     }
     if (font.italic === true) {
-      children.push(el("i"));
+      fontChildren.push(el("i"));
     }
     if (font.strike === true) {
-      children.push(el("strike"));
+      fontChildren.push(el("strike"));
     }
     if (font.underline === true) {
-      children.push(el("u", { val: "single" }));
+      fontChildren.push(el("u", { val: "single" }));
     }
     if (font.colorRgb !== undefined) {
-      children.push(el("color", { rgb: `FF${font.colorRgb}` }));
+      fontChildren.push(el("color", { rgb: `FF${font.colorRgb}` }));
     }
-    children.push(el("sz", { val: font.sz }));
-    children.push(el("name", { val: encodeXmlText(font.name) }));
-    return el("font", {}, children);
+    fontChildren.push(el("sz", { val: font.sz }));
+    fontChildren.push(el("name", { val: encodeXmlText(font.name) }));
+    return el("font", {}, fontChildren);
   });
 
   children.push(
@@ -670,6 +672,13 @@ interface RenderedCellValue {
 // xlsx has no distinct CELL TYPE for a percentage, an amount of money, a date, or a time — every one of them is an ordinary number whose meaning lives entirely in the number format its style points at, which is exactly how typed/xlsx/content.ts recovers them on the way in. So this writer says what it means the same way a real producer does: it renders the value as a bare number and asks for the matching format from typed/xlsx/number-format.ts's own write-side vocabulary, which the CellFormatTable interns into a real <numFmt>/<xf> pair.
 //
 // ST_CellType's rare t="d" ISO-8601 variant is deliberately NOT used for the temporal kinds, even though it would carry their string spelling verbatim: real Excel does not render it as a date at all, and it is a SINGLE combined date-and-time type, so writing all three temporal kinds through it collapses them onto one indistinguishable wire form that reads back as 'dateTime' whatever went in. A serial plus a date/time/dateTime format is both what real files carry and what keeps the three kinds distinguishable.
+// Reached only if ContentCellValue ever gains a variant renderCellValue's own switch does not match: every current member is covered there, so `value` narrows to `never` at the real call site, and adding an uncovered kind makes that narrowing fail and this call stop compiling. That is the real safety net. Exported so build.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real ContentCellValue kind is already handled by a case in renderCellValue.
+export function assertNeverContentCellValueKind(value: never): never {
+  throw new Error(
+    `renderCellValue: unhandled ContentCellValue kind ${JSON.stringify(value)}`,
+  );
+}
+
 function renderCellValue(
   value: ContentCellValue,
   isFormulaResult: boolean,
@@ -723,6 +732,7 @@ function renderCellValue(
     case "empty":
       return undefined;
   }
+  return assertNeverContentCellValueKind(value);
 }
 
 function renderString(
@@ -1104,7 +1114,7 @@ export function buildXlsxPackageFromContent(
   const chartPartNames: string[] = [];
   const tablePartNames: string[] = [];
   const usedImageFormats = new Set<"png" | "jpeg" | "gif">();
-  const extraParts: Package["parts"] = {};
+  let extraParts: Package["parts"] = {};
   const sheetExtras: SheetExtras[] = sheets.map((sheet, index) => {
     const relationships: WorksheetRelationship[] = [];
     let relCounter = 0;
@@ -1130,7 +1140,7 @@ export function buildXlsxPackageFromContent(
       for (const format of drawing.usedImageFormats) {
         usedImageFormats.add(format);
       }
-      Object.assign(extraParts, drawing.extraParts);
+      extraParts = { ...extraParts, ...drawing.extraParts };
       extraParts[`xl/drawings/drawing${index + 1}.xml`] = xmlPart(
         drawing.drawingRoot,
       );
