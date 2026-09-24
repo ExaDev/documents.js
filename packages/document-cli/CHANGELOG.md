@@ -1,3 +1,26 @@
+## [5.12.43](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.42...document-cli%405.12.43) (2026-09-24)
+
+### Bug Fixes
+
+* **document-cli:** assert each routed screen's own content, not the prior screen's absence ([4f6fcaa](https://github.com/ExaDev/documents.js/commit/4f6fcaa9ae6bf5da88e3b7ee748831f2e3071dcc))
+
+### Tests
+
+* **document-cli:** cover app.tsx's ScreenBody router, Overlay precedence and AppShell key ([7e24758](https://github.com/ExaDev/documents.js/commit/7e24758fb13bdfc7466ced684dc2fdbccad99a6a))
+* **document-cli:** kill the remaining app.tsx key-handler and overlay-gating mutants ([f73741e](https://github.com/ExaDev/documents.js/commit/f73741ec96bd80ac06e1da5722d5bdc742268e44))
+
+### Miscellaneous Chores
+
+* **document-cli:** raise the mutation-score break threshold to the current measurement ([bd33723](https://github.com/ExaDev/documents.js/commit/bd33723de8884901392377e620014934ade98a8a))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.3
+- Updated odf.js to 11.1.9
+- Updated document-outline.js to 3.10.20
+- Updated documents.js to 14.4.33
+
 ## [5.12.42](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.41...document-cli%405.12.42) (2026-09-24)
 
 

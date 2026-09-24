@@ -1,3 +1,18 @@
+## [1.1.96](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.95...document-operations%401.1.96) (2026-09-24)
+
+### Code Refactoring
+
+* **document-operations:** mark the read-only parameters readonly ([ff61299](https://github.com/ExaDev/documents.js/commit/ff612997440a66bb914eae627ff28270607ad5af))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.3
+- Updated odf.js to 11.1.9
+- Updated document-outline.js to 3.10.20
+- Updated documents.js to 14.4.33
+- Updated document-compute.js to 1.6.43
+
 ## [1.1.95](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.94...document-operations%401.1.95) (2026-09-24)
 
 

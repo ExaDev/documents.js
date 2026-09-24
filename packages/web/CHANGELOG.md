@@ -1,3 +1,29 @@
+## [2.15.0](https://github.com/ExaDev/documents.js/compare/web%402.14.7...web%402.15.0) (2026-09-24)
+
+### Features
+
+* **web:** add a ToolPage shell holding heading, description, gap, and measure ([e47aa3d](https://github.com/ExaDev/documents.js/commit/e47aa3d85e9bc35c54a5f55c948a376427dee504))
+
+### Bug Fixes
+
+* **web:** stop exporting ToolPageWidth, since nothing outside ToolPage.tsx names it ([b50abb1](https://github.com/ExaDev/documents.js/commit/b50abb1e4472e2f99fa474e89885247e88f277e1))
+
+### Code Refactoring
+
+* **web:** give every tool page one shell and one content measure ([4921633](https://github.com/ExaDev/documents.js/commit/4921633f3528f8b96e9639f2fb9024c3071f8f5e))
+
+### Styles
+
+* **web:** state the app's spacing and heading scales in the theme ([10b0eef](https://github.com/ExaDev/documents.js/commit/10b0eefd896d9215545916b442243200191c3d77))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.3
+- Updated markdown-codec to 11.1.9
+- Updated ooxml.js to 12.2.23
+- Updated documents.js to 14.4.33
+
 ## [2.14.7](https://github.com/ExaDev/documents.js/compare/web%402.14.6...web%402.14.7) (2026-09-24)
 
 

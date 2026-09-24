@@ -1,3 +1,25 @@
+## [14.4.33](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.32...documents.js%4014.4.33) (2026-09-24)
+
+### Code Refactoring
+
+* **documents.js:** make the exhaustive switches explicit and unshadow the locals ([67f9f3a](https://github.com/ExaDev/documents.js/commit/67f9f3a4c43b4b906ecbb623841177f8b002046e))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.3
+- Updated archive-codec to 1.11.22
+- Updated epub-codec to 5.1.10
+- Updated markdown-codec to 11.1.9
+- Updated odf.js to 11.1.9
+- Updated pdf-codec to 5.2.26
+- Updated doc-codec to 6.1.16
+- Updated ooxml.js to 12.2.23
+- Updated ppt-codec to 2.2.15
+- Updated rtf-codec to 8.1.16
+- Updated wpd-codec to 5.1.16
+- Updated xls-codec to 4.15.36
+
 ## [14.4.32](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.31...documents.js%4014.4.32) (2026-09-24)
 
 ### Code Refactoring
