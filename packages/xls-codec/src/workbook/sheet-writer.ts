@@ -87,7 +87,7 @@ const COLINFO_FLAG_HIDDEN = 0x0001;
 
 export interface SheetWriteContext {
   /** The icv a colour resolves to through the workbook's own palette plan (write.ts's buildPalettePlan) — the same colour-table resolution a cell decoration's own fill already draws, offered to the conditional-format writer whose DXFN style colours are palette references too. Every colour this is called with must already have been registered during that plan's own workbook-wide scan. */
-  icvOf: (color: Color) => number;
+  icvOf: (color: Readonly<Color>) => number;
   /** The XF index ([MS-XLS] 2.5.168 IXFCell) a cell's own (number format, alignment, decoration) combination resolves to — GENERAL_CELL_XF_INDEX for a cell with General formatting, general/bottom alignment, and no background/borders, one of the workbook's other cell XFs otherwise. write.ts's own cell-format interning pass is what assigns and deduplicates these. */
   xfIndexForCell(cell: ContentSheetCell): number;
   /** The shared string table index for a string cell's own text; every string a sheet writes must already be registered in the workbook-wide table before this is called. */
@@ -140,7 +140,7 @@ function writeDimensionsRecord(
 
 /** ColInfo ([MS-XLS] 2.4.53): one record per input column entry, covering exactly that one column (colFirst === colLast) rather than merging adjacent same-width columns into a range — both are legal, and workbook/sheet.ts's own readColInfo expands either shape back into one RawColumn per column, so the two round-trip identically. */
 function writeColInfoRecord(
-  column: ContentSheetColumn,
+  column: Readonly<ContentSheetColumn>,
 ): Uint8Array<ArrayBuffer> {
   if (column.index > MAX_COLUMN_INDEX) {
     throw new BiffWriteError(
@@ -470,7 +470,7 @@ function cellHeader(cell: ContentSheetCell, xfIndex: number): RecordBuilder {
 function writeCellValueRecord(
   cell: ContentSheetCell,
   xfIndex: number,
-  ctx: SheetWriteContext,
+  ctx: Readonly<SheetWriteContext>,
 ): Uint8Array<ArrayBuffer> {
   const value: ContentCellValue = cell.value;
   switch (value.kind) {
@@ -628,7 +628,7 @@ function writeFormulaRecords(
 function writeCellRecords(
   cell: ContentSheetCell,
   xfIndex: number,
-  ctx: SheetWriteContext,
+  ctx: Readonly<SheetWriteContext>,
 ): Uint8Array<ArrayBuffer>[] {
   return cell.formula !== undefined
     ? writeFormulaRecords(cell, cell.formula, xfIndex)
@@ -638,7 +638,7 @@ function writeCellRecords(
 /** Builds one worksheet's own substream: BOF, the print-settings records, Dimensions, ColInfo per column, Row + value-cell records per populated or declared row (in ascending row then column order), MergeCells if the sheet declares any, comment records for cells carrying one, the sheet's own MsoDrawing/Obj records for images and embedded objects, EOF. */
 export function buildWorksheetSubstream(
   sheet: ContentSheet,
-  ctx: SheetWriteContext,
+  ctx: Readonly<SheetWriteContext>,
   drawing: SheetDrawingWrite,
 ): Uint8Array<ArrayBuffer> {
   for (const cell of sheet.cells) {

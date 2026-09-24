@@ -40,6 +40,11 @@ export interface FormulaSheetContext {
   )[];
 }
 
+/** The operand stack every ptg below pushes onto, pops from, and splices out of as it folds a token stream into formula text. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the stack itself stays genuinely mutable. */
+interface OperandStack {
+  readonly stack: FormulaOperand[];
+}
+
 /** One already-formatted operand on the stack, carrying the precedence of the operator that produced it (or PRECEDENCE_ATOMIC for a literal, a reference, or a function call) so its parent can decide whether it needs wrapping in literal parentheses. */
 interface FormulaOperand {
   readonly text: string;
@@ -56,7 +61,8 @@ const PRECEDENCE_PERCENT = 6;
 const PRECEDENCE_UNARY = 7;
 const PRECEDENCE_ATOMIC = 8;
 
-function pushAtomic(stack: FormulaOperand[], text: string): void {
+function pushAtomic(sink: OperandStack, text: string): void {
+  const stack = sink.stack;
   stack.push({ text, precedence: PRECEDENCE_ATOMIC });
 }
 
@@ -70,10 +76,11 @@ function wrapAtOrBelow(operand: FormulaOperand, minimum: number): string {
 
 /** Pops two operands and pushes their combination — the left wrapped only if its own precedence is strictly lower than this operator's, the right wrapped if its precedence is lower than or equal to it (see the module comment for why the same rule is correct for every operator here). Returns false, changing nothing, when fewer than two operands are on the stack — a malformed token stream this reader declines to guess at rather than reading past. */
 function applyBinary(
-  stack: FormulaOperand[],
+  sink: OperandStack,
   symbol: string,
   precedence: number,
 ): boolean {
+  const stack = sink.stack;
   const right = stack.pop();
   const left = stack.pop();
   if (left === undefined || right === undefined) {
@@ -86,7 +93,8 @@ function applyBinary(
   return true;
 }
 
-function applyPrefix(stack: FormulaOperand[], symbol: string): boolean {
+function applyPrefix(sink: OperandStack, symbol: string): boolean {
+  const stack = sink.stack;
   const operand = stack.pop();
   if (operand === undefined) {
     return false;
@@ -98,7 +106,8 @@ function applyPrefix(stack: FormulaOperand[], symbol: string): boolean {
   return true;
 }
 
-function applyPercent(stack: FormulaOperand[]): boolean {
+function applyPercent(sink: OperandStack): boolean {
+  const stack = sink.stack;
   const operand = stack.pop();
   if (operand === undefined) {
     return false;
@@ -111,7 +120,8 @@ function applyPercent(stack: FormulaOperand[]): boolean {
 }
 
 /** PtgParen ([MS-XLS] 2.5.198.80): a pure display token restating parentheses the formula's own author typed, regardless of whether the grouping they express is otherwise necessary. Wrapped unconditionally rather than through precedence comparison, since the point is to reproduce exactly what was there, not to decide afresh whether it was needed. */
-function applyParen(stack: FormulaOperand[]): boolean {
+function applyParen(sink: OperandStack): boolean {
+  const stack = sink.stack;
   const operand = stack.pop();
   if (operand === undefined) {
     return false;
@@ -122,10 +132,11 @@ function applyParen(stack: FormulaOperand[]): boolean {
 
 /** Pops exactly `arity` operands (in argument order) and pushes `name(arg1,arg2,...)`. A function call's own arguments never need wrapping regardless of what built them — the parentheses already bound them unambiguously — so every argument is taken as its bare text. */
 function applyFunctionCall(
-  stack: FormulaOperand[],
+  sink: OperandStack,
   name: string,
   arity: number,
 ): boolean {
+  const stack = sink.stack;
   if (stack.length < arity) {
     return false;
   }
@@ -138,8 +149,8 @@ function applyFunctionCall(
 }
 
 /** PtgAttrSum ([MS-XLS] 2.5.198.41): the optimisation a real producer emits in place of a PtgFuncVar call to SUM with a single reference-class argument, wrapping whatever is already on top of the stack. */
-function applySum(stack: FormulaOperand[]): boolean {
-  return applyFunctionCall(stack, "SUM", 1);
+function applySum(sink: OperandStack): boolean {
+  return applyFunctionCall(sink, "SUM", 1);
 }
 
 function quoteStringLiteral(value: string): string {
@@ -445,7 +456,8 @@ export function parseFormulaText(
   options: ParseFormulaOptions = {},
 ): string | undefined {
   const cursor = new BlockCursor([rgce]);
-  const stack: FormulaOperand[] = [];
+  const sink: OperandStack = { stack: [] };
+  const stack = sink.stack;
   // Lazily-nonexistent rather than lazily-created: a formula with no PtgArray at all (the overwhelming majority) never touches this, and a genuine RgbExtra trailer is read strictly left-to-right across however many PtgArray tokens rgce turns out to hold, in the same single pass as rgce itself.
   const rgcbCursor =
     options.rgcb === undefined ? undefined : new BlockCursor([options.rgcb]);
@@ -454,88 +466,88 @@ export function parseFormulaText(
     const opcode = cursor.u8();
     switch (opcode) {
       case PTG_ADD:
-        if (!applyBinary(stack, "+", PRECEDENCE_ADD_SUB)) return undefined;
+        if (!applyBinary(sink, "+", PRECEDENCE_ADD_SUB)) return undefined;
         break;
       case PTG_SUB:
-        if (!applyBinary(stack, "-", PRECEDENCE_ADD_SUB)) return undefined;
+        if (!applyBinary(sink, "-", PRECEDENCE_ADD_SUB)) return undefined;
         break;
       case PTG_MUL:
-        if (!applyBinary(stack, "*", PRECEDENCE_MUL_DIV)) return undefined;
+        if (!applyBinary(sink, "*", PRECEDENCE_MUL_DIV)) return undefined;
         break;
       case PTG_DIV:
-        if (!applyBinary(stack, "/", PRECEDENCE_MUL_DIV)) return undefined;
+        if (!applyBinary(sink, "/", PRECEDENCE_MUL_DIV)) return undefined;
         break;
       case PTG_POWER:
-        if (!applyBinary(stack, "^", PRECEDENCE_POWER)) return undefined;
+        if (!applyBinary(sink, "^", PRECEDENCE_POWER)) return undefined;
         break;
       case PTG_CONCAT:
-        if (!applyBinary(stack, "&", PRECEDENCE_CONCAT)) return undefined;
+        if (!applyBinary(sink, "&", PRECEDENCE_CONCAT)) return undefined;
         break;
       case PTG_LT:
-        if (!applyBinary(stack, "<", PRECEDENCE_COMPARISON)) return undefined;
+        if (!applyBinary(sink, "<", PRECEDENCE_COMPARISON)) return undefined;
         break;
       case PTG_LE:
-        if (!applyBinary(stack, "<=", PRECEDENCE_COMPARISON)) return undefined;
+        if (!applyBinary(sink, "<=", PRECEDENCE_COMPARISON)) return undefined;
         break;
       case PTG_EQ:
-        if (!applyBinary(stack, "=", PRECEDENCE_COMPARISON)) return undefined;
+        if (!applyBinary(sink, "=", PRECEDENCE_COMPARISON)) return undefined;
         break;
       case PTG_GE:
-        if (!applyBinary(stack, ">=", PRECEDENCE_COMPARISON)) return undefined;
+        if (!applyBinary(sink, ">=", PRECEDENCE_COMPARISON)) return undefined;
         break;
       case PTG_GT:
-        if (!applyBinary(stack, ">", PRECEDENCE_COMPARISON)) return undefined;
+        if (!applyBinary(sink, ">", PRECEDENCE_COMPARISON)) return undefined;
         break;
       case PTG_NE:
-        if (!applyBinary(stack, "<>", PRECEDENCE_COMPARISON)) return undefined;
+        if (!applyBinary(sink, "<>", PRECEDENCE_COMPARISON)) return undefined;
         break;
       case PTG_UPLUS:
-        if (!applyPrefix(stack, "+")) return undefined;
+        if (!applyPrefix(sink, "+")) return undefined;
         break;
       case PTG_UMINUS:
-        if (!applyPrefix(stack, "-")) return undefined;
+        if (!applyPrefix(sink, "-")) return undefined;
         break;
       case PTG_PERCENT:
-        if (!applyPercent(stack)) return undefined;
+        if (!applyPercent(sink)) return undefined;
         break;
       case PTG_PAREN:
-        if (!applyParen(stack)) return undefined;
+        if (!applyParen(sink)) return undefined;
         break;
       case PTG_MISSARG:
         // An omitted optional argument (e.g. the third argument of IF(A1>0,1)) — present in the token stream as a real, empty operand so the enclosing PtgFuncVar's own cparams still counts it.
-        pushAtomic(stack, "");
+        pushAtomic(sink, "");
         break;
       case PTG_STR: {
         const value = readShortXLUnicodeString(cursor);
         options.onStringLiteral?.(value);
-        pushAtomic(stack, quoteStringLiteral(value));
+        pushAtomic(sink, quoteStringLiteral(value));
         break;
       }
       case PTG_ERR: {
         const text = errorTextOf(cursor.u8());
         if (text === undefined) return undefined;
-        pushAtomic(stack, text);
+        pushAtomic(sink, text);
         break;
       }
       case PTG_BOOL:
-        pushAtomic(stack, cursor.u8() !== 0 ? "TRUE" : "FALSE");
+        pushAtomic(sink, cursor.u8() !== 0 ? "TRUE" : "FALSE");
         break;
       case PTG_INT:
-        pushAtomic(stack, String(cursor.u16()));
+        pushAtomic(sink, String(cursor.u16()));
         break;
       case PTG_NUM:
-        pushAtomic(stack, String(cursor.f64()));
+        pushAtomic(sink, String(cursor.f64()));
         break;
       case PTG_REF_REF:
       case PTG_REF_VALUE:
       case PTG_REF_ARRAY:
-        pushAtomic(stack, formatPoint(readLoc(cursor)));
+        pushAtomic(sink, formatPoint(readLoc(cursor)));
         break;
       case PTG_AREA_REF:
       case PTG_AREA_VALUE:
       case PTG_AREA_ARRAY: {
         const [start, end] = readArea(cursor);
-        pushAtomic(stack, `${formatPoint(start)}:${formatPoint(end)}`);
+        pushAtomic(sink, `${formatPoint(start)}:${formatPoint(end)}`);
         break;
       }
       case PTG_REF3D_REF:
@@ -545,7 +557,7 @@ export function parseFormulaText(
         const point = readLoc(cursor);
         const label = resolveSheetLabel(ixti, context);
         if (label === undefined) return undefined;
-        pushAtomic(stack, `${label}${formatPoint(point)}`);
+        pushAtomic(sink, `${label}${formatPoint(point)}`);
         break;
       }
       case PTG_AREA3D_REF:
@@ -555,7 +567,7 @@ export function parseFormulaText(
         const [start, end] = readArea(cursor);
         const label = resolveSheetLabel(ixti, context);
         if (label === undefined) return undefined;
-        pushAtomic(stack, `${label}${formatPoint(start)}:${formatPoint(end)}`);
+        pushAtomic(sink, `${label}${formatPoint(start)}:${formatPoint(end)}`);
         break;
       }
       case PTG_REFN_REF:
@@ -563,7 +575,7 @@ export function parseFormulaText(
       case PTG_REFN_ARRAY: {
         if (options.relativeTo === undefined) return undefined;
         pushAtomic(
-          stack,
+          sink,
           formatPoint(readRelativeLoc(cursor, options.relativeTo)),
         );
         break;
@@ -573,7 +585,7 @@ export function parseFormulaText(
       case PTG_AREAN_ARRAY: {
         if (options.relativeTo === undefined) return undefined;
         const [start, end] = readRelativeArea(cursor, options.relativeTo);
-        pushAtomic(stack, `${formatPoint(start)}:${formatPoint(end)}`);
+        pushAtomic(sink, `${formatPoint(start)}:${formatPoint(end)}`);
         break;
       }
       case PTG_ARRAY_REF:
@@ -590,7 +602,7 @@ export function parseFormulaText(
           text = undefined;
         }
         if (text === undefined) return undefined;
-        pushAtomic(stack, text);
+        pushAtomic(sink, text);
         break;
       }
       case PTG_FUNC_REF:
@@ -600,7 +612,7 @@ export function parseFormulaText(
         const name = FTAB_NAMES.get(iftab);
         const arity = FTAB_FIXED_ARITY.get(iftab);
         if (name === undefined || arity === undefined) return undefined;
-        if (!applyFunctionCall(stack, name, arity)) return undefined;
+        if (!applyFunctionCall(sink, name, arity)) return undefined;
         break;
       }
       case PTG_FUNCVAR_REF:
@@ -610,7 +622,7 @@ export function parseFormulaText(
         const iftab = cursor.u16();
         const name = FTAB_NAMES.get(iftab);
         if (name === undefined) return undefined;
-        if (!applyFunctionCall(stack, name, cparams)) return undefined;
+        if (!applyFunctionCall(sink, name, cparams)) return undefined;
         break;
       }
       case PTG_ATTR_OPCODE: {
@@ -618,7 +630,7 @@ export function parseFormulaText(
         // No dedicated PTG_ATTR_CHOOSE branch: CHOOSE's own trailer is variable-length (a cOffset count then that many 2-byte jump offsets), so skipping PTG_ATTR_TRAILING_BYTES's fixed 2 bytes below never lands the cursor anywhere meaningful for it — but the else-if chain's own fallback already names every subtype this module DOES support and returns undefined for anything else, CHOOSE included, before that misaligned position is ever read from. A dedicated early return here would only ever reach that identical undefined through a different route.
         cursor.skip(PTG_ATTR_TRAILING_BYTES);
         if (subtype === PTG_ATTR_SUM) {
-          if (!applySum(stack)) return undefined;
+          if (!applySum(sink)) return undefined;
         } else if (
           subtype !== PTG_ATTR_SEMI &&
           subtype !== PTG_ATTR_IF &&

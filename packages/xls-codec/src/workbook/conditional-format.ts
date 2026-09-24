@@ -148,7 +148,7 @@ function parseCfBytes(record: RecordGroup):
 
 function readCf(
   record: RecordGroup,
-  ranges: ContentSheetRange[],
+  ranges: readonly ContentSheetRange[],
   formulaSheets: FormulaSheetContext,
 ): RawConditionalFormat | undefined {
   const parsed = parseCfBytes(record);
@@ -179,7 +179,7 @@ function readCf(
       formula1,
       formula2,
       style: parseDxfStyle(dxfBytes),
-      ranges,
+      ranges: [...ranges],
     };
   } catch (err) {
     recoverFromFormatError(err, undefined);

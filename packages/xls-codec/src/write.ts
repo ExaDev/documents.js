@@ -202,7 +202,7 @@ export interface PalettePlan {
   /** The workbook's own custom colour table (56 entries, icv 8 first), or undefined when every distinct decoration colour the workbook's cells use already matches the fixed default table — in which case no Palette record is needed at all, and icvOf resolves every colour straight through that default table. */
   readonly paletteColors: readonly Color[] | undefined;
   /** The icv (7-bit colour-table index) a decoration colour resolves to — into `paletteColors` when defined, into the fixed default table otherwise. Every colour this is called with must already have been registered during the workbook-wide colour scan below. */
-  readonly icvOf: (color: Color) => number;
+  readonly icvOf: (color: Readonly<Color>) => number;
 }
 
 /** Scans every sheet's cells once for the distinct fill/border colours the workbook actually uses (background, and each present border side's own colour), then decides whether they all already have a home in the fixed default table (no Palette record needed) or whether at least one genuinely custom colour forces a real one — in which case every distinct colour, not just the non-default ones, is allocated its own dedicated slot, so the whole 56-entry table is self-consistent and every reference resolves through it rather than a mix of "the file's own table" and "the implicit default". */
@@ -303,7 +303,7 @@ const UNDECORATED_EDGE: XfBorderEdge = { style: BORDER_STYLE_NONE, icv: 0 };
 
 function resolveWriteEdge(
   border: ContentBorder | undefined,
-  icvOf: (color: Color) => number,
+  icvOf: (color: Readonly<Color>) => number,
 ): XfBorderEdge {
   if (border === undefined) {
     return UNDECORATED_EDGE;
@@ -314,7 +314,7 @@ function resolveWriteEdge(
 /** A ContentCellFill's own fillPattern/fillForegroundIcv/fillBackgroundIcv triple, resolved for whichever of 'solid'/'pattern' the cell states — undefined input resolves to FLSNULL with both colours Automatic, matching the pre-#951 undecorated case exactly. A 'pattern' fill leaving one of its own colours unstated writes that colour Automatic too, the inverse of xf-colors.ts's own resolveFillBackground treating an unresolvable icv the same way on read. */
 function resolveFillFields(
   fill: ContentCellFill | undefined,
-  icvOf: (color: Color) => number,
+  icvOf: (color: Readonly<Color>) => number,
 ): Pick<
   XfDecorationFields,
   "fillPattern" | "fillForegroundIcv" | "fillBackgroundIcv"
@@ -363,7 +363,7 @@ function resolveFillFields(
 /** A cell's own decoration, resolved into the raw XfDecorationFields the CellXF payload packs — undefined for a cell with neither a background nor any border, so it shares the workbook's plain undecorated XF exactly as it did before decoration existed. The "has decoration at all" question is written-cells.ts's, since the writer's own record-emission predicate turns on the identical answer. */
 function resolveDecorationForCell(
   cell: ContentSheetCell,
-  icvOf: (color: Color) => number,
+  icvOf: (color: Readonly<Color>) => number,
 ): XfDecorationFields | undefined {
   if (!cellCarriesFormatting(cell)) {
     return undefined;

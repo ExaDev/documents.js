@@ -455,7 +455,7 @@ function readCfFilterRule(
 
 function readCf12(
   record: RecordGroup,
-  ranges: ContentSheetRange[],
+  ranges: readonly ContentSheetRange[],
   formulaSheets: FormulaSheetContext,
 ): RawConditionalFormat12 | undefined {
   try {
@@ -480,7 +480,7 @@ function readCf12(
     const common: RawConditionalFormat12Common = {
       priority,
       stopIfTrue,
-      ranges,
+      ranges: [...ranges],
     };
 
     if (ct === 0x03) {

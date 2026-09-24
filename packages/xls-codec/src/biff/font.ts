@@ -167,7 +167,7 @@ function fontNameBytes(name: string): Uint8Array<ArrayBuffer> {
  */
 export function xfFontFieldsOf(
   font: ContentFont | undefined,
-  icvOf: (color: Color) => number,
+  icvOf: (color: Readonly<Color>) => number,
 ): XfFontFields {
   if (font === undefined) {
     return NORMAL_FONT_FIELDS;

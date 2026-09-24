@@ -49,7 +49,7 @@ const DXFFNTD_ICV_FORE_OFFSET = 64 + 16;
 // The DXFN structure ([MS-XLS] 2.4.97), the exact inverse of parseDxfStyle: the 4+2 flag words (bit 26 = a DXFFntD font block, bit 29 = a DXFPat fill block), then only the blocks the flags name, in the reader's own order (font, alignment, border, pattern — the middle two never set, since the schema's style carries no alignment or border). The font block states one fact and nothing else: the text colour, as icvFore. The pattern block states a solid fill whose visible colour is the foreground icv, the identical reading resolveFillBackground's own solid case makes on the way back in.
 function writeDxfn(
   style: ContentSheetConditionalFormatStyle | undefined,
-  icvOf: (color: Color) => number,
+  icvOf: (color: Readonly<Color>) => number,
 ): Uint8Array<ArrayBuffer> {
   const textColor = style?.textColor;
   const background = style?.background;
@@ -86,7 +86,7 @@ function writeDxfn(
 
 function writeCfRecord(
   rule: Extract<ContentSheetConditionalFormat, { type: "cellIs" }>,
-  icvOf: (color: Color) => number,
+  icvOf: (color: Readonly<Color>) => number,
 ): Uint8Array<ArrayBuffer> {
   const cp = cpOf(rule.operator);
   const rgce1 = compileFormulaText(rule.formula1);
@@ -156,7 +156,9 @@ const ICF_TEMPLATE_BELOW_OR_EQUAL_AVERAGE = 0x001e;
 const TEMPLATE_PARAMS_SIZE = 16;
 
 // The CFVO type codes' inverse ([MS-XLS] 2.5.40's own cfvoType table), mirrored from conditional-format-12.ts's CFVO_TYPE_TO_VALUE_TYPE.
-function cfvoTypeCodeOf(value: ContentSheetConditionalFormatValue): number {
+function cfvoTypeCodeOf(
+  value: Readonly<ContentSheetConditionalFormatValue>,
+): number {
   switch (value.type) {
     case "num":
       return 0x01;
@@ -175,7 +177,7 @@ function cfvoTypeCodeOf(value: ContentSheetConditionalFormatValue): number {
 
 // One CFVO ([MS-XLS] 2.5.40): cfvoType, a CFVOParsedFormula (cce + rgce, no unused word — the one Ptg-carrying formula structure in this family that omits it), then an Xnum numValue present only when the formula is empty and the type names a value rather than a bound. Every value-bearing type is written through its rgce rather than its numValue: a type-0x04/0x05 numValue is constrained to 0..100 and a type-0x07 one is forbidden outright ([MS-XLS] 2.5.40's own numValue rules), while the compiled-form carrier is legal for every type and is the one spelling a value of any shape (a bare number or a genuine formula) round-trips through losslessly.
 function writeCfvo(
-  value: ContentSheetConditionalFormatValue,
+  value: Readonly<ContentSheetConditionalFormatValue>,
 ): Uint8Array<ArrayBuffer> {
   const cfvoType = cfvoTypeCodeOf(value);
   if (value.type === "min" || value.type === "max") {
@@ -192,7 +194,7 @@ function writeCfvo(
 }
 
 // CFColor ([MS-XLS] 2.5.21), written only in its LongRGBA shape (xclrType 0x00000002): this writer holds a resolved RGB triple and no theme to reference, and XCLRTHEMED has no resolution without one. numTint is 0.0 — the schema's colour carries no tint of its own to state.
-function writeCfColor(color: Color): Uint8Array<ArrayBuffer> {
+function writeCfColor(color: Readonly<Color>): Uint8Array<ArrayBuffer> {
   return new RecordBuilder()
     .u32(0x00000002) // XCLRRGB
     .u8(Math.round(color.r * 255))
@@ -386,7 +388,7 @@ export function textRuleFormula(
     ContentSheetConditionalFormat,
     { type: "containsText" | "notContainsText" | "beginsWith" | "endsWith" }
   >,
-  anchor: ContentSheetRange,
+  anchor: Readonly<ContentSheetRange>,
 ): string {
   const cell = relativeCellRef(anchor.startRow, anchor.startColumn);
   // An Excel string literal escapes a double quote by doubling it — the identical spelling biff/ptg-writer.ts's own tokenizer reads back — so the literal is built here rather than through JSON.stringify, whose backslash escape has no meaning in a formula.
@@ -418,8 +420,8 @@ export function relativeCellRef(row: number, column: number): string {
 function writeCf12Record(
   rule: Exclude<ContentSheetConditionalFormat, { type: "cellIs" }>,
   ipriority: number,
-  icvOf: (color: Color) => number,
-  anchor: ContentSheetRange,
+  icvOf: (color: Readonly<Color>) => number,
+  anchor: Readonly<ContentSheetRange>,
 ): Uint8Array<ArrayBuffer> {
   let ct: number;
   let icfTemplate: number;
@@ -692,7 +694,7 @@ export function validateRuleCount(count: number): void {
 
 export function writeSheetConditionalFormats(
   sheet: ContentSheet,
-  icvOf: (color: Color) => number,
+  icvOf: (color: Readonly<Color>) => number,
 ): Uint8Array<ArrayBuffer>[] {
   const rules = sheet.conditionalFormats ?? [];
   const basePieces: Uint8Array<ArrayBuffer>[] = [];
