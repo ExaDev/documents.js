@@ -598,6 +598,13 @@ function signatureOfDecoration(decoration: CellFormatDecoration): string {
   return sig;
 }
 
+// Reached only if ContentStrokeStyle ever gains a variant borderToXlsxStyle's own switch does not match: every current member (plus undefined, folded into the "solid" case) is covered there, so `value` narrows to `never` at the real call site, and adding an uncovered style makes that narrowing fail and this call stop compiling. That is the real safety net. Exported so styles.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real ContentStrokeStyle is already handled by a case in borderToXlsxStyle.
+export function assertNeverContentStrokeStyle(value: never): never {
+  throw new Error(
+    `borderToXlsxStyle: unhandled ContentBorder style ${JSON.stringify(value)}`,
+  );
+}
+
 function borderToXlsxStyle(border: ContentBorder): string {
   // The inverse of XLSX_BORDER_STYLE above: pick the xlsx style token that carries this border's pattern at the closest named weight. 'double'/'dotted' patterns always have a direct token; 'dashed' and a solid border bucket their widthPt back to a named weight through document-schema.js's own shared quantisation, the same one the reader's widths came out of.
   switch (border.style) {
@@ -613,6 +620,7 @@ function borderToXlsxStyle(border: ContentBorder): string {
     case undefined:
       return borderWeightForWidthPt(border.widthPt);
   }
+  return assertNeverContentStrokeStyle(border.style);
 }
 
 // One declared <fill> as the writer must emit it. 'none'/'gray125' are the two reserved scaffolding entries every real workbook declares regardless of content, carrying no colour; 'solid' carries its colour plus the indexed="64" bgColor that is Excel's own convention for "no separate background" on a solid pattern; 'pattern' is a genuine ContentCellPatternType fill a real cell asked for, carrying whichever of fgRgb/bgRgb its own foreground/background colours resolved to (ExaDev/documents.js#951) — discriminated by `kind` rather than by `patternType` alone, since a real cell fill can itself name patternType "gray125" (or any other SpreadsheetML member), which is a wholly different, independently-coloured <fill> entry from the reserved scaffolding one of the identical name.
@@ -626,6 +634,13 @@ export type DeclaredFill =
       fgRgb?: string;
       bgRgb?: string;
     };
+
+// Reached only if DeclaredFill ever gains a variant buildStylesPart's own fillElements switch (build.ts) does not match: every current member is covered there, so `value` narrows to `never` at the real call site, and adding an uncovered kind makes that narrowing fail and this call stop compiling. That is the real safety net. Exported so styles.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real DeclaredFill kind is already handled by a case in buildStylesPart.
+export function assertNeverDeclaredFillKind(value: never): never {
+  throw new Error(
+    `buildStylesPart: unhandled DeclaredFill kind ${JSON.stringify(value)}`,
+  );
+}
 
 // One declared <border> as the writer must emit it: each present edge carries its xlsx style token and colour; absent edges emit an empty <edge/> element, matching the empty-border reserved entry's shape (every edge is always present as an element, just empty when there is no border).
 export interface DeclaredBorder {
