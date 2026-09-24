@@ -28,7 +28,11 @@ function readCodes(source: string): string[] {
 
 function writeCodes(document: ContentDocument): string[] {
   const codes: RtfDiagnostic[] = [];
-  writeRtfContent(document, { sink: (diagnostic) => codes.push(diagnostic) });
+  writeRtfContent(document, {
+    sink: (diagnostic) => {
+      codes.push(diagnostic);
+    },
+  });
   return collect(codes);
 }
 
@@ -245,7 +249,9 @@ describe("every write-side diagnostic code is reachable", () => {
       };
       const diagnostics: RtfDiagnostic[] = [];
       writeRtf(documentPackage, {
-        sink: (diagnostic) => diagnostics.push(diagnostic),
+        sink: (diagnostic) => {
+          diagnostics.push(diagnostic);
+        },
       });
       collect(diagnostics);
       expect(diagnostics).toEqual([
@@ -272,7 +278,9 @@ describe("every write-side diagnostic code is reachable", () => {
     };
     const diagnostics: RtfDiagnostic[] = [];
     writeRtf(documentPackage, {
-      sink: (diagnostic) => diagnostics.push(diagnostic),
+      sink: (diagnostic) => {
+        diagnostics.push(diagnostic);
+      },
     });
     expect(diagnostics).toEqual([]);
   });

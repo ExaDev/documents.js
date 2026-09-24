@@ -9,6 +9,6 @@ export function bytes(source: string): Uint8Array {
 }
 
 // The inverse, for asserting on writer output without decoding through a codepage: a writer's own output is 7-bit ASCII by construction (every non-ASCII character leaves as a \uN escape), so reading it back as one byte per code unit is exact.
-export function text(value: Uint8Array): string {
+export function asciiText(value: Uint8Array): string {
   return asciiStringFromBytes(value);
 }
