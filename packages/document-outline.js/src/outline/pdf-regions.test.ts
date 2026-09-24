@@ -962,7 +962,6 @@ describe("isRowAlignedGrid", () => {
   });
 
   it("matches a row at exactly LINE_TOLERANCE_PT away, not only a strictly closer one", () => {
-    const rowSecond = 690;
     const bandA = [boundedText(bandAX, rowTop), boundedText(bandAX, rowSecond)];
     // Each row is exactly 2pt (LINE_TOLERANCE_PT) from its bandA counterpart.
     const bandB = [
