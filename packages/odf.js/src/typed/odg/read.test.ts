@@ -36,7 +36,7 @@ function stylesXml(): Package["parts"][string] {
 
 function graphicStyle(
   name: string,
-  attrs: Record<string, string>,
+  attrs: Readonly<Record<string, string>>,
 ): ReturnType<typeof el> {
   return el("style:style", { "style:name": name, "style:family": "graphic" }, [
     el("style:graphic-properties", attrs),

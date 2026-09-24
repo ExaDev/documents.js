@@ -287,7 +287,7 @@ function readTableCellDecoration(
 function readTableCell(
   cellElement: XmlElement,
   pkg: Package,
-  listIdState: OdfListIdState,
+  listIdState: Readonly<OdfListIdState>,
 ): ContentTableCell {
   // A cell's block content mirrors the general block-content reading every other shared/odt-specific walker here applies: text:p/text:h read as paragraphs/headings (a heading paragraph set in a cell is a real text:h under the same convention office:text uses — typed/shared/paragraph.ts's readParagraphOrHeading derives its identity), text:list reads through the SAME shared list walker (typed/shared/list.ts's readOdfListParagraphs/mintOdfListNumId) office:text and a slide text-box both use, and table:table recurses back into readOdfTable — a table nested inside a cell is still just a table:table element, read by the identical function that reads a top-level one. All four are walked in document order rather than tag-filtered, so a heading or a nested list/table between two paragraphs stays between them.
   const blocks: ContentBlock[] = [];
@@ -326,7 +326,7 @@ function readTableCell(
 function readTableRow(
   rowElement: XmlElement,
   pkg: Package,
-  listIdState: OdfListIdState,
+  listIdState: Readonly<OdfListIdState>,
 ): ContentTableRow {
   const cells: ContentTableCell[] = [];
   for (const child of rowElement.children) {
@@ -695,7 +695,7 @@ function flattenTableParts(
 export function readOdfTable(
   tableElement: XmlElement,
   pkg: Package,
-  listIdState: OdfListIdState = { next: 1 },
+  listIdState: Readonly<OdfListIdState> = { counter: { next: 1 } },
 ): ContentTable {
   const columns: ContentTableColumn[] = [];
   for (const { element: column, insideHeader } of flattenTableParts(

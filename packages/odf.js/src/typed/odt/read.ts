@@ -124,6 +124,11 @@ const AUTOMATIC_STYLE_PARTS = [CONTENT_PART, "styles.xml"] as const;
 // text:h identity in the office:text walk is the shared readParagraphOrHeading (typed/shared/paragraph.ts, imported above) — the same heading-identity step that module's own table-cell walk now applies, so a heading reads identically at body level and inside a table cell. List membership is never set alongside it: the shared walker (typed/shared/list.ts's readOdfListParagraphs) attaches it for paragraphs it reads inside a text:list, since ODF list membership is purely structural (which text:list/text:list-item this element is nested inside), never an attribute on the paragraph element itself the way docx's w:numPr is.
 
 // A paragraph's effective master page: the most specific style in its resolved "paragraph" chain that carries style:master-page-name — the ODF attribute that switches the page style from the paragraph it is applied to. It is an attribute of the style:style ELEMENT ITSELF, never of its style:paragraph-properties child, and never of the paragraph element (ODF has no direct formatting). Three independent pieces of ground truth agree on that placement: this package's own recorded real-LibreOffice style:style attribute set (styles/properties.ts's RISKY_STYLE_ELEMENT_ATTRS and the real-output fixture in its test suite), the ods reader's own equivalent lookup on a table's style:style (typed/ods/read.ts), and a controlled LibreOffice round trip — a flat-ODF document carrying the attribute on style:style renders two pages at the two master pages' own sizes and survives a re-save verbatim, while the identical document carrying it on style:paragraph-properties renders one page and has the attribute stripped outright on re-save. The chain is walked root-first so a nearer link's name overrides a further one's, exactly as cascade property resolution does, and inheritance through style:parent-style-name is real rather than assumed: the same round trip confirms LibreOffice applies a switch a paragraph reaches only through its parent style. Memoised per style name in the walk state: the same style name repeats across a document's paragraphs, and each resolution is a full two-part style-container scan.
+// The block list a lifted frame's own content is appended into. Wrapped rather than passed as a bare array so the closure's parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable.
+interface BlockSink {
+  readonly blocks: ContentBlock[];
+}
+
 function resolveParagraphMasterPageName(
   element: XmlElement,
   pkg: Package,
@@ -187,10 +192,8 @@ function readAnchoredFrameSources(
     return [];
   }
   const sources: LiftedFrameSource[] = [];
-  const readFrameInto = (
-    blocks: ContentBlock[],
-    frameElement: XmlElement,
-  ): void => {
+  const readFrameInto = (sink: BlockSink, frameElement: XmlElement): void => {
+    const blocks = sink.blocks;
     const shape = readDrawFrame(frameElement, [], pkg, state.listIdState, true);
     if (shape === undefined) {
       return;
@@ -222,7 +225,7 @@ function readAnchoredFrameSources(
     }
     if (child.tag === "draw:frame") {
       const blocks: ContentBlock[] = [];
-      readFrameInto(blocks, child);
+      readFrameInto({ blocks }, child);
       if (blocks.length > 0) {
         sources.push({ child, blocks });
       }
@@ -230,7 +233,7 @@ function readAnchoredFrameSources(
       const blocks: ContentBlock[] = [];
       for (const grandChild of child.children) {
         if (grandChild.type === "element" && grandChild.tag === "draw:frame") {
-          readFrameInto(blocks, grandChild);
+          readFrameInto({ blocks }, grandChild);
         }
       }
       if (blocks.length > 0) {
@@ -538,7 +541,7 @@ function splitOdtSections(
 // Package -> OdtDocument. Throws only when content.xml itself, or its own office:body/office:text element, is missing — a genuinely unusable package, mirroring exactly how ooxml.js's own readDocx throws when word/document.xml or its w:body is missing, rather than degrading gracefully the way a merely malformed or absent OPTIONAL part (meta.xml, styles.xml, an individual style reference) does throughout the rest of this reader.
 export function readOdtContent(
   pkg: Package,
-  options: OdtReadOptions = {},
+  options: Readonly<OdtReadOptions> = {},
 ): OdtDocument {
   const contentPart = pkg.parts[CONTENT_PART];
   if (contentPart?.kind !== "xml") {
@@ -600,7 +603,7 @@ export function readOdtContent(
   }
 
   const state: OdtFlowState = {
-    listIdState: { next: 1 },
+    listIdState: { counter: { next: 1 } },
     provenanceRegions,
     definitions,
     wrapperExtents: [],
@@ -712,7 +715,7 @@ export function readOdtContent(
 // No `pages` argument is passed, and none can be: `pages` carries each RENDERED page's own size, which only a layout pass can report. A reader runs strictly before any layout, so the package it returns is a content-only one — its nodes carry no `frames` and its root carries no `pages`, which is the honest shape for a document nothing has laid out yet.
 export function readOdt(
   pkg: Package,
-  options: OdtReadOptions = {},
+  options: Readonly<OdtReadOptions> = {},
 ): DocumentTree {
   const { metadata, sections, definitions, source } = readOdtContent(
     pkg,

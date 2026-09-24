@@ -15,7 +15,7 @@ const CONTENT_PART = "content.xml";
 export function subDocumentPackage(
   pkg: Package,
   prefix: string,
-  options: SubDocumentPackageOptions = {},
+  options: Readonly<SubDocumentPackageOptions> = {},
 ): Package {
   const normalised = prefix.endsWith("/") ? prefix : `${prefix}/`;
   const parts: Record<string, Package["parts"][string]> = {};

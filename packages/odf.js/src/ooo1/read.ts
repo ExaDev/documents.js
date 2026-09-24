@@ -22,7 +22,7 @@ import { readOdg, readOdgContent, type OdgDocument } from "../typed/odg/read";
 // A .sxw or .stw (OpenOffice.org 1.x Writer) package as a flat OdtDocument.
 export function readSxwContent(
   pkg: Package,
-  options: OdtReadOptions = {},
+  options: Readonly<OdtReadOptions> = {},
 ): OdtDocument {
   return readOdtContent(transformOoo1Package(pkg), options);
 }
@@ -30,7 +30,7 @@ export function readSxwContent(
 // A .sxw or .stw package as a wordprocessing DocumentTree.
 export function readSxw(
   pkg: Package,
-  options: OdtReadOptions = {},
+  options: Readonly<OdtReadOptions> = {},
 ): DocumentTree {
   return readOdt(transformOoo1Package(pkg), options);
 }

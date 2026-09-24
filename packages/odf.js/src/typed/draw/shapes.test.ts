@@ -7,7 +7,7 @@ import { bytesToBase64 } from "byte-codec";
 import { readDrawFrame, readDrawPageContent, walkDrawShapes } from "./shapes";
 
 function contentPackage(
-  automaticStyleChildren: XmlElement[] = [],
+  automaticStyleChildren: readonly XmlElement[] = [],
 ): Package["parts"][string] {
   return {
     kind: "xml",
@@ -21,8 +21,8 @@ function contentPackage(
 
 // Like contentPackage above, but ALSO populates content.xml's own office:styles container — the real placement of a named draw resource (<draw:gradient>/<draw:hatch>/<draw:fill-image>/<draw:stroke-dash>, OASIS ODF 1.3 section 16.42: "usable within the following element: <office:styles>"), a genuinely separate ODF vocabulary from style:style that a shape's own draw:fill-gradient-name/draw:fill-hatch-name/draw:fill-image-name/draw:stroke-dash attribute references by name rather than nests inside.
 function contentPackageWithResources(
-  automaticStyleChildren: XmlElement[],
-  namedResourceChildren: XmlElement[],
+  automaticStyleChildren: readonly XmlElement[],
+  namedResourceChildren: readonly XmlElement[],
 ): Package["parts"][string] {
   return {
     kind: "xml",
@@ -37,8 +37,8 @@ function contentPackageWithResources(
 
 function graphicStyle(
   name: string,
-  attrs: Record<string, string>,
-  extra: Record<string, string> = {},
+  attrs: Readonly<Record<string, string>>,
+  extra: Readonly<Record<string, string>> = {},
 ): XmlElement {
   return el(
     "style:style",
@@ -503,7 +503,7 @@ describe("readDrawFrame: flowPositioning opt-in", () => {
       el("draw:text-box", {}, [el("text:p", {}, [txt("Hi")])]),
     ]);
     const out: ContentShape[] = [];
-    walkDrawShapes([frame], [], { parts: {} }, out);
+    walkDrawShapes([frame], [], { parts: {} }, { shapes: out });
     expect(out).toEqual([]);
   });
 });
@@ -537,7 +537,7 @@ describe("walkDrawShapes: flat, non-grouped content", () => {
       "svg:height": "10pt",
     });
     const out: ContentShape[] = [];
-    walkDrawShapes([frame1, frame2], [], { parts: {} }, out);
+    walkDrawShapes([frame1, frame2], [], { parts: {} }, { shapes: out });
     expect(out.map((s) => s.frame.xPt)).toEqual([0, 20]);
   });
 
@@ -554,14 +554,14 @@ describe("walkDrawShapes: flat, non-grouped content", () => {
       ],
       [],
       { parts: {} },
-      out,
+      { shapes: out },
     );
     expect(out).toEqual([]);
   });
 
   it("drops a draw:frame with no resolvable geometry rather than pushing a fabricated shape", () => {
     const out: ContentShape[] = [];
-    walkDrawShapes([el("draw:frame")], [], { parts: {} }, out);
+    walkDrawShapes([el("draw:frame")], [], { parts: {} }, { shapes: out });
     expect(out).toEqual([]);
   });
 });
@@ -584,7 +584,7 @@ describe("walkDrawShapes: draw:g group flattening", () => {
     });
     const group = el("draw:g", {}, [shapeA, shapeB]);
     const out: ContentShape[] = [];
-    walkDrawShapes([group], [], { parts: {} }, out);
+    walkDrawShapes([group], [], { parts: {} }, { shapes: out });
     expect(out).toHaveLength(2);
     expect(out[0]).toMatchObject({
       name: "A",
@@ -611,7 +611,7 @@ describe("walkDrawShapes: draw:g group flattening", () => {
       [shapeA],
     );
     const out: ContentShape[] = [];
-    walkDrawShapes([group], [], { parts: {} }, out);
+    walkDrawShapes([group], [], { parts: {} }, { shapes: out });
     expect(out).toHaveLength(1);
     // After: applyOdfTransform(groupFunctions, {90,70}) -> rotate: (70,-90) -> translate: (170,10) -> frame top-left = center - halfSize = (170-40, 10-20) = (130,-10).
     expect(out[0]?.frame.xPt).toBeCloseTo(130, 6);
@@ -635,7 +635,7 @@ describe("walkDrawShapes: draw:g group flattening", () => {
       inner,
     ]);
     const out: ContentShape[] = [];
-    walkDrawShapes([outer], [], { parts: {} }, out);
+    walkDrawShapes([outer], [], { parts: {} }, { shapes: out });
     // Child local center (5,5) -> inner translate (10,0) -> (15,5) -> outer translate (0,10) -> (15,15) -> top-left (10,10).
     expect(out[0]?.frame.xPt).toBeCloseTo(10, 6);
     expect(out[0]?.frame.yPt).toBeCloseTo(10, 6);
@@ -643,7 +643,7 @@ describe("walkDrawShapes: draw:g group flattening", () => {
 
   it("flattens an EMPTY group (no children) into nothing, without error", () => {
     const out: ContentShape[] = [];
-    walkDrawShapes([el("draw:g")], [], { parts: {} }, out);
+    walkDrawShapes([el("draw:g")], [], { parts: {} }, { shapes: out });
     expect(out).toEqual([]);
   });
 });
@@ -1534,7 +1534,7 @@ describe("readDrawPageContent: draw:custom-shape presets", () => {
   function customShape(
     name: string,
     type: string,
-    extra: Record<string, string> = {},
+    extra: Readonly<Record<string, string>> = {},
   ): XmlElement {
     return el(
       "draw:custom-shape",
@@ -2186,7 +2186,7 @@ describe("readDrawPageContent / walkDrawShapes: paintOrder stamping", () => {
       "svg:height": "10pt",
     });
     const out: ContentShape[] = [];
-    walkDrawShapes([frameA, frameB], [], { parts: {} }, out);
+    walkDrawShapes([frameA, frameB], [], { parts: {} }, { shapes: out });
     // Document order is unchanged (A then B) — only the stamped value reflects the real z-index.
     expect(out.map((s) => s.name)).toEqual(["A", "B"]);
     expect(out.map((s) => s.paintOrder)).toEqual([5, 1]);
@@ -2209,15 +2209,15 @@ describe("readDrawPageContent / walkDrawShapes: paintOrder stamping", () => {
     });
     const group = el("draw:g", {}, [frameB]);
     const out: ContentShape[] = [];
-    walkDrawShapes([frameA, group], [], { parts: {} }, out);
+    walkDrawShapes([frameA, group], [], { parts: {} }, { shapes: out });
     expect(out.map((s) => s.paintOrder)).toEqual([0, 1]);
   });
 });
 
 describe("readDrawPageContent: svg:fill-rule (path vectors only — rect/ellipse have no fillRule field at all)", () => {
   function pathWithProps(
-    extra: Record<string, string> = {},
-    styleAttrs: Record<string, string> = {},
+    extra: Readonly<Record<string, string>> = {},
+    styleAttrs: Readonly<Record<string, string>> = {},
   ): { path: XmlElement; pkg: Package } {
     const gr1 = graphicStyle("gr1", {
       "draw:fill-color": "#ff0000",

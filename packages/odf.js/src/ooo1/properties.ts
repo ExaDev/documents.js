@@ -375,7 +375,7 @@ const LINE_THROUGH_EXPANSIONS: ReadonlyMap<
 ]);
 
 // Rewrites one OpenOffice.org 1.x property attribute into the ODF attribute(s) that carry the same formatting. Most are unchanged; the three that are not are the compound line decorations and the boolean fo:keep-with-next, all of which ODF respelled rather than renamed.
-function expandPropertyAttribute(attribute: Attribute): Attribute[] {
+function expandPropertyAttribute(attribute: Readonly<Attribute>): Attribute[] {
   if (attribute.name === "style:text-underline") {
     const expansion = UNDERLINE_EXPANSIONS.get(attribute.value);
     const style = expansion?.style ?? attribute.value;

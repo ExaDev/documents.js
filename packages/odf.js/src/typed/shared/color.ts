@@ -10,6 +10,6 @@ export function parseOdfColor(value: string): Color | undefined {
   return rgbHexToColor(value);
 }
 
-export function formatOdfColor(color: Color): string {
+export function formatOdfColor(color: Readonly<Color>): string {
   return `#${colorToRgbHex(color)}`;
 }

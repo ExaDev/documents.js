@@ -64,7 +64,7 @@ export type ShapeContentPlan =
 // - a heading (a shape's own draw:text-box content model is (text:p | text:list)* with no text:h at all — readDrawFrameContent's own text-box walk only ever looks for those two tags, so a text:h written here would be silently invisible on the way back in, not merely unusual).
 export function planShapeContent(
   blocks: readonly ContentBlock[],
-  listState: ListPlanState,
+  listState: Readonly<ListPlanState>,
   definitions?: Readonly<Record<string, DefinitionEntry>>,
   changeIds?: ReadonlyMap<ProvenanceDescriptor, string>,
 ): ShapeContentPlan {
@@ -206,7 +206,7 @@ function tableWriteContext(state: DrawShapeWriteState): OdfTableWriteContext {
 //
 // Exported because a VECTOR primitive's own geometry is the identical problem, not merely a similar one: typed/draw/shapes.ts's resolveVectorGeometry resolves a draw:rect/draw:ellipse/draw:path through the very same resolveOdfShapeGeometry call readDrawFrame uses, so its inverse is this function unchanged. The name still says "frame" because that is what it takes — a ContentVector's own placement field is spelled `frame` too.
 export function frameGeometryAttrs(
-  frame: Box,
+  frame: Readonly<Box>,
   rotationDeg: number | undefined,
 ): Record<string, string> {
   if (rotationDeg === undefined || rotationDeg === 0) {
@@ -367,7 +367,7 @@ export function odfZIndexOf(
 // One ContentShape -> the draw:frame element typed/draw/shapes.ts's own readDrawFrame reads back: geometry (svg:x/y/width/height, or draw:transform when rotated), an interned graphic-family style carrying the shape's own paint (explicit no-fill/no-stroke) and text insets (when non-zero), and exactly one of table:table/draw:text-box/draw:image as decided by planShapeContent. `listState` is the caller's own ListPlanState (typed/shared/list.ts) — see planShapeContent's own note on why this module never decides its own threading policy. `documentIndex` is this shape's own position in its page's document-encounter order — see odfZIndexOf's own note above for why it is written unconditionally rather than only as a fallback.
 export function writeDrawFrame(
   shape: ContentShape,
-  listState: ListPlanState,
+  listState: Readonly<ListPlanState>,
   state: DrawShapeWriteState,
   documentIndex: number,
 ): XmlElement {
@@ -423,7 +423,7 @@ export function writeDrawFrame(
 export function canonicalDrawShape(
   shape: ContentShape,
   documentIndex: number,
-  listState: ListPlanState,
+  listState: Readonly<ListPlanState>,
   definitions?: Readonly<Record<string, DefinitionEntry>>,
   changeIds?: ReadonlyMap<ProvenanceDescriptor, string>,
 ): ContentShape & { paintOrder: number } {
@@ -471,7 +471,7 @@ export function canonicalDrawShape(
 // Writes a whole page's (or slide's) own shapes in document order — the convenience wrapper typed/odp/write.ts calls per slide and typed/odg/write.ts calls per drawing page, matching typed/draw/shapes.ts's own readDrawPageContent as the shared entry point on the read side. Vector primitives (draw:rect/ellipse/line/path/polygon/polyline/custom-shape) are NOT handled here: ContentShape carries none of them (that is ContentVector's own vocabulary, a ContentDrawPage-only concept per document-schema.js's own drawing content model), so typed/draw/write-vectors.ts's writeDrawVectors produces those alongside this function's own output, not through it. A shape's array index IS its document-encounter index for both callers — odp emits nothing else onto a slide, and odg emits its own shapes array before its vectors array — so this passes the map index straight through as writeDrawFrame's own documentIndex, matching canonicalDrawShape's identical assumption above.
 export function writeDrawShapes(
   shapes: readonly ContentShape[],
-  listState: ListPlanState,
+  listState: Readonly<ListPlanState>,
   state: DrawShapeWriteState,
 ): XmlElement[] {
   return shapes.map((shape, index) =>

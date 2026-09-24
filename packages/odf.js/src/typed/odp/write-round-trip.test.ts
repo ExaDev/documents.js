@@ -62,12 +62,12 @@ function shape(
   };
 }
 
-function slide(shapes: ContentShape[], notes = ""): ContentSlide {
-  return { size: SLIDE_SIZE_WIDESCREEN, shapes, notes };
+function slide(shapes: readonly ContentShape[], notes = ""): ContentSlide {
+  return { size: SLIDE_SIZE_WIDESCREEN, shapes: [...shapes], notes };
 }
 
-function documentOf(slides: ContentSlide[]): PresentationDocument {
-  return { kind: "presentation", metadata: {}, slides };
+function documentOf(slides: readonly ContentSlide[]): PresentationDocument {
+  return { kind: "presentation", metadata: {}, slides: [...slides] };
 }
 
 describe("writeOdpContent: the round-trip law", () => {

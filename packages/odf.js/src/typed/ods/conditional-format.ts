@@ -241,7 +241,7 @@ const COMPARISON_OPERATOR_BY_MODE: ReadonlyMap<
 // decodeXmlText on every attribute value read here, not just this one: this package parses with processEntities:false (xml/parse.ts), so an attribute value is stored exactly as the source XML spelled it — a real LibreOffice-produced calcext:value of ">3" is confirmed (typed/ods/fixtures/conditional-format.ods's own content.xml) to serialise as calcext:value="&gt;3", literally, on disk. Reading it via a bare attrValue() would hand ">3"'s own comparison-operator prefix match a literal "&gt;3" instead, silently failing to match any of this mini-language's own prefixes and quarantining a real, well-formed rule as unpromotable residue.
 function readCondition(
   conditionEl: XmlElement,
-  ranges: ContentSheetRange[],
+  ranges: readonly ContentSheetRange[],
   pkg: Package,
 ): ContentSheetConditionalFormat | undefined {
   const rawValue = attrValue(conditionEl, "calcext:value");
@@ -261,13 +261,13 @@ function readCondition(
 
   switch (parsed.mode) {
     case "unique":
-      return { type: "uniqueValues", ranges, ...styleField };
+      return { type: "uniqueValues", ranges: [...ranges], ...styleField };
     case "duplicate":
-      return { type: "duplicateValues", ranges, ...styleField };
+      return { type: "duplicateValues", ranges: [...ranges], ...styleField };
     case "is-error":
-      return { type: "containsErrors", ranges, ...styleField };
+      return { type: "containsErrors", ranges: [...ranges], ...styleField };
     case "is-no-error":
-      return { type: "notContainsErrors", ranges, ...styleField };
+      return { type: "notContainsErrors", ranges: [...ranges], ...styleField };
     case "between":
     case "not-between": {
       if (parsed.expr1 === undefined || parsed.expr2 === undefined) {
@@ -275,7 +275,7 @@ function readCondition(
       }
       return {
         type: "cellIs",
-        ranges,
+        ranges: [...ranges],
         operator: parsed.mode === "between" ? "between" : "notBetween",
         formula1: parsed.expr1,
         formula2: parsed.expr2,
@@ -294,7 +294,7 @@ function readCondition(
       }
       return {
         type: "cellIs",
-        ranges,
+        ranges: [...ranges],
         operator,
         formula1: parsed.expr1,
         ...styleField,
@@ -319,7 +319,7 @@ function readCondition(
           : undefined;
       return {
         type: "top10",
-        ranges,
+        ranges: [...ranges],
         rank,
         ...(percent !== undefined ? { percent } : {}),
         ...(bottom !== undefined ? { bottom } : {}),
@@ -338,7 +338,7 @@ function readCondition(
         parsed.mode === "below-equal-average";
       return {
         type: "aboveAverage",
-        ranges,
+        ranges: [...ranges],
         aboveAverage,
         equalAverage,
         ...styleField,
@@ -359,7 +359,7 @@ function readCondition(
             : parsed.mode === "contains-text"
               ? "containsText"
               : "notContainsText";
-      return { type, ranges, text: parsed.expr1, ...styleField };
+      return { type, ranges: [...ranges], text: parsed.expr1, ...styleField };
     }
     case "formula-is":
       // ECMA-376's own 'expression' cfRule type has no closed-form structure to model without a general formula engine, and ContentSheetConditionalFormatSchema deliberately excludes it (see that schema's own top comment) — calcext:condition's own formula-is is the identical concept, so it is left unpromoted here for exactly the same reason.
@@ -385,7 +385,7 @@ function readCfvoValue(
 
 function readColorScale(
   colorScaleEl: XmlElement,
-  ranges: ContentSheetRange[],
+  ranges: readonly ContentSheetRange[],
 ): ContentSheetConditionalFormat | undefined {
   const entryEls = childrenWithTag(colorScaleEl, "calcext:color-scale-entry");
   if (entryEls.length < 2 || entryEls.length > 3) {
@@ -402,12 +402,12 @@ function readColorScale(
     }
     stops.push({ value, color });
   }
-  return { type: "colorScale", ranges, stops };
+  return { type: "colorScale", ranges: [...ranges], stops };
 }
 
 function readDataBar(
   dataBarEl: XmlElement,
-  ranges: ContentSheetRange[],
+  ranges: readonly ContentSheetRange[],
 ): ContentSheetConditionalFormat | undefined {
   const entryEls = [
     ...childrenWithTag(dataBarEl, "calcext:formatting-entry"),
@@ -428,7 +428,7 @@ function readDataBar(
   const showValue = attrValue(dataBarEl, "calcext:show-value");
   return {
     type: "dataBar",
-    ranges,
+    ranges: [...ranges],
     min,
     max,
     color,
@@ -438,7 +438,7 @@ function readDataBar(
 
 function readIconSet(
   iconSetEl: XmlElement,
-  ranges: ContentSheetRange[],
+  ranges: readonly ContentSheetRange[],
 ): ContentSheetConditionalFormat | undefined {
   const iconSetType = attrValue(iconSetEl, "calcext:icon-set-type");
   if (iconSetType === undefined) {
@@ -461,7 +461,7 @@ function readIconSet(
   const showValue = attrValue(iconSetEl, "calcext:show-value");
   return {
     type: "iconSet",
-    ranges,
+    ranges: [...ranges],
     iconSetType,
     thresholds,
     ...(showValue !== undefined ? { showValue: showValue === "true" } : {}),
@@ -502,7 +502,7 @@ const TIME_PERIOD_BY_CALCEXT_DATE: ReadonlyMap<string, TimePeriod> = new Map([
 
 function readDateIs(
   dateIsEl: XmlElement,
-  ranges: ContentSheetRange[],
+  ranges: readonly ContentSheetRange[],
   pkg: Package,
 ): ContentSheetConditionalFormat | undefined {
   const dateRaw = attrValue(dateIsEl, "calcext:date");
@@ -520,7 +520,7 @@ function readDateIs(
   );
   return {
     type: "timePeriod",
-    ranges,
+    ranges: [...ranges],
     timePeriod,
     ...(style !== undefined ? { style } : {}),
   };

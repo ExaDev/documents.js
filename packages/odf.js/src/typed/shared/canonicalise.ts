@@ -28,7 +28,7 @@ function unsupportedContent(what: string, where: string): Error {
 }
 
 // ODF states every colour as six hex digits (its own text:color datatype — see typed/shared/color.ts), so a Color component that is not a whole 1/255 step cannot be carried: 0.9 is written as "e6" and read back as 230/255. Round-tripping through document-schema.js's own hex pair IS that quantisation, stated once here rather than approximated with an epsilon comparison in a test.
-export function canonicalColor(color: Color): Color {
+export function canonicalColor(color: Readonly<Color>): Color {
   return rgbHexToColor(colorToRgbHex(color));
 }
 
@@ -183,7 +183,7 @@ function canonicalCellDecoration(
 export function canonicalCell(
   cell: ContentTableCell,
   covered: boolean,
-  listState: ListPlanState,
+  listState: Readonly<ListPlanState>,
 ): ContentTableCell {
   if (covered) {
     return { blocks: [], ...canonicalCellDecoration(cell) };
@@ -212,7 +212,7 @@ export function canonicalCell(
 // The one canonical ContentTable a written-and-reread table equals, wherever writeOdfTable places it (odt's own top-level tables, or one nested inside an odp/odg shape's draw:frame) — every mapping forced by ODF's own table:table content model rather than chosen here, matching typed/shared/table.ts's own writeOdfTable/readOdfTable as the single writer/reader pair every caller shares. `listState` is the caller's own document-wide ListPlanState (typed/odt/write.ts's planDocument, typed/odp/write.ts's own presentation-wide state — see each caller's own top-of-file note), threaded through every cell so a list minted inside this table — including one nested inside a cell of a table nested inside one of THIS table's own cells — is numbered in the identical document-encounter order readOdfTable's own listIdState mints it in on the way back in. Closed before every cell's own canonicalCell call (each cell is its own list-run scope, so two adjacent cells can never canonicalise to the same numId even when both carry an identical incoming one) and once more after the whole table, for whatever sibling block follows this table in the caller's own block list — a close between cells or immediately after canonicalCell's own return would only ever be overwritten by one of those two before anything could observe it, so only these two calls do real work.
 export function canonicalTable(
   table: ContentTable,
-  listState: ListPlanState,
+  listState: Readonly<ListPlanState>,
 ): ContentTable {
   assertTableObeysGridRule(table, "canonicalTable");
   const gridPositions = walkTableGrid(table);

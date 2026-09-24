@@ -18,8 +18,6 @@ export default tseslint.config(
     // Off: with noUncheckedIndexedAccess on, every indexed read is typed as possibly-undefined, so this rule fires on array and byte-buffer indexing whose bound the surrounding code has already established — a loop condition, a prior length check, or a fixture the test itself just built. None of the sites here is a value that can actually be absent. Tracked for a per-package decision on whether any of them is genuine; see the burn-down epic.
     nonNullAssertion: "off",
     isomorphic: true,
-    // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why — this package's own ODF readers/writers genuinely mutate a large number of array/object parameters in place. Tracked for burn-down.
-    preferReadonlyParams: "off",
   }),
   {
     // fast-xml-parser@5 deprecates the whole XMLBuilder class, not one of its options, and ships no replacement of its own — it points at a separate `fast-xml-builder` package that is not a declared dependency here. Swapping it is a real dependency decision with round-trip fidelity to re-verify (this builder is what keeps XML byte-faithful), so it is tracked rather than guessed at inside a tooling change. Scoped to the one module that constructs the builder, plus its own test file, which necessarily references the identical deprecated class to reach BUILDER's shared prototype.

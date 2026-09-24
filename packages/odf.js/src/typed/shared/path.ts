@@ -271,7 +271,7 @@ export function parseOdfPathData(d: string): OdfRawSubpath[] {
 export function scaleOdfRawPoint(
   point: OdfRawPoint,
   viewBox: OdfViewBox,
-  frame: Box,
+  frame: Readonly<Box>,
 ): ContentPathPoint {
   return {
     xPt: (point.x - viewBox.minX) * (frame.widthPt / viewBox.width),
@@ -282,7 +282,7 @@ export function scaleOdfRawPoint(
 export function buildOdfSubpaths(
   rawSubpaths: readonly OdfRawSubpath[],
   viewBox: OdfViewBox,
-  frame: Box,
+  frame: Readonly<Box>,
 ): ContentSubpath[] {
   return rawSubpaths.map((raw) => ({
     start: scaleOdfRawPoint(raw.start, viewBox, frame),
@@ -306,11 +306,11 @@ export function buildOdfSubpaths(
 // --- the write side: a ContentVector 'path' variant's own subpaths -> the svg:viewBox/svg:d pair parseOdfPathData and buildOdfSubpaths above read back -------------------------------------------------------------------------------
 //
 // THE ONE CHOICE THAT MAKES THE INVERSE EXACT RATHER THAN APPROXIMATE, and the reason these two functions are a pair rather than one: a writer is free to pick the viewBox its own coordinates are expressed in, and picking "0 0 <frame width> <frame height>" makes scaleOdfRawPoint's own scale factor (frame.widthPt / viewBox.width) exactly 1 and its minX/minY subtraction exactly zero — so a ContentSubpath's own local-space points ARE the numbers written into svg:d, with no scaling step to round-trip through at all. A real producer's viewBox is typically a large integer range unrelated to the frame's physical size (LibreOffice writes svg:viewBox="0 0 3657 4000" for a 3.656cm-wide shape, per this file's own top-of-file note); reading such a file and writing it back re-expresses the same geometry in this writer's own convention, which is a different spelling of the identical curve rather than a loss.
-export function formatOdfViewBox(frame: Box): string {
+export function formatOdfViewBox(frame: Readonly<Box>): string {
   return `0 0 ${formatOdfNumber(frame.widthPt)} ${formatOdfNumber(frame.heightPt)}`;
 }
 
-function formatPoint(point: ContentPathPoint): string {
+function formatPoint(point: Readonly<ContentPathPoint>): string {
   return `${formatOdfNumber(point.xPt)},${formatOdfNumber(point.yPt)}`;
 }
 

@@ -18,7 +18,7 @@ function loadFixture(name: string): Package {
   return parsePackage(bytes);
 }
 
-function databaseContentPart(databaseChildren: XmlNode[]) {
+function databaseContentPart(databaseChildren: readonly XmlNode[]) {
   return {
     kind: "xml" as const,
     nodes: [
@@ -643,7 +643,7 @@ describe("readOdbInventory: db:database-description variants (RNG-derived, never
 });
 
 describe("readOdbInventory: malformed db:component handling", () => {
-  function formsInventory(children: XmlNode[]) {
+  function formsInventory(children: readonly XmlNode[]) {
     const pkg: Package = {
       parts: {
         "content.xml": databaseContentPart([el("db:forms", {}, children)]),

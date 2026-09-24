@@ -114,7 +114,7 @@ describe("OOO1_MEDIA_TYPES", () => {
   });
 });
 
-function packageOf(parts: Record<string, string>): Package {
+function packageOf(parts: Readonly<Record<string, string>>): Package {
   return {
     parts: Object.fromEntries(
       Object.entries(parts).map(([path, xml]) => [

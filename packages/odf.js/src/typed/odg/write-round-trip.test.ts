@@ -65,15 +65,15 @@ function shape(
 }
 
 function page(
-  vectors: ContentVector[],
-  shapes: ContentShape[] = [],
+  vectors: readonly ContentVector[],
+  shapes: readonly ContentShape[] = [],
   size = PAGE_SIZE_LANDSCAPE,
 ): ContentDrawPage {
-  return { size, shapes, vectors };
+  return { size, shapes: [...shapes], vectors: [...vectors] };
 }
 
-function documentOf(pages: ContentDrawPage[]): DrawingDocument {
-  return { kind: "drawing", metadata: {}, pages };
+function documentOf(pages: readonly ContentDrawPage[]): DrawingDocument {
+  return { kind: "drawing", metadata: {}, pages: [...pages] };
 }
 
 describe("writeOdgContent: the round-trip law", () => {
