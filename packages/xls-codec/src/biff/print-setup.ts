@@ -65,6 +65,38 @@ export function unpackSetupFlags(grbit: number): {
 }
 
 /**
+ * Setup.iPaperSize's own code table ([MS-XLS] 2.4.257), restricted to the codes whose entry states a real, unambiguous sheet size in inches or millimetres, and with each size derived from those stated dimensions rather than from a table of pre-converted points.
+ *
+ * The full enumeration runs to 118 entries, most of them envelopes, rotated variants, and regional stationery sizes; the ones here are the office paper sizes a spreadsheet is realistically printed on, entered exactly as [MS-XLS]'s own table names them. A code outside this table — including 0 and everything at 256 or above, which the spec reserves for "custom printer paper sizes" no reader can resolve without the printer's own Pls record — resolves to no page size at all, and content.ts falls back to its documented default rather than guessing a size the file never stated.
+ */
+const PAPER_SIZE_BY_CODE: ReadonlyMap<number, PageSize> = new Map<
+  number,
+  PageSize
+>([
+  [1, inchPaper(8.5, 11)], // US Letter 8 1/2 x 11 in
+  [2, inchPaper(8.5, 11)], // US Letter Small 8 1/2 x 11 in
+  [3, inchPaper(11, 17)], // US Tabloid 11 x 17 in
+  [4, inchPaper(17, 11)], // US Ledger 17 x 11 in
+  [5, inchPaper(8.5, 14)], // US Legal 8 1/2 x 14 in
+  [6, inchPaper(5.5, 8.5)], // US Statement 5 1/2 x 8 1/2 in
+  [7, inchPaper(7.25, 10.5)], // US Executive 7 1/4 x 10 1/2 in
+  [8, millimetrePaper(297, 420)], // A3 297 x 420 mm
+  [9, millimetrePaper(210, 297)], // A4 210 x 297 mm
+  [10, millimetrePaper(210, 297)], // A4 Small 210 x 297 mm
+  [11, millimetrePaper(148, 210)], // A5 148 x 210 mm
+  [12, millimetrePaper(250, 354)], // B4 (JIS) 250 x 354
+  [13, millimetrePaper(182, 257)], // B5 (JIS) 182 x 257 mm
+  [14, inchPaper(8.5, 13)], // Folio 8 1/2 x 13 in
+  [15, millimetrePaper(215, 275)], // Quarto 215 x 275 mm
+  [16, inchPaper(10, 14)], // 10 x 14 in
+  [17, inchPaper(11, 17)], // 11 x 17 in
+  [18, inchPaper(8.5, 11)], // US Note 8 1/2 x 11 in
+  [42, millimetrePaper(250, 353)], // B4 (ISO) 250 x 353 mm
+  [66, millimetrePaper(420, 594)], // A2 420 x 594 mm
+  [70, millimetrePaper(105, 148)], // A6 105 x 148 mm
+]);
+
+/**
  * The page size a Setup record's own iPaperSize and orientation flags describe, or undefined when the code is not one this package maps.
  *
  * A paper code names the sheet's paper in its PORTRAIT dimensions regardless of how the sheet actually prints, so the orientation flags decide whether those dimensions are used as-is or transposed. [MS-XLS] 2.4.257 defines that in two steps: fNoOrient set means "Pages are printed using portrait mode" outright, and only when it is clear does fPortrait itself select portrait (1) or landscape (0).
@@ -140,35 +172,3 @@ function millimetrePaper(widthMm: number, heightMm: number): PageSize {
     heightPt: roundToHundredths(millimetresToPoints(heightMm)),
   };
 }
-
-/**
- * Setup.iPaperSize's own code table ([MS-XLS] 2.4.257), restricted to the codes whose entry states a real, unambiguous sheet size in inches or millimetres, and with each size derived from those stated dimensions rather than from a table of pre-converted points.
- *
- * The full enumeration runs to 118 entries, most of them envelopes, rotated variants, and regional stationery sizes; the ones here are the office paper sizes a spreadsheet is realistically printed on, entered exactly as [MS-XLS]'s own table names them. A code outside this table — including 0 and everything at 256 or above, which the spec reserves for "custom printer paper sizes" no reader can resolve without the printer's own Pls record — resolves to no page size at all, and content.ts falls back to its documented default rather than guessing a size the file never stated.
- */
-const PAPER_SIZE_BY_CODE: ReadonlyMap<number, PageSize> = new Map<
-  number,
-  PageSize
->([
-  [1, inchPaper(8.5, 11)], // US Letter 8 1/2 x 11 in
-  [2, inchPaper(8.5, 11)], // US Letter Small 8 1/2 x 11 in
-  [3, inchPaper(11, 17)], // US Tabloid 11 x 17 in
-  [4, inchPaper(17, 11)], // US Ledger 17 x 11 in
-  [5, inchPaper(8.5, 14)], // US Legal 8 1/2 x 14 in
-  [6, inchPaper(5.5, 8.5)], // US Statement 5 1/2 x 8 1/2 in
-  [7, inchPaper(7.25, 10.5)], // US Executive 7 1/4 x 10 1/2 in
-  [8, millimetrePaper(297, 420)], // A3 297 x 420 mm
-  [9, millimetrePaper(210, 297)], // A4 210 x 297 mm
-  [10, millimetrePaper(210, 297)], // A4 Small 210 x 297 mm
-  [11, millimetrePaper(148, 210)], // A5 148 x 210 mm
-  [12, millimetrePaper(250, 354)], // B4 (JIS) 250 x 354
-  [13, millimetrePaper(182, 257)], // B5 (JIS) 182 x 257 mm
-  [14, inchPaper(8.5, 13)], // Folio 8 1/2 x 13 in
-  [15, millimetrePaper(215, 275)], // Quarto 215 x 275 mm
-  [16, inchPaper(10, 14)], // 10 x 14 in
-  [17, inchPaper(11, 17)], // 11 x 17 in
-  [18, inchPaper(8.5, 11)], // US Note 8 1/2 x 11 in
-  [42, millimetrePaper(250, 353)], // B4 (ISO) 250 x 353 mm
-  [66, millimetrePaper(420, 594)], // A2 420 x 594 mm
-  [70, millimetrePaper(105, 148)], // A6 105 x 148 mm
-]);
