@@ -1,3 +1,14 @@
+## [5.1.10](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.1.9...wpd-codec%405.1.10) (2026-09-24)
+
+### Bug Fixes
+
+* **wpd-codec:** thread five duplicated putUint16/putUint32 test helpers through a byte sink ([0f14a90](https://github.com/ExaDev/documents.js/commit/0f14a909a90796e1b737c9d026d76626840fc5a3))
+
+
+### Dependencies
+
+- Updated archive-codec to 1.11.17
+
 ## [5.1.9](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.1.8...wpd-codec%405.1.9) (2026-09-24)
 
 

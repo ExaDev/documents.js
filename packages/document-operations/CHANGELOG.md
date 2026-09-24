@@ -1,3 +1,15 @@
+## [1.1.80](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.79...document-operations%401.1.80) (2026-09-24)
+
+### Bug Fixes
+
+* **document-operations:** cover assertNever's own throw directly ([8dc73bc](https://github.com/ExaDev/documents.js/commit/8dc73bc6d03fc946c193af3c0b0bd6414fac6d95))
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.19
+- Updated document-compute.js to 1.6.28
+
 ## [1.1.79](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.78...document-operations%401.1.79) (2026-09-24)
 
 ### Bug Fixes

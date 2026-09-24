@@ -1,3 +1,14 @@
+## [2.2.8](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.2.7...ppt-codec%402.2.8) (2026-09-24)
+
+### Bug Fixes
+
+* **ppt-codec:** clear the last preferReadonlyParams exceptions ([a7f3037](https://github.com/ExaDev/documents.js/commit/a7f3037afc2fb60de7a4e9a4840135d362ae46bb))
+
+
+### Dependencies
+
+- Updated archive-codec to 1.11.17
+
 ## [2.2.7](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.2.6...ppt-codec%402.2.7) (2026-09-24)
 
 

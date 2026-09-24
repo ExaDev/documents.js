@@ -1,3 +1,10 @@
+## [1.11.17](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.16...archive-codec%401.11.17) (2026-09-24)
+
+### Bug Fixes
+
+* **archive-codec:** cover assertNever's own throw directly ([276a82f](https://github.com/ExaDev/documents.js/commit/276a82f12a24bfc888c08363fe5ba128330f5777))
+* **archive-codec:** mark two never-mutated parameters readonly ([209f280](https://github.com/ExaDev/documents.js/commit/209f2800ad25eb9071cd6c900158ec064ca41f2a))
+
 ## [1.11.16](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.15...archive-codec%401.11.16) (2026-09-24)
 
 ### Bug Fixes
