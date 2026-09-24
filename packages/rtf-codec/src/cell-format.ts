@@ -235,7 +235,7 @@ export function applyCellDefinitionControlWord(
 
 // The ContentBorder one pending side describes, or undefined when the side states no border at all. A side named by \clbrdrt with no <brdrk> after it is still a border — Word writes that shape — so an absent style takes the 'solid' the schema's own default names.
 export function resolveBorder(
-  pending: PendingBorder,
+  pending: Readonly<PendingBorder>,
   colorAt: (index: number) => Color | undefined,
 ): ContentBorder | undefined {
   if (pending.none) {
@@ -323,7 +323,7 @@ const PERCENT_TYPE_TO_VALUE: ReadonlyMap<ContentCellPatternType, number> =
 // The inverse of resolveCellFill: a ContentCellFill's own \clcbpatN/\clcfpatN/\clshdngN text. A 'solid' fill writes \clcbpatN alone — the identical shape every RTF cell with a flat background colour and no genuine shading already writes, so this does not regress the pre-#1024 output for the overwhelmingly common case. A 'pattern' fill writes all three: \clcbpatN for backgroundColor, \clcfpatN for foregroundColor, and \clshdngN for the percentage PERCENT_TYPE_TO_VALUE names for that patternType, scaled back up to hundredths of a percent. RTF's own shading model is a flat two-colour percentage blend with no named stripe/cross/grid concept at all — unlike ST_Shd/ST_PatternType, which this same pattern-fill vocabulary also serves and which DO have real tokens for those — so a patternType outside the percentN family throws rather than silently collapsing to one colour the way this writer did before #1024, the identical "throw for a construct this format's own vocabulary cannot state" contract buildCellShading (ooxml.js's docx side) already keeps for the mirror case (a SpreadsheetML-only pattern name ST_Shd has no member for). colorIndexOf resolves each half's own colour to its table index; a fill whose colour resolves to no index at all (the colour table has no room, or the caller's own colorIndexOf declines it) writes no control word for that half, exactly as the pre-existing \clcbpat writer already did.
 export function cellFillControlWords(
   fill: ContentCellFill,
-  colorIndexOf: (color: Color) => number | undefined,
+  colorIndexOf: (color: Readonly<Color>) => number | undefined,
 ): string {
   switch (fill.kind) {
     case "solid": {

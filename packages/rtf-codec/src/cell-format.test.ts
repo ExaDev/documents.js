@@ -12,7 +12,9 @@ import {
   type PendingCell,
 } from "./cell-format";
 
-function pendingBorder(overrides: Partial<PendingBorder> = {}): PendingBorder {
+function pendingBorder(
+  overrides: Readonly<Partial<PendingBorder>> = {},
+): PendingBorder {
   return {
     style: undefined,
     widthTwips: undefined,
@@ -433,7 +435,7 @@ describe("borderControlWords", () => {
 });
 
 describe("cellFillControlWords", () => {
-  const colorIndexOf = (color: Color): number | undefined =>
+  const colorIndexOf = (color: Readonly<Color>): number | undefined =>
     color === RED ? 1 : color === BLUE ? 2 : undefined;
 
   it("writes clcbpat alone for a solid fill whose colour resolves to an index", () => {

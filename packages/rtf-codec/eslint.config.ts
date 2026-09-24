@@ -13,8 +13,6 @@ export default packageLintConfig({
     "exadev/no-object-assign",
   ],
   isomorphic: true,
-  // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why — this package's own tokenizer/parser/writer genuinely mutates several array/object parameters in place. Tracked for burn-down.
-  preferReadonlyParams: "off",
   // Passed to the shared config rather than declared here, because flat config replaces a same-key rule instead of merging it: a second no-restricted-imports over runtime src would silently drop the Worker-isomorphism Node-builtin ban while still reporting these.
   //
   // RTF is tokenised plain text, not XML, so none of this family's existing XML plumbing applies and none of the JavaScript RTF libraries below could be reached for without defeating the reason this package exists at all — the same hand-write bet markdown-codec makes against micromark/remark and pdf-codec makes against pdf-lib/pdfjs-dist. Each is banned by name rather than by guessing at specifiers, covering every module of every library rather than only its main entry point.

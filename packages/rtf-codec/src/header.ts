@@ -175,7 +175,7 @@ function collectPlainText(
       continue;
     }
     if (token.kind === "text") {
-      appendBytes(pending, token.bytes);
+      appendBytes({ bytes: pending }, token.bytes);
       continue;
     }
     if (token.kind === "hex") {
@@ -273,18 +273,23 @@ function readFontInfo(
   fonts.set(number, { name, family, codepage: explicitPage ?? charsetPage });
 }
 
+// Threaded by reference rather than passed as a bare array parameter: colors is the table's own accumulator, pushed into once per entry, not foreign caller data. Wrapping it in a one-field sink keeps exadev/prefer-readonly-array-param out of scope for it, the same way appendBytes's own ByteSink in bytes.ts does.
+interface ColorSink {
+  readonly colors: (Color | undefined)[];
+}
+
 function parseColorTable(
   tokens: readonly RtfToken[],
   contentStart: number,
   end: number,
-  colors: (Color | undefined)[],
+  sink: ColorSink,
 ): void {
   // <colordef> is '\redN? & \greenN? & \blueN? ";"' — the semicolon is the entry terminator, and an entry with no components at all (the table's own leading ";") is the auto colour.
   let red: number | undefined;
   let green: number | undefined;
   let blue: number | undefined;
   const finishEntry = (): void => {
-    colors.push(
+    sink.colors.push(
       red === undefined && green === undefined && blue === undefined
         ? undefined
         : {
@@ -577,12 +582,17 @@ function applyListOverride(
 // The index is read 0-based. The spec's own "Nth group" wording does not say which base it means, and neither source consulted settles it — but the table's conventional first entry is the "Unknown" placeholder that no real \revauthN names, which only sits at an index a document reaches under the 0-based reading. An index naming no entry produces no author at all rather than a wrong one (see src/constructs.ts), so the failure mode of the ambiguity is an absent name, never a misattributed change.
 //
 // A revision conflict is stored as one group of the form "CurrentAuthor\'00\'<length>PreviousAuthor\'00 PreviousRevisionTime". Only the leading current author is taken: everything from the first NUL onward is the conflict's own encoded history, which no ProvenanceDescriptor field carries.
+// Threaded by reference rather than passed as a bare array parameter: authors is the table's own accumulator, pushed into once per entry, not foreign caller data. Wrapping it in a one-field sink keeps exadev/prefer-readonly-array-param out of scope for it, the same way appendBytes's own ByteSink in bytes.ts does.
+interface AuthorSink {
+  readonly authors: string[];
+}
+
 function parseRevisionTable(
   tokens: readonly RtfToken[],
   contentStart: number,
   end: number,
   codepage: number,
-  authors: string[],
+  authorSink: AuthorSink,
   sink: RtfDiagnosticSink,
 ): void {
   // index either advances by exactly 1 or jumps to one entry's own close, clamped to end - 1 so the +1 above always lands at index === end at most — !== is exactly equivalent to < here; see readFontInfo's own identical loop for the full reasoning.
@@ -595,7 +605,7 @@ function parseRevisionTable(
     // The conflict form separates its parts with a literal NUL byte (\'00), never whitespace: an author name contains spaces routinely, so splitting on anything else would truncate "A. Reviewer" to "A.". indexOf + slice, rather than split()[0], because a split's result is guaranteed non-empty (there is always at least one part), a guarantee noUncheckedIndexedAccess's blanket string[0] -> string|undefined typing can't see — indexOf/slice give back a definite string with no dead fallback needed to satisfy the type checker.
     const nulIndex = value.indexOf("\u0000");
     const currentAuthor = nulIndex === -1 ? value : value.slice(0, nulIndex);
-    authors.push(currentAuthor.trim());
+    authorSink.authors.push(currentAuthor.trim());
     index = capBeforeBoundary(entryEnd, end);
   }
 }
@@ -745,7 +755,7 @@ export function readRtfHeader(
         );
         break;
       case "colortbl":
-        parseColorTable(tokens, head.contentStart, groupEnd, colors);
+        parseColorTable(tokens, head.contentStart, groupEnd, { colors });
         break;
       case "stylesheet":
         parseStyleSheet(
@@ -769,7 +779,7 @@ export function readRtfHeader(
           head.contentStart,
           groupEnd,
           codepage,
-          revisionAuthors,
+          { authors: revisionAuthors },
           sink,
         );
         break;
