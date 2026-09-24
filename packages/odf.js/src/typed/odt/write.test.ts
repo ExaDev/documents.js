@@ -18,7 +18,7 @@ import {
   rootElement,
 } from "../../xml/query";
 import { assertMimetypeEntryLayout } from "../../test-support/zip";
-import { writeOdtContent } from "./write";
+import { assertNeverContentBlockKind, writeOdtContent } from "./write";
 
 // The write side's XML-shape suite: what writeOdtContent actually emits, construct by construct. The round-trip suite beside it (write-round-trip.test.ts) proves the output reads back as the document it came from; this one proves the output is the ODF a real consumer expects, which a round trip through one package's own reader cannot — a writer and reader that agreed on the same wrong spelling would round-trip perfectly and open nowhere.
 //
@@ -1073,5 +1073,20 @@ describe("writeOdtContent: what it refuses rather than dropping", () => {
     expect(() =>
       writeOdtContent({ kind: "wordprocessing", metadata: {}, sections: [] }),
     ).toThrow(/no page geometry/);
+  });
+});
+
+describe("assertNeverContentBlockKind", () => {
+  it("throws naming the unhandled kind, proving normaliseOdtContent's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverContentBlockKind({ kind: "bogus" } as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'normaliseOdtContent: unhandled ContentBlock kind {"kind":"bogus"}',
+    );
   });
 });

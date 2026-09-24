@@ -381,6 +381,13 @@ function planDocument(
 // - breakType is 'nextPage' on every section after the first and absent on the first: an ODF page-style switch is defined to force a page break, so the three other members have no spelling here.
 // - Per-node residue (`source`), `sourcePath`, and `frames` are dropped — a construct's or block's own residue is not re-emitted (the restorable-fidelity gap this writer's own scope note names; the package-level residue table on the DocumentTree, by contrast, IS restored, by writeOdt rather than by this normaliser, since normaliseOdtContent works over the flat ContentDocument that table has no place on), and the other two are a reader's and a layout pass's own facts, not content.
 // - metadata's `producer` (a PDF-only concept) and `language` are dropped: nothing writes the first, and while dc:language IS written, readOdfMetadata does not read it back.
+// Reached only if ContentBlock ever gains a variant the block-canonicalising switch inside normaliseOdtContent's own sections.map does not match: every current member is covered there, so `value` narrows to `never` at the real call site, and adding an uncovered kind makes that narrowing fail and this call stop compiling. That is the real safety net. Exported so write.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real ContentBlock kind is already handled by a case there.
+export function assertNeverContentBlockKind(value: never): never {
+  throw new Error(
+    `normaliseOdtContent: unhandled ContentBlock kind ${JSON.stringify(value)}`,
+  );
+}
+
 // The return type is the wordprocessing arm specifically rather than the whole ContentDocument union: this function accepts any document so it can refuse a wrong-kind one by name, but it only ever RETURNS a wordprocessing one, and saying so spares every caller a re-narrowing step over a fact that is already settled.
 export function normaliseOdtContent(
   document: ContentDocument,
@@ -435,6 +442,7 @@ export function normaliseOdtContent(
           case "constructEnd":
             return { kind: "constructEnd" };
         }
+        return assertNeverContentBlockKind(block);
       });
       return index === 0
         ? { pageSize: section.pageSize, margins: section.margins, blocks }
@@ -837,7 +845,7 @@ export function writeOdtContent(
   const version = options.version ?? DEFAULT_ODF_VERSION;
   const textElement = el("office:text");
   const pkg = createOdfPackage(
-    options.template ? ODF_MEDIA_TYPES.ott : ODF_MEDIA_TYPES.odt,
+    options.template === true ? ODF_MEDIA_TYPES.ott : ODF_MEDIA_TYPES.odt,
     textElement,
     version,
   );
