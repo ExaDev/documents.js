@@ -151,7 +151,7 @@ const payloadByPart = new WeakMap<BinaryPart, EmbeddedOoxmlPayload>();
 
 // The reader-facing entry: an embeddings part (already narrowed to its binary arm by the caller's kind check) decoded through readEmbeddedOoxmlPayload, memoised per part so the shared-part case decodes once.
 export function readEmbeddedPayloadPart(
-  part: BinaryPart,
+  part: Readonly<BinaryPart>,
 ): EmbeddedOoxmlPayload | undefined {
   const cached = payloadByPart.get(part);
   if (cached !== undefined) {

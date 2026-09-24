@@ -16,7 +16,7 @@ const REL_PERSON =
 
 // A single-sheet package whose worksheet part carries its own .rels (the thing that names the comment parts) plus whatever extra parts a test supplies. The sheet holds two ordinary numeric cells, A1 and B1, so a comment attached to an existing cell and a cell with no comment at all are both always in play; a comment anywhere else exercises materialising a cell the sheetData never wrote.
 function buildCommentedPackage(
-  sheetRelationships: ReturnType<typeof el>[],
+  sheetRelationships: readonly ReturnType<typeof el>[],
   extraParts: Record<string, Part>,
 ): Package {
   const parts: Package["parts"] = {
@@ -67,7 +67,7 @@ function buildCommentedPackage(
 }
 
 function readCommentedCells(
-  sheetRelationships: ReturnType<typeof el>[],
+  sheetRelationships: readonly ReturnType<typeof el>[],
   extraParts: Record<string, Part>,
 ) {
   const result = readXlsxContent(

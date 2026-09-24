@@ -33,10 +33,10 @@ export function assignReadingOrder(
 
 type Axis = "vertical" | "horizontal";
 
-const start = (frame: Box, axis: Axis): number =>
+const start = (frame: Readonly<Box>, axis: Axis): number =>
   axis === "vertical" ? frame.yPt : frame.xPt;
 
-const end = (frame: Box, axis: Axis): number =>
+const end = (frame: Readonly<Box>, axis: Axis): number =>
   axis === "vertical" ? frame.yPt + frame.heightPt : frame.xPt + frame.widthPt;
 
 // One step of the cut: take whichever axis offers the widest band of empty space *relative to how far
@@ -58,7 +58,7 @@ const end = (frame: Box, axis: Axis): number =>
 // top-to-bottom reading of a slide with no column structure.
 // No separate "0 or 1 shapes" early return is needed: with at most one shape, splitOnGap on either axis produces a single group and a zero widestGap, so both ratios below are 0, neither `> 1` group-count check can pass, and the function falls through to the final sort — a no-op on an array that short — returning the input untouched, exactly what an early return would have done.
 // No separate "columns.groups.length > 1" guard is needed alongside the ratio comparison below: splitOnGap only ever raises widestGap above 0 by actually pushing a second group (a split happens exactly when a positive gap is found), so a widestGap of 0 always pairs with exactly one group and a ratio of 0 — meaning the ratio comparison can only come out true when columns.groups.length is already at least 2.
-function cut(shapes: ContentShape[]): ContentShape[] {
+function cut(shapes: readonly ContentShape[]): ContentShape[] {
   const rows = splitOnGap(shapes, "vertical");
   const columns = splitOnGap(shapes, "horizontal");
   if (

@@ -11,7 +11,7 @@ const REL_TABLE =
 const REL_DRAWING =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing";
 
-function basePackage(sheetRels: ReturnType<typeof el>[]): Package {
+function basePackage(sheetRels: readonly ReturnType<typeof el>[]): Package {
   return {
     parts: {
       "xl/workbook.xml": {
@@ -52,7 +52,9 @@ function basePackage(sheetRels: ReturnType<typeof el>[]): Package {
   };
 }
 
-function tablePart(attrs: Record<string, string>): Package["parts"][string] {
+function tablePart(
+  attrs: Readonly<Record<string, string>>,
+): Package["parts"][string] {
   return {
     kind: "xml",
     nodes: [

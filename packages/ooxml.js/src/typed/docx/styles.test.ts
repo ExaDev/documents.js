@@ -40,7 +40,7 @@ function styleEl(
 }
 
 function stylesRoot(
-  styles: XmlElement[],
+  styles: readonly XmlElement[],
   docDefaultsPPr?: XmlElement,
   docDefaultsRPr?: XmlElement,
 ): XmlElement {
@@ -60,17 +60,17 @@ function stylesRoot(
 
 // Builds a paragraph containing `run` and returns both, so tests never need to re-extract the run from the paragraph's own children (which would require a type assertion to narrow XmlNode back to XmlElement).
 function paragraphWithRun(
-  pPrChildren: XmlElement[],
+  pPrChildren: readonly XmlElement[],
   run: XmlElement,
 ): { paragraph: XmlElement; run: XmlElement } {
   return { paragraph: el("w:p", {}, [el("w:pPr", {}, pPrChildren), run]), run };
 }
 
-function paragraphEl(pPrChildren: XmlElement[]): XmlElement {
+function paragraphEl(pPrChildren: readonly XmlElement[]): XmlElement {
   return el("w:p", {}, [el("w:pPr", {}, pPrChildren)]);
 }
 
-function runEl(rPrChildren: XmlElement[]): XmlElement {
+function runEl(rPrChildren: readonly XmlElement[]): XmlElement {
   return el("w:r", {}, [el("w:rPr", {}, rPrChildren)]);
 }
 

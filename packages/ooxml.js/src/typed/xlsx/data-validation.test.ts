@@ -18,7 +18,7 @@ function buildOne(validation: ContentSheetDataValidation) {
 }
 
 function worksheetWith(
-  ...dataValidation: ReturnType<typeof el>[]
+  ...dataValidation: readonly ReturnType<typeof el>[]
 ): ReturnType<typeof el> {
   return el("worksheet", {}, [el("dataValidations", {}, dataValidation)]);
 }

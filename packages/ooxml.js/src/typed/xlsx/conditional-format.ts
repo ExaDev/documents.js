@@ -712,7 +712,7 @@ const TEXT_PREDICATE_OPERATOR: Readonly<
 };
 
 function buildCfvoElement(
-  value: ContentSheetConditionalFormatValue,
+  value: Readonly<ContentSheetConditionalFormatValue>,
 ): XmlElement {
   const attrs: Record<string, string> = { type: value.type };
   if (value.value !== undefined) {

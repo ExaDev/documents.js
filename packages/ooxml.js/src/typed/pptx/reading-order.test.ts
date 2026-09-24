@@ -23,7 +23,7 @@ function shape(
 
 // The names in reading order — read back off the `readingOrder` ranks, since the array itself is
 // deliberately returned in document order.
-const order = (shapes: ContentShape[]): (string | undefined)[] =>
+const order = (shapes: readonly ContentShape[]): (string | undefined)[] =>
   [...assignReadingOrder(shapes)]
     .sort((a, b) => (a.readingOrder ?? 0) - (b.readingOrder ?? 0))
     .map((s) => s.name);

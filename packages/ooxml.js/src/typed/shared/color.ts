@@ -25,7 +25,7 @@ function linearToSrgb(c: number): number {
 
 // shade: 10% shade is 10% of the (linearised) input colour combined with 90% black — i.e. linear *= pct. tint: 10% tint is 10% of the (linearised) input colour combined with 90% white — i.e. linear = 1 - (1 - linear) * pct. Both formulas and the linear-space requirement are verified against Apache POI's DrawPaint.applyColorTransform.
 function applyShadeOrTint(
-  color: Color,
+  color: Readonly<Color>,
   kind: "shade" | "tint",
   value: number,
 ): Color {
@@ -48,7 +48,7 @@ export interface Hsl {
 }
 
 // Standard sRGB <-> HSL conversion (CSS Color Module Level 3 / W3C), operating on the gamma-encoded components directly — distinct from, and applied after, the linear-space shade/tint transform above, matching Apache POI's own RGB2HSL/HSL2RGB (which run on the already-gamma-corrected result of any preceding shade/tint pass).
-export function rgbToHsl(color: Color): Hsl {
+export function rgbToHsl(color: Readonly<Color>): Hsl {
   const { r, g, b } = color;
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
@@ -102,7 +102,7 @@ export function hslToRgb(hsl: Hsl): Color {
 
 // lumMod: multiplies luminance by the given percentage (50% halves it, 200% doubles it). lumOff: shifts luminance by the given percentage, additively, with hue/saturation unchanged (a 10% offset to 20% luminance yields 30%). Both operate in HSL space, per ECMA-376's own description of these transforms and Apache POI's DrawPaint implementation.
 function applyLumModOrOff(
-  color: Color,
+  color: Readonly<Color>,
   kind: "lumMod" | "lumOff",
   value: number,
 ): Color {
@@ -114,7 +114,7 @@ function applyLumModOrOff(
 
 // Applies a sequence of DrawingML colour-transform children to a base colour (an a:srgbClr's own value, or an a:schemeClr's theme-resolved value). Shade/tint are applied first, in linear space; lumMod/lumOff second, in HSL space — a two-pass model (rather than processing each child strictly in its own XML document order) matching Apache POI's DrawPaint.applyColorTransform, a mature, independently-verified OOXML renderer.
 export function applyColorTransforms(
-  base: Color,
+  base: Readonly<Color>,
   transforms: readonly ColorTransform[],
 ): Color {
   let color = base;

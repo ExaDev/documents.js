@@ -33,7 +33,7 @@ const PICTURE_GRAPHIC_URI =
   "http://schemas.openxmlformats.org/drawingml/2006/picture";
 
 function docxPackage(
-  bodyChildren: XmlNode[],
+  bodyChildren: readonly XmlNode[],
   extraParts: Package["parts"] = {},
 ): Package {
   const body = el("w:body", {}, [
@@ -59,7 +59,7 @@ function docxPackage(
   };
 }
 
-function para(text: string, ...extra: XmlNode[]): XmlNode {
+function para(text: string, ...extra: readonly XmlNode[]): XmlNode {
   return el("w:p", {}, [...extra, el("w:r", {}, [el("w:t", {}, [txt(text)])])]);
 }
 
@@ -1239,7 +1239,7 @@ describe("buildDocxPackageFromContent: construct round trip", () => {
   });
 
   it("round-trips a checkbox, a date, and a table-of-contents control through their own docx spellings", () => {
-    const control = (properties: XmlNode[], text: string): XmlNode =>
+    const control = (properties: readonly XmlNode[], text: string): XmlNode =>
       el("w:sdt", {}, [
         el("w:sdtPr", {}, properties),
         el("w:sdtContent", {}, [para(text)]),
@@ -3430,8 +3430,8 @@ describe("buildDocxPackageFromContent: run content, styles part, note parts, and
 
 describe("buildDocxPackageFromContent: internal link wrap boundary shapes", () => {
   function paragraphWithLinks(
-    runs: { text: string; hyperlink?: string }[],
-    constructs: {
+    runs: readonly { text: string; hyperlink?: string }[],
+    constructs: readonly {
       anchor: string;
       startRun: number;
       endRun: number;
@@ -3444,7 +3444,7 @@ describe("buildDocxPackageFromContent: internal link wrap boundary shapes", () =
           blocks: [
             {
               kind: "paragraph",
-              runs,
+              runs: [...runs],
               constructs: constructs.map((extent) => ({
                 descriptor: {
                   kind: "link" as const,
@@ -4333,12 +4333,12 @@ describe("buildDocxPackageFromContent: table grid and vertical-merge arithmetic"
   }
 
   function tableOf(
-    rows: TableFixtureRow[],
-    columnWidthsPt: number[] = [100, 100],
+    rows: readonly TableFixtureRow[],
+    columnWidthsPt: readonly number[] = [100, 100],
   ): Extract<ContentBlock, { kind: "table" }> {
     return {
       kind: "table",
-      rows,
+      rows: [...rows],
       columns: columnWidthsPt.map((widthPt) => ({ widthPt })),
     };
   }

@@ -103,8 +103,8 @@ describe("applyColorTransforms", () => {
 
 // Asserts each field with toBeCloseTo rather than a single toEqual: the saturation formula below combines a subtraction and an absolute value, which for these inputs lands a bit off an exact decimal (e.g. 0.5 becomes 0.49999999999999994) — an inherent property of the correct floating-point computation, not a bug either the formula or the test needs to route around.
 function expectHsl(
-  color: { r: number; g: number; b: number },
-  hsl: { h: number; s: number; l: number },
+  color: Readonly<{ r: number; g: number; b: number }>,
+  hsl: Readonly<{ h: number; s: number; l: number }>,
 ): void {
   const result = rgbToHsl(color);
   expect(result.h).toBeCloseTo(hsl.h, 10);

@@ -20,7 +20,7 @@ function image(): ContentImageBlock {
   };
 }
 
-const captionsOf = (blocks: ContentBlock[]): (string | undefined)[] =>
+const captionsOf = (blocks: readonly ContentBlock[]): (string | undefined)[] =>
   associateFigureCaptions(blocks)
     .filter((block) => block.kind === "image")
     .map((block) => block.caption);

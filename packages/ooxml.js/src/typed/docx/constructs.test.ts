@@ -19,7 +19,7 @@ import {
 
 // The block-scope rule in action: which real docx spellings of a structured document tag, field, bookmark, or tracked change become a constructStart/constructEnd pair, and which ones (the run-level occurrences, and the pairs whose extents cross) are deliberately not representable. Every fixture here is a whole word/document.xml body, so each case is read exactly as readDocxContent would read a real file.
 
-function docxPackage(bodyChildren: XmlNode[]): Package {
+function docxPackage(bodyChildren: readonly XmlNode[]): Package {
   const body = el("w:body", {}, [
     ...bodyChildren,
     el("w:sectPr", {}, [el("w:pgSz", { "w:w": "12240", "w:h": "15840" })]),
@@ -34,11 +34,11 @@ function docxPackage(bodyChildren: XmlNode[]): Package {
   };
 }
 
-function para(text: string, ...extra: XmlNode[]): XmlNode {
+function para(text: string, ...extra: readonly XmlNode[]): XmlNode {
   return el("w:p", {}, [...extra, el("w:r", {}, [el("w:t", {}, [txt(text)])])]);
 }
 
-function blocksOf(bodyChildren: XmlNode[]): ContentBlock[] {
+function blocksOf(bodyChildren: readonly XmlNode[]): ContentBlock[] {
   return readDocxContent(docxPackage(bodyChildren)).sections[0]?.blocks ?? [];
 }
 
@@ -177,7 +177,9 @@ describe("runRangeMarkerExtents: isBlockScopedHalf", () => {
 });
 
 describe("runRangeMarkerExtents: malformed pairings", () => {
-  const flatIndex = (elements: XmlElement[]): ParagraphContentIndex => ({
+  const flatIndex = (
+    elements: readonly XmlElement[],
+  ): ParagraphContentIndex => ({
     elements,
     firstContentIndex: 0,
     lastContentIndex: elements.length - 1,

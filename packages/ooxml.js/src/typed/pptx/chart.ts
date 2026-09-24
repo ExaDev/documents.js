@@ -94,7 +94,7 @@ function labelCell(text: string | undefined): ContentTableCell {
 // The table layout: a header row of series names (empty corner cell over the category column), then one row per category index with each series' cached value at that index in its own column. Values stay verbatim c:v text — chart caches carry no typed-cell concept to preserve beyond that. Returns undefined when the chart has no series at all, leaving the frame's geometry with empty content.
 export function readChartTable(
   chartRoot: XmlElement,
-  frame: Box,
+  frame: Readonly<Box>,
 ): ContentTable | undefined {
   const chart = childrenWithTag(chartRoot, "c:chart")[0];
   const plotArea =

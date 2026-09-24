@@ -25,7 +25,7 @@ function packageOf(workbook: ReturnType<typeof el> | undefined): Package {
 }
 
 function workbookWithDefinedNames(
-  ...definedNames: ReturnType<typeof el>[]
+  ...definedNames: readonly ReturnType<typeof el>[]
 ): ReturnType<typeof el> {
   return el("workbook", {}, [el("definedNames", {}, definedNames)]);
 }
