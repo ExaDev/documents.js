@@ -35,6 +35,16 @@ function numberCell(
   };
 }
 
+// Mirrors regions.ts's own private tuning constants (see regions.ts's own comments for what each represents) so the hand-checked assertions below stay tied to the real weights rather than restating their computed output as independent literals.
+const MIXED_MARGIN = 0.15;
+const PROSE_LENGTH_NORM = 40;
+const TABLE_ROW_REGULARITY_WEIGHT = 0.5;
+const TABLE_DENSITY_WEIGHT = 0.2;
+// vitest's own toBeCloseTo precision (decimal digits), reused everywhere a floating-point score is checked.
+const PRECISION_DIGITS = 10;
+// The confidence floor a "high confidence" classification test asserts against.
+const HIGH_CONFIDENCE_THRESHOLD = 0.9;
+
 // A text-valued cell that also carries a `formula` field (e.g. a text-producing formula like =CONCATENATE(...)): the one shape that lets a test separately control "is this cell string-kind" (relevant to topRowTextFraction) from "does this cell count as numeric-like" (NUMERIC_VALUE_KINDS.has(kind) || formula !== undefined — true here purely because of the formula, independent of its string kind).
 function formulaTextCell(
   row: number,
@@ -57,20 +67,23 @@ describe("segmentSheetRegions adjacency rule", () => {
   });
 
   it("does not connect cells in the same column across two blank rows", () => {
-    const cells = [textCell(0, 0, "a"), textCell(3, 0, "b")];
+    const rowBeyondTolerance = 3;
+    const cells = [textCell(0, 0, "a"), textCell(rowBeyondTolerance, 0, "b")];
     const regions = segmentSheetRegions(cells);
     expect(regions).toHaveLength(2);
   });
 
   it("does not connect cells in the same column across two blank rows, however they are ordered on input", () => {
     // The reverse insertion order of the test above: connectivity is judged after sorting each column by row, so an unsorted (descending) input must not let a large negative row difference slip past the gap-tolerance check as if it were adjacent.
-    const cells = [numberCell(5, 0, 1), numberCell(0, 0, 2)];
+    const farRow = 5;
+    const cells = [numberCell(farRow, 0, 1), numberCell(0, 0, 2)];
     const regions = segmentSheetRegions(cells);
     expect(regions).toHaveLength(2);
   });
 
   it("does not connect cells in the same row across two blank columns, however they are ordered on input", () => {
-    const cells = [numberCell(0, 5, 1), numberCell(0, 0, 2)];
+    const farColumn = 5;
+    const cells = [numberCell(0, farColumn, 1), numberCell(0, 0, 2)];
     const regions = segmentSheetRegions(cells);
     expect(regions).toHaveLength(2);
   });
@@ -83,7 +96,11 @@ describe("segmentSheetRegions adjacency rule", () => {
   });
 
   it("does not connect cells in the same row across two blank columns", () => {
-    const cells = [textCell(0, 0, "a"), textCell(0, 3, "b")];
+    const columnBeyondTolerance = 3;
+    const cells = [
+      textCell(0, 0, "a"),
+      textCell(0, columnBeyondTolerance, "b"),
+    ];
     const regions = segmentSheetRegions(cells);
     expect(regions).toHaveLength(2);
   });
@@ -97,35 +114,42 @@ describe("segmentSheetRegions adjacency rule", () => {
 
   it("chains a dense rectangular block together even though no cell is diagonally adjacent to another", () => {
     // A fully dense 3x3 grid: every cell has a same-row or same-column immediate neighbour, so the whole block is one region via transitivity even though the adjacency rule itself never directly connects a diagonal pair.
+    const gridSize = 3;
     const cells: ContentSheetCell[] = [];
-    for (let row = 0; row < 3; row++) {
-      for (let column = 0; column < 3; column++) {
-        cells.push(numberCell(row, column, row * 3 + column));
+    for (let row = 0; row < gridSize; row++) {
+      for (let column = 0; column < gridSize; column++) {
+        cells.push(numberCell(row, column, row * gridSize + column));
       }
     }
     const regions = segmentSheetRegions(cells);
     expect(regions).toHaveLength(1);
-    expect(regions[0]?.cells).toHaveLength(9);
+    expect(regions[0]?.cells).toHaveLength(gridSize * gridSize);
   });
 });
 
 describe("segmentSheetRegions classification", () => {
   it("classifies a regular grid with a header row as a table, with high confidence", () => {
+    const lastColumn = 3;
     const cells: ContentSheetCell[] = [
       textCell(0, 0, "Region"),
       textCell(0, 1, "Quarter"),
       textCell(0, 2, "Revenue"),
-      textCell(0, 3, "Cost"),
+      textCell(0, lastColumn, "Cost"),
     ];
-    for (let row = 1; row <= 4; row++) {
-      for (let column = 0; column < 4; column++) {
-        cells.push(numberCell(row, column, row * 10 + column));
+    const gridRows = 4;
+    const gridColumns = 4;
+    const valueStride = 10;
+    for (let row = 1; row <= gridRows; row++) {
+      for (let column = 0; column < gridColumns; column++) {
+        cells.push(numberCell(row, column, row * valueStride + column));
       }
     }
     const regions = segmentSheetRegions(cells);
     expect(regions).toHaveLength(1);
     expect(regions[0]?.classification).toBe("table");
-    expect(regions[0]?.confidence).toBeGreaterThanOrEqual(0.9);
+    expect(regions[0]?.confidence).toBeGreaterThanOrEqual(
+      HIGH_CONFIDENCE_THRESHOLD,
+    );
   });
 
   it("classifies a column of long commentary as prose, with high confidence", () => {
@@ -139,13 +163,17 @@ describe("segmentSheetRegions classification", () => {
     const regions = segmentSheetRegions(cells);
     expect(regions).toHaveLength(1);
     expect(regions[0]?.classification).toBe("prose");
-    expect(regions[0]?.confidence).toBeGreaterThanOrEqual(0.9);
+    expect(regions[0]?.confidence).toBeGreaterThanOrEqual(
+      HIGH_CONFIDENCE_THRESHOLD,
+    );
   });
 
   it("classifies a formula-heavy numeric grid as a model, with high confidence", () => {
     const cells: ContentSheetCell[] = [];
-    for (let row = 0; row < 3; row++) {
-      for (let column = 0; column < 2; column++) {
+    const modelRows = 3;
+    const modelColumns = 2;
+    for (let row = 0; row < modelRows; row++) {
+      for (let column = 0; column < modelColumns; column++) {
         cells.push(
           numberCell(
             row,
@@ -159,17 +187,22 @@ describe("segmentSheetRegions classification", () => {
     const regions = segmentSheetRegions(cells);
     expect(regions).toHaveLength(1);
     expect(regions[0]?.classification).toBe("model");
-    expect(regions[0]?.confidence).toBeGreaterThanOrEqual(0.9);
+    expect(regions[0]?.confidence).toBeGreaterThanOrEqual(
+      HIGH_CONFIDENCE_THRESHOLD,
+    );
   });
 
   it("classifies a region with comparably strong formula and prose signal as mixed", () => {
+    const lastColumn = 3;
     const longText =
       "This single row carries both a calculation and a full sentence of commentary side by side.";
+    const arbitraryValueA = 42;
+    const arbitraryValueB = 7;
     const cells: ContentSheetCell[] = [
-      numberCell(0, 0, 42, "=SUM(A1:A10)"),
-      numberCell(0, 1, 7, "=B1*2"),
+      numberCell(0, 0, arbitraryValueA, "=SUM(A1:A10)"),
+      numberCell(0, 1, arbitraryValueB, "=B1*2"),
       textCell(0, 2, longText),
-      textCell(0, 3, longText),
+      textCell(0, lastColumn, longText),
     ];
     const regions = segmentSheetRegions(cells);
     expect(regions).toHaveLength(1);
@@ -177,7 +210,10 @@ describe("segmentSheetRegions classification", () => {
   });
 
   it("classifies a lone populated cell as unknown, since one cell carries no structural signal", () => {
-    const regions = segmentSheetRegions([textCell(5, 5, "orphan")]);
+    const orphanPosition = 5;
+    const regions = segmentSheetRegions([
+      textCell(orphanPosition, orphanPosition, "orphan"),
+    ]);
     expect(regions).toHaveLength(1);
     expect(regions[0]?.classification).toBe("unknown");
   });
@@ -185,32 +221,37 @@ describe("segmentSheetRegions classification", () => {
 
 describe("segmentSheetRegions region discovery", () => {
   it("keeps a table and a comfortably separate prose column as two distinct regions", () => {
+    const lastColumn = 3;
     const tableCells: ContentSheetCell[] = [
       textCell(0, 0, "Region"),
       textCell(0, 1, "Quarter"),
       textCell(0, 2, "Revenue"),
-      textCell(0, 3, "Cost"),
+      textCell(0, lastColumn, "Cost"),
     ];
-    for (let row = 1; row <= 4; row++) {
-      for (let column = 0; column < 4; column++) {
-        tableCells.push(numberCell(row, column, row * 10 + column));
+    const gridRows = 4;
+    const gridColumns = 4;
+    const valueStride = 10;
+    for (let row = 1; row <= gridRows; row++) {
+      for (let column = 0; column < gridColumns; column++) {
+        tableCells.push(numberCell(row, column, row * valueStride + column));
       }
     }
     // Column 7 sits 4 columns past the table's rightmost column (3) — comfortably past the adjacency rule's own 2-column tolerance, so no per-row alignment between the two blocks can bridge them regardless of which rows the commentary happens to occupy.
+    const proseColumn = 7;
     const proseCells = [
       textCell(
         0,
-        7,
+        proseColumn,
         "This column is unrelated commentary sitting well away from the table above.",
       ),
       textCell(
         1,
-        7,
+        proseColumn,
         "It shares no row or column proximity with the table within the tolerance rule.",
       ),
       textCell(
         2,
-        7,
+        proseColumn,
         "So it must remain its own separate region rather than merging into the table.",
       ),
     ];
@@ -227,13 +268,16 @@ describe("segmentSheetRegions region discovery", () => {
 describe("segmentSheetRegions ordering", () => {
   it("sorts regions by startRow first, then by startColumn for a tie, regardless of discovery order", () => {
     // Three well-separated single-cell regions, deliberately listed out of the expected output order: B and A share a startRow (a tie the comparator's second clause must resolve), and C sits at a later row entirely.
+    const farPosition = 20;
+    const expectedRegionCount = 3;
+    const valueC = 3;
     const cells = [
-      numberCell(0, 20, 2), // B: row 0, column 20
-      numberCell(20, 0, 3), // C: row 20, column 0
+      numberCell(0, farPosition, 2), // B: row 0, column farPosition
+      numberCell(farPosition, 0, valueC), // C: row farPosition, column 0
       numberCell(0, 0, 1), // A: row 0, column 0
     ];
     const regions = segmentSheetRegions(cells);
-    expect(regions).toHaveLength(3);
+    expect(regions).toHaveLength(expectedRegionCount);
     expect(
       regions.map((region) => [
         region.range.startRow,
@@ -241,76 +285,121 @@ describe("segmentSheetRegions ordering", () => {
       ]),
     ).toEqual([
       [0, 0], // A
-      [0, 20], // B
-      [20, 0], // C
+      [0, farPosition], // B
+      [farPosition, 0], // C
     ]);
   });
 });
 
 describe("boundingRange", () => {
   it("computes the min/max row and column independently, not by summing or defaulting to the first cell", () => {
+    // No single cell carries both the min and the max of either axis, so a broken implementation that summed or picked the first cell's own row/column could not coincidentally pass.
+    const minRow = 1;
+    const maxRow = 7;
+    const minColumn = 2;
+    const maxColumn = 9;
+    // Every row/column not named above is an "other" position: not itself a min or max on either axis, present only to prove the four bounds are read independently rather than by coincidence. Cell values themselves are arbitrary and unrelated to any bound.
+    const otherRow1 = 5;
+    const otherColumn1 = 3;
+    const otherRow2 = 4;
+    const otherColumn2 = 8;
+    const cellValueC = 3;
+    const cellValueD = 4;
     const cells = [
-      numberCell(5, 9, 1),
-      numberCell(1, 3, 2),
-      numberCell(7, 2, 3),
-      numberCell(4, 8, 4),
+      numberCell(otherRow1, maxColumn, 1),
+      numberCell(minRow, otherColumn1, 2),
+      numberCell(maxRow, minColumn, cellValueC),
+      numberCell(otherRow2, otherColumn2, cellValueD),
     ];
     expect(boundingRange(cells)).toEqual({
-      startRow: 1,
-      startColumn: 2,
-      endRow: 7,
-      endColumn: 9,
+      startRow: minRow,
+      startColumn: minColumn,
+      endRow: maxRow,
+      endColumn: maxColumn,
     });
   });
 });
 
 describe("computeSignals", () => {
+  // Shared column/value positions for the header-row threshold tests below: a 5-cell top row (columns 0-4) and a shorter "other" row.
+  const fourthTextColumn = 3;
+  const numberColumn = 4;
+  const otherRowValueA = 5;
+  const otherRowValueB = 6;
+
   it("computes every signal precisely for a small, hand-checked sheet", () => {
-    // Rows/columns deliberately start away from zero (10/20) so rowSpan/colSpan's own `max - min + 1` can't coincide with a broken `max + min + 1` the way it would if min were 0.
+    // Rows/columns deliberately start away from zero (headerRow/col0) so rowSpan/colSpan's own `max - min + 1` can't coincide with a broken `max + min + 1` the way it would if min were 0.
+    const headerRow = 10;
+    const dataRow = 11;
+    const col0 = 20;
+    const col1 = 21;
+    const col2 = 22;
+    const col3 = 23;
+    const cellCount = 6;
+    const expectedRowSpan = 2; // dataRow - headerRow + 1
+    const expectedColSpan = 4; // col3 - col0 + 1
+    const expectedDistinctRows = 2;
+    const expectedDistinctColumns = 4;
+    const headerTextLength = 7; // "Header1".length, "Header2".length
+    const dataValue0 = 10;
+    const dataValue1 = 20;
+    const dataValue2 = 30;
+    const dataValue3 = 40;
     const cells: ContentSheetCell[] = [
-      textCell(10, 20, "Header1"), // 7 chars
-      textCell(10, 21, "Header2"), // 7 chars
-      numberCell(11, 20, 10),
-      numberCell(11, 21, 20, "=X"),
-      numberCell(11, 22, 30),
-      numberCell(11, 23, 40),
+      textCell(headerRow, col0, "Header1"), // 7 chars
+      textCell(headerRow, col1, "Header2"), // 7 chars
+      numberCell(dataRow, col0, dataValue0),
+      numberCell(dataRow, col1, dataValue1, "=X"),
+      numberCell(dataRow, col2, dataValue2),
+      numberCell(dataRow, col3, dataValue3),
     ];
     const signals = computeSignals(cells);
-    expect(signals.cellCount).toBe(6);
-    expect(signals.rowSpan).toBe(2); // maxRow(11) - minRow(10) + 1
-    expect(signals.colSpan).toBe(4); // maxColumn(23) - minColumn(20) + 1
-    expect(signals.distinctRows).toBe(2);
-    expect(signals.distinctColumns).toBe(4);
-    expect(signals.formulaFraction).toBeCloseTo(1 / 6, 10);
-    expect(signals.numericFraction).toBeCloseTo(4 / 6, 10);
-    expect(signals.textFraction).toBeCloseTo(2 / 6, 10);
-    expect(signals.averageTextLength).toBe(7); // (7 + 7) / 2
+    expect(signals.cellCount).toBe(cellCount);
+    expect(signals.rowSpan).toBe(expectedRowSpan);
+    expect(signals.colSpan).toBe(expectedColSpan);
+    expect(signals.distinctRows).toBe(expectedDistinctRows);
+    expect(signals.distinctColumns).toBe(expectedDistinctColumns);
+    expect(signals.formulaFraction).toBeCloseTo(
+      1 / cellCount,
+      PRECISION_DIGITS,
+    );
+    expect(signals.numericFraction).toBeCloseTo(
+      expectedDistinctColumns / cellCount,
+      PRECISION_DIGITS,
+    );
+    expect(signals.textFraction).toBeCloseTo(2 / cellCount, PRECISION_DIGITS);
+    expect(signals.averageTextLength).toBe(headerTextLength); // (7 + 7) / 2
     // rowRegularity: row counts [2, 4], mean 3, variance ((2-3)^2+(4-3)^2)/2 = 1, so 1 - sqrt(1)/3.
-    expect(signals.rowRegularity).toBeCloseTo(1 - Math.sqrt(1) / 3, 10);
-    // Top row (row 0) is 100% text, and the only other row (row 1) is 100% numeric — a genuine header shape.
+    const meanRowCount = 3;
+    expect(signals.rowRegularity).toBeCloseTo(
+      1 - Math.sqrt(1) / meanRowCount,
+      PRECISION_DIGITS,
+    );
+    // Top row is 100% text, and the only other row is 100% numeric — a genuine header shape.
     expect(signals.hasHeaderLikeRow).toBe(true);
   });
 
   it("treats every row as trivially regular when only one row is populated", () => {
-    const cells = [
-      numberCell(0, 0, 1),
-      numberCell(0, 1, 2),
-      numberCell(0, 2, 3),
-    ];
+    const columnCount = 3;
+    const cells = Array.from({ length: columnCount }, (_, column) =>
+      numberCell(0, column, column + 1),
+    );
     expect(computeSignals(cells).rowRegularity).toBe(1);
   });
 
   it("divides the top row's string count by its own cell count, not the product, when checking the header-row text fraction", () => {
+    const arbitraryValueC = 3;
+    const arbitraryValueD = 4;
     const cells: ContentSheetCell[] = [
       // Top row: 1 text of 5 cells = 0.2 text fraction, well below the 0.8 threshold.
       textCell(0, 0, "a"),
       numberCell(0, 1, 1),
       numberCell(0, 2, 2),
-      numberCell(0, 3, 3),
-      numberCell(0, 4, 4),
+      numberCell(0, fourthTextColumn, arbitraryValueC),
+      numberCell(0, numberColumn, arbitraryValueD),
       // Other row: trivially satisfies the numeric-fraction half on its own.
-      numberCell(1, 0, 5),
-      numberCell(1, 1, 6),
+      numberCell(1, 0, otherRowValueA),
+      numberCell(1, 1, otherRowValueB),
     ];
     expect(computeSignals(cells).hasHeaderLikeRow).toBe(false);
   });
@@ -320,10 +409,10 @@ describe("computeSignals", () => {
       textCell(0, 0, "a"),
       textCell(0, 1, "b"),
       textCell(0, 2, "c"),
-      textCell(0, 3, "d"),
-      numberCell(0, 4, 1), // top row: 0.8 text fraction
-      numberCell(1, 0, 5),
-      numberCell(1, 1, 6), // row 1: fully numeric, qualifies
+      textCell(0, fourthTextColumn, "d"),
+      numberCell(0, numberColumn, 1), // top row: 0.8 text fraction
+      numberCell(1, 0, otherRowValueA),
+      numberCell(1, 1, otherRowValueB), // row 1: fully numeric, qualifies
       textCell(2, 0, "x"),
       textCell(2, 1, "y"), // row 2: fully text, does NOT qualify
     ];
@@ -335,10 +424,10 @@ describe("computeSignals", () => {
       textCell(0, 0, "a"),
       textCell(0, 1, "b"),
       textCell(0, 2, "c"),
-      textCell(0, 3, "d"),
-      numberCell(0, 4, 1), // top row: 0.8 text fraction
+      textCell(0, fourthTextColumn, "d"),
+      numberCell(0, numberColumn, 1), // top row: 0.8 text fraction
       // Other row: 1 numeric of 3 cells = 0.333, below the 0.5 threshold.
-      numberCell(1, 0, 5),
+      numberCell(1, 0, otherRowValueA),
       textCell(1, 1, "x"),
       textCell(1, 2, "y"),
     ];
@@ -351,10 +440,10 @@ describe("computeSignals", () => {
       textCell(0, 0, "a"),
       textCell(0, 1, "b"),
       textCell(0, 2, "c"),
-      textCell(0, 3, "d"),
-      numberCell(0, 4, 1),
+      textCell(0, fourthTextColumn, "d"),
+      numberCell(0, numberColumn, 1),
       // Other row: 1 numeric + 1 plain text = exactly 0.5 numeric-like fraction.
-      numberCell(1, 0, 5),
+      numberCell(1, 0, otherRowValueA),
       textCell(1, 1, "e"),
     ];
     expect(computeSignals(cells).hasHeaderLikeRow).toBe(true);
@@ -365,8 +454,8 @@ describe("computeSignals", () => {
       textCell(0, 0, "a"),
       textCell(0, 1, "b"),
       textCell(0, 2, "c"),
-      textCell(0, 3, "d"),
-      numberCell(0, 4, 1),
+      textCell(0, fourthTextColumn, "d"),
+      numberCell(0, numberColumn, 1),
       textCell(1, 0, "e"), // the other row is entirely non-numeric
       textCell(1, 1, "f"),
     ];
@@ -389,8 +478,8 @@ describe("computeSignals", () => {
       textCell(0, 0, "a"),
       textCell(0, 1, "b"),
       textCell(0, 2, "c"),
-      textCell(0, 3, "d"),
-      numberCell(0, 4, 1),
+      textCell(0, fourthTextColumn, "d"),
+      numberCell(0, numberColumn, 1),
       formulaTextCell(1, 0, "e", "=CONCAT(A1,A2)"),
       formulaTextCell(1, 1, "f", "=CONCAT(B1,B2)"),
     ];
@@ -419,30 +508,39 @@ describe("classifyRegion", () => {
   });
 
   it("computes tableScore as a weighted blend of row regularity, header signal, and density — never a table from a single row or column", () => {
+    const arbitraryValue = 3;
     const singleRow = computeSignals([
       numberCell(0, 0, 1),
       numberCell(0, 1, 2),
-      numberCell(0, 2, 3),
+      numberCell(0, 2, arbitraryValue),
     ]);
     expect(classifyRegion(singleRow).classification).not.toBe("table");
 
+    const cellCount = 3;
+    const rowSpan = 2;
+    const colSpan = 2;
+    const rowRegularity = 0.6;
     const signals: RegionSignals = {
-      cellCount: 3,
-      rowSpan: 2,
-      colSpan: 2,
+      cellCount,
+      rowSpan,
+      colSpan,
       distinctRows: 2,
       distinctColumns: 2,
       formulaFraction: 0,
       numericFraction: 0,
       textFraction: 0,
       averageTextLength: 0,
-      rowRegularity: 0.6,
+      rowRegularity,
       hasHeaderLikeRow: false,
     };
     const result = classifyRegion(signals);
     expect(result.classification).toBe("table");
-    // 0.5 * 0.6 (rowRegularity) + 0.3 * 0 (no header) + 0.2 * (3/4) (density)
-    expect(result.confidence).toBeCloseTo(0.5 * 0.6 + 0.2 * 0.75, 10);
+    const density = cellCount / (rowSpan * colSpan);
+    expect(result.confidence).toBeCloseTo(
+      TABLE_ROW_REGULARITY_WEIGHT * rowRegularity +
+        TABLE_DENSITY_WEIGHT * density,
+      PRECISION_DIGITS,
+    );
   });
 
   it("never scores a single-column region as a table, however regular or dense its other signals look", () => {
@@ -467,6 +565,7 @@ describe("classifyRegion", () => {
   });
 
   it("divides averageTextLength by PROSE_LENGTH_NORM, not the reverse, when scoring prose", () => {
+    const textFraction = 0.9;
     const signals: RegionSignals = {
       cellCount: 10,
       rowSpan: 1,
@@ -475,14 +574,17 @@ describe("classifyRegion", () => {
       distinctColumns: 5,
       formulaFraction: 0,
       numericFraction: 0,
-      textFraction: 0.9,
-      averageTextLength: 36, // 36 / 40 (PROSE_LENGTH_NORM) = 0.9
+      textFraction,
+      averageTextLength: textFraction * PROSE_LENGTH_NORM,
       rowRegularity: 1,
       hasHeaderLikeRow: false,
     };
     const result = classifyRegion(signals);
     expect(result.classification).toBe("prose");
-    expect(result.confidence).toBeCloseTo(0.9 * 0.9, 10);
+    expect(result.confidence).toBeCloseTo(
+      textFraction * textFraction,
+      PRECISION_DIGITS,
+    );
   });
 
   it("does not treat a score exactly at the signal threshold as too weak to trust", () => {
@@ -540,29 +642,41 @@ describe("classifyRegion", () => {
       hasHeaderLikeRow: false,
     };
     // table = 0.5*1 + 0.3*0 + 0.2*(2/2) = 0.7; prose = 0.64; gap = 0.06 < MIXED_MARGIN (0.15)
+    const gap = 0.06;
     const result = classifyRegion(signals);
     expect(result.classification).toBe("mixed");
-    expect(result.confidence).toBeCloseTo(1 - 0.06 / 0.15, 10);
+    expect(result.confidence).toBeCloseTo(
+      1 - gap / MIXED_MARGIN,
+      PRECISION_DIGITS,
+    );
   });
 
   it("does not call it mixed when the second-highest score itself falls short of the signal threshold", () => {
+    const cellCount = 20;
+    const rowSpan = 10;
+    const colSpan = 10;
+    const rowRegularity = 0.8;
     const signals: RegionSignals = {
-      cellCount: 20,
-      rowSpan: 10,
-      colSpan: 10,
+      cellCount,
+      rowSpan,
+      colSpan,
       distinctRows: 2,
       distinctColumns: 2,
       formulaFraction: 0,
       numericFraction: 0,
       textFraction: 0.5,
       averageTextLength: 24, // 24/40 = 0.6, prose = 0.5*0.6 = 0.3, below threshold
-      rowRegularity: 0.8,
+      rowRegularity,
       hasHeaderLikeRow: false,
     };
-    // table = 0.5*0.8 + 0.2*(20/100) = 0.44
     const result = classifyRegion(signals);
     expect(result.classification).toBe("table");
-    expect(result.confidence).toBeCloseTo(0.44, 10);
+    const density = cellCount / (rowSpan * colSpan);
+    expect(result.confidence).toBeCloseTo(
+      TABLE_ROW_REGULARITY_WEIGHT * rowRegularity +
+        TABLE_DENSITY_WEIGHT * density,
+      PRECISION_DIGITS,
+    );
   });
 
   it("treats a second-highest score exactly at the threshold as strong enough to call the region mixed", () => {
@@ -580,9 +694,13 @@ describe("classifyRegion", () => {
       hasHeaderLikeRow: false,
     };
     // table = 0.5*0.7 + 0.2*(2/4) = 0.45; gap = 0.1 < MIXED_MARGIN
+    const gap = 0.1;
     const result = classifyRegion(signals);
     expect(result.classification).toBe("mixed");
-    expect(result.confidence).toBeCloseTo(1 - 0.1 / 0.15, 10);
+    expect(result.confidence).toBeCloseTo(
+      1 - gap / MIXED_MARGIN,
+      PRECISION_DIGITS,
+    );
   });
 
   it("does not call it mixed when the top score sits exactly at the second score plus the mixed margin", () => {
@@ -605,7 +723,10 @@ describe("classifyRegion", () => {
     };
     const result = classifyRegion(signals);
     expect(result.classification).toBe("table");
-    expect(result.confidence).toBeCloseTo(second + MIXED_MARGIN, 10);
+    expect(result.confidence).toBeCloseTo(
+      second + MIXED_MARGIN,
+      PRECISION_DIGITS,
+    );
   });
 });
 
@@ -632,8 +753,9 @@ describe("advisory contract", () => {
   });
 
   it("reuses the same cell objects in its output rather than cloning them", () => {
+    const arbitraryValue = 5;
     const a = textCell(0, 0, "a");
-    const b = numberCell(2, 0, 5);
+    const b = numberCell(2, 0, arbitraryValue);
     const regions = segmentSheetRegions([a, b]);
     expect(regions[0]?.cells).toContain(a);
     expect(regions[0]?.cells).toContain(b);
