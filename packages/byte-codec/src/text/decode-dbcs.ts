@@ -4,7 +4,12 @@
 //
 // Every decoder shares one shape: an explicit byte-position state machine (never more than a small number of pending lead bytes) walking the input once, looking up a pointer in one of dbcs-tables.ts's tables via {@link pointerCodePoint}, and appending the result through decode.ts's own {@link appendCodePoint}/{@link fromCodeUnits} so a supplementary-plane result (Big5's CJK Compatibility Ideographs Supplement entries, gb18030's final algorithmic range) is split into a surrogate pair the same way every other decoder in this package already does.
 
-import { appendCodePoint, fromCodeUnits, UndecodableTextError } from "./decode";
+import {
+  appendCodePoint,
+  fromCodeUnits,
+  UndecodableTextError,
+  type CodeUnitSink,
+} from "./decode";
 import {
   BIG5,
   EUC_KR,
@@ -100,7 +105,7 @@ function twoByteTrailColumn(
  * @throws UndecodableTextError When the bytes contain a byte or byte pair Shift_JIS leaves undefined, or end with an incomplete two-byte sequence.
  */
 export function decodeShiftJis(bytes: Uint8Array): string {
-  const units: number[] = [];
+  const sink: CodeUnitSink = { units: [] };
   let leading = 0;
   for (const byte of bytes) {
     if (leading !== 0) {
@@ -113,7 +118,7 @@ export function decodeShiftJis(bytes: Uint8Array): string {
           ? undefined
           : (leadingByte - leadingOffset) * 188 + column;
       if (pointer !== undefined && pointer >= 8836 && pointer <= 10715) {
-        appendCodePoint(units, 0xe000 - 8836 + pointer);
+        appendCodePoint(sink, 0xe000 - 8836 + pointer);
         continue;
       }
       const codePoint =
@@ -124,13 +129,13 @@ export function decodeShiftJis(bytes: Uint8Array): string {
           `has no character for lead byte 0x${leadingByte.toString(16)} trail byte 0x${byte.toString(16)}`,
         );
       }
-      appendCodePoint(units, codePoint);
+      appendCodePoint(sink, codePoint);
       continue;
     }
     if (byte <= ASCII_BYTE_MAX || byte === 0x80) {
-      units.push(byte);
+      sink.units.push(byte);
     } else if (byte >= 0xa1 && byte <= 0xdf) {
-      appendCodePoint(units, 0xff61 - 0xa1 + byte);
+      appendCodePoint(sink, 0xff61 - 0xa1 + byte);
       // byte reaching this point is already known to be 0x81 or above (everything below is consumed by the two branches above), so only each band's own upper bound needs checking.
     } else if (byte <= 0x9f || (byte >= 0xe0 && byte <= 0xfc)) {
       leading = byte;
@@ -144,7 +149,7 @@ export function decodeShiftJis(bytes: Uint8Array): string {
   if (leading !== 0) {
     truncated("Shift_JIS");
   }
-  return fromCodeUnits(units);
+  return fromCodeUnits(sink.units);
 }
 
 /**
@@ -156,13 +161,13 @@ export function decodeShiftJis(bytes: Uint8Array): string {
  * @throws UndecodableTextError When the bytes contain a byte or byte pair EUC-JP leaves undefined, or end with an incomplete multi-byte sequence.
  */
 export function decodeEucJp(bytes: Uint8Array): string {
-  const units: number[] = [];
+  const sink: CodeUnitSink = { units: [] };
   let leading = 0;
   let jis0212 = false;
   for (const byte of bytes) {
     if (leading === 0x8e && byte >= 0xa1 && byte <= 0xdf) {
       leading = 0;
-      appendCodePoint(units, 0xff61 - 0xa1 + byte);
+      appendCodePoint(sink, 0xff61 - 0xa1 + byte);
       continue;
     }
     if (leading === 0x8f && byte >= 0xa1 && byte <= 0xfe) {
@@ -189,11 +194,11 @@ export function decodeEucJp(bytes: Uint8Array): string {
           `has no character for lead byte 0x${leadingByte.toString(16)} trail byte 0x${byte.toString(16)}`,
         );
       }
-      appendCodePoint(units, codePoint);
+      appendCodePoint(sink, codePoint);
       continue;
     }
     if (byte <= ASCII_BYTE_MAX) {
-      units.push(byte);
+      sink.units.push(byte);
     } else if (
       byte === 0x8e ||
       byte === 0x8f ||
@@ -207,7 +212,7 @@ export function decodeEucJp(bytes: Uint8Array): string {
   if (leading !== 0) {
     truncated("EUC-JP");
   }
-  return fromCodeUnits(units);
+  return fromCodeUnits(sink.units);
 }
 
 /**
@@ -219,7 +224,7 @@ export function decodeEucJp(bytes: Uint8Array): string {
  * @throws UndecodableTextError When the bytes contain a byte or byte pair EUC-KR leaves undefined, or end with an incomplete two-byte sequence.
  */
 export function decodeEucKr(bytes: Uint8Array): string {
-  const units: number[] = [];
+  const sink: CodeUnitSink = { units: [] };
   let leading = 0;
   for (const byte of bytes) {
     if (leading !== 0) {
@@ -235,11 +240,11 @@ export function decodeEucKr(bytes: Uint8Array): string {
           `has no character for lead byte 0x${leadingByte.toString(16)} trail byte 0x${byte.toString(16)}`,
         );
       }
-      appendCodePoint(units, codePoint);
+      appendCodePoint(sink, codePoint);
       continue;
     }
     if (byte <= ASCII_BYTE_MAX) {
-      units.push(byte);
+      sink.units.push(byte);
     } else if (byte >= 0x81 && byte <= 0xfe) {
       leading = byte;
     } else {
@@ -249,7 +254,7 @@ export function decodeEucKr(bytes: Uint8Array): string {
   if (leading !== 0) {
     truncated("EUC-KR");
   }
-  return fromCodeUnits(units);
+  return fromCodeUnits(sink.units);
 }
 
 /**
@@ -261,7 +266,7 @@ export function decodeEucKr(bytes: Uint8Array): string {
  * @throws UndecodableTextError When the bytes contain a byte or byte pair Big5 leaves undefined, or end with an incomplete two-byte sequence.
  */
 export function decodeBig5(bytes: Uint8Array): string {
-  const units: number[] = [];
+  const sink: CodeUnitSink = { units: [] };
   let leading = 0;
   for (const byte of bytes) {
     if (leading !== 0) {
@@ -275,8 +280,8 @@ export function decodeBig5(bytes: Uint8Array): string {
           ? undefined
           : BIG5_DOUBLE_CODE_POINT_POINTERS.get(pointer);
       if (doubled !== undefined) {
-        appendCodePoint(units, doubled[0]);
-        appendCodePoint(units, doubled[1]);
+        appendCodePoint(sink, doubled[0]);
+        appendCodePoint(sink, doubled[1]);
         continue;
       }
       const codePoint =
@@ -287,11 +292,11 @@ export function decodeBig5(bytes: Uint8Array): string {
           `has no character for lead byte 0x${leadingByte.toString(16)} trail byte 0x${byte.toString(16)}`,
         );
       }
-      appendCodePoint(units, codePoint);
+      appendCodePoint(sink, codePoint);
       continue;
     }
     if (byte <= ASCII_BYTE_MAX) {
-      units.push(byte);
+      sink.units.push(byte);
     } else if (byte >= 0x81 && byte <= 0xfe) {
       leading = byte;
     } else {
@@ -301,7 +306,7 @@ export function decodeBig5(bytes: Uint8Array): string {
   if (leading !== 0) {
     truncated("Big5");
   }
-  return fromCodeUnits(units);
+  return fromCodeUnits(sink.units);
 }
 
 /**
@@ -350,7 +355,7 @@ function gb18030RangesCodePoint(pointer: number): number | undefined {
  * @throws UndecodableTextError When the bytes contain a byte or byte sequence gb18030 leaves undefined, or end with an incomplete multi-byte sequence.
  */
 export function decodeGb18030(bytes: Uint8Array): string {
-  const units: number[] = [];
+  const sink: CodeUnitSink = { units: [] };
   let first = 0;
   let second = 0;
   let third = 0;
@@ -384,7 +389,7 @@ export function decodeGb18030(bytes: Uint8Array): string {
           `has no character for four-byte sequence 0x${failedFirst.toString(16)} 0x${failedSecond.toString(16)} 0x${failedThird.toString(16)} 0x${byte.toString(16)}`,
         );
       }
-      appendCodePoint(units, codePoint);
+      appendCodePoint(sink, codePoint);
       continue;
     }
     if (second !== 0) {
@@ -415,13 +420,13 @@ export function decodeGb18030(bytes: Uint8Array): string {
           `has no character for lead byte 0x${leadingByte.toString(16)} trail byte 0x${byte.toString(16)}`,
         );
       }
-      appendCodePoint(units, codePoint);
+      appendCodePoint(sink, codePoint);
       continue;
     }
     if (byte <= ASCII_BYTE_MAX) {
-      units.push(byte);
+      sink.units.push(byte);
     } else if (byte === 0x80) {
-      units.push(0x20ac);
+      sink.units.push(0x20ac);
       // byte reaching this point is already known to be 0x81 or above (everything below is consumed by the two branches above), so only this band's own upper bound needs checking.
     } else if (byte <= 0xfe) {
       first = byte;
@@ -433,5 +438,5 @@ export function decodeGb18030(bytes: Uint8Array): string {
   if (first !== 0) {
     truncated("gb18030");
   }
-  return fromCodeUnits(units);
+  return fromCodeUnits(sink.units);
 }

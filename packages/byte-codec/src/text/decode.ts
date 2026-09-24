@@ -150,18 +150,25 @@ const LOW_SURROGATE_MASK = 0x3ff;
 export const TEXT_DECODE_CHUNK_CODE_UNITS = 65_536 / 2;
 
 /**
- * Splits `codePoint` into one or two UTF-16 code units and pushes them onto `units`: the code point itself below the supplementary plane, a surrogate pair biased by {@link SURROGATE_BITS} and {@link LOW_SURROGATE_MASK} above it. Shared by every decoder here that can produce a code point outside the Basic Multilingual Plane — {@link decodeUtf32} for UTF-32's own scalar values, and decode-dbcs.ts's decoders for the WHATWG index tables' own supplementary-plane entries (Big5's CJK Compatibility Ideographs Supplement pointers, gb18030's final algorithmic range) — so the split happens in exactly one place rather than once per caller.
- * @param units - The code unit array to push onto, in place.
+ * A code unit accumulator threaded by reference into {@link appendCodePoint}, rather than the bare mutable array it wraps: the array itself is owned entirely by whichever decoder loop builds it, appended to hundreds or thousands of times per call, and this wrapper's own `units` property is not itself a primitive or callback, which is what keeps it out of scope for exadev/prefer-readonly-object-param (see this package's own eslint.config.ts, and PackageLintOptions.preferReadonlyParams in the workspace's shared eslint.shared.ts) the same way a bare `number[]` parameter is squarely inside exadev/prefer-readonly-array-param's.
+ */
+export interface CodeUnitSink {
+  readonly units: number[];
+}
+
+/**
+ * Splits `codePoint` into one or two UTF-16 code units and pushes them onto `sink.units`: the code point itself below the supplementary plane, a surrogate pair biased by {@link SURROGATE_BITS} and {@link LOW_SURROGATE_MASK} above it. Shared by every decoder here that can produce a code point outside the Basic Multilingual Plane — {@link decodeUtf32} for UTF-32's own scalar values, and decode-dbcs.ts's decoders for the WHATWG index tables' own supplementary-plane entries (Big5's CJK Compatibility Ideographs Supplement pointers, gb18030's final algorithmic range) — so the split happens in exactly one place rather than once per caller.
+ * @param sink - The code unit accumulator to push onto, in place.
  * @param codePoint - A Unicode scalar value in the range 0 to {@link MAX_CODE_POINT}.
  */
-export function appendCodePoint(units: number[], codePoint: number): void {
+export function appendCodePoint(sink: CodeUnitSink, codePoint: number): void {
   if (codePoint < SUPPLEMENTARY_PLANE_START) {
-    units.push(codePoint);
+    sink.units.push(codePoint);
     return;
   }
   const supplementary = codePoint - SUPPLEMENTARY_PLANE_START;
-  units.push(HIGH_SURROGATE_START + (supplementary >> SURROGATE_BITS));
-  units.push(LOW_SURROGATE_START + (supplementary & LOW_SURROGATE_MASK));
+  sink.units.push(HIGH_SURROGATE_START + (supplementary >> SURROGATE_BITS));
+  sink.units.push(LOW_SURROGATE_START + (supplementary & LOW_SURROGATE_MASK));
 }
 
 /**
@@ -296,7 +303,7 @@ function decodeUtf32(bytes: Uint8Array, littleEndian: boolean): string {
     );
   }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const units: number[] = [];
+  const sink: CodeUnitSink = { units: [] };
   for (let offset = 0; offset < bytes.byteLength; offset += 4) {
     const codePoint = view.getUint32(offset, littleEndian);
     if (
@@ -308,9 +315,9 @@ function decodeUtf32(bytes: Uint8Array, littleEndian: boolean): string {
         "UTF-32 text must hold only Unicode scalar values",
       );
     }
-    appendCodePoint(units, codePoint);
+    appendCodePoint(sink, codePoint);
   }
-  return fromCodeUnits(units);
+  return fromCodeUnits(sink.units);
 }
 
 function decodeWindows1252(bytes: Uint8Array): string {
