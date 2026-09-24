@@ -497,6 +497,52 @@ describe("readOdtContent: formula placement", () => {
     });
   });
 
+  it("treats a text:h heading inside a list item exactly like the list's paragraphs for detection", () => {
+    // odf.js's own list walker emits one block per item paragraph OR heading, so a heading carrying an inline formula, vector, and image counts one block and all three placements follow it. Heading-in-a-list-item is exactly the shape odf.js's readOdfListParagraphs explicitly supports for text:h, so it is pinned here for every detection walk.
+    const { blocks } = readOdt(
+      "<text:list>" +
+        `<text:list-item><text:h text:outline-level="2">Head ${inlineFormulaFrame("Object 1")} ${RECT_XML} ${inlineImageFrame()}</text:h></text:list-item>` +
+        "</text:list>" +
+        "<text:p>After</text:p>",
+      { objects: [["Object 1", "<math:mn>7</math:mn>"]], withImage: true },
+    );
+    expect(blockKinds(blocks)).toEqual([
+      "paragraph",
+      "embeddedObject",
+      "embeddedObject",
+      "image",
+      "paragraph",
+    ]);
+    expect(blocks[0]).toMatchObject({ kind: "paragraph", headingLevel: 2 });
+    expect(blocks[1]).toMatchObject({
+      objectKind: "formula",
+      sourcePath: "sections[0].blocks[1]",
+    });
+    expect(blocks[2]).toMatchObject({
+      objectKind: "drawing",
+      sourcePath: "sections[0].blocks[2]",
+    });
+    expect(blocks[3]).toMatchObject({
+      kind: "image",
+      sourcePath: "sections[0].blocks[3]",
+    });
+  });
+
+  it("ignores a stray paragraph sitting directly inside text:list (not inside a text:list-item)", () => {
+    // A text:p that is a DIRECT child of text:list is not a text:list-item, so odf.js's own list walker contributes no block for it and every detection walk skips it whole: no formula, drawing, or image block appears anywhere. (The walk iterates list items only, exactly as the upstream reader does.)
+    const { blocks } = readOdt(
+      "<text:list>" +
+        "<text:list-item><text:p>Item</text:p></text:list-item>" +
+        `<text:p>Stray ${inlineFormulaFrame("Object 1")} ${RECT_XML} ${inlineImageFrame()}</text:p>` +
+        "</text:list>" +
+        "<text:p>After</text:p>",
+      { objects: [["Object 1", "<math:mn>7</math:mn>"]], withImage: true },
+    );
+    expect(blockKinds(blocks)).toEqual(["paragraph", "paragraph"]);
+    expect(paragraphText(blocks[0])).toContain("Item");
+    expect(paragraphText(blocks[1])).toContain("After");
+  });
+
   it("treats a text:h heading exactly like a text:p for detection: its objects follow the heading block", () => {
     // One heading carrying an inline formula, an inline image, and a vector primitive: all three walks must count the heading as their block, so all three placements share index 1 (formula, drawing, image in the combined list's own order).
     const { blocks } = readOdt(
@@ -659,6 +705,31 @@ describe("readOdtContent: vector placement", () => {
     });
   });
 
+  it("descends a nested text:list, placing the vector after the inner item's paragraph", () => {
+    // The nested list's paragraphs are blocks of the same flat flow (Outer, Inner, drawing, After), counted one per item paragraph at every nesting level.
+    const { blocks } = readOdt(
+      "<text:list>" +
+        "<text:list-item>" +
+        "<text:p>Outer</text:p>" +
+        "<text:list>" +
+        `<text:list-item><text:p>Inner ${RECT_XML}</text:p></text:list-item>` +
+        "</text:list>" +
+        "</text:list-item>" +
+        "</text:list>" +
+        "<text:p>After</text:p>",
+    );
+    expect(blockKinds(blocks)).toEqual([
+      "paragraph",
+      "paragraph",
+      "embeddedObject",
+      "paragraph",
+    ]);
+    expect(blocks[2]).toMatchObject({
+      objectKind: "drawing",
+      sourcePath: "sections[0].blocks[2]",
+    });
+  });
+
   it("places a bare vector element sitting directly inside a text:list-item at the current index", () => {
     const { blocks } = readOdt(
       "<text:list>" +
@@ -780,6 +851,31 @@ describe("readOdtContent: image placement", () => {
     expect(blocks[1]).toMatchObject({
       kind: "image",
       sourcePath: "sections[0].blocks[1]",
+    });
+  });
+
+  it("descends a nested text:list, placing the image after the inner item's paragraph", () => {
+    const { blocks } = readOdt(
+      "<text:list>" +
+        "<text:list-item>" +
+        "<text:p>Outer</text:p>" +
+        "<text:list>" +
+        `<text:list-item><text:p>Inner ${inlineImageFrame()}</text:p></text:list-item>` +
+        "</text:list>" +
+        "</text:list-item>" +
+        "</text:list>" +
+        "<text:p>After</text:p>",
+      { withImage: true },
+    );
+    expect(blockKinds(blocks)).toEqual([
+      "paragraph",
+      "paragraph",
+      "image",
+      "paragraph",
+    ]);
+    expect(blocks[2]).toMatchObject({
+      kind: "image",
+      sourcePath: "sections[0].blocks[2]",
     });
   });
 
