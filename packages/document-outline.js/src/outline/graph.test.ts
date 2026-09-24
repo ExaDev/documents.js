@@ -190,8 +190,9 @@ describe("content-addressed deduplication", () => {
     ]);
     expectSchemaValid(docA, "docA");
     expectSchemaValid(docB, "docB");
+    const expectedSectionCount = 3; // the shared one plus each document's own final section
     const sections = graph.nodes.filter((node) => node.kind === "section");
-    expect(sections).toHaveLength(3); // the shared one plus each document's own final section
+    expect(sections).toHaveLength(expectedSectionCount);
     const shared = sections.find((section) =>
       graph.edges.some(
         (edge) =>
@@ -219,9 +220,10 @@ describe("content-addressed deduplication", () => {
       { from: "b", orderKey: orderKeys.orderKeyForIndex(1) },
     ]);
     // Every descendant of the shared section is also emitted exactly once: the heading anchor, two paragraphs, and each document's own leaf.
+    const expectedParagraphCount = 5;
     expect(
       graph.nodes.filter((node) => node.kind === "paragraph"),
-    ).toHaveLength(5);
+    ).toHaveLength(expectedParagraphCount);
   });
 
   it("deduplicates repeated content within one document: one node, one edge per position", () => {
@@ -422,7 +424,8 @@ describe("definitions tables", () => {
     const entries = graph.nodes.filter(
       (node) => node.kind === "definitionEntry",
     );
-    expect(entries).toHaveLength(4); // all four exist whether or not anything references them
+    const expectedEntryCount = 4; // all four exist whether or not anything references them
+    expect(entries).toHaveLength(expectedEntryCount);
     expect(sortedStrings(entries.map((node) => node.tenantKind))).toEqual([
       "attachment",
       "destination",
@@ -753,9 +756,10 @@ describe("factoring and node identity", () => {
       unfactoredGraph.nodes.filter((node) => node.kind === "styleEntry"),
     ).toHaveLength(0);
     // The recurring tuple is hoisted onto the first section's own ref (1 STYLED_BY edge), and both styled paragraphs — now bare, non-anchor leaves under that styled section — inherit the chain too (#660): one edge each, 3 in total, all resolving to the same shared style entry.
+    const expectedStyledByCount = 3;
     expect(
       factoredGraph.edges.filter((edge) => edge.kind === "STYLED_BY"),
-    ).toHaveLength(3);
+    ).toHaveLength(expectedStyledByCount);
     expect(
       unfactoredGraph.edges.filter((edge) => edge.kind === "STYLED_BY"),
     ).toHaveLength(0);
@@ -862,8 +866,11 @@ describe("extraction policy", () => {
   });
 
   it("emits a DEFINED_BY edge discovered inside a policy-extracted record value nested in a table entry's own body", () => {
+    const metaPathDepth = 3;
     const extractMeta: ExtractionPolicy = (path, value) =>
-      path.length === 3 && path[0] === "definitions" && path[2] === "meta"
+      path.length === metaPathDepth &&
+      path[0] === "definitions" &&
+      path[2] === "meta"
         ? "extract"
         : defaultExtractionPolicy(path, value);
     const pkg = wordprocessingPackage([sectionGroup([paragraph("Body.")])], {
@@ -894,8 +901,11 @@ describe("extraction policy", () => {
 
   it("emits a DEFINED_BY edge discovered inside a policy-extracted ARRAY value's own elements", () => {
     // mintValueNode's non-record branch (isRecord(value) === false) also covers arrays — walk() recurses into each element and accumulates their own edges, unlike a genuine scalar which never carries any.
+    const metaPathDepth = 3;
     const extractMeta: ExtractionPolicy = (path, value) =>
-      path.length === 3 && path[0] === "definitions" && path[2] === "meta"
+      path.length === metaPathDepth &&
+      path[0] === "definitions" &&
+      path[2] === "meta"
         ? "extract"
         : defaultExtractionPolicy(path, value);
     const pkg = wordprocessingPackage([sectionGroup([paragraph("Body.")])], {
@@ -1419,7 +1429,8 @@ describe("order keys (#660)", () => {
       .filter((edge) => edge.kind === "CONTAINS" && edge.from === section.id)
       .map((edge) => edge.orderKey)
       .sort();
-    expect(keys).toHaveLength(3);
+    const expectedKeyCount = 3;
+    expect(keys).toHaveLength(expectedKeyCount);
     // Equal-width lexicographic sort is numeric sort: the minted keys sort in document order and leave room between each adjacent pair for a consumer-side insert that touches no sibling edge.
     expect(keys[0]! < keys[1]!).toBe(true);
     expect(keys[1]! < keys[2]!).toBe(true);
@@ -1442,7 +1453,8 @@ describe("order keys (#660)", () => {
     // Nested midpoints keep landing in the shrinking interval until the digits run out — the documented rebalance signal, not a silent duplicate.
     let low = first;
     let landed = true;
-    for (let i = 0; i < 10_000 && landed; i += 1) {
+    const iterationSafetyBound = 10_000;
+    for (let i = 0; i < iterationSafetyBound && landed; i += 1) {
       try {
         const next = orderKeyBetween(low, mid);
         if (!(low < next && next < mid))
@@ -1457,7 +1469,8 @@ describe("order keys (#660)", () => {
 
   it("renumberedOrderKeys re-mints a fresh, roomy sibling list (the rebalance operation)", () => {
     const { orderKeyForIndex, renumberedOrderKeys } = orderKeys;
-    expect(renumberedOrderKeys(3)).toEqual([
+    const rebalanceSiblingCount = 3;
+    expect(renumberedOrderKeys(rebalanceSiblingCount)).toEqual([
       orderKeyForIndex(0),
       orderKeyForIndex(1),
       orderKeyForIndex(2),
@@ -1850,7 +1863,8 @@ describe("walkPropertyGraph (#660)", () => {
         (id) => id === visited.find((candidate) => candidate === id),
       ).length,
     ).toBeGreaterThanOrEqual(1);
-    expect(visited).toHaveLength(4); // root, section, then the shared leaf once per path
+    const expectedVisitedCount = 4; // root, section, then the shared leaf once per path
+    expect(visited).toHaveLength(expectedVisitedCount);
   });
 
   it("guards reference-kind edges by default: a hand-built cyclic graph terminates, and the cycle is reported rather than looping", () => {
@@ -2347,9 +2361,12 @@ describe("write API: insertNode / insertEdge (#935)", () => {
     const rebalanced = result.edges.filter(
       (edge) => edge.from === "doc" && edge.kind === "PROPERTY",
     );
-    expect(rebalanced).toHaveLength(3);
+    const expectedRebalancedCount = 3;
+    expect(rebalanced).toHaveLength(expectedRebalancedCount);
     // The tie is gone — every sibling now sorts uniquely.
-    expect(new Set(rebalanced.map((edge) => edge.orderKey)).size).toBe(3);
+    expect(new Set(rebalanced.map((edge) => edge.orderKey)).size).toBe(
+      expectedRebalancedCount,
+    );
     const ordered = [...rebalanced].sort((x, y) =>
       x.orderKey < y.orderKey ? -1 : 1,
     );
@@ -2636,7 +2653,8 @@ describe("write API: insertNode's fresh-mint children-wiring reconciles pre-exis
     const contains = result.graph.edges.filter(
       (edge) => edge.from === sectionId && edge.kind === "CONTAINS",
     );
-    expect(contains).toHaveLength(3);
+    const expectedContainsCount = 3;
+    expect(contains).toHaveLength(expectedContainsCount);
     // Genuinely exercises byOrderKeyAsc, not just "no duplicates": reading originalSiblings by CREATION order (unsorted) would see [C, A, B], which is NOT a subsequence of the requested [A, B, C] (C can never precede A in a subsequence of [A,B,C]) — so a broken sort would fail to match at least one requested position against its existing edge and mint a spurious extra one, changing this exact final order.
     expect(
       contains
@@ -2720,7 +2738,8 @@ describe("write API: insertNode's fresh-mint children-wiring reconciles pre-exis
     const contains = section.graph.edges.filter(
       (edge) => edge.from === sectionId && edge.kind === "CONTAINS",
     );
-    expect(contains).toHaveLength(3);
+    const expectedContainsCount = 3;
+    expect(contains).toHaveLength(expectedContainsCount);
     const orderKeysUsed = contains.map((edge) => edge.orderKey);
     // No two siblings share an orderKey — the degenerate shape boundedOrderKey/siblingInsertIndex refuse everywhere else in this module.
     expect(new Set(orderKeysUsed).size).toBe(orderKeysUsed.length);
@@ -2758,7 +2777,8 @@ describe("write API: insertNode's fresh-mint children-wiring reconciles pre-exis
       (edge) => edge.from === sectionId && edge.kind === "CONTAINS",
     );
     // Three edges total — both requested occurrences of leafA survive, not just the one that was already wired.
-    expect(contains).toHaveLength(3);
+    const expectedContainsCount = 3;
+    expect(contains).toHaveLength(expectedContainsCount);
     expect(contains.filter((edge) => edge.to === leafA.id)).toHaveLength(2);
     expect(contains.filter((edge) => edge.to === leafB.id)).toHaveLength(1);
     const ordered = [...contains]
@@ -3054,7 +3074,8 @@ describe("write API: insertNode handles a dedup hit's kind and children correctl
       )
       .sort((p, q) => (p.orderKey < q.orderKey ? -1 : 1));
     // Three edges total — both requested occurrences of a survive, not just one.
-    expect(ordered).toHaveLength(3);
+    const expectedOrderedCount = 3;
+    expect(ordered).toHaveLength(expectedOrderedCount);
     expect(ordered.filter((edge) => edge.to === a.id)).toHaveLength(2);
     expect(ordered.map((edge) => edge.to)).toEqual([a.id, b.id, a.id]);
   });
@@ -3384,11 +3405,14 @@ describe("write API: reconcileChildren reproduces every requested children list 
   }
 
   it("2-id pool, sequences up to length 6, every genuine-subsequence pre-wiring", () => {
-    runExhaustive(2, 6);
+    const maxLength = 6;
+    runExhaustive(2, maxLength);
   });
 
   it("3-id pool, sequences up to length 5, every genuine-subsequence pre-wiring", () => {
-    runExhaustive(3, 5);
+    const poolSize = 3;
+    const maxLength = 5;
+    runExhaustive(poolSize, maxLength);
   });
 
   it("order-inconsistent pre-wiring never inflates multiplicity beyond max(existingCount, requestedCount) (#935 round 9's edge case)", () => {
@@ -3433,7 +3457,8 @@ describe("write API: reconcileChildren reproduces every requested children list 
       (edge) => edge.from === bOnlyId && edge.kind === "CONTAINS",
     );
     // A's two pre-wired, unmatched edges are left exactly as they were (multiplicity stays 2, neither dropped nor duplicated), and B — requested but never pre-wired — is inserted fresh at multiplicity 1.
-    expect(bOnlyContains).toHaveLength(3);
+    const expectedBOnlyContainsCount = 3;
+    expect(bOnlyContains).toHaveLength(expectedBOnlyContainsCount);
     expect(bOnlyContains.filter((edge) => edge.to === a)).toHaveLength(2);
     expect(bOnlyContains.filter((edge) => edge.to === b)).toHaveLength(1);
   });
@@ -3529,11 +3554,15 @@ describe("write API: reconcileChildren reproduces every requested children list 
   }
 
   it("agrees with an independently-modelled reference algorithm across arbitrary (not just genuinely-subsequence) existing wirings, over every combination of a 3-label pool", () => {
-    const { graph: baseGraph, pool } = mintLeafPool(3);
+    const poolSize = 3;
+    const { graph: baseGraph, pool } = mintLeafPool(poolSize);
     const byLabel = { a: pool[0]!, b: pool[1]!, c: pool[2]! };
-    // Length 4, not 3: the anti-inflation pass's own multi-occurrence reuse (a bucket holding MORE than one leftover index for the same id, and a pointer advancing past its first entry to a second) can only ever matter to the final output when existing carries at least two UNMATCHED occurrences of the same id that children also asks for again — and forcing even one existing occurrence of a repeated id to go unmatched by direct LCS already needs a THIRD, differently-labelled element interspersed to break the trivial full match a homogeneous run would otherwise get for free (see this suite's own comment on the exhaustive-subsequence sweep above about full-length matches masking wrong-choice bugs). Two such occurrences plus one interleaved break needs four existing slots (e.g. [a,a,x,a]), one more than a length-3 wiring can ever hold — confirmed directly: a bucket.push/leftover-pointer-advance mutation on this pass survived the length-3 sweep untouched, killed only once existingSeqs reached length 4.
-    const existingSeqs = allLabelSequences(4); // every arbitrary existing wiring up to length 4, subsequence or not
-    const childrenSeqs = allLabelSequences(4).filter((seq) => seq.length > 0);
+    // Length 4, not poolSize: the anti-inflation pass's own multi-occurrence reuse (a bucket holding MORE than one leftover index for the same id, and a pointer advancing past its first entry to a second) can only ever matter to the final output when existing carries at least two UNMATCHED occurrences of the same id that children also asks for again — and forcing even one existing occurrence of a repeated id to go unmatched by direct LCS already needs a THIRD, differently-labelled element interspersed to break the trivial full match a homogeneous run would otherwise get for free (see this suite's own comment on the exhaustive-subsequence sweep above about full-length matches masking wrong-choice bugs). Two such occurrences plus one interleaved break needs four existing slots (e.g. [a,a,x,a]), one more than a length-3 wiring can ever hold — confirmed directly: a bucket.push/leftover-pointer-advance mutation on this pass survived the length-3 sweep untouched, killed only once existingSeqs reached length 4.
+    const existingChildrenLength = 4; // every arbitrary existing wiring up to this length, subsequence or not
+    const existingSeqs = allLabelSequences(existingChildrenLength);
+    const childrenSeqs = allLabelSequences(existingChildrenLength).filter(
+      (seq) => seq.length > 0,
+    );
     let casesRun = 0;
     for (const existingSeq of existingSeqs) {
       for (const children of childrenSeqs) {
@@ -3837,7 +3866,13 @@ describe("named error classes: identity and message text", () => {
   });
 
   it("AmbiguousSiblingError", () => {
-    const error = new AmbiguousSiblingError("from1", "CONTAINS", "sib1", 3);
+    const ambiguousEdgeCount = 3;
+    const error = new AmbiguousSiblingError(
+      "from1",
+      "CONTAINS",
+      "sib1",
+      ambiguousEdgeCount,
+    );
     expect(error.name).toBe("AmbiguousSiblingError");
     expect(error.message).toBe(
       'insertEdge: sibling "sib1" names 3 existing CONTAINS edges from "from1", not exactly one — before/after has no single position to resolve against',
@@ -3986,7 +4021,8 @@ describe("project() entry-node ordering", () => {
     const entryIds = graph.nodes
       .filter((node) => node.kind === "styleEntry")
       .map((node) => node.id);
-    expect(entryIds).toHaveLength(3);
+    const expectedEntryCount = 3;
+    expect(entryIds).toHaveLength(expectedEntryCount);
     // A default (string) sort is exactly the ascending order pendingEntryNodes.sort's own comparator must produce — if the real comparator were flipped, tied at 0 unconditionally, or otherwise wrong, entryIds would not already come out matching its own re-sorted copy.
     expect(entryIds).toEqual([...entryIds].sort());
   });
@@ -4061,18 +4097,27 @@ describe("entryIdAscComparator", () => {
 });
 
 describe("dpAt", () => {
+  // Arbitrary DP row content, distinct enough per position to catch an off-by-one read.
+  const dpRowStep = 10;
+  const dpRow = Array.from(
+    { length: 3 },
+    (_, index) => (index + 1) * dpRowStep,
+  );
+
   it("returns the value at a valid index", () => {
-    expect(dpAt([10, 20, 30], 1)).toBe(20);
+    const validIndex = 1;
+    expect(dpAt(dpRow, validIndex)).toBe(dpRow[validIndex]);
   });
 
   it("throws with the exact out-of-bounds message for an index past the row's length", () => {
-    expect(() => dpAt([10, 20, 30], 3)).toThrow(
+    const outOfBoundsIndex = dpRow.length;
+    expect(() => dpAt(dpRow, outOfBoundsIndex)).toThrow(
       "reconcileChildren: dp lookup index 3 out of bounds (0..2)",
     );
   });
 
   it("throws with the exact out-of-bounds message for a negative index", () => {
-    expect(() => dpAt([10, 20, 30], -1)).toThrow(
+    expect(() => dpAt(dpRow, -1)).toThrow(
       "reconcileChildren: dp lookup index -1 out of bounds (0..2)",
     );
   });
