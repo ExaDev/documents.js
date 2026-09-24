@@ -22,9 +22,11 @@ import {
 
 describe("Quantity schema", () => {
   it("validates a magnitude plus dimension vector", () => {
-    expect(QuantitySchema.safeParse(quantity(5, { length: 1 })).success).toBe(
-      true,
-    );
+    const SAMPLE_MAGNITUDE = 5;
+    expect(
+      QuantitySchema.safeParse(quantity(SAMPLE_MAGNITUDE, { length: 1 }))
+        .success,
+    ).toBe(true);
     expect(
       QuantitySchema.safeParse({
         kind: "quantity",
@@ -37,15 +39,18 @@ describe("Quantity schema", () => {
 
 describe("addQuantities / subtractQuantities", () => {
   it("adds and subtracts quantities of equal dimension", () => {
+    const ADDEND = 3;
+    const SUM = 5;
     const a = quantity(2, { length: 1 });
-    const b = quantity(3, { length: 1 });
-    expect(addQuantities(a, b)).toEqual(quantity(5, { length: 1 }));
+    const b = quantity(ADDEND, { length: 1 });
+    expect(addQuantities(a, b)).toEqual(quantity(SUM, { length: 1 }));
     expect(subtractQuantities(b, a)).toEqual(quantity(1, { length: 1 }));
   });
 
   it("throws IncompatibleDimensionsError when dimensions differ — never a silently wrong number", () => {
+    const SECONDS_MAGNITUDE = 3;
     const metres = quantity(2, { length: 1 });
-    const seconds = quantity(3, { time: 1 });
+    const seconds = quantity(SECONDS_MAGNITUDE, { time: 1 });
     expect(() => addQuantities(metres, seconds)).toThrow(
       IncompatibleDimensionsError,
     );
@@ -77,28 +82,33 @@ describe("addQuantities / subtractQuantities", () => {
 
 describe("multiplyQuantities / divideQuantities", () => {
   it("combines dimension vectors by adding/subtracting exponents", () => {
+    const ACCELERATION = 3;
+    const EXPECTED_FORCE = 6; // F = m * a = 2 * 3
+    const DISTANCE = 10;
+    const EXPECTED_SPEED = 5; // speed = distance / time = 10 / 2
     const mass = quantity(2, { mass: 1 });
-    const acceleration = quantity(3, { length: 1, time: -2 });
+    const acceleration = quantity(ACCELERATION, { length: 1, time: -2 });
     // F = m * a
     expect(multiplyQuantities(mass, acceleration)).toEqual(
-      quantity(6, { mass: 1, length: 1, time: -2 }),
+      quantity(EXPECTED_FORCE, { mass: 1, length: 1, time: -2 }),
     );
 
-    const distance = quantity(10, { length: 1 });
+    const distance = quantity(DISTANCE, { length: 1 });
     const time = quantity(2, { time: 1 });
     // speed = distance / time
     expect(divideQuantities(distance, time)).toEqual(
-      quantity(5, { length: 1, time: -1 }),
+      quantity(EXPECTED_SPEED, { length: 1, time: -1 }),
     );
   });
 
   it("throws DivisionByZeroError on division by a zero magnitude, naming the operation and dividend", () => {
-    expect(() => divideQuantities(quantity(5, {}), quantity(0, {}))).toThrow(
-      DivisionByZeroError,
-    );
+    const DIVIDEND_MAGNITUDE = 5;
+    expect(() =>
+      divideQuantities(quantity(DIVIDEND_MAGNITUDE, {}), quantity(0, {})),
+    ).toThrow(DivisionByZeroError);
     let caught: unknown;
     try {
-      divideQuantities(quantity(5, {}), quantity(0, {}));
+      divideQuantities(quantity(DIVIDEND_MAGNITUDE, {}), quantity(0, {}));
     } catch (error) {
       caught = error;
     }
@@ -112,33 +122,43 @@ describe("multiplyQuantities / divideQuantities", () => {
 
 describe("negateQuantity / absQuantity", () => {
   it("flips sign / takes magnitude without touching dimension", () => {
-    expect(negateQuantity(quantity(4, { length: 1 }))).toEqual(
-      quantity(-4, { length: 1 }),
+    const MAGNITUDE = 4;
+    expect(negateQuantity(quantity(MAGNITUDE, { length: 1 }))).toEqual(
+      quantity(-MAGNITUDE, { length: 1 }),
     );
-    expect(absQuantity(quantity(-4, { length: 1 }))).toEqual(
-      quantity(4, { length: 1 }),
+    expect(absQuantity(quantity(-MAGNITUDE, { length: 1 }))).toEqual(
+      quantity(MAGNITUDE, { length: 1 }),
     );
   });
 });
 
 describe("powQuantity", () => {
   it("raises a dimensionless base to any real power", () => {
-    expect(powQuantity(quantity(2, {}), quantity(3, {}))).toEqual(
-      quantity(8, {}),
+    const EXPONENT = 3;
+    const EXPECTED_POWER = 8; // 2 ** 3
+    expect(powQuantity(quantity(2, {}), quantity(EXPONENT, {}))).toEqual(
+      quantity(EXPECTED_POWER, {}),
     );
   });
 
   it("raises a dimensionless base to a non-integer power without ever reaching the dimensioned-base integer check", () => {
     // exponent.magnitude = 0.5 is not an integer — if the dimensionless-base early return (isDimensionless(base.dimension)) were skipped or its condition flipped, this would fall through to `!Number.isInteger(exponent.magnitude)` and wrongly throw IncompatibleDimensionsError instead of returning 2.
-    expect(powQuantity(quantity(4, {}), quantity(0.5, {}))).toEqual(
-      quantity(2, {}),
-    );
+    const SQUARE_ROOT_EXPONENT = 0.5;
+    const BASE_MAGNITUDE = 4;
+    expect(
+      powQuantity(
+        quantity(BASE_MAGNITUDE, {}),
+        quantity(SQUARE_ROOT_EXPONENT, {}),
+      ),
+    ).toEqual(quantity(2, {}));
   });
 
   it("raises a dimensioned base to an integer power, scaling every exponent", () => {
-    expect(powQuantity(quantity(2, { length: 1 }), quantity(3, {}))).toEqual(
-      quantity(8, { length: 3 }),
-    );
+    const EXPONENT = 3;
+    const EXPECTED_MAGNITUDE = 8; // 2 ** 3
+    expect(
+      powQuantity(quantity(2, { length: 1 }), quantity(EXPONENT, {})),
+    ).toEqual(quantity(EXPECTED_MAGNITUDE, { length: EXPONENT }));
   });
 
   it("rejects a dimensioned exponent, naming the operation and the required-dimensionless detail", () => {
@@ -156,9 +176,14 @@ describe("powQuantity", () => {
   });
 
   it("rejects a dimensioned base raised to a non-integer power, naming the operation and the integer-power detail", () => {
+    const SQUARE_ROOT_EXPONENT = 0.5;
+    const BASE_MAGNITUDE = 4;
     let caught: unknown;
     try {
-      powQuantity(quantity(4, { length: 1 }), quantity(0.5, {}));
+      powQuantity(
+        quantity(BASE_MAGNITUDE, { length: 1 }),
+        quantity(SQUARE_ROOT_EXPONENT, {}),
+      );
     } catch (error) {
       caught = error;
     }
@@ -172,7 +197,8 @@ describe("powQuantity", () => {
 
 describe("sqrtQuantity", () => {
   it("halves every exponent when they are all even", () => {
-    expect(sqrtQuantity(quantity(4, { length: 2 }))).toEqual(
+    const MAGNITUDE = 4;
+    expect(sqrtQuantity(quantity(MAGNITUDE, { length: 2 }))).toEqual(
       quantity(2, { length: 1 }),
     );
   });
@@ -182,9 +208,10 @@ describe("sqrtQuantity", () => {
   });
 
   it("rejects a dimension with an odd exponent, naming the operation and the even-exponent detail", () => {
+    const MAGNITUDE = 4;
     let caught: unknown;
     try {
-      sqrtQuantity(quantity(4, { length: 1 }));
+      sqrtQuantity(quantity(MAGNITUDE, { length: 1 }));
     } catch (error) {
       caught = error;
     }
@@ -210,11 +237,23 @@ describe("sqrtQuantity", () => {
   });
 });
 
+// Decimal places toBeCloseTo checks trig results to below — well past double-precision's meaningful digits for a radian argument this small.
+const CLOSE_TO_PRECISION = 12;
+
 describe("trigonometric quantities", () => {
   it("operate on a dimensionless (radian) argument and return dimensionless results", () => {
-    expect(cosQuantity(quantity(0, {})).magnitude).toBeCloseTo(1, 12);
-    expect(sinQuantity(quantity(0, {})).magnitude).toBeCloseTo(0, 12);
-    expect(tanQuantity(quantity(0, {})).magnitude).toBeCloseTo(0, 12);
+    expect(cosQuantity(quantity(0, {})).magnitude).toBeCloseTo(
+      1,
+      CLOSE_TO_PRECISION,
+    );
+    expect(sinQuantity(quantity(0, {})).magnitude).toBeCloseTo(
+      0,
+      CLOSE_TO_PRECISION,
+    );
+    expect(tanQuantity(quantity(0, {})).magnitude).toBeCloseTo(
+      0,
+      CLOSE_TO_PRECISION,
+    );
     expect(cosQuantity(quantity(0, {})).dimension).toEqual({});
   });
 
