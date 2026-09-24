@@ -1,3 +1,14 @@
+## [12.2.13](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.12...ooxml.js%4012.2.13) (2026-09-24)
+
+### Tests
+
+* **ooxml.js:** pin readSlideSize's cy-missing fallback in pptx/read.ts ([cb8423c](https://github.com/ExaDev/documents.js/commit/cb8423c6f6b9af59e39317c9d145020fdcbad6f6))
+
+
+### Dependencies
+
+- Updated archive-codec to 1.11.17
+
 ## [12.2.12](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.11...ooxml.js%4012.2.12) (2026-09-24)
 
 

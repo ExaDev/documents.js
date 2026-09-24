@@ -1,3 +1,21 @@
+## [14.4.19](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.18...documents.js%4014.4.19) (2026-09-24)
+
+### Tests
+
+* **documents.js:** cover the pptx slide notes, ids and removal surface ([0657b9b](https://github.com/ExaDev/documents.js/commit/0657b9b16c10250144ae31d16a7952201480b981))
+* **documents.js:** pin the gridline lattice geometry, tolerances and cluster selection ([46f3918](https://github.com/ExaDev/documents.js/commit/46f3918167765aa44a6183e9e2f75b534fa111f4))
+
+
+### Dependencies
+
+- Updated archive-codec to 1.11.17
+- Updated doc-codec to 6.1.8
+- Updated ooxml.js to 12.2.13
+- Updated ppt-codec to 2.2.8
+- Updated rtf-codec to 8.1.8
+- Updated wpd-codec to 5.1.10
+- Updated xls-codec to 4.15.27
+
 ## [14.4.18](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.17...documents.js%4014.4.18) (2026-09-24)
 
 ### Tests
