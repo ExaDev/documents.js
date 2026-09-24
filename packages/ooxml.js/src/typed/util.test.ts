@@ -55,6 +55,12 @@ describe("resolveRelTarget", () => {
     );
   });
 
+  it("resolves a relative target against an empty directory when the subject part path is undefined (the package root)", () => {
+    expect(resolveRelTarget(undefined, "media/image1.png")).toBe(
+      "media/image1.png",
+    );
+  });
+
   it("resolves a nested subject part's own directory correctly (the LAST slash, not the first)", () => {
     expect(
       resolveRelTarget("word/embeddings/oleObject1.bin", "image1.png"),
