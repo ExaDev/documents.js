@@ -31,8 +31,8 @@ function entryParagraphs(
 // The block-scope construct rows of the fidelity vocabulary (ExaDev/documents.js#719): text:section as a division, the TOC/index wrappers as index content controls, tracked changes as provenance, and the definitions-table tenants. Every fixture here is a programmatic package built with el/txt — the fixture gate the issue itself states: real-producer verification for these constructs is outstanding, and the shapes below follow the OASIS ODF 1.2 element/attribute grammar rather than any single producer's output.
 
 function odtPackage(
-  textChildren: XmlElement[],
-  automaticStyles: XmlElement[] = [],
+  textChildren: readonly XmlElement[],
+  automaticStyles: readonly XmlElement[] = [],
 ): Package {
   return {
     parts: {

@@ -4,7 +4,7 @@ import type { XmlElement } from "../model/node";
 import { el, txt } from "../xml/fragment";
 import { StyleRegistry, type InternRequest } from "./registry";
 
-function contentPackage(rootChildren: XmlElement[] = []): Package {
+function contentPackage(rootChildren: readonly XmlElement[] = []): Package {
   return {
     parts: {
       "content.xml": {
@@ -15,7 +15,7 @@ function contentPackage(rootChildren: XmlElement[] = []): Package {
   };
 }
 
-function stylesPackage(rootChildren: XmlElement[] = []): Package {
+function stylesPackage(rootChildren: readonly XmlElement[] = []): Package {
   return {
     parts: {
       "styles.xml": {

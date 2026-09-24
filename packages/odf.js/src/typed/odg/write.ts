@@ -72,7 +72,7 @@ function sortByPaintOrder<T extends { readonly paintOrder: number }>(
 // Canonicalisation runs in EMIT order and the sort happens after it, never the other way round: canonicalDrawShape runs the same planShapeContent the writer itself runs, which mints a text box's list identities off the shared ListPlanState, and the reader reproduces those identities by walking the written document in document order. Sorting a page's shapes into paint order before canonicalising them would renumber every list on any page whose paint order disagrees with its array order.
 function canonicalPage(
   page: ContentDrawPage,
-  listState: ListPlanState,
+  listState: Readonly<ListPlanState>,
   definitions: Readonly<Record<string, DefinitionEntry>> | undefined,
   changeIds: ReadonlyMap<ProvenanceDescriptor, string> | undefined,
 ): ContentDrawPage {
@@ -98,7 +98,7 @@ export function normaliseOdgContent(
       `normaliseOdgContent: expected a 'drawing' document, got '${document.kind}'`,
     );
   }
-  const listState: ListPlanState = { next: 1 };
+  const listState: ListPlanState = { cursor: { next: 1 } };
   return {
     kind: "drawing",
     metadata: canonicalMetadata(document.metadata),
@@ -111,7 +111,10 @@ export function normaliseOdgContent(
 // --- the writer -----------------------------------------------------------------------------------------------------
 
 // One page's own style:page-layout, identical to typed/odp/write.ts's own slidePageLayoutElement: ContentDrawPage carries no margins concept either (a drawing's own content is positioned absolutely, never flowed inside a margin box), and resolveDrawPageSize — the shared master-page chain typed/shared/masterpage.ts owns, which readOdgContent and readOdpContent both walk — reads back exactly the two fo:page-* attributes written here.
-function drawPageLayoutElement(name: string, pageSize: PageSize): XmlElement {
+function drawPageLayoutElement(
+  name: string,
+  pageSize: Readonly<PageSize>,
+): XmlElement {
   return el("style:page-layout", { "style:name": encodeXmlText(name) }, [
     el("style:page-layout-properties", {
       "fo:page-width": formatOdfLength(pageSize.widthPt),
@@ -166,7 +169,7 @@ export function writeOdgContent(
     { definitions: options.definitions, changeIds },
   );
   // One counter across the WHOLE drawing, matching readOdpContent's own document-wide threading of the same state: two lists on different pages must mint different identities exactly as two lists in different sections of one odt body do.
-  const listState: ListPlanState = { next: 1 };
+  const listState: ListPlanState = { cursor: { next: 1 } };
 
   document.pages.forEach((page, index) => {
     const masterPageName = `MP${index + 1}`;

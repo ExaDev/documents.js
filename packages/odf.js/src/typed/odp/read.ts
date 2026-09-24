@@ -134,7 +134,7 @@ function readSlideResidue(
       elements.push(child);
     }
   }
-  collectOdfUnmappedShapeResidue(page.children, elements);
+  collectOdfUnmappedShapeResidue(page.children, { elements: elements });
   return elements.length > 0 ? odfResidue("odp", ...elements) : undefined;
 }
 
@@ -142,10 +142,17 @@ function readSlideResidue(
 function readSlide(
   page: XmlElement,
   pkg: Package,
-  listIdState: OdfListIdState,
+  listIdState: Readonly<OdfListIdState>,
 ): ContentSlide {
   const shapes: ContentShape[] = [];
-  walkDrawShapes(page.children, [], pkg, shapes, { next: 0 }, listIdState);
+  walkDrawShapes(
+    page.children,
+    [],
+    pkg,
+    { shapes },
+    { counter: { next: 0 } },
+    listIdState,
+  );
   const source = readSlideResidue(page, pkg);
   return {
     size: readSlideSize(page, pkg),
@@ -179,7 +186,7 @@ export function readOdpContent(pkg: Package): OdpDocument {
       ? []
       : childrenWithTag(presentation, "draw:page");
 
-  const listIdState: OdfListIdState = { next: 1 };
+  const listIdState: OdfListIdState = { counter: { next: 1 } };
   const slides = pages.map((page) => readSlide(page, pkg, listIdState));
   const source: Record<string, SourceResidue> = {};
   collectOdfNonContentPartResidue(pkg, "odp", source);

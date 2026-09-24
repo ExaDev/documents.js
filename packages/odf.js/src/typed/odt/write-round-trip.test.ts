@@ -61,11 +61,13 @@ function expectRoundTrip(document: ContentDocument): void {
   );
 }
 
-function documentOf(blocks: ContentBlock[]): WordprocessingDocument {
+function documentOf(blocks: readonly ContentBlock[]): WordprocessingDocument {
   return {
     kind: "wordprocessing",
     metadata: {},
-    sections: [{ pageSize: PAGE_SIZE_A4, margins: MARGINS, blocks }],
+    sections: [
+      { pageSize: PAGE_SIZE_A4, margins: MARGINS, blocks: [...blocks] },
+    ],
   };
 }
 

@@ -28,7 +28,7 @@ function bodyParagraphs(
 }
 
 function contentPackage(
-  automaticStyleChildren: XmlElement[] = [],
+  automaticStyleChildren: readonly XmlElement[] = [],
 ): Package["parts"][string] {
   return {
     kind: "xml",
@@ -43,8 +43,8 @@ function contentPackage(
 function styleStyle(
   name: string,
   family: string,
-  extra: Record<string, string>,
-  children: XmlElement[] = [],
+  extra: Readonly<Record<string, string>>,
+  children: readonly XmlElement[] = [],
 ): XmlElement {
   return el(
     "style:style",
@@ -53,11 +53,11 @@ function styleStyle(
   );
 }
 
-function textProps(attrs: Record<string, string>): XmlElement {
+function textProps(attrs: Readonly<Record<string, string>>): XmlElement {
   return el("style:text-properties", attrs);
 }
 
-function paragraphProps(attrs: Record<string, string>): XmlElement {
+function paragraphProps(attrs: Readonly<Record<string, string>>): XmlElement {
   return el("style:paragraph-properties", attrs);
 }
 
@@ -190,7 +190,9 @@ describe("readOdfParagraph: paragraph-level formatting", () => {
 });
 
 // document-schema.js's own field comment states the raw ODF style:name as "Preformatted_20_Text" — LibreOffice's "_20_" space encoding, not a literal "Preformatted_Text" — confirmed against this package's own odt fixtures in the fix that added this describe block (ExaDev/documents.js#1020).
-function officeStylesPackage(children: XmlElement[]): Package["parts"][string] {
+function officeStylesPackage(
+  children: readonly XmlElement[],
+): Package["parts"][string] {
   return {
     kind: "xml",
     nodes: [

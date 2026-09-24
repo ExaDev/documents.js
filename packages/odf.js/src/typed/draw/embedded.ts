@@ -73,7 +73,7 @@ function embeddedKindFor(
 // An office:chart sub-document -> the ContentDocument its ContentEmbeddedObject carries, plus the chart-specific serialisation quarantined as the object's residue. A chart has no ContentDocument variant of its own (the schema states 'chart' as the one kind whose payload is not a same-named document), so the projection mirrors the family's pptx precedent — "a chart reaches consumers as the series/category data it carries": the chart's own local table:table cache (the data block ODF charts embed inside chart:plot-area) reads through the ordinary shared table reader, and it rides a ONE-PAGE drawing document whose page is the anchor frame's own real size and whose single shape spans that page — geometry the format genuinely stated, never invented page metrics. The chart's presentation specifics (chart:class, series layout, axes) have no cross-format home and quarantine whole in residue for a same-format restorer.
 export function readOdfChartContent(
   chartPackage: Package,
-  frame: Box,
+  frame: Readonly<Box>,
   format: OdfResidueFormat,
 ): { document: ContentDocument; residue: SourceResidue | undefined } {
   const contentPart = chartPackage.parts[CONTENT_PART];
@@ -131,7 +131,7 @@ export interface EmbeddedDocumentRead {
 // An embedded sub-document reference -> the ContentDocument its own typed reader produces, plus any residue that reader quarantines. This is the ONE kind -> reader dispatch table for the whole package (see this module's own top-of-file note for why it lives here rather than in each format reader): both frame-reading formats (odt's text-flow lift, ods's cell/page anchoring) hand every reference they resolve to this function, so a spreadsheet embedded in a Writer document and a Writer document embedded in a spreadsheet traverse the same table, and no format reader ever imports a sibling reader. A spreadsheet embedded inside a spreadsheet is plain self-recursion through the table's own 'spreadsheet' arm. `format` names the EMBEDDING format (the reader whose frame walk made the call), because the one arm that cares — chart residue, so a same-format restorer knows whose serialisation it is reading — is a property of where the object was found, not of what the object is. Every EmbeddedDocumentKind resolves: the reference itself already refused the unrepresentable shapes (a linked object, a .odb front-end), so a caller never needs an undefined arm to handle.
 export function readEmbeddedObjectDocument(
   reference: EmbeddedDrawObject,
-  frame: Box,
+  frame: Readonly<Box>,
   format: OdfResidueFormat,
 ): EmbeddedDocumentRead {
   switch (reference.objectKind) {
