@@ -832,9 +832,9 @@ class ContentBuilder {
   // Bookmarks whose end half arrived in the paragraph currently accumulating, having started in an earlier one — resolvable only once that paragraph's own block index is known.
   private closingBookmarks: OpenBookmark[] = [];
   // Form fields, held open the same way as a bookmark, but stacked rather than named: a \field group's own open and close are one matched pair, not two independently placed halves. Real producers keep a form field's \fldrslt inline, within one paragraph, but RTF's own grammar permits a multi-paragraph result (see OpenFormField's own comment above), so the paragraphSerial check in endFormField below is a genuine cross-paragraph guard, not merely defensive: it catches that case and drops the contentControl with a diagnostic rather than producing an inverted or mis-attached range.
-  private openFormFields: OpenFormField[] = [];
+  private readonly openFormFields: OpenFormField[] = [];
   // Suspended accumulator states, one per \result currently rendering — a stack rather than a single slot because a malformed producer can nest an \object (with its own \result) inside another \object's own \result content; see beginResultScratch/endResultScratch.
-  private resultScratchStack: BuilderAccumulatorState[] = [];
+  private readonly resultScratchStack: BuilderAccumulatorState[] = [];
 
   constructor(
     private readonly header: RtfHeader,
@@ -1723,18 +1723,6 @@ function readRtfDetail(
         : header.fonts.get(state.char.fontIndex)?.codepage;
     return fontPage ?? header.codepage;
   };
-  const flushBytes = (): void => {
-    if (pendingBytes.length === 0) {
-      return;
-    }
-    const text = decodeCodepageBytes(
-      Uint8Array.from(pendingBytes),
-      activeCodepage(),
-      sink,
-    );
-    pendingBytes = [];
-    emitText(text);
-  };
   const emitText = (text: string): void => {
     if (state.destination === "body") {
       const hyperlink =
@@ -1780,6 +1768,19 @@ function readRtfDetail(
       return;
     }
     // "picture" text is handled directly at the token site (it is hex, not characters); "skip", "listText", "unicodeWrapper" and "formField" discard — \*\ffdeftext (FFData.xstzTextDef) is one of these now, per SILENT_SKIP_DESTINATIONS above.
+  };
+
+  const flushBytes = (): void => {
+    if (pendingBytes.length === 0) {
+      return;
+    }
+    const text = decodeCodepageBytes(
+      Uint8Array.from(pendingBytes),
+      activeCodepage(),
+      sink,
+    );
+    pendingBytes = [];
+    emitText(text);
   };
 
   let index = 0;
@@ -2438,7 +2439,15 @@ function applySectionControlWord(
 ): void {
   const section = sectionSink.section;
   if (name === "sectd") {
-    Object.assign(section, defaultSectionState(header));
+    // \sectd resets every section property to the document default, which is a whole-state replacement rather than a patch, so each field of SectionState is assigned by name: a spread through Object.assign would not check that the source still matches the target's declared types if either shape changes.
+    const defaults = defaultSectionState(header);
+    section.paperWidthTwips = defaults.paperWidthTwips;
+    section.paperHeightTwips = defaults.paperHeightTwips;
+    section.marginLeftTwips = defaults.marginLeftTwips;
+    section.marginRightTwips = defaults.marginRightTwips;
+    section.marginTopTwips = defaults.marginTopTwips;
+    section.marginBottomTwips = defaults.marginBottomTwips;
+    section.breakType = defaults.breakType;
     return;
   }
   if (name === "sbkcol") {

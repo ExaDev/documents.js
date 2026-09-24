@@ -88,7 +88,9 @@ describe("font table", () => {
     const tokens = tokenizeRtf(
       bytes("{\\rtf1{\\fonttbl{\\f0\\froman\\cpg99999{\\*\\falt X}Y;}}}"),
     );
-    readRtfHeader(tokens, (diagnostic) => diagnostics.push(diagnostic));
+    readRtfHeader(tokens, (diagnostic) => {
+      diagnostics.push(diagnostic);
+    });
     expect(diagnostics).toHaveLength(1);
   });
 
