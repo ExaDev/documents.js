@@ -70,16 +70,21 @@ const context: SymbolTable = {
   ],
 };
 
+// Decimal places toBeCloseTo checks quantities and interval bounds to below, throughout this file.
+const CLOSE_TO_PRECISION = 12;
+
 describe("evaluate: num", () => {
   it("evaluates an exact-rational literal to a dimensionless Quantity", () => {
+    const LITERAL_VALUE = 7;
     const result = evaluate(num("7"), {});
     expect(isInterval(result)).toBe(false);
-    expect(result).toEqual(quantity(7, {}));
+    expect(result).toEqual(quantity(LITERAL_VALUE, {}));
   });
 
   it("evaluates a non-integer rational literal", () => {
+    const EXPECTED_MAGNITUDE = 0.25; // 1/4
     const result = evaluate(num("1", "4"), {});
-    expect(result).toEqual(quantity(0.25, {}));
+    expect(result).toEqual(quantity(EXPECTED_MAGNITUDE, {}));
   });
 });
 
@@ -90,8 +95,12 @@ describe("evaluate: qty", () => {
       {},
       context,
     );
+    const EXPECTED_METRES = 3.048; // 10 imperial feet
     expect(result.kind).toBe("quantity");
-    expect((result as { magnitude: number }).magnitude).toBeCloseTo(3.048, 12);
+    expect((result as { magnitude: number }).magnitude).toBeCloseTo(
+      EXPECTED_METRES,
+      CLOSE_TO_PRECISION,
+    );
     expect(result.dimension).toEqual({ length: 1 });
   });
 
@@ -101,7 +110,11 @@ describe("evaluate: qty", () => {
       {},
       context,
     );
-    expect((result as { magnitude: number }).magnitude).toBeCloseTo(273.15, 12);
+    const EXPECTED_KELVIN = 273.15; // 0 degC
+    expect((result as { magnitude: number }).magnitude).toBeCloseTo(
+      EXPECTED_KELVIN,
+      CLOSE_TO_PRECISION,
+    );
   });
 
   it("throws UnknownUnitError for a unit id the symbol table does not carry", () => {
@@ -117,8 +130,11 @@ describe("evaluate: qty", () => {
 
 describe("evaluate: sym", () => {
   it("returns the bound value for a symbol id", () => {
-    const bindings: FormulaBindings = { x: quantity(5, { length: 1 }) };
-    expect(evaluate(sym("x"), bindings)).toEqual(quantity(5, { length: 1 }));
+    const X_VALUE = 5;
+    const bindings: FormulaBindings = { x: quantity(X_VALUE, { length: 1 }) };
+    expect(evaluate(sym("x"), bindings)).toEqual(
+      quantity(X_VALUE, { length: 1 }),
+    );
   });
 
   it("throws UnboundSymbolError for a symbol with no binding", () => {
@@ -127,14 +143,16 @@ describe("evaluate: sym", () => {
 });
 
 describe("evaluate: app — arithmetic over bound symbols", () => {
+  const ACCELERATION = 3;
   const bindings: FormulaBindings = {
     m: quantity(2, { mass: 1 }),
-    a: quantity(3, { length: 1, time: -2 }),
+    a: quantity(ACCELERATION, { length: 1, time: -2 }),
   };
 
   it("adds", () => {
+    const EXPECTED_SUM = 5; // 2 + 3
     expect(evaluate(app("math:add", [num("2"), num("3")]), {})).toEqual(
-      quantity(5, {}),
+      quantity(EXPECTED_SUM, {}),
     );
   });
 
@@ -145,14 +163,17 @@ describe("evaluate: app — arithmetic over bound symbols", () => {
   });
 
   it("multiplies bound symbols, combining dimensions (F = m * a)", () => {
+    const EXPECTED_FORCE = 6; // 2 * 3
     expect(
       evaluate(app("math:multiply", [sym("m"), sym("a")]), bindings),
-    ).toEqual(quantity(6, { mass: 1, length: 1, time: -2 }));
+    ).toEqual(quantity(EXPECTED_FORCE, { mass: 1, length: 1, time: -2 }));
   });
 
   it("divides bound symbols, combining dimensions (speed = distance / time)", () => {
+    const DISTANCE = 10;
+    const EXPECTED_SPEED = 5; // 10 / 2
     const speedBindings: FormulaBindings = {
-      distance: quantity(10, { length: 1 }),
+      distance: quantity(DISTANCE, { length: 1 }),
       time: quantity(2, { time: 1 }),
     };
     expect(
@@ -160,12 +181,13 @@ describe("evaluate: app — arithmetic over bound symbols", () => {
         app("math:divide", [sym("distance"), sym("time")]),
         speedBindings,
       ),
-    ).toEqual(quantity(5, { length: 1, time: -1 }));
+    ).toEqual(quantity(EXPECTED_SPEED, { length: 1, time: -1 }));
   });
 
   it("raises via math:pow", () => {
+    const EXPECTED_POWER = 8; // 2 ** 3
     expect(evaluate(app("math:pow", [num("2"), num("3")]), {})).toEqual(
-      quantity(8, {}),
+      quantity(EXPECTED_POWER, {}),
     );
   });
 
@@ -268,12 +290,13 @@ describe("evaluate: app — arithmetic over bound symbols", () => {
 
 describe("evaluate: app — unary operators", () => {
   it("negates, takes the absolute value of, and takes the square root of a Quantity", () => {
+    const MAGNITUDE = 4;
     expect(evaluate(app("math:negate", [num("4")]), {})).toEqual(
-      quantity(-4, {}),
+      quantity(-MAGNITUDE, {}),
     );
     expect(
       evaluate(app("math:abs", [app("math:negate", [num("4")])]), {}),
-    ).toEqual(quantity(4, {}));
+    ).toEqual(quantity(MAGNITUDE, {}));
     expect(evaluate(app("math:sqrt", [num("4")]), {})).toEqual(quantity(2, {}));
   });
 
@@ -281,28 +304,30 @@ describe("evaluate: app — unary operators", () => {
     expect(
       (evaluate(app("math:sin", [num("0")]), {}) as { magnitude: number })
         .magnitude,
-    ).toBeCloseTo(0, 12);
+    ).toBeCloseTo(0, CLOSE_TO_PRECISION);
     expect(
       (evaluate(app("math:cos", [num("0")]), {}) as { magnitude: number })
         .magnitude,
-    ).toBeCloseTo(1, 12);
+    ).toBeCloseTo(1, CLOSE_TO_PRECISION);
     expect(
       (evaluate(app("math:tan", [num("0")]), {}) as { magnitude: number })
         .magnitude,
-    ).toBeCloseTo(0, 12);
+    ).toBeCloseTo(0, CLOSE_TO_PRECISION);
   });
 
   it("negates an Interval via the same evaluator, using the operator's own interval rule", () => {
-    const bindings: FormulaBindings = { phi: interval(1, 3, {}) };
+    const PHI_MAX = 3;
+    const bindings: FormulaBindings = { phi: interval(1, PHI_MAX, {}) };
     const result = evaluate(app("math:negate", [sym("phi")]), bindings);
     expect(isInterval(result)).toBe(true);
     if (!isInterval(result)) throw new Error("expected an Interval result");
-    expect(result.min).toBe(-3);
+    expect(result.min).toBe(-PHI_MAX);
     expect(result.max).toBe(-1);
   });
 
   it("throws UnsupportedExpressionError with an exact message when a unary operator has no interval rule in this pass", () => {
-    const bindings: FormulaBindings = { phi: interval(1, 4, {}) };
+    const PHI_MAX = 4;
+    const bindings: FormulaBindings = { phi: interval(1, PHI_MAX, {}) };
     let caught: unknown;
     try {
       evaluate(app("math:sqrt", [sym("phi")]), bindings);
@@ -345,15 +370,16 @@ describe("evaluate: app — unary operators", () => {
 describe("evaluate: intervals, reusing the same evaluator", () => {
   it("mixes a bound Interval with a plain Quantity literal via point-interval promotion", () => {
     // 0.87 <= cos(phi) <= 1, doubled.
-    const bindings: FormulaBindings = { cosPhi: interval(0.87, 1, {}) };
+    const COS_PHI_MIN = 0.87;
+    const bindings: FormulaBindings = { cosPhi: interval(COS_PHI_MIN, 1, {}) };
     const result = evaluate(
       app("math:multiply", [sym("cosPhi"), num("2")]),
       bindings,
     );
     expect(isInterval(result)).toBe(true);
     if (!isInterval(result)) throw new Error("expected an Interval result");
-    expect(result.min).toBeCloseTo(1.74, 12);
-    expect(result.max).toBeCloseTo(2, 12);
+    expect(result.min).toBeCloseTo(COS_PHI_MIN * 2, CLOSE_TO_PRECISION);
+    expect(result.max).toBeCloseTo(2, CLOSE_TO_PRECISION);
     expect(result.dimension).toEqual({});
   });
 
@@ -377,10 +403,12 @@ describe("evaluate: sum / prod binders", () => {
       upper: num("3"),
       body: sym("i"),
     };
-    expect(evaluate(expression, {})).toEqual(quantity(6, {}));
+    const EXPECTED_SUM = 6; // 1 + 2 + 3
+    expect(evaluate(expression, {})).toEqual(quantity(EXPECTED_SUM, {}));
   });
 
   it("multiplies i from 1 to 4 (4!)", () => {
+    const EXPECTED_PRODUCT = 24; // 1 * 2 * 3 * 4 = 4!
     const expression: MathExpression = {
       kind: "prod",
       binder: "i",
@@ -388,7 +416,7 @@ describe("evaluate: sum / prod binders", () => {
       upper: num("4"),
       body: sym("i"),
     };
-    expect(evaluate(expression, {})).toEqual(quantity(24, {}));
+    expect(evaluate(expression, {})).toEqual(quantity(EXPECTED_PRODUCT, {}));
   });
 });
 
@@ -585,11 +613,15 @@ describe("evaluateQuantity", () => {
       bindings,
       context,
     );
-    expect(result).toEqual(quantity(6, { mass: 1, length: 1 }));
+    const EXPECTED_MAGNITUDE = 6; // 2 * 3
+    expect(result).toEqual(
+      quantity(EXPECTED_MAGNITUDE, { mass: 1, length: 1 }),
+    );
   });
 
   it("defaults to an empty symbol table, exactly as evaluate() does, for an expression that needs no unit lookup", () => {
-    expect(evaluateQuantity(num("7"), {})).toEqual(quantity(7, {}));
+    const LITERAL_VALUE = 7;
+    expect(evaluateQuantity(num("7"), {})).toEqual(quantity(LITERAL_VALUE, {}));
   });
 
   it("rejects an Interval-valued result under its own context rather than widening the return type", () => {
