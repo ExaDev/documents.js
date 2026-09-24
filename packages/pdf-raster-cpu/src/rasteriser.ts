@@ -33,6 +33,15 @@ export interface UnitRgb {
   readonly b: number;
 }
 
+// Three opaque bytes per pixel (r, g, b): the canvas's own fixed storage layout, stated once since colourBytes, blendPixel, and sampleBilinear all index into it by this stride.
+const RGB_CHANNELS = 3;
+// A UnitRgb channel's own [0, 1] float scaled to a byte, and the divisor sampleBilinear's own alpha lerp normalises back down by.
+const RGB_CHANNEL_MAX = 255;
+// A polygon needs at least three points to bound any area; anything fewer is degenerate and contributes nothing to fill.
+const MIN_POLYGON_VERTICES = 3;
+// A source or destination pixel's own sample point sits at its cell centre, half a pixel in from its integer coordinate.
+const PIXEL_CENTER_OFFSET = 0.5;
+
 interface PageBuffers {
   readonly geometry: RasterPageGeometry;
   readonly canvas: Uint8Array<ArrayBuffer>;
@@ -53,9 +62,9 @@ export class CpuRasteriser implements PageRasteriser {
   beginPage(geometry: RasterPageGeometry): void {
     this.buffers = {
       geometry,
-      canvas: new Uint8Array(geometry.widthPx * geometry.heightPx * 3).fill(
-        255,
-      ),
+      canvas: new Uint8Array(
+        geometry.widthPx * geometry.heightPx * RGB_CHANNELS,
+      ).fill(RGB_CHANNEL_MAX),
       mask: new CoverageMask(geometry.widthPx, geometry.heightPx),
     };
     this.decodedImages.clear();
@@ -137,7 +146,7 @@ export class CpuRasteriser implements PageRasteriser {
       // Every subpath is a polygon, open ones implicitly closed by the scanline walk itself.
       const polygons = flattened
         .map((subpath) => subpath.points)
-        .filter((points) => points.length >= 3);
+        .filter((points) => points.length >= MIN_POLYGON_VERTICES);
       mask.reset();
       mask.fillPolygons(polygons, op.fill.fillRule);
       this.blendMask(canvas, mask, op.fill.color);
@@ -176,7 +185,10 @@ export class CpuRasteriser implements PageRasteriser {
       const samples = mask.countAt(i);
       const row = Math.floor(i / geometry.widthPx);
       const column = i % geometry.widthPx;
-      const [u, v] = inverse(column + 0.5, row + 0.5);
+      const [u, v] = inverse(
+        column + PIXEL_CENTER_OFFSET,
+        row + PIXEL_CENTER_OFFSET,
+      );
       const [r, g, b, a] = sampleBilinear(source, u, v);
       this.blendPixel(
         canvas,
@@ -220,7 +232,7 @@ export class CpuRasteriser implements PageRasteriser {
     colour: { readonly r: number; readonly g: number; readonly b: number },
     alpha: number,
   ): void {
-    const base = pixelIndex * 3;
+    const base = pixelIndex * RGB_CHANNELS;
     canvas[base] = Math.round(
       (canvas[base] ?? 0) + (colour.r - (canvas[base] ?? 0)) * alpha,
     );
@@ -246,9 +258,9 @@ export function colourBytes(color: UnitRgb): {
   readonly b: number;
 } {
   return {
-    r: Math.round(color.r * 255),
-    g: Math.round(color.g * 255),
-    b: Math.round(color.b * 255),
+    r: Math.round(color.r * RGB_CHANNEL_MAX),
+    g: Math.round(color.g * RGB_CHANNEL_MAX),
+    b: Math.round(color.b * RGB_CHANNEL_MAX),
   };
 }
 
@@ -298,11 +310,11 @@ export function sampleBilinear(
   const clampedU = Math.min(Math.max(u, 0), 1);
   const clampedV = Math.min(Math.max(v, 0), 1);
   const sx = Math.min(
-    Math.max(clampedU * source.width - 0.5, 0),
+    Math.max(clampedU * source.width - PIXEL_CENTER_OFFSET, 0),
     source.width - 1,
   );
   const sy = Math.min(
-    Math.max(clampedV * source.height - 0.5, 0),
+    Math.max(clampedV * source.height - PIXEL_CENTER_OFFSET, 0),
     source.height - 1,
   );
   const x0 = Math.floor(sx);
@@ -312,7 +324,7 @@ export function sampleBilinear(
   const y1 = y0 + 1;
   const fx = sx - x0;
   const fy = sy - y0;
-  const channelCount = source.channels === 1 ? 1 : 3;
+  const channelCount = source.channels === 1 ? 1 : RGB_CHANNELS;
   const sample = (x: number, y: number, channel: number): number => {
     const index = (y * source.width + x) * channelCount + channel;
     return source.data[index] ?? 0;
@@ -347,5 +359,10 @@ export function sampleBilinear(
   const alphaTop = alphaAt(x0, y0) + (alphaAt(x1, y0) - alphaAt(x0, y0)) * fx;
   const alphaBottom =
     alphaAt(x0, y1) + (alphaAt(x1, y1) - alphaAt(x0, y1)) * fx;
-  return [r, g, b, (alphaTop + (alphaBottom - alphaTop) * fy) / 255];
+  return [
+    r,
+    g,
+    b,
+    (alphaTop + (alphaBottom - alphaTop) * fy) / RGB_CHANNEL_MAX,
+  ];
 }

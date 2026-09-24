@@ -123,7 +123,9 @@ function emitJoinWedge(
     return undefined;
   }
   const cross = d1.x * d2.y - d1.y * d2.x;
-  if (Math.abs(cross) < 1e-12) {
+  // Below this, a cross product is floating-point noise from an exact-zero turn, not a genuine (if tiny) wedge angle.
+  const CROSS_PRODUCT_EPSILON = 1e-12;
+  if (Math.abs(cross) < CROSS_PRODUCT_EPSILON) {
     return undefined; // straight continuation (or exact reversal, where the format leaves the join undefined): the quads meet edge to edge and no wedge exists
   }
   // The outward normal for each direction is the left normal (-d.y, d.x) or its own negation, whichever side the cross product names as "outside" this turn. Naming the two full normals directly, one branch per side, rather than computing a shared +-1 factor and multiplying every component by it, means a mutation to one branch's own sign can no longer be absorbed as a uniform, undetectable rescaling of both normals at once — it misdirects only that one normal, which the wedge's own exact-coordinate tests below catch as a wrong offset point.

@@ -4,12 +4,16 @@ import type { RasterPageGeometry } from "pdf-codec/raster";
 
 // Shared between rasteriser.test.ts (rendered through renderPdfPage) and rasteriser-ops.test.ts (draw ops driven directly): both read pixels back from a decoded RawImage and both need a minimal RasterPageGeometry to hand CpuRasteriser.beginPage().
 
+// Three bytes per pixel (r, g, b), matching rasteriser.ts's own fixed canvas layout.
+const RGB_CHANNELS = 3;
+const RGB_CHANNEL_MAX = 255;
+
 export function pixelAt(
   image: RawImage,
   x: number,
   y: number,
 ): readonly [number, number, number] {
-  const index = (y * image.width + x) * 3;
+  const index = (y * image.width + x) * RGB_CHANNELS;
   return [
     image.data[index] ?? 0,
     image.data[index + 1] ?? 0,
@@ -17,7 +21,11 @@ export function pixelAt(
   ];
 }
 
-export const WHITE: readonly [number, number, number] = [255, 255, 255];
+export const WHITE: readonly [number, number, number] = [
+  RGB_CHANNEL_MAX,
+  RGB_CHANNEL_MAX,
+  RGB_CHANNEL_MAX,
+];
 export const BLACK: readonly [number, number, number] = [0, 0, 0];
 
 export function pageGeometry(
