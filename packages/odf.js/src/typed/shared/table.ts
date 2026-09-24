@@ -432,9 +432,9 @@ function tableCellStyle(
 export interface OdfTableWriteContext {
   readonly registry: StyleRegistry;
   // Mints the next document-unique table:name — called once per table:table element this function writes, including a nested table found inside a cell, off the caller's own document-wide counter.
-  mintTableName(): string;
+  readonly mintTableName: () => string;
   // Mints (or reuses) the named text:list-style for one list kind, off the caller's own memoized cache — one text:list-style per kind for the WHOLE document, not one per table.
-  mintListStyleName(kind: "ordered" | "bullet"): string;
+  readonly mintListStyleName: (kind: "ordered" | "bullet") => string;
   // The construct-writing context a cell's own paragraphs resolve their run-level construct extents against, identical to the body-paragraph and shape-text threading: the definitions table note/comment anchors resolve against and the tracked-change id map (ExaDev/documents.js#969 closed the last allowConstructs=false gap these close). Absent means the caller has no tree context and the paragraph writer itself refuses the construct kinds that need one.
   readonly definitions?: Readonly<Record<string, DefinitionEntry>>;
   readonly changeIds?: ReadonlyMap<ProvenanceDescriptor, string>;
