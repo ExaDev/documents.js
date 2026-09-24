@@ -241,8 +241,8 @@ function appendMarkdownParagraphs(
   }
 }
 
-// Reached only if WritableFormat ever gains a variant the switch below does not match: every current member is covered by a case there, so `format` narrows to `never` at this call, and adding an uncovered variant makes that narrowing fail and this call stop compiling — the real safety net. Exists so the switch's own exhaustiveness (proven by the type checker, not by a catch-all default that would silently swallow a genuinely new format) still gives consistent-return an explicit statement to see past the switch.
-function assertNever(format: never): never {
+// Reached only if WritableFormat ever gains a variant the switch below does not match: every current member is covered by a case there, so `format` narrows to `never` at this call, and adding an uncovered variant makes that narrowing fail and this call stop compiling — the real safety net. Exists so the switch's own exhaustiveness (proven by the type checker, not by a catch-all default that would silently swallow a genuinely new format) still gives consistent-return an explicit statement to see past the switch. Exported so editor.test.ts can exercise the throw directly with a forced-invalid cast — it is otherwise unreachable through createDocumentBytes, since WritableFormatSchema already rejects a bad format before this function is ever called.
+export function assertNever(format: never): never {
   throw new Error(`createDocumentBytes: unhandled format ${String(format)}`);
 }
 
