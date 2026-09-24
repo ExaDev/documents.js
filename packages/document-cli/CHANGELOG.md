@@ -1,3 +1,18 @@
+## [5.12.27](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.26...document-cli%405.12.27) (2026-09-24)
+
+### Tests
+
+* **document-cli:** assert odg detail rows' own pre-filled edit values and selection markers ([9ecffde](https://github.com/ExaDev/documents.js/commit/9ecffdecc40b8a0abbf14a6b1de5662e09339498))
+* **document-cli:** cover odg shape-or-vector-detail.tsx's view and edit flows ([457bfed](https://github.com/ExaDev/documents.js/commit/457bfed4637b6df38186f3bd99732e6ed2b5f1d4))
+* **document-cli:** cover odg ShapeDetail's Y/Width/Height frame edits ([b4c4801](https://github.com/ExaDev/documents.js/commit/b4c48013005c4ce08c7eb630fde174a1bf378c2d))
+* **document-cli:** prove the Fill row's own edit box starts empty with no fill set ([511fd96](https://github.com/ExaDev/documents.js/commit/511fd9684d5cd70f6f3b2f7e94300e30d0ac603d))
+
+
+### Dependencies
+
+- Updated document-outline.js to 3.10.16
+- Updated documents.js to 14.4.18
+
 ## [5.12.26](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.25...document-cli%405.12.26) (2026-09-24)
 
 

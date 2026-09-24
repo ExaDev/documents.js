@@ -1,3 +1,22 @@
+## [14.4.18](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.17...documents.js%4014.4.18) (2026-09-24)
+
+### Tests
+
+* **documents.js:** cover the docx paragraph spacing, indent and media surface ([5a83c6c](https://github.com/ExaDev/documents.js/commit/5a83c6c2b93317100fba8d9c002cdce37d7ad965))
+* **documents.js:** cover the pptx shape name, inset, frame and builder surface ([7bba03e](https://github.com/ExaDev/documents.js/commit/7bba03e3d22bee7551a1c4656f795404c7cc1ff2))
+
+
+### Dependencies
+
+- Updated archive-codec to 1.11.16
+- Updated pdf-codec to 5.2.22
+- Updated doc-codec to 6.1.7
+- Updated ooxml.js to 12.2.12
+- Updated ppt-codec to 2.2.7
+- Updated rtf-codec to 8.1.7
+- Updated wpd-codec to 5.1.9
+- Updated xls-codec to 4.15.26
+
 ## [14.4.17](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.16...documents.js%4014.4.17) (2026-09-24)
 
 ### Code Refactoring

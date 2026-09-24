@@ -1,3 +1,9 @@
+## [1.11.16](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.15...archive-codec%401.11.16) (2026-09-24)
+
+### Bug Fixes
+
+* **archive-codec:** spell out a leaf-name nullish check explicitly ([7b70620](https://github.com/ExaDev/documents.js/commit/7b70620b48c5336e2d114b7a3caef79510dd9af3))
+
 ## [1.11.15](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.14...archive-codec%401.11.15) (2026-09-24)
 
 ### Bug Fixes

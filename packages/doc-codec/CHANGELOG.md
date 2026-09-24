@@ -1,3 +1,14 @@
+## [6.1.7](https://github.com/ExaDev/documents.js/compare/doc-codec%406.1.6...doc-codec%406.1.7) (2026-09-24)
+
+### Bug Fixes
+
+* **doc-codec:** give twelve void-typed onWarning callbacks a block body ([09b561b](https://github.com/ExaDev/documents.js/commit/09b561bfaa1af94332304729f8752172e7d0aca3))
+
+
+### Dependencies
+
+- Updated archive-codec to 1.11.16
+
 ## [6.1.6](https://github.com/ExaDev/documents.js/compare/doc-codec%406.1.5...doc-codec%406.1.6) (2026-09-24)
 
 

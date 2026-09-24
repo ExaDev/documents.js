@@ -1,3 +1,16 @@
+## [1.1.79](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.78...document-operations%401.1.79) (2026-09-24)
+
+### Bug Fixes
+
+* **document-operations:** give a void-typed callback a block body ([0cde5db](https://github.com/ExaDev/documents.js/commit/0cde5dbe066539d56545d859dd5c8e5e0016cb57))
+
+
+### Dependencies
+
+- Updated document-outline.js to 3.10.16
+- Updated documents.js to 14.4.18
+- Updated document-compute.js to 1.6.27
+
 ## [1.1.78](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.77...document-operations%401.1.78) (2026-09-24)
 
 ### Bug Fixes
