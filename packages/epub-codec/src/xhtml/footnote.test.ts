@@ -8,9 +8,9 @@ import {
 
 function element(
   tag: string,
-  attributes: { name: string; value: string }[] = [],
+  attributes: readonly { name: string; value: string }[] = [],
 ): XmlElement {
-  return { type: "element", tag, attributes, children: [] };
+  return { type: "element", tag, attributes: [...attributes], children: [] };
 }
 
 describe("sameDocumentFragment", () => {

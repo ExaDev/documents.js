@@ -5,7 +5,7 @@ function utf8(text: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(text);
 }
 
-function bytes(...values: number[]): Uint8Array<ArrayBuffer> {
+function bytes(...values: readonly number[]): Uint8Array<ArrayBuffer> {
   return new Uint8Array(values);
 }
 

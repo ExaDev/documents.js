@@ -18,12 +18,12 @@ function xhtmlDocument(inner: string): string {
   return `<?xml version="1.0" encoding="utf-8"?><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><body>${inner}</body></html>`;
 }
 
-function write(blocks: ContentBlock[]): string {
+function write(blocks: readonly ContentBlock[]): string {
   return writeWithSink(blocks, () => undefined).xml;
 }
 
 // The raw XmlElement tree, for the handful of tests that need to inspect writer-internal node structure (e.g. whether a spurious empty text node exists between two sibling elements) directly — a distinction the serialized XML string itself can lose, since an empty text node contributes zero characters to the output either way.
-function writeBody(blocks: ContentBlock[]) {
+function writeBody(blocks: readonly ContentBlock[]) {
   return writeXhtmlBody(blocks, {
     registerImage: () => "images/img1.png",
     sink: () => undefined,
@@ -33,7 +33,7 @@ function writeBody(blocks: ContentBlock[]) {
 }
 
 function writeWithSink(
-  blocks: ContentBlock[],
+  blocks: readonly ContentBlock[],
   sink: (d: EpubDiagnostic) => void,
 ): { xml: string; diagnostics: EpubDiagnostic[] } {
   const diagnostics: EpubDiagnostic[] = [];
@@ -57,7 +57,7 @@ function cellTagCountsPerRow(markup: string): number[] {
   );
 }
 
-function roundTrip(blocks: ContentBlock[]): ContentBlock[] {
+function roundTrip(blocks: readonly ContentBlock[]): ContentBlock[] {
   const xml = write(blocks);
   return readXhtmlBody(xml, {
     resolveImage: () => undefined,
@@ -1415,7 +1415,7 @@ describe("writeXhtmlBody: a table breaking the grid rule", () => {
     ],
   };
 
-  function thrownBy(blocks: ContentBlock[]): unknown {
+  function thrownBy(blocks: readonly ContentBlock[]): unknown {
     try {
       write(blocks);
     } catch (error) {

@@ -25,7 +25,11 @@ const CONTENT_WIDTH_PT = 451.28;
 
 function minimalEpubEntries(
   chapterXml: string,
-  extra: { opfExtra?: string; manifestExtra?: string; ncxItem?: boolean } = {},
+  extra: Readonly<{
+    opfExtra?: string;
+    manifestExtra?: string;
+    ncxItem?: boolean;
+  }> = {},
 ): [string, { bytes: Uint8Array<ArrayBuffer>; stored?: boolean }][] {
   const encoder = new TextEncoder();
   const container = `<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>`;
