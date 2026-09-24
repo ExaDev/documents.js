@@ -3,13 +3,49 @@ import { zipPackage } from "../zip";
 
 // A hand-authored, real EPUB 3 fixture — built directly via zipPackage from literal XML strings, never through this package's own writer (writeEpubContent), so a bug in the writer cannot hide behind a fixture built with the same code (the identical convention documents.js's own test-support/docx.ts and odt.ts already state for their own hand-authored fixtures). Covers the EPUB 3-specific constructs this package's own hand-authored corpus needs: a real <nav epub:type="toc"> navigation document, and a footnote via the structured epub:type="footnote"/"noteref" idiom.
 
-// A PNG carrying only what src/image/dimensions.ts reads: the signature, then just enough of an IHDR chunk to declare 2x2 (width at byte offset 16, height at 20 — PNG_HEADER_BYTES's own 24 bytes). Deliberately stops there: this package's own reader never looks past offset 24 for a PNG (no chunk-length or bit-depth/colour-type validation, no real IDAT/IEND), so writing bytes beyond it would carry no signal any reader here — or any test of this fixture — could ever observe.
+// Mirrors dimensions.ts's own private layout constants (see image/dimensions.test.ts, which names these identically) so this fixture stays tied to the format's real structure rather than restating its offsets as independent literals.
+const PNG_SIG_HIGH_BIT_MARKER = 0x89;
+const PNG_SIG_P = 0x50;
+const PNG_SIG_N = 0x4e;
+const PNG_SIG_G = 0x47;
+const PNG_SIG_CR = 0x0d;
+const PNG_SIG_LF = 0x0a;
+const PNG_SIG_LINE_ENDING_DETECTOR = 0x1a;
+const PNG_SIG = [
+  PNG_SIG_HIGH_BIT_MARKER,
+  PNG_SIG_P,
+  PNG_SIG_N,
+  PNG_SIG_G,
+  PNG_SIG_CR,
+  PNG_SIG_LF,
+  PNG_SIG_LINE_ENDING_DETECTOR,
+  PNG_SIG_LF,
+];
+const IHDR_TAG_I = 0x49;
+const IHDR_TAG_H = 0x48;
+const IHDR_TAG_D = 0x44;
+const IHDR_TAG_R = 0x52;
+const IHDR_TAG_BYTES = [IHDR_TAG_I, IHDR_TAG_H, IHDR_TAG_D, IHDR_TAG_R];
+const UINT32_BYTES = 4;
+const PNG_CHUNK_TYPE_OFFSET = PNG_SIG.length + UINT32_BYTES; // 12
+const PNG_IHDR_WIDTH_OFFSET = PNG_CHUNK_TYPE_OFFSET + UINT32_BYTES; // 16
+const PNG_IHDR_HEIGHT_OFFSET = PNG_IHDR_WIDTH_OFFSET + UINT32_BYTES; // 20
+const PNG_HEADER_BYTES = PNG_IHDR_HEIGHT_OFFSET + UINT32_BYTES; // 24
+const FIXTURE_IMAGE_SIZE_PX = 2;
+
+// A PNG carrying only what src/image/dimensions.ts reads: the signature, then just enough of an IHDR chunk to declare 2x2 (PNG_HEADER_BYTES's own 24 bytes). Deliberately stops there: this package's own reader never looks past that offset for a PNG (no chunk-length or bit-depth/colour-type validation, no real IDAT/IEND), so writing bytes beyond it would carry no signal any reader here, or any test of this fixture, could ever observe.
 function fakePng2x2(): Uint8Array<ArrayBuffer> {
-  const bytes = new Uint8Array(24);
-  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
-  bytes.set([0x49, 0x48, 0x44, 0x52], 12);
-  new DataView(bytes.buffer).setUint32(16, 2);
-  new DataView(bytes.buffer).setUint32(20, 2);
+  const bytes = new Uint8Array(PNG_HEADER_BYTES);
+  bytes.set(PNG_SIG, 0);
+  bytes.set(IHDR_TAG_BYTES, PNG_CHUNK_TYPE_OFFSET);
+  new DataView(bytes.buffer).setUint32(
+    PNG_IHDR_WIDTH_OFFSET,
+    FIXTURE_IMAGE_SIZE_PX,
+  );
+  new DataView(bytes.buffer).setUint32(
+    PNG_IHDR_HEIGHT_OFFSET,
+    FIXTURE_IMAGE_SIZE_PX,
+  );
   return bytes;
 }
 
