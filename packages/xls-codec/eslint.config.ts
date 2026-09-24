@@ -13,8 +13,6 @@ export default packageLintConfig({
     "tsdoc/syntax",
   ],
   isomorphic: true,
-  // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why — this package's own BIFF8 record readers/writers genuinely mutate a large number of array/object parameters in place. Tracked for burn-down.
-  preferReadonlyParams: "off",
   additionalRestrictedImportPatterns: [
     {
       group: ["xlsx", "xlsx/**", "node-xlsx", "exceljs", "cfb", "cfb/**"],

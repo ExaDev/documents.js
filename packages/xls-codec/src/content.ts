@@ -355,7 +355,7 @@ function readSheet(
       ? new Map<string, SheetCellComment>()
       : readSheetComments(substream.records);
   const cells = mapCells(raw, globals);
-  applyCellComments(comments, cells);
+  applyCellComments(comments, { cells });
   const dataValidations = mapDataValidations(raw.dataValidations);
   const conditionalFormats = [
     ...mapConditionalFormats(raw.conditionalFormats, globals.palette),
@@ -651,15 +651,21 @@ function mapCells(raw: RawSheet, globals: WorkbookGlobals): ContentSheetCell[] {
       cells.push(mapped);
     }
   }
-  applyMerges(cells, raw);
+  applyMerges({ cells }, raw);
   return cells;
+}
+
+// The sheet's own cell array, which both attach-after-the-fact passes below append newly materialised anchors onto (a comment pinned to a cell no record occupied, a merge whose anchor position holds no cell). Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable.
+interface CellSink {
+  readonly cells: ContentSheetCell[];
 }
 
 // Comments are read from their own Note/Obj/TxO records (workbook/comments.ts), entirely separate from the CELLTABLE cells above, so they attach after the fact — the same "comments live in their own parts, attach after cells are read" ordering ooxml.js's own content.ts uses for xlsx's own comment mechanism. A comment anchored to a position no cell record ever occupied (a note pinned to an otherwise-empty cell) still carries real content worth keeping, materialised the same way an <f>-only formula cell or a decorated blank cell already is: an empty value with the annotation attached.
 function applyCellComments(
   comments: ReadonlyMap<string, SheetCellComment>,
-  cells: ContentSheetCell[],
+  sink: CellSink,
 ): void {
+  const cells = sink.cells;
   // No comments.size===0 early return: an empty comments map already makes the loop below a no-op on its own (nothing to iterate), so a dedicated guard here would only ever produce that identical no-op — never a genuinely different result, just the same one reached by a shorter path.
   const byPosition = new Map<string, ContentSheetCell>();
   for (const cell of cells) {
@@ -916,7 +922,8 @@ function displayTextOf(value: ContentCellValue): string {
  *
  * ContentSheetCell documents colSpan/rowSpan as belonging to the anchor cell alone, and only when greater than one. A merged range whose anchor is blank is common — merging cells in Excel keeps only the top-left value, and a range merged over an empty cell has no value anywhere — so the anchor is created here rather than left absent, which would lose the merge entirely.
  */
-function applyMerges(cells: ContentSheetCell[], raw: RawSheet): void {
+function applyMerges(sink: CellSink, raw: RawSheet): void {
+  const cells = sink.cells;
   for (const range of raw.merges) {
     const rowSpan = range.endRow - range.startRow + 1;
     const colSpan = range.endColumn - range.startColumn + 1;

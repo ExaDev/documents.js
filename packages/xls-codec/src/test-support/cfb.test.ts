@@ -424,14 +424,14 @@ describe("checkedName", () => {
 
 describe("requiredLeaf", () => {
   it("throws for an already-empty segment array, the one input no real path ever produces", () => {
-    expect(() => requiredLeaf([])).toThrow(
+    expect(() => requiredLeaf({ segments: [] })).toThrow(
       /split\("\/"\) produced no segments at all/,
     );
   });
 
   it("returns and removes the array's own last element for a genuinely non-empty array", () => {
     const segments = ["a", "b", "c"];
-    expect(requiredLeaf(segments)).toBe("c");
+    expect(requiredLeaf({ segments })).toBe("c");
     expect(segments).toStrictEqual(["a", "b"]);
   });
 });

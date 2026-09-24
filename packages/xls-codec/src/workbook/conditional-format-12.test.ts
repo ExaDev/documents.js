@@ -201,11 +201,13 @@ function cfFilterBytes(body: readonly number[] = [0, 0, 0, 0]): number[] {
 }
 
 /** CFExFilterParams ([MS-XLS] 2.4): a flags byte (fTop/fPercent/reserved) then iParam(2) then 13 reserved bytes — top10's own rgbTemplateParms shape. */
-function cfExFilterParams(options: {
-  top?: boolean;
-  percent?: boolean;
-  iParam: number;
-}): number[] {
+function cfExFilterParams(
+  options: Readonly<{
+    top?: boolean;
+    percent?: boolean;
+    iParam: number;
+  }>,
+): number[] {
   const flags =
     (options.top === true ? 0x01 : 0x00) |
     (options.percent === true ? 0x02 : 0x00);

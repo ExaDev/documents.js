@@ -216,15 +216,17 @@ function xfTableWithDecoration(
 }
 
 /** A Font record ([MS-XLS] 2.4.122) with an uncompressed fontName — the record's own "fontName.fHighByte MUST equal 1" rule — for a test driving the per-cell font reader. Every field left absent carries the spec's own default shape (Arial at 10pt/200 twips, no flags, Automatic colour, normal weight, no underline). */
-function fontRecord(options: {
-  name?: string;
-  heightTwips?: number;
-  bold?: boolean;
-  italic?: boolean;
-  strikeout?: boolean;
-  underline?: boolean;
-  colorIcv?: number;
-}): Uint8Array<ArrayBuffer> {
+function fontRecord(
+  options: Readonly<{
+    name?: string;
+    heightTwips?: number;
+    bold?: boolean;
+    italic?: boolean;
+    strikeout?: boolean;
+    underline?: boolean;
+    colorIcv?: number;
+  }>,
+): Uint8Array<ArrayBuffer> {
   const name = options.name ?? "Arial";
   const nameBytes: number[] = [name.length, 0x01];
   for (let index = 0; index < name.length; index += 1) {
@@ -1885,12 +1887,12 @@ describe("readXlsContent", () => {
     /** PtgArea3d reference class ([MS-XLS] 2.5.198.28): opcode 0x3b, the ixti, then an absolute RgceArea. */
     function ptgArea3d(
       ixti: number,
-      area: {
+      area: Readonly<{
         rowFirst: number;
         rowLast: number;
         columnFirst: number;
         columnLast: number;
-      },
+      }>,
     ): number[] {
       return [
         0x3b,
@@ -2394,13 +2396,15 @@ describe("isXlsFile", () => {
 
 describe("readXlsContent print settings", () => {
   /** A Setup record ([MS-XLS] 2.4.257) with iPageStart, iRes, iVRes, numHdr, numFtr, and iCopies at values a real producer writes — none of which this reader acts on. */
-  function setupRecord(fields: {
-    paperCode: number;
-    scalePercent: number;
-    fitWidth: number;
-    fitHeight: number;
-    grbit: number;
-  }): Uint8Array<ArrayBuffer> {
+  function setupRecord(
+    fields: Readonly<{
+      paperCode: number;
+      scalePercent: number;
+      fitWidth: number;
+      fitHeight: number;
+      grbit: number;
+    }>,
+  ): Uint8Array<ArrayBuffer> {
     return record(RECORD_SETUP, [
       ...u16(fields.paperCode),
       ...u16(fields.scalePercent),
@@ -2419,12 +2423,12 @@ describe("readXlsContent print settings", () => {
   /** The built-in Print_Area Lbl ([MS-XLS] 2.4.150) for one sheet: fBuiltin, cch 1, the one-based itab, name character 0x06, then a PtgArea3d naming the range. */
   function printAreaRecord(
     itab: number,
-    area: {
+    area: Readonly<{
       rowFirst: number;
       rowLast: number;
       colFirst: number;
       colLast: number;
-    },
+    }>,
   ): Uint8Array<ArrayBuffer> {
     const rgce = [
       0x3b,

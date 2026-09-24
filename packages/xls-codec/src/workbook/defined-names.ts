@@ -291,7 +291,7 @@ function validateUserName(name: string): void {
 
 /** A scopeSheetIndex past the end of the document's own sheets array names a sheet that does not exist, so it is refused rather than written as an itab no BoundSheet8 answers to. */
 function scopeOf(
-  defined: ContentDefinedName,
+  defined: Readonly<ContentDefinedName>,
   sheetCount: number,
 ): number | undefined {
   if (defined.scopeSheetIndex === undefined) {
@@ -307,7 +307,7 @@ function scopeOf(
 
 /** Parses and compiles one entry's refersTo, throwing for anything outside the single sheet-qualified reference vocabulary documented on definedNameEntriesFor. */
 function compileRefersTo(
-  defined: ContentDefinedName,
+  defined: Readonly<ContentDefinedName>,
   sheets: readonly { readonly name: string }[],
 ): { readonly sheetIndex: number; readonly rgce: Uint8Array<ArrayBuffer> } {
   const match = SHEET_QUALIFIED_REFERENCE_RE.exec(defined.refersTo);

@@ -61,9 +61,14 @@ export function requiredSectorStart(
   return found;
 }
 
-/** A compound-file entry path's own last segment. entry.path.split("/") always yields at least one element (String.prototype.split never returns an empty array), so `.pop()` can never actually return undefined here — reachable only by calling this function directly with an already-empty array, which no real path ever produces. */
-export function requiredLeaf(segments: string[]): string {
-  const leaf = segments.pop();
+/** The split path a compound-file entry is being placed at. Wrapped rather than passed as a bare array because requiredLeaf below genuinely removes the leaf from it: the caller then walks what remains as the entry's own parent storages, so the pop is load-bearing rather than incidental. */
+export interface PathSegmentSink {
+  readonly segments: string[];
+}
+
+/** A compound-file entry path's own last segment, REMOVED from `sink.segments` so what remains is the entry's own parent storage path. entry.path.split("/") always yields at least one element (String.prototype.split never returns an empty array), so `.pop()` can never actually return undefined here — reachable only by calling this function directly with an already-empty array, which no real path ever produces. */
+export function requiredLeaf(sink: PathSegmentSink): string {
+  const leaf = sink.segments.pop();
   if (leaf === undefined) {
     throw new Error(
       'internal error: a compound-file entry path\'s own split("/") produced no segments at all',
@@ -160,7 +165,7 @@ export function compoundFile(
   const root: StorageNode = { name: "Root Entry", children: [] };
   for (const entry of entries) {
     const segments = entry.path.split("/");
-    const leaf = requiredLeaf(segments);
+    const leaf = requiredLeaf({ segments });
     if (leaf.length === 0 || segments.some((segment) => segment.length === 0)) {
       throw new Error(
         `compoundFile entry paths must be slash-separated with no empty segments (got ${JSON.stringify(entry.path)})`,

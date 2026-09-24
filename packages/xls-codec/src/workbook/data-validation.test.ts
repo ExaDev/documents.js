@@ -74,14 +74,16 @@ function dvRecord(
 }
 
 // flags DWORD bit layout, LSB first: valType(4) errStyle(3) fStrLookup(1) fAllowBlank(1) fSuppressCombo(1) mdImeMode(8) fShowInputMsg(1) fShowErrorMsg(1) typOperator(4) reserved(8).
-function dvFlags(options: {
-  valType: number;
-  errStyle?: number;
-  fAllowBlank?: boolean;
-  fShowInputMsg?: boolean;
-  fShowErrorMsg?: boolean;
-  typOperator?: number;
-}): number {
+function dvFlags(
+  options: Readonly<{
+    valType: number;
+    errStyle?: number;
+    fAllowBlank?: boolean;
+    fShowInputMsg?: boolean;
+    fShowErrorMsg?: boolean;
+    typOperator?: number;
+  }>,
+): number {
   return (
     (options.valType & 0xf) |
     ((options.errStyle ?? 0) << 4) |

@@ -97,7 +97,7 @@ export interface PaperSelection {
  * A portrait match is preferred over a landscape one wherever both exist, which is what keeps the choice deterministic for the handful of codes in the table that are each other's transpose (US Tabloid 11x17in and US Ledger 17x11in are the same sheet of paper entered twice, once each way round).
  */
 export function paperSelectionFor(
-  pageSize: PageSize,
+  pageSize: Readonly<PageSize>,
 ): PaperSelection | undefined {
   for (const [code, paper] of PAPER_SIZE_BY_CODE) {
     if (

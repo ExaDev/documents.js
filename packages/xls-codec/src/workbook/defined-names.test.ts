@@ -216,7 +216,7 @@ describe("definedNameEntriesFor", () => {
   const ONE_SHEET_NAMES = [{ name: "Sheet1" }];
 
   function entryFor(
-    name: ContentDefinedName,
+    name: Readonly<ContentDefinedName>,
   ): ReturnType<typeof definedNameEntriesFor>[number] {
     const [entry] = definedNameEntriesFor([name], ONE_SHEET_NAMES);
     if (entry === undefined) {

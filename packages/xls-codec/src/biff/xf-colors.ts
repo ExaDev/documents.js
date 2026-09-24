@@ -281,7 +281,7 @@ interface Hsl {
 }
 
 // Standard sRGB <-> HSL conversion (CSS Color Module Level 3 / W3C), operating on the gamma-encoded 0-1 components ColorSchema itself carries — the same convention ooxml.js's own DrawingML shade/tint reading (typed/shared/color.ts) documents and cross-validates against Apache POI's RGB2HSL/HSL2RGB, reused here rather than re-derived since it's plain, format-agnostic colour maths.
-function rgbToHsl(color: Color): Hsl {
+function rgbToHsl(color: Readonly<Color>): Hsl {
   const { r, g, b } = color;
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
@@ -329,7 +329,7 @@ function hslToRgb(hsl: Hsl): Color {
  *
  * The formula itself — Lum' = Lum*(1+tint) for a negative tint, Lum' = Lum*(1-tint) + tint for a positive one — is Microsoft's own documented Color.TintAndShade algorithm, cross-checked against Apache POI's XSSFColor#getTint/#setTint javadoc (a completely independent implementation carrying the identical formula) rather than trusted from memory alone.
  */
-export function applyTint(color: Color, tint: number): Color {
+export function applyTint(color: Readonly<Color>, tint: number): Color {
   if (tint === 0) {
     return color;
   }
@@ -574,7 +574,7 @@ export function readLongRgbColor(cursor: BlockCursor): Color {
 
 /** The inverse of readLongRgbColor: a colour's own red/green/blue/reserved bytes, rounded to the nearest byte (the same rounding colorToRgbHex applies) — exact for any colour this package itself constructed via rgbHexToColor, which is what write.ts's own palette-colour interning does. */
 export function longRgbBytesOf(
-  color: Color,
+  color: Readonly<Color>,
 ): readonly [number, number, number, number] {
   return [
     Math.round(color.r * RGB_BYTE_MAX),

@@ -670,7 +670,11 @@ describe("readSheetRecords formula cells", () => {
       ...u16(row),
       ...u16(column),
     ];
-    const shrFmlaOf = (rwFirst: number, colFirst: number, rgce: number[]) =>
+    const shrFmlaOf = (
+      rwFirst: number,
+      colFirst: number,
+      rgce: readonly number[],
+    ) =>
       record(RECORD_SHRFMLA, [
         ...u16(rwFirst),
         ...u16(rwFirst),
