@@ -1,3 +1,16 @@
+## [5.2.22](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.21...pdf-codec%405.2.22) (2026-09-24)
+
+### Code Refactoring
+
+* **pdf-codec:** drop dead stores and implied checks from the tier-1 decoder ([66e24af](https://github.com/ExaDev/documents.js/commit/66e24af0e0c6091a8fe65ed1b7e8e628d3dbf880))
+* **pdf-codec:** remove encrypt.ts branches no test could ever observe ([53a052b](https://github.com/ExaDev/documents.js/commit/53a052bfdc67296f73d3864c8423808f45698167))
+
+### Tests
+
+* **pdf-codec:** cover encrypt.ts's dispatch, key lengths and AES padding ([9f5a903](https://github.com/ExaDev/documents.js/commit/9f5a9035321af4082fdf4f4f11a70f679f37c339))
+* **pdf-codec:** drive the tier-1 decoder from a hand-written Annex D encoder ([c99402a](https://github.com/ExaDev/documents.js/commit/c99402ae379c66ebe6f9089f29108d2ee7c38fc1))
+* **pdf-codec:** scatter the tier-1 round-trip grids twice as wide ([6f736ad](https://github.com/ExaDev/documents.js/commit/6f736ad5b248d1aa165a57a88b84909520345ebb))
+
 ## [5.2.21](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.20...pdf-codec%405.2.21) (2026-09-24)
 
 
