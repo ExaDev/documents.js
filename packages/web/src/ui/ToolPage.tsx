@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { header, width } from "./ToolPage.css";
 
 /** Which measure a page's content is laid out in. `panel` is the default and covers forms, label/value pairs and narrow tables; `canvas` is for a page whose content is a rendered document or a table wide enough that a measure would only force it to scroll sideways. */
-export type ToolPageWidth = keyof typeof width;
+type ToolPageWidth = keyof typeof width;
 
 export interface ToolPageProps {
   /** The page's own name, rendered as its only h2. Sentence case, and a noun phrase rather than an instruction, since the sidebar link next to it is already the verb. */
