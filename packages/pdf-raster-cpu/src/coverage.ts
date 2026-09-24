@@ -10,16 +10,24 @@ export const COVERAGE_DENOMINATOR = SUPERSAMPLE_PER_AXIS * SUPERSAMPLE_PER_AXIS;
 
 export type FillRule = "nonzero" | "evenodd";
 
+// Subsample index k samples at its own cell centre, (k + 0.5) / SUPERSAMPLE_PER_AXIS.
+const SUBSAMPLE_CENTER_OFFSET = 0.5;
+// A polygon needs at least three points to bound any area; anything fewer (a point or a segment) is degenerate.
+const MIN_POLYGON_VERTICES = 3;
+
 // The first subsample index along one axis whose own centre falls at or after `coordinate`, clamped to the grid's own first index. Subsample index k samples at (k + 0.5) / SUPERSAMPLE_PER_AXIS, so the first index at or past a coordinate is ceil(coordinate * SUPERSAMPLE_PER_AXIS - 0.5). Shared by the scanline's row range and the span walk's column range rather than written out twice: both bounds mean the same thing on their own axis, and stating it once is what makes the span walk's own pixel-level assertions cover the row range's arithmetic too.
 function firstSampleAtOrAfter(coordinate: number): number {
-  return Math.max(0, Math.ceil(coordinate * SUPERSAMPLE_PER_AXIS - 0.5));
+  return Math.max(
+    0,
+    Math.ceil(coordinate * SUPERSAMPLE_PER_AXIS - SUBSAMPLE_CENTER_OFFSET),
+  );
 }
 
 // The last subsample index along one axis whose own centre falls strictly before `coordinate`, clamped to the last index a `sizePx`-pixel axis has — the inclusive counterpart of firstSampleAtOrAfter, and shared by the same two callers.
 function lastSampleBefore(coordinate: number, sizePx: number): number {
   return Math.min(
     SUPERSAMPLE_PER_AXIS * sizePx - 1,
-    Math.floor(coordinate * SUPERSAMPLE_PER_AXIS - 0.5),
+    Math.floor(coordinate * SUPERSAMPLE_PER_AXIS - SUBSAMPLE_CENTER_OFFSET),
   );
 }
 
@@ -60,7 +68,7 @@ export class CoverageMask {
     // The y-coordinates of every point that bounds area, collected first so the scan range below reduces over a real list rather than over a pair of infinite sentinels: an input that bounds no area at all leaves this empty, which is the one state that needs its own answer.
     const boundedYs: number[] = [];
     for (const polygon of polygons) {
-      if (polygon.length < 3) {
+      if (polygon.length < MIN_POLYGON_VERTICES) {
         continue; // a degenerate polygon (a point or a segment) bounds no area, and coverage.test.ts's "does not let a degenerate two-point polygon influence the bounding box" pins why this filter earns its keep despite the two-point case's crossings mostly cancelling on their own: floating-point rounding between an edge and its own reverse traversal can leave a hairline residual that is not otherwise nothing
       }
       for (const point of polygon) {
@@ -80,7 +88,7 @@ export class CoverageMask {
     );
     const crossings: { x: number; downward: boolean }[] = [];
     for (let row = rowMin; row <= rowMax; row++) {
-      const y = (row + 0.5) / SUPERSAMPLE_PER_AXIS;
+      const y = (row + SUBSAMPLE_CENTER_OFFSET) / SUPERSAMPLE_PER_AXIS;
       crossings.length = 0;
       for (const polygon of polygons) {
         // entries() bounds the walk by the polygon itself rather than by an index comparison of its own, and hands back a point the type system already knows is there; the modulo wraps the last edge back to the first point, closing the ring.
