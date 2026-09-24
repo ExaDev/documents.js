@@ -227,6 +227,13 @@ export function segmentOdfText(
   return segments;
 }
 
+// Reached only if OdfTextSegment ever gains a variant buildOdfInlineNodes's own switch does not match: every current member is covered there, so `value` narrows to `never` at the real call site, and adding an uncovered kind makes that narrowing fail and this call stop compiling. That is the real safety net. Exported so text.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real OdfTextSegment kind is already handled by a case in buildOdfInlineNodes.
+export function assertNeverOdfTextSegmentKind(value: never): never {
+  throw new Error(
+    `buildOdfInlineNodes: unhandled OdfTextSegment kind ${JSON.stringify(value)}`,
+  );
+}
+
 // Builds the inline nodes one segment list means: a text node (entity-encoded, since this package's model stores every string exactly as it appears in the source XML — see xml/entities.ts), a text:s carrying its own text:c count when it stands for more than one space, a text:tab, a text:line-break.
 export function buildOdfInlineNodes(
   segments: readonly OdfTextSegment[],
@@ -244,5 +251,6 @@ export function buildOdfInlineNodes(
       case "lineBreak":
         return el("text:line-break");
     }
+    return assertNeverOdfTextSegmentKind(segment.kind);
   });
 }

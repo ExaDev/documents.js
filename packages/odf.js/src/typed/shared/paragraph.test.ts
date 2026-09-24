@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { Package } from "../../model/package";
 import type { XmlElement } from "../../model/node";
 import { el, txt } from "../../xml/fragment";
-import { readOdfParagraph } from "./paragraph";
+import {
+  assertNeverOdfBookmarkMarkerSide,
+  readOdfParagraph,
+} from "./paragraph";
 import type { ContentParagraph, DefinitionEntry } from "document-schema.js";
 import type { OdfDefinitionsSink } from "./constructs";
 
@@ -987,5 +990,20 @@ describe("readOdfParagraph: run-level construct extents (fields, bookmarks)", ()
       },
     ]);
     expect(sink.entries["comment:c1"]).toMatchObject({ kind: "comment" });
+  });
+});
+
+describe("assertNeverOdfBookmarkMarkerSide", () => {
+  it("throws naming the unhandled side, proving writeOdfBookmarkMarker's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverOdfBookmarkMarkerSide("bogus" as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'writeOdfBookmarkMarker: unhandled OdfBookmarkMarker side "bogus"',
+    );
   });
 });

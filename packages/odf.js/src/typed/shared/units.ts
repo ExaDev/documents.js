@@ -16,6 +16,13 @@ const CM_PER_INCH = 2.54; // Exact, per the international yard-and-pound agreeme
 const MM_PER_INCH = 25.4; // = CM_PER_INCH * 10, exact for the same reason.
 const CSS_REFERENCE_PIXELS_PER_INCH = 96; // The CSS reference pixel (and ODF's own assumption for px): 96px = 1in.
 
+// Reached only if LengthUnit ever gains a member unitToPtFactor's own switch does not match: every current member is covered there, so `value` narrows to `never` at the real call site, and adding an uncovered unit makes that narrowing fail and this call stop compiling. That is the real safety net. Exported so units.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real LengthUnit is already handled by a case in unitToPtFactor.
+export function assertNeverLengthUnit(value: never): never {
+  throw new Error(
+    `unitToPtFactor: unhandled LengthUnit ${JSON.stringify(value)}`,
+  );
+}
+
 function unitToPtFactor(unit: LengthUnit): number {
   switch (unit) {
     case "pt":
@@ -31,6 +38,7 @@ function unitToPtFactor(unit: LengthUnit): number {
     case "px":
       return POINTS_PER_INCH / CSS_REFERENCE_PIXELS_PER_INCH;
   }
+  return assertNeverLengthUnit(unit);
 }
 
 export function isLengthUnit(value: string): value is LengthUnit {
