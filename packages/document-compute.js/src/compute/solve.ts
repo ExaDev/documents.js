@@ -137,6 +137,9 @@ function bisection(
   );
 }
 
+// Below this magnitude, the estimated derivative is treated as numerically vanished rather than genuinely tiny: dividing by it would blow the next step up rather than refine it, so Newton's method reports non-convergence instead of chasing an unstable step.
+const VANISHED_DERIVATIVE_THRESHOLD = 1e-14;
+
 function newton(
   f: (x: number) => number,
   initialGuess: number | undefined,
@@ -158,7 +161,10 @@ function newton(
     }
     // No symbolic derivative is available (out of scope for this pass — see the README), so the derivative is estimated numerically. Central difference (f(x+h) - f(x-h)) / (2h) rather than a one-sided forward/backward difference because its truncation error is O(h^2) instead of O(h), which matters here since h is a fixed step rather than adaptively shrunk.
     const derivative = (f(x + h) - f(x - h)) / (2 * h);
-    if (!Number.isFinite(derivative) || Math.abs(derivative) < 1e-14) {
+    if (
+      !Number.isFinite(derivative) ||
+      Math.abs(derivative) < VANISHED_DERIVATIVE_THRESHOLD
+    ) {
       throw new NonConvergentSolveError(
         "newton",
         i,

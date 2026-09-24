@@ -139,13 +139,16 @@ function formatEvaluationResult(value: Quantity): string {
 }
 
 // A plain-text rendering of a corpus report for a CLI/console consumer — one line per document naming its own coverage, one line per non-matching outcome naming the specific gap, and a combined total. Not the only way to consume a CorpusReport (every field is public data a caller can format its own way), just the family's own convention of shipping a formatter alongside a report type that will otherwise get re-formatted slightly differently by every caller.
+// Coverage is stored as a 0-1 fraction; formatting it as a percentage scales it back up before fixing it to one decimal place.
+const PERCENTAGE_SCALE = 100;
+
 export function formatCorpusReport(report: CorpusReport): string {
   const lines: string[] = [];
   for (const { label, report: documentReport } of report.documents) {
     const coverageText =
       documentReport.coverage === undefined
         ? "no stated answers"
-        : `${(documentReport.coverage * 100).toFixed(1)}% (${documentReport.matched}/${documentReport.matched + documentReport.mismatched})`;
+        : `${(documentReport.coverage * PERCENTAGE_SCALE).toFixed(1)}% (${documentReport.matched}/${documentReport.matched + documentReport.mismatched})`;
     lines.push(`${label}: ${coverageText}`);
     for (const outcome of documentReport.outcomes) {
       if (outcome.outcome !== "match") {
@@ -156,7 +159,7 @@ export function formatCorpusReport(report: CorpusReport): string {
   const combinedText =
     report.coverage === undefined
       ? "no stated answers in corpus"
-      : `${(report.coverage * 100).toFixed(1)}% (${report.matched}/${report.matched + report.mismatched}), ${report.gaps} gap(s), ${report.unresolved} unresolved`;
+      : `${(report.coverage * PERCENTAGE_SCALE).toFixed(1)}% (${report.matched}/${report.matched + report.mismatched}), ${report.gaps} gap(s), ${report.unresolved} unresolved`;
   lines.push(`TOTAL: ${combinedText}`);
   return lines.join("\n");
 }
