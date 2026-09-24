@@ -20,8 +20,28 @@ const CONTAINER_XML =
 const CHAPTER1_XHTML =
   '<?xml version="1.0" encoding="UTF-8"?>\n<html xmlns="http://www.w3.org/1999/xhtml"><body><p>Hello &amp; world</p></body></html>';
 
+// The real 8-byte PNG signature, plus five arbitrary trailing bytes standing in for pixel data this test never parses as an actual image, only round-trips as an opaque binary part.
+const PNG_SIG_HIGH_BIT_MARKER = 0x89;
+const PNG_SIG_P = 0x50;
+const PNG_SIG_N = 0x4e;
+const PNG_SIG_G = 0x47;
+const PNG_SIG_CR = 0x0d;
+const PNG_SIG_LF = 0x0a;
+const PNG_SIG_LINE_ENDING_DETECTOR = 0x1a;
+const ARBITRARY_TRAILING_BYTES = Array.from(
+  { length: 5 },
+  (_, index) => index + 1,
+);
 const PNG_BYTES: Uint8Array<ArrayBuffer> = new Uint8Array([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4, 5,
+  PNG_SIG_HIGH_BIT_MARKER,
+  PNG_SIG_P,
+  PNG_SIG_N,
+  PNG_SIG_G,
+  PNG_SIG_CR,
+  PNG_SIG_LF,
+  PNG_SIG_LINE_ENDING_DETECTOR,
+  PNG_SIG_LF,
+  ...ARBITRARY_TRAILING_BYTES,
 ]);
 
 // Deliberately scrambled — mimetype is neither first nor adjacent to META-INF/container.xml here — so a test built on this fixture proves serializePackage's hoisting is driven by part identity, not by preserving whatever order the input happened to arrive in.
@@ -102,8 +122,7 @@ describe("serializePackage: mimetype hoisting", () => {
 
 describe("packageCodec schema validation", () => {
   it("rejects bytes that are not a valid zip archive", () => {
-    expect(() =>
-      z.decode(packageCodec, new Uint8Array([0, 1, 2, 3])),
-    ).toThrow();
+    const notAZipArchive = Uint8Array.from({ length: 4 }, (_, index) => index);
+    expect(() => z.decode(packageCodec, notAZipArchive)).toThrow();
   });
 });
