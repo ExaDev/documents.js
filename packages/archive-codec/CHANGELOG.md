@@ -1,3 +1,9 @@
+## [1.11.20](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.19...archive-codec%401.11.20) (2026-09-24)
+
+### Bug Fixes
+
+* **archive-codec:** cover the two test-support mutation gaps ([b820092](https://github.com/ExaDev/documents.js/commit/b8200921891ae5a50e2118c44379eb3586cc7af6))
+
 ## [1.11.19](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.18...archive-codec%401.11.19) (2026-09-24)
 
 ### Bug Fixes

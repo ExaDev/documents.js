@@ -1,3 +1,25 @@
+## [14.4.27](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.26...documents.js%4014.4.27) (2026-09-24)
+
+### Code Refactoring
+
+* **documents.js:** share ColumnResolver's candidate-index scan ([ea57875](https://github.com/ExaDev/documents.js/commit/ea5787571ffc3f3ccb8024d80c36da92c8e1b960))
+
+### Tests
+
+* **documents.js:** cover a correlated JOIN ON clause and multi-column NATURAL JOIN merge order ([c739639](https://github.com/ExaDev/documents.js/commit/c7396399714bc9ad56584d1ed85476fd6029af9d))
+* **documents.js:** pin evaluate.ts's logic, name resolution, and BETWEEN gaps ([fa03b1e](https://github.com/ExaDev/documents.js/commit/fa03b1e1d381c6f021479d1700054f3cf8b96eae))
+
+
+### Dependencies
+
+- Updated archive-codec to 1.11.20
+- Updated doc-codec to 6.1.12
+- Updated ooxml.js to 12.2.20
+- Updated ppt-codec to 2.2.11
+- Updated rtf-codec to 8.1.12
+- Updated wpd-codec to 5.1.13
+- Updated xls-codec to 4.15.33
+
 ## [14.4.26](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.25...documents.js%4014.4.26) (2026-09-24)
 
 
