@@ -896,6 +896,13 @@ function resolveValue(
   }
 }
 
+// Reached only if ContentCellValue ever gains a variant a switch over its own kind does not match: every current member is covered wherever this is called, so `value` narrows to `never` at each real call site, and adding an uncovered kind makes that narrowing fail and those calls stop compiling. That is the real safety net. Shared between this module's own displayTextOf, write.ts's defaultFormatIdForKind, write.test.ts's displayTextFor (which mirrors displayTextOf exactly, per its own doc comment), and workbook/sheet-writer.ts's writeCellValueRecord and formulaValueBytes, all five of which switch over the identical union, rather than each keeping a byte-identical copy. Exported so content.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real kind is already handled by a case in all five.
+export function assertNeverContentCellValueKind(value: never): never {
+  throw new Error(
+    `displayTextOf: unhandled ContentCellValue kind ${JSON.stringify(value)}`,
+  );
+}
+
 /** The typed value's own spelling, matching ooxml.js's derivation exactly so the same cell reads identically from either format. Deliberately not the producer's rendered string: this package classifies number formats but does not render through them. */
 function displayTextOf(value: ContentCellValue): string {
   switch (value.kind) {
@@ -915,6 +922,7 @@ function displayTextOf(value: ContentCellValue): string {
       return "";
     // No default: ContentCellValueSchema's discriminated union has exactly these ten kinds, so every one is already handled above — a default clause here would only ever be reached by a value outside that union, which the parameter's own type already rules out, and a hand-added "return the identical empty string" branch for that unreachable case is not a smaller version of a real fallback, it is a second, redundant copy of the "empty" case's own return.
   }
+  return assertNeverContentCellValueKind(value);
 }
 
 /**

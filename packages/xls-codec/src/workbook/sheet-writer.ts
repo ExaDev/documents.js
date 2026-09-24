@@ -11,6 +11,7 @@ import type {
 import { writeBofData } from "../biff/bof-writer";
 import { RecordBuilder } from "../biff/builder";
 import { errorCodeOf } from "../biff/errors";
+import { assertNeverContentCellValueKind } from "../content";
 import {
   packSetupFlags,
   paperSelectionFor,
@@ -89,9 +90,9 @@ export interface SheetWriteContext {
   /** The icv a colour resolves to through the workbook's own palette plan (write.ts's buildPalettePlan) — the same colour-table resolution a cell decoration's own fill already draws, offered to the conditional-format writer whose DXFN style colours are palette references too. Every colour this is called with must already have been registered during that plan's own workbook-wide scan. */
   icvOf: (color: Readonly<Color>) => number;
   /** The XF index ([MS-XLS] 2.5.168 IXFCell) a cell's own (number format, alignment, decoration) combination resolves to — GENERAL_CELL_XF_INDEX for a cell with General formatting, general/bottom alignment, and no background/borders, one of the workbook's other cell XFs otherwise. write.ts's own cell-format interning pass is what assigns and deduplicates these. */
-  xfIndexForCell(cell: ContentSheetCell): number;
+  readonly xfIndexForCell: (cell: ContentSheetCell) => number;
   /** The shared string table index for a string cell's own text; every string a sheet writes must already be registered in the workbook-wide table before this is called. */
-  sstIndexFor(text: string): number;
+  readonly sstIndexFor: (text: string) => number;
 }
 
 function checkedCellPosition(cell: ContentSheetCell): void {
@@ -535,6 +536,7 @@ function writeCellValueRecord(
       }
       return writeRecord(RECORD_BLANK, cellHeader(cell, xfIndex).build());
   }
+  return assertNeverContentCellValueKind(value);
 }
 
 // --- Formula records ([MS-XLS] 2.4.127) ---
@@ -599,6 +601,7 @@ function formulaValueBytes(cell: ContentSheetCell): Uint8Array<ArrayBuffer> {
         `cell at row ${cell.row}, column ${cell.column} carries a formula whose value resolves to an empty cell, which this writer cannot express as a Formula record's cached result`,
       );
   }
+  return assertNeverContentCellValueKind(value);
 }
 
 /** Formula ([MS-XLS] 2.4.127): a Cell, the 8-byte FormulaValue above, a flags word and a 4-byte calculation cache this writer has no data for (both written zero — see the module comment on RECORD_CALCCOUNT and friends for the same "nothing this schema models" reasoning), then a CellParsedFormula — a two-byte cce and that many bytes of compiled Ptg tokens from biff/ptg-writer.ts's own compileFormulaText. Never carries an RgbExtra trailer: this writer's formula compiler refuses any construct (an array-constant literal, a shared/array formula) that would need one, so cce always accounts for the whole of rgce. A string-kind result is followed by a String record ([MS-XLS] 2.4.268) carrying the cached text, exactly as workbook/sheet.ts's own reader expects to find it. `formula` is the caller's own already-narrowed `cell.formula` (writeCellRecords' `cell.formula !== undefined` check), passed rather than re-read and re-checked here, so a cell with no formula can only ever reach writeCellValueRecord instead — there is no second, unreachable "no formula" branch inside this function for a defensive message to rot behind. */

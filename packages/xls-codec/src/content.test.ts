@@ -57,7 +57,11 @@ import {
 } from "./biff/record-types";
 import { BiffFormatError } from "./biff/records";
 import { isXlsFile } from "./container";
-import { readXls, readXlsContent } from "./content";
+import {
+  assertNeverContentCellValueKind,
+  readXls,
+  readXlsContent,
+} from "./content";
 import {
   bofData,
   cell,
@@ -156,7 +160,7 @@ function xlsFile(stream: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
   return compoundFile([{ path: "Workbook", bytes: stream }]);
 }
 
-/** Adds a real "\x05SummaryInformation" stream beside an .xls file's existing streams — composed with archive-codec's own writeSummaryInformationStream/writeCompoundFile rather than by extending xlsFile, which stays a pure BIFF8-only fixture builder. */
+/** Adds a real `"\x05SummaryInformation"` stream beside an .xls file's existing streams — composed with archive-codec's own writeSummaryInformationStream/writeCompoundFile rather than by extending xlsFile, which stays a pure BIFF8-only fixture builder. */
 function withSummaryInformation(
   xls: Uint8Array<ArrayBuffer>,
   metadata: Parameters<typeof writeSummaryInformationStream>[0],
@@ -235,11 +239,14 @@ function fontRecord(
   }
   return record(RECORD_FONT, [
     ...u16(options.heightTwips ?? 200),
-    ...u16((options.italic ? 0x0002 : 0) | (options.strikeout ? 0x0008 : 0)),
+    ...u16(
+      (options.italic === true ? 0x0002 : 0) |
+        (options.strikeout === true ? 0x0008 : 0),
+    ),
     ...u16(options.colorIcv ?? 0x7fff),
-    ...u16(options.bold ? 700 : 400),
+    ...u16(options.bold === true ? 700 : 400),
     ...u16(0), // sss: normal script
-    options.underline ? 0x01 : 0x00,
+    options.underline === true ? 0x01 : 0x00,
     0x02, // bFamily: Swiss, Arial's own classification
     0x00, // bCharSet: ANSI
     0, // unused3
@@ -2824,5 +2831,20 @@ describe("readXlsContent: charts, drawings and images (ExaDev/documents.js#924)"
 
     expect(sheet?.images).toStrictEqual([]);
     expect(sheet?.embeddedObjects).toBeUndefined();
+  });
+});
+
+describe("assertNeverContentCellValueKind", () => {
+  it("throws naming the unhandled kind, proving displayTextOf's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverContentCellValueKind({ kind: "bogus" } as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'displayTextOf: unhandled ContentCellValue kind {"kind":"bogus"}',
+    );
   });
 });
