@@ -112,7 +112,7 @@ describe("decodeJpeg2000CodeBlock: degenerate code-blocks", () => {
 
 // --- A hand-written EBCOT tier-1 encoder (ISO/IEC 15444-1 Annex D), driving decodeJpeg2000CodeBlock from hand-chosen coefficient grids. ---
 //
-// The whole-codestream fixtures in jpeg2000.test.ts pin this decoder end to end against OpenJPEG's output, but only along the neighbourhood shapes a real encoder's images happen to produce, and only where a context divergence happens to flip a sample: a completely zeroed sign-context table decodes every fixture in the suite unchallenged. The tests below need bit streams whose exact decision sequence is known, so the encoder half of Annex D is restated here the way scripts/generate-jbig2-fixtures.mjs restates the MQ coder: T.800's Table D.1 and Table D.3 are transcribed afresh below, independently of src/image/jpeg2000-t1.ts's own transcription, so a decoder reading any other context label than this encoder writes cannot track the same adaptive state and fails the round trip. What that pins is the label each neighbourhood shape maps to, which is precisely what no differential test against a shared encoder can pin.
+// The whole-codestream fixtures in jpeg2000.test.ts pin this decoder end to end against OpenJPEG's output, but only along the neighbourhood shapes a real encoder's images happen to produce, and only where a context divergence happens to flip a sample: a completely zeroed sign-context table decodes every fixture in the suite unchallenged. The tests below need bit streams whose exact decision sequence is known, so the encoder half of Annex D is restated here the way scripts/generate-jbig2-fixtures.mjs restates the MQ coder: T.800's Table D.1 and Table D.3 are transcribed afresh below, independently of src/image/jpeg2000-t1.ts's own transcription. A decoder that maps any neighbourhood shape to a different label than this encoder writes, or that merges two labels' decisions into one adaptive slot, cannot decode these streams; the one labelling change no stream can expose is a pure exchange of two labels that both start in state zero, because the MQ coder's per-context state is a function of the decisions that context decodes and an exchange preserves each set's sequence.
 
 // T.800 Table C.1 (identical to T.88 Table E.1), as (Qe, NMPS, NLPS, SWITCH).
 const ENCODER_QE_STATES: readonly (readonly [
@@ -643,23 +643,24 @@ function expectRoundTrip(grid: EncoderGrid): void {
   expect(Array.from(decoded)).toEqual(Array.from(values));
 }
 
-// A deterministic scatter of magnitudes and signs over an 8x8 grid, dense enough that every context label is reached several times with both decisions, so a decoder tracking any other label than this encoder writes diverges.
+// A deterministic scatter of magnitudes and signs over a 16x16 grid, dense enough that every context label is reached many times with both decisions, so a decoder that redirects or merges labels tracks different adaptive states from the ones this encoder wrote.
 function scatterGrid(
   subband: Jpeg2000SubbandType,
   codeBlockStyle = 0,
+  salt = 0,
 ): EncoderGrid {
-  const width = 8;
-  const height = 8;
-  const maxBitPlanes = 3;
+  const width = 16;
+  const height = 16;
+  const maxBitPlanes = 4;
   const cells: (readonly [number, number, number, number])[] = [];
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const magnitude =
-        (x * x * 3 + y * y * 5 + x * y * 7 + x * 11 + y * 13) % 7;
+        ((((x * 7 + y * 11 + salt * 3) ^ (x * y * 13 + salt)) % 15) + 15) % 15;
       if (magnitude === 0) {
         continue;
       }
-      const sign = (x * 5 + y * 3) % 3 === 0 ? -1 : 1;
+      const sign = (x * 13 + y * 7 + salt) % 5 < 2 ? -1 : 1;
       cells.push([x, y, magnitude, sign]);
     }
   }
@@ -699,21 +700,25 @@ describe("decodeJpeg2000CodeBlock: round trips through a hand-written Annex D en
     });
   });
 
-  // One grid per subband orientation: LL and LH read Table D.1's axes one way round, HL exchanges them, and HH is driven by the diagonal sum against the combined straight one.
+  // Two grids per subband orientation: LL and LH read Table D.1's axes one way round, HL exchanges them, and HH is driven by the diagonal sum against the combined straight one. A second, differently scattered grid keeps any label's decision sequence from being a repetition of another's.
   it("decodes the full zero-coding context table of an LL block", () => {
     expectRoundTrip(scatterGrid("LL"));
+    expectRoundTrip(scatterGrid("LL", 0, 1));
   });
 
   it("decodes the full zero-coding context table of an LH block", () => {
     expectRoundTrip(scatterGrid("LH"));
+    expectRoundTrip(scatterGrid("LH", 0, 2));
   });
 
   it("decodes the full zero-coding context table of an HL block", () => {
     expectRoundTrip(scatterGrid("HL"));
+    expectRoundTrip(scatterGrid("HL", 0, 3));
   });
 
   it("decodes the full zero-coding context table of an HH block", () => {
     expectRoundTrip(scatterGrid("HH"));
+    expectRoundTrip(scatterGrid("HH", 0, 4));
   });
 
   it("decodes a block taller than one stripe, with a partial final stripe", () => {
@@ -752,7 +757,7 @@ describe("decodeJpeg2000CodeBlock: round trips through a hand-written Annex D en
   });
 
   it("separates refinement with a significant neighbour from refinement without one", () => {
-    // The isolated coefficient at (0, 0) is refined in context 14 and the vertical pair at x=2 in context 15; interleaved by the scan, so a decoder choosing between them any other way tracks different adaptive states.
+    // The isolated coefficient at (0, 0) is refined in context 14 and the vertical pair at x=2 in context 15, so both halves of D.3.2's context choice are exercised on one stream. (An exchange of the two labels themselves is not observable by any stream: both contexts start in state zero and the MQ coder's per-context state is a function of the decisions that context decodes, which an exchange preserves.)
     expectRoundTrip({
       width: 3,
       height: 4,
