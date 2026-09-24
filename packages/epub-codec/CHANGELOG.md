@@ -1,3 +1,10 @@
+## [5.1.4](https://github.com/ExaDev/documents.js/compare/epub-codec%405.1.3...epub-codec%405.1.4) (2026-09-24)
+
+
+### Dependencies
+
+- Updated byte-codec to 2.0.0
+
 ## [5.1.3](https://github.com/ExaDev/documents.js/compare/epub-codec%405.1.2...epub-codec%405.1.3) (2026-09-23)
 
 

@@ -1,3 +1,10 @@
+## [11.1.4](https://github.com/ExaDev/documents.js/compare/odf.js%4011.1.3...odf.js%4011.1.4) (2026-09-24)
+
+
+### Dependencies
+
+- Updated byte-codec to 2.0.0
+
 ## [11.1.3](https://github.com/ExaDev/documents.js/compare/odf.js%4011.1.2...odf.js%4011.1.3) (2026-09-23)
 
 

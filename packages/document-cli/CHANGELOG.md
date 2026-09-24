@@ -1,3 +1,12 @@
+## [5.12.23](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.22...document-cli%405.12.23) (2026-09-24)
+
+
+### Dependencies
+
+- Updated odf.js to 11.1.4
+- Updated document-outline.js to 3.10.15
+- Updated documents.js to 14.4.14
+
 ## [5.12.22](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.21...document-cli%405.12.22) (2026-09-24)
 
 

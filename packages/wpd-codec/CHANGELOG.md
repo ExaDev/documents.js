@@ -1,3 +1,15 @@
+## [5.1.6](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.1.5...wpd-codec%405.1.6) (2026-09-24)
+
+### Bug Fixes
+
+* **wpd-codec:** remove two variable shadows ([acdeadb](https://github.com/ExaDev/documents.js/commit/acdeadba97d7c58f909980819f3ec3e1405ea572))
+
+
+### Dependencies
+
+- Updated byte-codec to 2.0.0
+- Updated archive-codec to 1.11.13
+
 ## [5.1.5](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.1.4...wpd-codec%405.1.5) (2026-09-23)
 
 ### Bug Fixes
