@@ -1,3 +1,10 @@
+## [5.2.23](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.22...pdf-codec%405.2.23) (2026-09-24)
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.1
+
 ## [5.2.22](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.21...pdf-codec%405.2.22) (2026-09-24)
 
 ### Code Refactoring

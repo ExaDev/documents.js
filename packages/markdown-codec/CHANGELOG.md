@@ -1,3 +1,14 @@
+## [11.1.5](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.1.4...markdown-codec%4011.1.5) (2026-09-24)
+
+### Bug Fixes
+
+* **markdown-codec:** clear the last preferReadonlyParams exceptions ([566605c](https://github.com/ExaDev/documents.js/commit/566605ce027bc3cfb69274d0683714943942f487))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.1
+
 ## [11.1.4](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.1.3...markdown-codec%4011.1.4) (2026-09-24)
 
 
