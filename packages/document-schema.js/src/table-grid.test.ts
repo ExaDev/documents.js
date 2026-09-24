@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ContentTable, ContentTableCell } from "./content";
 import {
+  assertNeverTableGridFaultKind,
   denseTableRows,
   describeTableGridFault,
   findTableGridFault,
@@ -853,6 +854,21 @@ describe("describeTableGridFault", () => {
       }),
     ).toBe(
       "the merged region anchored at row 8, column 9 overlaps the region anchored at row 2, column 3, but a grid position belongs to one region only",
+    );
+  });
+});
+
+describe("assertNeverTableGridFaultKind", () => {
+  it("throws naming the unhandled kind, proving describeTableGridFault's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverTableGridFaultKind({ kind: "bogus" } as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'describeTableGridFault: unhandled TableGridFault kind {"kind":"bogus"}',
     );
   });
 });
