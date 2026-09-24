@@ -862,6 +862,41 @@ describe("sourcePath", () => {
   });
 });
 
+// Deliberately deep nesting for ContentEmbeddedObjectSchema's own recursive guard, mirroring the discipline already applied to ContentTable's three-level recursion test above: a formula embedded inside a drawing embedded inside a spreadsheet, three levels deep, exercising both anchoring mechanisms (ContentSheetSchema.embeddedObjects at level 1->2, and the ContentBlock 'embeddedObject' variant at level 2->3) in the same structure. The innermost document is a genuine 'formula'-kind ContentDocument (reusing the fixture above), so this also drives the recursion down through the real, self-recursive MathMlNodeSchema (src/mathml.ts), not only through the block model.
+const formulaEmbeddedBlock: ContentBlock = {
+  kind: "embeddedObject",
+  objectKind: "formula",
+  document: formulaDocument(),
+  frame: { xPt: 10, yPt: 10, widthPt: 80, heightPt: 20 },
+};
+
+const drawingWithFormula: ContentDocument = {
+  kind: "drawing",
+  metadata: {},
+  pages: [
+    {
+      size: { widthPt: 400, heightPt: 300 },
+      shapes: [
+        {
+          frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 40 },
+          insetLeftPt: 0,
+          insetTopPt: 0,
+          insetRightPt: 0,
+          insetBottomPt: 0,
+          blocks: [formulaEmbeddedBlock],
+        },
+      ],
+      vectors: [],
+    },
+  ],
+};
+
+const drawingEmbeddedObject: ContentEmbeddedObject = {
+  objectKind: "drawing",
+  document: drawingWithFormula,
+  frame: { xPt: 100, yPt: 100, widthPt: 200, heightPt: 150 },
+};
+
 describe("source (the quarantined residue channel)", () => {
   // One residue value reused across positions, plus a second format spelling, so the tests pin that the field is the SAME facility everywhere rather than per-node lookalikes.
   const docxResidue: SourceResidue = {
@@ -973,7 +1008,10 @@ describe("source (the quarantined residue channel)", () => {
         ...sheet,
         source: odfResidue,
         cells: sheet.cells.map((cell) => ({ ...cell, source: odfResidue })),
-        images: sheet.images.map((image) => ({ ...image, source: odfResidue })),
+        images: sheet.images.map((sheetImage) => ({
+          ...sheetImage,
+          source: odfResidue,
+        })),
       })),
     });
     if (spreadsheet.kind !== "spreadsheet")
@@ -1349,7 +1387,7 @@ describe("ContentImageBlock format", () => {
 });
 
 describe("ContentImageBlock floatPosition", () => {
-  function image(floatPosition?: unknown) {
+  function buildFloatingImage(floatPosition?: unknown) {
     return {
       kind: "image",
       format: "png",
@@ -1362,7 +1400,7 @@ describe("ContentImageBlock floatPosition", () => {
 
   it("accepts an offset-based position on both axes — the shape ODF's draw:frame always takes, and docx's wp:anchor takes when wp:posOffset is used", () => {
     const result = ContentImageBlockSchema.parse(
-      image({
+      buildFloatingImage({
         horizontal: { relativeTo: "page", offsetPt: 36 },
         vertical: { relativeTo: "paragraph", offsetPt: -12 },
       }),
@@ -1375,7 +1413,7 @@ describe("ContentImageBlock floatPosition", () => {
 
   it("accepts an align-based position on both axes — the shape docx's wp:anchor takes when wp:align is used instead of wp:posOffset", () => {
     const result = ContentImageBlockSchema.parse(
-      image({
+      buildFloatingImage({
         horizontal: { relativeTo: "margin", align: "right" },
         vertical: { relativeTo: "margin", align: "top" },
       }),
@@ -1389,7 +1427,7 @@ describe("ContentImageBlock floatPosition", () => {
   it("accepts one axis offset-based and the other align-based — docx's own wp:positionH/wp:positionV choose independently per axis", () => {
     expect(
       ContentImageBlockSchema.safeParse(
-        image({
+        buildFloatingImage({
           horizontal: { relativeTo: "column", offsetPt: 18 },
           vertical: { relativeTo: "line", align: "bottom" },
         }),
@@ -1400,7 +1438,7 @@ describe("ContentImageBlock floatPosition", () => {
   it("refuses an axis carrying both offsetPt and align at once — a state neither docx's wp:positionH/wp:positionV nor ODF's draw:frame can actually produce", () => {
     expect(
       ContentImageBlockSchema.safeParse(
-        image({
+        buildFloatingImage({
           horizontal: { relativeTo: "page", offsetPt: 36, align: "left" },
           vertical: { relativeTo: "page", offsetPt: 0 },
         }),
@@ -1411,7 +1449,7 @@ describe("ContentImageBlock floatPosition", () => {
   it("refuses an axis carrying neither offsetPt nor align", () => {
     expect(
       ContentImageBlockSchema.safeParse(
-        image({
+        buildFloatingImage({
           horizontal: { relativeTo: "page" },
           vertical: { relativeTo: "page", offsetPt: 0 },
         }),
@@ -1422,7 +1460,7 @@ describe("ContentImageBlock floatPosition", () => {
   it("refuses an origin outside the closed vocabulary", () => {
     expect(
       ContentImageBlockSchema.safeParse(
-        image({
+        buildFloatingImage({
           horizontal: { relativeTo: "bogus", offsetPt: 0 },
           vertical: { relativeTo: "page", offsetPt: 0 },
         }),
@@ -1432,7 +1470,7 @@ describe("ContentImageBlock floatPosition", () => {
 
   it("is absent by default — an inline image has no anchored position of its own to record", () => {
     expect(
-      ContentImageBlockSchema.parse(image()).floatPosition,
+      ContentImageBlockSchema.parse(buildFloatingImage()).floatPosition,
     ).toBeUndefined();
   });
 });
@@ -1686,7 +1724,7 @@ describe("ContentTableRow isHeader", () => {
 
   // The flag says nothing about where a header row sits: any row may carry it, including a non-leading or non-contiguous one, which is exactly the shape a docx w:tblHeader can legally state and a leading-header-count field could not hold.
   it("accepts a table whose header rows are neither leading nor contiguous", () => {
-    const table = ContentTableSchema.parse({
+    const parsedTable = ContentTableSchema.parse({
       kind: "table",
       rows: [
         { cells: [] },
@@ -1696,7 +1734,7 @@ describe("ContentTableRow isHeader", () => {
       ],
       columns: [],
     });
-    expect(table.rows.map((row) => row.isHeader)).toEqual([
+    expect(parsedTable.rows.map((row) => row.isHeader)).toEqual([
       undefined,
       true,
       undefined,
@@ -2067,41 +2105,6 @@ describe("ContentDocumentSchema round trips", () => {
     );
   });
 });
-
-// Deliberately deep nesting for ContentEmbeddedObjectSchema's own recursive guard, mirroring the discipline already applied to ContentTable's three-level recursion test above: a formula embedded inside a drawing embedded inside a spreadsheet, three levels deep, exercising both anchoring mechanisms (ContentSheetSchema.embeddedObjects at level 1->2, and the ContentBlock 'embeddedObject' variant at level 2->3) in the same structure. The innermost document is a genuine 'formula'-kind ContentDocument (reusing the fixture above), so this also drives the recursion down through the real, self-recursive MathMlNodeSchema (src/mathml.ts), not only through the block model.
-const formulaEmbeddedBlock: ContentBlock = {
-  kind: "embeddedObject",
-  objectKind: "formula",
-  document: formulaDocument(),
-  frame: { xPt: 10, yPt: 10, widthPt: 80, heightPt: 20 },
-};
-
-const drawingWithFormula: ContentDocument = {
-  kind: "drawing",
-  metadata: {},
-  pages: [
-    {
-      size: { widthPt: 400, heightPt: 300 },
-      shapes: [
-        {
-          frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 40 },
-          insetLeftPt: 0,
-          insetTopPt: 0,
-          insetRightPt: 0,
-          insetBottomPt: 0,
-          blocks: [formulaEmbeddedBlock],
-        },
-      ],
-      vectors: [],
-    },
-  ],
-};
-
-const drawingEmbeddedObject: ContentEmbeddedObject = {
-  objectKind: "drawing",
-  document: drawingWithFormula,
-  frame: { xPt: 100, yPt: 100, widthPt: 200, heightPt: 150 },
-};
 
 const spreadsheetWithDrawing: ContentDocument = {
   kind: "spreadsheet",
