@@ -94,7 +94,7 @@ function sheetNumberOf(path: string): number | undefined {
 // A cell is projected only when it has a reference (r) and a resolvable value: t="s" dereferences <v> through the shared-strings table, otherwise <v> is the literal (numeric) value coerced to string. When the cell carries an <f> child, its text becomes the projected formula, carried alongside the value. Cells without <v> (styling-only, or formula cells with no cached value) and unresolvable shared-string references are dropped — that is the defined scope of this lossy projection.
 function readCell(
   cell: XmlElement,
-  sharedStrings: string[],
+  sharedStrings: readonly string[],
 ): XlsxCell | undefined {
   const reference = attr(cell, "r");
   if (reference === undefined) {
@@ -123,7 +123,10 @@ function readCell(
   return projected;
 }
 
-function readCells(worksheet: XmlElement, sharedStrings: string[]): XlsxCell[] {
+function readCells(
+  worksheet: XmlElement,
+  sharedStrings: readonly string[],
+): XlsxCell[] {
   const cells: XlsxCell[] = [];
   for (const row of elementsWithTag(worksheet.children, "row")) {
     for (const cell of childrenWithTag(row, "c")) {

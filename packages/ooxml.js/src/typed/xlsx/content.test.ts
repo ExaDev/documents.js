@@ -2445,7 +2445,7 @@ describe("readXlsxContent: drawing pictures (mixed anchor spellings)", () => {
 
 // A drawing-bearing package for SheetGridGeometry and anchor-walk edge cases the fixtures above don't happen to exercise: the caller supplies the worksheet's own children (cols/sheetFormatPr/sheetData) and the drawing's own single anchor element directly, everything else (workbook, every relationship, the one media part) fixed to the same tiny PNG the picture fixtures above already use.
 function customDrawingPackage(
-  worksheetChildren: XmlNode[],
+  worksheetChildren: readonly XmlNode[],
   anchor: XmlElement,
 ): Package {
   const worksheet = el("worksheet", {}, [
@@ -2729,11 +2729,11 @@ describe("readXlsxContent: anchor marker fields (synthetic packages)", () => {
 
 describe("readXlsxContent: chart graphic frame structural gaps (synthetic packages)", () => {
   function chartGraphicFrame(
-    opts: {
+    opts: Readonly<{
       withCNvPr?: boolean;
       name?: string;
       graphicUri?: string;
-    } = {},
+    }> = {},
   ): XmlElement {
     const {
       withCNvPr = true,

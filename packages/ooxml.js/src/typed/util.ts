@@ -2,7 +2,7 @@ import type { XmlElement, XmlNode } from "../model/node";
 import type { Package, Part } from "../model/package";
 
 // Depth-first walk over a node forest, yielding every node and descending into element children.
-export function* walk(nodes: XmlNode[]): Generator<XmlNode> {
+export function* walk(nodes: readonly XmlNode[]): Generator<XmlNode> {
   for (const node of nodes) {
     yield node;
     if (node.type === "element") {
@@ -12,7 +12,10 @@ export function* walk(nodes: XmlNode[]): Generator<XmlNode> {
 }
 
 // Recursive descendant search by tag.
-export function elementsWithTag(nodes: XmlNode[], tag: string): XmlElement[] {
+export function elementsWithTag(
+  nodes: readonly XmlNode[],
+  tag: string,
+): XmlElement[] {
   const out: XmlElement[] = [];
   for (const node of walk(nodes)) {
     if (node.type === "element" && node.tag === tag) {

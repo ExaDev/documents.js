@@ -22,7 +22,7 @@ const THEME_REL =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme";
 
 function rels(
-  entries: { id: string; type: string; target: string }[],
+  entries: readonly { id: string; type: string; target: string }[],
 ): XmlElement {
   return el(
     "Relationships",
@@ -41,7 +41,7 @@ interface XfrmSpec {
 }
 
 function placeholderShape(
-  ph: { type?: string; idx?: string },
+  ph: Readonly<{ type?: string; idx?: string }>,
   xfrm?: XfrmSpec,
 ): XmlElement {
   const phAttrs: Record<string, string> = {};
@@ -71,7 +71,7 @@ function placeholderShape(
 }
 
 function buildFixturePackage(
-  options: { slideType?: string; layoutHasXfrm?: boolean } = {},
+  options: Readonly<{ slideType?: string; layoutHasXfrm?: boolean }> = {},
 ): Package {
   const slideType = options.slideType ?? "title";
   const layoutHasXfrm = options.layoutHasXfrm ?? true;

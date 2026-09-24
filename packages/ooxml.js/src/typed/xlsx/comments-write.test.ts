@@ -15,10 +15,10 @@ const EMPTY_PRINT_SETTINGS = {
   pageOrder: "downThenOver" as const,
 };
 
-function sheet(cells: ContentSheetCell[]): ContentSheet {
+function sheet(cells: readonly ContentSheetCell[]): ContentSheet {
   return {
     name: "Sheet1",
-    cells,
+    cells: [...cells],
     columns: [],
     rows: [],
     images: [],

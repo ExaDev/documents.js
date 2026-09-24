@@ -251,13 +251,18 @@ function buildChartRoot(document: ContentDocument): XmlElement {
 }
 
 // Global, workbook-wide counters for chart and media file numbering — shared across every sheet's own buildSheetDrawing call (build.ts threads one instance through its own sequential sheet walk), so chart1.xml/image1.png number up across the whole workbook the way a real producer's own output does, never restarting per sheet.
-export interface DrawingCounters {
+// The counters themselves, nested rather than sitting directly on DrawingCounters: they are genuinely incremented on every media/chart part emitted, so a flat DrawingCounters would be a readonly-param candidate the increment cannot satisfy. Nesting keeps the wrapper stable and the numbers mutable, and leaves every call site (all of which build one via newDrawingCounters) untouched.
+interface DrawingCounterValues {
   nextChart: number;
   nextMedia: number;
 }
 
+export interface DrawingCounters {
+  readonly values: DrawingCounterValues;
+}
+
 export function newDrawingCounters(): DrawingCounters {
-  return { nextChart: 1, nextMedia: 1 };
+  return { values: { nextChart: 1, nextMedia: 1 } };
 }
 
 export interface SheetDrawingWrite {
@@ -328,7 +333,7 @@ export function buildSheetDrawing(
         "buildXlsxPackageFromContent: a sheet image in svg format has no OOXML blip this writer can produce (SpreadsheetML's a:blip only references a raster part Excel decodes directly — png/jpeg/gif)",
       );
     }
-    const mediaName = `image${counters.nextMedia++}.${image.format}`;
+    const mediaName = `image${counters.values.nextMedia++}.${image.format}`;
     extraParts[`xl/media/${mediaName}`] = {
       kind: "binary",
       base64: image.base64,
@@ -365,7 +370,7 @@ export function buildSheetDrawing(
   for (const chart of charts) {
     const { anchorRow, anchorColumn, offsetXPt, offsetYPt } =
       requireAnchorFields(chart);
-    const chartName = `chart${counters.nextChart++}.xml`;
+    const chartName = `chart${counters.values.nextChart++}.xml`;
     const chartPartPath = `xl/charts/${chartName}`;
     extraParts[chartPartPath] = xmlPart(buildChartRoot(chart.document));
     chartPartNames.push(chartPartPath);

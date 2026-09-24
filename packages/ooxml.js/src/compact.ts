@@ -95,7 +95,7 @@ class StringTable {
 }
 
 function encodeAttrs(
-  attributes: Attribute[],
+  attributes: readonly Attribute[],
   table: StringTable,
 ): CompactAttrPairs {
   const pairs: CompactAttrPairs = [];
@@ -139,7 +139,7 @@ function packageToCompact(pkg: Package): CompactPackage {
   return { s: table.strings, p };
 }
 
-function stringAt(strings: string[], index: number): string {
+function stringAt(strings: readonly string[], index: number): string {
   const value = strings[index];
   if (value === undefined) {
     throw new Error(`fromCompact: string table index ${index} is out of range`);
@@ -147,7 +147,10 @@ function stringAt(strings: string[], index: number): string {
   return value;
 }
 
-function decodeAttrs(pairs: CompactAttrPairs, strings: string[]): Attribute[] {
+function decodeAttrs(
+  pairs: CompactAttrPairs,
+  strings: readonly string[],
+): Attribute[] {
   const attributes: Attribute[] = [];
   for (let i = 0; i < pairs.length; i += 2) {
     const nameIdx = pairs[i];
@@ -165,7 +168,7 @@ function decodeAttrs(pairs: CompactAttrPairs, strings: string[]): Attribute[] {
   return attributes;
 }
 
-function decodeNode(node: CompactXmlNode, strings: string[]): XmlNode {
+function decodeNode(node: CompactXmlNode, strings: readonly string[]): XmlNode {
   switch (node[0]) {
     case 1:
       return { type: "text", value: stringAt(strings, node[1]) };

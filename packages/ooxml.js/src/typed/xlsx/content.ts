@@ -384,10 +384,13 @@ function readCell(
 }
 
 // Merged ranges (<mergeCells><mergeCell ref="A1:B2"/></mergeCells>) map onto colSpan/rowSpan on the ANCHOR cell (the range's own top-left position) — the same anchor/covered-cell convention readOds/readOdt already use for their own merged ranges. Unlike ODF's table:covered-table-cell (a distinct element the reader can skip outright), xlsx writes an ordinary, genuinely empty <c> for each covered position (confirmed via this package's own kitchen-sink fixture: B6/A7/B7 for a merged A6:B7 range each exist as bare, valueless <c s="..."/> elements) — readCell's own existing "no v/is/f at all -> drop" rule already handles those without any merge-specific logic.
-function applyMergedRanges(
-  worksheet: XmlElement,
-  cells: readonly ContentSheetCell[],
-): void {
+// The sheet's own cell array. applyCellComments appends newly materialised anchors onto it (a note on a cell no <c> ever occupied), so it is genuinely mutable; the other two passes below only read it, but share the type so one wrapper serves the whole attach-after-the-fact family. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope.
+interface CellSink {
+  readonly cells: ContentSheetCell[];
+}
+
+function applyMergedRanges(worksheet: XmlElement, sink: CellSink): void {
+  const cells = sink.cells;
   const mergeCellsEl = childrenWithTag(worksheet, "mergeCells")[0];
   if (mergeCellsEl === undefined) {
     return;
@@ -436,15 +439,16 @@ function readCells(
       }
     }
   }
-  applyMergedRanges(worksheet, cells);
+  applyMergedRanges(worksheet, { cells });
   return cells;
 }
 
 // Cell comments live in their own parts, reached through the sheet's own relationships (see comments.ts), so they attach after the cells themselves are read. A comment anchored to a position no <c> ever occupied (a note on a genuinely empty cell is ordinary) still carries real content worth keeping — the same policy that keeps an <f>-only formula cell, materialised the same way: an empty value with the annotation attached.
 function applyCellComments(
   comments: ReadonlyMap<string, SheetCellComment>,
-  cells: ContentSheetCell[],
+  sink: CellSink,
 ): void {
+  const cells = sink.cells;
   // No "comments.size === 0" early return: with no comments, the two loops below simply never do anything (building an unused, empty byPosition map, then iterating a genuinely empty comments Map) — `cells` comes back byte-for-byte unchanged either way, so an early return here would only ever skip work whose absence is already unobservable.
   const byPosition = new Map<string, ContentSheetCell>();
   for (const cell of cells) {
@@ -470,9 +474,10 @@ function applyCellComments(
 
 // The narrow residue fallback left once dataValidation and conditionalFormatting were promoted to real vocabulary (ExaDev/documents.js#758): a dataValidation whose type this package's schema does not name (effectively just ECMA-376's own 'none', vanishingly rare in real files) or whose sqref does not parse, and a synthetic single-cfRule <conditionalFormatting> wrapper for a cfRule type the discriminated union does not cover ('expression' being the one real, deliberate member ExaDev/documents.js#758 chose not to promote — see document-schema.js's own doc comment on ContentSheetConditionalFormatSchema) — quarantined VERBATIM on its range's anchor cell through the residue channel: carried, restorable by a same-format writer, never interpreted here. The anchor is the first range's top-left position — the same anchoring convention merges and cell comments use — and a cell carries one residue slot, so a second rule anchoring at the same cell is skipped (the sqref inside each residue names its full range, so one copy reconstructs it). A rule whose sqref parses to nothing is left unattached rather than parked on a made-up position. The caller (readSheet below) supplies exactly the elements typed/xlsx/data-validation.ts's and typed/xlsx/conditional-format.ts's own structural readers could not promote — this function no longer discovers <dataValidations>/<conditionalFormatting> from the worksheet itself.
 function applyCellResidueRules(
-  cells: ContentSheetCell[],
+  sink: CellSink,
   rules: readonly XmlElement[],
 ): void {
+  const cells = sink.cells;
   // No "rules.length === 0" early return: with no rules, the two loops below simply never do anything (building an unused, empty byPosition map, then iterating a genuinely empty rules array) — `cells` comes back byte-for-byte unchanged either way, so an early return here would only ever skip work whose absence is already unobservable.
   const byPosition = new Map<string, ContentSheetCell>();
   for (const cell of cells) {
@@ -508,7 +513,7 @@ function applyCellResidueRules(
 
 function readSheet(
   pkg: Package,
-  entry: SheetEntry,
+  entry: Readonly<SheetEntry>,
   sheetIndex: number,
   sharedStrings: readonly string[],
   definedNamesBySheet: ReadonlyMap<number, SheetDefinedNames>,
@@ -531,12 +536,12 @@ function readSheet(
     };
   }
   const cells = readCells(worksheet, sharedStrings, context);
-  applyCellComments(readSheetCellComments(pkg, entry.path), cells);
+  applyCellComments(readSheetCellComments(pkg, entry.path), { cells });
   const { validations, residueElements: dataValidationResidue } =
     readDataValidations(worksheet);
   const { formats, residueElements: conditionalFormatResidue } =
     readConditionalFormats(worksheet, dxfs);
-  applyCellResidueRules(cells, [
+  applyCellResidueRules({ cells }, [
     ...dataValidationResidue,
     ...conditionalFormatResidue,
   ]);

@@ -444,16 +444,18 @@ describe("readGroupXfrm", () => {
   });
 });
 
-function unrotatedGroup(fields: {
-  offXPt: number;
-  offYPt: number;
-  extWidthPt: number;
-  extHeightPt: number;
-  childOffXPt: number;
-  childOffYPt: number;
-  childExtWidthPt: number;
-  childExtHeightPt: number;
-}): GroupChildTransform {
+function unrotatedGroup(
+  fields: Readonly<{
+    offXPt: number;
+    offYPt: number;
+    extWidthPt: number;
+    extHeightPt: number;
+    childOffXPt: number;
+    childOffYPt: number;
+    childExtWidthPt: number;
+    childExtHeightPt: number;
+  }>,
+): GroupChildTransform {
   return { ...fields, compositeRotationDeg: 0, compositeMirrored: false };
 }
 

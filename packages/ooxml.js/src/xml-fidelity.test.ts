@@ -44,7 +44,7 @@ const isComment = (n: XmlNode): n is XmlComment => n.type === "comment";
 const isPi = (n: XmlNode): n is XmlPi => n.type === "pi";
 const isElement = (n: XmlNode): n is XmlElement => n.type === "element";
 
-function walk(nodes: XmlNode[], visit: (node: XmlNode) => void): void {
+function walk(nodes: readonly XmlNode[], visit: (node: XmlNode) => void): void {
   for (const node of nodes) {
     visit(node);
     if (node.type === "element") {
@@ -53,13 +53,16 @@ function walk(nodes: XmlNode[], visit: (node: XmlNode) => void): void {
   }
 }
 
-function allNodes(roots: XmlNode[]): XmlNode[] {
+function allNodes(roots: readonly XmlNode[]): XmlNode[] {
   const out: XmlNode[] = [];
   walk(roots, (n) => out.push(n));
   return out;
 }
 
-function findElement(roots: XmlNode[], tag: string): XmlElement | undefined {
+function findElement(
+  roots: readonly XmlNode[],
+  tag: string,
+): XmlElement | undefined {
   return allNodes(roots).find(
     (n): n is XmlElement => n.type === "element" && n.tag === tag,
   );

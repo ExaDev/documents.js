@@ -158,7 +158,7 @@ export function quoteSheetNameIfNeeded(sheetName: string): string {
 // The write-side inverse of parsePrintAreaValue: builds a _xlnm.Print_Area defined-name value for one sheet's own print range. Built directly from the range's own row/column indices rather than dollar-signing rangeReference's own formatted "A1:B2" string with a regex: the same structured values are available already, so there is no formatted string to re-parse in the first place.
 export function buildPrintAreaValue(
   sheetName: string,
-  range: ContentSheetPrintRange,
+  range: Readonly<ContentSheetPrintRange>,
 ): string {
   const start = `$${columnIndexToLetters(range.startColumn)}$${range.startRow + 1}`;
   const end = `$${columnIndexToLetters(range.endColumn)}$${range.endRow + 1}`;

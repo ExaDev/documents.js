@@ -122,7 +122,7 @@ const THEME_COLOR_SLOT: ReadonlyMap<string, string> = new Map([
 
 // w:themeShade/w:themeTint (ST_UcharHexNumber, a two-hex-digit 0x00-0xFF byte) refine a resolved theme colour's own lightness — WordprocessingML's own convention, genuinely different from DrawingML's thousandths-of-a-percent a:shade/a:tint (shared/color.ts's applyColorTransforms, which transforms gamma-linearised R/G/B channels independently, verified against Apache POI's DrawPaint.java): this one operates purely on the HSL lightness channel, hue and saturation untouched, verified against LibreOffice's own writerfilter/dmapper implementation (sw/source/writerfilter/dmapper/DomainMapper.cxx's ThemeColorHandler consumer feeds (255-byte)*10000/255 as a 100ths-of-a-percent magnitude into tools/source/generic/color.cxx's Color::ApplyTintOrShade) — a different reference implementation from the DrawingML transform above because the two are genuinely different XML vocabularies sharing a name, not because of any inconsistency within this package. That 100ths-of-a-percent magnitude, converted back to a plain [0,1] factor, algebraically simplifies to exactly byteValue/255: tint blends lightness toward white by (1-factor), shade scales it toward black by factor — byte 0xFF means "no change" either way, byte 0x00 means the theme colour's own hue/saturation survive but lightness goes fully to white (tint) or fully to black (shade).
 function applyWordThemeShadeOrTint(
-  color: Color,
+  color: Readonly<Color>,
   kind: "shade" | "tint",
   byteValue: number,
 ): Color {
