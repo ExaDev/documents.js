@@ -2,7 +2,7 @@ import { Alert, Container, Paper, Select, Stack, Title } from "@mantine/core";
 import { createFileRoute } from "@tanstack/react-router";
 import { DocumentFormatSchema } from "documents.js";
 import type { DocumentFormat } from "documents.js";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { NoDocumentOpen } from "../document/NoDocumentOpen";
 import { useOpenDocument } from "../document/OpenDocumentContext";
@@ -58,9 +58,12 @@ function InspectionPanel({
 
   const format = formatOverride ?? detectedFormat;
 
-  // Runs once, for the one document this panel instance will ever see: a fresh open remounts a whole new instance (see the key above) rather than this effect re-running to reset anything. Skips inspecting outright when there is no detected format yet: handleFormatChange below is what runs inspection once the user picks one manually.
+  // Runs once, for the one document this panel instance will ever see: a fresh open remounts a whole new instance (see the key above) rather than this effect re-running to reset anything. Skips inspecting outright when there is no detected format yet: handleFormatChange below is what runs inspection once the user picks one manually. A `hasRun` ref guard stands in for a dependency array here, not out of preference, but because one is provably impossible to write correctly: `detectedFormat`, `file`, and `inspectMutate` are guaranteed stable for this panel's entire lifetime (the key above is what enforces that), so there is no reactive value a dependency list could ever meaningfully name.
   const { mutate: inspectMutate } = inspect;
+  const hasRun = useRef(false);
   useEffect(() => {
+    if (hasRun.current) return;
+    hasRun.current = true;
     if (detectedFormat === undefined) return;
     inspectMutate(
       { format: detectedFormat, bytes: file.bytes },
@@ -70,7 +73,7 @@ function InspectionPanel({
         },
       },
     );
-  }, [detectedFormat, file, inspectMutate]);
+  });
 
   const handleFormatChange = (value: string | null) => {
     // Mantine's Select works in plain strings, so `value` needs re-narrowing to DocumentFormat here rather than a cast — it can only ever hold a value drawn from formats.data, which are themselves real DocumentFormat values, so this parse cannot practically fail. safeParse's own enum check already rejects a `null` clear the same way it would reject any other non-member string, so there is no separate `value === null` case to test for.
