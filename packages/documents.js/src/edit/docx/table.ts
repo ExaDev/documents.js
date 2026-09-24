@@ -541,7 +541,7 @@ function verticalSpan(
   let span = 1;
   for (const row of rowsBelow) {
     const below = row.find((cell) => cell.columnIndex === columnIndex);
-    if (!below?.continuesVerticalMerge) {
+    if (below?.continuesVerticalMerge !== true) {
       break;
     }
     span++;

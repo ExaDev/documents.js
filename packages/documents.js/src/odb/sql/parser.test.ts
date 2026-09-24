@@ -1,3 +1,4 @@
+import { assertNeverTokenKind } from "./parser";
 import { describe, expect, it } from "vitest";
 import { HsqldbSqlParseError, HsqldbSqlUnsupportedError } from "./errors";
 import { parseSelect } from "./parser";
@@ -671,5 +672,13 @@ describe("parseSelect: malformed input", () => {
         expect(error.offset).toBe("SELECT * FROM T WHERE A IS ".length);
       }
     }
+  });
+});
+
+describe("assertNeverTokenKind", () => {
+  it("throws naming the unhandled token, proving the switch's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverTokenKind({ kind: "bogus" } as never);
+    }).toThrow('documents.js: unhandled token {"kind":"bogus"}');
   });
 });

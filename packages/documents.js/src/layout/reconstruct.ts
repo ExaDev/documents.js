@@ -59,6 +59,14 @@ import { inferCellValue } from "./cell-typing";
 import type { GridLattice, TableRegion } from "./lattice";
 import { detectGridLattice, findColumnIndex, findRowIndex } from "./lattice";
 
+// A modest, deliberately nominal fallback for the rare edge case where even the widest measured text extent in the last recovered column is zero (e.g. a LayoutText item carrying no widthPt at all) — not claimed as a real recovered value, just enough to keep the resulting ContentSheetColumn structurally sane.
+const DEFAULT_COLUMN_WIDTH_FALLBACK_PT = 40;
+
+const NO_ITEMS: ReadonlySet<LayoutItem> = new Set();
+
+// A horizontal gap exceeding 2 em within a line reads as tabbed/columnar content, not natural word spacing (plan Step 10, both the docx tab-insertion rule and the pptx same-line block split).
+const LARGE_GAP_EM_MULTIPLIER = 2;
+
 export interface ReconstructOptions {
   readonly signal?: AbortSignal;
   // Called once per recovered spreadsheet cell whose rendered text was either RE-TYPED away from a plain string or deliberately DECLINED as too ambiguous to re-type — reconstructSpreadsheet's own audit trail for a step that is, unavoidably, probabilistic. See src/layout/cell-typing.ts for the confidence bar each outcome is decided against. Cells whose text is not number/date/boolean-shaped at all are not reported: there was no inference to make, so there is nothing to audit.
@@ -453,9 +461,6 @@ function modalLineGap(gaps: readonly number[]): number {
   }
   return bestCount > 1 ? bestBucket : Math.min(...gaps);
 }
-
-// A horizontal gap exceeding 2 em within a line reads as tabbed/columnar content, not natural word spacing (plan Step 10, both the docx tab-insertion rule and the pptx same-line block split).
-const LARGE_GAP_EM_MULTIPLIER = 2;
 
 // A vertical gap exceeding 1.25x the page's own modal line spacing reads as a paragraph break in docx, or as leaving one pptx text block for another (plan Step 10) — the same underlying "is this still the same flow of text" signal in both directions, so both reuse this one constant.
 const PARAGRAPH_GAP_MULTIPLIER = 1.25;
@@ -2186,8 +2191,6 @@ function recoverTable(
   };
 }
 
-const NO_ITEMS: ReadonlySet<LayoutItem> = new Set();
-
 // ---------------------------------------------------------------------------
 // PDF -> ods (spreadsheet): recovers what was printed, not what was entered. Every recovered cell keeps its own rendered string verbatim in the REQUIRED displayText field, and additionally gets a heuristically re-typed `value` (number/percentage/currency/date/boolean) wherever src/layout/cell-typing.ts finds exactly one defensible reading of that string — an explicitly PROBABILISTIC step, not a fidelity guarantee, since a rendered PDF genuinely never carries a cell's own typed value and a numeric-looking string may always have been a genuine string. Read cell-typing.ts's own module doc before relying on a re-typed value: it states the confidence bar, and every re-typing decision (including a deliberate refusal on a named ambiguity) is reported through ReconstructOptions.onCellTypeInference. A formula is still never claimed — nothing about a rendered value implies one was computed. Two detection paths, tried in this order per page: (1) a real gridline lattice — a genuine printed spreadsheet with gridlines enabled draws exactly this, see layout/sheets.ts's own renderGridlines — is used DIRECTLY as cell boundaries, no inference needed; (2) absent a lattice, text is clustered into a grid from geometry alone, reusing this module's own clusterIntoLines for rows (a spreadsheet cell's own text is never wrapped across lines — sheets.ts's own module doc — so a text line already IS a row) and a parallel x-position recurrence clustering for columns, generalizing clusterIntoParagraphs's own single dominantLeftX to several recurring column anchors. Column widths, row heights, and a sheet's own page size are all genuinely MEASURED from recovered geometry, never invented; there is no attempt to recover print INTENT (range/scale/repeat-rows) that a rendered page carries no trace of at all.
 // ---------------------------------------------------------------------------
@@ -2376,9 +2379,6 @@ function nearestColumnIndex(positions: readonly number[], xPt: number): number {
   });
   return bestIndex;
 }
-
-// A modest, deliberately nominal fallback for the rare edge case where even the widest measured text extent in the last recovered column is zero (e.g. a LayoutText item carrying no widthPt at all) — not claimed as a real recovered value, just enough to keep the resulting ContentSheetColumn structurally sane.
-const DEFAULT_COLUMN_WIDTH_FALLBACK_PT = 40;
 
 // The last recovered column has no following anchor to measure a gap against, unlike every other column, whose width is the genuinely measured distance to the next anchor. Falls back to the widest actually-measured text extent within that column (anchor to the item's own right edge) — still a real geometric measurement, never an invented default.
 function lastColumnWidthPt(

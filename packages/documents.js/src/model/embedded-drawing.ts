@@ -69,6 +69,7 @@ function translateVector(
     case "path":
       return { ...vector, frame: shiftBox(vector.frame, dxPt, dyPt) };
   }
+  return assertNeverVectorKind(vector);
 }
 
 // Every vector primitive the block's own nested drawing document carries, across all its pages, translated into the coordinate space of whichever container is about to write them: by the block's OWN frame origin (where the embedded object sits in its parent document) plus `containerOriginPt`, the origin of whatever wraps the block in turn — a slide shape's frame for the presentation directions, the plain origin for a block sitting directly in a text flow. Returns an empty array for a block whose document is not a drawing document at all, so a caller can use this as the "is there vector geometry to write here?" test and its own extraction in one step, the same way drawingOfBlock above is used as the narrowing test.
@@ -91,4 +92,9 @@ export function embeddedDrawingVectors(
   return drawing.pages.flatMap((page) =>
     page.vectors.map((vector) => translateVector(vector, dxPt, dyPt)),
   );
+}
+
+// Reached only if the union behind `vector.kind` ever gains a member the switch above does not match: every current member has a case there, so `vector.kind` narrows to `never` at the call, and adding an uncovered member makes that narrowing fail and the call stop compiling. Exists so the switch's own exhaustiveness, proven by the type checker rather than by a catch-all default that would silently accept a genuinely new member, still gives consistent-return an explicit statement to see past the switch. Exported so a test can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable.
+export function assertNeverVectorKind(value: never): never {
+  throw new Error(`documents.js: unhandled vector ${JSON.stringify(value)}`);
 }

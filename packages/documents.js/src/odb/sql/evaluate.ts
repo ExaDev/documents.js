@@ -74,6 +74,7 @@ function truthOfComparison(
     case ">=":
       return ordering >= 0 ? "true" : "false";
   }
+  return assertNeverOperator(operator);
 }
 
 function notTruth(truth: Truth): Truth {
@@ -108,6 +109,7 @@ function literalToValue(literal: SqlLiteral): ContentCellValue {
     case "null":
       return CELL_NULL;
   }
+  return assertNeverLiteralKind(literal);
 }
 
 // SQL LIKE, with % matching any run of characters (including none) and _ matching exactly one. Case-sensitive, matching both HSQLDB's and Firebird's own default LIKE behaviour. Every other character in the pattern matches literally, including regular-expression metacharacters, which is what the escaping below is for; a LIKE ... ESCAPE clause is rejected outright by the parser rather than approximated here.
@@ -292,7 +294,7 @@ function resolveColumnIndex(
     return index;
   }
   throw new HsqldbSqlEvaluationError(
-    `column "${ref.name}" not found—available: ${candidateIndices.length === 0 ? "(none)" : candidateIndices.map((index) => columns[index]?.columnName ?? "?").join(", ")}`,
+    `column "${ref.name}" not found—available: ${candidateIndices.length === 0 ? "(none)" : candidateIndices.map((candidate) => columns[candidate]?.columnName ?? "?").join(", ")}`,
     sql,
   );
 }
@@ -558,6 +560,7 @@ function evaluatePredicate(
         evaluatePredicate(predicate.right, row, resolver, tables, sql),
       );
   }
+  return assertNeverPredicateKind(predicate);
 }
 
 // IN (SELECT ...): the inner query must produce exactly one column (SQL's own rule — a row-valued or multi-column IN needs a row constructor on the left, which this grammar has no expression syntax for at all), and this follows evaluateIn's own three-valued rule identically: a NULL left operand is UNKNOWN regardless of what the subquery produces, and a non-match against a result set containing a NULL is UNKNOWN rather than FALSE. `outerResolver`/`outerRow` give the subquery a correlation fallback (this module's own top-of-file comment, point 6) — used whether or not the subquery actually turns out to reference an outer column, since re-evaluating an uncorrelated subquery with a harmless, unused fallback in place produces the identical result.
@@ -694,6 +697,7 @@ function groupKeyOf(values: readonly ContentCellValue[]): string {
         case "error":
           return `text:${value.value}`;
       }
+      return assertNeverValueKind(value);
     })
     .join(" ");
 }
@@ -1218,4 +1222,24 @@ function evaluateSelectInScope(
     return evaluateGrouped(statement, plan, matching, resolver);
   }
   return evaluateUngrouped(statement, plan, matching, resolver);
+}
+
+// Reached only if the union behind `operator` ever gains a member the switch above does not match: every current member has a case there, so `operator` narrows to `never` at the call, and adding an uncovered member makes that narrowing fail and the call stop compiling. Exists so the switch's own exhaustiveness, proven by the type checker rather than by a catch-all default that would silently accept a genuinely new member, still gives consistent-return an explicit statement to see past the switch. Exported so a test can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable.
+export function assertNeverOperator(value: never): never {
+  throw new Error(`documents.js: unhandled operator ${JSON.stringify(value)}`);
+}
+
+// Reached only if the union behind `literal.kind` ever gains a member the switch above does not match: every current member has a case there, so `literal.kind` narrows to `never` at the call, and adding an uncovered member makes that narrowing fail and the call stop compiling. Exists so the switch's own exhaustiveness, proven by the type checker rather than by a catch-all default that would silently accept a genuinely new member, still gives consistent-return an explicit statement to see past the switch. Exported so a test can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable.
+export function assertNeverLiteralKind(value: never): never {
+  throw new Error(`documents.js: unhandled literal ${JSON.stringify(value)}`);
+}
+
+// Reached only if the union behind `predicate.kind` ever gains a member the switch above does not match: every current member has a case there, so `predicate.kind` narrows to `never` at the call, and adding an uncovered member makes that narrowing fail and the call stop compiling. Exists so the switch's own exhaustiveness, proven by the type checker rather than by a catch-all default that would silently accept a genuinely new member, still gives consistent-return an explicit statement to see past the switch. Exported so a test can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable.
+export function assertNeverPredicateKind(value: never): never {
+  throw new Error(`documents.js: unhandled predicate ${JSON.stringify(value)}`);
+}
+
+// Reached only if the union behind `value.kind` ever gains a member the switch above does not match: every current member has a case there, so `value.kind` narrows to `never` at the call, and adding an uncovered member makes that narrowing fail and the call stop compiling. Exists so the switch's own exhaustiveness, proven by the type checker rather than by a catch-all default that would silently accept a genuinely new member, still gives consistent-return an explicit statement to see past the switch. Exported so a test can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable.
+export function assertNeverValueKind(value: never): never {
+  throw new Error(`documents.js: unhandled value ${JSON.stringify(value)}`);
 }

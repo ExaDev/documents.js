@@ -1,3 +1,4 @@
+import { assertNeverNodeKind } from "./item";
 import { describe, expect, it } from "vitest";
 import { encodePng } from "byte-codec";
 import { DEFAULT_LAYOUT_FONT } from "document-schema.js";
@@ -362,5 +363,13 @@ describe("sourcePath", () => {
       color: BLACK,
     });
     expect(item.sourcePath).toBeUndefined();
+  });
+});
+
+describe("assertNeverNodeKind", () => {
+  it("throws naming the unhandled node, proving the switch's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverNodeKind({ kind: "bogus" } as never);
+    }).toThrow('documents.js: unhandled node {"kind":"bogus"}');
   });
 });
