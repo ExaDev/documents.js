@@ -12,7 +12,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   return {
     ...actual,
     Outlet: () => <div data-testid="outlet" />,
-    useMatchRoute: () => (options: { to: string }) =>
+    useMatchRoute: () => (options: Readonly<{ to: string }>) =>
       currentMatch === options.to ? {} : false,
     // Stands in for the real Link, which needs a live router context this test never mounts — forwards exactly the props DocumentTabs' Button-as-Link actually needs the test to see.
     Link: (props: {

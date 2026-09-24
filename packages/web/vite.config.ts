@@ -10,11 +10,11 @@ import { BACKGROUND_COLOR, BRAND_COLOR } from "./src/design-tokens.ts";
 import { name as packageName } from "./package.json" with { type: "json" };
 
 // The sidebar's version link needs the real commit this build was produced from, and whether it happens to be an exact release tag — read here rather than dry-running semantic-release, because CI's own job graph already guarantees the answer is sitting on disk by build time: the deploy job's checkout runs strictly after the release job (`needs: [..., release]`), re-fetching `ref: main` fresh, so if semantic-release just cut a release its version-bump commit and tag are already the checked-out HEAD. A dry run would only ever predict what real git state already states outright.
-function execGit(args: string[]): string {
+function execGit(args: readonly string[]): string {
   return execFileSync("git", args, { encoding: "utf-8" }).trim();
 }
 
-function tryExecGit(args: string[]): string | undefined {
+function tryExecGit(args: readonly string[]): string | undefined {
   try {
     // 'no tag at HEAD' is an expected outcome for most commits, not a real failure — stderr is piped rather than inherited so git's own "fatal: no tag exactly matches" doesn't scroll through every dev/build run.
     return execFileSync("git", args, {

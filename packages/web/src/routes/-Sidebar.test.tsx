@@ -9,11 +9,13 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof TanstackRouter>();
   return {
     ...actual,
-    Link: (props: {
-      to: string;
-      className: string;
-      children: (state: { isActive: boolean }) => React.ReactNode;
-    }) => (
+    Link: (
+      props: Readonly<{
+        to: string;
+        className: string;
+        children: (state: Readonly<{ isActive: boolean }>) => React.ReactNode;
+      }>,
+    ) => (
       <a href={props.to} className={props.className}>
         {props.children({ isActive: currentIsActive })}
       </a>

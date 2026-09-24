@@ -11,12 +11,15 @@ let capturedUpgradeOptions: { context: () => unknown } | undefined;
 class FakeRPCHandler {
   constructor(
     public router: unknown,
-    options: CapturedHandlerOptions,
+    options: Readonly<CapturedHandlerOptions>,
   ) {
     capturedOptions = options;
   }
 
-  upgrade(target: unknown, options: { context: () => unknown }): void {
+  upgrade(
+    target: unknown,
+    options: Readonly<{ context: () => unknown }>,
+  ): void {
     capturedUpgradeTarget = target;
     capturedUpgradeOptions = options;
   }
