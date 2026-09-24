@@ -18,14 +18,16 @@ import {
 } from "./current-user";
 
 // Built from [MS-PPT] 2.3.2's own field table: rh, then a 20-byte (0x14) fixed portion of size/headerToken/offsetToCurrentEdit/lenUserName/docFileVersion/majorVersion/minorVersion/unused, then the variable ansiUserName, then relVersion, then the optional unicodeUserName of 2 * lenUserName bytes. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/940d5700-e4d7-4fc0-ab48-fed5dbc48bc1
-function currentUserAtom(options: {
-  headerToken?: number;
-  offsetToCurrentEdit?: number;
-  ansiUserName?: string;
-  unicodeUserName?: string;
-  size?: number;
-  docFileVersion?: number;
-}): Uint8Array<ArrayBuffer> {
+function currentUserAtom(
+  options: Readonly<{
+    headerToken?: number;
+    offsetToCurrentEdit?: number;
+    ansiUserName?: string;
+    unicodeUserName?: string;
+    size?: number;
+    docFileVersion?: number;
+  }>,
+): Uint8Array<ArrayBuffer> {
   const {
     headerToken = CURRENT_USER_HEADER_TOKEN_PLAIN,
     offsetToCurrentEdit = 0x00001234,

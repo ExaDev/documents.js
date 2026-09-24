@@ -33,7 +33,9 @@ const CONTEXT: DrawingWriteContext = {
   strict: false,
 };
 
-function masterDrawingShapes(size: { widthPt: number; heightPt: number }) {
+function masterDrawingShapes(
+  size: Readonly<{ widthPt: number; heightPt: number }>,
+) {
   const written = writeMainMaster(size, CONTEXT);
   const record = readRecordAt(written.bytes, 0);
   const drawingRecord = findChild(childRecords(record), RT_Drawing);

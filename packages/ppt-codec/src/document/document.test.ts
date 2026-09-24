@@ -28,11 +28,13 @@ import { readFontNames } from "./fonts";
 import { readSlideListWithText } from "./slide-list";
 
 // [MS-PPT] 2.4.2 DocumentAtom: recVer 0x1, recLen 0x28, then slideSize and notesSize as PointStructs (x then y, signed 32-bit), serverZoom as a RatioStruct, two persist references, firstSlideNumber, slideSizeType, and four bool1 bytes. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/121f2728-3497-4a0a-829e-6f416fee2ee6
-function documentAtom(options: {
-  slideX?: number;
-  slideY?: number;
-  notesMasterPersistIdRef?: number;
-}): Uint8Array<ArrayBuffer> {
+function documentAtom(
+  options: Readonly<{
+    slideX?: number;
+    slideY?: number;
+    notesMasterPersistIdRef?: number;
+  }>,
+): Uint8Array<ArrayBuffer> {
   const { slideX = 5760, slideY = 4320, notesMasterPersistIdRef = 0 } = options;
   return atom(
     RT_DocumentAtom,

@@ -484,7 +484,9 @@ describe("writeSlideDrawing: table geometry, properties and spid numbering", () 
 });
 
 describe("writeSlideDrawing: table cell spans and content", () => {
-  function collectDiagnostics(shapes: DrawingShape[]): PptDiagnostic[] {
+  function collectDiagnostics(
+    shapes: readonly DrawingShape[],
+  ): PptDiagnostic[] {
     const diagnostics: PptDiagnostic[] = [];
     const context: DrawingWriteContext = {
       ...CONTEXT,
@@ -768,7 +770,9 @@ describe("writeSlideDrawing: table cell spans and content", () => {
 });
 
 describe("writeSlideDrawing: block planning", () => {
-  function collectDiagnostics(shapes: DrawingShape[]): PptDiagnostic[] {
+  function collectDiagnostics(
+    shapes: readonly DrawingShape[],
+  ): PptDiagnostic[] {
     const diagnostics: PptDiagnostic[] = [];
     const context: DrawingWriteContext = {
       ...CONTEXT,

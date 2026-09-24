@@ -79,7 +79,9 @@ interface MasterPlaceholder {
 }
 
 // Each of the five placeholders SL_TitleBody's own MasterVariant rule requires, paired directly with its own rectangle rather than built as two separately-indexed arrays (a placementId list and a frame list) that would have to be kept in step by position — pairing them at the point each is defined removes the possibility of the two ever disagreeing on length or order, which a later index-based lookup could otherwise get wrong with nothing to catch it.
-function masterPlaceholders(size: PageSize): readonly MasterPlaceholder[] {
+function masterPlaceholders(
+  size: Readonly<PageSize>,
+): readonly MasterPlaceholder[] {
   const { widthPt: w, heightPt: h } = size;
   const margin = w * SIDE_MARGIN;
   const contentWidth = w - margin * 2;
@@ -181,7 +183,7 @@ function writeTextMasterStyleAtom(textType: number): Uint8Array<ArrayBuffer> {
 
 // The MainMasterContainer itself: the five placeholder shapes SL_TitleBody's own MasterVariant rule requires of a main master, each anchored and each carrying nothing, since this writer has no master content to put in them. The drawing counts ride out alongside the bytes, since the master's own drawing is one of the drawings the document-wide OfficeArtFDGG aggregates.
 export function writeMainMaster(
-  size: PageSize,
+  size: Readonly<PageSize>,
   context: DrawingWriteContext,
 ): DrawingWritten {
   const masterPlaceholderList = masterPlaceholders(size);

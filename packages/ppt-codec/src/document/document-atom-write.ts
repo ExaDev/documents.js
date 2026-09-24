@@ -5,7 +5,9 @@ import { pointsToMasterUnits } from "../units";
 
 // The write-side mirror of readDocumentAtom: [MS-PPT] 2.4.2's 40-byte DocumentAtom, recVer 0x1. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/121f2728-3497-4a0a-829e-6f416fee2ee6
 
-export function writeDocumentAtom(size: PageSize): Uint8Array<ArrayBuffer> {
+export function writeDocumentAtom(
+  size: Readonly<PageSize>,
+): Uint8Array<ArrayBuffer> {
   const width = pointsToMasterUnits(size.widthPt);
   const height = pointsToMasterUnits(size.heightPt);
   return writeAtom(

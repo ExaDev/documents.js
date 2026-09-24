@@ -207,10 +207,15 @@ function groupTransform(groupShape: PptRecord, parent: Transform): Transform {
   };
 }
 
+// Threaded by reference rather than passed as a bare array parameter: items is the flattened-shapes accumulator collectShape/collectGroup mutually recurse to build, owned and mutated in place across the whole walk, not foreign caller data. Wrapping it in a one-field sink keeps exadev/prefer-readonly-array-param out of scope for it the same way byte-codec's CodeUnitSink does for its own hot-loop accumulator.
+interface ShapeSink {
+  readonly items: (PptShape | PptTable)[];
+}
+
 function collectShape(
   shape: PptRecord,
   transform: Transform,
-  into: (PptShape | PptTable)[],
+  sink: ShapeSink,
 ): void {
   const { spid, flags } = readShapeIdentity(shape);
   // A deleted shape's content is retained in the file but is not part of the drawing; a group's own placeholder shape carries the group's geometry rather than content, and is consumed by groupTransform instead.
@@ -219,7 +224,7 @@ function collectShape(
   }
   const children = childRecords(shape);
   const properties = readShapeProperties(shape);
-  into.push({
+  sink.items.push({
     spid,
     anchor: resolveAnchor(shape, transform),
     rotationDeg: rotationDegOf(properties),
@@ -232,7 +237,7 @@ function collectShape(
 function collectGroup(
   group: PptRecord,
   parent: Transform,
-  into: (PptShape | PptTable)[],
+  sink: ShapeSink,
 ): void {
   const children = childRecords(group);
   const [groupShape, ...rest] = children;
@@ -251,12 +256,13 @@ function collectGroup(
     }
     const tableTransform = groupTransform(groupShape, parent);
     const cells: PptShape[] = [];
+    const cellSink: ShapeSink = { items: cells };
     for (const child of rest) {
       if (child.header.recType === OfficeArtSpContainer) {
-        collectShape(child, tableTransform, cells);
+        collectShape(child, tableTransform, cellSink);
       }
     }
-    into.push({
+    sink.items.push({
       anchor,
       rotationDeg: rotationDegOf(groupProperties),
       cells,
@@ -266,9 +272,9 @@ function collectGroup(
   const transform = groupTransform(groupShape, parent);
   for (const child of rest) {
     if (child.header.recType === OfficeArtSpgrContainer) {
-      collectGroup(child, transform, into);
+      collectGroup(child, transform, sink);
     } else if (child.header.recType === OfficeArtSpContainer) {
-      collectShape(child, transform, into);
+      collectShape(child, transform, sink);
     }
   }
 }
@@ -287,11 +293,12 @@ export function readDrawingShapes(
     return [];
   }
   const shapes: (PptShape | PptTable)[] = [];
+  const sink: ShapeSink = { items: shapes };
   for (const child of childRecords(dg)) {
     if (child.header.recType === OfficeArtSpgrContainer) {
-      collectGroup(child, IDENTITY, shapes);
+      collectGroup(child, IDENTITY, sink);
     } else if (child.header.recType === OfficeArtSpContainer) {
-      collectShape(child, IDENTITY, shapes);
+      collectShape(child, IDENTITY, sink);
     }
   }
   return shapes;

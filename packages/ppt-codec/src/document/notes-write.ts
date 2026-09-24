@@ -25,7 +25,10 @@ const NOTES_BODY_TOP_FRACTION = 0.5;
 const NOTES_BODY_MARGIN_FRACTION = 0.05;
 
 // One shape holding the whole of a slide's notes: one paragraph per line, matching how ContentSlide.notes spells a multi-paragraph note and how odf.js's odp writer splits the same string across its own text:p elements.
-function notesBodyShape(notes: string, notesPageSize: PageSize): ContentShape {
+function notesBodyShape(
+  notes: string,
+  notesPageSize: Readonly<PageSize>,
+): ContentShape {
   const marginXPt = notesPageSize.widthPt * NOTES_BODY_MARGIN_FRACTION;
   const marginYPt = notesPageSize.heightPt * NOTES_BODY_MARGIN_FRACTION;
   const topPt = notesPageSize.heightPt * NOTES_BODY_TOP_FRACTION;
@@ -65,7 +68,7 @@ export function writeNotesAtom(slideIdRef: number): Uint8Array<ArrayBuffer> {
 export function writeNotesContainer(
   slideIdRef: number,
   notes: string,
-  notesPageSize: PageSize,
+  notesPageSize: Readonly<PageSize>,
   context: DrawingWriteContext,
 ): DrawingWritten {
   const drawing = writeSlideDrawing(
