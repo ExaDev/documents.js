@@ -15,6 +15,8 @@ export interface OpenDocument {
 export interface OpenDocumentContextValue {
   document: OpenDocument | undefined;
   openDocument: (file: OpenedFile) => void;
+  /** Clears the open document back to undefined, without opening a replacement. The open-document bar is the only caller today, for its own explicit close action; a tool page never calls this itself. */
+  closeDocument: () => void;
 }
 
 const OpenDocumentContext = createContext<OpenDocumentContextValue | undefined>(
@@ -26,20 +28,25 @@ export function OpenDocumentProvider({ children }: { children: ReactNode }) {
   const [document, setDocument] = useState<OpenDocument | undefined>(undefined);
   const nextId = useRef(1);
 
-  // Memoised via a lazy `useState` initialiser rather than `useCallback(fn, [])`. This closure captures nothing from render scope (`nextId` is itself a ref, and `setDocument` is already stable), so there is no reactive value a dependency array could ever meaningfully name; an empty array is the only array `useCallback` could ever be given here, which is exactly what makes it provably impossible for a test to distinguish from one that isn't empty. `useState`'s own initialiser runs once and only once, giving the same forever-stable reference without reading a ref during render (banned by react-hooks/refs).
-  const [openDocument] = useState<(file: OpenedFile) => void>(
-    () => (file: OpenedFile) => {
+  // Memoised via a lazy `useState` initialiser rather than `useCallback(fn, [])`. Neither closure captures anything from render scope (`nextId` is itself a ref, and `setDocument` is already stable), so there is no reactive value a dependency array could ever meaningfully name for either; an empty array is the only array `useCallback` could ever be given here, which is exactly what makes it provably impossible for a test to distinguish from one that isn't empty. `useState`'s own initialiser runs once and only once, giving the same forever-stable pair of references without reading a ref during render (banned by react-hooks/refs). Both functions are created by the one initialiser so they share a single stable object rather than needing two separate useState calls.
+  const [{ openDocument, closeDocument }] = useState<
+    Pick<OpenDocumentContextValue, "openDocument" | "closeDocument">
+  >(() => ({
+    openDocument: (file: OpenedFile) => {
       setDocument({
         id: nextId.current++,
         file,
         format: inferFormatFromFilename(file.name),
       });
     },
-  );
+    closeDocument: () => {
+      setDocument(undefined);
+    },
+  }));
 
   const value = useMemo<OpenDocumentContextValue>(
-    () => ({ document, openDocument }),
-    [document, openDocument],
+    () => ({ document, openDocument, closeDocument }),
+    [document, openDocument, closeDocument],
   );
 
   return (

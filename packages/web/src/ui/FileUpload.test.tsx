@@ -27,9 +27,10 @@ vi.mock("@mantine/dropzone", () => {
     children: React.ReactNode;
   }) {
     latestOnDrop = props.onDrop;
+    // A div with role="presentation", not a button. The real Dropzone (react-dropzone's own getRootProps()) renders its root with role="presentation" too, and FileUpload now nests a real close button inside it once a file is open. A mocked button root would make that a button nested in a button, an HTML nesting the real markup never actually produces.
     return (
-      <button
-        type="button"
+      <div
+        role="presentation"
         data-testid="dropzone"
         data-activate-on-click={String(props.activateOnClick)}
         data-disabled={String(props.disabled)}
@@ -40,7 +41,7 @@ vi.mock("@mantine/dropzone", () => {
         onClick={props.onClick}
       >
         {props.children}
-      </button>
+      </div>
     );
   }
   MockDropzone.Accept = (props: { children: React.ReactNode }) => (
@@ -149,6 +150,69 @@ describe("FileUpload", () => {
     expect(html()).not.toContain("Drag a file here");
     expect(html()).toContain("tabler-icon-file");
     expect(html()).not.toContain("tabler-icon-upload");
+  });
+
+  it("renders no close button when a file is present but onClose is not given", () => {
+    createFileAccess.mockReturnValue(fileAccessStub());
+    const { container } = renderUpload({
+      file: { bytes: new Uint8Array([1]), name: "report.pdf" },
+    });
+    expect(container.querySelector("button[aria-label^='Close']")).toBeNull();
+  });
+
+  it("renders no close button at all while there is no file, even when onClose is given", () => {
+    createFileAccess.mockReturnValue(fileAccessStub());
+    const { container } = renderUpload({ onClose: vi.fn<() => void>() });
+    expect(container.querySelector("button[aria-label^='Close']")).toBeNull();
+  });
+
+  it("names the close button after the currently open file, and calls onClose without also opening a replacement", () => {
+    const openFile = vi.fn(() => Promise.resolve(undefined));
+    createFileAccess.mockReturnValue(
+      fileAccessStub({ supportsNativePicker: () => true, openFile }),
+    );
+    const onClose = vi.fn<() => void>();
+    const onFile = vi.fn();
+    const { container } = renderUpload({
+      file: { bytes: new Uint8Array([1]), name: "report.pdf" },
+      onClose,
+      onFile,
+    });
+    const closeBtn = container.querySelector<HTMLButtonElement>(
+      "button[aria-label='Close report.pdf']",
+    );
+    expect(closeBtn).not.toBeNull();
+    closeBtn!.click();
+    expect(onClose).toHaveBeenCalledTimes(1);
+    // Checked synchronously, straight after the click: the close button's own onClick must stop the click bubbling up to the Dropzone's own onClick (handleClick), which would otherwise open the native picker at the same moment as closing. openFile's own call happens synchronously within that bubbled handler, before its returned promise ever settles, so this is observable immediately, unlike onFile (only called after openFile's promise resolves).
+    expect(openFile).not.toHaveBeenCalled();
+    expect(onFile).not.toHaveBeenCalled();
+  });
+
+  it("still lets a click on the bar itself (outside the close button) open a replacement, native picker supported", async () => {
+    const openFile = vi.fn(() =>
+      Promise.resolve({ bytes: new Uint8Array([2]), name: "replaced.pdf" }),
+    );
+    createFileAccess.mockReturnValue(
+      fileAccessStub({ supportsNativePicker: () => true, openFile }),
+    );
+    const onClose = vi.fn<() => void>();
+    const onFile = vi.fn();
+    const { click } = renderUpload({
+      file: { bytes: new Uint8Array([1]), name: "report.pdf" },
+      onClose,
+      onFile,
+    });
+
+    click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(openFile).toHaveBeenCalledTimes(1);
+    expect(onFile).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "replaced.pdf" }),
+    );
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it("shows the upload icon, not the file icon, when no file is present", () => {

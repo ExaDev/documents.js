@@ -15,15 +15,18 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 });
 
 let latestOnFile: ((file: OpenedFile) => void) | undefined;
+let latestOnClose: (() => void) | undefined;
 let latestFile: OpenedFile | undefined;
 let latestFormatHint: string | undefined;
 vi.mock("../ui/FileUpload", () => ({
   FileUpload: (props: {
     onFile: (file: OpenedFile) => void;
+    onClose?: () => void;
     file?: OpenedFile;
     formatHint?: string;
   }) => {
     latestOnFile = props.onFile;
+    latestOnClose = props.onClose;
     latestFile = props.file;
     latestFormatHint = props.formatHint;
     return <div data-testid="file-upload" />;
@@ -48,6 +51,7 @@ function mountLayout() {
 
 afterEach(() => {
   latestOnFile = undefined;
+  latestOnClose = undefined;
   latestFile = undefined;
   latestFormatHint = undefined;
 });
@@ -98,6 +102,21 @@ describe("DocumentLayout", () => {
     expect(mounted.container.textContent).toContain(
       "Could not detect a format from the file's extension.",
     );
+    mounted.unmount();
+  });
+
+  it("clears the open document, and its detected-format line, when the FileUpload's own close action fires", () => {
+    const mounted = mountLayout();
+    act(() => {
+      latestOnFile?.(openedFile("report.docx"));
+    });
+    expect(latestFile?.name).toBe("report.docx");
+
+    act(() => {
+      latestOnClose?.();
+    });
+    expect(latestFile).toBeUndefined();
+    expect(mounted.container.textContent).not.toContain("Detected format");
     mounted.unmount();
   });
 });

@@ -10,13 +10,14 @@ export const Route = createFileRoute("/_document")({
 });
 
 function OpenDocumentBar() {
-  const { document, openDocument } = useOpenDocument();
+  const { document, openDocument, closeDocument } = useOpenDocument();
   return (
     <Paper withBorder p="md">
       <Stack gap="xs">
         <FileUpload
           file={document?.file}
           onFile={openDocument}
+          onClose={closeDocument}
           formatHint="Any document format this app supports"
         />
         {document !== undefined && (

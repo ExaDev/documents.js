@@ -98,4 +98,35 @@ describe("useOpenDocument", () => {
     expect(latestValue?.document?.id).toBe(1);
     mounted.unmount();
   });
+
+  it("clears the document back to undefined when closeDocument is called", () => {
+    const mounted = mountProbe();
+    open("first.docx");
+    expect(latestValue?.document).toBeDefined();
+    act(() => {
+      latestValue?.closeDocument();
+    });
+    expect(latestValue?.document).toBeUndefined();
+    mounted.unmount();
+  });
+
+  it("assigns a fresh, higher id to the next open after closeDocument, rather than reusing the sequence", () => {
+    const mounted = mountProbe();
+    open("first.docx");
+    const firstId = latestValue?.document?.id;
+    act(() => {
+      latestValue?.closeDocument();
+    });
+    open("second.docx");
+    expect(latestValue?.document?.id).toBeGreaterThan(firstId!);
+    mounted.unmount();
+  });
+
+  it("keeps closeDocument's own reference stable across an open, matching openDocument's own stability", () => {
+    const mounted = mountProbe();
+    const firstClose = latestValue?.closeDocument;
+    open("first.docx");
+    expect(latestValue?.closeDocument).toBe(firstClose);
+    mounted.unmount();
+  });
 });
