@@ -1,3 +1,19 @@
+## [2.14.0](https://github.com/ExaDev/documents.js/compare/web%402.13.31...web%402.14.0) (2026-09-24)
+
+### Features
+
+* **web:** open a document once for every tool, Editors and Recent included ([f79ac81](https://github.com/ExaDev/documents.js/commit/f79ac812cf1b2d970d2dfea0a60b5d460947a2f3))
+
+### Styles
+
+* **web:** punctuate comments and the format alert without double hyphens ([617e90c](https://github.com/ExaDev/documents.js/commit/617e90ca8b2c33ab3f1db9dcb030357107794743))
+
+
+### Dependencies
+
+- Updated ooxml.js to 12.2.18
+- Updated documents.js to 14.4.25
+
 ## [2.13.31](https://github.com/ExaDev/documents.js/compare/web%402.13.30...web%402.13.31) (2026-09-24)
 
 

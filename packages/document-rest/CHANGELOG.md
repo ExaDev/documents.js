@@ -1,3 +1,11 @@
+## [1.4.90](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.89...document-rest%401.4.90) (2026-09-24)
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.25
+- Updated document-operations to 1.1.87
+
 ## [1.4.89](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.88...document-rest%401.4.89) (2026-09-24)
 
 ### Miscellaneous Chores
