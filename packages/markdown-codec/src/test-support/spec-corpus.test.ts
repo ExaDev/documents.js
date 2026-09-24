@@ -26,9 +26,10 @@ describe("isSpecExample", () => {
   });
 
   it("rejects a non-object", () => {
+    const arbitraryNumber = 42;
     expect(isSpecExample("not an object")).toBe(false);
     expect(isSpecExample(null)).toBe(false);
-    expect(isSpecExample(42)).toBe(false);
+    expect(isSpecExample(arbitraryNumber)).toBe(false);
   });
 
   it('rejects a function even when it carries all four fields with the right types — typeof a function is "function", never "object"', () => {

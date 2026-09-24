@@ -112,6 +112,8 @@ function readPositiveIntAttr(attrs: string, name: string): number | undefined {
 // A `style="...background-color: #rrggbb..."` declaration — the one CSS shape src/emit/html-table.ts's own writer ever produces for a cell's solid ContentCellFill, and the only one this reader recognises back; a pattern fill has no such CSS equivalent to begin with (see that module's own top comment) so there is nothing here for a pattern to round-trip through. The 3-digit shorthand (#rgb) is accepted too since it is completely unambiguous, even though the writer itself always emits the 6-digit form.
 const BACKGROUND_COLOR_PATTERN =
   /background-color\s*:\s*#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/i;
+// The #rgb shorthand's own digit count, before each digit is doubled up into the 6-digit form.
+const SHORT_HEX_DIGIT_COUNT = 3;
 
 function readBackgroundFill(attrs: string): ContentCellFill | undefined {
   const style = readAttr(attrs, "style");
@@ -123,7 +125,7 @@ function readBackgroundFill(attrs: string): ContentCellFill | undefined {
     return undefined;
   }
   const normalised =
-    hex.length === 3
+    hex.length === SHORT_HEX_DIGIT_COUNT
       ? hex
           .split("")
           .map((digit) => digit + digit)

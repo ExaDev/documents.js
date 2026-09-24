@@ -85,8 +85,10 @@ describe("parseTableDelimiterRow", () => {
 
 describe("fitRowToColumns", () => {
   it("pads a short row with empty cells and truncates a long one", () => {
-    expect(fitRowToColumns(["a"], 3)).toEqual(["a", "", ""]);
-    expect(fitRowToColumns(["a", "b", "c"], 2)).toEqual(["a", "b"]);
+    const threeColumns = 3;
+    const twoColumns = 2;
+    expect(fitRowToColumns(["a"], threeColumns)).toEqual(["a", "", ""]);
+    expect(fitRowToColumns(["a", "b", "c"], twoColumns)).toEqual(["a", "b"]);
   });
 });
 

@@ -22,8 +22,10 @@ const EMPHASIS_MARKER = "*";
 const ONE_PIXEL_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
-// A 1x1 PNG measures one CSS reference pixel each way, which document-schema.js's own point-based geometry records as 72/96 pt.
-const ONE_PIXEL_PT = 72 / 96;
+// A 1x1 PNG measures one CSS reference pixel each way, which document-schema.js's own point-based geometry records as POINTS_PER_INCH/CSS_PIXELS_PER_INCH pt.
+const POINTS_PER_INCH = 72;
+const CSS_PIXELS_PER_INCH = 96;
+const ONE_PIXEL_PT = POINTS_PER_INCH / CSS_PIXELS_PER_INCH;
 
 // Every fixture below puts the cell under test in a BODY row behind one fixed header row, so each assertion reads the <td> spelling rather than the header row's own <th>.
 const HEADER_TEXT = "h";
@@ -312,7 +314,12 @@ describe("emitHtmlTable", () => {
         },
       ]),
     );
-    expect(cellTagCountsPerRow(html)).toEqual([3, 2]);
+    const firstRowCellCount = 3; // h, i, j
+    const secondRowCellCount = 2; // the colspan=2 cell plus x; the covered cell writes no tag
+    expect(cellTagCountsPerRow(html)).toEqual([
+      firstRowCellCount,
+      secondRowCellCount,
+    ]);
     expect(html).toContain('<td colspan="2">wide</td><td>x</td>');
   });
 

@@ -15,8 +15,9 @@ describe("matchEntity numeric references", () => {
   });
 
   it("decodes the maximum valid codepoint (U+10FFFF) normally, not as a replacement", () => {
+    const maxValidCodepoint = 0x10ffff;
     expect(matchEntity("&#x10FFFF;", 0)?.value).toBe(
-      String.fromCodePoint(0x10ffff),
+      String.fromCodePoint(maxValidCodepoint),
     );
   });
 
@@ -25,8 +26,9 @@ describe("matchEntity numeric references", () => {
   });
 
   it("decodes the character just below the surrogate range normally", () => {
+    const justBelowSurrogateRange = 0xd7ff;
     expect(matchEntity("&#xD7FF;", 0)?.value).toBe(
-      String.fromCodePoint(0xd7ff),
+      String.fromCodePoint(justBelowSurrogateRange),
     );
   });
 
@@ -39,8 +41,9 @@ describe("matchEntity numeric references", () => {
   });
 
   it("decodes the character just past the surrogate range normally", () => {
+    const justPastSurrogateRange = 0xe000;
     expect(matchEntity("&#xE000;", 0)?.value).toBe(
-      String.fromCodePoint(0xe000),
+      String.fromCodePoint(justPastSurrogateRange),
     );
   });
 
