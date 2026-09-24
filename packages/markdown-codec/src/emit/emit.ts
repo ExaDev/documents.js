@@ -536,6 +536,7 @@ function renderTopLevelBlock(
     case "pageBreak":
       return "";
   }
+  return assertNeverRenderableBlock(block);
 }
 
 // --- List rendering: every ContentParagraph carrying .list is its own list item (see src/lower/lower.ts's own top-of-file note on why ContentListMembership cannot distinguish a continuation paragraph from a fresh sibling item — this package resolves that ambiguity the same way on both sides, consistently). A construct (most commonly a blockquote's division pair) sitting directly inside an item shares that item's own membership on its own wrapped paragraphs — src/lower/lower.ts's lowerBlockquote threads the enclosing BlockLowerContext.list straight through a quote's own children — so ListRegionItem below generalises every function in this section from plain ContentParagraph blocks to that heterogeneous shape (a plain list-tagged paragraph, or a construct carrying one), letting a construct stay nested inside the item it interrupts rather than fracturing it into separate top-level content (renderItems' own region-collection scan is where that heterogeneous run is actually assembled, via constructCarriesListItemId below). ---
@@ -573,10 +574,11 @@ function listInfoFor(
 function stripCheckboxRun(item: ContentParagraph): ContentParagraph {
   const first = item.runs[0];
   const checked = first?.text.startsWith(`${TASK_CHECKBOX_CHECKED} `);
-  const glyphPrefix = checked
-    ? `${TASK_CHECKBOX_CHECKED} `
-    : `${TASK_CHECKBOX_UNCHECKED} `;
-  if (!first?.text.startsWith(glyphPrefix)) {
+  const glyphPrefix =
+    checked === true
+      ? `${TASK_CHECKBOX_CHECKED} `
+      : `${TASK_CHECKBOX_UNCHECKED} `;
+  if (first?.text.startsWith(glyphPrefix) !== true) {
     return item;
   }
   const strippedText = first.text.slice(glyphPrefix.length);
@@ -1297,4 +1299,11 @@ export function emitMarkdown(
 
   const lineEnding = options.lineEnding ?? DEFAULT_LINE_ENDING;
   return lineEnding === "crlf" ? text.replaceAll("\n", "\r\n") : text;
+}
+
+// Reached only if RenderableBlock ever gains a member renderTopLevelBlock's own switch does not match: every current member has a case there, so `block` narrows to `never` at the call, and adding an uncovered member makes that narrowing fail and the call stop compiling. Exists so the switch's exhaustiveness, proven by the type checker rather than by a catch-all default that would silently drop a genuinely new member, still gives consistent-return an explicit statement to see past the switch. Exported so the tests can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable.
+export function assertNeverRenderableBlock(block: never): never {
+  throw new Error(
+    `markdown-codec: unhandled renderable block ${JSON.stringify(block)}`,
+  );
 }

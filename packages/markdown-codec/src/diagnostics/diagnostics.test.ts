@@ -539,9 +539,9 @@ describe("throw-tier error classes carry their own precise code, message, and fi
   it("MarkdownInputTooLargeError: lowerMarkdown enforces maxInputBytes against the input's own UTF-8 byte length, not its character count", () => {
     // "é" is two UTF-8 bytes but one UTF-16 code unit — a maxInputBytes check keyed on .length rather than TextEncoder byte length would let this through at limit 5.
     const source = "aaéé";
-    const error = captureThrown(() =>
-      lowerMarkdown(source, { maxInputBytes: 5 }),
-    );
+    const error = captureThrown(() => {
+      lowerMarkdown(source, { maxInputBytes: 5 });
+    });
     expect(error).toBeInstanceOf(MarkdownInputTooLargeError);
     expect(error).toBeInstanceOf(MarkdownParseError);
     const typed = error as MarkdownInputTooLargeError;
@@ -561,7 +561,9 @@ describe("throw-tier error classes carry their own precise code, message, and fi
   it("MarkdownNestingLimitExceededError: parseMarkdown enforces maxNesting against the open-block stack depth", () => {
     // Three levels of blockquote nesting against a maxNesting of 2 — the third open (nestingDepth reaching the limit) must throw, not the first or second.
     const source = "> > > deep";
-    const error = captureThrown(() => parseMarkdown(source, { maxNesting: 2 }));
+    const error = captureThrown(() => {
+      parseMarkdown(source, { maxNesting: 2 });
+    });
     expect(error).toBeInstanceOf(MarkdownNestingLimitExceededError);
     expect(error).toBeInstanceOf(MarkdownParseError);
     const typed = error as MarkdownNestingLimitExceededError;

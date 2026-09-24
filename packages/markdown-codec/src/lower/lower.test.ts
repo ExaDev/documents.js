@@ -1,3 +1,4 @@
+import { assertNeverMarkdownBlock } from "./lower";
 // Construct-by-construct tests for the AST -> ContentDocument lowering stage (src/lower/lower.ts). Each `describe` below maps onto one row of that module's own top-of-file table; the "gaps" describe block gives every MarkdownDiagnosticCodes entry that module produces its own targeted, real-markdown-input test.
 
 import { ContentDocumentSchema } from "document-schema.js";
@@ -1050,5 +1051,13 @@ describe("gaps (MarkdownDiagnosticCodes)", () => {
     expect(
       collector.has(MarkdownDiagnosticCodes.FRONT_MATTER_KEY_UNMAPPED),
     ).toBe(true);
+  });
+});
+
+describe("assertNeverMarkdownBlock", () => {
+  it("throws naming the unhandled markdown block, proving lowerBlock's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverMarkdownBlock({ type: "bogus" } as never);
+    }).toThrow('markdown-codec: unhandled markdown block {"type":"bogus"}');
   });
 });

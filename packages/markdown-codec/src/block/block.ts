@@ -283,6 +283,7 @@ class BlockParser {
         // Both own exactly one line and close as soon as the next one arrives.
         return "not-matched";
     }
+    return assertNeverBlockKind(node.kind);
   }
 
   // spec 0.31.2: "A block quote marker consists of 0-3 spaces of initial indent, plus the character `>` together with a following space, or a single character `>` not followed by a space."
@@ -804,6 +805,9 @@ class BlockParser {
       case "list":
         finalizeListTightness(node);
         return;
+      // Every other block kind is finalized entirely by its own parser and carries nothing to settle once its lines have been consumed, so reaching the end of one is the ordinary case rather than a gap.
+      default:
+        return;
     }
   }
 
@@ -1021,6 +1025,7 @@ function toAstBlock(
       // Neither can appear as a child of anything toAstBlocks walks: a document is the root, and a list item is only ever reached through its own list.
       return undefined;
   }
+  return assertNeverBlockKind(node.kind);
 }
 
 function toAstBlocks(
@@ -1057,4 +1062,11 @@ export function parseMarkdown(
     references: context.references,
     footnotes: context.footnotes,
   };
+}
+
+// Reached only if BlockNodeKind ever gains a member continueBlock's and toAstBlock's own switches do not match: every current member has a case in both, so `node.kind` narrows to `never` at each call, and adding an uncovered member makes that narrowing fail and the call stop compiling. Exists so the switch's exhaustiveness, proven by the type checker rather than by a catch-all default that would silently drop a genuinely new member, still gives consistent-return an explicit statement to see past the switch. Exported so the tests can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable.
+export function assertNeverBlockKind(kind: never): never {
+  throw new Error(
+    `markdown-codec: unhandled block kind ${JSON.stringify(kind)}`,
+  );
 }

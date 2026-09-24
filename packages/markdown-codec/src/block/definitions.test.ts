@@ -37,7 +37,9 @@ describe("extractDefinitions", () => {
     extractDefinitions(
       "[a]: /1\n[a]: /2",
       new Map<string, LinkReferenceDefinition>(),
-      (diagnostic) => messages.push(diagnostic.message),
+      (diagnostic) => {
+        messages.push(diagnostic.message);
+      },
     );
     expect(messages).toEqual([
       'link reference definition "A" was already defined earlier in the document; this later definition is ignored',

@@ -140,6 +140,7 @@ function renderInline(node: MarkdownInlineNode): string {
       // Math (ExaDev/markdown-codec#53) is a Pandoc/GFM extension outside CommonMark/GFM proper — neither vendored corpus this renderer exists to check against (src/conformance.test.ts, src/gfm-conformance.test.ts) carries a math example, so there is no cmark-produced expected HTML to match here. The \( \) delimiters are reconstructed around the escaped literal — matching what the real write path (src/emit/inline.ts's renderLeaf) actually produces — so an EMPTY math span (a genuine, if unlikely, corpus edge case: two backslash escapes sitting directly adjacent, e.g. "\(\)") renders as "\(\)" here too rather than as nothing, keeping this internal oracle consistent with the real writer it exists to cross-check other constructs against.
       return `\\(${escapeHtml(node.literal)}\\)`;
   }
+  return assertNeverInlineNode(node);
 }
 
 export function renderInlines(nodes: readonly MarkdownInlineNode[]): string {
@@ -289,4 +290,11 @@ export function renderDocumentToHtml(document: MarkdownDocumentNode): string {
   const renderer = new HtmlRenderer();
   renderer.render(document.children, false);
   return renderer.result();
+}
+
+// Reached only if MarkdownInlineNode ever gains a member renderInline's own switch does not match: every current member has a case there, so `node` narrows to `never` at the call, and adding an uncovered member makes that narrowing fail and the call stop compiling. Exists so the switch's exhaustiveness, proven by the type checker rather than by a catch-all default that would silently drop a genuinely new member, still gives consistent-return an explicit statement to see past the switch. Exported so the tests can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable.
+export function assertNeverInlineNode(node: never): never {
+  throw new Error(
+    `markdown-codec: unhandled inline node ${JSON.stringify(node)}`,
+  );
 }

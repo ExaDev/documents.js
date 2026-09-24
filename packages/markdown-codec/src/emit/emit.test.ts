@@ -1,3 +1,4 @@
+import { assertNeverRenderableBlock } from "./emit";
 // Construct-by-construct tests for the ContentDocument -> markdown emission stage (src/emit/emit.ts), the structural inverse of src/lower/lower.test.ts. Most tests here build a ContentDocument directly (bypassing src/lower entirely) so each construct — including a cross-format shape src/lower itself never produces, like a paragraph with indentLeftPt but no quotable styleId — can be exercised in isolation; a handful round-trip through src/lower/lower.ts first where that is the more natural way to obtain a real value (a code span run, a task-list item).
 
 import type {
@@ -5046,5 +5047,13 @@ describe("emitMarkdown's own top-level assembly", () => {
         { lineEnding: "crlf" },
       ),
     ).toBe("first\r\n\r\nsecond");
+  });
+});
+
+describe("assertNeverRenderableBlock", () => {
+  it("throws naming the unhandled renderable block, proving renderTopLevelBlock's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverRenderableBlock({ kind: "bogus" } as never);
+    }).toThrow('markdown-codec: unhandled renderable block {"kind":"bogus"}');
   });
 });

@@ -1,3 +1,4 @@
+import { assertNeverInlineKind } from "./inline";
 // AST-level tests for the inline phase. These assert the NODE SHAPE parseInlines produces, which the CommonMark conformance suite (src/conformance.test.ts) cannot: that suite compares rendered HTML, so it is blind to everything the AST records for the write side's benefit but HTML discards — which of `*`/`_` an emphasis was written with, an entity's original source spelling, an autolink's email flag. It is also where GFM's own extensions are covered, since the CommonMark corpus by definition does not test them.
 
 import { describe, expect, it } from "vitest";
@@ -597,5 +598,13 @@ describe("GFM extended autolinks", () => {
     expect(parse("www.example.com")).toEqual([
       { type: "text", value: "www.example.com" },
     ]);
+  });
+});
+
+describe("assertNeverInlineKind", () => {
+  it("throws naming the unhandled inline kind, proving toAstNode's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverInlineKind("bogus" as never);
+    }).toThrow('markdown-codec: unhandled inline kind "bogus"');
   });
 });

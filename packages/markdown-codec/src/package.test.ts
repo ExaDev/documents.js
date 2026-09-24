@@ -137,7 +137,9 @@ describe("readMarkdown: markdown text -> DocumentTree", () => {
   it("reports the same diagnostics as readMarkdownContent, through the return value and the caller sink alike", () => {
     const seen: string[] = [];
     const { diagnostics } = readMarkdown(SAMPLE, {
-      sink: (diagnostic) => seen.push(diagnostic.code),
+      sink: (diagnostic) => {
+        seen.push(diagnostic.code);
+      },
     });
 
     expect(diagnostics.map((diagnostic) => diagnostic.code)).toEqual(
@@ -309,7 +311,9 @@ describe("writeMarkdown: DocumentTree -> markdown text", () => {
 
     const seen: string[] = [];
     writeMarkdown(withExtraTables, {
-      sink: (diagnostic) => seen.push(diagnostic.code),
+      sink: (diagnostic) => {
+        seen.push(diagnostic.code);
+      },
     });
 
     expect(
@@ -324,7 +328,9 @@ describe("writeMarkdown: DocumentTree -> markdown text", () => {
     const seen: string[] = [];
 
     const written = writeMarkdown(base, {
-      sink: (diagnostic) => seen.push(diagnostic.code),
+      sink: (diagnostic) => {
+        seen.push(diagnostic.code);
+      },
     });
 
     expect(
