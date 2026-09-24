@@ -2,6 +2,7 @@ import { readNativeDocumentTree } from "documents.js";
 import { flattenTree, rgbHexToColor } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import {
+  assertNever,
   documentAppendParagraphsOperation,
   documentCreateOperation,
 } from "./editor";
@@ -283,5 +284,13 @@ describe("documentAppendParagraphsOperation", () => {
         paragraphs: [{ text: "x" }],
       }),
     ).rejects.toThrow(/never converts format/);
+  });
+});
+
+describe("assertNever", () => {
+  it("throws naming the unhandled value, proving createDocumentBytes' own exhaustiveness guard actually fires at runtime", () => {
+    expect(() => assertNever("bogus-format" as never)).toThrow(
+      "createDocumentBytes: unhandled format bogus-format",
+    );
   });
 });
