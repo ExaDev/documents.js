@@ -1,3 +1,15 @@
+## [14.4.32](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.31...documents.js%4014.4.32) (2026-09-24)
+
+### Code Refactoring
+
+* **documents.js:** give the diagnostic callbacks void bodies and async promise returns ([23fbfb7](https://github.com/ExaDev/documents.js/commit/23fbfb7c36681fd424f268935605cbd7e09125d7))
+
+
+### Dependencies
+
+- Updated epub-codec to 5.1.9
+- Updated rtf-codec to 8.1.15
+
 ## [14.4.31](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.30...documents.js%4014.4.31) (2026-09-24)
 
 
