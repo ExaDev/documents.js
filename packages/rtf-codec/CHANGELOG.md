@@ -1,3 +1,11 @@
+## [8.1.16](https://github.com/ExaDev/documents.js/compare/rtf-codec%408.1.15...rtf-codec%408.1.16) (2026-09-24)
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.3
+- Updated archive-codec to 1.11.22
+
 ## [8.1.15](https://github.com/ExaDev/documents.js/compare/rtf-codec%408.1.14...rtf-codec%408.1.15) (2026-09-24)
 
 ### Code Refactoring

@@ -1,3 +1,14 @@
+## [5.2.26](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.25...pdf-codec%405.2.26) (2026-09-24)
+
+### Code Refactoring
+
+* **pdf-codec:** empty the eslint-config rule debt list ([590305b](https://github.com/ExaDev/documents.js/commit/590305b4b026cdea3462bd5ba94a8a19bb586eb8))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.3
+
 ## [5.2.25](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.24...pdf-codec%405.2.25) (2026-09-24)
 
 
