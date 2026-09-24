@@ -128,7 +128,10 @@ describe("convert_document", () => {
 
     const written = await readFile(outputPath);
     expect(written.byteLength).toBe(structured.output.byteLength);
-    expect(new TextDecoder().decode(written.subarray(0, 5))).toBe("%PDF-");
+    const pdfMagic = "%PDF-";
+    expect(new TextDecoder().decode(written.subarray(0, pdfMagic.length))).toBe(
+      pdfMagic,
+    );
   });
 
   it("reports a structured font substitution when asked, for a family this package vendors a metric-compatible substitute for", async () => {

@@ -196,7 +196,8 @@ describe("describe_font_file", () => {
   });
 
   it("returns an isError result for bytes that are not a recognised sfnt font at all", async () => {
-    const garbage = new Uint8Array([0x00, 0x01, 0x02, 0x03]);
+    const notAFontSignature = 0x03;
+    const garbage = new Uint8Array([0x00, 0x01, 0x02, notAFontSignature]);
 
     const result = await pair.client.callTool({
       name: "describe_font_file",
@@ -212,8 +213,10 @@ describe("describe_font_file", () => {
   });
 
   it("returns an isError result naming a TrueType Collection as its own actionable case, not a bare parse failure", async () => {
-    const ttc = new Uint8Array(12);
-    new DataView(ttc.buffer).setUint32(0, 0x74746366); // 'ttcf'
+    const ttcHeaderSize = 12;
+    const ttc = new Uint8Array(ttcHeaderSize);
+    const TTCF_TAG = 0x74746366; // 'ttcf'
+    new DataView(ttc.buffer).setUint32(0, TTCF_TAG);
 
     const result = await pair.client.callTool({
       name: "describe_font_file",

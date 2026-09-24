@@ -10,6 +10,9 @@ import { createServer } from "./server";
 // The path an HTTP/SSE-only client (Claude Web, Claude Mobile, ChatGPT) is told to add as a connector — see the README's remote transport section. A GET/DELETE (or POST) against this exact path falls through to createMcpHandler's own routing (legacy session operations, 405s, and so on); every other path on this listener 404s before nodeHandler ever sees it.
 export const MCP_HTTP_PATH = "/mcp";
 
+/** The HTTP status this listener sends for any path other than {@link MCP_HTTP_PATH}. Exported so tests assert against the same name rather than re-declaring the number. */
+export const HTTP_NOT_FOUND = 404;
+
 // The bound server alongside the concrete address it actually bound — returned together because http.Server#address()'s own return type (AddressInfo | string | null) covers a Unix domain socket or pipe bind, or a server never listened on or already closed, none of which this function's own TCP-only listen(port, host) call can ever produce; resolving with the narrowed value here means every caller works with a real AddressInfo directly, rather than each one repeating a defensive check against a shape this function's own contract already rules out.
 export interface HttpServerBinding {
   readonly server: HttpServer;
@@ -40,7 +43,9 @@ export function routeHttpRequest(
   }
   const url = new URL(req.url, "http://localhost");
   if (url.pathname !== MCP_HTTP_PATH) {
-    res.writeHead(404, { "content-type": "text/plain" }).end("Not found");
+    res
+      .writeHead(HTTP_NOT_FOUND, { "content-type": "text/plain" })
+      .end("Not found");
     return;
   }
   onMcpRequest();
