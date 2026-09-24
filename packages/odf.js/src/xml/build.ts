@@ -1,5 +1,9 @@
 import { XMLBuilder } from "fast-xml-parser";
-import type { Attribute, XmlNode } from "../model/node";
+import {
+  assertNeverXmlNodeType,
+  type Attribute,
+  type XmlNode,
+} from "../model/node";
 
 const BUILDER = new XMLBuilder({
   preserveOrder: true,
@@ -62,4 +66,5 @@ export function toOrderedNode(node: XmlNode): Record<string, unknown> {
       return obj;
     }
   }
+  return assertNeverXmlNodeType(node);
 }
