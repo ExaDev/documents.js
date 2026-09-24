@@ -77,7 +77,7 @@ const ALCV_TOP = 0x0;
 const ALCV_CENTER = 0x1;
 const ALCV_BOTTOM = 0x2;
 
-/** alc (a CellXF/StyleXF payload's word1, bits 0-2) -> ContentSheetCell.alignment, or undefined for ALCGEN (the value-kind default this field being absent already requests) and for the three HorizAlign members (ALCFILL/ALCCONTCTR/ALCDIST) Alignment has no member for — matching ooxml.js's readHorizontalAlignment policy of only the four direct members surviving. */
+/** alc (a CellXF/StyleXF payload's word1, bits 0-2) -\> ContentSheetCell.alignment, or undefined for ALCGEN (the value-kind default this field being absent already requests) and for the three HorizAlign members (ALCFILL/ALCCONTCTR/ALCDIST) Alignment has no member for — matching ooxml.js's readHorizontalAlignment policy of only the four direct members surviving. */
 export function resolveHorizontalAlignment(alc: number): Alignment | undefined {
   switch (alc) {
     case ALC_LEFT:
@@ -93,7 +93,7 @@ export function resolveHorizontalAlignment(alc: number): Alignment | undefined {
   }
 }
 
-/** ContentSheetCell.alignment -> the alc token to pack into word1 — undefined maps to ALCGEN, the "use the value-kind default" token every genuinely unaligned cell already carried before this module modelled alignment at all. */
+/** ContentSheetCell.alignment -\> the alc token to pack into word1 — undefined maps to ALCGEN, the "use the value-kind default" token every genuinely unaligned cell already carried before this module modelled alignment at all. */
 export function horizAlignTokenFor(alignment: Alignment | undefined): number {
   switch (alignment) {
     case "left":
@@ -109,7 +109,7 @@ export function horizAlignTokenFor(alignment: Alignment | undefined): number {
   }
 }
 
-/** alcV (word1, bits 4-6) -> ContentSheetCell.verticalAlignment, or undefined for ALCVBOT (the schema's own documented default for an absent verticalAlignment) and for the two VertAlign members (ALCVJUST/ALCVDIST) the schema has no member for — matching ooxml.js's readVerticalAlignment policy. */
+/** alcV (word1, bits 4-6) -\> ContentSheetCell.verticalAlignment, or undefined for ALCVBOT (the schema's own documented default for an absent verticalAlignment) and for the two VertAlign members (ALCVJUST/ALCVDIST) the schema has no member for — matching ooxml.js's readVerticalAlignment policy. */
 export function resolveVerticalAlignment(
   alcV: number,
 ): "top" | "middle" | "bottom" | undefined {
@@ -123,7 +123,7 @@ export function resolveVerticalAlignment(
   }
 }
 
-/** ContentSheetCell.verticalAlignment -> the alcV token to pack into word1 — undefined (meaning 'bottom', the schema's own documented default) and the literal 'bottom' both map to ALCVBOT, exactly what an unaligned cell already carried before this module modelled alignment at all. */
+/** ContentSheetCell.verticalAlignment -\> the alcV token to pack into word1 — undefined (meaning 'bottom', the schema's own documented default) and the literal 'bottom' both map to ALCVBOT, exactly what an unaligned cell already carried before this module modelled alignment at all. */
 export function vertAlignTokenFor(
   verticalAlignment: "top" | "middle" | "bottom" | undefined,
 ): number {
@@ -405,6 +405,13 @@ const SOLID_BORDER_STYLE: Readonly<Record<BorderWeight, number>> = {
 };
 
 /** The inverse of resolveBorderEdge's style resolution: picks the BorderStyle token carrying a ContentBorder's own pattern at the closest named weight, bucketing a solid/dashed border's widthPt back to a weight through document-schema.js's own shared quantisation — the same one resolveBorderEdge's widths came out of, and the same one ooxml.js's borderToXlsxStyle buckets xlsx's string tokens through. */
+// Reached only if ContentStrokeStyle ever gains a variant borderStyleTokenFor's own switch does not match: every current member (plus undefined, folded into the "solid" case) is covered there, so `value` narrows to `never` at the real call site, and adding an uncovered style makes that narrowing fail and this call stop compiling. That is the real safety net. Exported so xf-colors.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real ContentStrokeStyle is already handled by a case in borderStyleTokenFor.
+export function assertNeverContentStrokeStyle(value: never): never {
+  throw new Error(
+    `borderStyleTokenFor: unhandled ContentBorder style ${JSON.stringify(value)}`,
+  );
+}
+
 export function borderStyleTokenFor(border: ContentBorder): number {
   switch (border.style) {
     case "double":
@@ -419,6 +426,7 @@ export function borderStyleTokenFor(border: ContentBorder): number {
     case undefined:
       return SOLID_BORDER_STYLE[borderWeightForWidthPt(border.widthPt)];
   }
+  return assertNeverContentStrokeStyle(border.style);
 }
 
 /**

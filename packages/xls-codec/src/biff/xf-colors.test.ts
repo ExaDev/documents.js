@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyTint,
+  assertNeverContentStrokeStyle,
   BORDER_STYLE_DASHED,
   BORDER_STYLE_DOTTED,
   BORDER_STYLE_DOUBLE,
@@ -421,4 +422,19 @@ describe("applyTint", () => {
       expect(actual.b).toBeCloseTo(expected.b);
     },
   );
+});
+
+describe("assertNeverContentStrokeStyle", () => {
+  it("throws naming the unhandled style, proving borderStyleTokenFor's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverContentStrokeStyle("bogus" as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'borderStyleTokenFor: unhandled ContentBorder style "bogus"',
+    );
+  });
 });
