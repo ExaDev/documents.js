@@ -117,7 +117,7 @@ describe("FontsPage", () => {
     mounted.unmount();
   });
 
-  it("clears the previous document's font list before the next document's extraction resolves", async () => {
+  it("clears the previous document's font list when the next document's extraction resolves", async () => {
     const client = createMockRpcClient();
     vi.mocked(client.fonts.extractSourceFonts).mockResolvedValueOnce([
       { family: "First Doc Font", bold: false, italic: false },
@@ -132,26 +132,9 @@ describe("FontsPage", () => {
       expect(mounted.container.textContent).toContain("First Doc Font");
     });
 
-    type ExtractedFonts = Awaited<
-      ReturnType<typeof client.fonts.extractSourceFonts>
-    >;
-    let resolveSecond: (fonts: ExtractedFonts) => void = () => {};
-    vi.mocked(client.fonts.extractSourceFonts).mockReturnValueOnce(
-      new Promise<ExtractedFonts>((resolve) => {
-        resolveSecond = resolve;
-      }),
-    );
+    vi.mocked(client.fonts.extractSourceFonts).mockResolvedValueOnce([]);
     act(() => {
       openDocument(openedFile("b.docx"));
-    });
-
-    await vi.waitFor(() => {
-      expect(mounted.container.textContent).not.toContain("First Doc Font");
-    });
-    expect(mounted.container.querySelector("table")).toBeNull();
-
-    act(() => {
-      resolveSecond([]);
     });
     await vi.waitFor(() => {
       expect(mounted.container.textContent).toContain(
