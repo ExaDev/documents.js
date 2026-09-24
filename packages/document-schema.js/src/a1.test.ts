@@ -8,24 +8,43 @@ import {
   rangeReference,
 } from "./a1";
 
+// 0-based column indices for the letter labels each test names, in spreadsheet column order.
+const Z_COLUMN_INDEX = 25;
+const AA_COLUMN_INDEX = 26;
+const AZ_COLUMN_INDEX = 51;
+const BA_COLUMN_INDEX = 52;
+const ZZ_COLUMN_INDEX = 701;
+const AAA_COLUMN_INDEX = 702;
+const XFD_COLUMN_INDEX = 16383; // Excel's own maximum column.
+
 describe("columnLettersToIndex / columnIndexToLetters", () => {
   it("round-trips single and double letters through the base-26 (no zero digit) conversion", () => {
     expect(columnLettersToIndex("A")).toBe(0);
-    expect(columnLettersToIndex("Z")).toBe(25);
-    expect(columnLettersToIndex("AA")).toBe(26);
-    expect(columnLettersToIndex("AZ")).toBe(51);
-    expect(columnLettersToIndex("BA")).toBe(52);
-    expect(columnLettersToIndex("XFD")).toBe(16383);
+    expect(columnLettersToIndex("Z")).toBe(Z_COLUMN_INDEX);
+    expect(columnLettersToIndex("AA")).toBe(AA_COLUMN_INDEX);
+    expect(columnLettersToIndex("AZ")).toBe(AZ_COLUMN_INDEX);
+    expect(columnLettersToIndex("BA")).toBe(BA_COLUMN_INDEX);
+    expect(columnLettersToIndex("XFD")).toBe(XFD_COLUMN_INDEX);
   });
 
   it("is a genuine round trip in both directions", () => {
-    for (const index of [0, 1, 25, 26, 51, 52, 701, 702, 16383]) {
+    for (const index of [
+      0,
+      1,
+      Z_COLUMN_INDEX,
+      AA_COLUMN_INDEX,
+      AZ_COLUMN_INDEX,
+      BA_COLUMN_INDEX,
+      ZZ_COLUMN_INDEX,
+      AAA_COLUMN_INDEX,
+      XFD_COLUMN_INDEX,
+    ]) {
       expect(columnLettersToIndex(columnIndexToLetters(index))).toBe(index);
     }
   });
 
   it("is case-insensitive on the way in", () => {
-    expect(columnLettersToIndex("aa")).toBe(26);
+    expect(columnLettersToIndex("aa")).toBe(AA_COLUMN_INDEX);
   });
 
   it("rejects a non-letter input", () => {
@@ -35,7 +54,7 @@ describe("columnLettersToIndex / columnIndexToLetters", () => {
 
   it("rejects the character immediately past 'Z' in code-point order, not just past it", () => {
     // '[' is charCode 91, exactly ALPHABET_START_CODE (65) + ALPHABET_SIZE (26) — the boundary itself, not one past it. 'Z' (90) must still be accepted.
-    expect(columnLettersToIndex("Z")).toBe(25);
+    expect(columnLettersToIndex("Z")).toBe(Z_COLUMN_INDEX);
     expect(columnLettersToIndex("[")).toBeUndefined();
     expect(columnLettersToIndex("A[")).toBeUndefined();
   });
@@ -49,9 +68,10 @@ describe("parseCellReference / cellReference", () => {
   });
 
   it("round-trips through cellReference (row-first: cellReference(row, column))", () => {
+    const row10Index = 9;
     expect(cellReference(0, 0)).toBe("A1");
     expect(cellReference(1, 1)).toBe("B2");
-    expect(cellReference(9, 26)).toBe("AA10");
+    expect(cellReference(row10Index, AA_COLUMN_INDEX)).toBe("AA10");
   });
 
   it("rejects a malformed reference", () => {
