@@ -127,6 +127,7 @@ const HTML_BLOCK_END_PATTERNS: readonly RegExp[] = [
   /\]\]>/,
 ];
 
+// This array's own literal elements above the ignored range stay flagged by no-magic-numbers, deliberately: they are the CommonMark spec's own HTML block-type numbers (spec 0.31.2, conditions 1-7), the exact reason HtmlBlockType is numbered rather than named. An Array.from-plus-index-math derivation from LAST_HTML_BLOCK_TYPE was tried and reverted, since it replaces the direct, spec-legible literal with an unnecessary `as HtmlBlockType` assertion and arithmetic nobody needed to satisfy the linter, making the code worse for it. Inline eslint-disable comments are inert in this repo (noInlineConfig), so there is no suppression to add; this array is a documented, permanent exception instead.
 const HTML_BLOCK_TYPES: readonly HtmlBlockType[] = [1, 2, 3, 4, 5, 6, 7];
 const LAST_HTML_BLOCK_TYPE = 7;
 
