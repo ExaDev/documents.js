@@ -115,12 +115,13 @@ function unpackRow(
   bitDepth: number,
 ): number[] {
   const sampleCount = width * channels;
-  const samples: number[] = new Array<number>(sampleCount);
-  if (bitDepth === 8) {
-    for (let i = 0; i < sampleCount; i++) {
-      samples[i] = rowBytes[i]!;
-    }
-  } else if (bitDepth === 16) {
+  // Sized through Array.from's own length property rather than an Array constructor argument:
+  // the constructor's argument is a mutable node whose removal changes nothing observable
+  // (index assignment grows the array identically).
+  const samples: number[] = Array.from({ length: sampleCount });
+  // No 8-bit special case: at depth 8 the general bit-unpacking below is byte-aligned (shift
+  // 0, mask 255) and reads exactly the same value, so the branch would be a duplicate path.
+  if (bitDepth === 16) {
     for (let i = 0; i < sampleCount; i++) {
       samples[i] = rowBytes[i * 2]!; // high byte only
     }
@@ -253,12 +254,11 @@ function buildRawImage(
         }
       } else if (colorType === 3) {
         const index = samples[pixelBase]!;
-        if (palette === undefined) {
-          throw new Error("indexed-colour PNG has no PLTE chunk");
-        }
-        data[outBase] = palette[index * 3]!;
-        data[outBase + 1] = palette[index * 3 + 1]!;
-        data[outBase + 2] = palette[index * 3 + 2]!;
+        // decodePng already refused an indexed image with no PLTE chunk before this function
+        // runs, so the non-null assertions are carried by that check.
+        data[outBase] = palette![index * 3]!;
+        data[outBase + 1] = palette![index * 3 + 1]!;
+        data[outBase + 2] = palette![index * 3 + 2]!;
         if (alpha !== undefined && trns !== undefined) {
           alpha[alphaIndex] = index < trns.length ? trns[index]! : 255;
         }
@@ -281,7 +281,5 @@ function buildRawImage(
     }
   }
 
-  return alpha === undefined
-    ? { width, height, channels: outChannels, data }
-    : { width, height, channels: outChannels, data, alpha };
+  return { width, height, channels: outChannels, data, alpha };
 }
