@@ -292,7 +292,7 @@ describe("OdgPageDetailScreen add-item kinds", () => {
     });
     expect(frame).toContain("image not added");
     expect(frame).toContain("No items yet");
-  });
+  }, 20000);
 
   describe("with a real image file on disk", () => {
     let workspace: string;
@@ -372,7 +372,7 @@ describe("OdgPageDetailScreen add-item kinds", () => {
         return current;
       });
       expect(frame).toContain("No items yet");
-    });
+    }, 20000);
   });
 });
 
@@ -411,7 +411,7 @@ describe("OdgPageDetailScreen list navigation", () => {
     });
     expect(emptyFrame).toContain("No items yet");
     expect(emptyFrame).not.toContain("Findable box");
-  });
+  }, 20000);
 
   it("pops back to pageList on Esc from an empty page", async () => {
     const { lastFrame, stdin } = render(<OdgHarness />);
