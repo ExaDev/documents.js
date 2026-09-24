@@ -4,12 +4,12 @@ import { RtfDiagnosticCodes } from "./diagnostics";
 import { bytesToHex } from "./base64";
 import { newPendingCell } from "./cell-format";
 import { writeEmbeddedObjectData } from "./embedded-object";
+import { readRtfContent } from "./read";
 import {
   appendToLastListItem,
   closingBookmarkExtent,
-  readRtfContent,
   verticalMergeRowSpan,
-} from "./read";
+} from "./read-state";
 import { bookmarkAnchorDescriptor } from "./constructs";
 import {
   HEADER,
