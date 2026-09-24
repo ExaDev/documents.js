@@ -36,19 +36,23 @@ function leafKindLabel(leaf: OutlineLeaf): string {
   return "formula";
 }
 
+interface LineSink {
+  readonly lines: string[];
+}
+
 // One line per outline entry, groups and leaves alike: a group renders its own label (the heading's text, the list item's text, the "Slide N"/sheet-name/"Page N" label) and recurses into its children one depth deeper; a leaf renders its own text (a paragraph's runs, a table's cell text, an image's alt text, a formula's LaTeX), or its kind in brackets when it carries none (a page break, a vector, an embedded object) — so the text view never silently drops an entry the JSON view carries. A group whose label is empty (an empty heading, a formula with no LaTeX linearisation) renders as a bare indented line, the honest transcript of an empty label rather than an invented placeholder.
 function appendOutlineLines(
   children: readonly OutlineChild[],
   depth: number,
-  lines: string[],
+  sink: LineSink,
 ): void {
   for (const child of children) {
     if (isOutlineNode(child)) {
-      lines.push(`${INDENT.repeat(depth)}${singleLineText(child.text)}`);
-      appendOutlineLines(child.children, depth + 1, lines);
+      sink.lines.push(`${INDENT.repeat(depth)}${singleLineText(child.text)}`);
+      appendOutlineLines(child.children, depth + 1, sink);
     } else {
       const text = singleLineText(outlineLeafText(child));
-      lines.push(
+      sink.lines.push(
         text === ""
           ? `${INDENT.repeat(depth)}[${leafKindLabel(child)}]`
           : `${INDENT.repeat(depth)}${text}`,
@@ -140,7 +144,7 @@ async function runOutline(
     }
 
     const lines: string[] = [];
-    appendOutlineLines(outline, 0, lines);
+    appendOutlineLines(outline, 0, { lines });
     // An empty document (no groups, no leaves) has nothing to print — joining an empty array still needs the trailing newline suppressed, or stdout would carry one blank line for a document with no outline at all.
     if (lines.length > 0) {
       process.stdout.write(`${lines.join("\n")}\n`);

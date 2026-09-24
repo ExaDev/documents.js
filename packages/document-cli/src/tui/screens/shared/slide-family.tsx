@@ -108,7 +108,7 @@ const DEFAULT_FRAME_MARGIN_FRACTION = 0.1;
 const DEFAULT_FRAME_SIZE_FRACTION = 0.3;
 
 // A newly inserted shape needs some starting position and size — there is no drag-to-place gesture in a terminal, see the shape-editor's own point-value frame fields — so this derives a modest default from the slide's own declared size (a computable truth) rather than a bare literal point value that would be wrong for a widescreen vs standard-size deck.
-export function defaultShapeFrame(slideSize: PageSize): GeometryBox {
+export function defaultShapeFrame(slideSize: Readonly<PageSize>): GeometryBox {
   return {
     xPt: slideSize.widthPt * DEFAULT_FRAME_MARGIN_FRACTION,
     yPt: slideSize.heightPt * DEFAULT_FRAME_MARGIN_FRACTION,

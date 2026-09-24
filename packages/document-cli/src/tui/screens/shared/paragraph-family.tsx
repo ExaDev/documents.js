@@ -180,7 +180,9 @@ export function usePersistedSelection(
 
 const PREVIEW_WIDTH = 60;
 
-function paragraphBadges(paragraph: ParagraphFamilyParagraph): string {
+function paragraphBadges(
+  paragraph: Readonly<ParagraphFamilyParagraph>,
+): string {
   const runs = paragraph.runs();
   const badges: string[] = [];
   if (runs.some((run) => run.bold)) {
@@ -201,7 +203,7 @@ function paragraphBadges(paragraph: ParagraphFamilyParagraph): string {
   return badges.length === 0 ? "" : ` [${badges.join(" ")}]`;
 }
 
-function tableSummary(table: ParagraphFamilyTable): string {
+function tableSummary(table: Readonly<ParagraphFamilyTable>): string {
   return `Table ${table.rows().length}×${table.gridColumnCount()}`;
 }
 

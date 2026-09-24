@@ -149,7 +149,7 @@ export function formatPt(value: number): string {
   return value.toFixed(1);
 }
 
-export function formatFrame(box: Box): string {
+export function formatFrame(box: Readonly<Box>): string {
   return `${formatPt(box.xPt)},${formatPt(box.yPt)} ${formatPt(box.widthPt)}x${formatPt(box.heightPt)}pt`;
 }
 
@@ -160,7 +160,7 @@ function formatPoint(point: {
   return `${formatPt(point.xPt)},${formatPt(point.yPt)}`;
 }
 
-export function formatColor(color: LayoutColor): string {
+export function formatColor(color: Readonly<LayoutColor>): string {
   return `rgb(${color.r.toFixed(2)}, ${color.g.toFixed(2)}, ${color.b.toFixed(2)})`;
 }
 
