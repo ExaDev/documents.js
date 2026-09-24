@@ -1,3 +1,9 @@
+## [6.1.9](https://github.com/ExaDev/documents.js/compare/doc-codec%406.1.8...doc-codec%406.1.9) (2026-09-24)
+
+### Bug Fixes
+
+* **doc-codec:** compare a nullable boolean explicitly in cascadeRowBorders ([d90e783](https://github.com/ExaDev/documents.js/commit/d90e783afdc55d48cd81c310be0fb316f8930516))
+
 ## [6.1.8](https://github.com/ExaDev/documents.js/compare/doc-codec%406.1.7...doc-codec%406.1.8) (2026-09-24)
 
 

@@ -1,3 +1,14 @@
+## [5.12.29](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.28...document-cli%405.12.29) (2026-09-24)
+
+### Bug Fixes
+
+* **document-cli:** clear the last preferReadonlyParams exceptions ([0bb2cc7](https://github.com/ExaDev/documents.js/commit/0bb2cc78e5f51301a05a183a59f63c12cb80364c))
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.20
+
 ## [5.12.28](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.27...document-cli%405.12.28) (2026-09-24)
 
 
