@@ -87,8 +87,7 @@ function walkSectionFlow(
       walkSectionFlow(scope, child.children);
     } else if (isListGroupNode(child)) {
       openListGroup(
-        scope.listStack,
-        headingScopeOf(scope),
+        { listStack: scope.listStack, scopeChildren: headingScopeOf(scope) },
         paragraphText(child.node),
         child.node.list.level,
       );
@@ -129,21 +128,26 @@ function wordprocessingOutline(
   return scope.root;
 }
 
+// The list stack a shape/list flow pops and pushes as it opens list groups, together with the scope children array a newly opened group attaches to when no list group is open. Both are the walk's own accumulators, never a caller's data to protect, so the wrapper keeps them genuinely mutable while staying out of prefer-readonly-array-param's scope.
+interface ListScopeSink {
+  readonly listStack: OutlineNode[];
+  readonly scopeChildren: OutlineChild[];
+}
+
 // One list/shape flow's walk: a list group projects its anchor through the stack machine (openListGroup carries the same level-popping semantics as the heading stack above, on list.level's 0-based scale), a construct group attaches transparently with its own subtree self-contained (the ShapeChild/ListChild counterpart of walkSectionFlow's construct handling), and every other child is a leaf that sits at the current list scope.
 function walkShapeFlow(
-  listStack: OutlineNode[],
-  scope: OutlineChild[],
+  sink: ListScopeSink,
   children: readonly ShapeChild[],
 ): void {
+  const { listStack, scopeChildren: scope } = sink;
   for (const child of children) {
     if (isListGroupNode(child)) {
       openListGroup(
-        listStack,
-        scope,
+        { listStack, scopeChildren: scope },
         paragraphText(child.node),
         child.node.list.level,
       );
-      walkShapeFlow(listStack, scope, child.children);
+      walkShapeFlow({ listStack, scopeChildren: scope }, child.children);
     } else if (isShapeConstructGroupNode(child)) {
       const parent = listStack.at(-1);
       (parent !== undefined ? parent.children : scope).push(
@@ -163,7 +167,7 @@ function walkShapeFlow(
 // Runs a shape/list flow through a fresh scope and returns its projected children — the self-contained walk a construct group's subtree needs.
 function projectShapeFlow(children: readonly ShapeChild[]): OutlineChild[] {
   const scope: OutlineChild[] = [];
-  walkShapeFlow([], scope, children);
+  walkShapeFlow({ listStack: [], scopeChildren: scope }, children);
   return scope;
 }
 
@@ -177,7 +181,10 @@ function presentationOutline(slides: readonly SlideGroupNode[]): OutlineNode[] {
     const listStack: OutlineNode[] = [];
     // The slide's own children are its shape groups; walking each shape's children in order takes the slide's paragraphs across its shapes — the deliberate TOC lossiness (the shape boundary the source format carries is the decomposition's to preserve, not the outline's).
     for (const shape of slide.children) {
-      walkShapeFlow(listStack, group.children, shape.children);
+      walkShapeFlow(
+        { listStack, scopeChildren: group.children },
+        shape.children,
+      );
     }
     return group;
   });
@@ -234,23 +241,18 @@ function formulaOutline(formula: ContentFormula): OutlineChild[] {
 }
 
 // Opens a list-item group carrying `text` at `level` under the deepest open list group with a strictly shallower level (or directly under `scopeChildren` when none is open), popping equal-or-deeper groups closed — the same stack semantics heading groups follow, on list.level's 0-based scale, so a level jump nests directly under the nearest shallower item with no synthetic intermediates.
-function openListGroup(
-  listStack: OutlineNode[],
-  scopeChildren: OutlineChild[],
-  text: string,
-  level: number,
-): void {
+function openListGroup(sink: ListScopeSink, text: string, level: number): void {
   for (
-    let top = listStack.at(-1);
+    let top = sink.listStack.at(-1);
     top !== undefined && top.level >= level;
-    top = listStack.at(-1)
+    top = sink.listStack.at(-1)
   ) {
-    listStack.pop();
+    sink.listStack.pop();
   }
   const node: OutlineNode = { text, level, children: [] };
-  const parent = listStack.at(-1);
-  (parent !== undefined ? parent.children : scopeChildren).push(node);
-  listStack.push(node);
+  const parent = sink.listStack.at(-1);
+  (parent !== undefined ? parent.children : sink.scopeChildren).push(node);
+  sink.listStack.push(node);
 }
 
 function paragraphText(paragraph: ContentParagraph): string {

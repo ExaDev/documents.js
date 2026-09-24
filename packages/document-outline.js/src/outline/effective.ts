@@ -91,7 +91,7 @@ function resolveSectionGroup(
   const own = chainWithRef(chain, group);
   const children = resolveSectionChildren(styles, own, group.children);
   if (group.style === undefined && children === group.children) return group;
-  return { node: group.node, children };
+  return { node: group.node, children: [...children] };
 }
 
 function resolveSlideGroup(
@@ -145,7 +145,7 @@ function resolveShapeGroup(
   const own = chainWithRef(chain, group);
   const children = resolveListChildren(styles, own, group.children);
   if (group.style === undefined && children === group.children) return group;
-  return { node: group.node, children };
+  return { node: group.node, children: [...children] };
 }
 
 // A construct group carries the same optional style ref as every other wrapper (chainWithRef treats it identically), and its own children are a section flow it wraps — resolved with resolveSectionChildren, same as a heading group's, not the flattening/reset a decompose walk applies when building the tree in the first place. That reset governs how a construct's extent nests when the tree is FIRST built; it says nothing about a later resolve pass over the tree the schema already validated, whose only job is threading each group's style chain down to the paragraphs in its subtree.
@@ -157,7 +157,7 @@ function resolveSectionConstructGroup(
   const own = chainWithRef(chain, group);
   const children = resolveSectionChildren(styles, own, group.children);
   if (group.style === undefined && children === group.children) return group;
-  return { node: group.node, children };
+  return { node: group.node, children: [...children] };
 }
 
 // The ShapeChild/ListChild counterpart: a construct group wrapping a list/shape flow, resolved with resolveListChildren, same as a shape group's.
@@ -169,7 +169,7 @@ function resolveShapeConstructGroup(
   const own = chainWithRef(chain, group);
   const children = resolveListChildren(styles, own, group.children);
   if (group.style === undefined && children === group.children) return group;
-  return { node: group.node, children };
+  return { node: group.node, children: [...children] };
 }
 
 function resolveHeadingGroup(
@@ -188,7 +188,7 @@ function resolveHeadingGroup(
     children === group.children
   )
     return group;
-  return { node: anchor, children };
+  return { node: anchor, children: [...children] };
 }
 
 function resolveListGroup(
@@ -207,7 +207,7 @@ function resolveListGroup(
     children === group.children
   )
     return group;
-  return { node: anchor, children };
+  return { node: anchor, children: [...children] };
 }
 
 // applyEntry is typed on the loose ContentParagraph, so a resolved anchor comes back with its REQUIRED grouping signal widened to optional; these assertions re-narrow it without a cast. Resolution fills gaps and never removes fields, so the signal always survives through this module's own construction path — document-schema.js's applyParagraphStyleProperties (the only function that ever produces the `paragraph` either assertion receives here) builds its result as `{ ...paragraph }` first, so every field the input paragraph already carries survives verbatim regardless of what any StyleEntry supplies. Exported, like pdf-regions.ts's own internal helpers, purely so the throw itself — a defensive guard against that fill-only contract ever regressing, not a case this module's own callers can trigger — has a direct test exercising it instead of relying on a real resolution path that can never reach it.
@@ -235,8 +235,8 @@ export function assertResolvedListAnchor(
 function resolveSectionChildren(
   styles: StylesTable,
   chain: readonly string[],
-  children: SectionChild[],
-): SectionChild[] {
+  children: readonly SectionChild[],
+): readonly SectionChild[] {
   let changed = false;
   const out: SectionChild[] = [];
   for (const child of children) {
@@ -260,8 +260,8 @@ function resolveSectionChildren(
 function resolveListChildren(
   styles: StylesTable,
   chain: readonly string[],
-  children: ListChild[],
-): ListChild[] {
+  children: readonly ListChild[],
+): readonly ListChild[] {
   let changed = false;
   const out: ListChild[] = [];
   for (const child of children) {

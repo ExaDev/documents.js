@@ -51,8 +51,8 @@ function line(xPt: number, yPt: number, text: string, sizePt = 10): LayoutText {
   };
 }
 
-function page(items: LayoutItem[]): LayoutPage {
-  return { widthPt: 612, heightPt: 792, items };
+function page(items: readonly LayoutItem[]): LayoutPage {
+  return { widthPt: 612, heightPt: 792, items: [...items] };
 }
 
 describe("segmentPdfRegions", () => {
@@ -330,12 +330,14 @@ describe("regionReadingOrderComparator", () => {
 });
 
 // A BoundedItem whose own item content is irrelevant — only `bounds` matters to the function under test (boundingBox, findCut, isRowAlignedGrid's own band-membership).
-function boundedAt(bounds: {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-}): BoundedItem {
+function boundedAt(
+  bounds: Readonly<{
+    minX: number;
+    minY: number;
+    maxX: number;
+    maxY: number;
+  }>,
+): BoundedItem {
   return { item: line(0, 0, "x"), bounds };
 }
 
