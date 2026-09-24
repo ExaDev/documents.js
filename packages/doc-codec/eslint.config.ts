@@ -5,7 +5,6 @@ export default packageLintConfig({
   // Off: 781 sites across every package are debt from this same @exadev/eslint-config 2.1.2->2.12.1 bump (see PackageLintOptions.newRuleDebt in eslint.shared.ts), not something this bump's own PR fixes. This package's own measured subset:
   newRuleDebt: [
     "@typescript-eslint/method-signature-style",
-    "@typescript-eslint/no-shadow",
     "@typescript-eslint/strict-boolean-expressions",
     "@typescript-eslint/strict-void-return",
     "tsdoc/syntax",
