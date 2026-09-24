@@ -171,6 +171,14 @@ describe("RecentFilesPanel", () => {
     expect(removeRecentFile).toHaveBeenCalledWith(42);
   });
 
+  it("does nothing when the remove action is clicked on a record with no id yet", () => {
+    useRecentFiles.mockReturnValue([record({ id: undefined })]);
+    const { container } = renderPanel();
+    const buttons = container.querySelectorAll("button");
+    buttons[1]!.click();
+    expect(removeRecentFile).not.toHaveBeenCalled();
+  });
+
   it("reopens a file with a granted permission: reads its bytes, opens it as the shared document, and navigates to /convert", async () => {
     const handle = fakeHandle();
     useRecentFiles.mockReturnValue([

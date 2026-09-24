@@ -139,11 +139,38 @@ describe("MetadataPage", () => {
 
     expect(titleInput(mounted.container)?.value).toBe("Existing title");
     expect(authorInput(mounted.container)?.value).toBe("Existing author");
+    expect(mounted.container.textContent).toContain("Creator");
     expect(mounted.container.textContent).toContain("Word");
+    expect(mounted.container.textContent).toContain("Created");
     expect(mounted.container.textContent).toContain("2020-01-01T00:00:00Z");
+    expect(mounted.container.textContent).toContain("Modified");
     expect(mounted.container.textContent).toContain("2020-06-01T00:00:00Z");
+    expect(mounted.container.textContent).toContain("Producer");
     expect(mounted.container.textContent).toContain("documents.js");
     expect(mounted.container.textContent).not.toContain("Could not recognise");
+    mounted.unmount();
+  });
+
+  it("omits every read-only metadata row the document does not carry", async () => {
+    const client = createMockRpcClient();
+    vi.mocked(client.metadata.read).mockResolvedValue({
+      title: "Existing title",
+      author: "Existing author",
+    });
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountMetadataPage();
+
+    act(() => {
+      openDocument(openedFile("report.docx"));
+    });
+    await vi.waitFor(() => {
+      expect(mounted.container.querySelector("table")).not.toBeNull();
+    });
+
+    expect(mounted.container.textContent).not.toContain("Creator");
+    expect(mounted.container.textContent).not.toContain("Created");
+    expect(mounted.container.textContent).not.toContain("Modified");
+    expect(mounted.container.textContent).not.toContain("Producer");
     mounted.unmount();
   });
 

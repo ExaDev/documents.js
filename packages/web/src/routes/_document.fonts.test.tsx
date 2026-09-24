@@ -87,6 +87,36 @@ describe("FontsPage", () => {
     mounted.unmount();
   });
 
+  it("marks each font's own bold and italic columns independently, not just whichever one happens to be true", async () => {
+    const client = createMockRpcClient();
+    vi.mocked(client.fonts.extractSourceFonts).mockResolvedValue([
+      { family: "Bold Sans", bold: true, italic: false },
+      { family: "Italic Serif", bold: false, italic: true },
+    ]);
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountFontsPage();
+
+    act(() => {
+      openDocument(openedFile("report.docx"));
+    });
+    await vi.waitFor(() => {
+      expect(mounted.container.querySelector("table")).not.toBeNull();
+    });
+
+    const rows = [
+      ...mounted.container.querySelectorAll("tbody tr"),
+    ] as HTMLTableRowElement[];
+    const boldSansCells = [...rows[0]!.querySelectorAll("td")].map(
+      (cell) => cell.textContent,
+    );
+    const italicSerifCells = [...rows[1]!.querySelectorAll("td")].map(
+      (cell) => cell.textContent,
+    );
+    expect(boldSansCells).toEqual(["Bold Sans", "yes", "no"]);
+    expect(italicSerifCells).toEqual(["Italic Serif", "no", "yes"]);
+    mounted.unmount();
+  });
+
   it("shows a 'no fonts found' message when the document has none embedded", async () => {
     const client = createMockRpcClient();
     vi.mocked(client.fonts.extractSourceFonts).mockResolvedValue([]);
