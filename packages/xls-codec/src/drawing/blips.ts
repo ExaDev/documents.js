@@ -84,7 +84,7 @@ function readBseImage(data: Uint8Array<ArrayBuffer>): BlipImage | undefined {
   } catch (err) {
     // A BSE entry truncated before its own fixed fields even end (shorter than the 34 bytes needed to reach cbName) is exactly like any other malformed record elsewhere in this package: absent from the result, not a thrown error. There is no separate numeric length pre-check for this — the cursor's own bounds-checked reads already throw BiffFormatError at precisely the byte where truncation actually bites, which is a tighter and more honest boundary than restating BSE_FIXED_SIZE (a length that itself is never actually reachable-but-still-too-short, since any BSE this size or larger already has room to read past its own fixed fields) as a second, redundant check here.
     recoverFromFormatError(err, undefined);
-    return;
+    return undefined;
   }
   const embeddedStart = BSE_FIXED_SIZE + cbName;
   // No explicit "past the end" guard: an externally-linked reference (foDelay carries a delay-stream offset instead of an embedded blip, which this reader has no delay stream to resolve against) leaves nothing at or past embeddedStart, and subarray on an out-of-range start already yields an empty slice — readEscherRecords finds no records in it, so blip below is undefined and this function still returns undefined, the identical outcome an explicit guard here would have produced.
