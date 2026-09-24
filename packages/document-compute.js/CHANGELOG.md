@@ -1,3 +1,15 @@
+## [1.6.23](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.6.22...document-compute.js%401.6.23) (2026-09-24)
+
+### Bug Fixes
+
+* **document-compute.js:** rename a shadowed test fixture binding ([e99d09a](https://github.com/ExaDev/documents.js/commit/e99d09afd3a3b6ae1236abe3200244bcce9d3c93))
+
+
+### Dependencies
+
+- Updated markdown-codec to 11.1.4
+- Updated documents.js to 14.4.14
+
 ## [1.6.22](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.6.21...document-compute.js%401.6.22) (2026-09-24)
 
 

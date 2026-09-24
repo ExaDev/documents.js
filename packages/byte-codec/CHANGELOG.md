@@ -1,3 +1,16 @@
+## [2.0.0](https://github.com/ExaDev/documents.js/compare/byte-codec%401.10.1...byte-codec%402.0.0) (2026-09-24)
+
+### ⚠ BREAKING CHANGES
+
+* **byte-codec:** appendCodePoint's exported signature changes from
+  (units: number[], codePoint: number) to (sink: CodeUnitSink, codePoint:
+  number). No package in this workspace calls it directly; every caller was
+  one of this package's own decoders, updated in the same change.
+
+### Bug Fixes
+
+* **byte-codec:** thread appendCodePoint's accumulator through a sink object ([ca94560](https://github.com/ExaDev/documents.js/commit/ca94560177eb9233f1ee5e5519b38eacb94077f3))
+
 ## [1.10.1](https://github.com/ExaDev/documents.js/compare/byte-codec%401.10.0...byte-codec%401.10.1) (2026-09-23)
 
 ### Bug Fixes

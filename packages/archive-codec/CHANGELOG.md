@@ -1,3 +1,10 @@
+## [1.11.13](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.12...archive-codec%401.11.13) (2026-09-24)
+
+### Bug Fixes
+
+* **archive-codec:** give a numeric sort its own comparator ([aec778e](https://github.com/ExaDev/documents.js/commit/aec778e9a6f5faf9f41fa6b25ad67f34f28c6182))
+* **archive-codec:** satisfy prefer-numeric-sort-compare at the same site ([c409f32](https://github.com/ExaDev/documents.js/commit/c409f326ead522cdcaad947ec0f1fca0c94afddd))
+
 ## [1.11.12](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.11...archive-codec%401.11.12) (2026-09-22)
 
 
