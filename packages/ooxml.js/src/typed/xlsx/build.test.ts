@@ -18,7 +18,10 @@ import {
   rootElement,
   textContent,
 } from "../util";
-import { buildXlsxPackageFromContent } from "./build";
+import {
+  assertNeverContentCellValueKind,
+  buildXlsxPackageFromContent,
+} from "./build";
 import { readXlsxContent } from "./content";
 import { readWorkbookDefinitions } from "./definitions";
 import { columnWidthCharsToPt } from "./units";
@@ -1703,9 +1706,9 @@ describe("buildXlsxPackageFromContent: cell comments (ExaDev/documents.js#949)",
     const overrides = childrenWithTag(contentTypes, "Override").map((el) =>
       attr(el, "PartName"),
     );
-    expect(overrides.some((name) => name?.includes("threadedComment"))).toBe(
-      false,
-    );
+    expect(
+      overrides.some((name) => name?.includes("threadedComment") === true),
+    ).toBe(false);
   });
 
   it("writes a worksheet rels part, a threadedComments part, and a matching Content_Types override for a sheet carrying a commented cell", () => {
@@ -2425,7 +2428,9 @@ describe("buildXlsxPackageFromContent: [Content_Types].xml carries every part's 
         "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml",
     });
     expect(
-      overrides.filter((o) => o.partName?.startsWith("/xl/worksheets/sheet")),
+      overrides.filter(
+        (o) => o.partName?.startsWith("/xl/worksheets/sheet") === true,
+      ),
     ).toHaveLength(2);
     // Only sheet 1 carries a comment, a drawing, and a table — indices must not leak onto sheet 2.
     expect(overrides).toContainEqual({
@@ -3572,12 +3577,12 @@ describe("buildXlsxPackageFromContent: [Content_Types].xml carries no chart/tabl
     const overrides = childrenWithTag(contentTypes, "Override").map((el) =>
       attr(el, "PartName"),
     );
-    expect(overrides.some((name) => name?.startsWith("/xl/charts/"))).toBe(
-      false,
-    );
-    expect(overrides.some((name) => name?.startsWith("/xl/tables/"))).toBe(
-      false,
-    );
+    expect(
+      overrides.some((name) => name?.startsWith("/xl/charts/") === true),
+    ).toBe(false);
+    expect(
+      overrides.some((name) => name?.startsWith("/xl/tables/") === true),
+    ).toBe(false);
   });
 });
 
@@ -4848,5 +4853,20 @@ describe("buildXlsxPackageFromContent: xl/styles.xml and docProps facts pinned i
     expect(printOptions.tag).toBe("printOptions");
     expect(attributeOf(printOptions, "gridLines")).toBe("true");
     expect(attributeOf(printOptions, "headings")).toBe("true");
+  });
+});
+
+describe("assertNeverContentCellValueKind", () => {
+  it("throws naming the unhandled kind, proving renderCellValue's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverContentCellValueKind({ kind: "bogus" } as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'renderCellValue: unhandled ContentCellValue kind {"kind":"bogus"}',
+    );
   });
 });

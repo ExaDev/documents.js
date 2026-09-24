@@ -25,7 +25,12 @@ import {
   DEFAULT_COLUMN_WIDTH_CHARS,
   DEFAULT_ROW_HEIGHT_PT,
 } from "./units";
-import { readXlsxContent, resolveSheetEntries } from "./content";
+import {
+  assertNeverNonEmptyContentCellValueKind,
+  assertNeverNumberFormatClassKind,
+  readXlsxContent,
+  resolveSheetEntries,
+} from "./content";
 
 // True precisely when `key` is an own property of `obj`, regardless of whether its value is `undefined` — unlike `toBeUndefined()`, which is satisfied identically by a key holding `undefined` and by the key's own absence, and so cannot distinguish "never assigned" from "assigned undefined". Several of readCell's own optional-field copies (font/background/borders/alignment/verticalAlignment/numberFormatCode) are guarded by a presence check specifically to avoid ever assigning the key at all when the source has nothing to offer, and only a key-existence assertion can prove that guard is doing real work rather than being a no-op the object shape would be identical without.
 function hasOwn(obj: object, key: string): boolean {
@@ -3349,5 +3354,35 @@ describe("buildXlsxPackageFromContent + readXlsxContent: conditionalFormat round
       conditionalFormats: [format],
     });
     expect(sheet.conditionalFormats).toEqual([format]);
+  });
+});
+
+describe("assertNeverNonEmptyContentCellValueKind", () => {
+  it("throws naming the unhandled kind, proving deriveDisplayText's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverNonEmptyContentCellValueKind({ kind: "bogus" } as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'deriveDisplayText: unhandled ContentCellValue kind {"kind":"bogus"}',
+    );
+  });
+});
+
+describe("assertNeverNumberFormatClassKind", () => {
+  it("throws naming the unhandled kind, proving resolveNumericValue's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverNumberFormatClassKind({ kind: "bogus" } as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'resolveNumericValue: unhandled NumberFormatClass kind {"kind":"bogus"}',
+    );
   });
 });

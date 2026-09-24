@@ -169,6 +169,13 @@ interface ResolvedCellValue {
 }
 
 // Derives displayText — xlsx has no cached "producer-rendered string" field the way ODF's own text:p content (or, for a genuinely numeric cell, its office:value-type-adjacent convention) gives readOds for free; a numeric cell's <v> is always the bare, unformatted number, with the thousands separators, currency symbol, date pattern, and percent sign living purely in xl/styles.xml's own numFmt code. This reader CLASSIFIES that code (see the top-of-file scope note) but does not render through it, so displayText remains a plain string representation of the typed value, NOT the producer's own rendering: String(value) for a number/percentage/currency (0.4256, not "42.56%"; 99.99, not "£99.99"), 'TRUE'/'FALSE' for a boolean (matching Excel's own default, unformatted boolean display), the string/error text verbatim for the string/error kinds, and the ISO spelling for the three temporal kinds — which, for a date/time cell, is a real improvement over the bare serial this reader used to show, even though it is still not what the sheet itself prints.
+// Reached only if ContentCellValue's non-empty kinds ever gain a variant deriveDisplayText's own switch does not match: every current member is covered there, so `value` narrows to `never` at the real call site, and adding an uncovered kind makes that narrowing fail and this call stop compiling. That is the real safety net. Exported so content.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real non-empty ContentCellValue kind is already handled by a case in deriveDisplayText.
+export function assertNeverNonEmptyContentCellValueKind(value: never): never {
+  throw new Error(
+    `deriveDisplayText: unhandled ContentCellValue kind ${JSON.stringify(value)}`,
+  );
+}
+
 function deriveDisplayText(
   value: Exclude<ContentCellValue, { kind: "empty" }>,
 ): string {
@@ -186,6 +193,7 @@ function deriveDisplayText(
     case "dateTime":
       return value.value;
   }
+  return assertNeverNonEmptyContentCellValueKind(value);
 }
 
 // Everything needed to turn a bare numeric <v> into its real value kind, AND to recover a cell's decoration (background/borders/alignment/verticalAlignment), resolved ONCE per package rather than per cell: one entry per cellXfs index (the array index is the value of a cell's own s attribute), and the workbook's own date epoch. A sheet of 50,000 numeric cells therefore classifies a handful of format codes, not 50,000, and looks up decoration by the same index it already reads for the number format.
@@ -229,6 +237,13 @@ function numberFormatOf(
 }
 
 // A percentage keeps its RAW stored fraction (0.4256, the number the file holds, displayed by Excel as 42.56%) — ContentCellValue's own 'percentage' variant is documented as carrying the underlying value, not the scaled-up display number. A currency carries an ISO 4217 code only when the format genuinely named one ([$GBP-809]); a format identifying money by SYMBOL alone ([$£-809], or a quoted "$") leaves `currency` absent rather than guessing, which is the honest statement "this is money and we do not know which" — '$' alone is USD, CAD, AUD and a dozen others. A date/time serial that names no real date (a negative serial, or the 1900 system's phantom 1900-02-29) degrades to the plain number it literally is rather than emitting an invalid ISO string.
+// Reached only if excel-number-format's NumberFormatClass ever gains a variant resolveNumericValue's own switch does not match: every current member is covered there (elapsedTime/text/number share one case list), so `value` narrows to `never` at the real call site, and adding an uncovered kind makes that narrowing fail and this call stop compiling. That is the real safety net. Exported so content.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real NumberFormatClass kind is already handled by a case in resolveNumericValue.
+export function assertNeverNumberFormatClassKind(value: never): never {
+  throw new Error(
+    `resolveNumericValue: unhandled NumberFormatClass kind ${JSON.stringify(value)}`,
+  );
+}
+
 function resolveNumericValue(
   num: number,
   cell: XmlElement,
@@ -266,6 +281,7 @@ function resolveNumericValue(
     case "number":
       return { kind: "number", value: num };
   }
+  return assertNeverNumberFormatClassKind(format);
 }
 
 // Maps a <c>'s own t attribute (ECMA-376 ST_CellType) plus its <v>/<is> content to ContentCellValue. t="n" and an absent t attribute are the identical case (ECMA-376's own schema default for CT_Cell/@t is "n"). A cell with no <v>, no <is>, and no <f> at all is genuinely empty (styling-only, or a covered/merged-away position LibreOffice itself still writes a bare styled <c> for — see this package's own kitchen-sink fixture) and returns undefined, matching typed/xlsx.ts's own readXlsxWorkbook precedent of dropping such cells rather than fabricating content for them.

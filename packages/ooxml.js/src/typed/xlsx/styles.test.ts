@@ -10,6 +10,8 @@ import {
   CellFormatTable,
   DEFAULT_CELL_FORMAT_INDEX,
   GENERAL_NUM_FMT_ID,
+  assertNeverContentStrokeStyle,
+  assertNeverDeclaredFillKind,
   colorFromElement,
   readCellFormatCodes,
   readCellStyles,
@@ -1435,5 +1437,35 @@ describe("CellFormatTable: intern's own alignment-presence OR, not AND", () => {
       },
     );
     expect(noVertical).not.toBe(withVertical);
+  });
+});
+
+describe("assertNeverContentStrokeStyle", () => {
+  it("throws naming the unhandled style, proving borderToXlsxStyle's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverContentStrokeStyle("bogus" as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'borderToXlsxStyle: unhandled ContentBorder style "bogus"',
+    );
+  });
+});
+
+describe("assertNeverDeclaredFillKind", () => {
+  it("throws naming the unhandled kind, proving buildStylesPart's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverDeclaredFillKind({ kind: "bogus" } as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'buildStylesPart: unhandled DeclaredFill kind {"kind":"bogus"}',
+    );
   });
 });
