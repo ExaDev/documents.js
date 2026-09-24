@@ -241,6 +241,11 @@ function appendMarkdownParagraphs(
   }
 }
 
+// Reached only if WritableFormat ever gains a variant the switch below does not match: every current member is covered by a case there, so `format` narrows to `never` at this call, and adding an uncovered variant makes that narrowing fail and this call stop compiling — the real safety net. Exists so the switch's own exhaustiveness (proven by the type checker, not by a catch-all default that would silently swallow a genuinely new format) still gives consistent-return an explicit statement to see past the switch.
+function assertNever(format: never): never {
+  throw new Error(`createDocumentBytes: unhandled format ${String(format)}`);
+}
+
 function createDocumentBytes(format: WritableFormat): Uint8Array<ArrayBuffer> {
   switch (format) {
     case "docx":
@@ -260,6 +265,7 @@ function createDocumentBytes(format: WritableFormat): Uint8Array<ArrayBuffer> {
     case "markdown":
       return encodeMarkdownText(createMarkdownEditor().toMarkdownText());
   }
+  return assertNever(format);
 }
 
 const ResolvedDocumentOutputSchema = z.union([
