@@ -589,10 +589,15 @@ describe("App Overlay precedence", () => {
     expect(flattenFrame(frame)).toContain("Key bindings");
   });
 
-  it("shows the DiagnosticsPanel on Ctrl+D from the launcher", async () => {
+  it("shows the DiagnosticsPanel on Ctrl+D from the launcher, but plain 'd' alone does nothing", async () => {
     const { lastFrame, stdin } = render(<App />);
     await waitForFrame(lastFrame, (frame) => frame.includes("document-cli"));
     await settle();
+
+    stdin.write("d");
+    await settle();
+    expect(flattenFrame(lastFrame())).not.toContain("Diagnostics (");
+
     stdin.write(CTRL_D);
     const frame = await waitForFrame(lastFrame, (candidate) =>
       flattenFrame(candidate).includes("Diagnostics ("),
@@ -656,6 +661,14 @@ describe("App Overlay precedence", () => {
       flattenFrame(candidate).includes("Quit? The open document"),
     );
     expect(flattenFrame(frame)).toContain("Quit? The open document");
+    await settle();
+
+    // AppShell's own global useInput is gated `isActive: !overlayOpen`; with confirmQuit already open, '?' must not also open the HelpOverlay underneath it.
+    stdin.write("?");
+    await settle();
+    const stillConfirming = lastFrame();
+    expect(flattenFrame(stillConfirming)).toContain("Quit? The open document");
+    expect(flattenFrame(stillConfirming)).not.toContain("Key bindings");
   });
 });
 
@@ -728,6 +741,31 @@ describe("App AppShell key handlers", () => {
     await settle();
     expect(lastFrame()).toBeDefined();
     unmount();
+  });
+
+  it("Ctrl+C triggers the same REQUEST_QUIT dispatch 'q' does, shown by the same confirmQuit dialog once there are unsaved changes", async () => {
+    const { lastFrame, stdin } = render(<App />);
+    await waitForFrame(lastFrame, (frame) => frame.includes("document-cli"));
+    await settle();
+    await createDocument(stdin, lastFrame, "docx");
+    await waitForFrame(lastFrame, (candidate) =>
+      candidate.includes("Body (docx)"),
+    );
+    await settle();
+    stdin.write("a");
+    await waitForFrame(lastFrame, (frame) => frame.includes("Paragraph 0"));
+    await settle();
+    stdin.write(ESCAPE);
+    await waitForFrame(lastFrame, (frame) =>
+      flattenFrame(frame).includes("Body (docx)"),
+    );
+    await settle();
+
+    stdin.write(CTRL_C);
+    const frame = await waitForFrame(lastFrame, (candidate) =>
+      flattenFrame(candidate).includes("Quit? The open document"),
+    );
+    expect(flattenFrame(frame)).toContain("Quit? The open document");
   });
 
   it("Ctrl+S with no open document warns instead of saving", async () => {
