@@ -9,7 +9,7 @@ import {
   Title,
 } from "@mantine/core";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { NoDocumentOpen } from "../document/NoDocumentOpen";
 import { useOpenDocument } from "../document/OpenDocumentContext";
@@ -60,8 +60,11 @@ function OdmPanel({ master }: { master: OpenedFile }) {
     renderOdm.data?.ok === false ? renderOdm.data.unresolved : undefined;
 
   const { mutate: renderOdmMutate } = renderOdm;
-  // Runs once at mount, then again on every subsequent chapter pick via handleChapter's own direct call below, not re-triggered by this effect, since `master` never changes for a given panel instance (see the key above).
+  // Runs once at mount, then again on every subsequent chapter pick via handleChapter's own direct call below, not re-triggered by this effect, since `master` never changes for a given panel instance (see the key above). A `hasRun` ref guard stands in for a dependency array here, not out of preference, but because one is provably impossible to write correctly: `master` and `renderOdmMutate` are guaranteed stable for this panel's entire lifetime (the key above is what enforces that), so there is no reactive value a dependency list could ever meaningfully name.
+  const hasRun = useRef(false);
   useEffect(() => {
+    if (hasRun.current) return;
+    hasRun.current = true;
     renderOdmMutate(
       { master: master.bytes, chapters: [] },
       {
@@ -70,7 +73,7 @@ function OdmPanel({ master }: { master: OpenedFile }) {
         },
       },
     );
-  }, [master, renderOdmMutate]);
+  });
 
   const handleChapter = (opened: OpenedFile) => {
     // A chapter file replaces an earlier pick with the same name (a re-pick of a chapter you edited on disk) and otherwise joins the set; either way the master re-renders against the new set immediately.
