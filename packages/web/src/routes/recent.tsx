@@ -1,7 +1,8 @@
-import { Container, Paper, Stack, Title } from "@mantine/core";
+import { Paper } from "@mantine/core";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { RecentFilesPanel } from "../ui/RecentFilesPanel";
+import { ToolPage } from "../ui/ToolPage";
 
 export const Route = createFileRoute("/recent")({
   component: RecentPage,
@@ -9,13 +10,10 @@ export const Route = createFileRoute("/recent")({
 
 function RecentPage() {
   return (
-    <Container size="sm" py="xl">
-      <Stack gap="lg">
-        <Title order={2}>Recent files</Title>
-        <Paper withBorder p="md">
-          <RecentFilesPanel />
-        </Paper>
-      </Stack>
-    </Container>
+    <ToolPage title="Recent files">
+      <Paper withBorder p="md">
+        <RecentFilesPanel />
+      </Paper>
+    </ToolPage>
   );
 }

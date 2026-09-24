@@ -1,13 +1,4 @@
-import {
-  Alert,
-  Button,
-  Container,
-  Paper,
-  Stack,
-  Text,
-  Textarea,
-  Title,
-} from "@mantine/core";
+import { Alert, Button, Paper, Stack, Text, Textarea } from "@mantine/core";
 import { createFileRoute } from "@tanstack/react-router";
 import type { DocumentFormat } from "documents.js";
 import { useEffect, useRef, useState } from "react";
@@ -18,6 +9,7 @@ import { useOpenDocument } from "../document/OpenDocumentContext";
 import { useReadContent, useRestoreContent } from "../hooks/useContentDump";
 import type { OpenedFile } from "../ports/fileAccess";
 import { notifyError, notifySuccess } from "../ui/notify";
+import { ToolPage } from "../ui/ToolPage";
 
 export const Route = createFileRoute("/_document/package")({
   component: PackagePage,
@@ -28,27 +20,24 @@ function PackagePage() {
   const { document } = useOpenDocument();
 
   return (
-    <Container size="lg" py="xl">
-      <Stack gap="lg">
-        <Title order={2}>Package / JSON</Title>
-        {document === undefined ? (
-          <NoDocumentOpen>
-            Open a document above to see its structure as JSON.
-          </NoDocumentOpen>
-        ) : document.format === undefined ? (
-          <Alert color="yellow">
-            The file extension does not identify a known document format.
-          </Alert>
-        ) : (
-          // Keyed by the document's own open sequence: a fresh open remounts this panel from scratch, resetting the edited JSON without calling its setter directly inside an effect (react-hooks/set-state-in-effect).
-          <PackagePanel
-            key={document.id}
-            file={document.file}
-            format={document.format}
-          />
-        )}
-      </Stack>
-    </Container>
+    <ToolPage title="Package / JSON" width="canvas">
+      {document === undefined ? (
+        <NoDocumentOpen>
+          Open a document above to see its structure as JSON.
+        </NoDocumentOpen>
+      ) : document.format === undefined ? (
+        <Alert color="yellow">
+          The file extension does not identify a known document format.
+        </Alert>
+      ) : (
+        // Keyed by the document's own open sequence: a fresh open remounts this panel from scratch, resetting the edited JSON without calling its setter directly inside an effect (react-hooks/set-state-in-effect).
+        <PackagePanel
+          key={document.id}
+          file={document.file}
+          format={document.format}
+        />
+      )}
+    </ToolPage>
   );
 }
 

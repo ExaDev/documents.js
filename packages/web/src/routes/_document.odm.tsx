@@ -1,13 +1,4 @@
-import {
-  Alert,
-  Container,
-  Group,
-  List,
-  Paper,
-  Stack,
-  Text,
-  Title,
-} from "@mantine/core";
+import { Alert, Group, List, Paper, Text } from "@mantine/core";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 
@@ -18,6 +9,7 @@ import { usePdfObjectUrl } from "../hooks/usePdfObjectUrl";
 import type { OpenedFile } from "../ports/fileAccess";
 import { FileUpload } from "../ui/FileUpload";
 import { notifyError } from "../ui/notify";
+import { ToolPage } from "../ui/ToolPage";
 
 export const Route = createFileRoute("/_document/odm")({
   component: OdmPage,
@@ -28,24 +20,20 @@ function OdmPage() {
   const { document } = useOpenDocument();
 
   return (
-    <Container size="lg" py="xl">
-      <Stack gap="lg">
-        <Title order={2}>Render an .odm master document</Title>
-        <Text c="dimmed">
-          A master document links its chapters as external .odt files. Open the
-          .odm above, then add whichever chapter files you have below — the
-          named list of still-missing chapters tells you what else to add.
-        </Text>
-        {document === undefined ? (
-          <NoDocumentOpen>
-            Open an .odm master document above to render it.
-          </NoDocumentOpen>
-        ) : (
-          // Keyed by the document's own open sequence: a fresh master document remounts this panel from scratch, dropping any chapters picked for the previous master without calling its setter directly inside an effect (react-hooks/set-state-in-effect). A chapter file is only ever meaningful relative to the master that links it.
-          <OdmPanel key={document.id} master={document.file} />
-        )}
-      </Stack>
-    </Container>
+    <ToolPage
+      title="Render an .odm master document"
+      width="canvas"
+      description="A master document links its chapters as external .odt files. Open the .odm above, then add whichever chapter files you have below: the named list of still-missing chapters tells you what else to add."
+    >
+      {document === undefined ? (
+        <NoDocumentOpen>
+          Open an .odm master document above to render it.
+        </NoDocumentOpen>
+      ) : (
+        // Keyed by the document's own open sequence: a fresh master document remounts this panel from scratch, dropping any chapters picked for the previous master without calling its setter directly inside an effect (react-hooks/set-state-in-effect). A chapter file is only ever meaningful relative to the master that links it.
+        <OdmPanel key={document.id} master={document.file} />
+      )}
+    </ToolPage>
   );
 }
 
