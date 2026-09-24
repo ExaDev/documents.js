@@ -146,7 +146,12 @@ function renderSlideOrPage(slide: SlideOrPage): ReactNode {
 }
 
 function rotationTransform(
-  frame: { xPt: number; yPt: number; widthPt: number; heightPt: number },
+  frame: Readonly<{
+    xPt: number;
+    yPt: number;
+    widthPt: number;
+    heightPt: number;
+  }>,
   rotationDeg: number | undefined,
 ): string | undefined {
   if (rotationDeg === undefined) return undefined;

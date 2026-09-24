@@ -19,7 +19,7 @@ function renderPanel(diagnostics: readonly Diagnostic[]): string {
   return mounted.container.innerHTML;
 }
 
-function diagnostic(overrides: Partial<Diagnostic> = {}): Diagnostic {
+function diagnostic(overrides: Readonly<Partial<Diagnostic>> = {}): Diagnostic {
   return { severity: "info", code: "x", message: "a message", ...overrides };
 }
 

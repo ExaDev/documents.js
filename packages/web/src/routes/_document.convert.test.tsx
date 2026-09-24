@@ -127,7 +127,7 @@ const saveFile =
   vi.fn<
     (
       bytes: Uint8Array,
-      options: { suggestedName: string; mimeType: string },
+      options: Readonly<{ suggestedName: string; mimeType: string }>,
     ) => Promise<{ handle?: undefined }>
   >();
 vi.mock("../adapters/fileAccess/createFileAccess", () => ({

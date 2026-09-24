@@ -12,7 +12,7 @@ vi.mock("../hooks/useRecentFiles", () => ({
   },
 }));
 
-const navigate = vi.fn<(options: { to: string }) => void>();
+const navigate = vi.fn<(options: Readonly<{ to: string }>) => void>();
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigate }));
 
 const notifyError = vi.fn<(title: string, error: unknown) => void>();
@@ -72,11 +72,13 @@ function record(overrides: Partial<RecentFileRecord> = {}): RecentFileRecord {
 }
 
 function fakeHandle(
-  overrides: Partial<{
-    queryPermission: () => Promise<PermissionState>;
-    requestPermission: () => Promise<PermissionState>;
-    getFile: () => Promise<File>;
-  }> = {},
+  overrides: Readonly<
+    Partial<{
+      queryPermission: () => Promise<PermissionState>;
+      requestPermission: () => Promise<PermissionState>;
+      getFile: () => Promise<File>;
+    }>
+  > = {},
 ): FileSystemFileHandle {
   return {
     queryPermission:
