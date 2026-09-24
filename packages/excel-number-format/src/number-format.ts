@@ -99,8 +99,11 @@ function containsCurrencySymbol(text: string): boolean {
  *
  * [$GBP-809] carries an ISO 4217 alphabetic code; [$£-809] and [$R$-416] carry a display SYMBOL instead. Only the three-ASCII-letter shape is treated as a code — a consuming codec's own currency field is documented as the ISO 4217 code, so a symbol must leave it absent rather than have a code invented for it (there is no faithful symbol-to-code mapping: '$' alone is USD, CAD, AUD, and a dozen others). Exported (not just used internally by classifyBracket below) because a codec's own writer needs the identical predicate to decide whether a currency string it is about to write is a real ISO code or a symbol that cannot go inside a [$...] bracket — ooxml.js's typed/xlsx/number-format.ts's currencyNumberFormat is exactly this case, and reusing this function rather than a second copy is what keeps the read and write sides from drifting on what counts as a valid code.
  */
+/** Every ISO 4217 alphabetic currency code is exactly three letters ("GBP", "USD"), never two or four. */
+const ISO_4217_CODE_LENGTH = 3;
+
 export function isIsoCurrencyCodeShape(marker: string): boolean {
-  if (marker.length !== 3) {
+  if (marker.length !== ISO_4217_CODE_LENGTH) {
     return false;
   }
   for (const char of marker) {
@@ -367,44 +370,60 @@ export function classifyNumberFormat(formatCode: string): NumberFormatClass {
  *
  * These strings are fed through the SAME classifyNumberFormat above as a producer-declared code, never a second lookup table of pre-decided kinds, so the two feeds can never drift apart. Two spellings of ids 5-8 circulate in reproductions of this table (bare `$#,##0` and quoted `"$"#,##0`); both classify identically here, since a currency symbol is recognised as a bare code character and inside a literal alike.
  */
-export const BUILTIN_NUMBER_FORMATS: ReadonlyMap<number, string> = new Map<
-  number,
-  string
->([
-  [0, "General"],
-  [1, "0"],
-  [2, "0.00"],
-  [3, "#,##0"],
-  [4, "#,##0.00"],
-  [5, "$#,##0_);($#,##0)"],
-  [6, "$#,##0_);[Red]($#,##0)"],
-  [7, "$#,##0.00_);($#,##0.00)"],
-  [8, "$#,##0.00_);[Red]($#,##0.00)"],
-  [9, "0%"],
-  [10, "0.00%"],
-  [11, "0.00E+00"],
-  [12, "# ?/?"],
-  [13, "# ??/??"],
-  [14, "mm-dd-yy"],
-  [15, "d-mmm-yy"],
-  [16, "d-mmm"],
-  [17, "mmm-yy"],
-  [18, "h:mm AM/PM"],
-  [19, "h:mm:ss AM/PM"],
-  [20, "h:mm"],
-  [21, "h:mm:ss"],
-  [22, "m/d/yy h:mm"],
-  [37, "#,##0 ;(#,##0)"],
-  [38, "#,##0 ;[Red](#,##0)"],
-  [39, "#,##0.00;(#,##0.00)"],
-  [40, "#,##0.00;[Red](#,##0.00)"],
-  [41, '_(* #,##0_);_(* \\(#,##0\\);_(* "-"_);_(@_)'],
-  [42, '_("$"* #,##0_);_("$"* \\(#,##0\\);_("$"* "-"_);_(@_)'],
-  [43, '_(* #,##0.00_);_(* \\(#,##0.00\\);_(* "-"??_);_(@_)'],
-  [44, '_("$"* #,##0.00_);_("$"* \\(#,##0.00\\);_("$"* "-"??_);_(@_)'],
-  [45, "mm:ss"],
-  [46, "[h]:mm:ss"],
-  [47, "mmss.0"],
-  [48, "##0.0E+0"],
-  [49, "@"],
+// ECMA-376's own built-in table is two unbroken runs of consecutive ids: 0 through 22, then, once the reserved 23-36 range this table's own doc comment above describes, 37 through 49. Each run is built from a plain string array keyed by its own array index plus the run's starting id, rather than a 33-entry array of [id, code] tuples that names every id number individually. The ids here are ECMA-376's own consecutive assignment, not independently chosen magnitudes: FIRST_RUN_START_ID and SECOND_RUN_START_ID are the only numbers that carry any real meaning of their own (where each run begins), so those are the only two this file names.
+const FIRST_RUN_START_ID = 0;
+const SECOND_RUN_START_ID = 37;
+
+const FIRST_RUN_CODES: readonly string[] = [
+  "General", // 0
+  "0", // 1
+  "0.00", // 2
+  "#,##0", // 3
+  "#,##0.00", // 4
+  "$#,##0_);($#,##0)", // 5
+  "$#,##0_);[Red]($#,##0)", // 6
+  "$#,##0.00_);($#,##0.00)", // 7
+  "$#,##0.00_);[Red]($#,##0.00)", // 8
+  "0%", // 9
+  "0.00%", // 10
+  "0.00E+00", // 11
+  "# ?/?", // 12
+  "# ??/??", // 13
+  "mm-dd-yy", // 14
+  "d-mmm-yy", // 15
+  "d-mmm", // 16
+  "mmm-yy", // 17
+  "h:mm AM/PM", // 18
+  "h:mm:ss AM/PM", // 19
+  "h:mm", // 20
+  "h:mm:ss", // 21
+  "m/d/yy h:mm", // 22
+];
+
+const SECOND_RUN_CODES: readonly string[] = [
+  "#,##0 ;(#,##0)", // 37
+  "#,##0 ;[Red](#,##0)", // 38
+  "#,##0.00;(#,##0.00)", // 39
+  "#,##0.00;[Red](#,##0.00)", // 40
+  '_(* #,##0_);_(* \\(#,##0\\);_(* "-"_);_(@_)', // 41
+  '_("$"* #,##0_);_("$"* \\(#,##0\\);_("$"* "-"_);_(@_)', // 42
+  '_(* #,##0.00_);_(* \\(#,##0.00\\);_(* "-"??_);_(@_)', // 43
+  '_("$"* #,##0.00_);_("$"* \\(#,##0.00\\);_("$"* "-"??_);_(@_)', // 44
+  "mm:ss", // 45
+  "[h]:mm:ss", // 46
+  "mmss.0", // 47
+  "##0.0E+0", // 48
+  "@", // 49
+];
+
+function idKeyedEntries(
+  startId: number,
+  codes: readonly string[],
+): readonly (readonly [number, string])[] {
+  return codes.map((code, offset) => [startId + offset, code]);
+}
+
+export const BUILTIN_NUMBER_FORMATS: ReadonlyMap<number, string> = new Map([
+  ...idKeyedEntries(FIRST_RUN_START_ID, FIRST_RUN_CODES),
+  ...idKeyedEntries(SECOND_RUN_START_ID, SECOND_RUN_CODES),
 ]);

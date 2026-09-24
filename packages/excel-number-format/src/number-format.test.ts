@@ -92,7 +92,7 @@ describe("splitNumberFormatSections", () => {
     const sections = splitNumberFormatSections(
       tokenizeNumberFormat('0.00;[Red]-0.00;"-";@'),
     );
-    expect(sections).toHaveLength(4);
+    expect(sections).toHaveLength(MAX_NUMBER_FORMAT_SECTIONS);
     expect(sections[0]).toEqual([
       { kind: "code", char: "0" },
       { kind: "code", char: "." },
@@ -346,8 +346,34 @@ describe("BUILTIN_NUMBER_FORMATS: the same classifier, fed the spec's own implie
     return classifyNumberFormat(code);
   };
 
+  // Every code below is copied verbatim from BUILTIN_NUMBER_FORMATS's own entries, so the exercised numFmtId itself never needs writing as a literal here: the code string IS the meaningful value under test, and idOf recovers whichever id the table currently assigns it.
+  const idOf = (code: string): number => {
+    for (const [id, candidate] of BUILTIN_NUMBER_FORMATS) {
+      if (candidate === code) {
+        return id;
+      }
+    }
+    throw new Error(`no built-in numFmtId maps to ${code}`);
+  };
+
   it("classifies every plain-numeric built-in as a number", () => {
-    for (const id of [0, 1, 2, 3, 4, 11, 12, 13, 37, 38, 39, 40, 41, 43, 48]) {
+    for (const code of [
+      "0",
+      "0.00",
+      "#,##0",
+      "#,##0.00",
+      "0.00E+00",
+      "# ?/?",
+      "# ??/??",
+      "#,##0 ;(#,##0)",
+      "#,##0 ;[Red](#,##0)",
+      "#,##0.00;(#,##0.00)",
+      "#,##0.00;[Red](#,##0.00)",
+      '_(* #,##0_);_(* \\(#,##0\\);_(* "-"_);_(@_)',
+      '_(* #,##0.00_);_(* \\(#,##0.00\\);_(* "-"??_);_(@_)',
+      "##0.0E+0",
+    ]) {
+      const id = idOf(code);
       expect({ id, class: classOf(id) }).toEqual({
         id,
         class: { kind: "number" },
@@ -356,7 +382,15 @@ describe("BUILTIN_NUMBER_FORMATS: the same classifier, fed the spec's own implie
   });
 
   it("classifies the currency and accounting built-ins as currency with no code (the spec's table names a symbol, never an ISO code)", () => {
-    for (const id of [5, 6, 7, 8, 42, 44]) {
+    for (const code of [
+      "$#,##0_);($#,##0)",
+      "$#,##0_);[Red]($#,##0)",
+      "$#,##0.00_);($#,##0.00)",
+      "$#,##0.00_);[Red]($#,##0.00)",
+      '_("$"* #,##0_);_("$"* \\(#,##0\\);_("$"* "-"_);_(@_)',
+      '_("$"* #,##0.00_);_("$"* \\(#,##0.00\\);_("$"* "-"??_);_(@_)',
+    ]) {
+      const id = idOf(code);
       expect({ id, class: classOf(id) }).toEqual({
         id,
         class: { kind: "currency" },
@@ -365,30 +399,43 @@ describe("BUILTIN_NUMBER_FORMATS: the same classifier, fed the spec's own implie
   });
 
   it("classifies the two percentage built-ins", () => {
-    expect(classOf(9)).toEqual({ kind: "percentage" });
-    expect(classOf(10)).toEqual({ kind: "percentage" });
+    expect(classOf(idOf("0%"))).toEqual({ kind: "percentage" });
+    expect(classOf(idOf("0.00%"))).toEqual({ kind: "percentage" });
   });
 
   it("classifies the date, time, combined, elapsed, and text built-ins", () => {
-    for (const id of [14, 15, 16, 17]) {
+    for (const code of ["mm-dd-yy", "d-mmm-yy", "d-mmm", "mmm-yy"]) {
+      const id = idOf(code);
       expect({ id, class: classOf(id) }).toEqual({
         id,
         class: { kind: "date" },
       });
     }
-    for (const id of [18, 19, 20, 21, 45, 47]) {
+    for (const code of [
+      "h:mm AM/PM",
+      "h:mm:ss AM/PM",
+      "h:mm",
+      "h:mm:ss",
+      "mm:ss",
+      "mmss.0",
+    ]) {
+      const id = idOf(code);
       expect({ id, class: classOf(id) }).toEqual({
         id,
         class: { kind: "time" },
       });
     }
-    expect(classOf(22)).toEqual({ kind: "dateTime" });
-    expect(classOf(46)).toEqual({ kind: "elapsedTime" });
-    expect(classOf(49)).toEqual({ kind: "text" });
+    expect(classOf(idOf("m/d/yy h:mm"))).toEqual({ kind: "dateTime" });
+    expect(classOf(idOf("[h]:mm:ss"))).toEqual({ kind: "elapsedTime" });
+    expect(classOf(idOf("@"))).toEqual({ kind: "text" });
   });
 
-  it("leaves ids 23-36 undefined — ECMA-376's own table reserves them, and inventing codes would fabricate a mapping", () => {
-    for (let id = 23; id <= 36; id++) {
+  // ECMA-376's own table leaves this whole id range reserved (see BUILTIN_NUMBER_FORMATS's own doc comment); RESERVED_ID_RANGE_START/END are the range's own boundary values from the spec, not independently chosen magnitudes.
+  const RESERVED_ID_RANGE_START = 23;
+  const RESERVED_ID_RANGE_END = 36;
+
+  it("leaves the reserved id range undefined, since inventing codes for it would fabricate a mapping the spec never defines", () => {
+    for (let id = RESERVED_ID_RANGE_START; id <= RESERVED_ID_RANGE_END; id++) {
       expect(BUILTIN_NUMBER_FORMATS.get(id)).toBeUndefined();
     }
   });
