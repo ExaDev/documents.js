@@ -144,7 +144,7 @@ const FLOAT_ORIGIN_BY_ANCHOR_TYPE: Readonly<
 // A positioned draw:frame's own floating position, document-schema.js's format-agnostic ContentFloatPosition (ExaDev/documents.js#1087/#1094) — undefined for a frame with no text:anchor-type at all (a slide or table-cell shape, where the attribute is never written) or one anchored "char"/"as-char" (inline in text flow, no position of its own). ODF's svg:x/svg:y are always a literal point offset on both axes — there is no alignment-keyword concept the way docx's wp:align is — so both axes always take ContentFloatAxisSchema's offsetPt branch, never its align branch.
 function readFloatPosition(
   frame: XmlElement,
-  frameBox: Box,
+  frameBox: Readonly<Box>,
 ): ContentFloatPosition | undefined {
   const anchorType = attrValue(frame, "text:anchor-type");
   const origin =
@@ -163,7 +163,7 @@ function readFloatPosition(
 export function readDrawImageBlock(
   image: XmlElement,
   frame: XmlElement,
-  frameBox: Box,
+  frameBox: Readonly<Box>,
   pkg: Package,
 ): ContentImageBlock | undefined {
   const href = attrValue(image, "xlink:href");
@@ -200,9 +200,9 @@ export function readDrawImageBlock(
 // ODP LIST MEMBERSHIP — minted numId, not the numId-less { level } shape: document-schema.js 3.3.0 made ContentListMembership.numId optional precisely so a reader whose source carries NO list identity could emit the honest minimal { level } (ooxml.js's pptx reader, whose a:pPr/@lvl is a bare depth attribute on the paragraph with no list element behind it — a fabricated numId there would be a lie in the data). A slide text box is not that case: draw:text-box's own content model is exactly (text:p | text:list)*, and its text:list elements are the IDENTICAL structural containers the odt reader walks in office:text — a slide can carry two of them (two bullet bodies in one text box, or one list in each of two frames), and a consumer grouping list paragraphs apart (rendering separate <ul>/<ol> elements, nesting an outline per list) must be able to tell them apart. The deciding criterion is exactly that: whether the source carries genuine list identity a consumer needs for grouping separate lists apart. ODP's text:list elements pass it, so this reader mints a per-encounter numId through the SAME shared machinery (typed/shared/list.ts: mintOdfListNumId/readOdfListParagraphs, including the ordered:/bullet: kind prefix) the odt reader uses — emitting { level } alone would discard a real, source-grounded fact, not avoid a fabrication.
 function readDrawFrameContent(
   frame: XmlElement,
-  frameBox: Box,
+  frameBox: Readonly<Box>,
   pkg: Package,
-  listIdState: OdfListIdState,
+  listIdState: Readonly<OdfListIdState>,
   embeddedFormat: OdfResidueFormat | undefined,
 ): ContentBlock[] {
   // An embedded object's draw:object is checked BEFORE every other content, exactly as odt's anchored-frame reader and ods's cell-anchored reader already order it: a real embedding frame ALSO carries a sibling draw:image (the ObjectReplacements/ preview) that must not be mistaken for the frame's own picture content. Opt-in through embeddedFormat rather than unconditional, because ods calls readDrawFrame for its anchored frames and resolves the reference itself through its own cell-anchored path — an unconditional branch here would hand ods a second, differently-shaped copy of the same object.
@@ -264,7 +264,7 @@ export function readDrawFrame(
   frame: XmlElement,
   groupFunctions: readonly OdfTransformFunction[],
   pkg: Package,
-  listIdState: OdfListIdState = { next: 1 },
+  listIdState: Readonly<OdfListIdState> = { counter: { next: 1 } },
   flowPositioning = false,
   embeddedFormat?: OdfResidueFormat,
 ): ContentShape | undefined {
@@ -321,14 +321,20 @@ function readOwnTransformFunctions(
 // `indexState` reuses the EXACT SAME paintOrderKey/DocumentIndexState machinery walkDrawPageContent (odg, further down this file) uses — ContentShapeSchema carries the identical optional `paintOrder` field ContentSlideSchema's own shapes already declare, so a presentation shape gets the same real, spec-aware (draw:z-index-honouring, falling back to document-encounter order) paint-order value an odg drawing's shapes get, even though odp's own output array is never reordered by it (matching this walker's own pre-existing document-order-only behaviour — only the STAMPED VALUE is new, not a new sort). Defaults to a fresh counter so every existing external call site (a single top-level call per slide, with no indexState argument) keeps working unchanged; recursion into a nested draw:g threads the SAME state onward so the counter stays monotonic across the whole slide, matching walkDrawPageContent's own threading discipline exactly.
 //
 // `listIdState` threads the text-box list numId counter (see readDrawFrameContent's own ODP LIST MEMBERSHIP note) through every frame of the walk, with the same fresh-counter default and the same recursive threading discipline as indexState — odp passes one document-wide state (see readOdpContent) so a list's identity is unique across the whole presentation, never reset per slide or per group.
+// The shape accumulator walkDrawShapes appends each resolved draw:frame onto, flattening draw:g groups as it goes. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable.
+export interface ShapeSink {
+  readonly shapes: ContentShape[];
+}
+
 export function walkDrawShapes(
   children: readonly XmlNode[],
   groupFunctions: readonly OdfTransformFunction[],
   pkg: Package,
-  out: ContentShape[],
-  indexState: DocumentIndexState = { next: 0 },
-  listIdState: OdfListIdState = { next: 1 },
+  sink: ShapeSink,
+  indexState: Readonly<DocumentIndexState> = { counter: { next: 0 } },
+  listIdState: Readonly<OdfListIdState> = { counter: { next: 1 } },
 ): void {
+  const out = sink.shapes;
   for (const node of children) {
     if (node.type !== "element") {
       continue;
@@ -350,7 +356,7 @@ export function walkDrawShapes(
       const ownFunctions = readOwnTransformFunctions(node);
       // No length-0 shortcut returning groupFunctions unchanged: spreading an empty ownFunctions ahead of groupFunctions produces the identical content either way, so the shortcut was a pure allocation micro-optimisation, not an observable behavioural branch.
       const nested = [...ownFunctions, ...groupFunctions];
-      walkDrawShapes(node.children, nested, pkg, out, indexState, listIdState);
+      walkDrawShapes(node.children, nested, pkg, sink, indexState, listIdState);
     }
   }
 }
@@ -890,7 +896,7 @@ function polygonSubpath(
 // A regular N-gon inscribed in the shape's own frame, point-up, independently stretched on each axis to fill a non-square frame — the same box-fit convention every other approximated preset in this file already uses (round-rectangle, the fixed triangle/diamond presets alongside this one). A closest reasonable approximation for an unadjusted preset of this name, not a literal read of the file's own stored draw:enhanced-path geometry (see this section's own top-of-file note).
 function regularPolygonSubpath(
   sides: number,
-  frame: Box,
+  frame: Readonly<Box>,
 ): ContentSubpath | undefined {
   const cx = frame.widthPt / 2;
   const cy = frame.heightPt / 2;
@@ -908,7 +914,7 @@ function regularPolygonSubpath(
 // The fixed-geometry preset subpaths — see this section's own top-of-file note for why these six specifically, and why 'parallelogram'/'trapezoid' are deliberately excluded from this table.
 function fixedPresetSubpath(
   type: string,
-  frame: Box,
+  frame: Readonly<Box>,
 ): ContentSubpath | undefined {
   const w = frame.widthPt;
   const h = frame.heightPt;
@@ -944,7 +950,10 @@ function fixedPresetSubpath(
 // The standard cubic-Bezier approximation constant for a quarter circle (4/3 * (sqrt(2) - 1) = 0.55228474983...) — a universal mathematical constant independent of ODF, used below to build a rounded rectangle's four corner arcs.
 const BEZIER_QUARTER_CIRCLE_KAPPA = 0.5522847498307936;
 
-function roundedRectSubpath(frame: Box, radiusPt: number): ContentSubpath {
+function roundedRectSubpath(
+  frame: Readonly<Box>,
+  radiusPt: number,
+): ContentSubpath {
   const w = frame.widthPt;
   const h = frame.heightPt;
 
@@ -1006,7 +1015,7 @@ function readOdfHandleValue(
 function readRoundRectangleRadiusPt(
   geometryElement: XmlElement,
   viewBox: OdfViewBox,
-  frame: Box,
+  frame: Readonly<Box>,
 ): number | undefined {
   if (viewBox.width <= 0) {
     return undefined;
@@ -1163,17 +1172,25 @@ function readCustomShapeAsTextShape(
 }
 
 // PAINT ORDER (draw:z-index): confirmed against the OASIS ODF schema (datypic.com's ODF 1.1 schema reference for draw:z-index — xsd:nonNegativeInteger, [0..1], valid on every shape element this file reads: draw:rect, draw:ellipse/circle, draw:line, draw:path/polygon/polyline, draw:custom-shape, draw:frame, draw:g) that draw:z-index is real, spec-defined ODF vocabulary for overriding a shape's stacking order independently of its position in the document. It is read here when present. Separately and empirically confirmed against real LibreOffice 26.2 .odg output (a controlled round trip: two overlapping shapes' UNO ZOrder property was set to the OPPOSITE of their creation/document order, then saved): LibreOffice's OWN writer never emits draw:z-index at all for a plain draw:page's shapes — instead, it physically REORDERS the shape elements within the saved XML to already match paint order, with document order and z-order coinciding exactly in every real LibreOffice-produced file. paintOrderKey below therefore uses an explicit draw:z-index when present, and otherwise falls back to a monotonically increasing DOCUMENT-ENCOUNTER counter — which for genuine LibreOffice output already IS the correct paint order (a no-op sort), while still resolving correctly for any OTHER producer that DOES emit an explicit draw:z-index differing from document order.
-interface DocumentIndexState {
+// The paint-order counter itself, nested rather than sitting directly on DocumentIndexState: it is genuinely incremented on every shape indexed, so a flat DocumentIndexState would be a readonly-param candidate the increment cannot satisfy.
+interface DocumentIndexCounter {
   next: number;
 }
 
-function nextDocumentIndex(state: DocumentIndexState): number {
-  const value = state.next;
-  state.next += 1;
+interface DocumentIndexState {
+  readonly counter: DocumentIndexCounter;
+}
+
+function nextDocumentIndex(state: Readonly<DocumentIndexState>): number {
+  const value = state.counter.next;
+  state.counter.next += 1;
   return value;
 }
 
-function paintOrderKey(element: XmlElement, state: DocumentIndexState): number {
+function paintOrderKey(
+  element: XmlElement,
+  state: Readonly<DocumentIndexState>,
+): number {
   const documentIndex = nextDocumentIndex(state);
   const raw = attrValue(element, "draw:z-index");
   if (raw === undefined) {
@@ -1197,14 +1214,20 @@ function byPaintOrder<T>(items: readonly PaintOrdered<T>[]): T[] {
 }
 
 // Walks a draw:page's (or a nested draw:g's) own direct children, producing TWO paint-ordered lists — shapes (draw:frame content, plus any unrecognised draw:custom-shape salvaged as text) and vectors (every recognised vector primitive) — mirroring walkDrawShapes' own draw:frame/draw:g flattening exactly (indexState is threaded by reference so z-index fallback stays monotonic across the WHOLE recursive walk, not reset per group) but additionally recognising the vector-primitive element kinds odp's own walkDrawShapes deliberately does not (see this file's own top-of-file note). Every produced ContentShape/ContentVector is stamped with its own resolved `paintOrder: zIndex` (not merely sorted by it and then discarded) — ContentDrawPageSchema still keeps `shapes` and `vectors` as two SEPARATE arrays with no shared field connecting them, but since BOTH now carry the real zIndex value from the SAME single monotonic indexState counter threaded across the whole walk, a caller CAN recover their true relative paint order by comparing `paintOrder` directly across the two arrays — the cross-array ordering gap this comment used to describe as unrecoverable is closed by this stamping, even though the schema's own two-array shape is unchanged.
+// The two paint-ordered accumulators walkDrawPageContent fills, always threaded together: one recursive walk produces both shapes and vectors, stamped from one monotonic index counter, so splitting them would only recreate the pairing at every call site.
+interface PaintOrderedSink {
+  readonly shapesOut: PaintOrdered<ContentShape>[];
+  readonly vectorsOut: PaintOrdered<ContentVector>[];
+}
+
 function walkDrawPageContent(
   children: readonly XmlNode[],
   groupFunctions: readonly OdfTransformFunction[],
   pkg: Package,
-  indexState: DocumentIndexState,
-  shapesOut: PaintOrdered<ContentShape>[],
-  vectorsOut: PaintOrdered<ContentVector>[],
+  indexState: Readonly<DocumentIndexState>,
+  sink: PaintOrderedSink,
 ): void {
+  const { shapesOut, vectorsOut } = sink;
   for (const node of children) {
     if (node.type !== "element") {
       continue;
@@ -1226,14 +1249,7 @@ function walkDrawPageContent(
       const ownFunctions = readOwnTransformFunctions(node);
       // See walkDrawShapes' own identical construction above for why there is no length-0 shortcut here either.
       const nested = [...ownFunctions, ...groupFunctions];
-      walkDrawPageContent(
-        node.children,
-        nested,
-        pkg,
-        indexState,
-        shapesOut,
-        vectorsOut,
-      );
+      walkDrawPageContent(node.children, nested, pkg, indexState, sink);
     } else if (node.tag === "draw:rect") {
       const zIndex = paintOrderKey(node, indexState);
       const vector = readDrawRectVector(node, groupFunctions, pkg);
@@ -1289,6 +1305,15 @@ export function readDrawPageContent(
 ): DrawPageContent {
   const shapesOut: PaintOrdered<ContentShape>[] = [];
   const vectorsOut: PaintOrdered<ContentVector>[] = [];
-  walkDrawPageContent(children, [], pkg, { next: 0 }, shapesOut, vectorsOut);
+  walkDrawPageContent(
+    children,
+    [],
+    pkg,
+    { counter: { next: 0 } },
+    {
+      shapesOut,
+      vectorsOut,
+    },
+  );
   return { shapes: byPaintOrder(shapesOut), vectors: byPaintOrder(vectorsOut) };
 }

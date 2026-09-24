@@ -488,7 +488,7 @@ describe("readOdsContent: anchored drawings (synthetic packages — the scope bo
     ]),
   );
 
-  function imageFrame(attrs: Record<string, string>): XmlElement {
+  function imageFrame(attrs: Readonly<Record<string, string>>): XmlElement {
     return el("draw:frame", attrs, [
       el("draw:image", { "xlink:href": "Pictures/img.png" }),
     ]);
@@ -759,7 +759,7 @@ describe("readOdsContent: error and fallback paths (synthetic packages — not s
 // The ods residue rows (ExaDev/documents.js#769): recalculation semantics are not content, so table:calculation-settings and the non-content parts quarantine at the package tier.
 describe("readOdsContent: residue rows", () => {
   function spreadsheetPackage(
-    children: XmlElement[],
+    children: readonly XmlElement[],
     extraParts: Record<string, Package["parts"][string]> = {},
   ): Package {
     return {
@@ -1017,7 +1017,7 @@ describe('readOdsContent: cell background/borders/alignment/verticalAlignment (s
 
   function stringCell(
     text: string,
-    extraAttrs: Record<string, string> = {},
+    extraAttrs: Readonly<Record<string, string>> = {},
   ): XmlElement {
     return el(
       "table:table-cell",
@@ -1027,7 +1027,7 @@ describe('readOdsContent: cell background/borders/alignment/verticalAlignment (s
   }
 
   function sheetPackage(
-    automaticStyleChildren: XmlElement[],
+    automaticStyleChildren: readonly XmlElement[],
     table: XmlElement,
   ): Package {
     return {
@@ -1348,8 +1348,8 @@ describe("readOdsContent: cell comments (ExaDev/documents.js#949, synthetic pack
   }
 
   function cellWithAnnotation(
-    annotationChildren: XmlElement[],
-    valueAttrs: Record<string, string> = {
+    annotationChildren: readonly XmlElement[],
+    valueAttrs: Readonly<Record<string, string>> = {
       "office:value-type": "string",
     },
   ): XmlElement {

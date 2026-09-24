@@ -1,3 +1,9 @@
+## [11.1.6](https://github.com/ExaDev/documents.js/compare/odf.js%4011.1.5...odf.js%4011.1.6) (2026-09-24)
+
+### Bug Fixes
+
+* **odf.js:** clear the last preferReadonlyParams exceptions ([cac9c36](https://github.com/ExaDev/documents.js/commit/cac9c368ff2003d1813475fe16ab5b38bd702c8d))
+
 ## [11.1.5](https://github.com/ExaDev/documents.js/compare/odf.js%4011.1.4...odf.js%4011.1.5) (2026-09-24)
 
 

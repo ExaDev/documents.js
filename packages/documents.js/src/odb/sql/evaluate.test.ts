@@ -118,6 +118,95 @@ describe("evaluateSelect: projection", () => {
       [text("b")],
     ]);
   });
+
+  it("resolves a genuinely unambiguous case-insensitive table-qualifier match, not just an exact one", () => {
+    // Every column name in EMPLOYEES is already upper-case, so an unquoted reference to it (upper-cased by the lexer) matches exactly and never exercises the case-insensitive fold path at all. A table whose real name is mixed-case is the only way to reach it, since the table qualifier itself is what tryResolveName is resolving here.
+    const mixedCase: HsqldbTable = {
+      tableName: "MixedCase",
+      columns: [{ name: "COL", type: "VARCHAR(10)" }],
+      rows: [[text("hi")]],
+    };
+    expect(
+      run("SELECT MixedCase.COL FROM MixedCase", [mixedCase]).rows,
+    ).toEqual([[text("hi")]]);
+  });
+
+  it("never folds a quoted, exact-only reference case-insensitively, even when an unquoted one would", () => {
+    const mixedCase: HsqldbTable = {
+      tableName: "MixedCase",
+      columns: [{ name: "COL", type: "VARCHAR(10)" }],
+      rows: [[text("hi")]],
+    };
+    // "MIXEDCASE" is what MixedCase.toUpperCase() produces, so a real fold match exists for it. Quoted, it must still be refused: only an unquoted reference is allowed to fold.
+    expect(() => run('SELECT * FROM "MIXEDCASE"', [mixedCase])).toThrow(
+      'table "MIXEDCASE" not found',
+    );
+  });
+
+  it("lists every candidate table name, comma-separated, when none resolves", () => {
+    expect(() => run("SELECT * FROM NOPE", [EMPLOYEES, DEPARTMENTS])).toThrow(
+      "available: EMPLOYEES, DEPARTMENTS",
+    );
+  });
+
+  it("says '(none)' rather than an empty list when there is nothing at all to resolve against", () => {
+    expect(() => run("SELECT * FROM NOPE", [])).toThrow("available: (none)");
+  });
+
+  it("resolves a genuinely unambiguous case-insensitive column match after a JOIN, not just an exact one", () => {
+    // Mirrors the table-qualifier fold test above, but for tryResolveColumnIndex's own separate implementation of the identical rule, over the joined column list rather than a single table's own columns.
+    const left: HsqldbTable = {
+      tableName: "L",
+      columns: [{ name: "Id", type: "INTEGER" }],
+      rows: [[num(1)]],
+    };
+    const right: HsqldbTable = {
+      tableName: "R",
+      columns: [{ name: "VAL", type: "INTEGER" }],
+      rows: [[num(2)]],
+    };
+    expect(run("SELECT ID FROM L CROSS JOIN R", [left, right]).rows).toEqual([
+      [num(1)],
+    ]);
+  });
+
+  it("refuses to guess an unqualified column name that matches two joined columns case-insensitively, naming both", () => {
+    const left: HsqldbTable = {
+      tableName: "L",
+      columns: [{ name: "Val", type: "INTEGER" }],
+      rows: [[num(1)]],
+    };
+    const right: HsqldbTable = {
+      tableName: "R",
+      columns: [{ name: "val", type: "INTEGER" }],
+      rows: [[num(2)]],
+    };
+    expect(() => run("SELECT VAL FROM L CROSS JOIN R", [left, right])).toThrow(
+      'column "VAL" is ambiguous',
+    );
+    expect(() => run("SELECT VAL FROM L CROSS JOIN R", [left, right])).toThrow(
+      "matches Val, val case-insensitively",
+    );
+  });
+
+  it("refuses to guess a table name that matches two real tables case-insensitively, naming both in the error", () => {
+    const fooUpper: HsqldbTable = {
+      tableName: "Foo",
+      columns: [{ name: "A", type: "INTEGER" }],
+      rows: [],
+    };
+    const fooLower: HsqldbTable = {
+      tableName: "foo",
+      columns: [{ name: "A", type: "INTEGER" }],
+      rows: [],
+    };
+    expect(() => run("SELECT * FROM FOO", [fooUpper, fooLower])).toThrow(
+      'table "FOO" is ambiguous',
+    );
+    expect(() => run("SELECT * FROM FOO", [fooUpper, fooLower])).toThrow(
+      "matches Foo, foo case-insensitively",
+    );
+  });
 });
 
 describe("evaluateSelect: three-valued NULL logic in WHERE", () => {
@@ -183,6 +272,46 @@ describe("evaluateSelect: three-valued NULL logic in WHERE", () => {
   it("applies the same rule to a boolean column", () => {
     expect(names("WHERE ACTIVE = TRUE")).toEqual(["Alice", "Carol", "Erin"]);
     expect(names("WHERE ACTIVE <> TRUE")).toEqual(["Bob", "Frank"]);
+  });
+
+  it("excludes a row on a strict '<' comparison of two equal values, distinguishing it from '<='", () => {
+    expect(names("WHERE SALARY < 1000")).toEqual(["Erin", "Frank"]);
+  });
+
+  it("distinguishes NOT TRUE (FALSE) from NOT UNKNOWN (UNKNOWN) through a double negation, since a bare WHERE cannot tell FALSE and UNKNOWN apart by inclusion alone", () => {
+    // NOT (NOT (SALARY > 100)): the inner NOT of a definitely-true predicate must be definitely FALSE, not UNKNOWN. Otherwise the outer NOT would leave it UNKNOWN and wrongly exclude the row, so this must equal the un-negated predicate exactly.
+    expect(names("WHERE NOT (NOT (SALARY > 100))")).toEqual(
+      names("WHERE SALARY > 100"),
+    );
+  });
+
+  it("resolves AND's early FALSE branch off the RIGHT operand alone, not only the left", () => {
+    // For every row but Alice, NAME = 'Alice' is already FALSE, so AND short-circuits FALSE regardless of DEPT. Alice is the one row where the right operand (DEPT = 'Eng', false: her own dept is Sales) has to carry the early FALSE result on its own.
+    expect(names("WHERE NOT (NAME = 'Alice' AND DEPT = 'Eng')")).toEqual([
+      "Alice",
+      "Bob",
+      "Carol",
+      "Dave",
+      "Erin",
+      "Frank",
+    ]);
+  });
+
+  it("resolves TRUE AND UNKNOWN to UNKNOWN, not TRUE, when the left operand alone is definitely true", () => {
+    // Bob is the only NAME = 'Bob' row, and his own SALARY is NULL, so the right operand is UNKNOWN. The AND must stay UNKNOWN, not collapse to TRUE just because the left operand did.
+    expect(names("WHERE NAME = 'Bob' AND SALARY > 100")).toEqual([]);
+  });
+
+  it("resolves OR's FALSE/UNKNOWN fallthrough correctly once neither operand is TRUE", () => {
+    // Neither operand is ever TRUE for Bob (both FALSE) or for Erin/Frank (FALSE and UNKNOWN, their own DEPT is NULL), so all three exercise OR's fallthrough past its TRUE/TRUE early return. That is the one path a plain, unnested OR test never reaches, since a top-level WHERE cannot distinguish a FALSE fallthrough result from an UNKNOWN one by inclusion alone.
+    expect(names("WHERE NOT (NAME = 'Alice' OR DEPT = 'Eng')")).toEqual([
+      "Bob",
+    ]);
+  });
+
+  it("resolves UNKNOWN OR FALSE to UNKNOWN, not FALSE, when the left operand alone is definitely unknown", () => {
+    // Bob is the only row where SALARY > 100 is UNKNOWN (his own SALARY is NULL) while DEPT = 'Eng' is definitely FALSE (his dept is Sales). The OR must stay UNKNOWN, not collapse to FALSE just because the right operand did.
+    expect(names("WHERE NOT (SALARY > 100 OR DEPT = 'Eng')")).toEqual([]);
   });
 });
 
@@ -265,6 +394,20 @@ describe("evaluateSelect: BETWEEN", () => {
     expect(names("WHERE SALARY NOT BETWEEN 1000 AND 2000")).toEqual([
       "Erin",
       "Frank",
+    ]);
+  });
+
+  it("treats a NULL lower or upper bound as UNKNOWN, not just a NULL operand", () => {
+    // Bob's own SALARY is NULL, used here as one of the BOUNDS rather than as the operand being tested.
+    expect(names("WHERE 1000 BETWEEN SALARY AND 2000")).toEqual([
+      "Alice",
+      "Erin",
+      "Frank",
+    ]);
+    expect(names("WHERE 1000 BETWEEN 500 AND SALARY")).toEqual([
+      "Alice",
+      "Carol",
+      "Dave",
     ]);
   });
 
@@ -764,6 +907,36 @@ describe("evaluateSelect: NATURAL JOIN and JOIN ... USING", () => {
     expect(result.rows).toEqual([[num(1), num(1)]]);
   });
 
+  it("merges every shared column under NATURAL JOIN, laid out left-to-right in the left side's own column order", () => {
+    const leftTable: HsqldbTable = {
+      tableName: "LEFT_T",
+      columns: [
+        { name: "B", type: "VARCHAR(5)" },
+        { name: "A", type: "VARCHAR(5)" },
+        { name: "ONLY_LEFT", type: "VARCHAR(5)" },
+      ],
+      rows: [[text("b1"), text("a1"), text("l1")]],
+    };
+    const rightTable: HsqldbTable = {
+      tableName: "RIGHT_T",
+      columns: [
+        { name: "A", type: "VARCHAR(5)" },
+        { name: "ONLY_RIGHT", type: "VARCHAR(5)" },
+        { name: "B", type: "VARCHAR(5)" },
+      ],
+      rows: [[text("a1"), text("r1"), text("b1")]],
+    };
+    const result = run("SELECT * FROM LEFT_T NATURAL JOIN RIGHT_T", [
+      leftTable,
+      rightTable,
+    ]);
+    // Shared columns B and A come first, in LEFT_T's own column order (B before A, since LEFT_T declares B before A) rather than RIGHT_T's own order (which declares A before B) or alphabetical order, and each side's own remaining column follows.
+    expect(result.columns).toEqual(["B", "A", "ONLY_LEFT", "ONLY_RIGHT"]);
+    expect(result.rows).toEqual([
+      [text("b1"), text("a1"), text("l1"), text("r1")],
+    ]);
+  });
+
   it("produces the unrestricted cartesian product for CROSS JOIN, with no condition and no merging", () => {
     const result = run(
       "SELECT * FROM CUSTOMERS CROSS JOIN ORDERS",
@@ -962,6 +1135,20 @@ describe("evaluateSelect: EXISTS (SELECT ...)", () => {
     expect(
       runSub(
         "SELECT NAME FROM EMPLOYEES WHERE EXISTS (SELECT NAME FROM DEPARTMENTS WHERE EXISTS (SELECT DEPT FROM REGIONAL_TARGETS WHERE REGIONAL_TARGETS.DEPT = EMPLOYEES.DEPT)) ORDER BY NAME",
+      ).rows,
+    ).toEqual([
+      [text("Alice")],
+      [text("Bob")],
+      [text("Carol")],
+      [text("Dave")],
+    ]);
+  });
+
+  it("resolves a correlated reference from a JOIN's own ON clause inside a subquery, not only from the subquery's WHERE", () => {
+    // The subquery's own JOIN already matches DEPARTMENTS to REGIONAL_TARGETS on department name alone, which finds at least one row for every outer row regardless of DEPT. The ON clause's second, correlated term (REGIONAL_TARGETS.DEPT = EMPLOYEES.DEPT) is therefore the only thing that can make Erin/Frank (DEPT NULL) differ from Alice/Bob/Carol/Dave: without it, or with `outer` not threaded into the JOIN's own resolver, a NULL-comparison-derived UNKNOWN could never turn EXISTS false, and every row would match.
+    expect(
+      runSub(
+        "SELECT NAME FROM EMPLOYEES WHERE EXISTS (SELECT REGIONAL_TARGETS.TARGET_SALARY FROM DEPARTMENTS JOIN REGIONAL_TARGETS ON REGIONAL_TARGETS.DEPT = DEPARTMENTS.NAME AND REGIONAL_TARGETS.DEPT = EMPLOYEES.DEPT) ORDER BY NAME",
       ).rows,
     ).toEqual([
       [text("Alice")],

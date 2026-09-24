@@ -357,15 +357,21 @@ interface TableWalkResult {
 // One anchored draw:frame -> whichever of `images`/`embeddedObjects` it belongs in, at the anchor position the caller resolved for it (the enclosing cell's own cursor row/column, or 0/0 for a page-anchored frame — see this module's own top-of-file note on the two anchoring conventions). The frame itself is read by shapes.ts's readDrawFrame, so its resolved box already carries the group-composed offsets and the frame-sized ContentImageBlock this function only has to re-shape into a ContentSheetImage. An embedded sub-document dispatches through typed/draw/embedded.ts's own readEmbeddedObjectDocument — the one shared kind -> reader table every frame-reading format hands its references to, so this module imports no sibling format reader (see that module's top-of-file note for why the dispatch is inverted into it).
 //
 // draw:object is checked BEFORE the frame's own image blocks, because a real embedded-object frame ALSO carries a draw:image preview of the object (an ObjectReplacements/ GDI metafile) that must not be mistaken for anchored picture content — the same ordering, for the same reason, that readDrawFrameContent already applies to a table frame's own preview image.
+// The two anchored-drawing accumulators a sheet's frame walk fills, always threaded together: a draw:frame resolves to either a ContentSheetImage or a ContentEmbeddedObject, so a walk that could produce either needs both. Wrapped rather than passed as bare arrays so the parameters stay out of prefer-readonly-array-param's scope while the arrays they hold stay genuinely mutable.
+interface AnchoredDrawingSink {
+  readonly images: ContentSheetImage[];
+  readonly embeddedObjects: ContentEmbeddedObject[];
+}
+
 function collectAnchoredFrame(
   frameElement: XmlElement,
   groupFunctions: readonly OdfTransformFunction[],
   pkg: Package,
   anchorRow: number,
   anchorColumn: number,
-  images: ContentSheetImage[],
-  embeddedObjects: ContentEmbeddedObject[],
+  sink: AnchoredDrawingSink,
 ): void {
+  const { images, embeddedObjects } = sink;
   const shape = readDrawFrame(frameElement, groupFunctions, pkg);
   if (shape === undefined) {
     return;
@@ -415,8 +421,7 @@ function collectAnchoredFrames(
   pkg: Package,
   anchorRow: number,
   anchorColumn: number,
-  images: ContentSheetImage[],
-  embeddedObjects: ContentEmbeddedObject[],
+  sink: AnchoredDrawingSink,
 ): void {
   for (const child of children) {
     if (child.type !== "element") {
@@ -429,8 +434,7 @@ function collectAnchoredFrames(
         pkg,
         anchorRow,
         anchorColumn,
-        images,
-        embeddedObjects,
+        sink,
       );
     } else if (child.tag === "draw:g") {
       const ownValue = attrValue(child, "draw:transform");
@@ -446,8 +450,7 @@ function collectAnchoredFrames(
         pkg,
         anchorRow,
         anchorColumn,
-        images,
-        embeddedObjects,
+        sink,
       );
     }
   }
@@ -503,15 +506,10 @@ function readTable(tableElement: XmlElement, pkg: Package): TableWalkResult {
         );
 
         // Anchored drawings are collected BEFORE the empty-cell skip below: a cell whose only content is an anchored image or embedded object carries no value, formula or text at all, so it is (correctly) never materialized as a ContentSheetCell — but its frame is real content that would be lost by skipping the cell entirely. See this module's own top-of-file note on why the anchor position is this cursor's own row/column rather than any attribute.
-        collectAnchoredFrames(
-          child.children,
-          [],
-          pkg,
-          rowIndex,
-          columnIndex,
+        collectAnchoredFrames(child.children, [], pkg, rowIndex, columnIndex, {
           images,
           embeddedObjects,
-        );
+        });
 
         const formula = attrValue(child, "table:formula");
         const { runs, displayText } = readCellText(child, pkg);
@@ -624,15 +622,10 @@ function readTable(tableElement: XmlElement, pkg: Package): TableWalkResult {
     }
     if (child.tag === "table:shapes") {
       // Page-anchored drawings: absolute sheet coordinates, reported against cell (0, 0) whose own top-left IS the sheet origin — see this module's own top-of-file note (convention 2).
-      collectAnchoredFrames(
-        child.children,
-        [],
-        pkg,
-        0,
-        0,
+      collectAnchoredFrames(child.children, [], pkg, 0, 0, {
         images,
         embeddedObjects,
-      );
+      });
     } else if (child.tag === "table:table-column") {
       processColumn(child);
     } else if (child.tag === "table:table-header-columns") {
@@ -693,8 +686,8 @@ function readPrintSettings(
   pkg: Package,
   repeatColumns: ContentSheetRepeatRange | undefined,
   repeatRows: ContentSheetRepeatRange | undefined,
-  manualBreakRows: number[],
-  manualBreakColumns: number[],
+  manualBreakRows: readonly number[],
+  manualBreakColumns: readonly number[],
 ): ContentSheetPrintSettings {
   const tableStyleName = attrValue(tableElement, "table:style-name");
   const tableStyleElement =
@@ -758,7 +751,7 @@ function readPrintSettings(
 
   const manualBreaks =
     manualBreakRows.length > 0 || manualBreakColumns.length > 0
-      ? { rows: manualBreakRows, columns: manualBreakColumns }
+      ? { rows: [...manualBreakRows], columns: [...manualBreakColumns] }
       : undefined;
 
   const settings: ContentSheetPrintSettings = {

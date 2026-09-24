@@ -12,7 +12,6 @@ import {
   openDocument,
   resetOpenDocumentCapture,
 } from "../test/openDocumentHarness";
-import { setPendingReopen } from "../ui/reopenMailbox";
 
 vi.mock("../rpc/client", () => ({ getRpcClient: vi.fn() }));
 
@@ -686,9 +685,11 @@ describe("ConvertLayout", () => {
 
   it("seeds source and target from the route params on first mount, taking priority over the open document's own detected format", () => {
     currentParams = { source: "docx", target: "pdf" };
-    setPendingReopen({ file: openedFile("reopened.xlsx"), format: "xlsx" });
     vi.mocked(getRpcClient).mockReturnValue(baseClient());
     const mounted = mountConvertLayout();
+    act(() => {
+      openDocument(openedFile("reopened.xlsx"));
+    });
 
     expect(latestSelects.From?.value).toBe("docx");
     expect(latestSelects.To?.value).toBe("pdf");
@@ -696,9 +697,11 @@ describe("ConvertLayout", () => {
   });
 
   it("seeds source from a document already open when this tab is first reached (e.g. a Recent Files reopen)", () => {
-    setPendingReopen({ file: openedFile("reopened.docx"), format: "docx" });
     vi.mocked(getRpcClient).mockReturnValue(baseClient());
     const mounted = mountConvertLayout();
+    act(() => {
+      openDocument(openedFile("reopened.docx"));
+    });
 
     expect(latestSelects.From?.value).toBe("docx");
     expect(latestSelects.From?.description).toBe("Detected from file");

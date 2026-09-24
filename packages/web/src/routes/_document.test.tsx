@@ -1,34 +1,16 @@
 import type * as TanstackRouter from "@tanstack/react-router";
 import { act } from "react";
-import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { OpenDocumentProvider } from "../document/OpenDocumentContext";
 import type { OpenedFile } from "../ports/fileAccess";
 import { mountWithMantine } from "../test/mountComponent";
 
-let currentMatch: string | false = false;
 vi.mock("@tanstack/react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof TanstackRouter>();
   return {
     ...actual,
     Outlet: () => <div data-testid="outlet" />,
-    useMatchRoute: () => (options: Readonly<{ to: string }>) =>
-      currentMatch === options.to ? {} : false,
-    // Stands in for the real Link, which needs a live router context this test never mounts — forwards exactly the props DocumentTabs' Button-as-Link actually needs the test to see.
-    Link: (props: {
-      to: string;
-      children?: ReactNode;
-      className?: string;
-      "data-active"?: string;
-    }) => (
-      <a
-        href={props.to}
-        className={props.className}
-        data-active={props["data-active"]}
-      >
-        {props.children}
-      </a>
-    ),
   };
 });
 
@@ -55,19 +37,23 @@ function openedFile(name: string): OpenedFile {
   return { bytes: new Uint8Array([1, 2, 3]), name };
 }
 
+// The layout reads the open document out of context rather than holding it, so this harness supplies the same provider the root route mounts in the real app.
 function mountLayout() {
-  return mountWithMantine(<DocumentLayout />);
+  return mountWithMantine(
+    <OpenDocumentProvider>
+      <DocumentLayout />
+    </OpenDocumentProvider>,
+  );
 }
 
 afterEach(() => {
   latestOnFile = undefined;
   latestFile = undefined;
   latestFormatHint = undefined;
-  currentMatch = false;
 });
 
 describe("DocumentLayout", () => {
-  it("renders the shared FileUpload, every tab, and the routed outlet", () => {
+  it("renders the shared FileUpload and the routed outlet", () => {
     const mounted = mountLayout();
     expect(
       mounted.container.querySelector('[data-testid="file-upload"]'),
@@ -75,14 +61,13 @@ describe("DocumentLayout", () => {
     expect(
       mounted.container.querySelector('[data-testid="outlet"]'),
     ).not.toBeNull();
-    expect(mounted.container.textContent).toContain("Convert");
-    expect(mounted.container.textContent).toContain("Metadata");
-    expect(mounted.container.textContent).toContain("Inspect");
-    expect(mounted.container.textContent).toContain("Fonts");
-    expect(mounted.container.textContent).toContain("Package / JSON");
-    expect(mounted.container.textContent).toContain(".odb");
-    expect(mounted.container.textContent).toContain(".odm");
     expect(latestFormatHint).toBe("Any document format this app supports");
+    mounted.unmount();
+  });
+
+  it("leaves navigating between the document tools to the sidebar rather than repeating it as a second tab strip", () => {
+    const mounted = mountLayout();
+    expect(mounted.container.querySelectorAll("a")).toHaveLength(0);
     mounted.unmount();
   });
 
@@ -113,17 +98,6 @@ describe("DocumentLayout", () => {
     expect(mounted.container.textContent).toContain(
       "Could not detect a format from the file's extension.",
     );
-    mounted.unmount();
-  });
-
-  it("marks only the tab matching the current route active", () => {
-    currentMatch = "/metadata";
-    const mounted = mountLayout();
-    const links = [...mounted.container.querySelectorAll("a")];
-    const metadataLink = links.find((link) => link.textContent === "Metadata");
-    const convertLink = links.find((link) => link.textContent === "Convert");
-    expect(metadataLink?.getAttribute("data-active")).toBe("true");
-    expect(convertLink?.getAttribute("data-active")).toBeNull();
     mounted.unmount();
   });
 });

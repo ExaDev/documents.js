@@ -171,27 +171,41 @@ function ReadOnlyItemDetail(props: {
 
 // --- real field editor, for a genuine 'pdf'-format document ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-// A field is either commit-based (Enter opens a TextField seeded with `currentValue`, submitting dispatches through `commit`) or activate-based (Enter fires `activate` immediately, no TextField at all — used for a toggle whose entire state fits in its own label, and for "Replace image..."'s nested file-path wizard). Exactly one of the two is ever set on a given row.
-interface EditableRow {
+// A field is either commit-based (Enter opens a TextField seeded with `currentValue`, submitting dispatches through `commit`) or activate-based (Enter fires `activate` immediately, no TextField at all: used for a toggle whose entire state fits in its own label, and for "Replace image..."'s nested file-path wizard). The two forms are mutually exclusive rather than merely "usually": an activate-based row never seeds a TextField, so it has no `currentValue` to seed one with, hence the XOR shape below rather than an optional `currentValue` every activate row would otherwise carry as dead, unread state.
+interface CommitRow {
   readonly label: string;
   readonly currentValue: string;
-  readonly commit?: (raw: string) => void;
-  readonly activate?: () => void;
+  readonly commit: (raw: string) => void;
+  readonly activate?: never;
+}
+interface ActivateRow {
+  readonly label: string;
+  readonly currentValue?: never;
+  readonly commit?: never;
+  readonly activate: () => void;
+}
+type EditableRow = CommitRow | ActivateRow;
+
+interface FrameFields {
+  readonly xPt: number;
+  readonly yPt: number;
+  readonly widthPt: number;
+  readonly heightPt: number;
+}
+
+// Every PdfRectItem/PdfEllipseItem/PdfImageItem/PdfLinkItem/PdfInternalLinkItem exposes xPt/yPt/widthPt/heightPt as prototype getters (see edit/pdf/item.ts), not the live item's own enumerable properties — object-spreading a live item directly (`{...item, widthPt: ...}`) silently omits every frame field the caller did not explicitly name, since a getter defined on the prototype chain is never copied by a spread. buildFrameRows's callers pass the live item itself as `frame` for convenience, so this snapshot is what actually makes `{...frame, ...}` in its own commit callback below spread real values rather than dropping three of the four fields to `undefined` on every edit.
+function frameOf(item: FrameFields): FrameFields {
+  return {
+    xPt: item.xPt,
+    yPt: item.yPt,
+    widthPt: item.widthPt,
+    heightPt: item.heightPt,
+  };
 }
 
 function buildFrameRows(
-  frame: {
-    readonly xPt: number;
-    readonly yPt: number;
-    readonly widthPt: number;
-    readonly heightPt: number;
-  },
-  onFrameChange: (frame: {
-    readonly xPt: number;
-    readonly yPt: number;
-    readonly widthPt: number;
-    readonly heightPt: number;
-  }) => void,
+  frame: FrameFields,
+  onFrameChange: (frame: FrameFields) => void,
 ): EditableRow[] {
   return [
     {
@@ -321,7 +335,6 @@ function buildTextRows(
     },
     {
       label: `Font weight: ${item.font.weight} (Enter to toggle)`,
-      currentValue: "",
       activate: () => {
         dispatch({
           type: "SET_PDF_TEXT_FONT",
@@ -336,7 +349,6 @@ function buildTextRows(
     },
     {
       label: `Font style: ${item.font.style} (Enter to toggle)`,
-      currentValue: "",
       activate: () => {
         dispatch({
           type: "SET_PDF_TEXT_FONT",
@@ -400,7 +412,6 @@ function buildTextRows(
     },
     {
       label: `Underline: ${item.underline === true ? "yes" : "no"} (Enter to toggle)`,
-      currentValue: "",
       activate: () => {
         dispatch({ type: "TOGGLE_PDF_TEXT_UNDERLINE", pageIndex, itemIndex });
       },
@@ -415,7 +426,7 @@ function buildRectRows(
   dispatch: Dispatch<Action>,
 ): EditableRow[] {
   return [
-    ...buildFrameRows(item, (frame) => {
+    ...buildFrameRows(frameOf(item), (frame) => {
       dispatch({ type: "SET_PDF_RECT_FRAME", pageIndex, itemIndex, ...frame });
     }),
     ...buildFillStrokeRows(
@@ -438,7 +449,7 @@ function buildEllipseRows(
   dispatch: Dispatch<Action>,
 ): EditableRow[] {
   return [
-    ...buildFrameRows(item, (frame) => {
+    ...buildFrameRows(frameOf(item), (frame) => {
       dispatch({
         type: "SET_PDF_ELLIPSE_FRAME",
         pageIndex,
@@ -562,7 +573,6 @@ function buildPathRows(
   return [
     {
       label: `Fill rule: ${item.fillRule ?? "nonzero (default)"} (Enter to cycle)`,
-      currentValue: "",
       activate: () => {
         dispatch({
           type: "SET_PDF_PATH_FILL_RULE",
@@ -598,7 +608,7 @@ function buildImageRows(
   onReplaceImage: () => void,
 ): EditableRow[] {
   return [
-    ...buildFrameRows(item, (frame) => {
+    ...buildFrameRows(frameOf(item), (frame) => {
       dispatch({ type: "SET_PDF_IMAGE_FRAME", pageIndex, itemIndex, ...frame });
     }),
     {
@@ -614,7 +624,7 @@ function buildImageRows(
         });
       },
     },
-    { label: "Replace image...", currentValue: "", activate: onReplaceImage },
+    { label: "Replace image...", activate: onReplaceImage },
   ];
 }
 
@@ -632,7 +642,7 @@ function buildLinkRows(
         dispatch({ type: "SET_PDF_LINK_URI", pageIndex, itemIndex, uri: raw });
       },
     },
-    ...buildFrameRows(item, (frame) => {
+    ...buildFrameRows(frameOf(item), (frame) => {
       dispatch({ type: "SET_PDF_LINK_FRAME", pageIndex, itemIndex, ...frame });
     }),
   ];
@@ -658,7 +668,7 @@ function buildInternalLinkRows(
         });
       },
     },
-    ...buildFrameRows(item, (frame) => {
+    ...buildFrameRows(frameOf(item), (frame) => {
       dispatch({
         type: "SET_PDF_INTERNAL_LINK_FRAME",
         pageIndex,

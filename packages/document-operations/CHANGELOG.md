@@ -1,3 +1,28 @@
+## [1.1.88](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.87...document-operations%401.1.88) (2026-09-24)
+
+
+### Dependencies
+
+- Updated odf.js to 11.1.6
+- Updated documents.js to 14.4.26
+- Updated document-compute.js to 1.6.35
+
+## [1.1.87](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.86...document-operations%401.1.87) (2026-09-24)
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.25
+- Updated document-compute.js to 1.6.34
+
+## [1.1.86](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.85...document-operations%401.1.86) (2026-09-24)
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.24
+- Updated document-compute.js to 1.6.33
+
 ## [1.1.85](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.84...document-operations%401.1.85) (2026-09-24)
 
 ### Bug Fixes

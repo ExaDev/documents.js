@@ -1,14 +1,13 @@
 import { ActionIcon, Badge, Group, Stack, Text, Tooltip } from "@mantine/core";
 import { useNavigate } from "@tanstack/react-router";
 import { IconFile, IconReload, IconTrash } from "@tabler/icons-react";
-import { DocumentFormatSchema } from "documents.js";
 
 import type { RecentFileRecord } from "../db/dexie";
+import { useOpenDocument } from "../document/OpenDocumentContext";
 import { removeRecentFile, useRecentFiles } from "../hooks/useRecentFiles";
 import { relativeTime } from "../shared/relativeTime";
 import { notifyError } from "./notify";
 import { iconFlexShrink, minWidthZero } from "./RecentFilesPanel.css";
-import { setPendingReopen } from "./reopenMailbox";
 
 // Exported so a test can pin the exact KB/MB boundary directly, rather than only through rendered text.
 export function formatBytes(bytes: number): string {
@@ -27,11 +26,11 @@ export function reopenTooltipLabel(hasHandle: boolean): string {
 export function RecentFilesPanel() {
   const files = useRecentFiles();
   const navigate = useNavigate();
+  const { openDocument } = useOpenDocument();
 
+  // Reads the file back off disk through its stored handle and opens it as the app's one shared document, so every tool sees it without a second pick. The record's own stored format is not consulted: openDocument re-infers the format from the filename, which is the same rule that decided the record was worth storing in the first place, so there is exactly one place formats are inferred.
   const handleReopen = async (record: RecentFileRecord) => {
     if (record.handle === undefined) return;
-    const parsedFormat = DocumentFormatSchema.safeParse(record.format);
-    if (!parsedFormat.success) return;
     try {
       let permission = await record.handle.queryPermission({ mode: "read" });
       if (permission !== "granted")
@@ -45,10 +44,7 @@ export function RecentFilesPanel() {
       }
       const nativeFile = await record.handle.getFile();
       const bytes = new Uint8Array(await nativeFile.arrayBuffer());
-      setPendingReopen({
-        file: { bytes, name: record.name, handle: record.handle },
-        format: parsedFormat.data,
-      });
+      openDocument({ bytes, name: record.name, handle: record.handle });
       void navigate({ to: "/convert" });
     } catch (error) {
       notifyError(`Could not reopen "${record.name}"`, error);
@@ -108,6 +104,7 @@ export function RecentFilesPanel() {
                 <ActionIcon
                   variant="subtle"
                   disabled={!hasHandle}
+                  aria-label={`Reopen ${record.name}`}
                   onClick={() => void handleReopen(record)}
                 >
                   <IconReload size={16} />
@@ -117,6 +114,7 @@ export function RecentFilesPanel() {
                 <ActionIcon
                   variant="subtle"
                   color="red"
+                  aria-label={`Remove ${record.name} from recent files`}
                   onClick={() => {
                     handleRemove(record.id);
                   }}

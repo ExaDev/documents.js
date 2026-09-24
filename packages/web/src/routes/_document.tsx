@@ -1,54 +1,13 @@
-import { Button, Container, Group, Paper, Stack, Text } from "@mantine/core";
-import {
-  createFileRoute,
-  Link,
-  Outlet,
-  useMatchRoute,
-} from "@tanstack/react-router";
+import { Container, Paper, Stack, Text } from "@mantine/core";
+import { createFileRoute, Outlet } from "@tanstack/react-router";
 
-import {
-  OpenDocumentProvider,
-  useOpenDocument,
-} from "../document/OpenDocumentContext";
+import { useOpenDocument } from "../document/OpenDocumentContext";
 import { FileUpload } from "../ui/FileUpload";
 
-// Pathless layout route (the leading '_' contributes no URL segment — see TanStack Router's file-based routing docs) wrapping Convert/Metadata/Inspect/Fonts/Package/.odb/.odm: the seven tool pages that all operate on one shared open document rather than each demanding their own upload. Editors and Recent stay outside this layout entirely, since neither fits the shared-document model (Editors owns its own live worker-side session per document; Recent lists history rather than operating on a currently-open one).
+// Pathless layout route (the leading '_' contributes no URL segment — see TanStack Router's file-based routing docs) wrapping Convert/Editors/Metadata/Inspect/Fonts/Package/.odb/.odm: the eight tool pages that all operate on one shared open document rather than each demanding their own upload. It renders the one place a document is opened; the document itself is held by the root route's OpenDocumentProvider, so Recent Files can open into it from outside this layout. Recent stays outside, since it lists history rather than operating on a currently-open document.
 export const Route = createFileRoute("/_document")({
   component: DocumentLayout,
 });
-
-const DOCUMENT_TABS = [
-  { to: "/convert", label: "Convert" },
-  { to: "/metadata", label: "Metadata" },
-  { to: "/inspect", label: "Inspect" },
-  { to: "/fonts", label: "Fonts" },
-  { to: "/package", label: "Package / JSON" },
-  { to: "/odb", label: ".odb" },
-  { to: "/odm", label: ".odm" },
-] as const;
-
-function DocumentTabs() {
-  const matchRoute = useMatchRoute();
-  return (
-    <Group gap="xs" wrap="wrap">
-      {DOCUMENT_TABS.map((tab) => {
-        const isActive = matchRoute({ to: tab.to, fuzzy: true }) !== false;
-        return (
-          <Button
-            key={tab.to}
-            component={Link}
-            to={tab.to}
-            size="xs"
-            variant={isActive ? "filled" : "default"}
-            data-active={isActive ? "true" : undefined}
-          >
-            {tab.label}
-          </Button>
-        );
-      })}
-    </Group>
-  );
-}
 
 function OpenDocumentBar() {
   const { document, openDocument } = useOpenDocument();
@@ -74,14 +33,11 @@ function OpenDocumentBar() {
 
 function DocumentLayout() {
   return (
-    <OpenDocumentProvider>
-      <Container fluid px="xl" py="xl">
-        <Stack gap="lg">
-          <OpenDocumentBar />
-          <DocumentTabs />
-          <Outlet />
-        </Stack>
-      </Container>
-    </OpenDocumentProvider>
+    <Container fluid px="xl" py="xl">
+      <Stack gap="lg">
+        <OpenDocumentBar />
+        <Outlet />
+      </Stack>
+    </Container>
   );
 }

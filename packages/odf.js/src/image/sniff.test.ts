@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { sniffImageFormat } from "./sniff";
 
-function bytesOf(values: number[]): Uint8Array<ArrayBuffer> {
+function bytesOf(values: readonly number[]): Uint8Array<ArrayBuffer> {
   return new Uint8Array(values);
 }
 

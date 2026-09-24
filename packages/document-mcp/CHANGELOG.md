@@ -1,3 +1,33 @@
+## [4.14.91](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.90...document-mcp%404.14.91) (2026-09-24)
+
+
+### Dependencies
+
+- Updated odf.js to 11.1.6
+- Updated documents.js to 14.4.26
+- Updated document-operations to 1.1.88
+
+## [4.14.90](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.89...document-mcp%404.14.90) (2026-09-24)
+
+
+### Dependencies
+
+- Updated wpd-codec to 5.1.12
+- Updated documents.js to 14.4.25
+- Updated document-operations to 1.1.87
+
+## [4.14.89](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.88...document-mcp%404.14.89) (2026-09-24)
+
+### Miscellaneous Chores
+
+* **lint:** enable max-lines in four already-compliant packages ([13edc4e](https://github.com/ExaDev/documents.js/commit/13edc4ecee421af67eb835c4e55ad453bfac443a))
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.24
+- Updated document-operations to 1.1.86
+
 ## [4.14.88](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.87...document-mcp%404.14.88) (2026-09-24)
 
 

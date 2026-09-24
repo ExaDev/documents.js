@@ -1,3 +1,10 @@
+## [2.2.10](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.2.9...ppt-codec%402.2.10) (2026-09-24)
+
+
+### Dependencies
+
+- Updated archive-codec to 1.11.19
+
 ## [2.2.9](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.2.8...ppt-codec%402.2.9) (2026-09-24)
 
 

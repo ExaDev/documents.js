@@ -44,8 +44,8 @@ import {
 
 // Every fixture here is a programmatic package/element built with el/txt, matching the sibling odt/constructs.test.ts's own fixture-gate convention.
 
-function part(nodes: XmlNode[]): Package {
-  return { parts: { "settings.xml": { kind: "xml", nodes } } };
+function part(nodes: readonly XmlNode[]): Package {
+  return { parts: { "settings.xml": { kind: "xml", nodes: [...nodes] } } };
 }
 
 describe("isEmbeddedObjectPart", () => {
@@ -160,7 +160,7 @@ describe("writeOdfPackageResidue", () => {
   });
 });
 
-function sectionPackage(styles: XmlElement[]): Package {
+function sectionPackage(styles: readonly XmlElement[]): Package {
   return {
     parts: {
       "content.xml": {
@@ -291,7 +291,7 @@ describe("odfIndexControlDescriptor", () => {
 });
 
 function paragraphWithSiblings(
-  siblings: XmlNode[],
+  siblings: readonly XmlNode[],
   halfIndex: number,
 ): { paragraph: XmlElement; half: XmlElement } {
   const half = el("text:bookmark-start", { "text:name": "b" });

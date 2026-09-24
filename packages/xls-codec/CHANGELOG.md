@@ -1,3 +1,24 @@
+## [4.15.32](https://github.com/ExaDev/documents.js/compare/xls-codec%404.15.31...xls-codec%404.15.32) (2026-09-24)
+
+
+### Dependencies
+
+- Updated excel-number-format to 1.2.9
+
+## [4.15.31](https://github.com/ExaDev/documents.js/compare/xls-codec%404.15.30...xls-codec%404.15.31) (2026-09-24)
+
+
+### Dependencies
+
+- Updated archive-codec to 1.11.19
+
+## [4.15.30](https://github.com/ExaDev/documents.js/compare/xls-codec%404.15.29...xls-codec%404.15.30) (2026-09-24)
+
+
+### Dependencies
+
+- Updated excel-number-format to 1.2.8
+
 ## [4.15.29](https://github.com/ExaDev/documents.js/compare/xls-codec%404.15.28...xls-codec%404.15.29) (2026-09-24)
 
 ### Bug Fixes

@@ -88,7 +88,7 @@ export function readOdfConstructBodyBlocks(
   body: XmlElement,
   pkg: Package,
   context: OdfParagraphContext,
-  listIdState: OdfListIdState,
+  listIdState: Readonly<OdfListIdState>,
 ): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   const bodyContext: OdfParagraphContext = { ...context, listIdState };
@@ -114,15 +114,16 @@ function collectRuns(
   container: XmlElement,
   baseProperties: StyleProperties,
   pkg: Package,
-  out: ContentRun[],
+  sink: RunSink,
   walk: RunWalkState,
   hyperlinkTarget?: string,
 ): void {
+  const out = sink.runs;
   for (const node of container.children) {
     if (node.type === "text") {
       if (node.value.length > 0) {
         pushRun(
-          out,
+          sink,
           runFromText(decodeXmlText(node.value), baseProperties),
           hyperlinkTarget,
         );
@@ -134,21 +135,21 @@ function collectRuns(
     }
     if (node.tag === "text:s") {
       pushRun(
-        out,
+        sink,
         runFromText(" ".repeat(getOdfSpaceCount(node)), baseProperties),
         hyperlinkTarget,
       );
     } else if (node.tag === "text:tab") {
-      pushRun(out, runFromText("\t", baseProperties), hyperlinkTarget);
+      pushRun(sink, runFromText("\t", baseProperties), hyperlinkTarget);
     } else if (node.tag === "text:line-break") {
-      pushRun(out, runFromText("\n", baseProperties), hyperlinkTarget);
+      pushRun(sink, runFromText("\n", baseProperties), hyperlinkTarget);
     } else if (node.tag === "text:span") {
       const styleName = attrValue(node, "text:style-name");
       const spanProperties: StyleProperties = {
         ...baseProperties,
         ...resolveStyle(styleName, "text", pkg).properties,
       };
-      collectRuns(node, spanProperties, pkg, out, walk, hyperlinkTarget);
+      collectRuns(node, spanProperties, pkg, sink, walk, hyperlinkTarget);
     } else if (node.tag === "text:a") {
       // A text:a is an inline hyperlink: its xlink:href is the link target, its children (text, text:span, text:s/tab/line-break, even a nested text:a) are the link's visible content. Threading the href as hyperlinkTarget through the recursion lets a text:span inside the link still resolve its own "text"-family formatting AND carry the hyperlink on every run it emits — mirroring ooxml.js's own docx reader, which threads the resolved w:hyperlink target through w:ins/w:fldSimple recursion and stamps { ...run, hyperlink: target } on every leaf run. A text:a with no xlink:href is malformed (ODF makes href mandatory) but its visible text still reads; an enclosing text:a's own target is inherited in that case so an inner link's text is not lost.
       // Entity-decoded, like every other text this reader projects out of the lossless model: a real href routinely carries an ampersand between query parameters, which the source XML spells &amp;. ContentRun.hyperlink is a resolved URI, not a fragment of XML, and leaving it encoded would also make the write direction double-encode it on every cycle.
@@ -158,14 +159,14 @@ function collectRuns(
         node,
         baseProperties,
         pkg,
-        out,
+        sink,
         walk,
         href ?? hyperlinkTarget,
       );
     } else if (isOdfFieldElement(node)) {
       // An inline field's own children are its cached display content, so they read as ordinary runs at the field's position with the field's base formatting — this is the fix for the long-standing drop where a field's cached text vanished along with its field-ness. The extent covers exactly the runs the field contributed: startRun === endRun when the producer cached nothing, which is the point-anchor spelling of an uncached field.
       const startRun = out.length;
-      collectRuns(node, baseProperties, pkg, out, walk, hyperlinkTarget);
+      collectRuns(node, baseProperties, pkg, sink, walk, hyperlinkTarget);
       walk.extents.push({
         descriptor: odfFieldDescriptor(node),
         startRun,
@@ -274,7 +275,7 @@ function collectRuns(
         const citation =
           citationElement === undefined ? "" : decodeOdfText(citationElement);
         if (citation.length > 0) {
-          pushRun(out, runFromText(citation, baseProperties), hyperlinkTarget);
+          pushRun(sink, runFromText(citation, baseProperties), hyperlinkTarget);
         }
         if (name !== undefined) {
           if (walk.definitions !== undefined) {
@@ -379,10 +380,10 @@ function collectRuns(
       // Inline vocabulary with no cross-format analogue: a phonetic-annotation ruby pair, an RDF metadata anchor, a producer-private extension element. What renders as flow text reads as ordinary runs while the element itself quarantines, so nothing is lost on either side — the residue half carries what the construct WAS, the runs carry what it SAID. A ruby's rendered text is its ruby-base ALONE (the ruby-text is the small gloss above it, not flow content — recursing into the whole ruby would inline the annotation as if it were body text); a text:meta wraps ordinary content, so the whole element recurses.
       if (node.tag === "text:ruby") {
         for (const base of childrenWithTag(node, "text:ruby-base")) {
-          collectRuns(base, baseProperties, pkg, out, walk, hyperlinkTarget);
+          collectRuns(base, baseProperties, pkg, sink, walk, hyperlinkTarget);
         }
       } else {
-        collectRuns(node, baseProperties, pkg, out, walk, hyperlinkTarget);
+        collectRuns(node, baseProperties, pkg, sink, walk, hyperlinkTarget);
       }
       walk.residueElements.push(node);
     }
@@ -390,12 +391,21 @@ function collectRuns(
   }
 }
 
+// The run accumulator a paragraph's inline walk appends onto. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable.
+interface NodeSink {
+  readonly nodes: XmlNode[];
+}
+
+interface RunSink {
+  readonly runs: ContentRun[];
+}
+
 function pushRun(
-  out: ContentRun[],
+  sink: RunSink,
   run: ContentRun,
   hyperlinkTarget: string | undefined,
 ): void {
-  out.push(
+  sink.runs.push(
     hyperlinkTarget === undefined
       ? run
       : { ...run, hyperlink: hyperlinkTarget },
@@ -456,9 +466,9 @@ export function readOdfParagraph(
     order: 0,
     provenanceRegions: context.provenanceRegions,
     definitions: context.definitions,
-    listIdState: context.listIdState ?? { next: 1 },
+    listIdState: context.listIdState ?? { counter: { next: 1 } },
   };
-  collectRuns(pElement, paragraphProperties, pkg, runs, walk);
+  collectRuns(pElement, paragraphProperties, pkg, { runs }, walk);
 
   // The paragraph's own residue, one value for everything this format carries that the run/paragraph vocabulary does not model: the unmodellable half of its own style chain (every style:paragraph-properties/style:text-properties element in the resolved chain that properties.ts cannot fully model — hasUnknown — fo:keep-with-next, a style:map child, anything StyleProperties carries no field for), the inline no-analogue elements the run walk quarantined (text:ruby, text:meta, vendor extensions), and the element's own text:is-list-header flag (a heading-is-a-list-header marker with no cross-format analogue, carried as a children-stripped element spelling its own tag). Only when the context names the reading format — residue's format member states which reader produced it, and this shared reader serves seven of them. Span-run and table/graphic-style unknowns stay dropped (documented): the run- and table-level channels exist, but the resolved-styles fact this row lands is the paragraph's own chain.
   let source: ContentParagraph["source"];
@@ -1220,17 +1230,17 @@ function writeOdfParagraphChildren(
     const existing = changeMarkersAtItemBoundary.get(itemBoundary) ?? [];
     changeMarkersAtItemBoundary.set(itemBoundary, [...existing, ...markers]);
   }
-  const emitMarkers = (children: XmlNode[], boundary: number): void => {
+  const emitMarkers = (sink: NodeSink, boundary: number): void => {
     for (const marker of markersAtItemBoundary.get(boundary) ?? []) {
-      children.push(writeOdfBookmarkMarker(marker));
+      sink.nodes.push(writeOdfBookmarkMarker(marker));
     }
     for (const marker of changeMarkersAtItemBoundary.get(boundary) ?? []) {
-      children.push(writeOdfChangeMarker(marker));
+      sink.nodes.push(writeOdfChangeMarker(marker));
     }
   };
 
   const children: XmlNode[] = [];
-  emitMarkers(children, 0);
+  emitMarkers({ nodes: children }, 0);
   let index = 0;
   while (index < items.length) {
     const target = odfItemHyperlink(items[index]!);
@@ -1261,7 +1271,7 @@ function writeOdfParagraphChildren(
       );
     }
     index = end;
-    emitMarkers(children, index);
+    emitMarkers({ nodes: children }, index);
   }
   return children;
 }

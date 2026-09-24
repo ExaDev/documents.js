@@ -23,8 +23,13 @@ import { formatOdfLength } from "./units";
 // The counter state (OdfListIdState) is minted-per-document, threaded by reference through the caller's whole walk — one state for the entire odt body or the entire odp presentation (every slide, every frame), so two lists on different slides of one presentation get different numIds exactly as two lists in different sections of one odt body do.
 
 // A monotonically increasing counter for minting fresh top-level list numIds, threaded by reference through a reader's whole document walk — see this module's own top-of-file note on why a per-encounter counter, not text:style-name, is the numId source.
-export interface OdfListIdState {
+// The counter itself, nested rather than sitting directly on OdfListIdState: it is genuinely incremented on every mint, so a flat OdfListIdState would be a readonly-param candidate the increment cannot satisfy. Nesting keeps the wrapper stable and the number mutable.
+interface OdfListIdCounter {
   next: number;
+}
+
+export interface OdfListIdState {
+  readonly counter: OdfListIdCounter;
 }
 
 // Resolves a text:list's text:style-name to its ordered-vs-bullet kind by finding the corresponding text:list-style definition and inspecting its level-1 child tag. Searches both content.xml and styles.xml, in both office:automatic-styles and office:styles — mirroring cascade.ts's own both-parts-both-containers pattern (style:name uniqueness is document-wide, so at most one text:list-style can match). Returns undefined when the style-name is absent or unresolvable, so the caller leaves the numId unprefixed and the downstream consumer falls back to a neutral marker.
@@ -77,15 +82,17 @@ export function resolveOdfListKind(
 export function mintOdfListNumId(
   pkg: Package,
   listElement: XmlElement,
-  state: OdfListIdState,
+  state: Readonly<OdfListIdState>,
 ): string {
   const kind = resolveOdfListKind(
     pkg,
     attrValue(listElement, "text:style-name"),
   );
   const numId =
-    kind !== undefined ? `${kind}:list${state.next}` : `list${state.next}`;
-  state.next += 1;
+    kind !== undefined
+      ? `${kind}:list${state.counter.next}`
+      : `list${state.counter.next}`;
+  state.counter.next += 1;
   return numId;
 }
 
@@ -216,43 +223,48 @@ export function canonicalNumId(
 }
 
 // The list-identity counter one document's plan threads: a reader mints a numId per top-level text:list encountered in document order across the WHOLE relevant scope (an odt body, an odp presentation), so a writer's own plan has to number lists the same way — once per maximal run of consecutive list paragraphs sharing an incoming numId, never per distinct numId string (two separate runs carrying one numId are two ODF lists, and the reader will say so).
-export interface ListPlanState {
+// The plan cursor itself, nested for the same reason OdfListIdCounter is: every field here is genuinely written as the walk opens and closes list runs.
+interface ListPlanCursor {
   next: number;
   // The incoming numId of the run currently open, and the canonical numId minted for it. Both absent between runs.
   openNumId?: string;
   openCanonicalNumId?: string;
 }
 
+export interface ListPlanState {
+  readonly cursor: ListPlanCursor;
+}
+
 // Advances one paragraph's list-plan state and returns the canonical numId to stamp on its membership, or undefined when `membership` itself is undefined (also closing whatever run was open). A membership carrying no incoming numId at all still opens a real run of its own (keyed on the sentinel above), mirroring how a source format that carries only a depth still names a genuine list once minted. Mint a fresh canonical numId only when the incoming key changes from the currently open run's — consecutive paragraphs sharing one incoming numId (or both bare) extend the same run.
 export function planListMembership(
   membership: { numId?: string; level: number } | undefined,
-  listState: ListPlanState,
+  listState: Readonly<ListPlanState>,
 ): string | undefined {
   if (membership === undefined) {
     closeListPlan(listState);
     return undefined;
   }
   const incomingKey = membership.numId ?? NO_NUM_ID_KEY;
-  if (listState.openNumId !== incomingKey) {
-    listState.openNumId = incomingKey;
-    listState.openCanonicalNumId = canonicalNumId(
+  if (listState.cursor.openNumId !== incomingKey) {
+    listState.cursor.openNumId = incomingKey;
+    listState.cursor.openCanonicalNumId = canonicalNumId(
       membership.numId,
-      listState.next,
+      listState.cursor.next,
     );
-    listState.next += 1;
+    listState.cursor.next += 1;
   }
-  return listState.openCanonicalNumId;
+  return listState.cursor.openCanonicalNumId;
 }
 
 // Force-closes whatever list run is currently open, for a caller that needs a run boundary the membership check alone would not catch — a table, an image, a page break interrupting an odt section's own block flow, or a shape/container boundary no list can structurally span (an odp text-box's list is local to its own draw:frame, so a new shape must never silently continue the previous one's run even if their raw numIds happen to coincide).
-export function closeListPlan(listState: ListPlanState): void {
-  listState.openNumId = undefined;
-  listState.openCanonicalNumId = undefined;
+export function closeListPlan(listState: Readonly<ListPlanState>): void {
+  listState.cursor.openNumId = undefined;
+  listState.cursor.openCanonicalNumId = undefined;
 }
 
 export function readOdfListParagraphs(
   listElement: XmlElement,
-  membership: ContentListMembership,
+  membership: Readonly<ContentListMembership>,
   readParagraph: OdfListParagraphReader,
 ): ContentParagraph[] {
   const paragraphs: ContentParagraph[] = [];

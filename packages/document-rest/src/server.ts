@@ -12,6 +12,14 @@ const OPERATIONS_BY_NAME: ReadonlyMap<string, DocumentOperation> = new Map(
   DOCUMENT_OPERATIONS.map((operation) => [operation.name, operation]),
 );
 
+/** The HTTP status codes this server ever sends, named for readability at each call site rather than repeated as bare literals. Exported so tests can assert against the same names rather than re-declaring the numbers. */
+export const HTTP_STATUS = {
+  ok: 200,
+  badRequest: 400,
+  notFound: 404,
+  methodNotAllowed: 405,
+} as const;
+
 // A caller-facing error mapping for one operation's own typed error — the REST counterpart to document-mcp's own registerOperation `mapError` hooks (packages/document-mcp/src/register-operation.ts). Returns undefined to fall through to the default 400 { error: message } body.
 interface RestErrorMapping {
   readonly status: number;
@@ -29,7 +37,7 @@ function buildErrorMappers(): ReadonlyMap<
       (error: unknown): RestErrorMapping | undefined => {
         if (!(error instanceof OdbReportNotSpecifiedError)) return undefined;
         return {
-          status: 400,
+          status: HTTP_STATUS.badRequest,
           body: {
             error: error.message,
             availableReports: error.availableReports,
@@ -42,7 +50,7 @@ function buildErrorMappers(): ReadonlyMap<
       (error: unknown): RestErrorMapping | undefined => {
         if (!(error instanceof OdmUnresolvedSectionError)) return undefined;
         return {
-          status: 400,
+          status: HTTP_STATUS.badRequest,
           body: {
             error: `${error.message} Pass chaptersDir containing these files, or an explicit chapters override, for each href.`,
             hrefs: error.hrefs,
@@ -91,7 +99,7 @@ async function handleOperationRequest(
   try {
     rawBody = await readJsonBody(req);
   } catch (error) {
-    sendJson(res, 400, {
+    sendJson(res, HTTP_STATUS.badRequest, {
       error: `Request body is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
     });
     return;
@@ -99,7 +107,7 @@ async function handleOperationRequest(
 
   const parsed = operation.inputSchema.safeParse(rawBody);
   if (!parsed.success) {
-    sendJson(res, 400, {
+    sendJson(res, HTTP_STATUS.badRequest, {
       error: "Request body failed validation.",
       issues: z.treeifyError(parsed.error),
     });
@@ -110,14 +118,14 @@ async function handleOperationRequest(
     const result = await operation.run(parsed.data, {
       signal: abortSignalFor(res),
     });
-    sendJson(res, 200, { result: result });
+    sendJson(res, HTTP_STATUS.ok, { result: result });
   } catch (error) {
     const mapped = buildErrorMappers().get(operation.name)?.(error);
     if (mapped !== undefined) {
       sendJson(res, mapped.status, mapped.body);
       return;
     }
-    sendJson(res, 400, {
+    sendJson(res, HTTP_STATUS.badRequest, {
       error: error instanceof Error ? error.message : String(error),
     });
   }
@@ -140,13 +148,15 @@ export function createRestServer(): Server {
   return createHttpServer((req, res) => {
     void (async () => {
       if (req.url === undefined || req.method === undefined) {
-        sendJson(res, 400, { error: "Malformed request: no url or method." });
+        sendJson(res, HTTP_STATUS.badRequest, {
+          error: "Malformed request: no url or method.",
+        });
         return;
       }
       const url = new URL(req.url, "http://localhost");
 
       if (url.pathname === "/" && req.method === "GET") {
-        sendJson(res, 200, listOperations());
+        sendJson(res, HTTP_STATUS.ok, listOperations());
         return;
       }
 
@@ -154,14 +164,14 @@ export function createRestServer(): Server {
       const name = url.pathname.slice(1);
       const operation = OPERATIONS_BY_NAME.get(name);
       if (operation === undefined) {
-        sendJson(res, 404, {
+        sendJson(res, HTTP_STATUS.notFound, {
           error: `No operation named "${name}". GET / lists every available operation.`,
         });
         return;
       }
 
       if (req.method !== "POST") {
-        sendJson(res, 405, {
+        sendJson(res, HTTP_STATUS.methodNotAllowed, {
           error: `${name} only accepts POST, received ${req.method}.`,
         });
         return;

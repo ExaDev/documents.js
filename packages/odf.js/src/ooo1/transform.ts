@@ -244,7 +244,9 @@ function renameQName(
 }
 
 // Rewrites one xmlns declaration: the prefix it binds becomes the canonical one, and an OpenOffice.org URI becomes its OASIS successor. A declaration binding something neither vocabulary owns (the ooo:/ooow:/oooc: extension namespaces OpenOffice.org 1.1 already wrote, xforms:, xsd:, xsi:) is left exactly as it is — those URIs are identical in ODF.
-function transformNamespaceDeclaration(attribute: Attribute): Attribute {
+function transformNamespaceDeclaration(
+  attribute: Readonly<Attribute>,
+): Attribute {
   const canonical = CANONICAL_PREFIX_BY_URI.get(attribute.value);
   if (canonical === undefined || !isOdfNamespacePrefix(canonical)) {
     return attribute;
@@ -346,10 +348,15 @@ function withoutAttributes(
 
 function element(
   tag: string,
-  attributes: Attribute[],
-  children: XmlNode[],
+  attributes: readonly Attribute[],
+  children: readonly XmlNode[],
 ): XmlElement {
-  return { type: "element", tag, attributes, children };
+  return {
+    type: "element",
+    tag,
+    attributes: [...attributes],
+    children: [...children],
+  };
 }
 
 function textElement(tag: string, value: string): XmlElement {
@@ -521,8 +528,8 @@ function transformElement(
 
 // office:body's children move inside the genre element ODF introduced. Without an office:class to name the genre there is nothing to build, so the body is left as it was rather than being wrapped in a guessed one.
 function buildBody(
-  attributes: Attribute[],
-  children: XmlNode[],
+  attributes: readonly Attribute[],
+  children: readonly XmlNode[],
   documentClass: string | undefined,
 ): XmlElement {
   const genre =
@@ -538,8 +545,8 @@ function buildBody(
 // A bare OpenOffice.org 1.x shape becomes ODF's draw:frame wrapping the same element: the frame takes the placement, size, anchoring and style, and the shape keeps whatever identifies its content. The frame-level child elements (an image map, a contour, a description) belong to the frame in ODF too.
 function buildFrame(
   tag: string,
-  attributes: Attribute[],
-  children: XmlNode[],
+  attributes: readonly Attribute[],
+  children: readonly XmlNode[],
 ): XmlElement {
   const frameAttributes = attributes.filter((attribute) =>
     FRAME_ATTRIBUTES.has(attribute.name),
@@ -861,7 +868,9 @@ function reverseAttributeNameFor(tag: string, name: string): string {
 }
 
 // The reverse of transformNamespaceDeclaration: an ODF (or already-OpenOffice.org) URI's canonical prefix decides the OpenOffice.org 1.x URI to bind it to. A prefix with no OpenOffice.org 1.x counterpart at all (smil:/anim:/xforms:/ db:/rpt:, ODF namespaces this format predates) is left exactly as it is — the same "neither vocabulary owns this" case the forward direction's own comment describes, just approached from the other side.
-function transformNamespaceDeclarationToOoo1(attribute: Attribute): Attribute {
+function transformNamespaceDeclarationToOoo1(
+  attribute: Readonly<Attribute>,
+): Attribute {
   const canonical = CANONICAL_PREFIX_BY_URI.get(attribute.value);
   if (canonical === undefined || !isOoo1NamespacePrefix(canonical)) {
     return attribute;

@@ -291,7 +291,7 @@ describe("formatOdfViewBox", () => {
 describe("formatOdfPathData", () => {
   const frame = { xPt: 0, yPt: 0, widthPt: 200, heightPt: 100 };
 
-  function reparse(subpaths: ContentSubpath[]): ContentSubpath[] {
+  function reparse(subpaths: readonly ContentSubpath[]): ContentSubpath[] {
     const viewBox = parseOdfViewBox(formatOdfViewBox(frame));
     if (viewBox === undefined) {
       throw new Error("expected the written viewBox to parse");

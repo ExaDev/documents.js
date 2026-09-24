@@ -219,7 +219,7 @@ export class StyleRegistry {
 
   private constructor(
     automaticStyles: XmlElement,
-    prefixes: Record<StyleFamily, string>,
+    prefixes: Readonly<Record<StyleFamily, string>>,
     reservedByFamily: Record<StyleFamily, Set<string>>,
   ) {
     this.automaticStyles = automaticStyles;

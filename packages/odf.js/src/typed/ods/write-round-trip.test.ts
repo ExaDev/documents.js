@@ -62,18 +62,18 @@ function expectRoundTrip(document: ContentDocument): void {
   );
 }
 
-function documentOf(sheets: ContentSheet[]): SpreadsheetDocument {
-  return { kind: "spreadsheet", metadata: {}, sheets };
+function documentOf(sheets: readonly ContentSheet[]): SpreadsheetDocument {
+  return { kind: "spreadsheet", metadata: {}, sheets: [...sheets] };
 }
 
 function sheetOf(
   name: string,
-  cells: ContentSheetCell[],
+  cells: readonly ContentSheetCell[],
   overrides: Partial<ContentSheet> = {},
 ): ContentSheet {
   return {
     name,
-    cells,
+    cells: [...cells],
     columns: [],
     rows: [],
     images: [],

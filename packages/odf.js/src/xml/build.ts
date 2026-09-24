@@ -13,7 +13,7 @@ const BUILDER = new XMLBuilder({
   suppressEmptyNode: false,
 });
 
-export function buildXml(nodes: XmlNode[]): string {
+export function buildXml(nodes: readonly XmlNode[]): string {
   const out = BUILDER.build(toOrdered(nodes));
   if (typeof out !== "string") {
     throw new Error("XMLBuilder did not return a string");
@@ -21,11 +21,11 @@ export function buildXml(nodes: XmlNode[]): string {
   return out;
 }
 
-function toOrdered(nodes: XmlNode[]): unknown[] {
+function toOrdered(nodes: readonly XmlNode[]): unknown[] {
   return nodes.map(toOrderedNode);
 }
 
-function attrsObject(attributes: Attribute[]): Record<string, string> {
+function attrsObject(attributes: readonly Attribute[]): Record<string, string> {
   const obj: Record<string, string> = {};
   for (const a of attributes) {
     obj[`@_${a.name}`] = a.value;

@@ -106,10 +106,12 @@ function formatOdfDuration(isoTime: string): string {
 }
 
 // The office:value attribute's own literal: exactValue (the arbitrary-precision decimal string, when the producer's own value would not survive a bare double round trip) is preferred over String(value) precisely because it is the more precise fact to hand a real spreadsheet application, and reading it back through readCellValue's own `Number(raw)` recovers the identical double either way.
-function formatCellNumberLiteral(value: {
-  value: number;
-  exactValue?: string;
-}): string {
+function formatCellNumberLiteral(
+  value: Readonly<{
+    value: number;
+    exactValue?: string;
+  }>,
+): string {
   return value.exactValue ?? String(value.value);
 }
 
@@ -483,7 +485,7 @@ function conditionalFormatStyleName(
 // calcext:color is stated only where the format itself carries one: a colour-scale entry's own colour. Data-bar and icon-set entries carry none (the data bar's colour lives on its parent's calcext:positive-color, and an icon-set entry has no colour concept at all), so `color` is optional and the attribute is simply absent without it.
 function writeCfvoEntry(
   tag: string,
-  value: ContentSheetConditionalFormatValue,
+  value: Readonly<ContentSheetConditionalFormatValue>,
   color?: Color,
 ): XmlElement {
   const type = calextTypeForCfvoType(value.type);
@@ -879,7 +881,7 @@ function sheetPageLayoutElement(
 
 // table:print-ranges is a space-separated list of "SheetName.StartCell:SheetName.EndCell" ranges, both halves carrying the sheet-name prefix (see typed/ods/read.ts's own parsePrintRanges) — ContentSheetPrintSettingsSchema carries only one, so only one is ever written.
 function formatPrintRange(
-  range: NonNullable<ContentSheetPrintSettings["printRange"]>,
+  range: Readonly<NonNullable<ContentSheetPrintSettings["printRange"]>>,
   sheetName: string,
 ): string {
   const start = cellReference(range.startColumn, range.startRow);
@@ -1211,7 +1213,7 @@ function writeSheet(sheet: ContentSheet, state: OdsWriteState): XmlElement {
 // --- the canonical form: what reading this writer's own output back produces ----------------------------------------
 
 // Exported alongside normaliseOdsContent purely for direct unit coverage: normaliseOdsContent applies every canonical* helper below identically to BOTH sides of a round-trip equality check (the actual, real-reader-produced document and the expected, original-document-normalised-the-same-way), so a mutation to one of these helpers alone cannot be observed through that comparison — it changes both sides in lockstep. Each is therefore also pinned directly, against a literal expected return value, in write.test.ts.
-export function canonicalColor(color: Color): Color {
+export function canonicalColor(color: Readonly<Color>): Color {
   return rgbHexToColor(colorToRgbHex(color));
 }
 

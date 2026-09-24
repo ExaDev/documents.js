@@ -121,7 +121,9 @@ describe("readOdbForm: form-and-report.odb (real LibreOffice output)", () => {
 });
 
 describe("readOdbForm: synthetic control-tree shapes", () => {
-  function formPackage(formsChildren: ReturnType<typeof el>[]): Package {
+  function formPackage(
+    formsChildren: readonly ReturnType<typeof el>[],
+  ): Package {
     return {
       parts: {
         "content.xml": {

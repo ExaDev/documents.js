@@ -1,3 +1,36 @@
+## [1.4.91](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.90...document-rest%401.4.91) (2026-09-24)
+
+### Bug Fixes
+
+* **document-rest:** name every HTTP status code and the max TCP port ([0817355](https://github.com/ExaDev/documents.js/commit/0817355c38a2ef81478eeafc117379129f0b9486))
+
+
+### Dependencies
+
+- Updated odf.js to 11.1.6
+- Updated documents.js to 14.4.26
+- Updated document-operations to 1.1.88
+
+## [1.4.90](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.89...document-rest%401.4.90) (2026-09-24)
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.25
+- Updated document-operations to 1.1.87
+
+## [1.4.89](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.88...document-rest%401.4.89) (2026-09-24)
+
+### Miscellaneous Chores
+
+* **lint:** enable max-lines in four already-compliant packages ([13edc4e](https://github.com/ExaDev/documents.js/commit/13edc4ecee421af67eb835c4e55ad453bfac443a))
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.24
+- Updated document-operations to 1.1.86
+
 ## [1.4.88](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.87...document-rest%401.4.88) (2026-09-24)
 
 

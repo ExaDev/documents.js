@@ -1,3 +1,28 @@
+## [1.6.35](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.6.34...document-compute.js%401.6.35) (2026-09-24)
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.26
+
+## [1.6.34](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.6.33...document-compute.js%401.6.34) (2026-09-24)
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.25
+
+## [1.6.33](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.6.32...document-compute.js%401.6.33) (2026-09-24)
+
+### Miscellaneous Chores
+
+* **lint:** enable max-lines in four already-compliant packages ([13edc4e](https://github.com/ExaDev/documents.js/commit/13edc4ecee421af67eb835c4e55ad453bfac443a))
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.24
+
 ## [1.6.32](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.6.31...document-compute.js%401.6.32) (2026-09-24)
 
 

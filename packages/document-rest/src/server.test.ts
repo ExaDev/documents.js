@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { bytesToBase64, createDocx } from "documents.js";
 import { ODF_MEDIA_TYPES, zipPackage } from "odf.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createRestServer } from "./server";
+import { createRestServer, HTTP_STATUS } from "./server";
 
 // The identical fixture document-operations' own odb-render-report.test.ts uses (copied verbatim — see that package's test-support/fixtures/form-and-report.odb for its provenance), needed here only to exercise odb_render_report's OdbReportNotSpecifiedError -> 400 mapping with a real .odb.
 const FORM_AND_REPORT_ODB_PATH = fileURLToPath(
@@ -68,7 +68,7 @@ describe("createRestServer", () => {
 
   it("GET / lists every available operation", async () => {
     const response = await fetch(running.baseUrl + "/");
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(HTTP_STATUS.ok);
     expect(response.headers.get("content-type")).toBe("application/json");
     const body = (await response.json()) as { operations: { name: string }[] };
     expect(body.operations.some((op) => op.name === "convert_document")).toBe(
@@ -78,7 +78,7 @@ describe("createRestServer", () => {
 
   it("does not list operations for a non-GET request to /", async () => {
     const response = await fetch(running.baseUrl + "/", { method: "POST" });
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(HTTP_STATUS.notFound);
   });
 
   it("treats an empty request body as {} rather than a JSON parse failure", async () => {
@@ -88,7 +88,7 @@ describe("createRestServer", () => {
       body: "",
     });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(HTTP_STATUS.badRequest);
     const body = (await response.json()) as { error: string };
     // An empty body parses to {}, which then fails convert_document's own inputSchema (missing source/targetFormat) — a distinct failure mode from "not valid JSON", and the one that actually applies here.
     expect(body.error).toMatch(/failed validation/);
@@ -108,7 +108,7 @@ describe("createRestServer", () => {
       }),
     });
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(HTTP_STATUS.ok);
     const body = (await response.json()) as {
       result: { targetFormat: string; output: { bytesBase64?: string } };
     };
@@ -123,7 +123,7 @@ describe("createRestServer", () => {
       body: JSON.stringify({ source: { path: "x" } }),
     });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(HTTP_STATUS.badRequest);
     const body = (await response.json()) as { error: string; issues: unknown };
     expect(body.error).toMatch(/failed validation/);
     expect(body.issues).toBeDefined();
@@ -136,7 +136,7 @@ describe("createRestServer", () => {
       body: "not json",
     });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(HTTP_STATUS.badRequest);
     const body = (await response.json()) as { error: string };
     expect(body.error).toMatch(/not valid JSON/);
   });
@@ -151,7 +151,7 @@ describe("createRestServer", () => {
       }),
     });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(HTTP_STATUS.badRequest);
     const body = (await response.json()) as { error: string };
     expect(body.error).toMatch(/Could not infer a document format/);
   });
@@ -163,7 +163,7 @@ describe("createRestServer", () => {
       body: "{}",
     });
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(HTTP_STATUS.notFound);
     const body = (await response.json()) as { error: string };
     expect(body.error).toBe(
       'No operation named "not_a_real_operation". GET / lists every available operation.',
@@ -172,7 +172,7 @@ describe("createRestServer", () => {
 
   it("returns 405 for GET on a known operation route", async () => {
     const response = await fetch(running.baseUrl + "/convert_document");
-    expect(response.status).toBe(405);
+    expect(response.status).toBe(HTTP_STATUS.methodNotAllowed);
     const body = (await response.json()) as { error: string };
     expect(body.error).toBe(
       "convert_document only accepts POST, received GET.",
@@ -188,7 +188,7 @@ describe("createRestServer", () => {
       }),
     });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(HTTP_STATUS.badRequest);
     const body = (await response.json()) as { error: string; hrefs: string[] };
     expect(body.hrefs).toEqual(["../missing.odt"]);
     expect(body.error).toMatch(
@@ -211,7 +211,7 @@ describe("createRestServer", () => {
       }),
     });
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(HTTP_STATUS.ok);
     const body = (await response.json()) as {
       result: { bytesBase64?: string };
     };
