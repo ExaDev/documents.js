@@ -1,3 +1,17 @@
+## [1.6.37](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.6.36...document-compute.js%401.6.37) (2026-09-24)
+
+### Bug Fixes
+
+* **document-compute.js:** enable no-magic-numbers ([dfc54ab](https://github.com/ExaDev/documents.js/commit/dfc54ab0e785eeaa9827368744549e2e81bd1cb5))
+* **document-compute.js:** name magic numbers in corpus.test.ts ([4427226](https://github.com/ExaDev/documents.js/commit/4427226c3b4716a013a3d15749fe7b5b5cb8654b))
+* **document-compute.js:** name magic numbers in dimensions.test.ts and quantity.test.ts ([4dcdfac](https://github.com/ExaDev/documents.js/commit/4dcdfacc208f7e547dbe0808c9479886535a8d8e))
+* **document-compute.js:** name magic numbers in errors.test.ts and rational.test.ts ([69088e5](https://github.com/ExaDev/documents.js/commit/69088e543c2c18a793f453b930cf78b898cec58e))
+* **document-compute.js:** name magic numbers in evaluate.test.ts ([c1d1356](https://github.com/ExaDev/documents.js/commit/c1d1356acbccbed66ba84f036c8d1db28f00862a))
+* **document-compute.js:** name magic numbers in interval.test.ts ([c183100](https://github.com/ExaDev/documents.js/commit/c183100b3fe0bbe21132312eff270cc7465362c1))
+* **document-compute.js:** name magic numbers in solve.test.ts ([236d540](https://github.com/ExaDev/documents.js/commit/236d540fddee57f94a347e8f1255929c1b746098))
+* **document-compute.js:** name magic numbers in the compute/harness source modules ([488d9b7](https://github.com/ExaDev/documents.js/commit/488d9b7a64fb4ec42737a3e8945e6f9617c3e734))
+* **document-compute.js:** name magic numbers in worked-example.test.ts ([af899de](https://github.com/ExaDev/documents.js/commit/af899de91e15b0c9d146354be870b0d54e878621))
+
 ## [1.6.36](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.6.35...document-compute.js%401.6.36) (2026-09-24)
 
 
