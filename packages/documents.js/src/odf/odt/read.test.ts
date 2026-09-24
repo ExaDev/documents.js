@@ -1,8 +1,4 @@
-import type {
-  ContentBlock,
-  ContentDocument,
-  ContentVector,
-} from "document-schema.js";
+import type { ContentBlock, ContentVector } from "document-schema.js";
 import { decodePackage, zipPackage } from "odf.js";
 import { encodePng } from "byte-codec";
 import { describe, expect, it } from "vitest";
@@ -123,13 +119,10 @@ function odtBytes(
 }
 
 // Every fixture is decoded and read INSIDE its it() body, fresh per call: a describe-scope read would execute during vitest collection and be attributed to no test, silently turning its mutants' classification into no-coverage.
-function readOdt(
+function readOdtBlocks(
   bodyInner: string,
   options: OdtFixtureOptions = {},
-): {
-  readonly blocks: readonly ContentBlock[];
-  readonly content: ContentDocument;
-} {
+): readonly ContentBlock[] {
   const content = readOdtContent(decodePackage(odtBytes(bodyInner, options)));
   if (content.kind !== "wordprocessing") {
     throw new Error("expected a wordprocessing ContentDocument");
@@ -139,7 +132,7 @@ function readOdt(
       `expected exactly one section, got ${content.sections.length}`,
     );
   }
-  return { blocks: content.sections[0]!.blocks, content };
+  return content.sections[0]!.blocks;
 }
 
 function blockKinds(blocks: readonly ContentBlock[]): string[] {
@@ -252,7 +245,7 @@ describe("readOdtContent: a real inline image", () => {
 describe("readOdtContent: formula placement", () => {
   it("replaces a paragraph carrying nothing but a display formula, keeping the formula's own declared frame", () => {
     // odf.js's own reader produces three paragraph blocks (the middle one empty); the formula walk consumes the middle one and splices the formula block in its place, so the blank paragraph beside every display formula never appears.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:p>Intro</text:p>" +
         `<text:p>${inlineFormulaFrame("Object 1")}</text:p>` +
         "<text:p>Outro</text:p>",
@@ -274,7 +267,7 @@ describe("readOdtContent: formula placement", () => {
 
   it("keeps a paragraph that carries real text around an inline formula, placing the formula right after it", () => {
     // "Two ... three" is genuine paragraph content, so the paragraph is never consumed: the block sequence is paragraph, paragraph, formula, paragraph.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:p>One</text:p>" +
         `<text:p>Two ${inlineFormulaFrame("Object 1")} three</text:p>` +
         "<text:p>Four</text:p>",
@@ -296,7 +289,7 @@ describe("readOdtContent: formula placement", () => {
 
   it("treats whitespace-only text between formula frames as no content of the paragraph's own (still consumed)", () => {
     // The two surrounding text nodes trim to nothing, so the paragraph is still nothing but the formula: three blocks, not four. An untrimmed check would see " " as content and leave the empty paragraph in place.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:p>Before</text:p>" +
         `<text:p> ${inlineFormulaFrame("Object 1")} </text:p>` +
         "<text:p>After</text:p>",
@@ -311,7 +304,7 @@ describe("readOdtContent: formula placement", () => {
 
   it("tolerates XML comment nodes between a paragraph's formula frames (still consumed)", () => {
     // A comment child is neither text nor an element, so it is skipped rather than counted as unrecognised content: the paragraph carrying only the frame and comments is still replaced outright.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:p>Before</text:p>" +
         `<text:p><!--edge-->${inlineFormulaFrame("Object 1")}<!--case--></text:p>` +
         "<text:p>After</text:p>",
@@ -326,7 +319,7 @@ describe("readOdtContent: formula placement", () => {
 
   it("keeps a paragraph that mixes a formula frame with another element of its own", () => {
     // A text:span carrying text is content the paragraph owns; only whitespace and the recognised frames themselves may surround them, so this paragraph is not consumed and keeps its text.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:p>Before</text:p>" +
         `<text:p><text:span>note</text:span>${inlineFormulaFrame("Object 1")}</text:p>` +
         "<text:p>After</text:p>",
@@ -342,7 +335,7 @@ describe("readOdtContent: formula placement", () => {
   });
 
   it("places two formula frames of one paragraph as two adjacent blocks, in document order", () => {
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:p>Before</text:p>" +
         `<text:p>${inlineFormulaFrame("Object 1")}${inlineFormulaFrame("Object 2")}</text:p>` +
         "<text:p>After</text:p>",
@@ -373,7 +366,7 @@ describe("readOdtContent: formula placement", () => {
 
   it("places an absolutely-positioned formula frame that is a direct child of office:text between the blocks either side of it", () => {
     // A top-level draw:frame contributes no block of its own, so the formula belongs at the current index: exactly between the two paragraphs. Its geometry comes from odf.js's own readDrawFrame, i.e. the literal svg:x/y/width/height.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:p>Before</text:p>" +
         absoluteFormulaFrame("Object 1") +
         "<text:p>After</text:p>",
@@ -393,7 +386,7 @@ describe("readOdtContent: formula placement", () => {
 
   it("places a formula found inside a table cell immediately after the table's own single block", () => {
     // One table:table is exactly one ContentBlock regardless of its cells; the deep detection walk still finds the formula inside the cell, and its insertion point is counted one past the table.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:p>Before</text:p>" +
         `<table:table><table:table-row><table:table-cell><text:p>Cell ${inlineFormulaFrame("Object 1")}</text:p></table:table-cell></table:table-row></table:table>` +
         "<text:p>After</text:p>",
@@ -413,7 +406,7 @@ describe("readOdtContent: formula placement", () => {
 
   it("places a formula inside a text:section after the section's own counted paragraph", () => {
     // odf.js reads a text:section as a division construct, so its flat block list carries constructStart/constructEnd marker blocks around the section's content: [paragraph, constructStart, paragraph, constructEnd]. The mirror walk counts pre-marker blocks, so the consumed index lands on the constructStart marker and the formula is spliced before the empty paragraph: paragraph, formula, paragraph, constructEnd. Pinned exactly as the current mirror behaves.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:p>Before</text:p>" +
         `<text:section text:name="Sect"><text:p>${inlineFormulaFrame("Object 1")}</text:p></text:section>`,
       { objects: [["Object 1", "<math:mn>7</math:mn>"]] },
@@ -431,7 +424,7 @@ describe("readOdtContent: formula placement", () => {
   });
 
   it("unwraps a text:list into one block per item paragraph, placing a formula after the item that carries it", () => {
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:list>" +
         "<text:list-item><text:p>Item one</text:p></text:list-item>" +
         `<text:list-item><text:p>Item two ${inlineFormulaFrame("Object 1")}</text:p></text:list-item>` +
@@ -453,7 +446,7 @@ describe("readOdtContent: formula placement", () => {
 
   it("descends a nested text:list, placing the formula after the inner item's paragraph", () => {
     // The inner list's paragraphs are blocks of the same flat flow: Outer, Inner, formula, After.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:list>" +
         "<text:list-item>" +
         "<text:p>Outer</text:p>" +
@@ -479,7 +472,7 @@ describe("readOdtContent: formula placement", () => {
 
   it("places a bare formula frame sitting directly inside a text:list-item at the current index (it contributes no block of its own)", () => {
     // The list's blocks are the item paragraphs alone; the frame after the paragraph inside the same list item lands between the item's paragraph and the following block.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:list>" +
         `<text:list-item><text:p>Item</text:p>${absoluteFormulaFrame("Object 1")}</text:list-item>` +
         "</text:list>" +
@@ -499,7 +492,7 @@ describe("readOdtContent: formula placement", () => {
 
   it("treats a text:h heading inside a list item exactly like the list's paragraphs for detection", () => {
     // odf.js's own list walker emits one block per item paragraph OR heading, so a heading carrying an inline formula, vector, and image counts one block and all three placements follow it. Heading-in-a-list-item is exactly the shape odf.js's readOdfListParagraphs explicitly supports for text:h, so it is pinned here for every detection walk.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:list>" +
         `<text:list-item><text:h text:outline-level="2">Head ${inlineFormulaFrame("Object 1")} ${RECT_XML} ${inlineImageFrame()}</text:h></text:list-item>` +
         "</text:list>" +
@@ -530,7 +523,7 @@ describe("readOdtContent: formula placement", () => {
 
   it("ignores a stray paragraph sitting directly inside text:list (not inside a text:list-item)", () => {
     // A text:p that is a DIRECT child of text:list is not a text:list-item, so odf.js's own list walker contributes no block for it and every detection walk skips it whole: no formula, drawing, or image block appears anywhere. (The walk iterates list items only, exactly as the upstream reader does.)
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:list>" +
         "<text:list-item><text:p>Item</text:p></text:list-item>" +
         `<text:p>Stray ${inlineFormulaFrame("Object 1")} ${RECT_XML} ${inlineImageFrame()}</text:p>` +
@@ -545,7 +538,7 @@ describe("readOdtContent: formula placement", () => {
 
   it("treats a text:h heading exactly like a text:p for detection: its objects follow the heading block", () => {
     // One heading carrying an inline formula, an inline image, and a vector primitive: all three walks must count the heading as their block, so all three placements share index 1 (formula, drawing, image in the combined list's own order).
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       `<text:h text:outline-level="2">Head ${inlineFormulaFrame("Object 1")}${inlineImageFrame()}${RECT_XML}</text:h>` +
         "<text:p>After</text:p>",
       { objects: [["Object 1", "<math:mn>7</math:mn>"]], withImage: true },
@@ -576,7 +569,7 @@ describe("readOdtContent: formula placement", () => {
 describe("readOdtContent: vector placement", () => {
   it("replaces a paragraph carrying nothing but a vector primitive with one drawing block sized to the section's own page", () => {
     // The drawing block wraps a one-page drawing ContentDocument whose page is the SECTION's page (A4 default, from document-schema.js's PAGE_SIZE_A4), and whose vectors keep their recovered page-relative geometry.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:p>Before</text:p>" +
         `<text:p>${RECT_XML}</text:p>` +
         "<text:p>After</text:p>",
@@ -604,7 +597,7 @@ describe("readOdtContent: vector placement", () => {
 
   it("keeps a paragraph that carries text beside the vector, placing the drawing block after it", () => {
     // Real text means the paragraph is content of its own; consuming it here would silently drop the label.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       `<text:p>Label ${RECT_XML}</text:p>` + "<text:p>After</text:p>",
     );
     expect(blockKinds(blocks)).toEqual([
@@ -617,7 +610,7 @@ describe("readOdtContent: vector placement", () => {
 
   it("keeps a paragraph that mixes a vector primitive with another element of its own", () => {
     // A text:span beside the rect is content the paragraph owns: only whitespace and the vector-tagged elements themselves may surround them, so the paragraph (with its text) stays and the drawing block follows it.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:p>Before</text:p>" +
         `<text:p><text:span>note</text:span>${RECT_XML}</text:p>` +
         "<text:p>After</text:p>",
@@ -633,7 +626,7 @@ describe("readOdtContent: vector placement", () => {
 
   it("groups every vector of one paragraph into a single drawing block, in document order", () => {
     // "All vectors within one container become one drawing block" is the write side's own convention: two primitives, one placement, one block.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:p>Before</text:p>" +
         `<text:p>${RECT_XML}${ELLIPSE_XML}</text:p>` +
         "<text:p>After</text:p>",
@@ -660,7 +653,7 @@ describe("readOdtContent: vector placement", () => {
   });
 
   it("places a bare vector primitive that is a direct child of office:text between the blocks either side of it", () => {
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       `<text:p>Before</text:p>${RECT_XML}<text:p>After</text:p>`,
     );
     expect(blockKinds(blocks)).toEqual([
@@ -676,7 +669,7 @@ describe("readOdtContent: vector placement", () => {
 
   it("places a vector primitive sitting directly among a table's own children after the table's single block", () => {
     // The table branch's detection is collectContainerVectors(node.children): odf.js's own readDrawPageContent walks only shape elements at the level it is handed, so this sees a primitive DIRECTLY among the table's children (synthetic as markup, but exactly the branch's contract) and places it one past the table's own block.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:p>Before</text:p>" +
         `<table:table><table:table-row><table:table-cell><text:p>Cell</text:p></table:table-cell></table:table-row>${RECT_XML}</table:table>` +
         "<text:p>After</text:p>",
@@ -695,7 +688,7 @@ describe("readOdtContent: vector placement", () => {
 
   it("does not detect a vector nested inside a table cell: the table branch's walk is shallow where the formula walk's is deep", () => {
     // A draw:rect inside a cell's paragraph is beneath the level collectContainerVectors walks, so no drawing block appears at all. This is the genuine formula/vector asymmetry at table scope (collectFormulaFrames recurses through any element; readDrawPageContent recognises only shape elements directly), pinned as-is.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:p>Before</text:p>" +
         `<table:table><table:table-row><table:table-cell><text:p>${RECT_XML}</text:p></table:table-cell></table:table-row></table:table>` +
         "<text:p>After</text:p>",
@@ -704,7 +697,7 @@ describe("readOdtContent: vector placement", () => {
   });
 
   it("places a vector inside a list item's paragraph after that paragraph's own block", () => {
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:list>" +
         `<text:list-item><text:p>Item ${RECT_XML}</text:p></text:list-item>` +
         "</text:list>" +
@@ -723,7 +716,7 @@ describe("readOdtContent: vector placement", () => {
 
   it("descends a nested text:list, placing the vector after the inner item's paragraph", () => {
     // The nested list's paragraphs are blocks of the same flat flow (Outer, Inner, drawing, After), counted one per item paragraph at every nesting level.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:list>" +
         "<text:list-item>" +
         "<text:p>Outer</text:p>" +
@@ -747,7 +740,7 @@ describe("readOdtContent: vector placement", () => {
   });
 
   it("places a bare vector element sitting directly inside a text:list-item at the current index", () => {
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:list>" +
         `<text:list-item><text:p>Item</text:p>${RECT_XML}</text:list-item>` +
         "</text:list>" +
@@ -766,7 +759,7 @@ describe("readOdtContent: vector placement", () => {
 
   it("places a vector inside a text:section after the section's own counted paragraph", () => {
     // Same marker-block shape as the formula case above: the consumed index eats the constructStart marker and the drawing block lands before the empty paragraph.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:p>Before</text:p>" +
         `<text:section text:name="Sect"><text:p>${RECT_XML}</text:p></text:section>`,
     );
@@ -780,7 +773,7 @@ describe("readOdtContent: vector placement", () => {
 
   it("never consumes a paragraph whose only vector-tagged child resolves no vector (a geometry-less draw:rect)", () => {
     // A draw:rect with no svg:x/y/width/height at all is a vector TAG but resolves no vector, so the paragraph keeps its own (empty) block and no drawing block appears for it. Treating "vector-tagged children present" as enough to consume would drop this paragraph outright with nothing in its place.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:p>Intro</text:p>" +
         "<text:p><draw:rect/></text:p>" +
         `<text:p>${inlineImageFrame()}</text:p>` +
@@ -800,7 +793,7 @@ describe("readOdtContent: vector placement", () => {
 describe("readOdtContent: image placement", () => {
   it("never consumes the paragraph an image is found in, even when the image is all it carries", () => {
     // The one deliberate divergence from the formula/vector walks: ContentImageBlock has nowhere to record inline membership, so the (empty) paragraph block stays and the image follows it: four blocks, not three.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:p>Before</text:p>" +
         `<text:p>${inlineImageFrame()}</text:p>` +
         "<text:p>After</text:p>",
@@ -823,7 +816,7 @@ describe("readOdtContent: image placement", () => {
   });
 
   it("places an absolutely-positioned image frame that is a direct child of office:text between the blocks either side of it", () => {
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       `<text:p>Before</text:p>${absoluteImageFrame()}<text:p>After</text:p>`,
       { withImage: true },
     );
@@ -837,7 +830,7 @@ describe("readOdtContent: image placement", () => {
   });
 
   it("places an image found inside a table cell immediately after the table's own single block", () => {
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:p>Before</text:p>" +
         `<table:table><table:table-row><table:table-cell><text:p>${inlineImageFrame()}</text:p></table:table-cell></table:table-row></table:table>` +
         "<text:p>After</text:p>",
@@ -856,7 +849,7 @@ describe("readOdtContent: image placement", () => {
   });
 
   it("places an image inside a list item's paragraph after that paragraph's own block", () => {
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:list>" +
         `<text:list-item><text:p>Item ${inlineImageFrame()}</text:p></text:list-item>` +
         "</text:list>" +
@@ -871,7 +864,7 @@ describe("readOdtContent: image placement", () => {
   });
 
   it("descends a nested text:list, placing the image after the inner item's paragraph", () => {
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:list>" +
         "<text:list-item>" +
         "<text:p>Outer</text:p>" +
@@ -896,7 +889,7 @@ describe("readOdtContent: image placement", () => {
   });
 
   it("places a bare image frame sitting directly inside a text:list-item at the current index", () => {
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:list>" +
         `<text:list-item><text:p>Item</text:p>${absoluteImageFrame()}</text:list-item>` +
         "</text:list>" +
@@ -912,7 +905,7 @@ describe("readOdtContent: image placement", () => {
 
   it("places an image inside a text:section after the section's own counted paragraph, inside the construct markers", () => {
     // Images never consume, so the marker blocks survive untouched here: constructStart, image, paragraph, constructEnd, paragraph.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       `<text:section text:name="Sect"><text:p>${inlineImageFrame()}</text:p></text:section>` +
         "<text:p>After</text:p>",
       { withImage: true },
@@ -934,7 +927,7 @@ describe("readOdtContent: image placement", () => {
 describe("readOdtContent: the three detection passes merge into one splice", () => {
   it("interleaves a formula before an image by true block position, with the image's paragraph kept", () => {
     // Formula paragraph first: the formula replaces its own (consumed) paragraph, the image's paragraph is kept, so Intro, formula, empty paragraph, image, Outro.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:p>Intro</text:p>" +
         `<text:p>${inlineFormulaFrame("Object 1")}</text:p>` +
         `<text:p>${inlineImageFrame()}</text:p>` +
@@ -960,7 +953,7 @@ describe("readOdtContent: the three detection passes merge into one splice", () 
 
   it("interleaves an image before a formula by true block position (the reverse concatenation order)", () => {
     // The formula pass's placements are concatenated ahead of the image pass's, so this ordering is the one that needs the combined list actually SORTED by index: image at position 2, formula replacing its own paragraph at position 3.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:p>Intro</text:p>" +
         `<text:p>${inlineImageFrame()}</text:p>` +
         `<text:p>${inlineFormulaFrame("Object 1")}</text:p>` +
@@ -986,7 +979,7 @@ describe("readOdtContent: the three detection passes merge into one splice", () 
 
   it("never consumes an empty or whitespace-only paragraph that carries no detected object at all", () => {
     // An empty recognised-element list must mean "not this walk's paragraph": the whitespace-only and truly empty paragraphs are ordinary content here and must survive alongside the image splice.
-    const { blocks } = readOdt(
+    const blocks = readOdtBlocks(
       "<text:p>Intro</text:p>" +
         "<text:p> </text:p>" +
         "<text:p></text:p>" +
