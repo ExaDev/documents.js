@@ -179,19 +179,26 @@ interface EditableRow {
   readonly activate?: () => void;
 }
 
+interface FrameFields {
+  readonly xPt: number;
+  readonly yPt: number;
+  readonly widthPt: number;
+  readonly heightPt: number;
+}
+
+// Every PdfRectItem/PdfEllipseItem/PdfImageItem/PdfLinkItem/PdfInternalLinkItem exposes xPt/yPt/widthPt/heightPt as prototype getters (see edit/pdf/item.ts), not the live item's own enumerable properties — object-spreading a live item directly (`{...item, widthPt: ...}`) silently omits every frame field the caller did not explicitly name, since a getter defined on the prototype chain is never copied by a spread. buildFrameRows's callers pass the live item itself as `frame` for convenience, so this snapshot is what actually makes `{...frame, ...}` in its own commit callback below spread real values rather than dropping three of the four fields to `undefined` on every edit.
+function frameOf(item: FrameFields): FrameFields {
+  return {
+    xPt: item.xPt,
+    yPt: item.yPt,
+    widthPt: item.widthPt,
+    heightPt: item.heightPt,
+  };
+}
+
 function buildFrameRows(
-  frame: {
-    readonly xPt: number;
-    readonly yPt: number;
-    readonly widthPt: number;
-    readonly heightPt: number;
-  },
-  onFrameChange: (frame: {
-    readonly xPt: number;
-    readonly yPt: number;
-    readonly widthPt: number;
-    readonly heightPt: number;
-  }) => void,
+  frame: FrameFields,
+  onFrameChange: (frame: FrameFields) => void,
 ): EditableRow[] {
   return [
     {
@@ -415,7 +422,7 @@ function buildRectRows(
   dispatch: Dispatch<Action>,
 ): EditableRow[] {
   return [
-    ...buildFrameRows(item, (frame) => {
+    ...buildFrameRows(frameOf(item), (frame) => {
       dispatch({ type: "SET_PDF_RECT_FRAME", pageIndex, itemIndex, ...frame });
     }),
     ...buildFillStrokeRows(
@@ -438,7 +445,7 @@ function buildEllipseRows(
   dispatch: Dispatch<Action>,
 ): EditableRow[] {
   return [
-    ...buildFrameRows(item, (frame) => {
+    ...buildFrameRows(frameOf(item), (frame) => {
       dispatch({
         type: "SET_PDF_ELLIPSE_FRAME",
         pageIndex,
@@ -598,7 +605,7 @@ function buildImageRows(
   onReplaceImage: () => void,
 ): EditableRow[] {
   return [
-    ...buildFrameRows(item, (frame) => {
+    ...buildFrameRows(frameOf(item), (frame) => {
       dispatch({ type: "SET_PDF_IMAGE_FRAME", pageIndex, itemIndex, ...frame });
     }),
     {
@@ -632,7 +639,7 @@ function buildLinkRows(
         dispatch({ type: "SET_PDF_LINK_URI", pageIndex, itemIndex, uri: raw });
       },
     },
-    ...buildFrameRows(item, (frame) => {
+    ...buildFrameRows(frameOf(item), (frame) => {
       dispatch({ type: "SET_PDF_LINK_FRAME", pageIndex, itemIndex, ...frame });
     }),
   ];
@@ -658,7 +665,7 @@ function buildInternalLinkRows(
         });
       },
     },
-    ...buildFrameRows(item, (frame) => {
+    ...buildFrameRows(frameOf(item), (frame) => {
       dispatch({
         type: "SET_PDF_INTERNAL_LINK_FRAME",
         pageIndex,
