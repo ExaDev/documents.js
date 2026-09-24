@@ -9,6 +9,9 @@ import {
   UnsupportedExpressionError,
 } from "./errors";
 
+// An arbitrary iteration count NonConvergentSolveError is exercised with below, unrelated to any real solver's actual iteration budget.
+const SAMPLE_ITERATION_COUNT = 42;
+
 // Every error class is a real, named Error subclass a caller can catch and discriminate by `instanceof` or by `.name` — exercised end to end by quantity.test.ts/interval.test.ts/evaluate.test.ts/solve.test.ts at the call sites that actually throw them; this file pins each constructor's own contract (name, structured fields, message content) directly.
 describe("document-compute.js error classes", () => {
   it("IncompatibleDimensionsError carries the operation and both dimension vectors", () => {
@@ -90,12 +93,12 @@ describe("document-compute.js error classes", () => {
   it("NonConvergentSolveError carries the method and iteration count", () => {
     const error = new NonConvergentSolveError(
       "newton",
-      42,
+      SAMPLE_ITERATION_COUNT,
       "derivative vanished",
     );
     expect(error.name).toBe("NonConvergentSolveError");
     expect(error.method).toBe("newton");
-    expect(error.iterations).toBe(42);
+    expect(error.iterations).toBe(SAMPLE_ITERATION_COUNT);
     expect(error.message).toContain("newton");
     expect(error.message).toContain("42");
   });
