@@ -423,7 +423,7 @@ describe("definitions tables", () => {
       (node) => node.kind === "definitionEntry",
     );
     expect(entries).toHaveLength(4); // all four exist whether or not anything references them
-    expect(entries.map((node) => node.tenantKind).sort()).toEqual([
+    expect(sortedStrings(entries.map((node) => node.tenantKind))).toEqual([
       "attachment",
       "destination",
       "footnote",
@@ -511,7 +511,7 @@ describe("definitions tables", () => {
       (node) =>
         node.kind === "definitionEntry" && node.tenantKind === "glossary",
     );
-    expect(glossary.map((node) => node.definition).sort()).toEqual([
+    expect(sortedStrings(glossary.map((node) => node.definition))).toEqual([
       "n1",
       "the minimum number of members needed",
     ]);
@@ -825,7 +825,9 @@ describe("extraction policy", () => {
     expect(graph.edges.filter((edge) => edge.kind === "PROPERTY")).toHaveLength(
       2,
     );
-    for (const edge of graph.edges.filter((edge) => edge.kind === "PROPERTY")) {
+    for (const edge of graph.edges.filter(
+      (candidate) => candidate.kind === "PROPERTY",
+    )) {
       expect(edge.path).toEqual(["metadata", "title"]);
       expect(edge.to).toBe(valueNodes[0]!.id);
       expect(edge.orderKey).toBe(orderKeys.orderKeyForIndex(0));
@@ -4229,3 +4231,10 @@ describe("insertEdge sorts its own siblings by orderKey before resolving a posit
     expect(inserted!.orderKey < b.orderKey).toBe(true);
   });
 });
+
+// A projected node's face fields are typed `unknown`, because a table entry's body is arbitrary record content, so sorting them directly would be sorting an unknown[] on whatever order the default stringifying comparator happens to give. Narrowing to the strings these assertions are actually about keeps the comparison a plain lexicographic string sort, and the length check makes a non-string value fail here rather than silently sorting by its stringification.
+function sortedStrings(values: readonly unknown[]): string[] {
+  const strings = values.filter((value) => typeof value === "string");
+  expect(strings).toHaveLength(values.length);
+  return [...strings].sort();
+}

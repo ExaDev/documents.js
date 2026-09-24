@@ -16,6 +16,7 @@ import {
   type SheetGroupNode,
   type SlideGroupNode,
 } from "document-schema.js";
+import { assertNeverPackage } from "./exhaustive";
 import type { OutlineChild, OutlineLeaf, OutlineNode } from "./node";
 
 // Builds the hierarchical outline over a DocumentTree (document-schema.js 4.0.0's promoted shape, ExaDev/document-schema.js#20), dispatching on pkg.kind and projecting pkg.children. This is the TOC PROJECTION, not a decomposition: it deliberately re-groups across container boundaries — a wordprocessing package's sections flow into one tree, a slide's paragraphs are taken across its shapes in shape order — which is exactly the lossiness a table of contents wants, and exactly why the lossless decompose/flatten pair lives in documents.js's package boundary instead (ExaDev/document-outline.js#2 phase 2: one implementation, one authority; this package keeps no second copy of the grouping semantics). Returns the root scope's children, OutlineChild[]: the root is not itself a node (no synthetic "document" root group), so a wordprocessing document's pre-heading content — or a document with no grouping signal at all — appears as leaves directly in the returned array alongside (or instead of) group nodes. Document order is preserved everywhere: a child always appears in the position its source node occupied.
@@ -42,6 +43,7 @@ export function buildOutline(pkg: DocumentTree): OutlineChild[] {
       // The schema pins a formula package's children to exactly one ContentFormula, so the single element is the whole content and the [0] access can never miss on a schema-valid package.
       return formulaOutline(pkg.children[0]!);
   }
+  return assertNeverPackage(pkg);
 }
 
 // The mutable state one wordprocessing projection thread carries: the root scope and the two open-group stacks. Bundled so a construct group's own subtree (self-contained per document-schema.js's construct-group contract: "transparent to the flow it wraps") can run the identical walk over a FRESH instance — its internal heading/list nesting neither inherits the surrounding open groups nor leaks back into them — while the outer, section-spanning walk keeps threading one shared instance across every section (the stacks stay open across section boundaries, by design; see the per-kind contract above).

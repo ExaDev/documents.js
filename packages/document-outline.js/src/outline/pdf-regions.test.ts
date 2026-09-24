@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { LayoutItem, LayoutPage, LayoutText } from "pdf-codec";
 import { DEFAULT_BASELINE_TOLERANCE_EM } from "pdf-codec/text-group";
 import type { LayoutFont } from "document-schema.js";
+import { assertNeverLayoutItem } from "./pdf-regions";
 import {
   attachCaptions,
   boundingBox,
@@ -1577,5 +1578,13 @@ describe("verticalGap", () => {
         { xPt: 0, yPt: 100, widthPt: 1, heightPt: 10 },
       ),
     ).toBe(0);
+  });
+});
+
+describe("assertNeverLayoutItem", () => {
+  it("throws naming the unhandled item, proving layoutItemBounds' own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverLayoutItem({ kind: "bogus" } as never);
+    }).toThrow('layoutItemBounds: unhandled layout item {"kind":"bogus"}');
   });
 });
