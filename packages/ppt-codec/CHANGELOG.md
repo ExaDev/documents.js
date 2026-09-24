@@ -1,3 +1,9 @@
+## [2.2.17](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.2.16...ppt-codec%402.2.17) (2026-09-24)
+
+### Code Refactoring
+
+* empty the switch-exhaustiveness debt across four packages ([491fac9](https://github.com/ExaDev/documents.js/commit/491fac91880bf370d33f9dae0a5e21b2b07d2250))
+
 ## [2.2.16](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.2.15...ppt-codec%402.2.16) (2026-09-24)
 
 ### Code Refactoring

@@ -1,3 +1,20 @@
+## [5.12.45](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.44...document-cli%405.12.45) (2026-09-24)
+
+### Bug Fixes
+
+* **document-cli:** raise the timeout for page-detail's three App-driven tests ([6fd3c18](https://github.com/ExaDev/documents.js/commit/6fd3c1862cd0b8e9732a193e14b2e0fa4c444c46))
+
+### Tests
+
+* **document-cli:** cover odg page-detail's add-item kinds and list navigation ([ef2adae](https://github.com/ExaDev/documents.js/commit/ef2adae0f02eb27c0c3fe12d405912c67d370a15))
+* **document-cli:** cover paragraph-family's list creation, search filter and badges ([b61bee7](https://github.com/ExaDev/documents.js/commit/b61bee78dd8abb9a4067e121d4e23641c01a8d24))
+
+
+### Dependencies
+
+- Updated odf.js to 11.1.10
+- Updated documents.js to 14.4.35
+
 ## [5.12.44](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.43...document-cli%405.12.44) (2026-09-24)
 
 

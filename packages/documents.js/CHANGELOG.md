@@ -1,3 +1,17 @@
+## [14.4.35](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.34...documents.js%4014.4.35) (2026-09-24)
+
+### Code Refactoring
+
+* empty the switch-exhaustiveness debt across four packages ([491fac9](https://github.com/ExaDev/documents.js/commit/491fac91880bf370d33f9dae0a5e21b2b07d2250))
+
+
+### Dependencies
+
+- Updated markdown-codec to 11.1.10
+- Updated odf.js to 11.1.10
+- Updated ppt-codec to 2.2.17
+- Updated rtf-codec to 8.1.18
+
 ## [14.4.34](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.33...documents.js%4014.4.34) (2026-09-24)
 
 ### Tests

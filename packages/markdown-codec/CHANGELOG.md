@@ -1,3 +1,26 @@
+## [11.1.10](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.1.9...markdown-codec%4011.1.10) (2026-09-24)
+
+### Bug Fixes
+
+* **markdown-codec:** name magic numbers across ten small files ([58f661b](https://github.com/ExaDev/documents.js/commit/58f661b2d902be367ea6f8244287a42ae09b8105)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **markdown-codec:** name magic numbers in assets/chars/block/scan tests ([abbb039](https://github.com/ExaDev/documents.js/commit/abbb0390f6e380f255a7ef3b09a6886b19e33e73)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **markdown-codec:** name magic numbers in block.ts, html-table.test.ts, link.test.ts, lower.test.ts ([e2f985c](https://github.com/ExaDev/documents.js/commit/e2f985c1f615aa9720ab2dc6bf85420dfea86a66)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **markdown-codec:** name magic numbers in chars.test.ts ([c45afde](https://github.com/ExaDev/documents.js/commit/c45afdedb2d0229808299cc69a93a0d6ad5a040e)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **markdown-codec:** name magic numbers in image.ts ([0f96935](https://github.com/ExaDev/documents.js/commit/0f96935b795419541b9ee5ea555145358fdb42dd)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **markdown-codec:** name magic numbers in inline.test.ts, emit.test.ts, delimiter.test.ts ([11fcbfb](https://github.com/ExaDev/documents.js/commit/11fcbfb2e1b8b0041d3f7d5745c6bb21596580bc)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **markdown-codec:** name magic numbers in lower/image.test.ts ([fffeb33](https://github.com/ExaDev/documents.js/commit/fffeb33bccbc15ed121e17cb6eb5613ac5a5607c)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **markdown-codec:** name magic numbers in package.test.ts and style-constants.test.ts ([773bd8b](https://github.com/ExaDev/documents.js/commit/773bd8b2645bdb0034025c2d3ea1d4595b89f84c)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+
+### Code Refactoring
+
+* empty the switch-exhaustiveness debt across four packages ([491fac9](https://github.com/ExaDev/documents.js/commit/491fac91880bf370d33f9dae0a5e21b2b07d2250))
+* **markdown-codec:** restructure conformance exclusions as objects keyed by example ([82dbac8](https://github.com/ExaDev/documents.js/commit/82dbac899f0bb11e75b8f3ac79112ee95704f64e)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+
+### Miscellaneous Chores
+
+* **markdown-codec:** enable no-magic-numbers ([08fb33b](https://github.com/ExaDev/documents.js/commit/08fb33b591d6e085dbf5a6043ea6c47cb463212d)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **markdown-codec:** turn magicNumbers off with a documented reason ([a8a2499](https://github.com/ExaDev/documents.js/commit/a8a2499efc225070016ddf677471e864b9d4e680)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+
 ## [11.1.9](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.1.8...markdown-codec%4011.1.9) (2026-09-24)
 
 
