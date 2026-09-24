@@ -5,7 +5,7 @@ import { createRestServer } from "./server";
 // createHttpServer(callback) attaches `callback` as a listener for the server's own "request" event (see Node's node:http docs), so emitting that event directly drives the real request handler with a request object we control — the only way to reach the "no url or method" guard, since neither a real client nor Node's own http module can ever produce a genuine IncomingMessage missing either field.
 function emitFakeRequest(
   server: ReturnType<typeof createRestServer>,
-  overrides: Partial<Pick<IncomingMessage, "url" | "method">>,
+  overrides: Readonly<Partial<Pick<IncomingMessage, "url" | "method">>>,
 ): { status: () => number | undefined; body: () => string | undefined } {
   let status: number | undefined;
   let body: string | undefined;
