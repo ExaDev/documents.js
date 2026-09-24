@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { bytesToBase64, encodePng } from "byte-codec";
+import { base64ToBytes, bytesToBase64, encodePng } from "byte-codec";
 import { describe, expect, it } from "vitest";
 import type { LayoutFont } from "document-schema.js";
 import type { LayoutDocument, LayoutImageAsset } from "./layout";
@@ -10,6 +10,7 @@ import { createFontRegistry } from "./font-registry";
 import { createFontMeasurer, createStandardFontMeasurer } from "./measure";
 import { readPdf } from "./read";
 import { parseSfnt } from "./sfnt";
+import { STIX_TWO_MATH_FONT_BASE64 } from "./assets/stix-two-math-font";
 import { carlitoRegularBytes } from "./test-support/fonts";
 import { wrapRunsToWidth } from "./text-layout";
 import { writePdf } from "./write";
@@ -709,5 +710,199 @@ describe("the vendored-substitute step's Calibri Light report", () => {
       reason: "vendored-substitute",
       resolvedFamily: "carlito",
     });
+  });
+});
+
+describe("writePdf: embedded face allocation, ordering and subsetting inputs", () => {
+  function textItems(
+    entries: readonly {
+      readonly text: string;
+      readonly font: LayoutFont;
+      readonly yPt: number;
+    }[],
+  ) {
+    return entries.map(({ text, font, yPt }) => ({
+      kind: "text" as const,
+      text,
+      xPt: 72,
+      yPt,
+      font,
+      sizePt: 12,
+      color: BLACK,
+    }));
+  }
+
+  it("assigns resource names by PostScript-name sort order, so the second item's face names E1", () => {
+    // Encounter order is Regular then Bold; sorted order is Bold then Regular, so the bold face
+    // must be E1 and the regular E2 — pinned by which resource each run's Tf actually names.
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [
+        {
+          widthPt: 612,
+          heightPt: 792,
+          items: textItems([
+            { text: "regular", font: CALIBRI, yPt: 700 },
+            { text: "bold", font: CALIBRI_BOLD, yPt: 680 },
+          ]),
+        },
+      ],
+      images: {},
+    };
+    const text = decode(
+      writePdf(doc, { compress: false, fonts: createFontRegistry() }),
+    );
+    expect(text).toContain("/Size 16 ");
+    expect(text).toContain("/E2 12 Tf");
+    expect(text).toContain("/E1 12 Tf");
+  });
+
+  it("orders four faces' object groups by PostScript name, however they are encountered", () => {
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [
+        {
+          widthPt: 612,
+          heightPt: 792,
+          items: textItems([
+            { text: "a", font: CAMBRIA_BOLD, yPt: 700 },
+            { text: "b", font: CALIBRI_BOLD, yPt: 680 },
+            { text: "c", font: CAMBRIA, yPt: 660 },
+            { text: "d", font: CALIBRI, yPt: 640 },
+          ]),
+        },
+      ],
+      images: {},
+    };
+    const text = decode(
+      writePdf(doc, { compress: false, fonts: createFontRegistry() }),
+    );
+    // Caladea-Bold < Caladea-Regular < Carlito-Bold < Carlito-Regular (the "Cal" families sort
+    // before the "Car" ones): the four groups' /BaseFont tags appear in the file in exactly that
+    // order, which only the sort can produce, and each run's Tf names its own face's slot in it.
+    const boldCaladea = text.indexOf("Caladea-Bold");
+    const regularCaladea = text.indexOf("Caladea-Regular");
+    const boldCarlito = text.indexOf("Carlito-Bold");
+    const regularCarlito = text.indexOf("Carlito-Regular");
+    expect(boldCaladea).toBeGreaterThanOrEqual(0);
+    expect(boldCaladea).toBeLessThan(regularCaladea);
+    expect(regularCaladea).toBeLessThan(boldCarlito);
+    expect(boldCarlito).toBeLessThan(regularCarlito);
+    // Encounter order was Caladea-Bold, Carlito-Bold, Caladea-Regular, Carlito-Regular.
+    expect(text).toContain("/E1 12 Tf");
+    expect(text).toContain("/E3 12 Tf");
+    expect(text).toContain("/E2 12 Tf");
+    expect(text).toContain("/E4 12 Tf");
+  });
+
+  it("subsets to exactly the shaped and code-point-derived glyph set of the document's own text", () => {
+    // 'office fluff' shapes ligatures (ffi, fl, ff) while its raw code points still cover every
+    // letter: the subset's size and its CRC32 subset tag are both functions of exactly that glyph
+    // list, so a seeded or reordered input list moves either one.
+    const bytes = writePdf(textDoc("office fluff", CALIBRI), {
+      compress: false,
+      fonts: createFontRegistry(),
+    });
+    const text = decode(bytes);
+    expect(text).toContain("/BaseFont /YLSGNX+Carlito-Regular");
+    expect(text).toContain("/Length1 28632");
+    expect(text).toContain("/Size 11 ");
+  });
+
+  it("subsets a digits-only document without pulling in any letter glyph", () => {
+    const bytes = writePdf(textDoc("0123", CALIBRI), {
+      compress: false,
+      fonts: createFontRegistry(),
+    });
+    const text = decode(bytes);
+    // The ToUnicode CMap covers exactly the digits' code points; a stray seed string would add
+    // letter mappings (S is 0053) that nothing in the document drew.
+    expect(text).toContain("<0030>");
+    expect(text).not.toContain("<0053>");
+    expect(text).not.toContain("<0057>");
+  });
+
+  it("refuses to embed a face whose outlines cannot be subsetted, naming the face", () => {
+    // STIX Two Math is CFF-flavoured: sfnt-subset rebuilds 'glyf' and refuses anything without it.
+    const fonts = createFontRegistry({
+      fonts: [
+        {
+          family: "MathSource",
+          bold: false,
+          italic: false,
+          bytes: base64ToBytes(STIX_TWO_MATH_FONT_BASE64),
+        },
+      ],
+    });
+    const doc = textDoc("x", {
+      family: "MathSource",
+      weight: "normal",
+      style: "normal",
+    });
+    expect(() => writePdf(doc, { fonts })).toThrow(
+      /font "STIXTwoMath" resolved to an embeddable face, but its glyph outlines could not be subsetted/,
+    );
+  });
+});
+
+describe("writePdf: faces sharing one PostScript name", () => {
+  it("keeps first-encountered order between three faces whose programs all spell the same name", () => {
+    // Three byte-distinct copies of one font resolve to three distinct faces whose PostScript
+    // names are identical (embedded-font's face cache is keyed by the bytes object, so copies
+    // parse separately). The sort comparator returns 0 for every pair and sort's stability is
+    // what keeps the encounter order — pinned here by which resource name each size's run picks.
+    const fonts = createFontRegistry({
+      fonts: [
+        {
+          family: "FamilyA",
+          bold: false,
+          italic: false,
+          bytes: carlitoRegularBytes(),
+        },
+        {
+          family: "FamilyB",
+          bold: false,
+          italic: false,
+          bytes: new Uint8Array(carlitoRegularBytes()),
+        },
+        {
+          family: "FamilyC",
+          bold: false,
+          italic: false,
+          bytes: new Uint8Array(carlitoRegularBytes()),
+        },
+      ],
+    });
+    const run = (family: string, yPt: number, sizePt: number) => ({
+      kind: "text" as const,
+      text: "x",
+      xPt: 72,
+      yPt,
+      font: { family, weight: "normal" as const, style: "normal" as const },
+      sizePt,
+      color: BLACK,
+    });
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [
+        {
+          widthPt: 612,
+          heightPt: 792,
+          items: [
+            run("FamilyA", 700, 12),
+            run("FamilyB", 680, 13),
+            run("FamilyC", 660, 14),
+          ],
+        },
+      ],
+      images: {},
+    };
+    const text = decode(writePdf(doc, { compress: false, fonts }));
+    expect(text).toContain("/E1 12 Tf");
+    expect(text).toContain("/E2 13 Tf");
+    expect(text).toContain("/E3 14 Tf");
   });
 });

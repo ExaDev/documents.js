@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { base64ToBytes, bytesToBase64, decodePng } from "byte-codec";
+import { base64ToBytes, bytesToBase64, decodePng, encodePng } from "byte-codec";
 import type { LayoutDocument, LayoutImageAsset } from "./layout";
 import { LAYOUT_FORMAT_VERSION } from "./layout";
 import { readImageXObject } from "./images-read";
@@ -267,5 +267,77 @@ describe("writePdf: verbatim passthrough of no-encoder image filters", () => {
     const reread = readPdf(bytes);
     const repixels = pixelsOf(reread);
     expect(Array.from(repixels!)).toEqual(Array.from(built!.pixels));
+  });
+});
+
+// The passthrough paths' own dictionary shape, exercised without a real fixture stream: the
+// writer never decodes the original bytes (they are re-embedded verbatim), so arbitrary bytes
+// stand in for the compressed stream while the canonical PNG beside them is a real decode input.
+describe("writePdf: passthrough dictionary shape", () => {
+  const ORIGINAL_STREAM = new Uint8Array([0xde, 0xad, 0xbe, 0xef, 0x01]);
+
+  function passthroughAsset(
+    overrides: Partial<NonNullable<LayoutImageAsset["original"]>> = {},
+    canonicalAlpha?: Uint8Array<ArrayBuffer>,
+  ): LayoutImageAsset {
+    // A real 8x8 bilevel grayscale canonical, optionally with a soft mask.
+    const data = new Uint8Array(64).fill(0);
+    data.fill(255, 0, 8);
+    const png = encodePng({
+      width: 8,
+      height: 8,
+      channels: 1,
+      data,
+      alpha: canonicalAlpha,
+    });
+    return {
+      format: "png",
+      base64: bytesToBase64(png),
+      widthPx: 8,
+      heightPx: 8,
+      original: {
+        filter: "jbig2",
+        base64: bytesToBase64(ORIGINAL_STREAM),
+        ...overrides,
+      },
+    };
+  }
+
+  it("re-emits a source soft mask as a generated /SMask beside the verbatim stream", () => {
+    const doc = docWithImage(
+      passthroughAsset(undefined, new Uint8Array(64).fill(128)),
+    );
+    const text = new TextDecoder("latin1").decode(writePdf(doc));
+    expect(text).toContain("/Filter /JBIG2Decode");
+    // Image 4, its generated /SMask 5: the reference points at a genuinely separate object.
+    expect(text).toContain("/SMask 5 0 R");
+  });
+
+  it("re-emits captured /JBIG2Globals as their own stream and points /DecodeParms at them", () => {
+    const globals = new Uint8Array([0x51, 0x52, 0x53, 0x54]);
+    const doc = docWithImage(
+      passthroughAsset({ jbig2GlobalsBase64: bytesToBase64(globals) }),
+    );
+    const objectTextOf = (pdfText: string, num: number): string => {
+      const start = pdfText.indexOf(`${String(num)} 0 obj`);
+      const end = pdfText.indexOf("endobj", start);
+      if (start < 0 || end < 0) {
+        throw new Error(`object ${String(num)} not found in the written PDF`);
+      }
+      return pdfText.slice(start, end);
+    };
+    const compressed = new TextDecoder("latin1").decode(writePdf(doc));
+    expect(compressed).toContain("/JBIG2Globals 5 0 R");
+    expect(compressed).toMatch(/\/DecodeParms <</);
+    // Under compression the globals stream itself is Flate-wrapped, exactly as any producer
+    // writes it — asserted on the globals object's own dictionary, not anywhere in the file.
+    expect(objectTextOf(compressed, 5)).toContain("/Filter /FlateDecode");
+    const uncompressed = new TextDecoder("latin1").decode(
+      writePdf(doc, { compress: false }),
+    );
+    // Uncompressed, the same stream carries no filter and the globals bytes appear verbatim.
+    expect(uncompressed).toContain("/JBIG2Globals 5 0 R");
+    expect(objectTextOf(uncompressed, 5)).not.toContain("/Filter");
+    expect(objectTextOf(uncompressed, 5)).not.toContain("/JBIG2Globals");
   });
 });
