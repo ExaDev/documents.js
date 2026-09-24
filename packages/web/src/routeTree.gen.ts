@@ -11,9 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DocumentRouteImport } from './routes/_document'
-import { Route as EditorsRouteImport } from './routes/editors'
 import { Route as RecentRouteImport } from './routes/recent'
 import { Route as DocumentConvertRouteImport } from './routes/_document.convert'
+import { Route as DocumentEditorsRouteImport } from './routes/_document.editors'
 import { Route as DocumentFontsRouteImport } from './routes/_document.fonts'
 import { Route as DocumentInspectRouteImport } from './routes/_document.inspect'
 import { Route as DocumentMetadataRouteImport } from './routes/_document.metadata'
@@ -32,11 +32,6 @@ const DocumentRoute = DocumentRouteImport.update({
   id: '/_document',
   getParentRoute: () => rootRouteImport,
 } as any)
-const EditorsRoute = EditorsRouteImport.update({
-  id: '/editors',
-  path: '/editors',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const RecentRoute = RecentRouteImport.update({
   id: '/recent',
   path: '/recent',
@@ -45,6 +40,11 @@ const RecentRoute = RecentRouteImport.update({
 const DocumentConvertRoute = DocumentConvertRouteImport.update({
   id: '/convert',
   path: '/convert',
+  getParentRoute: () => DocumentRoute,
+} as any)
+const DocumentEditorsRoute = DocumentEditorsRouteImport.update({
+  id: '/editors',
+  path: '/editors',
   getParentRoute: () => DocumentRoute,
 } as any)
 const DocumentFontsRoute = DocumentFontsRouteImport.update({
@@ -91,9 +91,9 @@ const DocumentConvertSourceTargetRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/editors': typeof EditorsRoute
   '/recent': typeof RecentRoute
   '/convert': typeof DocumentConvertRouteWithChildren
+  '/editors': typeof DocumentEditorsRoute
   '/fonts': typeof DocumentFontsRoute
   '/inspect': typeof DocumentInspectRoute
   '/metadata': typeof DocumentMetadataRoute
@@ -105,8 +105,8 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/editors': typeof EditorsRoute
   '/recent': typeof RecentRoute
+  '/editors': typeof DocumentEditorsRoute
   '/fonts': typeof DocumentFontsRoute
   '/inspect': typeof DocumentInspectRoute
   '/metadata': typeof DocumentMetadataRoute
@@ -120,9 +120,9 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_document': typeof DocumentRouteWithChildren
-  '/editors': typeof EditorsRoute
   '/recent': typeof RecentRoute
   '/_document/convert': typeof DocumentConvertRouteWithChildren
+  '/_document/editors': typeof DocumentEditorsRoute
   '/_document/fonts': typeof DocumentFontsRoute
   '/_document/inspect': typeof DocumentInspectRoute
   '/_document/metadata': typeof DocumentMetadataRoute
@@ -136,9 +136,9 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/editors'
     | '/recent'
     | '/convert'
+    | '/editors'
     | '/fonts'
     | '/inspect'
     | '/metadata'
@@ -150,8 +150,8 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/editors'
     | '/recent'
+    | '/editors'
     | '/fonts'
     | '/inspect'
     | '/metadata'
@@ -164,9 +164,9 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_document'
-    | '/editors'
     | '/recent'
     | '/_document/convert'
+    | '/_document/editors'
     | '/_document/fonts'
     | '/_document/inspect'
     | '/_document/metadata'
@@ -180,7 +180,6 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DocumentRoute: typeof DocumentRouteWithChildren
-  EditorsRoute: typeof EditorsRoute
   RecentRoute: typeof RecentRoute
 }
 
@@ -200,13 +199,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DocumentRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/editors': {
-      id: '/editors'
-      path: '/editors'
-      fullPath: '/editors'
-      preLoaderRoute: typeof EditorsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/recent': {
       id: '/recent'
       path: '/recent'
@@ -219,6 +211,13 @@ declare module '@tanstack/react-router' {
       path: '/convert'
       fullPath: '/convert'
       preLoaderRoute: typeof DocumentConvertRouteImport
+      parentRoute: typeof DocumentRoute
+    }
+    '/_document/editors': {
+      id: '/_document/editors'
+      path: '/editors'
+      fullPath: '/editors'
+      preLoaderRoute: typeof DocumentEditorsRouteImport
       parentRoute: typeof DocumentRoute
     }
     '/_document/fonts': {
@@ -296,6 +295,7 @@ const DocumentConvertRouteWithChildren = DocumentConvertRoute._addFileChildren(
 
 interface DocumentRouteChildren {
   DocumentConvertRoute: typeof DocumentConvertRouteWithChildren
+  DocumentEditorsRoute: typeof DocumentEditorsRoute
   DocumentFontsRoute: typeof DocumentFontsRoute
   DocumentInspectRoute: typeof DocumentInspectRoute
   DocumentMetadataRoute: typeof DocumentMetadataRoute
@@ -306,6 +306,7 @@ interface DocumentRouteChildren {
 
 const DocumentRouteChildren: DocumentRouteChildren = {
   DocumentConvertRoute: DocumentConvertRouteWithChildren,
+  DocumentEditorsRoute: DocumentEditorsRoute,
   DocumentFontsRoute: DocumentFontsRoute,
   DocumentInspectRoute: DocumentInspectRoute,
   DocumentMetadataRoute: DocumentMetadataRoute,
@@ -321,7 +322,6 @@ const DocumentRouteWithChildren = DocumentRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DocumentRoute: DocumentRouteWithChildren,
-  EditorsRoute: EditorsRoute,
   RecentRoute: RecentRoute,
 }
 export const routeTree = rootRouteImport

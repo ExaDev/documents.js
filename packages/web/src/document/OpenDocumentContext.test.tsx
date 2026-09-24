@@ -2,7 +2,6 @@ import { act, useEffect } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { mountWithMantine } from "../test/mountComponent";
-import { setPendingReopen } from "../ui/reopenMailbox";
 import { OpenDocumentProvider, useOpenDocument } from "./OpenDocumentContext";
 
 function openedFile(name: string) {
@@ -93,21 +92,10 @@ describe("useOpenDocument", () => {
     mounted.unmount();
   });
 
-  it("seeds the initial document from a pending Recent Files reopen", () => {
-    setPendingReopen({ file: openedFile("reopened.docx"), format: "docx" });
+  it("numbers the very first open as 1, the sequence a panel keys its remount off", () => {
     const mounted = mountProbe();
-    expect(latestValue?.document?.file.name).toBe("reopened.docx");
-    expect(latestValue?.document?.format).toBe("docx");
+    open("first.docx");
+    expect(latestValue?.document?.id).toBe(1);
     mounted.unmount();
-  });
-
-  it("does not re-read the reopen mailbox on a later provider mount once it has been drained", () => {
-    setPendingReopen({ file: openedFile("reopened.docx"), format: "docx" });
-    const first = mountProbe();
-    first.unmount();
-
-    const second = mountProbe();
-    expect(latestValue?.document).toBeUndefined();
-    second.unmount();
   });
 });
