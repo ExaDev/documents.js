@@ -109,7 +109,7 @@ function rels(
     entries.map((e) =>
       el(
         "Relationship",
-        e.external
+        e.external === true
           ? { Id: e.id, Type: e.type, Target: e.target, TargetMode: "External" }
           : { Id: e.id, Type: e.type, Target: e.target },
       ),
@@ -1755,7 +1755,7 @@ describe("readPptxContent: internal slide-jump links (a:hlinkClick to a slide)",
       {
         id: "rIdEdge",
         type: rel.type,
-        target: rel.external ? "slide99.xml" : "slide2.xml",
+        target: rel.external === true ? "slide99.xml" : "slide2.xml",
         external: rel.external,
       },
     ]);

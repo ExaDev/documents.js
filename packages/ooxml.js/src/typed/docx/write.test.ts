@@ -17,7 +17,10 @@ import { attr, childrenWithTag, elementsWithTag, rootElement } from "../util";
 import { ptToEmu } from "../shared/units";
 import type { DocxDocument } from "./read";
 import { readDocxContent } from "./read";
-import { buildDocxPackageFromContent } from "./write";
+import {
+  assertNeverRasterImageFormat,
+  buildDocxPackageFromContent,
+} from "./write";
 import { DocxWriteDiagnosticCodes } from "./diagnostics";
 import type { DocxWriteDiagnostic } from "./diagnostics";
 
@@ -6374,7 +6377,11 @@ describe("buildDocxPackageFromContent: a table column's own isHeader has no w:tb
           { ...emptyBodySection(), blocks: [tableWithHeaderColumn()] },
         ],
       },
-      { onDiagnostic: (diagnostic) => diagnostics.push(diagnostic) },
+      {
+        onDiagnostic: (diagnostic) => {
+          diagnostics.push(diagnostic);
+        },
+      },
     );
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0]).toEqual({
@@ -6396,7 +6403,11 @@ describe("buildDocxPackageFromContent: a table column's own isHeader has no w:tb
           },
         ],
       },
-      { onDiagnostic: (_diagnostic, context) => contexts.push(context) },
+      {
+        onDiagnostic: (_diagnostic, context) => {
+          contexts.push(context);
+        },
+      },
     );
     expect(contexts).toEqual([{ sourcePath: "body/table[0]" }]);
   });
@@ -6440,7 +6451,11 @@ describe("buildDocxPackageFromContent: a table column's own isHeader has no w:tb
           },
         ],
       },
-      { onDiagnostic: (diagnostic) => diagnostics.push(diagnostic) },
+      {
+        onDiagnostic: (diagnostic) => {
+          diagnostics.push(diagnostic);
+        },
+      },
     );
     expect(diagnostics.map((d) => d.message)).toEqual([
       expect.stringContaining("table column 0 is a header column"),
@@ -6465,8 +6480,27 @@ describe("buildDocxPackageFromContent: a table column's own isHeader has no w:tb
           },
         ],
       },
-      { onDiagnostic: (diagnostic) => diagnostics.push(diagnostic) },
+      {
+        onDiagnostic: (diagnostic) => {
+          diagnostics.push(diagnostic);
+        },
+      },
     );
     expect(diagnostics).toEqual([]);
+  });
+});
+
+describe("assertNeverRasterImageFormat", () => {
+  it("throws naming the unhandled format, proving mediaExtension's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverRasterImageFormat("bogus" as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'mediaExtension: unhandled image format "bogus"',
+    );
   });
 });
