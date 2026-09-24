@@ -11,6 +11,11 @@ export function serializePackage(pkg: Package): Uint8Array<ArrayBuffer> {
   return zipPackage(entries);
 }
 
+// Reached only if Part ever gains a variant partToBytes's own switch does not match: every current member is covered there, so `value` narrows to `never` at the real call site, and adding an uncovered kind makes that narrowing fail and this call stop compiling. That is the real safety net. Exported so write.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real Part kind is already handled by a case in partToBytes.
+export function assertNeverPartKind(value: never): never {
+  throw new Error(`partToBytes: unhandled Part kind ${JSON.stringify(value)}`);
+}
+
 function partToBytes(part: Part): Uint8Array<ArrayBuffer> {
   switch (part.kind) {
     case "xml":
@@ -18,4 +23,5 @@ function partToBytes(part: Part): Uint8Array<ArrayBuffer> {
     case "binary":
       return base64ToBytes(part.base64);
   }
+  return assertNeverPartKind(part);
 }
