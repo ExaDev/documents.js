@@ -110,10 +110,13 @@ function textToPdfString(text: string): PdfObject {
   const bytes = new Uint8Array(2 + text.length * 2);
   bytes[0] = 0xfe;
   bytes[1] = 0xff;
-  for (let i = 0; i < text.length; i++) {
-    const code = text.charCodeAt(i);
-    bytes[2 + i * 2] = (code >> 8) & 0xff;
-    bytes[2 + i * 2 + 1] = code & 0xff;
+  // split("") yields one single-code-unit string per element — the UTF-16 code units themselves, surrogate halves included, which is what the pair-at-a-time re-encoding below consumes. The write position is driven by its own running offset rather than by an index bounded on text.length because the target array is sized to exactly that length: an off-by-one past its end writes into the void, where no assertion could ever see it.
+  let offset = 2;
+  for (const unit of text.split("")) {
+    const code = unit.charCodeAt(0);
+    bytes[offset] = (code >> 8) & 0xff;
+    bytes[offset + 1] = code & 0xff;
+    offset += 2;
   }
   return pdfHexString(bytes);
 }
@@ -221,6 +224,15 @@ function buildFontObjects(
   return { font, descriptor };
 }
 
+// Every Unicode code point the given texts carry, as a set — the subsetting input that must include even a character whose shaped glyph never appears (a ligature consumes its components' glyphs, so shaping alone under-covers the cmap).
+function codePointsOf(texts: readonly string[]): Set<number> {
+  return new Set(
+    texts.flatMap((text) =>
+      [...text].map((character) => character.codePointAt(0)!),
+    ),
+  );
+}
+
 interface PreparedImage {
   readonly dict: PdfDict; // /SMask, if any, is added in place once the SMask object number is known
   readonly raw: Uint8Array<ArrayBuffer>;
@@ -281,6 +293,8 @@ function pngImageDict(
 }
 
 // A bilevel (every sample 0 or 255) 8-bit grayscale decode re-packed to the 1-bit-per-pixel layout the CCITT encoder consumes: 255 -> 1 (white), 0 -> 0 (black), MSB first, rows padded to whole bytes. Undefined when any sample is intermediate — a genuinely greyscale image has no G4 spelling and stays on the Flate path.
+//
+// Driven by the sample array's own length rather than by width/height bounds: decodePng always returns exactly width*height samples, so an index past the array's end reads undefined, which the bilevel test below rejects — an off-by-one past the bound is visible as "not bilevel" instead of silently reading a phantom black pixel the packed array's own fixed size would then have dropped.
 function packBilevel(raw: {
   readonly width: number;
   readonly height: number;
@@ -288,16 +302,18 @@ function packBilevel(raw: {
 }): Uint8Array | undefined {
   const rowBytes = (raw.width + 7) >> 3;
   const packed = new Uint8Array(rowBytes * raw.height);
-  for (let y = 0; y < raw.height; y++) {
-    for (let x = 0; x < raw.width; x++) {
-      const sample = raw.data[y * raw.width + x] ?? 0;
-      if (sample !== 0 && sample !== 255) {
-        return undefined;
-      }
-      if (sample === 255) {
-        const index = y * rowBytes + (x >> 3);
-        packed[index] = (packed[index] ?? 0) | (0x80 >> (x & 7));
-      }
+  // Accumulated through a DataView so a byte already holding earlier bits is read back as a
+  // plain number, never as the undefined an out-of-range typed-array read reports.
+  const view = new DataView(packed.buffer);
+  for (let index = 0; index < raw.data.length; index++) {
+    const sample = raw.data[index];
+    if (sample !== 0 && sample !== 255) {
+      return undefined;
+    }
+    if (sample === 255) {
+      const x = index % raw.width;
+      const byteIndex = Math.floor(index / raw.width) * rowBytes + (x >> 3);
+      view.setUint8(byteIndex, view.getUint8(byteIndex) | (0x80 >> (x & 7)));
     }
   }
   return packed;
@@ -370,13 +386,9 @@ function preparePngImage(
 // Verbatim re-embedding of a no-encoder filter's original stream (JBIG2, JPEG 2000): the asset's own decoded canonical never reaches the file at all — these bytes are the compressed stream as the source carried it, re-emitted under the same filter, so a pdf-to-pdf round trip pays zero generation loss for exactly the two filters this package cannot re-encode. Width/Height still come from the asset (a viewer needs them whatever the stream says). A JBIG2 image is 1-bit /DeviceGray by construction (T.88's bitmap inverted into PDF's 0-is-black convention at decode), stated explicitly; a JPEG 2000 stream's component count and sample depth are the codestream's own to state (ISO 32000-1 7.4.9: /BitsPerComponent "shall not be present", /ColorSpace optional), so neither is written. /DecodeParms with the /JBIG2Globals reference is added in place at emission, once the globals stream's own object number is known — the identical late-binding the SMask reference already uses. A source soft mask still re-emits: the decoded canonical's alpha is extracted through the ordinary PNG prepare path and rides along as a generated /SMask, since the original compressed stream does not encode it.
 function preparePassthroughImage(
   asset: LayoutImageAsset,
+  original: NonNullable<LayoutImageAsset["original"]>,
   compress: boolean,
 ): PreparedImage {
-  if (asset.original === undefined) {
-    throw new Error(
-      "preparePassthroughImage: asset carries no original stream",
-    );
-  }
   const png = preparePngImage(base64ToBytes(asset.base64), compress);
   const entries = new Map<string, PdfObject>([
     ["Type", pdfName("XObject")],
@@ -385,17 +397,20 @@ function preparePassthroughImage(
     ["Height", pdfNum(asset.heightPx)],
     [
       "Filter",
-      pdfName(asset.original.filter === "jbig2" ? "JBIG2Decode" : "JPXDecode"),
+      pdfName(original.filter === "jbig2" ? "JBIG2Decode" : "JPXDecode"),
     ],
   ]);
-  if (asset.original.filter === "jbig2") {
+  if (original.filter === "jbig2") {
     entries.set("ColorSpace", pdfName("DeviceGray"));
     entries.set("BitsPerComponent", pdfNum(1));
   }
   return {
     dict: pdfDict(entries),
-    raw: base64ToBytes(asset.original.base64),
-    ...(png.alpha !== undefined ? { alpha: png.alpha } : {}),
+    raw: base64ToBytes(original.base64),
+    // Stated directly rather than conditionally spread: an undefined alpha is exactly what every
+    // consumer already tests for (`prepared.alpha === undefined`), so an absent property and an
+    // explicitly-undefined one mean the same thing here.
+    alpha: png.alpha,
   };
 }
 
@@ -404,7 +419,7 @@ function prepareImage(
   compress: boolean,
 ): PreparedImage {
   if (asset.original !== undefined) {
-    return preparePassthroughImage(asset, compress);
+    return preparePassthroughImage(asset, asset.original, compress);
   }
   const bytes = base64ToBytes(asset.base64);
   return asset.format === "jpeg"
@@ -553,12 +568,9 @@ function xrefEntry(offset: number, generation: number, inUse: boolean): string {
 
 // #967 residue parse-back: the inverse of serializeObjectToText the read side's readDocumentResidue used to quarantine each row. One object from the row's text through the ordinary lexer/parser; a row that does not parse at all restores as nothing (skip, never throw — residue is opacity, not data this writer depends on).
 function parseResidueRow(residue: SourceResidue): PdfObject | undefined {
+  // Parse diagnostics here describe the SOURCE producer's serialisation, not this writer's output — nothing downstream can act on them, so the sink drops them on the floor.
   const reader = new ByteReader(new TextEncoder().encode(residue.xml));
-  const ignored: unknown[] = [];
-  return parseValue(reader, () => {
-    // Parse diagnostics here describe the SOURCE producer's serialisation, not this writer's output — nothing downstream can act on them, so they are collected and dropped rather than surfaced.
-    void ignored;
-  });
+  return parseValue(reader, () => undefined);
 }
 
 // True when the parsed object names an indirect object anywhere inside — the marker that the row is tied to the source file's own object graph and cannot be restorable in this one.
@@ -614,24 +626,15 @@ export function writePdf(
   const fontNames = new Set<StandardFontName>();
   const imageIds = new Set<string>();
   // Keyed by the EmbeddedFace object itself rather than by family name: a FontRegistry memoises one face per (family, bold, italic), so two LayoutFonts that resolve to the same real font program (Calibri and Calibri Light both substituting to Carlito Regular, say) arrive here as the identical object and correctly share one embedded font group, while two genuinely different programs never collide however similarly they are named.
-  const embeddedUses = new Map<
-    EmbeddedFace,
-    { readonly texts: string[]; readonly codePoints: Set<number> }
-  >();
+  const embeddedUses = new Map<EmbeddedFace, string[]>();
   for (const page of doc.pages) {
     for (const item of page.items) {
       if (item.kind === "text") {
         const resolved = resolveFaceWithRegistry(registry, item.font);
         if (resolved.kind === "embedded") {
-          const use = embeddedUses.get(resolved.face) ?? {
-            texts: [],
-            codePoints: new Set<number>(),
-          };
-          use.texts.push(item.text);
-          for (const character of item.text) {
-            use.codePoints.add(character.codePointAt(0)!);
-          }
-          embeddedUses.set(resolved.face, use);
+          const texts = embeddedUses.get(resolved.face) ?? [];
+          texts.push(item.text);
+          embeddedUses.set(resolved.face, texts);
         } else {
           fontNames.add(resolved.standardName);
         }
@@ -725,7 +728,7 @@ export function writePdf(
         ? 1
         : 0,
   );
-  for (const [index, [face, use]] of sortedEmbeddedUses.entries()) {
+  for (const [index, [face, texts]] of sortedEmbeddedUses.entries()) {
     embeddedAllocs.set(face, {
       type0Num: nextObjNum++,
       cidFontNum: nextObjNum++,
@@ -733,8 +736,8 @@ export function writePdf(
       fontFileNum: nextObjNum++,
       toUnicodeNum: nextObjNum++,
       resourceName: `${EMBEDDED_FONT_RESOURCE_PREFIX}${index + 1}`,
-      texts: use.texts,
-      codePoints: use.codePoints,
+      texts,
+      codePoints: codePointsOf(texts),
     });
   }
 
@@ -758,17 +761,15 @@ export function writePdf(
   const outlineRootNum =
     (doc.outline ?? []).length > 0 ? nextObjNum++ : undefined;
   const outlineItemNums: number[] = [];
-  if (outlineRootNum !== undefined) {
-    const countItems = (items: readonly LayoutOutlineItem[]): number => {
-      let n = 0;
-      for (const item of items) {
-        n += 1 + countItems(item.children);
-      }
-      return n;
-    };
-    for (let i = 0; i < countItems(doc.outline ?? []); i += 1) {
-      outlineItemNums.push(nextObjNum++);
+  const countItems = (items: readonly LayoutOutlineItem[]): number => {
+    let n = 0;
+    for (const item of items) {
+      n += 1 + countItems(item.children);
     }
+    return n;
+  };
+  for (let i = 0; i < countItems(doc.outline ?? []); i += 1) {
+    outlineItemNums.push(nextObjNum++);
   }
 
   // #967: optional-content layers. One OCG object per layer, in doc.layers order, so the /OCProperties lists stay stable under the fixed-order determinism rule.
@@ -820,21 +821,21 @@ export function writePdf(
     return num;
   };
 
-  // #967: the tagged structure tree. One object per element plus one for the /ParentTree number tree; element ids map to their object numbers in the same document-order walk that emits them.
+  // #967: the tagged structure tree. One object per element plus one for the /ParentTree number tree; element ids map to their object numbers in the same document-order walk that emits them. The walk both allocates and registers, so whether any element exists is simply whether the register is non-empty — no separate count to keep in agreement with it.
   const structElementNumById = new Map<string, number>();
-  const countElements = (
+  const allocateStructureElements = (
     elements: readonly LayoutStructureElement[],
-  ): number => {
-    let n = 0;
+  ): void => {
     for (const element of elements) {
       structElementNumById.set(element.id, nextObjNum++);
-      n += 1 + countElements(element.children);
+      allocateStructureElements(element.children);
     }
-    return n;
   };
-  const structElementCount = countElements(doc.structure ?? []);
-  const structRootNum = structElementCount > 0 ? nextObjNum++ : undefined;
-  const structParentTreeNum = structElementCount > 0 ? nextObjNum++ : undefined;
+  allocateStructureElements(doc.structure ?? []);
+  const structRootNum =
+    structElementNumById.size > 0 ? nextObjNum++ : undefined;
+  const structParentTreeNum =
+    structElementNumById.size > 0 ? nextObjNum++ : undefined;
 
   // #967: package-level residue. The XMP packet is the one row needing an object of its own (a /Metadata stream); every other restored row lands inline on the Catalog or the trailer, so no allocation.
   const residueXmpNum =
@@ -965,7 +966,8 @@ export function writePdf(
     });
   }
 
-  if (outlineRootNum !== undefined && (doc.outline ?? []).length > 0) {
+  // outlineRootNum is allocated only for a non-empty outline, so it is the whole condition here: restating the emptiness check would duplicate the allocation-side guard.
+  if (outlineRootNum !== undefined) {
     // One shared pre-order cursor across the whole walk: allocation reserved every item's number by pre-order count, so emission must consume them in exactly that order — a per-level cursor would hand children numbers already used by earlier siblings.
     let itemCursor = 0;
     const emitItems = (
@@ -1084,13 +1086,16 @@ export function writePdf(
   };
   const emitFormFieldObjects = (
     fields: readonly LayoutFormField[],
-    parentName: string,
+    parentName: string | undefined,
   ): void => {
     for (const field of fields) {
+      // A root-level field carries its whole name (parentName undefined, no decomposition attempted at all); a nested field carries the segment beyond its parent's — or its whole name when the fully-qualified name does not extend the parent's, which is the model's own escape hatch for a child named independently of its parent.
       const ownName =
-        parentName.length > 0 && field.name.startsWith(`${parentName}.`)
-          ? field.name.slice(parentName.length + 1)
-          : field.name;
+        parentName === undefined
+          ? field.name
+          : field.name.startsWith(`${parentName}.`)
+            ? field.name.slice(parentName.length + 1)
+            : field.name;
       const entries: [string, PdfObject][] = [];
       if (ownName.length > 0) {
         entries.push([
@@ -1138,14 +1143,10 @@ export function writePdf(
           field.fieldType === "checkbox" ||
           field.fieldType === "radio"
         ) {
-          // The button family's checked state is a NAME export value: any name other than Off reads back as checked, so /Yes is the canonical spelling for a checked field the model left value-less and /Off the unchecked one.
+          // The button family's checked state is a NAME export value: any name other than Off reads back as checked, so a value the model did carry is exported as itself and a value-less field falls back to Yes/Off from its own checked state.
           entries.push([
             "V",
-            pdfName(
-              field.checked === false || field.value === undefined
-                ? (field.value ?? (field.checked === true ? "Yes" : "Off"))
-                : field.value,
-            ),
+            pdfName(field.value ?? (field.checked === true ? "Yes" : "Off")),
           ]);
         }
         if (field.options !== undefined) {
@@ -1168,7 +1169,7 @@ export function writePdf(
           ]);
           // The merged field dict is the annotation: its page /Annots entry references this very object, not a copy of it.
           noteWidgetAnnot(firstWidget, pdfRef(formNumOf(field), 0));
-        } else if (field.widgets.length > 1 && firstWidget !== undefined) {
+        } else if (formExtraWidgetNums.has(field)) {
           // Every widget is one of the extra objects the allocation walk reserved, referenced from /Kids and from its page's /Annots alike — the same annotation object in both places, never a copy.
           const extraNums = formExtraWidgetNums.get(field) ?? [];
           entries.push([
@@ -1197,10 +1198,10 @@ export function writePdf(
       emitFormFieldObjects(field.children, field.name);
     }
   };
-  emitFormFieldObjects(doc.form ?? [], "");
+  emitFormFieldObjects(doc.form ?? [], undefined);
 
   // #967: the tagged structure tree. One /StructElem per model element (/S the type, /P the parent — the root for top-level elements, /K the child refs), and the /StructTreeRoot pointing at both the element roots and the /ParentTree number tree built after the page walk below (it depends on the per-page MCID assignments).
-  if (structRootNum !== undefined && structParentTreeNum !== undefined) {
+  if (structRootNum !== undefined) {
     const emitStructureElement = (
       element: LayoutStructureElement,
       parentNum: number,
@@ -1354,11 +1355,13 @@ export function writePdf(
   for (const [face, alloc] of embeddedAllocs) {
     // The shaped glyph map is computed before the subset because its keys are the subset's own extra input: a 'GSUB' ligature glyph is reachable through no single code point's 'cmap' entry, so handing only the text's code points to the subsetter would drop exactly the ligature outlines the content stream is about to draw.
     const usedGlyphs = collectEmbeddedGlyphs(alloc.texts, face);
-    // Ascending on both axes so the same document always subsets against the same input order, matching the sorted-for-determinism reasoning every other allocation here follows.
+    // Neither list needs sorting on the way in: subsetSfnt reduces both to one glyph set and
+    // sorts that itself, so the subset (and its CRC32 tag) is the same whatever order the
+    // document happened to encounter its text in.
     const subset = subsetSfnt(
       face.font,
-      [...alloc.codePoints].sort((a, b) => a - b),
-      [...usedGlyphs.keys()].sort((a, b) => a - b),
+      [...alloc.codePoints],
+      [...usedGlyphs.keys()],
     );
     if (subset === undefined) {
       // Loud rather than a silent fall-back to a standard-14 substitute: the caller's own registry chose this face, and quietly drawing the document in a different font than it asked for — with metrics already laid out against this one — would be a worse outcome than a failure naming exactly which face could not be embedded. subsetSfnt returns undefined only for a font it cannot rebuild correctly (a CFF-outline face with no 'glyf' at all, or a missing/truncated table it must reconstruct); see its own module comment.
@@ -1497,6 +1500,7 @@ export function writePdf(
       markedStructure,
     } = writeContentStream(page.items, pageContext);
     if (markedStructure.length > 0) {
+      // Registered only when non-empty, so a page's presence in the register below means it genuinely has marked items.
       markedStructureByPage.set(pageIndex, [...markedStructure]);
     }
     for (const substitution of substitutions) {
@@ -1557,7 +1561,7 @@ export function writePdf(
     if (annots.length > 0) {
       pageEntries.set("Annots", pdfArray(annots));
     }
-    if ((markedStructureByPage.get(pageIndex) ?? []).length > 0) {
+    if (markedStructureByPage.has(pageIndex)) {
       // The producer-chosen key this page's parent-tree entry is filed under (14.7.4.4); the page's own position is the natural deterministic choice for a writer minting the tree itself.
       pageEntries.set("StructParents", pdfNum(pageIndex));
     }
@@ -1568,16 +1572,19 @@ export function writePdf(
   if (structRootNum !== undefined && structParentTreeNum !== undefined) {
     const nums: PdfObject[] = [];
     for (const [pageIndex, marks] of markedStructureByPage) {
+      // Each slot 0..maxMcid derives its own value — an owning element's reference, or null for an MCID no element claims — so the array's length is exactly maxMcid+1 by construction rather than by a post-hoc fill that a shorter allocation would silently repair.
       const maxMcid = Math.max(...marks.map((mark) => mark.mcid));
-      const byMcid: PdfObject[] = Array.from({ length: maxMcid + 1 }, () =>
-        pdfNull(),
+      const byMcid: PdfObject[] = Array.from(
+        { length: maxMcid + 1 },
+        (_, mcid) => {
+          const mark = marks.find((candidate) => candidate.mcid === mcid);
+          const elementNum =
+            mark === undefined
+              ? undefined
+              : structElementNumById.get(mark.structureId);
+          return elementNum === undefined ? pdfNull() : pdfRef(elementNum, 0);
+        },
       );
-      for (const mark of marks) {
-        const elementNum = structElementNumById.get(mark.structureId);
-        if (elementNum !== undefined) {
-          byMcid[mark.mcid] = pdfRef(elementNum, 0);
-        }
-      }
       nums.push(pdfNum(pageIndex), pdfArray(byMcid));
     }
     objects.push({
