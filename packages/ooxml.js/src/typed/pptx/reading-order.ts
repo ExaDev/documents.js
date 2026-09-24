@@ -24,7 +24,9 @@ export function assignReadingOrder(
   shapes: readonly ContentShape[],
 ): ContentShape[] {
   const ranked = new Map<ContentShape, number>();
-  cut([...shapes]).forEach((shape, rank) => ranked.set(shape, rank));
+  cut([...shapes]).forEach((shape, rank) => {
+    ranked.set(shape, rank);
+  });
   return shapes.map((shape) => ({
     ...shape,
     readingOrder: ranked.get(shape) ?? 0,

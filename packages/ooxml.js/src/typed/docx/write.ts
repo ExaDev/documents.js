@@ -254,6 +254,13 @@ function hyperlinkRelationshipId(state: WriteState, uri: string): string {
 }
 
 // WordprocessingML's a:blip references a relationship whose target is a raster part Word decodes directly — PNG, JPEG, and GIF are all in that directly-decodable set. SVG is not: rendering one needs the modern a:svgBlip extension (an a:extLst entry pointing at the SVG part, alongside a required raster fallback a plain a:blip can fall back to for older Word), which this writer does not build — writing a bare a:blip pointed at an SVG part would produce a docx no version of Word can actually render, worse than refusing it outright.
+// Reached only if this raster-only format union ever gains a member mediaExtension's own switch does not match: every current member is covered there, so `value` narrows to `never` at the real call site, and adding an uncovered format makes that narrowing fail and this call stop compiling. That is the real safety net. Exported so write.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real member is already handled by a case in mediaExtension.
+export function assertNeverRasterImageFormat(value: never): never {
+  throw new Error(
+    `mediaExtension: unhandled image format ${JSON.stringify(value)}`,
+  );
+}
+
 function mediaExtension(format: "png" | "jpeg" | "gif"): string {
   switch (format) {
     case "png":
@@ -263,6 +270,7 @@ function mediaExtension(format: "png" | "jpeg" | "gif"): string {
     case "gif":
       return "gif";
   }
+  return assertNeverRasterImageFormat(format);
 }
 
 function imageRelationshipId(
@@ -396,6 +404,9 @@ const JUSTIFICATION_BY_ALIGNMENT: Readonly<Record<Alignment, string>> = {
   justify: "both",
 };
 
+// w:spacing/@w:line's own 240ths-of-a-line unit, the write-side counterpart of shared/units.ts's lineUnitsToMultiplier — kept local rather than exported from there because nothing else writes it.
+const LINE_UNITS_PER_LINE = 240;
+
 // CT_PPr's own child sequence, which Word enforces: pStyle, pageBreakBefore, numPr, bidi, spacing, ind, jc, outlineLvl. An indentFirstLinePt is w:firstLine when positive and w:hanging (the signed inverse) when negative, matching the convention readParagraphPropertiesLayer reads it back through.
 function buildParagraphProperties(
   paragraph: ContentParagraph,
@@ -468,10 +479,18 @@ function buildParagraphProperties(
   return children.length === 0 ? undefined : el("w:pPr", {}, children);
 }
 
-// w:spacing/@w:line's own 240ths-of-a-line unit, the write-side counterpart of shared/units.ts's lineUnitsToMultiplier — kept local rather than exported from there because nothing else writes it.
-const LINE_UNITS_PER_LINE = 240;
-
 // A tracked change carrying a whole paragraph still has to mark the paragraph's own mark as changed (w:pPr/w:rPr/w:ins and kin), or Word shows the change as covering the text but not the paragraph break that ends it — CT_PPr puts that w:rPr after every property element and before w:sectPr, which is exactly where appending it lands. The change element itself wraps the paragraph's RUNS, never the w:p: CT_RunTrackChange (reached through EG_RunLevelElts) has no w:p in its content model, so a change wrapping whole paragraphs is not valid WordprocessingML even though the reader tolerates it as input. A paragraph carrying no runs at all still gets an empty change element (rather than none), since that empty element is exactly what marks the paragraph as wholly changed to a reader walking its content-bearing children.
+// Moved above buildParagraph, which is the first (and only earlier) reader: the four tracked-change elements that wrap a block flow. formatChange has no entry: w:pPrChange is a child of w:pPr recording one paragraph's superseded properties, not a wrapper over blocks, so a formatChange construct writes its content unwrapped rather than as an element that would not parse where it sits.
+const TRACKED_CHANGE_TAG_BY_CHANGE: Readonly<
+  Record<ProvenanceChange, string | undefined>
+> = {
+  insertion: "w:ins",
+  deletion: "w:del",
+  moveFrom: "w:moveFrom",
+  moveTo: "w:moveTo",
+  formatChange: undefined,
+};
+
 function buildParagraph(
   paragraph: ContentParagraph,
   state: WriteState,
@@ -518,7 +537,22 @@ const NOTE_REFERENCE_TAG: Readonly<
   endnote: "w:endnoteReference",
 };
 
-// The write side of a run-level construct extent (document-schema.js's ContentParagraph.constructs): a bookmark's two halves, a comment extent's commentRangeStart/End pair, and a field's fldChar characters go back between the runs their ranges name — the exact inverse of the reader's run-position walk, so each reads back at the positions it was written from. A comment/footnote/endnote reference mark is not a boundary marker at all: it mutates the run element already sitting at its own recorded index (handled above this function's own boundary-map loop, before the early-return guard, since a paragraph carrying only a reference mark and no bookmark/field/comment-extent must still get it). An internal link wraps its runs in one w:hyperlink/@w:anchor element (wrapInternalLinks below); everything else — a run-scoped content control — writes its paragraph's content untouched and loses only the descriptor, the same content-preserving policy the block-level foreign constructs follow. At a shared boundary the halves go out in three groups — closes of extents that opened earlier, then opens, then point extents (startRun === endRun) as one adjacent group each — a convention the reader is indifferent to (both halves land on the same run position either way) but one the written XML needs: WordprocessingML pairs the halves by w:id with start-before-end ordering, so a point's end emitted among the boundary's closes would precede its own start, and pairing point halves keeps two points at one position from interleaving by id, which is the shape Word itself writes for adjacent point bookmarks.
+// The run-element identities of an interleaved paragraph content list, keyed by their positions in the runs the paragraph carries — what wrapInternalLinks locates a link's slice by, since the markers and field characters interleaved between runs shift raw array indices. Moved above interleaveRunConstructExtents, which is the first (and only earlier) reader.
+class RunPositions {
+  private readonly indexOfElement = new Map<XmlElement, number>();
+
+  constructor(runElements: readonly XmlElement[]) {
+    runElements.forEach((element, index) => {
+      this.indexOfElement.set(element, index);
+    });
+  }
+
+  positionOf(element: XmlElement): number | undefined {
+    return this.indexOfElement.get(element);
+  }
+}
+
+// The write side of a run-level construct extent (document-schema.js's ContentParagraph.constructs): a bookmark's two halves, a comment extent's commentRangeStart/End pair, and a field's fldChar characters go back between the runs their ranges name, the exact inverse of the reader's run-position walk, so each reads back at the positions it was written from. A comment/footnote/endnote reference mark is not a boundary marker at all: it mutates the run element already sitting at its own recorded index (handled above this function's own boundary-map loop, before the early-return guard, since a paragraph carrying only a reference mark and no bookmark/field/comment-extent must still get it). An internal link wraps its runs in one w:hyperlink/@w:anchor element (wrapInternalLinks below); everything else, a run-scoped content control, writes its paragraph's content untouched and loses only the descriptor, the same content-preserving policy the block-level foreign constructs follow. At a shared boundary the halves go out in three groups, closes of extents that opened earlier, then opens, then point extents (startRun === endRun) as one adjacent group each, a convention the reader is indifferent to (both halves land on the same run position either way) but one the written XML needs: WordprocessingML pairs the halves by w:id with start-before-end ordering, so a point's end emitted among the boundary's closes would precede its own start, and pairing point halves keeps two points at one position from interleaving by id, which is the shape Word itself writes for adjacent point bookmarks.
 function interleaveRunConstructExtents(
   runElements: readonly XmlElement[],
   paragraph: ContentParagraph,
@@ -691,21 +725,6 @@ function interleaveRunConstructExtents(
   return wrapInternalLinks(out, positions, links);
 }
 
-// The run-element identities of an interleaved paragraph content list, keyed by their positions in the runs the paragraph carries — what wrapInternalLinks locates a link's slice by, since the markers and field characters interleaved between runs shift raw array indices.
-class RunPositions {
-  private readonly indexOfElement = new Map<XmlElement, number>();
-
-  constructor(runElements: readonly XmlElement[]) {
-    runElements.forEach((element, index) => {
-      this.indexOfElement.set(element, index);
-    });
-  }
-
-  positionOf(element: XmlElement): number | undefined {
-    return this.indexOfElement.get(element);
-  }
-}
-
 // One internal-target link extent, the only link shape with a run-level spelling here: an external target rides ContentRun.hyperlink on each covered run instead.
 interface InternalLinkExtent {
   readonly descriptor: LinkDescriptor;
@@ -793,6 +812,11 @@ function trailingEmptyRunElements(
 
 // --- tables -------------------------------------------------------------------------------------------------------
 
+// The four ContentStrokeStyle members' own ST_Border keywords. 'solid' writes as 'single', the plain one-line border readCellBorderEdge maps straight back to solid; the other three are their own keywords.
+const STROKE_STYLE_KEYWORD: Readonly<
+  Record<"solid" | "dashed" | "dotted" | "double", string>
+> = { solid: "single", dashed: "dashed", dotted: "dotted", double: "double" };
+
 function buildCellBorders(borders: ContentCellBorders): XmlElement {
   const edges: XmlElement[] = [];
   const edge = (tag: string, border: ContentCellBorders["top"]): void => {
@@ -815,11 +839,6 @@ function buildCellBorders(borders: ContentCellBorders): XmlElement {
   edge("w:right", borders.right);
   return el("w:tcBorders", {}, edges);
 }
-
-// The four ContentStrokeStyle members' own ST_Border keywords. 'solid' writes as 'single', the plain one-line border readCellBorderEdge maps straight back to solid; the other three are their own keywords.
-const STROKE_STYLE_KEYWORD: Readonly<
-  Record<"solid" | "dashed" | "dotted" | "double", string>
-> = { solid: "single", dashed: "dashed", dotted: "dotted", double: "double" };
 
 function buildCell(
   cell: ContentTableCell,
@@ -1090,17 +1109,6 @@ function buildObjectElement(
 }
 
 // --- construct markers ------------------------------------------------------------------------------------------------
-
-// The four tracked-change elements that wrap a block flow. formatChange has no entry: w:pPrChange is a child of w:pPr recording one paragraph's superseded properties, not a wrapper over blocks, so a formatChange construct writes its content unwrapped rather than as an element that would not parse where it sits.
-const TRACKED_CHANGE_TAG_BY_CHANGE: Readonly<
-  Record<ProvenanceChange, string | undefined>
-> = {
-  insertion: "w:ins",
-  deletion: "w:del",
-  moveFrom: "w:moveFrom",
-  moveTo: "w:moveTo",
-  formatChange: undefined,
-};
 
 // CT_TrackChange's own w:id and w:author are both required attributes (ECMA-376's schema, not merely convention); w:date is optional. ProvenanceDescriptor.author is optional — not every ContentDocument source records one — so an absent author falls back to this rather than the writer omitting a required attribute. Each call mints its own w:id, since every tracked-change element (a paragraph mark's rPr/w:ins and the run wrapper around its content alike) needs a unique one, not one id shared across a whole multi-paragraph extent.
 const UNKNOWN_PROVENANCE_AUTHOR = "Unknown";

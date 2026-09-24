@@ -1255,7 +1255,7 @@ function readTable(
         const matchIndex = rowColumnIndices[r]!.indexOf(colIndex);
         // Indexing with indexOf's -1 miss already yields undefined, so no ternary is needed — matchCell is RawCell | undefined either way.
         const matchCell = rawRows[r]![matchIndex];
-        if (!matchCell?.isVMergeContinuation) {
+        if (matchCell?.isVMergeContinuation !== true) {
           break;
         }
         rowSpan++;

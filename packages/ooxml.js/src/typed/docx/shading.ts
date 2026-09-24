@@ -64,14 +64,14 @@ const PATTERN_TYPE_TO_SHD_VAL: ReadonlyMap<ContentCellPatternType, string> =
     ]),
   );
 
-/** w:shd/@w:color and @w:fill share the identical "auto"/"none" spelling for no concrete colour that w:color/@w:val already uses on a run — both defer rather than asserting one. */
+/** `w:shd/@w:color` and `@w:fill` share the identical "auto"/"none" spelling for no concrete colour that `w:color/@w:val` already uses on a run — both defer rather than asserting one. */
 function shdColor(value: string | undefined): Color | undefined {
   return value === undefined || value === "auto" || value === "none"
     ? undefined
     : rgbHexToColor(value);
 }
 
-/** One <w:shd> element -> a ContentCellFill, or undefined where it states none. */
+/** One `<w:shd>` element becomes a ContentCellFill, or undefined where it states none. */
 export function readCellShading(
   tcPr: XmlElement | undefined,
 ): ContentCellFill | undefined {
@@ -102,7 +102,7 @@ export function readCellShading(
   };
 }
 
-/** The inverse of readCellShading: a ContentCellFill's own single <w:shd> element. A 'solid' fill writes w:val="clear" with the colour stated as w:fill (the plain background a real producer's own solid cell fill is spelled with) and w:color left automatic. A 'pattern' fill writes its own token from PATTERN_TYPE_TO_SHD_VAL, with w:color/w:fill stated for whichever of foregroundColor/backgroundColor the fill actually carries and left automatic for the one it does not — throwing for a SpreadsheetML-only pattern name ST_Shd has no member for, rather than writing the wrong pattern or silently dropping it. */
+/** The inverse of readCellShading: a ContentCellFill's own single `<w:shd>` element. A 'solid' fill writes w:val="clear" with the colour stated as w:fill (the plain background a real producer's own solid cell fill is spelled with) and w:color left automatic. A 'pattern' fill writes its own token from PATTERN_TYPE_TO_SHD_VAL, with w:color/w:fill stated for whichever of foregroundColor/backgroundColor the fill actually carries and left automatic for the one it does not — throwing for a SpreadsheetML-only pattern name ST_Shd has no member for, rather than writing the wrong pattern or silently dropping it. */
 export function buildCellShading(fill: ContentCellFill): XmlElement {
   switch (fill.kind) {
     case "solid":
