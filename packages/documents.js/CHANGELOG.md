@@ -1,3 +1,16 @@
+## [14.4.16](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.15...documents.js%4014.4.16) (2026-09-24)
+
+### Code Refactoring
+
+* **documents.js:** drop the redundant any-detections guard in the odt reader ([c595fd9](https://github.com/ExaDev/documents.js/commit/c595fd92d162c9f56293de3c7f6b08af5c72ea38))
+
+### Tests
+
+* **documents.js:** cover odt headings in list items, stray list children, nested lists ([fa92a4e](https://github.com/ExaDev/documents.js/commit/fa92a4e2359bf82de59a2c06d21ff195da4707a8))
+* **documents.js:** make the odt multi-section guard and vector-tag filter observable ([8849739](https://github.com/ExaDev/documents.js/commit/8849739d39088b4186b5712ce98be0588ee5e0ef))
+* **documents.js:** pin odt read placements across formula, vector, and image detection ([7cb925f](https://github.com/ExaDev/documents.js/commit/7cb925f7f7483eac386a8af71eaa28a816b67c62))
+* **documents.js:** tidy the odt read test helper to return blocks directly ([1c898c6](https://github.com/ExaDev/documents.js/commit/1c898c6ee30d97981a78dbae0102b0a3f31e6ca4))
+
 ## [14.4.15](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.14...documents.js%4014.4.15) (2026-09-24)
 
 
