@@ -91,7 +91,9 @@ describe("compoundFile sibling reuse", () => {
       (e) => e.name === "Thing",
     );
     expect(thingEntries).toHaveLength(2);
-    expect(thingEntries.map((e) => e.objectType).sort()).toEqual([1, 2]); // one storage, one stream
+    expect(thingEntries.map((e) => e.objectType).sort((a, b) => a - b)).toEqual(
+      [1, 2],
+    ); // one storage, one stream
     const streams = readCompoundFile(bytes);
     expect(streams.map((s) => s.path).sort()).toEqual(["Thing", "Thing/Inner"]);
   });

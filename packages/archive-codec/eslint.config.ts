@@ -6,7 +6,6 @@ export default packageLintConfig({
   newRuleDebt: [
     "@typescript-eslint/consistent-return",
     "@typescript-eslint/no-shadow",
-    "@typescript-eslint/require-array-sort-compare",
     "@typescript-eslint/strict-boolean-expressions",
     "exadev/prefer-numeric-sort-compare",
   ],
