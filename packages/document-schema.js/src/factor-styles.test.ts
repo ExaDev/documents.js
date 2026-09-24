@@ -238,26 +238,33 @@ describe("factorStyles minting", () => {
   });
 
   it("freezes an ancestor's minted key for nested wrappers — a deeper different value never shadows the ref that restores it", () => {
+    const frozenIndentPt = 20;
+    const h2IndentPt = 40;
     const h1 = paragraph([run("Chapter")], {
       headingLevel: 1,
-      indentLeftPt: 20,
+      indentLeftPt: frozenIndentPt,
     });
-    const body1 = paragraph([run("one")], { indentLeftPt: 20 });
-    const body2 = paragraph([run("two")], { indentLeftPt: 20 });
-    const h2 = paragraph([run("Part")], { headingLevel: 2, indentLeftPt: 40 });
-    const body3 = paragraph([run("three")], { indentLeftPt: 40 });
-    const body4 = paragraph([run("four")], { indentLeftPt: 40 });
+    const body1 = paragraph([run("one")], { indentLeftPt: frozenIndentPt });
+    const body2 = paragraph([run("two")], { indentLeftPt: frozenIndentPt });
+    const h2 = paragraph([run("Part")], {
+      headingLevel: 2,
+      indentLeftPt: h2IndentPt,
+    });
+    const body3 = paragraph([run("three")], { indentLeftPt: h2IndentPt });
+    const body4 = paragraph([run("four")], { indentLeftPt: h2IndentPt });
     const doc = wordprocessingDoc([h1, body1, body2, h2, body3, body4]);
     const minted = assembleTree(doc);
     // The section mints {indentLeftPt: 20} (three positions: the H1 anchor and its two body leaves — the H2 branch carries a different value and stays inline). indentLeftPt is then frozen for every wrapper below, so the H2 group — whose extent shares {indentLeftPt: 40} three times — mints nothing: re-minting the key with 40 would silently rewrite the value the section's ref restores for the stripped 20-positions in nothing, but would shadow it for any nested stripped position, and freezing is the rule that keeps the two namespaces apart.
     expect(refsOf(minted)).toEqual([{ ref: "s1", nodeKind: "section" }]);
-    expect(minted.styles?.s1).toEqual({ paragraph: { indentLeftPt: 20 } });
+    expect(minted.styles?.s1).toEqual({
+      paragraph: { indentLeftPt: frozenIndentPt },
+    });
     if (minted.kind !== "wordprocessing")
       throw new Error("expected wordprocessing");
     // The H2 nests INSIDE the still-open H1 group (decompose's stack), so find it by text anywhere in the tree.
     const h2Group = findGroupByText(minted, "Part");
     expect(h2Group).toMatchObject({
-      node: { kind: "paragraph", headingLevel: 2, indentLeftPt: 40 },
+      node: { kind: "paragraph", headingLevel: 2, indentLeftPt: h2IndentPt },
     });
     expect(h2Group).not.toHaveProperty("style");
     // Resolution restores the stripped positions exactly and leaves the H2 branch alone: gap-fill on the section's chain returns indentLeftPt 20 to the stripped three, and the inline 40s win where they sit.
@@ -267,7 +274,14 @@ describe("factorStyles minting", () => {
     const indents = flat.sections[0]!.blocks.map((block) =>
       block.kind === "paragraph" ? block.indentLeftPt : undefined,
     );
-    expect(indents).toEqual([20, 20, 20, 40, 40, 40]);
+    expect(indents).toEqual([
+      frozenIndentPt,
+      frozenIndentPt,
+      frozenIndentPt,
+      h2IndentPt,
+      h2IndentPt,
+      h2IndentPt,
+    ]);
   });
 
   it("orders entries by descending frequency and mints deterministically", () => {
@@ -419,14 +433,15 @@ describe("factorStyles minting", () => {
   });
 
   it("strips by copying, never mutating the input content", () => {
-    const p1 = paragraph([run("one")], { indentLeftPt: 20 });
-    const p2 = paragraph([run("two")], { indentLeftPt: 20 });
+    const sharedIndentPt = 20;
+    const p1 = paragraph([run("one")], { indentLeftPt: sharedIndentPt });
+    const p2 = paragraph([run("two")], { indentLeftPt: sharedIndentPt });
     const doc = wordprocessingDoc([p1, p2]);
     const snapshot = structuredClone(doc);
     assembleTree(doc);
     expect(doc).toEqual(snapshot);
-    expect(p1.indentLeftPt).toBe(20);
-    expect(p2.indentLeftPt).toBe(20);
+    expect(p1.indentLeftPt).toBe(sharedIndentPt);
+    expect(p2.indentLeftPt).toBe(sharedIndentPt);
   });
 
   it("strips an aliased node at every position whose own chain minted — identical tuple, both sibling wrappers mint", () => {
