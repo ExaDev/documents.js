@@ -5,6 +5,7 @@ import {
   assertMimetypeEntryLayout,
   localFileHeaderNames,
   readUint32LE,
+  ZIP_COMPRESSED_SIZE_OFFSET,
 } from "./test-support/zip";
 
 function enc(s: string): Uint8Array<ArrayBuffer> {
@@ -12,7 +13,20 @@ function enc(s: string): Uint8Array<ArrayBuffer> {
 }
 
 // zip.ts's own private FIXED_ENTRY_MTIME, duplicated here rather than exported: index.ts re-exports this module wholesale (export * from "./zip"), so a named export would leak an internal implementation constant into the package's public API.
-const FIXED_ENTRY_MTIME = new Date(Date.UTC(1980, 5, 15, 12, 0, 0));
+const FIXED_ENTRY_YEAR = 1980;
+const FIXED_ENTRY_MONTH_JUNE = 5; // Date.UTC's month is 0-indexed.
+const FIXED_ENTRY_DAY = 15;
+const FIXED_ENTRY_HOUR_NOON = 12;
+const FIXED_ENTRY_MTIME = new Date(
+  Date.UTC(
+    FIXED_ENTRY_YEAR,
+    FIXED_ENTRY_MONTH_JUNE,
+    FIXED_ENTRY_DAY,
+    FIXED_ENTRY_HOUR_NOON,
+    0,
+    0,
+  ),
+);
 
 // fflate's DOS-date encoding reads the pinned mtime through Date's *local* calendar getters, not UTC — a value sitting exactly on fflate's own 1980 floor previously rolled back into 1979 under any reading process whose local zone has a negative UTC offset at that instant, and fflate throws for a year outside 1980-2099. Checked here against the two POSIX-sign-inverted Etc/GMT zones bracketing every real IANA offset, present or historical (Etc/GMT+12 = UTC-12, the most negative offset any zone has used; Etc/GMT-14 = UTC+14, the most positive) via Intl.DateTimeFormat's own explicit-zone resolution rather than by mutating process.env.TZ, which a worker_threads pool — exactly the pool Stryker's own vitest-runner forces — does not reliably propagate to Date's local getters at all, so a mutation-based version of this test would silently stop exercising the offset it names under mutation testing.
 describe("zipPackage: entry mtime survives every real-world timezone offset", () => {
@@ -25,8 +39,11 @@ describe("zipPackage: entry mtime survives every real-world timezone offset", ()
         .formatToParts(FIXED_ENTRY_MTIME)
         .find((part) => part.type === "year")?.value,
     );
-    expect(year).toBeGreaterThanOrEqual(1980);
-    expect(year).toBeLessThanOrEqual(2099);
+    // fflate's own documented DOS-date encoding range.
+    const fflateDosDateMinYear = 1980;
+    const fflateDosDateMaxYear = 2099;
+    expect(year).toBeGreaterThanOrEqual(fflateDosDateMinYear);
+    expect(year).toBeLessThanOrEqual(fflateDosDateMaxYear);
   });
 });
 
@@ -77,13 +94,18 @@ describe("zipPackage / unzipPackage round trip", () => {
   it('stores a "stored" entry uncompressed, with a compressed size equal to its input length', () => {
     const original = enc(EPUB_MIME_TYPE);
     const bytes = zipPackage([["mimetype", { bytes: original, stored: true }]]);
-    expect(readUint32LE(bytes, 18)).toBe(original.length);
+    expect(readUint32LE(bytes, ZIP_COMPRESSED_SIZE_OFFSET)).toBe(
+      original.length,
+    );
   });
 
   it("deflates a non-stored entry of repetitive content to fewer bytes than the input", () => {
-    const original = enc("a".repeat(1000));
+    const repetitiveContentLength = 1000;
+    const original = enc("a".repeat(repetitiveContentLength));
     const bytes = zipPackage([["content.opf", { bytes: original }]]);
-    expect(readUint32LE(bytes, 18)).toBeLessThan(original.length);
+    expect(readUint32LE(bytes, ZIP_COMPRESSED_SIZE_OFFSET)).toBeLessThan(
+      original.length,
+    );
   });
 });
 
