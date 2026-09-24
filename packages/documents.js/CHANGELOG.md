@@ -1,3 +1,18 @@
+## [14.4.12](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.11...documents.js%4014.4.12) (2026-09-24)
+
+### Code Refactoring
+
+* **documents.js:** drop redundant guards in the docx embedded-objects splice ([fed1e3a](https://github.com/ExaDev/documents.js/commit/fed1e3aa98047e07a152b9666ee4d3659eb796dd))
+
+### Tests
+
+* **documents.js:** cover the docx embedded-objects splice degrade tiers and section pass ([3fa9810](https://github.com/ExaDev/documents.js/commit/3fa9810823a3705fa1f1dc2a2c9f7bd920fc2aae))
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.2.19
+
 ## [14.4.11](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.10...documents.js%4014.4.11) (2026-09-24)
 
 

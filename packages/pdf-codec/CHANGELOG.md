@@ -1,3 +1,9 @@
+## [5.2.19](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.18...pdf-codec%405.2.19) (2026-09-24)
+
+### Tests
+
+* **pdf-codec:** close image/png-decode.ts's mutation gap from 65 to 96 ([5be60e3](https://github.com/ExaDev/documents.js/commit/5be60e3229acecd85d9a1dabcb771130485fd04e))
+
 ## [5.2.18](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.17...pdf-codec%405.2.18) (2026-09-24)
 
 ### Tests
