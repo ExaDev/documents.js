@@ -36,6 +36,9 @@ function opid(id: number, flags = 0): Uint8Array<ArrayBuffer> {
 
 const F_COMPLEX = 1 << 14;
 
+// Both suites assert on the same PptFormatError wording, so the pattern lives beside the other shared fixtures rather than between them.
+const PptFormatErrorMatch = /cannot hold/;
+
 function shapeWithTable(
   recType: number,
   entries: readonly Uint8Array<ArrayBuffer>[],
@@ -219,8 +222,6 @@ describe("readShapeProperties", () => {
     );
   });
 });
-
-const PptFormatErrorMatch = /cannot hold/;
 
 describe("writeShapePropertyTable / readShapeProperties round trip", () => {
   it("round-trips plain and complex properties together, in ascending opid order", () => {

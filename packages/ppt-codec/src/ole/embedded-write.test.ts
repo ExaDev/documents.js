@@ -1,3 +1,4 @@
+import { assertNeverObjectKind } from "./embedded-write";
 import { describe, expect, it } from "vitest";
 import { childRecords, findChild, readRecordAt } from "../record/tree";
 import {
@@ -108,5 +109,13 @@ describe("writeExOleObjStg", () => {
     expect(record.header.recType).toBe(RT_ExternalOleObjectStg);
     expect(record.header.recInstance).toBe(0x000);
     expect(Array.from(record.data)).toEqual(Array.from(cfb));
+  });
+});
+
+describe("assertNeverObjectKind", () => {
+  it("throws naming the unhandled kind, proving progIdFor's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverObjectKind("bogus" as never);
+    }).toThrow('progIdFor: unhandled embedded object kind "bogus"');
   });
 });

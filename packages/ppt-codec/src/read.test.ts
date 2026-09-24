@@ -30,7 +30,7 @@ function pptFile(
   ]);
 }
 
-/** The same synthetic presentation pptFile builds, with a real "\x05SummaryInformation" stream added beside it — composed with archive-codec's own writeSummaryInformationStream rather than by extending test-support/compound-file.ts, which stays a pure [MS-CFB]-only fixture builder. */
+/** The same synthetic presentation pptFile builds, with a real `\x05SummaryInformation` stream added beside it — composed with archive-codec's own writeSummaryInformationStream rather than by extending test-support/compound-file.ts, which stays a pure [MS-CFB]-only fixture builder. */
 function pptFileWithMetadata(
   metadata: Parameters<typeof writeSummaryInformationStream>[0],
   options: Parameters<typeof syntheticPresentation>[0] = {},

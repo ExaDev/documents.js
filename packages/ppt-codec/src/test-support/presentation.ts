@@ -512,19 +512,21 @@ function tableShape(
     }),
   );
   // Two degenerate shapes sharing the group's own coordinate system — one zero-width (left equals right), one zero-height (top equals bottom) — placed well clear of every real cell's own anchor, spelling the gridline shapes a genuine PowerPoint-authored table carries alongside its actual cells.
-  const gridlineShapes = table.includeGridlineShapes
-    ? [
-        container(OfficeArtSpContainer, [
-          fsp(spid + 900, 0),
-          clientAnchor(TABLE_TOP, TABLE_RIGHT, TABLE_RIGHT, bottom),
-        ]),
-        container(OfficeArtSpContainer, [
-          fsp(spid + 901, 0),
-          clientAnchor(bottom, TABLE_LEFT, TABLE_RIGHT, bottom),
-        ]),
-      ]
-    : [];
-  const orderedCells = table.reverseCellOrder ? [...cells].reverse() : cells;
+  const gridlineShapes =
+    table.includeGridlineShapes === true
+      ? [
+          container(OfficeArtSpContainer, [
+            fsp(spid + 900, 0),
+            clientAnchor(TABLE_TOP, TABLE_RIGHT, TABLE_RIGHT, bottom),
+          ]),
+          container(OfficeArtSpContainer, [
+            fsp(spid + 901, 0),
+            clientAnchor(bottom, TABLE_LEFT, TABLE_RIGHT, bottom),
+          ]),
+        ]
+      : [];
+  const orderedCells =
+    table.reverseCellOrder === true ? [...cells].reverse() : cells;
   return container(OfficeArtSpgrContainer, [
     groupShape,
     ...gridlineShapes,
