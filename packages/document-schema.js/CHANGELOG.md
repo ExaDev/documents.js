@@ -1,3 +1,15 @@
+## [7.15.2](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.15.1...document-schema.js%407.15.2) (2026-09-24)
+
+### Bug Fixes
+
+* **document-schema.js:** name magic numbers in a1.test.ts and border-weight.test.ts ([8ce2539](https://github.com/ExaDev/documents.js/commit/8ce2539c9baaa4ed4cae2605f58640e9f82c36bc)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **document-schema.js:** name magic numbers in canonicalise.test.ts and schema-io.test.ts ([dfb3c3c](https://github.com/ExaDev/documents.js/commit/dfb3c3c4c9071252035fd41e6e010d1b15301e98)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **document-schema.js:** name magic numbers in color, content, table-grid and definitions tests ([8346a14](https://github.com/ExaDev/documents.js/commit/8346a147491672fc5f1ffb469634fbd8b6a85afa)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **document-schema.js:** name magic numbers in color.test.ts ([4733758](https://github.com/ExaDev/documents.js/commit/4733758a151125c8cf421032eed37f0bea5e57f4)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **document-schema.js:** name magic numbers in content.test.ts ([36bf62b](https://github.com/ExaDev/documents.js/commit/36bf62b4b6bf9f6e92b13573407fdafcfb54ec1f)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **document-schema.js:** name magic numbers in factor-styles.test.ts ([09910a1](https://github.com/ExaDev/documents.js/commit/09910a12cd732c01b5dc40101f37dafb58119fb8)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **document-schema.js:** name the last magic numbers, completing the burn-down ([74cca8a](https://github.com/ExaDev/documents.js/commit/74cca8a605743b495d531cf5361ffd3e303e0848)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+
 ## [7.15.1](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.15.0...document-schema.js%407.15.1) (2026-09-24)
 
 ### Bug Fixes
