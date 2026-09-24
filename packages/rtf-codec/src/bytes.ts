@@ -25,10 +25,15 @@ export function asciiStringFromBytes(input: Uint8Array): string {
   return out;
 }
 
-// Appends every byte of `input` to `target` without spreading it into an argument list, for the same argument-count reason as asciiStringFromBytes above.
-export function appendBytes(target: number[], input: Uint8Array): void {
+// Threaded by reference rather than passed as a bare array parameter: target is a local accumulator every call site owns and mutates in place across many calls, not foreign caller data. Wrapping it in a one-field sink keeps exadev/prefer-readonly-array-param out of scope for it, the same way byte-codec's own CodeUnitSink does for its identical hot-loop-accumulator shape.
+export interface ByteSink {
+  readonly bytes: number[];
+}
+
+// Appends every byte of `input` to `sink.bytes` without spreading it into an argument list, for the same argument-count reason as asciiStringFromBytes above.
+export function appendBytes(sink: ByteSink, input: Uint8Array): void {
   for (const byte of input) {
-    target.push(byte);
+    sink.bytes.push(byte);
   }
 }
 

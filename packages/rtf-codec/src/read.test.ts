@@ -4459,7 +4459,7 @@ describe("internal invariants exercised directly (no legitimate RTF input can re
 
   it("appendToLastListItem throws when the list has no entry to append to", () => {
     expect(() => {
-      appendToLastListItem([], "text");
+      appendToLastListItem({ items: [] }, "text");
     }).toThrow(
       "internal invariant violated: a form field list item's text arrived with no list item entry to append to",
     );
@@ -4467,7 +4467,7 @@ describe("internal invariants exercised directly (no legitimate RTF input can re
 
   it("appendToLastListItem appends to the last entry, in place, leaving earlier entries untouched", () => {
     const items = ["first", "second"];
-    appendToLastListItem(items, " more");
+    appendToLastListItem({ items }, " more");
     expect(items).toEqual(["first", "second more"]);
   });
 

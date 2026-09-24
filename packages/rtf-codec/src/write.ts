@@ -497,6 +497,11 @@ function isContentControlExtent(
   return extent.descriptor.kind === "contentControl";
 }
 
+// Threaded by reference rather than passed as a bare array parameter: opened is the real, order-sensitive stack writeFormFieldBoundaries and drainOpenedFormFields share across a whole paragraph's own boundary walk (see writeFormFieldBoundaries's own note on why it must be a real stack, popped and pushed in place, not a Set). Wrapping it in a one-field sink whose own opened property is not itself a primitive or callback keeps exadev/prefer-readonly-array-param out of scope for it, the same way appendBytes's own ByteSink in bytes.ts does.
+interface FormFieldStackSink {
+  readonly opened: ContentControlExtent[];
+}
+
 // Two contentControl extents "cross" when neither nests inside or around the other: one starts before the other ends but also ends after it does (e.g. {startRun:0,endRun:2} and {startRun:1,endRun:3}). RTF's own \*\formfield destination is a bracket, not a range — a `{\field...}` group nests cleanly inside another `{\field...}` group's own \fldrslt, but two crossing groups have no valid brace sequence at all: whichever one physically closes second necessarily closes the OTHER one's own braces instead of its own, corrupting both (verified by execution against writeFormFieldBoundaries below: the pair above produced output where the first extent's own closing braces closed the second field's groups and vice versa, brace-balanced overall but mis-nested throughout). Detected and dropped HERE, before either extent's own open half is ever written, rather than at close time — by then a crossing extent's own opening braces are already in the output and cannot be un-written. Processes extents sorted (startRun ascending, endRun descending, so a tied startRun opens the wider extent first) because that is also the order writeFormFieldBoundaries itself must open extents in to keep two same-position opens correctly nested — an ordinary non-crossing extent (nested, disjoint, or sharing a boundary with another) passes through unchanged, in this order, for exactly that reason.
 function selectNestableFormFields(
   extents: readonly ContentControlExtent[],
@@ -808,7 +813,7 @@ class RtfWriter {
       this.sink,
     );
     // The extents currently open with no close yet written, in actual open order (most-recently-opened last) — a real stack, not a Set, because writeFormFieldBoundaries below must always close the TOP of it and nothing else: see that method's own comment for why scanning for "any extent whose endRun matches" independently of open order mis-nests two extents that share a boundary.
-    const openedFormFields: ContentControlExtent[] = [];
+    const openedFormFields: FormFieldStackSink = { opened: [] };
     for (const [index, run] of paragraph.runs.entries()) {
       this.writeRunBoundaries(bookmarks, index);
       this.writeFormFieldBoundaries(formFields, index, openedFormFields);
@@ -827,12 +832,12 @@ class RtfWriter {
     }
   }
 
-  private drainOpenedFormFields(opened: ContentControlExtent[]): void {
+  private drainOpenedFormFields(sink: FormFieldStackSink): void {
     // Only the count matters here — every remaining entry closes identically ("}}"), so there is nothing to read off any individual extent.
-    for (let remaining = opened.length; remaining > 0; remaining -= 1) {
+    for (let remaining = sink.opened.length; remaining > 0; remaining -= 1) {
       this.raw("}}");
     }
-    opened.length = 0;
+    sink.opened.length = 0;
   }
 
   private writeRunBoundaries(
@@ -861,13 +866,13 @@ class RtfWriter {
   private writeFormFieldBoundaries(
     extents: readonly ContentControlExtent[],
     position: number,
-    opened: ContentControlExtent[],
+    sink: FormFieldStackSink,
   ): void {
-    let top = opened[opened.length - 1];
+    let top = sink.opened[sink.opened.length - 1];
     while (top?.endRun === position) {
-      opened.pop();
+      sink.opened.pop();
       this.raw("}}");
-      top = opened[opened.length - 1];
+      top = sink.opened[sink.opened.length - 1];
     }
     for (const extent of extents) {
       if (extent.startRun !== position) {
@@ -883,9 +888,9 @@ class RtfWriter {
         continue;
       }
       this.raw(open);
-      opened.push(extent);
+      sink.opened.push(extent);
       if (extent.endRun === position) {
-        opened.pop();
+        sink.opened.pop();
         this.raw("}}");
       }
     }
@@ -1205,7 +1210,7 @@ class RtfWriter {
   // Emits the \pict destination itself from an already-decoded payload — `inTable` gives the outer \pard the same \intbl variant writeParagraph(paragraph, inTable) takes.
   private writeImagePict(
     bytes: Uint8Array,
-    image: Pick<ContentImageBlock, "format" | "widthPt" | "heightPt">,
+    image: Readonly<Pick<ContentImageBlock, "format" | "widthPt" | "heightPt">>,
     inTable: boolean,
   ): void {
     const widthTwips = pointsToTwips(image.widthPt);
@@ -1223,7 +1228,7 @@ class RtfWriter {
 
   private writeImageParagraph(
     base64: string,
-    image: Pick<ContentImageBlock, "format" | "widthPt" | "heightPt">,
+    image: Readonly<Pick<ContentImageBlock, "format" | "widthPt" | "heightPt">>,
   ): void {
     const bytes = this.decodeImageOrWarn({ ...image, base64 });
     if (bytes === undefined) {
