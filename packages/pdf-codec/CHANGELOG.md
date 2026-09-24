@@ -1,3 +1,9 @@
+## [5.2.20](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.19...pdf-codec%405.2.20) (2026-09-24)
+
+### Tests
+
+* **pdf-codec:** close glyf.ts's mutation gap from 92 to 96 ([9c1f808](https://github.com/ExaDev/documents.js/commit/9c1f808d62cad48d4ce98ce6135ff803370fd9f9))
+
 ## [5.2.19](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.18...pdf-codec%405.2.19) (2026-09-24)
 
 ### Tests
