@@ -295,4 +295,35 @@ describe("OdmPage", () => {
     });
     mounted.unmount();
   });
+
+  it("calls notifyError when the re-render triggered by picking a chapter rejects", async () => {
+    const client = createMockRpcClient();
+    vi.mocked(client.odm.render).mockResolvedValueOnce({
+      ok: true,
+      pdf: new Uint8Array([1]),
+    });
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountOdmPage();
+
+    act(() => {
+      openDocument(openedFile("book.odm"));
+    });
+    await vi.waitFor(() => {
+      expect(latestChapterProps).toBeDefined();
+    });
+
+    vi.mocked(client.odm.render).mockRejectedValueOnce(
+      new Error("bad chapter"),
+    );
+    act(() => {
+      latestChapterProps?.onFile(openedFile("ch1.odt"));
+    });
+    await vi.waitFor(() => {
+      expect(notifyError).toHaveBeenCalledWith(
+        "Could not render master document",
+        expect.any(Error),
+      );
+    });
+    mounted.unmount();
+  });
 });
