@@ -23,15 +23,16 @@ describe("EpubBytesSchema", () => {
   });
 
   it("rejects bytes with no zip header", () => {
-    expect(
-      EpubBytesSchema.safeParse(new Uint8Array([0, 1, 2, 3])).success,
-    ).toBe(false);
+    const notAZipHeader = Uint8Array.from({ length: 4 }, (_, index) => index);
+    expect(EpubBytesSchema.safeParse(notAZipHeader).success).toBe(false);
   });
 
   it("rejects bytes matching only part of the zip header", () => {
-    // The first byte matches PK\x03\x04's own 0x50, but the rest don't — .some() would wrongly accept this, .every() correctly rejects it.
+    // The first byte matches PK\x03\x04's own 'P', but the rest don't — .some() would wrongly accept this, .every() correctly rejects it.
+    const zipSignatureP = 0x50;
     expect(
-      EpubBytesSchema.safeParse(new Uint8Array([0x50, 0, 0, 0])).success,
+      EpubBytesSchema.safeParse(new Uint8Array([zipSignatureP, 0, 0, 0]))
+        .success,
     ).toBe(false);
   });
 });

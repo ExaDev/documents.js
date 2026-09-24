@@ -15,7 +15,8 @@ describe("mintListNumId / parseListNumId", () => {
   });
 
   it("round-trips an ordered list with a non-default start", () => {
-    const numId = mintListNumId(3, { type: "ordered", start: 5 });
+    const level = 3;
+    const numId = mintListNumId(level, { type: "ordered", start: 5 });
     expect(numId).toBe("epub3:ordered@5");
     expect(parseListNumId(numId)).toEqual({ type: "ordered", start: 5 });
   });
@@ -27,7 +28,10 @@ describe("mintListNumId / parseListNumId", () => {
 
   it("mints a bullet list without an 'ordered@' suffix even when a start is given", () => {
     // A bullet list has no start concept — the type === "ordered" guard must actually gate this.
-    expect(mintListNumId(4, { type: "bullet", start: 5 })).toBe("epub4:bullet");
+    const level = 4;
+    expect(mintListNumId(level, { type: "bullet", start: 5 })).toBe(
+      "epub4:bullet",
+    );
   });
 
   it("parses an ordered numId with no @start suffix as having no explicit start", () => {

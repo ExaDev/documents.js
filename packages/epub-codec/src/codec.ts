@@ -9,7 +9,16 @@ import { serializePackage } from "./package-io/write";
 import { readEpub, readEpubContent } from "./read";
 import { writeEpub, writeEpubContent } from "./write";
 
-const ZIP_LOCAL_FILE_HEADER = [0x50, 0x4b, 0x03, 0x04];
+const ZIP_SIGNATURE_P = 0x50;
+const ZIP_SIGNATURE_K = 0x4b;
+const ZIP_SIGNATURE_LOCAL_FILE_MARKER = 0x03;
+const ZIP_SIGNATURE_LOCAL_FILE_HEADER = 0x04;
+const ZIP_LOCAL_FILE_HEADER = [
+  ZIP_SIGNATURE_P,
+  ZIP_SIGNATURE_K,
+  ZIP_SIGNATURE_LOCAL_FILE_MARKER,
+  ZIP_SIGNATURE_LOCAL_FILE_HEADER,
+];
 
 function hasZipHeader(bytes: Uint8Array): boolean {
   return ZIP_LOCAL_FILE_HEADER.every((byte, index) => bytes[index] === byte);

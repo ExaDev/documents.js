@@ -122,11 +122,16 @@ function writeSectionChild(
   return writeLeafBlock(child, context);
 }
 
+const MAX_XHTML_HEADING_LEVEL = 6; // XHTML only defines h1 through h6.
+
 function writeHeading(
   group: HeadingGroupNode,
   context: XhtmlWriteContext,
 ): XmlElement {
-  const level = Math.min(6, Math.max(1, group.node.headingLevel));
+  const level = Math.min(
+    MAX_XHTML_HEADING_LEVEL,
+    Math.max(1, group.node.headingLevel),
+  );
   return element(
     `h${String(level)}`,
     directionAttrs(group.node),
