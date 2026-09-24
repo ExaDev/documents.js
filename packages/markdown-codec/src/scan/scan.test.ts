@@ -41,18 +41,20 @@ describe("MarkdownScanCursor", () => {
 
   it("consumes a tab one column before a tab stop in a single step, with no pending partial state", () => {
     // Column 3 is one short of the next tab stop (4), so the tab there expands to exactly one column.
+    const columnsBeforeTab = 3;
     const cursor = new MarkdownScanCursor("   \tx");
-    for (let i = 0; i < 3; i++) cursor.next();
-    expect(cursor.position.column).toBe(3);
+    for (let i = 0; i < columnsBeforeTab; i++) cursor.next();
+    expect(cursor.position.column).toBe(columnsBeforeTab);
     expect(cursor.next()).toBe(" ");
     expect(cursor.position).toEqual({ offset: 4, line: 1, column: 4 });
     expect(cursor.next()).toBe("x");
   });
 
   it("expands a tab already sitting on a tab stop to a full 4 columns", () => {
+    const tabStop = 4;
     const cursor = new MarkdownScanCursor("    \tx");
-    for (let i = 0; i < 4; i++) cursor.next();
-    expect(cursor.position.column).toBe(4);
+    for (let i = 0; i < tabStop; i++) cursor.next();
+    expect(cursor.position.column).toBe(tabStop);
     expect(cursor.next()).toBe(" ");
     expect(cursor.position).toEqual({ offset: 4, line: 1, column: 5 });
     expect(cursor.next()).toBe(" ");
@@ -81,7 +83,8 @@ describe("MarkdownScanCursor", () => {
   it("peekRaw() reads real source characters, ignoring pending tab-expansion state", () => {
     const cursor = new MarkdownScanCursor("\tfoo");
     cursor.next(); // consume the first of the tab's expanded columns; rawOffset stays at the tab itself
-    expect(cursor.peekRaw(4)).toBe("\tfoo");
+    const sourceLength = 4; // "\tfoo".length
+    expect(cursor.peekRaw(sourceLength)).toBe("\tfoo");
   });
 
   it("peekRaw() returns only the requested slice, not the whole remaining source", () => {
