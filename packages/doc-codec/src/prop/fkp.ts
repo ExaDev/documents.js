@@ -26,7 +26,7 @@ const PN_MASK = 0x003fffff;
 export interface ChpxFkp {
   readonly rgfc: readonly number[];
   /** The Chpx's grpprl for run `index`, or undefined when the run's rgb entry is zero and it carries no exception. */
-  grpprl(index: number): Uint8Array | undefined;
+  readonly grpprl: (index: number) => Uint8Array | undefined;
 }
 
 export interface PapxRecord {
@@ -37,9 +37,9 @@ export interface PapxRecord {
 export interface PapxFkp {
   readonly rgfc: readonly number[];
   /** The PapxInFkp for paragraph `index`, or undefined when its BxPap.bOffset is zero and the paragraph takes the defaults. */
-  papx(index: number): PapxRecord | undefined;
-  /** `rgfc[index + 1]`, the exclusive end offset for paragraph `index` — always defined for any `index` `papx` itself accepts (rgfc always carries `cpara + 1` entries), so `papx`'s own bounds check is what actually guards this; exposed as its own method so that guarantee is directly testable rather than an unreachable check inside a caller. */
-  fcLimAt(index: number): number;
+  readonly papx: (index: number) => PapxRecord | undefined;
+  /** `rgfc[index + 1]`, the exclusive end offset for paragraph `index` — always defined for any `index` `papx` itself accepts (rgfc always carries `cpara + 1` entries), so `papx`'s own bounds check is what actually guards this; exposed as its own member so that guarantee is directly testable rather than an unreachable check inside a caller. */
+  readonly fcLimAt: (index: number) => number;
 }
 
 function checkPage(page: Uint8Array, what: string): void {
