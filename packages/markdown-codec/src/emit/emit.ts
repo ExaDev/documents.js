@@ -146,6 +146,8 @@ function renderAtxHeading(level: number, text: string): string {
 
 // A fenced code block's own closing condition (spec 0.31.2, "Fenced code blocks") is "a code fence of the same type as the code block that opened it, of length AT LEAST as great as the opening fence" — so a fence of exactly 3 characters closes prematurely the moment the code block's own literal content happens to contain a run of 3-or-more of that same character on its own line (a real, common case: this package always re-renders a code block as fenced regardless of whether it was originally fenced or indented, so an indented block whose own text happens to contain a backtick fence is exactly the scenario this guards). The fix real fenced-code-block writers already use: pick a fence one character longer than the longest run of the fence character anywhere in the content, so no line inside the block can ever be mistaken for the closing fence.
 const MIN_CODE_FENCE_LENGTH = 3;
+// CommonMark's own minimum thematic-break rule count: three or more of the same character.
+const THEMATIC_BREAK_CHAR_COUNT = 3;
 
 function longestRunLength(text: string, char: string): number {
   let longest = 0;
@@ -389,7 +391,7 @@ function renderParagraphBody(
   context: EmitContext,
 ): string {
   if (paragraph.styleId === HORIZONTAL_RULE_STYLE_ID) {
-    return context.thematicBreakChar.repeat(3);
+    return context.thematicBreakChar.repeat(THEMATIC_BREAK_CHAR_COUNT);
   }
   if (paragraph.styleId === CODE_BLOCK_STYLE_ID) {
     const literal = paragraph.runs.map((run) => run.text).join("");

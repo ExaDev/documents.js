@@ -265,7 +265,12 @@ describe("HTML-table fallback round trip", () => {
     if (block?.kind !== "table") {
       throw new Error(`expected a table block, got '${block?.kind}'`);
     }
-    expect(block.rows.map((row) => row.cells.length)).toEqual([3, 3, 3]);
+    const cellsPerRow = 3;
+    expect(block.rows.map((row) => row.cells.length)).toEqual([
+      cellsPerRow,
+      cellsPerRow,
+      cellsPerRow,
+    ]);
     const markdown = writeMarkdownContent(document);
     expect(cellTagCountsPerRow(markdown)).toEqual(cellTagCountsPerRow(source));
   });
