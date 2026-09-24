@@ -64,13 +64,13 @@ function listParagraph(
 }
 
 function wordprocessingDoc(
-  blocks: ContentBlock[],
+  blocks: readonly ContentBlock[],
   metadata: Record<string, unknown> = {},
 ): ContentDocument {
   return {
     kind: "wordprocessing",
     metadata,
-    sections: [{ ...SECTION, blocks }],
+    sections: [{ ...SECTION, blocks: [...blocks] }],
   };
 }
 
@@ -1230,7 +1230,7 @@ describe("factorStyles minting", () => {
   });
 
   it("returns a genuinely untouched draw page by the same object reference, even while a sibling draw page mints something", () => {
-    const shapeOf = (blocks: ContentParagraph[]): ShapeGroupNode => ({
+    const shapeOf = (blocks: readonly ContentParagraph[]): ShapeGroupNode => ({
       node: {
         frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
         insetLeftPt: 0,
@@ -1238,7 +1238,7 @@ describe("factorStyles minting", () => {
         insetRightPt: 0,
         insetBottomPt: 0,
       },
-      children: blocks,
+      children: [...blocks],
     });
     const mintingPage: DrawPageGroupNode = {
       node: { kind: "drawPage", size: { widthPt: 300, heightPt: 300 } },
@@ -1712,7 +1712,7 @@ function findGroupByText(
   return found;
 }
 
-function shapeBlocks(...blocks: ContentBlock[]): {
+function shapeBlocks(...blocks: readonly ContentBlock[]): {
   frame: { xPt: number; yPt: number; widthPt: number; heightPt: number };
   insetLeftPt: number;
   insetTopPt: number;
