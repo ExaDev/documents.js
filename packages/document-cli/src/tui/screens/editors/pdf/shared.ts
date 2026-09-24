@@ -68,7 +68,7 @@ export function formatPt(value: number): string {
 }
 
 // documents.js re-exports `rgbHexToColor` (hex string -> Color) at its top level but not that conversion's own inverse, `colorToRgbHex` — this is display-only formatting, not a reimplementation of that (unexported) function.
-export function formatColor(color: LayoutColor): string {
+export function formatColor(color: Readonly<LayoutColor>): string {
   const byte = (component: number): string =>
     Math.round(component * 255)
       .toString(16)
@@ -86,7 +86,7 @@ export function formatStroke(stroke: {
 // `LayoutText.color`/`LayoutLine.color` are both REQUIRED fields (unlike a rect/ellipse/path's own optional `fill`), so a blank or unparseable entry falls back to the item's current colour rather than clearing it — there is nowhere in either item's own type for "no colour" to live.
 export function parseRequiredColorField(
   raw: string,
-  fallback: LayoutColor,
+  fallback: Readonly<LayoutColor>,
 ): LayoutColor {
   return parseColorField(raw) ?? fallback;
 }

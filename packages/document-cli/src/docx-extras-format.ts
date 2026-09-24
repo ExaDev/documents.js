@@ -19,12 +19,12 @@ function indent(depth: number): string {
 }
 
 // Neither `Comment` nor `Footnote` (ooxml.js, re-exported by documents.js) carries an id field of its own, so both are addressed by their 1-based position in the array `readDocxExtras` returned — the position a reader would count off while looking at the list, not any XML-internal `w:id`.
-function commentLine(comment: Comment, position: number): string {
+function commentLine(comment: Readonly<Comment>, position: number): string {
   const author = comment.author ?? "(no author)";
   return `${indent(1)}[${position}] ${author}: ${comment.text}`;
 }
 
-function footnoteLine(footnote: Footnote, position: number): string {
+function footnoteLine(footnote: Readonly<Footnote>, position: number): string {
   const typeSuffix = footnote.type === undefined ? "" : ` (${footnote.type})`;
   return `${indent(1)}[${position}]${typeSuffix} ${footnote.text}`;
 }
@@ -82,7 +82,10 @@ function headerOrFooterSection(
   ];
 }
 
-function numberingLevelLine(ilvl: string, level: NumberingLevel): string {
+function numberingLevelLine(
+  ilvl: string,
+  level: Readonly<NumberingLevel>,
+): string {
   const restartSuffix =
     level.restart === undefined ? "" : `, restarts at level ${level.restart}`;
   return `${indent(2)}level ${ilvl}: ${level.format} ${JSON.stringify(level.text)} starting at ${level.startAt}${restartSuffix}`;
