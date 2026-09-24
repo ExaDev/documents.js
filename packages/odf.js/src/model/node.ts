@@ -47,6 +47,11 @@ export interface XmlElement {
 export type XmlNode =
   XmlText | XmlCdata | XmlComment | XmlDeclaration | XmlPi | XmlElement;
 
+// Reached only if XmlNode ever gains a variant a switch over its own `type` field does not match: every current member is covered wherever this is called, so `value` narrows to `never` at each real call site, and adding an uncovered type makes that narrowing fail and those calls stop compiling. That is the real safety net. Exported so node.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real XmlNode type is already handled in xml/build.ts's toOrderedNode.
+export function assertNeverXmlNodeType(value: never): never {
+  throw new Error(`XmlNode: unhandled type ${JSON.stringify(value)}`);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

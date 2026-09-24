@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isXmlNode } from "./node";
+import { assertNeverXmlNodeType, isXmlNode } from "./node";
 
 // isXmlNode is a hand-written recursive structural guard (used via z.custom, since a genuinely recursive Zod schema collapses to `unknown` under z.lazy in this pinned version) with no direct unit tests at all — every place it runs is exercised only as a side effect of parsing a real XML document, which never constructs the malformed shapes below.
 
@@ -26,7 +26,10 @@ describe("isXmlNode: non-object/malformed input", () => {
   });
 
   it('rejects a non-object value whose typeof is not "object" (a function) even when it carries otherwise-valid text-node properties', () => {
-    const fn = Object.assign(() => {}, { type: "text", value: "hi" });
+    // A function with own properties attached, not a plain object: Object.assign can mutate a callable target in place, but an object-spread literal ({ ...fn, ...props }) cannot, since spreading a function always collapses it to a plain {} carrying only its own enumerable properties, losing the "is a function" shape this test needs to reject. Direct property assignment on a typed function keeps the same callable-with-extra-properties shape without Object.assign's own unchecked merge.
+    const fn = (() => {}) as (() => void) & { type: string; value: string };
+    fn.type = "text";
+    fn.value = "hi";
     expect(isXmlNode(fn)).toBe(false);
   });
 });
@@ -172,5 +175,20 @@ describe("isXmlNode: element", () => {
       children: [grandchild],
     };
     expect(isXmlNode(validElement({ children: [child] }))).toBe(true);
+  });
+});
+
+describe("assertNeverXmlNodeType", () => {
+  it("throws naming the unhandled type, proving toOrderedNode's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverXmlNodeType({ type: "bogus" } as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'XmlNode: unhandled type {"type":"bogus"}',
+    );
   });
 });
