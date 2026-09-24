@@ -13,7 +13,9 @@ const CONTENT_ROOT_TAG = "office:document-content";
 // odf.js's readManifest requires this exact value to be present (any non-undefined string satisfies its own "is manifest:version there at all" check), never a specific version number — kept as the real OASIS ODF 1.3 manifest version rather than an arbitrary placeholder for the same representative-shape reason as CONTENT_ROOT_TAG above, and checked directly in odb-char-substitution-fixture.test.ts.
 const MANIFEST_VERSION = "1.3";
 
-function databaseContentPart(databaseChildren: ReturnType<typeof el>[]) {
+function databaseContentPart(
+  databaseChildren: readonly ReturnType<typeof el>[],
+) {
   return {
     kind: "xml" as const,
     nodes: [

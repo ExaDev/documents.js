@@ -151,8 +151,8 @@ interface WordprocessingBody {
 }
 
 function appendDocxOdtRun(
-  paragraph: WordprocessingParagraph,
-  run: RunInput,
+  paragraph: Readonly<WordprocessingParagraph>,
+  run: Readonly<RunInput>,
 ): void {
   rejectUnsupportedFields(
     run,
@@ -173,7 +173,7 @@ function appendDocxOdtRun(
 }
 
 function appendDocxOdtParagraphs(
-  body: WordprocessingBody,
+  body: Readonly<WordprocessingBody>,
   paragraphs: readonly ParagraphInput[],
 ): void {
   for (const paragraph of paragraphs) {
@@ -208,7 +208,7 @@ interface MarkdownWordprocessingBody {
 }
 
 function appendMarkdownParagraphs(
-  body: MarkdownWordprocessingBody,
+  body: Readonly<MarkdownWordprocessingBody>,
   paragraphs: readonly ParagraphInput[],
 ): void {
   for (const paragraph of paragraphs) {
