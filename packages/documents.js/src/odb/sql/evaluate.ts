@@ -338,25 +338,18 @@ class ColumnResolver {
     if (cached !== undefined) {
       return cached;
     }
-    let candidateIndices: readonly number[];
-    if (ref.qualifier !== undefined) {
-      const qualifierName = resolveName(
-        this.qualifierNames,
-        ref.qualifier,
-        "table qualifier",
-        this.sql,
-      );
-      candidateIndices = this.columns
-        .map((column, index) =>
-          column.qualifiers.includes(qualifierName) ? index : -1,
-        )
-        .filter((index) => index >= 0);
-    } else {
-      candidateIndices = this.columns.map((_column, index) => index);
-    }
+    const qualifierName =
+      ref.qualifier === undefined
+        ? undefined
+        : resolveName(
+            this.qualifierNames,
+            ref.qualifier,
+            "table qualifier",
+            this.sql,
+          );
     const index = resolveColumnIndex(
       this.columns,
-      candidateIndices,
+      this.candidateIndicesFor(qualifierName),
       ref.column,
       this.sql,
     );
@@ -370,9 +363,9 @@ class ColumnResolver {
     if (cached !== undefined) {
       return cached;
     }
-    let candidateIndices: readonly number[];
+    let qualifierName: string | undefined;
     if (ref.qualifier !== undefined) {
-      const qualifierName = tryResolveName(
+      qualifierName = tryResolveName(
         this.qualifierNames,
         ref.qualifier,
         "table qualifier",
@@ -381,17 +374,10 @@ class ColumnResolver {
       if (qualifierName === undefined) {
         return undefined;
       }
-      candidateIndices = this.columns
-        .map((column, index) =>
-          column.qualifiers.includes(qualifierName) ? index : -1,
-        )
-        .filter((index) => index >= 0);
-    } else {
-      candidateIndices = this.columns.map((_column, index) => index);
     }
     const index = tryResolveColumnIndex(
       this.columns,
-      candidateIndices,
+      this.candidateIndicesFor(qualifierName),
       ref.column,
       this.sql,
     );
@@ -400,6 +386,20 @@ class ColumnResolver {
     }
     this.cache.set(ref, index);
     return index;
+  }
+
+  // Every column index a name could plausibly refer to, shared by indexOf and tryLocalIndexOf: every already-qualifier-matched column, or, with no qualifier at all, every column in the joined list.
+  private candidateIndicesFor(
+    qualifierName: string | undefined,
+  ): readonly number[] {
+    if (qualifierName === undefined) {
+      return this.columns.map((_column, index) => index);
+    }
+    return this.columns
+      .map((column, index) =>
+        column.qualifiers.includes(qualifierName) ? index : -1,
+      )
+      .filter((index) => index >= 0);
   }
 
   valueAt(index: number, row: readonly ContentCellValue[]): ContentCellValue {
