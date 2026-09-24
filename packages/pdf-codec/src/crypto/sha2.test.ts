@@ -198,13 +198,13 @@ function referenceSha512Family(
       BigInt.asUintN(64, word + [a, b, c, d, e, f, g, h][i]!),
     );
   }
-  const digest = new Uint8Array(64);
+  const digestBytes = new Uint8Array(64);
   state.forEach((word, i) => {
     for (let j = 0; j < 8; j += 1) {
-      digest[i * 8 + j] = Number((word >> BigInt(56 - 8 * j)) & 0xffn);
+      digestBytes[i * 8 + j] = Number((word >> BigInt(56 - 8 * j)) & 0xffn);
     }
   });
-  return digest.subarray(0, outputBytes);
+  return digestBytes.subarray(0, outputBytes);
 }
 
 /** Deterministic pseudo-random bytes from Mulberry32, so a failing input reproduces exactly and no test depends on Math.random. */

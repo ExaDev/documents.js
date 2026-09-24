@@ -45,18 +45,18 @@ export interface MathFont {
   readonly metrics: MathFontMetrics;
   readonly cffBytes: Uint8Array<ArrayBuffer>;
   readonly descriptor: MathFontDescriptorMetrics;
-  glyphId(codePoint: number): number | undefined;
+  glyphId: (codePoint: number) => number | undefined;
   // The glyph-space (1000-units-per-em, PDF's own /W convention regardless of the font's own unitsPerEm) advance width for `glyphId` — the value math-font-write.ts writes into /W, and the same conversion factor content stream widths implicitly rely on.
-  glyphSpaceWidth(glyphId: number): number;
+  glyphSpaceWidth: (glyphId: number) => number;
   // This glyph's own tight ink bounding box in FONT DESIGN UNITS (y up, so a descender's yMin is negative), computed by interpreting its Type 2 charstring — see cff-bounds.ts. `undefined` for a glyph outside the font, one that draws nothing (a space), or one whose charstring that module declines to walk. The size-relative form most callers want is MathGlyphMetrics.inkAscentPt/inkDescentPt, which metricsAt(sizePt) already converts to points.
-  glyphInkBounds(glyphId: number): GlyphInkBounds | undefined;
+  glyphInkBounds: (glyphId: number) => GlyphInkBounds | undefined;
   // The font's own MathVariants.minConnectorOverlap, in design units — the floor on assembly part overlap assembleStretchyGlyph (math-stretch.ts) needs alongside a construction from `stretchyConstruction` below.
   readonly minConnectorOverlap: number;
   // Everything the font declares about stretching the glyph for `codePoint` along `axis`, in design units, or `undefined` when the font's MathVariants subtable does not cover that glyph on that axis at all (i.e. the character is not stretchy in this font, whatever an operator dictionary may say about it). See LoadedMathFont.stretchGlyph below for the points-in/points-out form most callers want.
-  stretchyConstruction(
+  stretchyConstruction: (
     codePoint: number,
     axis: MathStretchAxis,
-  ): MathGlyphConstruction | undefined;
+  ) => MathGlyphConstruction | undefined;
 }
 
 function toPt(designUnits: number, unitsPerEm: number, sizePt: number): number {

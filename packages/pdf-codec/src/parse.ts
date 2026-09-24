@@ -51,6 +51,12 @@ export function parseValue(
       });
       return pdfNull();
   }
+  return assertNeverToken(token);
+}
+
+// Reached only if the token union ever gains a kind parseValue's own switch does not match: every current kind has a case there, so `token` narrows to `never` at this call, and adding an uncovered kind makes that narrowing fail and the call stop compiling. Exists so the switch's exhaustiveness, proven by the type checker rather than by a catch-all default that would silently read a genuinely new token as nothing, still gives consistent-return an explicit statement to see past the switch. Exported so parse.test.ts can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable.
+export function assertNeverToken(token: never): never {
+  throw new Error(`parseValue: unhandled token ${JSON.stringify(token)}`);
 }
 
 function parseKeywordValue(

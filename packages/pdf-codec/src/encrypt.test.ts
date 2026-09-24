@@ -47,7 +47,12 @@ function collectDiagnostics(): {
   diagnostics: PdfDiagnostic[];
 } {
   const diagnostics: PdfDiagnostic[] = [];
-  return { sink: (diagnostic) => diagnostics.push(diagnostic), diagnostics };
+  return {
+    sink: (diagnostic) => {
+      diagnostics.push(diagnostic);
+    },
+    diagnostics,
+  };
 }
 
 function asciiBytes(text: string): Uint8Array<ArrayBuffer> {

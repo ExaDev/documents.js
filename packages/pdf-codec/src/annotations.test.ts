@@ -195,7 +195,11 @@ describe("readPdf: annotations", () => {
     const diagnostics: unknown[] = [];
     const doc = readPdf(
       pdfWithOneAnnotation("/Type /Annot /Subtype /Highlight"),
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
     );
     expect(doc.pages[0]!.annotations).toBeUndefined();
     expect(diagnostics).toEqual([

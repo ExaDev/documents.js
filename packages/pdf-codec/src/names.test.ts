@@ -89,7 +89,9 @@ describe("walkNameTree", () => {
 
   it("reports a warning and stops descent at a cycle", () => {
     const diagnostics: string[] = [];
-    const sink: PdfDiagnosticSink = (d) => diagnostics.push(d.code);
+    const sink: PdfDiagnosticSink = (d) => {
+      diagnostics.push(d.code);
+    };
     const root = pdfDict({});
     root.entries.set("Kids", pdfArray([root]));
     const entries = walkNameTree(root, resolverOf(new Map()), sink);
@@ -99,7 +101,9 @@ describe("walkNameTree", () => {
 
   it("reports a warning for a node that is not a dictionary and skips it", () => {
     const diagnostics: string[] = [];
-    const sink: PdfDiagnosticSink = (d) => diagnostics.push(d.code);
+    const sink: PdfDiagnosticSink = (d) => {
+      diagnostics.push(d.code);
+    };
     const root = pdfDict({ Kids: pdfArray([pdfNum(42)]) });
     const entries = walkNameTree(root, resolverOf(new Map()), sink);
     expect(entries).toEqual([]);

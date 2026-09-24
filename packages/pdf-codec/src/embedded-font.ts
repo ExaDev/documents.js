@@ -16,6 +16,8 @@ import { parseHmtx } from "./hmtx-table";
 import type { SfntFont } from "./sfnt";
 import { hasBytes, i16, sfntTableBytes, u16 } from "./sfnt";
 
+const LONG_HOR_METRIC_SIZE = 4; // advanceWidth (uint16) + leftSideBearing (int16)
+
 // A parsed, ready-to-embed TrueType-outline text face: everything the PDF write path needs to state a font's metrics in a /FontDescriptor, to resolve a string's characters to glyph IDs, and to measure that string — read once from the font's own 'cmap'/'hmtx'/'head'/'hhea'/'OS/2'/'post'/'name' tables and cached, the same shape math-font.ts's own loadMathFont provides for the vendored math font.
 //
 // The one thing this module gets right that a naive port of math-font.ts would not: every geometry field here is converted into PDF's 1000-units-per-em glyph space (ISO 32000-1 9.8.1), which a font's own design grid frequently is NOT. STIX Two Math happens to be drawn on a 1000-unit em, so math-font-write.ts's own `1000 / unitsPerEm` factor is an identity there; Carlito is drawn on a 2048-unit em and Caladea on a 1000-unit one, so the same factor is genuinely 0.48828125 for one vendored family and 1 for the other. Getting that scale wrong is silent rather than loud — a font declaring a 2048-unit ascent as if it were glyph-space would simply render with roughly twice the intended metrics, with nothing anywhere reporting an error — so the conversion is applied once, here, and every consumer of an EmbeddedFace reads glyph-space values only.
@@ -68,11 +70,11 @@ export interface EmbeddedFace {
   readonly postScriptName: string;
   readonly numGlyphs: number;
   readonly metrics: EmbeddedFaceMetrics;
-  glyphId(codePoint: number): number | undefined;
+  glyphId: (codePoint: number) => number | undefined;
   // This glyph's advance width in glyph space — the value a /W entry carries, and the one both measurement and content-stream emission below are driven by.
-  glyphSpaceWidth(glyphId: number): number;
+  glyphSpaceWidth: (glyphId: number) => number;
   // The advance adjustment, in glyph space, this face's own 'GPOS' pair kerning applies to `leftGlyphId` when `rightGlyphId` immediately follows it — negative to tighten, which is what nearly every real pair asks for. 0 covers three genuinely different facts the layout above has no use for distinguishing: the face declares no reachable kerning at all, no subtable describes this pair, or a subtable describes it and asks for no adjustment. gpos-table.ts keeps the last two apart for a caller that needs them; nothing here does, since all three draw and measure identically.
-  kernGlyphSpace(leftGlyphId: number, rightGlyphId: number): number;
+  kernGlyphSpace: (leftGlyphId: number, rightGlyphId: number) => number;
   // The face's own 'GSUB' shaping over the default-on feature set ('liga'/'rlig'/'calt'/'clig' — see gsub-table.ts for why exactly those four and not the opt-in features), or `undefined` for a face with nothing this package can apply. Applied inside encodeForShowEmbedded and collectEmbeddedGlyphs, never by a caller directly, so measurement, drawing, subsetting, and ToUnicode all describe the one substituted sequence.
   readonly gsubShaper: GsubShaper | undefined;
 }
@@ -214,8 +216,6 @@ const HHEA_ASCENDER_OFFSET = 4;
 const HHEA_DESCENDER_OFFSET = 6;
 const HHEA_LINE_GAP_OFFSET = 8;
 const HHEA_NUMBER_OF_HMETRICS_OFFSET = 34;
-const LONG_HOR_METRIC_SIZE = 4; // advanceWidth (uint16) + leftSideBearing (int16)
-
 // 'hhea' (ISO/IEC 14496-22 clause 5.2.3): the three vertical metrics a /FontDescriptor and a line-height calculation are built from, plus the metric count that bounds 'hmtx'. font-tables.ts parses the whole-font tables a FontDescriptor otherwise needs but not this one, since nothing before now needed a general 'hhea' reader — hmtx-table.ts reads only numberOfHMetrics out of it, and math-font.ts reaches into its raw bytes directly.
 function parseHhea(font: SfntFont):
   | {

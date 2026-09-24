@@ -32,8 +32,8 @@ export interface PdfFont {
   readonly family: string;
   readonly bold: boolean;
   readonly italic: boolean;
-  widthOf(code: number): number; // 1000ths of em, matching PDF's own /Widths convention
-  decodeToUnicode(codes: Uint8Array<ArrayBuffer>): string;
+  widthOf: (code: number) => number; // 1000ths of em, matching PDF's own /Widths convention
+  decodeToUnicode: (codes: Uint8Array<ArrayBuffer>) => string;
   // Present only on a composite font whose /Encoding CMap selects vertical writing mode. Writing mode is a property of the CMap, and a simple font has no CMap at all, so a simple font is always horizontal by construction rather than by default.
   readonly verticalMetricsOf?: (code: number) => VerticalGlyphMetrics;
 }

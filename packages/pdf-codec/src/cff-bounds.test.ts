@@ -457,8 +457,6 @@ describe("parseCffGlyphBounds's charstring interpreter, driven by hand-built cha
   it("switches a Global Subrs INDEX from the medium to the large subroutine bias exactly at a count of 33900 entries", () => {
     // The second subrBias threshold (TN 5177 section 16): count < 33900 biases by 1131 (medium), count >= 33900 biases by 32768 (large). A global subr INDEX of exactly 33900 filler entries puts the bias at the large value; calling subroutine 0 there needs operand -32768, the most negative int16 value, which only the large bias resolves correctly.
     const OP_HLINETO = 6;
-    const OP_ENDCHAR = 14;
-    const OP_CALLGSUBR = 29;
     const DX_100 = 100 + 139; // the single-byte small-integer encoding of 100 (bias 139)
     const lineSubr = [DX_100, OP_HLINETO];
     const filler = [OP_ENDCHAR];

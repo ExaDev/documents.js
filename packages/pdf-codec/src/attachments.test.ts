@@ -24,7 +24,9 @@ describe("readPdf: embedded files", () => {
   it("collects a /FileAttachment annotation's filespec and a catalog /AF entry, deduplicated against the name tree by name", () => {
     const diagnostics: PdfDiagnostic[] = [];
     const doc = readPdf(embeddedFilesPdf(), {
-      sink: (d) => diagnostics.push(d),
+      sink: (d) => {
+        diagnostics.push(d);
+      },
     });
     const names = doc.attachments?.map((a) => a.name);
     expect(names).toEqual(["notes.txt", "logo.bin", "manifest.json"]);
@@ -43,7 +45,9 @@ describe("readPdf: embedded files", () => {
   it("warns on and drops a filespec whose /EF resolves but has neither an /F nor a /UF stream", () => {
     const diagnostics: PdfDiagnostic[] = [];
     const doc = readPdf(embeddedFilesPdf(), {
-      sink: (d) => diagnostics.push(d),
+      sink: (d) => {
+        diagnostics.push(d);
+      },
     });
     expect(
       doc.attachments?.find((a) => a.name === "broken.bin"),
