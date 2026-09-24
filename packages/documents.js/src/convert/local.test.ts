@@ -424,13 +424,14 @@ describe("createLocalDocumentConverter: convert", () => {
     expect(result.package?.kind).toBe("formula");
   });
 
-  it("pdf: odf source forwards the abort signal to odfToPdf, which checks it before rendering", () => {
+  // convert() is async, so an already-aborted signal surfaces as a rejection rather than a synchronous throw. That is the difference that matters to a caller written as convert(...).catch(...) rather than await: a synchronous throw would escape such a caller's own handler entirely.
+  it("pdf: odf source forwards the abort signal to odfToPdf, which checks it before rendering", async () => {
     const converter = createLocalDocumentConverter();
     const controller = new AbortController();
     controller.abort();
     let caught: unknown;
     try {
-      void converter.convert(
+      await converter.convert(
         {
           source: { format: "odf", bytes: odfFormulaBytes(FRACTION_FORMULA) },
           targetFormat: "pdf",
@@ -856,7 +857,9 @@ describe("createLocalDocumentConverter: fonts", () => {
       },
       {
         signal: new AbortController().signal,
-        onFontSubstitution: (substitution) => substitutions.push(substitution),
+        onFontSubstitution: (substitution) => {
+          substitutions.push(substitution);
+        },
       },
     );
     expect(substitutions).toEqual([

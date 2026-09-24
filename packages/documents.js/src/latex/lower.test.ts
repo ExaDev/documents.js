@@ -757,7 +757,11 @@ describe("lowerLatex degradations", () => {
 
   it("streams diagnostics through the sink as they are emitted", () => {
     const seen: string[] = [];
-    lowerLatex("2x", { sink: (diagnostic) => seen.push(diagnostic.code) });
+    lowerLatex("2x", {
+      sink: (diagnostic) => {
+        seen.push(diagnostic.code);
+      },
+    });
     expect(seen).toEqual(["latex/juxtaposition-unparsed"]);
   });
 

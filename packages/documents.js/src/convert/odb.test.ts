@@ -98,7 +98,9 @@ describe("odbToXlsx / odbToCsv onDocument", () => {
   it("odbToXlsx fires onDocument exactly once with a content-only spreadsheet package", () => {
     const packages: unknown[] = [];
     const out = odbToXlsx(embeddedHsqldbOdbBytes(), {
-      onDocument: (pkg) => packages.push(pkg),
+      onDocument: (pkg) => {
+        packages.push(pkg);
+      },
     });
     expect(out.byteLength).toBeGreaterThan(0);
     expect(packages).toHaveLength(1);
@@ -118,7 +120,9 @@ describe("odbToXlsx / odbToCsv onDocument", () => {
     const packages: unknown[] = [];
     const out = odbToCsv(embeddedHsqldbOdbBytes(), {
       table: "ORDERS",
-      onDocument: (pkg) => packages.push(pkg),
+      onDocument: (pkg) => {
+        packages.push(pkg);
+      },
     });
     expect(new TextDecoder().decode(out)).toContain("first order");
     expect(packages).toHaveLength(1);

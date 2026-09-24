@@ -139,10 +139,10 @@ export class DocSection {
 
 // The first section's own block-flow handle, mirroring MarkdownBody's shape exactly (paragraphs/appendParagraph/tables/appendTable) so every caller written against docx's or odt's or markdown's `.body` works unchanged — the docx/odt/markdown family's one shared editor surface. Multiple sections remain reachable through sections()/appendSection(); body always views the FIRST one.
 export interface DocBody {
-  paragraphs(): DocParagraph[];
-  appendParagraph(init?: ParagraphInit): DocParagraph;
-  tables(): DocTable[];
-  appendTable(init: TableInit): DocTable;
+  paragraphs: () => DocParagraph[];
+  appendParagraph: (init?: ParagraphInit) => DocParagraph;
+  tables: () => DocTable[];
+  appendTable: (init: TableInit) => DocTable;
 }
 
 class DocBodyImpl implements DocBody {

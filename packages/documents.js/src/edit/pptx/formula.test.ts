@@ -217,7 +217,11 @@ describe("buildPptxPackage: an embedded formula block", () => {
           ],
         },
       ]),
-      { onMathDiagnostic: (diagnostic) => diagnostics.push(diagnostic) },
+      {
+        onMathDiagnostic: (diagnostic) => {
+          diagnostics.push(diagnostic);
+        },
+      },
     );
     expect(diagnostics.length).toBeGreaterThan(0);
   });

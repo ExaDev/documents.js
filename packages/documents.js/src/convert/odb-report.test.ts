@@ -89,8 +89,9 @@ describe("odbReportToPdf", () => {
 
     const substitutions: string[] = [];
     odbReportToPdf(content, {
-      onFontSubstitution: (substitution) =>
-        substitutions.push(substitution.requestedFamily),
+      onFontSubstitution: (substitution) => {
+        substitutions.push(substitution.requestedFamily);
+      },
     });
     expect(substitutions).toContain("Calibri");
   });

@@ -724,7 +724,9 @@ describe("odtToDocx: an embedded formula becomes real OOXML math", () => {
   it("reports no diagnostics at all for a formula whose every construct has a real OMML equivalent", () => {
     const diagnostics: OmmlDiagnostic[] = [];
     odtToDocx(odtWithEmbeddedFormulaBytes(), {
-      onMathDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+      onMathDiagnostic: (diagnostic) => {
+        diagnostics.push(diagnostic);
+      },
     });
     expect(diagnostics).toEqual([]);
   });
@@ -746,8 +748,9 @@ describe("odtToDocx: an embedded formula becomes real OOXML math", () => {
     }[] = [];
     const root = documentRootOf(
       odtToDocx(bytes, {
-        onMathDiagnostic: (diagnostic, context) =>
-          diagnostics.push({ ...diagnostic, sourcePath: context.sourcePath }),
+        onMathDiagnostic: (diagnostic, context) => {
+          diagnostics.push({ ...diagnostic, sourcePath: context.sourcePath });
+        },
       }),
     );
 

@@ -175,7 +175,9 @@ describe("createDocumentFontRegistry", () => {
     const registry = createDocumentFontRegistry(
       { kind: "docx", package: embeddedFontDocxPackage() },
       {
-        onFontSubstitution: (substitution) => substitutions.push(substitution),
+        onFontSubstitution: (substitution) => {
+          substitutions.push(substitution);
+        },
       },
     );
     registry.resolve({ family: "Caladea", weight: "normal", style: "italic" });
@@ -220,7 +222,9 @@ describe("a cmap miss on a source-embedded face", () => {
           kind: "docx",
           package: embeddedFontDocxPackage(),
         }),
-        onMissingGlyph: (substitution) => missing.push(substitution),
+        onMissingGlyph: (substitution) => {
+          missing.push(substitution);
+        },
       },
     );
     expect(missing).toEqual([{ from: UNMAPPED_CHARACTER }]);
@@ -235,7 +239,9 @@ describe("a cmap miss on a source-embedded face", () => {
         kind: "docx",
         package: embeddedFontDocxPackage(),
       }),
-      onMissingGlyph: (substitution) => missing.push(substitution),
+      onMissingGlyph: (substitution) => {
+        missing.push(substitution);
+      },
     });
     expect(missing).toEqual([]);
   });

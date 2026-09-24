@@ -150,7 +150,9 @@ describe("openMarkdown / toMarkdownText round trip", () => {
     heading!.headingLevel = 8;
     const diagnosticCodes: string[] = [];
     const output = editor.toMarkdownText({
-      sink: (diagnostic) => diagnosticCodes.push(diagnostic.code),
+      sink: (diagnostic) => {
+        diagnosticCodes.push(diagnostic.code);
+      },
     });
     expect(output).toContain("###### Title");
     expect(output).not.toContain("####### Title");

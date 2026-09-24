@@ -31,7 +31,11 @@ function readVectors(
     text,
     diagnostics === undefined
       ? undefined
-      : { onSvgDiagnostic: (diagnostic) => diagnostics.push(diagnostic) },
+      : {
+          onSvgDiagnostic: (diagnostic) => {
+            diagnostics.push(diagnostic);
+          },
+        },
   );
   if (document.kind !== "drawing") {
     throw new Error("expected a drawing ContentDocument");
@@ -218,7 +222,11 @@ describe("readSvgContent root geometry", () => {
     const diagnostics: SvgDiagnostic[] = [];
     const document = readSvgContent(
       '<svg xmlns="http://www.w3.org/2000/svg"><rect x="10" y="10" width="5" height="5"/></svg>',
-      { onSvgDiagnostic: (diagnostic) => diagnostics.push(diagnostic) },
+      {
+        onSvgDiagnostic: (diagnostic) => {
+          diagnostics.push(diagnostic);
+        },
+      },
     );
     if (document.kind !== "drawing") {
       throw new Error("expected a drawing ContentDocument");
@@ -1039,7 +1047,11 @@ describe("readSvgContent root geometry boundaries", () => {
     const diagnostics: SvgDiagnostic[] = [];
     const document = readSvgContent(
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 60"><rect x="0" y="0" width="5" height="5"/></svg>',
-      { onSvgDiagnostic: (diagnostic) => diagnostics.push(diagnostic) },
+      {
+        onSvgDiagnostic: (diagnostic) => {
+          diagnostics.push(diagnostic);
+        },
+      },
     );
     if (document.kind !== "drawing") {
       throw new Error("expected a drawing ContentDocument");
@@ -1082,7 +1094,9 @@ describe("readSvgContent root geometry boundaries", () => {
     readSvgContent(
       '<svg xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="5" height="5"/></svg>',
       {
-        onSvgDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+        onSvgDiagnostic: (diagnostic) => {
+          diagnostics.push(diagnostic);
+        },
       },
     );
     expect(diagnostics[0]).toMatchObject({
@@ -1496,7 +1510,11 @@ describe("buildSvgText", () => {
           ],
         },
       ]),
-      { onSvgDiagnostic: (diagnostic) => diagnostics.push(diagnostic) },
+      {
+        onSvgDiagnostic: (diagnostic) => {
+          diagnostics.push(diagnostic);
+        },
+      },
     );
     expect(text).toContain('stroke-dasharray="6 4"');
     expect(text).toContain('stroke-dasharray="1 3" stroke-linecap="round"');
@@ -1612,7 +1630,9 @@ describe("buildSvgText", () => {
       ],
     };
     buildSvgText(document, {
-      onSvgDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+      onSvgDiagnostic: (diagnostic) => {
+        diagnostics.push(diagnostic);
+      },
     });
     expect(diagnostics).toEqual([
       {
@@ -1646,7 +1666,9 @@ describe("buildSvgText", () => {
       ],
     };
     buildSvgText(document, {
-      onSvgDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+      onSvgDiagnostic: (diagnostic) => {
+        diagnostics.push(diagnostic);
+      },
     });
     expect(diagnostics[0]?.detail).toMatch(/^shape:/);
   });

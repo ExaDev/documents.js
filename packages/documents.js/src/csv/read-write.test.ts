@@ -109,7 +109,9 @@ describe("readCsvContent", () => {
     // Row 2 has one field where the grid is three wide: columns 1 and 2 are genuine empty cells, not holes.
     const events: CellTypeInference[] = [];
     const document = readCsvContent("a,b,c\n1,,3\nsolo\n", {
-      onCellTypeInference: (event) => events.push(event),
+      onCellTypeInference: (event) => {
+        events.push(event);
+      },
     });
     if (document.kind !== "spreadsheet") {
       throw new Error("expected a spreadsheet ContentDocument");
@@ -156,7 +158,9 @@ describe("readCsvContent", () => {
   it("fires onCellTypeInference exactly where inferCellValue reaches a decision, never for header cells or no-candidate text", () => {
     const events: CellTypeInference[] = [];
     readCsvContent("h1,h2\n007,42.5\nYes,x\n", {
-      onCellTypeInference: (event) => events.push(event),
+      onCellTypeInference: (event) => {
+        events.push(event);
+      },
     });
     // Header cells are never re-typed, so the header's own "007" fires nothing. "x" matches no typing rule at all, which is not a decision and fires nothing either — the sink reports decisions (retypes and named-ambiguity declines), not every cell.
     expect(events).toEqual([

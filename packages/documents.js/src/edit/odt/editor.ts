@@ -35,20 +35,20 @@ import { buildTable, OdtTable } from "./table";
 const CONTENT_PART_PATH = "content.xml";
 
 export interface OdtBody {
-  appendParagraph(init?: ParagraphInit): OdtParagraph;
-  appendTable(init: TableInit): OdtTable;
-  appendList(): OdtList;
-  appendPageBreak(): void;
-  appendFormula(formula: ContentFormula, frame: Box): OdtParagraph;
-  appendVectors(vectors: readonly ContentVector[]): OdtParagraph;
+  appendParagraph: (init?: ParagraphInit) => OdtParagraph;
+  appendTable: (init: TableInit) => OdtTable;
+  appendList: () => OdtList;
+  appendPageBreak: () => void;
+  appendFormula: (formula: ContentFormula, frame: Box) => OdtParagraph;
+  appendVectors: (vectors: readonly ContentVector[]) => OdtParagraph;
   // A bookmark's two halves as office:text-level siblings bracketing whatever is appended between the two calls — the one construct shape expressible append-only, since ODF allows text:bookmark-start/text:bookmark-end directly in the body flow around whole blocks. The name travels on both halves, the shape every real producer writes and odf.js's own reader pairs back through.
-  appendBookmarkStart(name: string): void;
-  appendBookmarkEnd(name: string): void;
+  appendBookmarkStart: (name: string) => void;
+  appendBookmarkEnd: (name: string) => void;
   // A division region: every append between openDivisionRegion and closeRegion lands inside the division's own text:section element — the block-flow spelling of an ODF division, which LibreOffice itself writes as text:section around the content it groups. The descriptor drives the section's own attributes (text:name, text:protected, and a trailing text:section-source for a linked chapter), mirroring odf.js's own typed writer; the one field not carried is columnCount, which needs the section-style interning that writer's style machinery performs and this editor surface does not have. Regions nest to arbitrary depth.
-  openDivisionRegion(descriptor: DivisionDescriptor): void;
+  openDivisionRegion: (descriptor: DivisionDescriptor) => void;
   // An index-wrapper region (text:table-of-content or one of its six siblings around the extent's own text:index-body). Answers false when the descriptor's *-source residue names no recognisable wrapper — there is then no fact saying which of the seven to write.
-  openIndexRegion(descriptor: ContentControlDescriptor): boolean;
-  closeRegion(): void;
+  openIndexRegion: (descriptor: ContentControlDescriptor) => boolean;
+  closeRegion: () => void;
 }
 
 function findContentRoot(pkg: Package): XmlElement {

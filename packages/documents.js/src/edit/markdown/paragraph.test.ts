@@ -75,7 +75,9 @@ describe("MarkdownParagraph.quoteDepth", () => {
 
     const diagnosticCodes: string[] = [];
     const output = editor.toMarkdownText({
-      sink: (diagnostic) => diagnosticCodes.push(diagnostic.code),
+      sink: (diagnostic) => {
+        diagnosticCodes.push(diagnostic.code);
+      },
     });
     expect(output).toBe("Plain text");
     expect(output).not.toContain(">");

@@ -98,8 +98,9 @@ describe("csv composition: PDF pivot", () => {
   it("csvToPdf threads onCellTypeInference through to the read hop, exposing the audit channel the ergonomic layer previously lacked", () => {
     const events: string[] = [];
     csvToPdf(csvBytes(), {
-      onCellTypeInference: (event) =>
-        events.push(`${event.row}:${event.column}:${event.outcome}`),
+      onCellTypeInference: (event) => {
+        events.push(`${event.row}:${event.column}:${event.outcome}`);
+      },
     });
     // The sink reports decisions only: the header (never re-typed) and the plain-text names (no typing candidate) fire nothing, leaving exactly the two numeric retypes.
     expect(events).toEqual(["1:1:retyped", "2:1:retyped"]);

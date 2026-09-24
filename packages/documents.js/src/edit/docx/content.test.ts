@@ -1193,7 +1193,9 @@ describe("buildDocxPackage: a table column's own isHeader has no w:tblGrid spell
     };
     const contexts: { readonly sourcePath?: string }[] = [];
     buildDocxPackage(documentOf(table), {
-      onDiagnostic: (_diagnostic, context) => contexts.push(context),
+      onDiagnostic: (_diagnostic, context) => {
+        contexts.push(context);
+      },
     });
     expect(contexts).toEqual([{ sourcePath: "body/table[0]" }]);
   });
@@ -1206,7 +1208,9 @@ describe("buildDocxPackage: a table column's own isHeader has no w:tblGrid spell
     };
     const diagnostics: DocxWriteDiagnostic[] = [];
     buildDocxPackage(documentOf(table), {
-      onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+      onDiagnostic: (diagnostic) => {
+        diagnostics.push(diagnostic);
+      },
     });
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0]).toEqual({
@@ -1256,7 +1260,9 @@ describe("buildDocxPackage: a table column's own isHeader has no w:tblGrid spell
     };
     const diagnostics: DocxWriteDiagnostic[] = [];
     buildDocxPackage(documentOf(table), {
-      onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+      onDiagnostic: (diagnostic) => {
+        diagnostics.push(diagnostic);
+      },
     });
     expect(diagnostics.map((d) => d.message)).toEqual([
       expect.stringContaining("table column 0 is a header column"),
@@ -1272,7 +1278,9 @@ describe("buildDocxPackage: a table column's own isHeader has no w:tblGrid spell
     };
     const diagnostics: DocxWriteDiagnostic[] = [];
     buildDocxPackage(documentOf(table), {
-      onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+      onDiagnostic: (diagnostic) => {
+        diagnostics.push(diagnostic);
+      },
     });
     expect(diagnostics).toEqual([]);
   });

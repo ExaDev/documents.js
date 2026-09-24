@@ -85,8 +85,8 @@ export interface DocumentConverter {
     readonly source: DocumentFormat;
     readonly target: DocumentFormat;
   }[];
-  convert(
+  convert: (
     request: ConversionRequest,
     options: ConversionOptions,
-  ): Promise<ConversionResult>;
+  ) => Promise<ConversionResult>;
 }
