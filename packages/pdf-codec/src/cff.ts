@@ -7,7 +7,7 @@ import { hasBytes, u8, u16, u24, u32 } from "./sfnt";
 export interface CffIndex {
   readonly count: number;
   readonly endOffset: number; // the absolute offset of the first byte past this INDEX — how a caller walks from one INDEX to the next, since a CFF's Name/Top DICT/String/Global Subr INDEXes are stored back to back with no offsets pointing at them
-  entry(index: number): Uint8Array<ArrayBuffer> | undefined;
+  entry: (index: number) => Uint8Array<ArrayBuffer> | undefined;
 }
 
 // A DICT's operators keyed to their operand list, in the order the operands appeared. A two-byte escaped operator (12 x) is keyed as CFF_ESCAPED_OPERATOR_BASE + x, so `12 30` (ROS) is 1230 and can never collide with a one-byte operator (0..21).

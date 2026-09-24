@@ -5,7 +5,7 @@ import { nextToken } from "./lexer";
 // A /ToUnicode CMap (ISO 32000-1 9.10.3) is written in a PostScript-derived syntax, but the only two constructs that matter for text extraction — bfchar (single-code mappings) and bfrange (contiguous-range mappings) — use exactly PDF's own token vocabulary (hex strings, arrays, numbers, keywords), so the shared lexer tokenizes it directly. Everything else in the stream (begincmap/endcmap, codespacerange, the surrounding PostScript dict/findresource/defineresource boilerplate) is simply skipped rather than interpreted — this is a CMap *reader*, not a PostScript interpreter.
 
 export interface ToUnicodeCMap {
-  lookup(code: number): string | undefined;
+  lookup: (code: number) => string | undefined;
 }
 
 function hexBytesToNumber(bytes: Uint8Array<ArrayBuffer>): number {

@@ -32,15 +32,15 @@ export interface CompositeComponent {
 export interface GlyfTable {
   readonly numGlyphs: number;
   // A glyph's own 'glyf' bytes: an empty array for a glyph with no outline (a space, say — its 'loca' entry legitimately has zero length), or `undefined` for a glyph ID outside the font or one whose 'loca' entry is malformed.
-  glyphBytes(glyphId: number): Uint8Array<ArrayBuffer> | undefined;
+  glyphBytes: (glyphId: number) => Uint8Array<ArrayBuffer> | undefined;
   // `undefined` for a glyph with no outline at all, since such a glyph has no header to read, as well as for an unreadable one.
-  glyphHeader(glyphId: number): GlyphHeader | undefined;
+  glyphHeader: (glyphId: number) => GlyphHeader | undefined;
   // The component records of a composite glyph, or `undefined` where the glyph is simple, empty, unreadable, or has a truncated component list. Never a partial list: a subsetter acting on half a composite's components would emit a visibly broken glyph, so an incomplete walk reports that it failed rather than what it managed.
-  compositeComponents(
+  compositeComponents: (
     glyphId: number,
-  ): readonly CompositeComponent[] | undefined;
+  ) => readonly CompositeComponent[] | undefined;
   // This glyph's own tight ink bounding box in design units, or `undefined` for a glyph that draws nothing (a space), one that is unreadable, or a composite this walk declines to measure (see resolveInkBounds below). For a simple glyph this is the box the font itself declares in the glyph's own header — there is no cheaper or more authoritative source, and re-deriving it from the point arrays would be recomputing what the format already states. For a composite it is the union of each component's own box under that component's own placement, since a composite's declared header box is derived data that real font tools have been known to leave stale.
-  glyphInkBounds(glyphId: number): GlyphInkBounds | undefined;
+  glyphInkBounds: (glyphId: number) => GlyphInkBounds | undefined;
 }
 
 export interface GlyfOptions {

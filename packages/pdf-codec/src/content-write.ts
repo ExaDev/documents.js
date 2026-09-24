@@ -62,8 +62,8 @@ export interface ResolvedImageResource {
 // content-write.ts never allocates font/image resource names itself — write.ts owns that (registry-keyed, sorted-order allocation, so object numbers stay deterministic regardless of Map/object iteration order). This context is purely a lookup back into whatever write.ts already decided, keeping this module a short, dumb dispatch over item kind.
 export interface ContentWriteContext {
   readonly measurer: TextMeasurer;
-  resolveFont(font: LayoutFont): ResolvedFontResource;
-  resolveImage(imageId: string): ResolvedImageResource;
+  resolveFont: (font: LayoutFont) => ResolvedFontResource;
+  resolveImage: (imageId: string) => ResolvedImageResource;
   // #967: the indirect-object number of an optional-content group by layer name (write.ts allocates one OCG per doc.layers row). An item carrying a layer the document's own layers table does not name draws unmarked rather than failing — the model tolerates the dangling name, so the writer does too.
   readonly layerObjectNumberOf?: (name: string) => number | undefined;
   // #967: the next page-scoped marked-content identifier, sequential in emission order. Absent when nothing consumes MCIDs (no structure tree): items still draw, and any /OC layer marking works without one.

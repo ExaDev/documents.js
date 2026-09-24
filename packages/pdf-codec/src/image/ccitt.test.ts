@@ -62,7 +62,9 @@ describe("decodeCcittFax: real libtiff-encoded streams", () => {
             k: encoding.k,
             columns: fixture.columns,
             rows: fixture.rows,
-            onWarning: (message) => warnings.push(message),
+            onWarning: (message) => {
+              warnings.push(message);
+            },
           },
         );
         expect(warnings).toEqual([]);
@@ -188,7 +190,9 @@ describe("decodeCcittFax: degradation", () => {
       k: -1,
       columns: 8,
       rows: 4,
-      onWarning: (message) => warnings.push(message),
+      onWarning: (message) => {
+        warnings.push(message);
+      },
     });
     expect(result.rows).toBe(4);
     expect(renderRows(toBlackPixels(result.bytes, 8, 4), 8)).toEqual([
@@ -209,7 +213,9 @@ describe("decodeCcittFax: degradation", () => {
       columns: 8,
       rows: 3,
       encodedByteAlign: true,
-      onWarning: (message) => warnings.push(message),
+      onWarning: (message) => {
+        warnings.push(message);
+      },
     });
     expect(result.rows).toBe(3);
     expect(renderRows(toBlackPixels(result.bytes, 8, 3), 8)).toEqual([
@@ -230,7 +236,9 @@ describe("decodeCcittFax: degradation", () => {
         k: 0,
         columns: 8,
         rows: 2,
-        onWarning: (message) => warnings.push(message),
+        onWarning: (message) => {
+          warnings.push(message);
+        },
       });
       expect(renderRows(toBlackPixels(result.bytes, 8, 2), 8)).toEqual([
         "........",

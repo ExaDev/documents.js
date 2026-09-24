@@ -17,11 +17,11 @@ export interface PdfDocument {
   readonly trailer: PdfDict;
   // The validated /Root catalog, exposed because every document-level reader (destinations, outline, embedded files, optional content, AcroForm) walks catalog keys — re-resolving trailer /Root at each call site would re-narrow a fact openPdfDocument already established.
   readonly catalog: PdfDict;
-  resolve(obj: PdfObject | undefined): PdfObject | undefined;
-  resolveDict(obj: PdfObject | undefined): PdfDict | undefined;
-  pages(): PdfDict[];
+  resolve: (obj: PdfObject | undefined) => PdfObject | undefined;
+  resolveDict: (obj: PdfObject | undefined) => PdfDict | undefined;
+  pages: () => PdfDict[];
   // The 0-based position of a page object in pages()' own order — identity-matched against the tree's resolved leaf objects (NOT the inheritance-merged copies pages() returns, which are fresh objects). This is what a destination array's page reference resolves against.
-  pageIndex(obj: PdfObject | undefined): number | undefined;
+  pageIndex: (obj: PdfObject | undefined) => number | undefined;
 }
 
 // Guards a reference cycle (object A pointing to B pointing back to A) — a corrupt or adversarial file, not something a real producer emits.

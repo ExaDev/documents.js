@@ -18,18 +18,18 @@ export type CipherMethod = "identity" | "rc4" | "aes";
 
 export interface PdfDecryptor {
   // Decrypts one string object's raw bytes, given the indirect object it was found inside.
-  decryptString(
+  decryptString: (
     bytes: Uint8Array<ArrayBuffer>,
     num: number,
     gen: number,
-  ): Uint8Array<ArrayBuffer>;
+  ) => Uint8Array<ArrayBuffer>;
   // Decrypts one stream's still-filter-encoded bytes. The stream's own dictionary is needed to honour /EncryptMetadata false, under which a /Type /Metadata stream is the one stream in the file left in the clear.
-  decryptStream(
+  decryptStream: (
     bytes: Uint8Array<ArrayBuffer>,
     dict: PdfDict,
     num: number,
     gen: number,
-  ): Uint8Array<ArrayBuffer>;
+  ) => Uint8Array<ArrayBuffer>;
 }
 
 // ISO 32000-1 7.6.3.3, Algorithm 2, step (a): the 32-byte padding string every password (including the empty one) is padded to or truncated at. Exported: encrypt-write.ts's Algorithm 3/8/9 need the same constant to pad a real owner/user password the same way.

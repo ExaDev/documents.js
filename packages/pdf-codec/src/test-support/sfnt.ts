@@ -240,7 +240,9 @@ export function buildCoverageFormat1(
   const sorted = [...glyphIds].sort((a, b) => a - b);
   const table = new TableBuilder(4 + sorted.length * 2);
   table.setU16(0, 1).setU16(2, sorted.length);
-  sorted.forEach((glyphId, index) => table.setU16(4 + index * 2, glyphId));
+  sorted.forEach((glyphId, index) => {
+    table.setU16(4 + index * 2, glyphId);
+  });
   return table.bytes;
 }
 
@@ -268,7 +270,9 @@ export function buildClassDefFormat1(
 ): Uint8Array<ArrayBuffer> {
   const table = new TableBuilder(6 + classes.length * 2);
   table.setU16(0, 1).setU16(2, startGlyphId).setU16(4, classes.length);
-  classes.forEach((klass, index) => table.setU16(6 + index * 2, klass));
+  classes.forEach((klass, index) => {
+    table.setU16(6 + index * 2, klass);
+  });
   return table.bytes;
 }
 
@@ -296,7 +300,9 @@ export function buildSingleSubstFormat2(
   const substitutesAt = 6 + sorted.length * 2;
   const table = new TableBuilder(substitutesAt + coverage.length);
   table.setU16(0, 2).setU16(2, substitutesAt).setU16(4, sorted.length);
-  sorted.forEach(([, to], index) => table.setU16(6 + index * 2, to));
+  sorted.forEach(([, to], index) => {
+    table.setU16(6 + index * 2, to);
+  });
   return table.put(substitutesAt, coverage).bytes;
 }
 
@@ -307,9 +313,9 @@ function buildLigatureRecord(
 ): Uint8Array<ArrayBuffer> {
   const table = new TableBuilder(4 + components.length * 2);
   table.setU16(0, ligatureGlyph).setU16(2, components.length + 1);
-  components.forEach((component, index) =>
-    table.setU16(4 + index * 2, component),
-  );
+  components.forEach((component, index) => {
+    table.setU16(4 + index * 2, component);
+  });
   return table.bytes;
 }
 
@@ -343,9 +349,13 @@ export function buildLigatureSubstFormat1(
   });
   const table = new TableBuilder(at);
   table.setU16(0, 1).setU16(2, coverageAt).setU16(4, ligSets.length);
-  setOffsets.forEach((offset, index) => table.setU16(6 + index * 2, offset));
+  setOffsets.forEach((offset, index) => {
+    table.setU16(6 + index * 2, offset);
+  });
   table.put(coverageAt, coverage);
-  ligSets.forEach((ligSet, index) => table.put(setOffsets[index]!, ligSet));
+  ligSets.forEach((ligSet, index) => {
+    table.put(setOffsets[index]!, ligSet);
+  });
   return table.bytes;
 }
 
@@ -459,7 +469,9 @@ function assembleRuleSetSubtable(
   }
   const table = new TableBuilder(setAt);
   writeHeader(table, blobOffsets);
-  blobs.forEach((blob, index) => table.put(blobOffsets[index]!, blob));
+  blobs.forEach((blob, index) => {
+    table.put(blobOffsets[index]!, blob);
+  });
   setOffsets.forEach((offset, index) => {
     table.setU16(headerSize + index * 2, offset);
     table.put(offset, assembledSets[index]!);
@@ -648,7 +660,9 @@ export function buildGsubTable(
 ): Uint8Array<ArrayBuffer> {
   const langSys = new TableBuilder(6 + features.length * 2);
   langSys.setU16(0, 0).setU16(2, 0xffff).setU16(4, features.length);
-  features.forEach((_, index) => langSys.setU16(6 + index * 2, index));
+  features.forEach((_, index) => {
+    langSys.setU16(6 + index * 2, index);
+  });
   const script = new TableBuilder(4 + langSys.bytes.length);
   script.setU16(0, 4).setU16(2, 0).put(4, langSys.bytes);
   const scriptList = new TableBuilder(8 + script.bytes.length);
@@ -661,9 +675,9 @@ export function buildGsubTable(
   const featureTables = features.map((feature) => {
     const table = new TableBuilder(4 + feature.lookupIndices.length * 2);
     table.setU16(0, 0).setU16(2, feature.lookupIndices.length);
-    feature.lookupIndices.forEach((lookupIndex, index) =>
-      table.setU16(4 + index * 2, lookupIndex),
-    );
+    feature.lookupIndices.forEach((lookupIndex, index) => {
+      table.setU16(4 + index * 2, lookupIndex);
+    });
     return table.bytes;
   });
   const featureListSize =
