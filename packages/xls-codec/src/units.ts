@@ -68,7 +68,7 @@ export function pointsToTwips(points: number): number {
 /**
  * The inverse of columnWidthToPoints: the smallest ColInfo coldx whose own forward pixel-quantized width is at least as wide as the given points. Because columnWidthToPoints truncates to a whole pixel, no coldx reproduces an arbitrary points value exactly; this picks the smallest coldx that rounds UP to (rather than under) the requested width, so a column written from a given widthPt and read back through columnWidthToPoints never comes back narrower than what was asked for — the same "honestly approximate" contract columnWidthToPoints's own comment already documents for the read direction.
  *
- * Derived directly from columnWidthToPoints's own forward formula: pixels(coldx) = floor((coldx + digitWidthAllowance) * MAX_DIGIT_WIDTH_PX / 256). Solving for the smallest coldx with pixels(coldx) >= targetPixels gives coldx = ceil(targetPixels * 256 / MAX_DIGIT_WIDTH_PX) - digitWidthAllowance.
+ * Derived directly from columnWidthToPoints's own forward formula: pixels(coldx) = floor((coldx + digitWidthAllowance) * MAX_DIGIT_WIDTH_PX / 256). Solving for the smallest coldx with `pixels(coldx) >= targetPixels` gives coldx = ceil(targetPixels * 256 / MAX_DIGIT_WIDTH_PX) - digitWidthAllowance.
  */
 export function pointsToColumnWidth(points: number): number {
   const digitWidthAllowance = Math.trunc(128 / MAX_DIGIT_WIDTH_PX);
