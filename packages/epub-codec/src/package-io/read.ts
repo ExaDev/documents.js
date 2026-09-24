@@ -23,20 +23,39 @@ export function packageFromEntries(
   return { parts };
 }
 
+const UTF8_BOM_BYTE_0 = 0xef;
+const UTF8_BOM_BYTE_1 = 0xbb;
+const UTF8_BOM_BYTE_2 = 0xbf;
+const UTF8_BOM_BYTES = 3;
+const WHITESPACE_SPACE = 0x20;
+const WHITESPACE_TAB = 0x09;
+const WHITESPACE_LF = 0x0a;
+const WHITESPACE_CR = 0x0d;
+const XML_LESS_THAN = 0x3c;
+
 // An XML part (after any BOM/whitespace) starts with '<'; no standard EPUB binary part (png, jpeg, gif, svg's own raster fallback, embedded font, audio, video, ...) starts with '<' — SVG itself is XML and is correctly classified as such — so a misclassification only ever stores an XML part losslessly as base64, it never misparses a binary part. Mirrors ooxml.js's and odf.js's own identical sniff exactly.
 function looksLikeXml(bytes: Uint8Array<ArrayBuffer>): boolean {
   let i = 0;
   // No separate `bytes.length >= 3` clause: an index past the end of `bytes` reads as undefined, which can never equal one of the three real BOM byte values, so the equality checks alone already reject a too-short array.
-  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
-    i = 3;
+  if (
+    bytes[0] === UTF8_BOM_BYTE_0 &&
+    bytes[1] === UTF8_BOM_BYTE_1 &&
+    bytes[2] === UTF8_BOM_BYTE_2
+  ) {
+    i = UTF8_BOM_BYTES;
   }
   // No `i < bytes.length` loop bound, and no separate `b === undefined` early return: bytes[i] reads as undefined once i runs past the end, undefined matches none of the whitespace comparisons below, and `undefined === 0x3c` is false — so the loop's own final `return b === 0x3c` already answers "false" for an end-of-array read exactly like an explicit early return would, making a separate length or undefined check a redundant restatement of it.
   for (;;) {
     const b = bytes[i];
-    if (b === 0x20 || b === 0x09 || b === 0x0a || b === 0x0d) {
+    if (
+      b === WHITESPACE_SPACE ||
+      b === WHITESPACE_TAB ||
+      b === WHITESPACE_LF ||
+      b === WHITESPACE_CR
+    ) {
       i = i + 1;
       continue;
     }
-    return b === 0x3c;
+    return b === XML_LESS_THAN;
   }
 }
