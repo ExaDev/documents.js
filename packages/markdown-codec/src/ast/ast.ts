@@ -44,9 +44,12 @@ export interface MarkdownParagraphNode {
 
 export type MarkdownHeadingStyle = "atx" | "setext";
 
+// The markdown-reachable ATX/setext heading depth, 1-6 (mirrors src/block/node.ts's own BlockHeadingLevel, the block-layer equivalent this AST-layer type feeds).
+export type MarkdownHeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
+
 export interface MarkdownHeadingNode {
   readonly type: "heading";
-  readonly level: 1 | 2 | 3 | 4 | 5 | 6;
+  readonly level: MarkdownHeadingLevel;
   readonly style: MarkdownHeadingStyle;
   readonly children: MarkdownInlineNode[];
   readonly position?: MarkdownPosition;
