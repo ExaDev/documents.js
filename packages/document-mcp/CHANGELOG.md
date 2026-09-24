@@ -1,3 +1,15 @@
+## [4.14.95](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.94...document-mcp%404.14.95) (2026-09-24)
+
+### Bug Fixes
+
+* **document-mcp:** name every magic number the no-magic-numbers rule flags ([a551aa4](https://github.com/ExaDev/documents.js/commit/a551aa4d4569d1af3be5270685d3d9780b554aa9)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.29
+- Updated document-operations to 1.1.92
+
 ## [4.14.94](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.93...document-mcp%404.14.94) (2026-09-24)
 
 
