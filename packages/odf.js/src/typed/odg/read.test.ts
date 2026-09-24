@@ -416,7 +416,7 @@ describe("readOdg: the package-native reader over the same fixture", () => {
 
 // The odg residue rows (ExaDev/documents.js#769): the unmapped shape kinds and vendor-extension elements quarantine on their own page's residue, and non-content parts quarantine at the package tier.
 describe("readOdgContent: residue rows", () => {
-  function drawingPackage(
+  function residueDrawingPackage(
     page: ReturnType<typeof el>,
     extraParts: Record<string, Package["parts"][string]> = {},
   ): Package {
@@ -451,7 +451,7 @@ describe("readOdgContent: residue rows", () => {
         "svg:y2": "5cm",
       }),
     ]);
-    const { pages } = readOdgContent(drawingPackage(page));
+    const { pages } = readOdgContent(residueDrawingPackage(page));
     const drawPage = pages[0];
     if (drawPage === undefined) {
       throw new Error("expected a draw page");
@@ -473,7 +473,7 @@ describe("readOdgContent: residue rows", () => {
         "svg:height": "2cm",
       }),
     ]);
-    const { pages } = readOdgContent(drawingPackage(page));
+    const { pages } = readOdgContent(residueDrawingPackage(page));
     const drawPage = pages[0];
     if (drawPage === undefined) {
       throw new Error("expected a draw page");
@@ -485,7 +485,7 @@ describe("readOdgContent: residue rows", () => {
 
   it("quarantines a non-content XML part at the package tier keyed by its part path, spliced onto readOdg's root", () => {
     const page = el("draw:page", {});
-    const pkg = drawingPackage(page, {
+    const pkg = residueDrawingPackage(page, {
       "settings.xml": { kind: "xml", nodes: [el("office:document-settings")] },
     });
     const { source } = readOdgContent(pkg);

@@ -267,12 +267,12 @@ const DOCUMENT_ROOT_ELEMENTS: ReadonlySet<string> = new Set([
 ]);
 
 function transformAttributes(
-  element: XmlElement,
+  source: XmlElement,
   tag: string,
   prefixes: ReadonlyMap<string, string>,
 ): Attribute[] {
   const out: Attribute[] = [];
-  for (const attribute of element.attributes) {
+  for (const attribute of source.attributes) {
     if (attribute.name === "xmlns" || attribute.name.startsWith("xmlns:")) {
       out.push(transformNamespaceDeclaration(attribute));
       continue;
@@ -882,12 +882,12 @@ function transformNamespaceDeclarationToOoo1(
 }
 
 function reverseTransformAttributes(
-  element: XmlElement,
+  source: XmlElement,
   tag: string,
   prefixes: ReadonlyMap<string, string>,
 ): Attribute[] {
   const out: Attribute[] = [];
-  for (const attribute of element.attributes) {
+  for (const attribute of source.attributes) {
     if (attribute.name === "xmlns" || attribute.name.startsWith("xmlns:")) {
       out.push(transformNamespaceDeclarationToOoo1(attribute));
       continue;

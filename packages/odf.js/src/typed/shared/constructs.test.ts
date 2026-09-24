@@ -294,11 +294,11 @@ function paragraphWithSiblings(
   siblings: readonly XmlNode[],
   halfIndex: number,
 ): { paragraph: XmlElement; half: XmlElement } {
-  const half = el("text:bookmark-start", { "text:name": "b" });
+  const bookmarkHalf = el("text:bookmark-start", { "text:name": "b" });
   const children = [...siblings];
-  children.splice(halfIndex, 0, half);
+  children.splice(halfIndex, 0, bookmarkHalf);
   const paragraph = el("text:p", {}, children);
-  return { paragraph, half };
+  return { paragraph, half: bookmarkHalf };
 }
 
 describe("isContentBearingNode (via odfMarkerHalfEventIndex)", () => {
@@ -319,7 +319,7 @@ describe("isContentBearingNode (via odfMarkerHalfEventIndex)", () => {
     "$label preceding the half, with another one trailing it, makes the half genuinely interior",
     ({ sibling }) => {
       // A trailing text:span (itself always content-bearing) pins the half off the trailing edge too, so a content-bearing leading sibling is the only thing that can still make this interior (neither leading nor trailing).
-      const { paragraph, half } = paragraphWithSiblings(
+      const { paragraph, half: bookmarkHalf } = paragraphWithSiblings(
         [sibling, el("text:span", {})],
         1,
       );
@@ -327,7 +327,7 @@ describe("isContentBearingNode (via odfMarkerHalfEventIndex)", () => {
         kind: "bookmark",
         side: "start",
         key: "b",
-        element: half,
+        element: bookmarkHalf,
         parent: paragraph,
         runPosition: 0,
         order: 0,
@@ -338,12 +338,15 @@ describe("isContentBearingNode (via odfMarkerHalfEventIndex)", () => {
   );
 
   it("an empty text node preceding the half does not move it off the leading edge", () => {
-    const { paragraph, half } = paragraphWithSiblings([txt("")], 1);
+    const { paragraph, half: bookmarkHalf } = paragraphWithSiblings(
+      [txt("")],
+      1,
+    );
     const marker: OdfMarkerHalf = {
       kind: "bookmark",
       side: "start",
       key: "b",
-      element: half,
+      element: bookmarkHalf,
       parent: paragraph,
       runPosition: 0,
       order: 0,
@@ -354,12 +357,12 @@ describe("isContentBearingNode (via odfMarkerHalfEventIndex)", () => {
 
   it("a non-content-bearing element (e.g. another bookmark half) preceding the half does not move it off the leading edge", () => {
     const decoy = el("text:bookmark-end", { "text:name": "other" });
-    const { paragraph, half } = paragraphWithSiblings([decoy], 1);
+    const { paragraph, half: bookmarkHalf } = paragraphWithSiblings([decoy], 1);
     const marker: OdfMarkerHalf = {
       kind: "bookmark",
       side: "start",
       key: "b",
-      element: half,
+      element: bookmarkHalf,
       parent: paragraph,
       runPosition: 0,
       order: 0,
@@ -370,12 +373,15 @@ describe("isContentBearingNode (via odfMarkerHalfEventIndex)", () => {
 
   it("a comment node (neither text nor element) preceding the half does not move it off the leading edge", () => {
     const comment: XmlNode = { type: "comment", value: "c" };
-    const { paragraph, half } = paragraphWithSiblings([comment], 1);
+    const { paragraph, half: bookmarkHalf } = paragraphWithSiblings(
+      [comment],
+      1,
+    );
     const marker: OdfMarkerHalf = {
       kind: "bookmark",
       side: "start",
       key: "b",
-      element: half,
+      element: bookmarkHalf,
       parent: paragraph,
       runPosition: 0,
       order: 0,
@@ -386,13 +392,13 @@ describe("isContentBearingNode (via odfMarkerHalfEventIndex)", () => {
 
   it("returns undefined when the half's own recorded parent is not the paragraph passed in, even though the half is a genuine child of that other parent", () => {
     // The half's own recorded parent is a real container that DOES hold it as a child (so a bypassed guard would not accidentally bail out on the later indexOf === -1 check instead) — only the mismatch against the paragraph argument itself should short-circuit this.
-    const half = el("text:bookmark-start", { "text:name": "b" });
-    const other = el("text:p", {}, [half]);
+    const bookmarkHalf = el("text:bookmark-start", { "text:name": "b" });
+    const other = el("text:p", {}, [bookmarkHalf]);
     const marker: OdfMarkerHalf = {
       kind: "bookmark",
       side: "start",
       key: "b",
-      element: half,
+      element: bookmarkHalf,
       parent: other,
       runPosition: 0,
       order: 0,
