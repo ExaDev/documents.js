@@ -360,22 +360,26 @@ function cascadeRowBorders(
       logicalRows,
     );
     const sides: Record<CellBorderSide, ContentBorder | undefined> = {
-      top: cell.clearedSides?.has("top")
-        ? undefined
-        : (cell.borders?.top ??
-          (isFirstRow ? rowBorders.top : rowBorders.insideHorizontal)),
-      left: cell.clearedSides?.has("left")
-        ? undefined
-        : (cell.borders?.left ??
-          (isFirstCell ? rowBorders.left : rowBorders.insideVertical)),
-      bottom: cell.clearedSides?.has("bottom")
-        ? undefined
-        : (cell.borders?.bottom ??
-          (isLastRow ? lastRowBorders?.bottom : rowBorders.insideHorizontal)),
-      right: cell.clearedSides?.has("right")
-        ? undefined
-        : (cell.borders?.right ??
-          (isLastCell ? rowBorders.right : rowBorders.insideVertical)),
+      top:
+        cell.clearedSides?.has("top") === true
+          ? undefined
+          : (cell.borders?.top ??
+            (isFirstRow ? rowBorders.top : rowBorders.insideHorizontal)),
+      left:
+        cell.clearedSides?.has("left") === true
+          ? undefined
+          : (cell.borders?.left ??
+            (isFirstCell ? rowBorders.left : rowBorders.insideVertical)),
+      bottom:
+        cell.clearedSides?.has("bottom") === true
+          ? undefined
+          : (cell.borders?.bottom ??
+            (isLastRow ? lastRowBorders?.bottom : rowBorders.insideHorizontal)),
+      right:
+        cell.clearedSides?.has("right") === true
+          ? undefined
+          : (cell.borders?.right ??
+            (isLastCell ? rowBorders.right : rowBorders.insideVertical)),
     };
     return {
       ...cell,
