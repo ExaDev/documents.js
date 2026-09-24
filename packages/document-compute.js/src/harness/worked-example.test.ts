@@ -17,6 +17,8 @@ function sym(id: string): MathExpression {
 }
 
 // ExactRational's numerator is a signed-integer string, so a decimal literal (6.001) has to be built as its own exact fraction (6001/1000) rather than passed straight through — MathExpressionSchema's own 'num' node carries no decimal-point spelling at all.
+const DECIMAL_BASE = 10;
+
 function num(value: number): MathExpression {
   if (Number.isInteger(value)) {
     return { kind: "num", numerator: String(value), denominator: "1" };
@@ -25,7 +27,7 @@ function num(value: number): MathExpression {
   const dotIndex = text.indexOf(".");
   const fractionDigits = text.length - dotIndex - 1;
   const numerator = text.slice(0, dotIndex) + text.slice(dotIndex + 1);
-  const denominator = String(10 ** fractionDigits);
+  const denominator = String(DECIMAL_BASE ** fractionDigits);
   return { kind: "num", numerator, denominator };
 }
 
@@ -50,11 +52,14 @@ function formula(content: MathExpression): ContentFormula {
 
 describe("runWorkedExampleSequence: dimensionless arithmetic", () => {
   it("matches when evaluate() reproduces the document's own stated answer", () => {
+    const mass = 2;
+    const acceleration = 3;
+    const statedForce = 6;
     const formulas = [
       formula(equation("F", app("math:multiply", [sym("m"), sym("a")]))), // F = m * a (the definition)
-      formula(equation("m", num(2))), // m = 2 (a binding)
-      formula(equation("a", num(3))), // a = 3 (a binding)
-      formula(equation("F", num(6))), // F = 6 (the stated result)
+      formula(equation("m", num(mass))), // m = 2 (a binding)
+      formula(equation("a", num(acceleration))), // a = 3 (a binding)
+      formula(equation("F", num(statedForce))), // F = 6 (the stated result)
     ];
     const report = runWorkedExampleSequence(formulas);
     expect(report.matched).toBe(1);
@@ -64,18 +69,21 @@ describe("runWorkedExampleSequence: dimensionless arithmetic", () => {
       {
         outcome: "match",
         targetSymbol: "F",
-        expected: { kind: "quantity", magnitude: 6, dimension: {} },
-        actual: { kind: "quantity", magnitude: 6, dimension: {} },
+        expected: { kind: "quantity", magnitude: statedForce, dimension: {} },
+        actual: { kind: "quantity", magnitude: statedForce, dimension: {} },
       },
     ]);
   });
 
   it("reports a mismatch when the stated answer does not match evaluate()'s own", () => {
+    const mass = 2;
+    const acceleration = 3;
+    const wrongStatedForce = 7;
     const formulas = [
       formula(equation("F", app("math:multiply", [sym("m"), sym("a")]))),
-      formula(equation("m", num(2))),
-      formula(equation("a", num(3))),
-      formula(equation("F", num(7))), // wrong on purpose
+      formula(equation("m", num(mass))),
+      formula(equation("a", num(acceleration))),
+      formula(equation("F", num(wrongStatedForce))), // wrong on purpose
     ];
     const report = runWorkedExampleSequence(formulas);
     expect(report.matched).toBe(0);
@@ -86,10 +94,11 @@ describe("runWorkedExampleSequence: dimensionless arithmetic", () => {
   });
 
   it("matches an exact zero stated answer using the absolute-tolerance branch, not a division by zero", () => {
+    const equalMeasurement = 5;
     const formulas = [
       formula(equation("d", app("math:subtract", [sym("m"), sym("m2")]))),
-      formula(equation("m", num(5))),
-      formula(equation("m2", num(5))),
+      formula(equation("m", num(equalMeasurement))),
+      formula(equation("m2", num(equalMeasurement))),
       formula(equation("d", num(0))),
     ];
     const report = runWorkedExampleSequence(formulas);
@@ -97,10 +106,12 @@ describe("runWorkedExampleSequence: dimensionless arithmetic", () => {
   });
 
   it("rejects a non-zero actual against a zero stated answer once it exceeds the absolute tolerance", () => {
+    const firstMeasurement = 5;
+    const secondMeasurement = 4;
     const formulas = [
       formula(equation("d", app("math:subtract", [sym("m"), sym("m2")]))),
-      formula(equation("m", num(5))),
-      formula(equation("m2", num(4))),
+      formula(equation("m", num(firstMeasurement))),
+      formula(equation("m2", num(secondMeasurement))),
       formula(equation("d", num(0))),
     ];
     const report = runWorkedExampleSequence(formulas);
@@ -109,7 +120,8 @@ describe("runWorkedExampleSequence: dimensionless arithmetic", () => {
 
   it("accepts an actual magnitude exactly at the absolute tolerance boundary against a zero stated answer (the comparison is inclusive)", () => {
     // m - m2 = (1 + 2^-10) - 1 = 2^-10 exactly (both exact in binary), matched against relativeTolerance = 2^-10 exactly: bit-identical, not merely close.
-    const relativeTolerance = 2 ** -10;
+    const toleranceExponent = -10;
+    const relativeTolerance = 2 ** toleranceExponent;
     const formulas = [
       formula(equation("d", app("math:subtract", [sym("m"), sym("m2")]))),
       formula(equation("m", num(1 + relativeTolerance))),
@@ -124,12 +136,16 @@ describe("runWorkedExampleSequence: dimensionless arithmetic", () => {
 
   it("accepts a residual exactly at the relative tolerance boundary (the comparison is inclusive)", () => {
     // Stated (expected) = 8, computed (actual) = m * a = 2 * 4.03125 = 8.0625: both exact in binary (0.03125 = 2^-5), and withinTolerance divides by |expected| = 8, so |actual - expected| / |expected| = 0.0625 / 8 = 2^-7 exactly, matching relativeTolerance = 2^-7 bit-for-bit — not merely close to it.
-    const relativeTolerance = 2 ** -7;
+    const toleranceExponent = -7;
+    const relativeTolerance = 2 ** toleranceExponent;
+    const mass = 2;
+    const accelerationAtBoundary = 4.03125;
+    const statedForce = 8;
     const formulas = [
       formula(equation("F", app("math:multiply", [sym("m"), sym("a")]))),
-      formula(equation("m", num(2))),
-      formula(equation("a", num(4.03125))),
-      formula(equation("F", num(8))),
+      formula(equation("m", num(mass))),
+      formula(equation("a", num(accelerationAtBoundary))),
+      formula(equation("F", num(statedForce))),
     ];
     const report = runWorkedExampleSequence(formulas, undefined, {
       relativeTolerance,
@@ -139,12 +155,16 @@ describe("runWorkedExampleSequence: dimensionless arithmetic", () => {
 
   it("rejects a residual just past the relative tolerance boundary, distinguishing the inclusive '<=' from a stricter '<'", () => {
     // Same construction as above but with the stated answer nudged so the ratio is strictly greater than the tolerance — must mismatch under either operator, so this alone doesn't kill the boundary mutant, but pairs with the exact-boundary test above to pin the comparison down from both sides.
-    const relativeTolerance = 2 ** -7;
+    const toleranceExponent = -7;
+    const relativeTolerance = 2 ** toleranceExponent;
+    const mass = 2;
+    const accelerationPastBoundary = 4.0625;
+    const statedForce = 8;
     const formulas = [
       formula(equation("F", app("math:multiply", [sym("m"), sym("a")]))),
-      formula(equation("m", num(2))),
-      formula(equation("a", num(4.0625))), // 2 * 4.0625 = 8.125, ratio = 0.125/8 = 2^-6, comfortably past 2^-7
-      formula(equation("F", num(8))),
+      formula(equation("m", num(mass))),
+      formula(equation("a", num(accelerationPastBoundary))), // 2 * 4.0625 = 8.125, ratio = 0.125/8 = 2^-6, comfortably past 2^-7
+      formula(equation("F", num(statedForce))),
     ];
     const report = runWorkedExampleSequence(formulas, undefined, {
       relativeTolerance,
@@ -153,22 +173,28 @@ describe("runWorkedExampleSequence: dimensionless arithmetic", () => {
   });
 
   it("tolerates a stated answer rounded within the relative tolerance", () => {
+    const mass = 2;
+    const acceleration = 3;
+    const roundedStatedForce = 6.001;
     const formulas = [
       formula(equation("F", app("math:multiply", [sym("m"), sym("a")]))),
-      formula(equation("m", num(2))),
-      formula(equation("a", num(3))),
-      formula(equation("F", num(6.001))), // rounded by the document's own author
+      formula(equation("m", num(mass))),
+      formula(equation("a", num(acceleration))),
+      formula(equation("F", num(roundedStatedForce))), // rounded by the document's own author
     ];
     const report = runWorkedExampleSequence(formulas);
     expect(report.matched).toBe(1);
   });
 
   it("rejects a stated answer outside an explicitly tightened tolerance", () => {
+    const mass = 2;
+    const acceleration = 3;
+    const roundedStatedForce = 6.001;
     const formulas = [
       formula(equation("F", app("math:multiply", [sym("m"), sym("a")]))),
-      formula(equation("m", num(2))),
-      formula(equation("a", num(3))),
-      formula(equation("F", num(6.001))),
+      formula(equation("m", num(mass))),
+      formula(equation("a", num(acceleration))),
+      formula(equation("F", num(roundedStatedForce))),
     ];
     const report = runWorkedExampleSequence(formulas, undefined, {
       relativeTolerance: 1e-9,
@@ -179,11 +205,16 @@ describe("runWorkedExampleSequence: dimensionless arithmetic", () => {
 
 describe("runWorkedExampleSequence: units-typed physics worked example", () => {
   it("matches a dimensioned worked example against the supplied unit registry", () => {
+    const massKg = 2;
+    const accelerationMps2 = 3;
+    const statedForceNewtons = 6;
     const formulas = [
       formula(equation("F", app("math:multiply", [sym("m"), sym("a")]))), // F = m * a
-      formula(equation("m", qty(2, "si:kilogram"))), // m = 2 kg
-      formula(equation("a", qty(3, "si:metre-per-second-squared"))), // a = 3 m/s^2
-      formula(equation("F", qty(6, "si:newton"))), // F = 6 N
+      formula(equation("m", qty(massKg, "si:kilogram"))), // m = 2 kg
+      formula(
+        equation("a", qty(accelerationMps2, "si:metre-per-second-squared")),
+      ), // a = 3 m/s^2
+      formula(equation("F", qty(statedForceNewtons, "si:newton"))), // F = 6 N
     ];
     const report = runWorkedExampleSequence(formulas, SI_UNIT_REGISTRY);
     expect(report.matched).toBe(1);
@@ -192,18 +223,23 @@ describe("runWorkedExampleSequence: units-typed physics worked example", () => {
       outcome: "match",
       expected: {
         kind: "quantity",
-        magnitude: 6,
+        magnitude: statedForceNewtons,
         dimension: { mass: 1, length: 1, time: -2 },
       },
     });
   });
 
   it("reports incompatible-dimensions when the definition mixes incompatible quantities", () => {
+    const massKg = 2;
+    const accelerationMps2 = 3;
+    const nonsensicalTotal = 5;
     const formulas = [
       formula(equation("total", app("math:add", [sym("m"), sym("a")]))), // total = m + a — mass + acceleration, nonsensical
-      formula(equation("m", qty(2, "si:kilogram"))),
-      formula(equation("a", qty(3, "si:metre-per-second-squared"))),
-      formula(equation("total", num(5))),
+      formula(equation("m", qty(massKg, "si:kilogram"))),
+      formula(
+        equation("a", qty(accelerationMps2, "si:metre-per-second-squared")),
+      ),
+      formula(equation("total", num(nonsensicalTotal))),
     ];
     const report = runWorkedExampleSequence(formulas, SI_UNIT_REGISTRY);
     expect(report.gaps).toBe(1);
@@ -224,9 +260,10 @@ describe("runWorkedExampleSequence: units-typed physics worked example", () => {
   });
 
   it("reports division-by-zero when a definition divides by a bound zero", () => {
+    const dividend = 6;
     const formulas = [
       formula(equation("q", app("math:divide", [sym("m"), sym("n")]))),
-      formula(equation("m", num(6))),
+      formula(equation("m", num(dividend))),
       formula(equation("n", num(0))),
       formula(equation("q", num(1))),
     ];
@@ -239,8 +276,9 @@ describe("runWorkedExampleSequence: units-typed physics worked example", () => {
   });
 
   it("reports numeric-domain when a definition takes the square root of a negative magnitude", () => {
+    const negativeRadicand = -4;
     const formulas = [
-      formula(equation("r", app("math:sqrt", [num(-4)]))),
+      formula(equation("r", app("math:sqrt", [num(negativeRadicand)]))),
       formula(equation("r", num(2))),
     ];
     const report = runWorkedExampleSequence(formulas);
@@ -252,14 +290,17 @@ describe("runWorkedExampleSequence: units-typed physics worked example", () => {
   });
 
   it("counts multiple independent gaps without conflating them with matches or the total", () => {
+    const mass = 2;
+    const acceleration = 3;
+    const statedForce = 6;
     const formulas = [
       formula(equation("a", qty(1, "si:no-such-unit"))), // gap 1: unknown-unit
       formula(equation("b", app("math:sqrt", [num(-1)]))), // definition, held pending
       formula(equation("b", num(1))), // gap 2: numeric-domain, on resolving the pending definition
       formula(equation("F", app("math:multiply", [sym("m"), sym("a2")]))),
-      formula(equation("m", num(2))),
-      formula(equation("a2", num(3))),
-      formula(equation("F", num(6))), // a genuine match, alongside the two gaps
+      formula(equation("m", num(mass))),
+      formula(equation("a2", num(acceleration))),
+      formula(equation("F", num(statedForce))), // a genuine match, alongside the two gaps
     ];
     const report = runWorkedExampleSequence(formulas, SI_UNIT_REGISTRY);
     expect(report.gaps).toBe(2);
@@ -276,7 +317,8 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
   });
 
   it("skips a formula that is not a 'symbol = expression' shape", () => {
-    const formulas = [formula(num(42))]; // a bare literal, no equation at all
+    const bareLiteral = 42;
+    const formulas = [formula(num(bareLiteral))]; // a bare literal, no equation at all
     const report = runWorkedExampleSequence(formulas);
     expect(report.total).toBe(0);
   });
@@ -304,10 +346,11 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
 
   it("treats an expression as a definition when at least one argument contains a symbol, even if another argument is a closed literal", () => {
     // math:add's args are [sym('x'), num(1)] — one contains a symbol, one does not. If containsSymbol used .every instead of .some, this would be misclassified as already-closed and evaluated immediately against EMPTY_BINDINGS, producing an unbound-symbol gap instead of being held as a pending definition.
+    const boundValue = 3;
     const formulas = [
       formula(equation("z", app("math:add", [sym("x"), num(1)]))),
       formula(equation("x", num(2))),
-      formula(equation("z", num(3))),
+      formula(equation("z", num(boundValue))),
     ];
     const report = runWorkedExampleSequence(formulas);
     expect(report.gaps).toBe(0);
@@ -337,10 +380,12 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
       upper: num(2),
       body: sym("n2"),
     };
+    const boundValueForBodySymbol = 5;
+    const expectedForBodySymbol = 10;
     for (const [rhs, boundName, boundValue, expected] of [
       [lowerHasSymbol, "n0", 1, 2],
       [upperHasSymbol, "n1", 2, 1],
-      [bodyHasSymbol, "n2", 5, 10],
+      [bodyHasSymbol, "n2", boundValueForBodySymbol, expectedForBodySymbol],
     ] as const) {
       const formulas = [
         formula(equation("total", rhs)),
@@ -355,12 +400,14 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
 
   it("treats a fully closed sum (no symbol anywhere in lower/upper/body) as a binding, not a definition held pending", () => {
     // If the OR were replaced wholesale with 'true' (rather than mutating one of its three operands), every sum/prod would be misclassified as a definition regardless of content — including this one, which has no symbol anywhere and should instead be evaluated immediately as an ordinary closed binding, generating no outcome of its own the same way "m = 2" never does.
+    const upperBound = 3;
+    const constantBody = 5;
     const closedSum: MathExpression = {
       kind: "sum",
       binder: "i",
       lower: num(1),
-      upper: num(3),
-      body: num(5), // constant body — 5 + 5 + 5 = 15, no reference to the binder or anything else
+      upper: num(upperBound),
+      body: num(constantBody), // constant body — 5 + 5 + 5 = 15, no reference to the binder or anything else
     };
     const formulas = [formula(equation("total", closedSum))];
     const report = runWorkedExampleSequence(formulas);
@@ -371,16 +418,18 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
 
   it("treats a matrix expression as containing a symbol whenever any one cell does, holding it pending rather than gapping it immediately", () => {
     // Distinguishes "held pending, then gapped only once something restates it" (correct: unresolved=0, gaps=1, from the eventual resolution attempt) from "wrongly read as closed, gapped immediately on first sight" (a .some/.every or arrow-function mutant: since nothing ever restates "total", a wrongly-immediate gap leaves nothing pending, so no "unresolved" outcome is ever produced either — gaps=1 either way, but only the correct path also means the definition was genuinely held). The two are told apart by NEVER restating "total": correctly held pending, the sequence ends with it still awaiting a result, which closeUnresolved reports as "unresolved", not "gap".
+    const matrixCellValue = 4;
+    const boundValue = 3;
     const matrixWithSymbol: MathExpression = {
       kind: "matrix",
       rows: [
         [num(1), num(2)],
-        [sym("k"), num(4)],
+        [sym("k"), num(matrixCellValue)],
       ],
     };
     const formulas = [
       formula(equation("total", matrixWithSymbol)),
-      formula(equation("k", num(3))),
+      formula(equation("k", num(boundValue))),
       // total is never restated.
     ];
     const report = runWorkedExampleSequence(formulas);
@@ -393,13 +442,14 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
   });
 
   it("reports unsupported-construct once a held-pending matrix definition is finally resolved", () => {
+    const boundValue = 3;
     const matrixWithSymbol: MathExpression = {
       kind: "matrix",
       rows: [[sym("k")]],
     };
     const formulas = [
       formula(equation("total", matrixWithSymbol)),
-      formula(equation("k", num(3))),
+      formula(equation("k", num(boundValue))),
       formula(equation("total", num(1))),
     ];
     const report = runWorkedExampleSequence(formulas);
@@ -411,10 +461,12 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
   });
 
   it("reports unresolved when a definition never gets a stated result, with an exact message naming it", () => {
+    const mass = 2;
+    const acceleration = 3;
     const formulas = [
       formula(equation("F", app("math:multiply", [sym("m"), sym("a")]))),
-      formula(equation("m", num(2))),
-      formula(equation("a", num(3))),
+      formula(equation("m", num(mass))),
+      formula(equation("a", num(acceleration))),
       // no "F = ..." line ever restates F
     ];
     const report = runWorkedExampleSequence(formulas);
@@ -428,12 +480,15 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
   });
 
   it("reports the first definition as unresolved when a second definition supersedes it before either resolves", () => {
+    const mass = 2;
+    const speedOfLight = 3;
+    const statedEnergy = 6;
     const formulas = [
       formula(equation("F", app("math:multiply", [sym("m"), sym("a")]))), // F = m * a, never resolved
       formula(equation("E", app("math:multiply", [sym("m"), sym("c")]))), // E = m * c, supersedes it
-      formula(equation("m", num(2))),
-      formula(equation("c", num(3))),
-      formula(equation("E", num(6))),
+      formula(equation("m", num(mass))),
+      formula(equation("c", num(speedOfLight))),
+      formula(equation("E", num(statedEnergy))),
     ];
     const report = runWorkedExampleSequence(formulas);
     expect(report.unresolved).toBe(1);
@@ -449,18 +504,22 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
   });
 
   it("resolves a definition against whatever a binding was most recently redefined to, not its value when the definition line first appeared", () => {
+    const initialMass = 2;
+    const redefinedMass = 99;
+    const acceleration = 3;
+    const statedForceFromLatestMass = 297; // 99 * 3, using the latest m — not the stale 2 * 3 = 6
     const formulas = [
-      formula(equation("m", num(2))), // m = 2 (an initial, later-superseded binding)
+      formula(equation("m", num(initialMass))), // m = 2 (an initial, later-superseded binding)
       formula(equation("F", app("math:multiply", [sym("m"), sym("a")]))), // F = m * a (the definition)
-      formula(equation("m", num(99))), // m redefined before F's own result is reached
-      formula(equation("a", num(3))),
-      formula(equation("F", num(297))), // 99 * 3, using the latest m — not the stale 2 * 3 = 6
+      formula(equation("m", num(redefinedMass))), // m redefined before F's own result is reached
+      formula(equation("a", num(acceleration))),
+      formula(equation("F", num(statedForceFromLatestMass))),
     ];
     const report = runWorkedExampleSequence(formulas);
     expect(report.matched).toBe(1);
     expect(report.outcomes[0]).toMatchObject({
       outcome: "match",
-      actual: { magnitude: 297 },
+      actual: { magnitude: statedForceFromLatestMass },
     });
   });
 
@@ -478,7 +537,8 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
   });
 
   it("reports coverage as undefined when nothing in the sequence has a resolvable stated answer, never a fabricated 0 or 1", () => {
-    const formulas = [formula(num(42))]; // skipped entirely — not even a gap
+    const bareLiteral = 42;
+    const formulas = [formula(num(bareLiteral))]; // skipped entirely — not even a gap
     const report = runWorkedExampleSequence(formulas);
     expect(report.coverage).toBeUndefined();
     expect(report.matched).toBe(0);
@@ -486,19 +546,25 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
   });
 
   it("computes coverage as matched / (matched + mismatched), not conflated with gaps or unresolved outcomes", () => {
+    const acceleration = 3;
+    const statedForceF = 6;
+    const valueB = 5;
+    const statedG = 10;
+    const valueC = 7;
+    const statedHMismatch = 999;
     const formulas = [
       // Two matches.
       formula(equation("F", app("math:multiply", [sym("m"), sym("a")]))),
       formula(equation("m", num(2))),
-      formula(equation("a", num(3))),
-      formula(equation("F", num(6))),
+      formula(equation("a", num(acceleration))),
+      formula(equation("F", num(statedForceF))),
       formula(equation("G", app("math:multiply", [sym("m"), sym("b")]))),
-      formula(equation("b", num(5))),
-      formula(equation("G", num(10))),
+      formula(equation("b", num(valueB))),
+      formula(equation("G", num(statedG))),
       // One mismatch.
       formula(equation("H", app("math:multiply", [sym("m"), sym("c")]))),
-      formula(equation("c", num(7))),
-      formula(equation("H", num(999))),
+      formula(equation("c", num(valueC))),
+      formula(equation("H", num(statedHMismatch))),
       // One gap (must not affect the coverage ratio at all).
       formula(equation("j", qty(1, "si:no-such-unit"))),
       // One unresolved (must not affect the coverage ratio either).
@@ -511,24 +577,34 @@ describe("runWorkedExampleSequence: structural edge cases", () => {
     expect(report.gaps).toBe(1);
     expect(report.unresolved).toBe(1);
     // 2 / (2 + 1) = 2/3 — distinct from every other plausible ratio of these four counts.
-    expect(report.coverage).toBeCloseTo(2 / 3, 12);
+    const expectedCoverageDenominator = 3;
+    const coveragePrecisionDigits = 12;
+    expect(report.coverage).toBeCloseTo(
+      2 / expectedCoverageDenominator,
+      coveragePrecisionDigits,
+    );
   });
 
   it("reports a defined coverage when matched equals mismatched (both nonzero), not a fabricated undefined", () => {
     // matched - mismatched = 0 here even though matched + mismatched = 2 (nonzero) — an arithmetic-operator mutant swapping the sum for a difference in the "nothing resolvable" guard would wrongly treat this as undefined.
+    const acceleration = 3;
+    const statedForceF = 6;
+    const valueC = 7;
+    const statedGMismatch = 999;
+    const evenSplitCoverage = 0.5;
     const formulas = [
       formula(equation("F", app("math:multiply", [sym("m"), sym("a")]))),
       formula(equation("m", num(2))),
-      formula(equation("a", num(3))),
-      formula(equation("F", num(6))), // match
+      formula(equation("a", num(acceleration))),
+      formula(equation("F", num(statedForceF))), // match
       formula(equation("G", app("math:multiply", [sym("m"), sym("c")]))),
-      formula(equation("c", num(7))),
-      formula(equation("G", num(999))), // mismatch
+      formula(equation("c", num(valueC))),
+      formula(equation("G", num(statedGMismatch))), // mismatch
     ];
     const report = runWorkedExampleSequence(formulas);
     expect(report.matched).toBe(1);
     expect(report.mismatched).toBe(1);
-    expect(report.coverage).toBe(0.5);
+    expect(report.coverage).toBe(evenSplitCoverage);
   });
 });
 
