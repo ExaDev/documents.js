@@ -107,11 +107,14 @@ describe("App ScreenBody routing, bodyList format branches", () => {
     await settle();
 
     stdin.write("x");
-    const frame = await waitForFrame(
-      lastFrame,
-      (candidate) => !flattenFrame(candidate).includes("Body (docx)"),
+    const frame = await waitForFrame(lastFrame, (candidate) =>
+      flattenFrame(candidate).includes(
+        "Comments, footnotes, headers, footers, numbering (",
+      ),
     );
-    expect(flattenFrame(frame)).not.toContain("Body (docx)");
+    expect(flattenFrame(frame)).toContain(
+      "Comments, footnotes, headers, footers, numbering (",
+    );
   });
 });
 
@@ -188,11 +191,10 @@ describe("App ScreenBody routing, paragraph/table/list sub-screens (docx+odt)", 
     await settle();
 
     stdin.write("L");
-    const frame = await waitForFrame(
-      lastFrame,
-      (candidate) => !flattenFrame(candidate).includes("Body (odt)"),
+    const frame = await waitForFrame(lastFrame, (candidate) =>
+      /List \d+ \(/.test(flattenFrame(candidate)),
     );
-    expect(flattenFrame(frame)).not.toContain("Body (odt)");
+    expect(flattenFrame(frame)).toMatch(/List \d+ \(/);
   });
 });
 
@@ -353,11 +355,10 @@ describe("App ScreenBody routing, sheetList/spreadsheetGrid format branches", ()
     await settle();
 
     stdin.write(ENTER);
-    const frame = await waitForFrame(
-      lastFrame,
-      (candidate) => !flattenFrame(candidate).includes("Sheets ("),
+    const frame = await waitForFrame(lastFrame, (candidate) =>
+      /Sheet1 \(\d+x\d+\)/.test(flattenFrame(candidate)),
     );
-    expect(flattenFrame(frame)).not.toContain("Sheets (");
+    expect(flattenFrame(frame)).toMatch(/Sheet1 \(\d+x\d+\)/);
   });
 });
 
@@ -421,9 +422,9 @@ describe("App ScreenBody routing, filePicker", () => {
 
     stdin.write("o");
     const frame = await waitForFrame(lastFrame, (candidate) =>
-      flattenFrame(candidate).includes("Open a document"),
+      flattenFrame(candidate).includes("Enter to open, Esc to cancel"),
     );
-    expect(flattenFrame(frame)).toContain("Open a document");
+    expect(flattenFrame(frame)).toContain("Enter to open, Esc to cancel");
   });
 });
 
@@ -468,11 +469,10 @@ describe("App ScreenBody routing, odb read-only screens", () => {
     await settle();
 
     stdin.write(ENTER);
-    const frame = await waitForFrame(
-      lastFrame,
-      (candidate) => !flattenFrame(candidate).includes("Tables ("),
+    const frame = await waitForFrame(lastFrame, (candidate) =>
+      /\(\d+ of \d+ rows\)/.test(flattenFrame(candidate)),
     );
-    expect(flattenFrame(frame)).not.toContain("Tables (");
+    expect(flattenFrame(frame)).toMatch(/\(\d+ of \d+ rows\)/);
   });
 });
 
@@ -530,11 +530,10 @@ describe("App ScreenBody routing, pdf screens", () => {
     await settle();
 
     stdin.write(ENTER);
-    const detailFrame = await waitForFrame(
-      lastFrame,
-      (candidate) => !flattenFrame(candidate).includes("Page 1 items"),
+    const detailFrame = await waitForFrame(lastFrame, (candidate) =>
+      flattenFrame(candidate).includes("Page 1, item 1"),
     );
-    expect(flattenFrame(detailFrame)).not.toContain("Page 1 items");
+    expect(flattenFrame(detailFrame)).toContain("Page 1, item 1");
   });
 });
 
@@ -753,11 +752,11 @@ describe("App AppShell key handlers", () => {
     await settle();
 
     stdin.write(CTRL_S);
-    const frame = await waitForFrame(
-      lastFrame,
-      (candidate) => !flattenFrame(candidate).includes("Body (docx)"),
+    const frame = await waitForFrame(lastFrame, (candidate) =>
+      flattenFrame(candidate).includes("Save as"),
     );
-    expect(flattenFrame(frame)).not.toContain("Body (docx)");
+    expect(flattenFrame(frame)).toContain("Save as");
+    expect(flattenFrame(frame)).toContain("Enter to save, Esc to cancel");
   });
 
   it("Ctrl+S on an on-disk document saves it directly, without opening saveAsPrompt", async () => {
