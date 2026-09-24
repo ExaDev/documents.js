@@ -1,3 +1,9 @@
+## [1.11.14](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.13...archive-codec%401.11.14) (2026-09-24)
+
+### Bug Fixes
+
+* **archive-codec:** give two exhaustive switches an explicit trailing throw ([14e79ca](https://github.com/ExaDev/documents.js/commit/14e79ca898afb56121717053e266ac6761b85083))
+
 ## [1.11.13](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.12...archive-codec%401.11.13) (2026-09-24)
 
 ### Bug Fixes
