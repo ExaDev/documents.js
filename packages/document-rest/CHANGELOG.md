@@ -1,3 +1,9 @@
+## [1.4.77](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.76...document-rest%401.4.77) (2026-09-24)
+
+### Bug Fixes
+
+* **document-rest:** mark two never-mutated params readonly ([89811d3](https://github.com/ExaDev/documents.js/commit/89811d3ae4eb790be62030e47408c5348c4746c0))
+
 ## [1.4.76](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.75...document-rest%401.4.76) (2026-09-24)
 
 

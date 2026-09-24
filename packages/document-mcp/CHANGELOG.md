@@ -1,3 +1,9 @@
+## [4.14.77](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.76...document-mcp%404.14.77) (2026-09-24)
+
+### Bug Fixes
+
+* **document-mcp:** clear the last preferReadonlyParams exceptions ([85c3512](https://github.com/ExaDev/documents.js/commit/85c351236c1531af055abed1b202940b39c05666))
+
 ## [4.14.76](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.75...document-mcp%404.14.76) (2026-09-24)
 
 

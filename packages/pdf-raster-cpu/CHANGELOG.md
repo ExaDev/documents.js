@@ -1,3 +1,9 @@
+## [1.0.45](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.44...pdf-raster-cpu%401.0.45) (2026-09-24)
+
+### Bug Fixes
+
+* **pdf-raster-cpu:** return the join wedge instead of mutating a shared array ([b7cebaf](https://github.com/ExaDev/documents.js/commit/b7cebaf041dfe81300305ffbd9f3c5be741bcbc7))
+
 ## [1.0.44](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.43...pdf-raster-cpu%401.0.44) (2026-09-24)
 
 
