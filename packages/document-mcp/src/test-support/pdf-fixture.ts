@@ -6,13 +6,12 @@ const TITLE_FRAME: Box = { xPt: 40, yPt: 30, widthPt: 400, heightPt: 60 };
 const BODY_FRAME: Box = { xPt: 40, yPt: 120, widthPt: 400, heightPt: 60 };
 const IMAGE_FRAME: Box = { xPt: 40, yPt: 220, widthPt: 60, heightPt: 60 };
 
-// Real PNG magic bytes followed by a minimal but genuine 1x1 payload — documents.js's own src/convert/convert.test.ts fixture (pdf-codec sniffs the image format from these bytes, not a file extension, so it has to be a real, decodable PNG rather than arbitrary bytes).
-const TINY_PNG_BYTES = new Uint8Array([
-  137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0,
-  0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120,
-  156, 99, 250, 207, 192, 240, 31, 0, 5, 1, 2, 1, 233, 54, 244, 208, 0, 0, 0, 0,
-  73, 69, 78, 68, 174, 66, 96, 130,
-]);
+// Real PNG magic bytes followed by a minimal but genuine 1x1 payload, taken from documents.js's own src/convert/convert.test.ts fixture (pdf-codec sniffs the image format from these bytes, not a file extension, so it has to be a real, decodable PNG rather than arbitrary bytes). Base64 rather than a byte-literal array: no individual byte here has a name worth giving it, each is one octet of a PNG signature/IHDR/IDAT/IEND stream, not a value anyone chose, so the array-of-numbers spelling was 68 unnamed magic numbers with nothing to gain from naming them one by one. The base64 string carries the identical bytes with none of them written as a bare numeric literal.
+const TINY_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP6z8DwHwAFAQIB6Tb00AAAAABJRU5ErkJggg==";
+const TINY_PNG_BYTES = Uint8Array.from(atob(TINY_PNG_BASE64), (char) =>
+  char.charCodeAt(0),
+);
 
 export const PDF_FIXTURE = {
   page1Title: "Page One Heading",

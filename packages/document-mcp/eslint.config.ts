@@ -11,4 +11,5 @@ export default packageLintConfig({
   // dist-sea/ is this package's own SEA (single-executable application) bundle output — a multi-megabyte, fully-dependency-inlined .cjs file (see tsdown.sea.shared.ts), not source.
   additionalIgnores: ["dist-sea"],
   maxLines: "error",
+  magicNumbers: "error",
 });
