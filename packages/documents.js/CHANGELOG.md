@@ -1,3 +1,11 @@
+## [14.4.20](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.19...documents.js%4014.4.20) (2026-09-24)
+
+
+### Dependencies
+
+- Updated doc-codec to 6.1.9
+- Updated rtf-codec to 8.1.9
+
 ## [14.4.19](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.18...documents.js%4014.4.19) (2026-09-24)
 
 ### Tests

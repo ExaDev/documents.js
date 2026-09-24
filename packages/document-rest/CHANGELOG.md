@@ -1,3 +1,11 @@
+## [1.4.84](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.83...document-rest%401.4.84) (2026-09-24)
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.20
+- Updated document-operations to 1.1.81
+
 ## [1.4.83](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.82...document-rest%401.4.83) (2026-09-24)
 
 

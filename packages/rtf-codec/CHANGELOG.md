@@ -1,3 +1,9 @@
+## [8.1.9](https://github.com/ExaDev/documents.js/compare/rtf-codec%408.1.8...rtf-codec%408.1.9) (2026-09-24)
+
+### Bug Fixes
+
+* **rtf-codec:** clear the last preferReadonlyParams exceptions ([a8d7c7d](https://github.com/ExaDev/documents.js/commit/a8d7c7dcd5905993193983f098580149aa171c71))
+
 ## [8.1.8](https://github.com/ExaDev/documents.js/compare/rtf-codec%408.1.7...rtf-codec%408.1.8) (2026-09-24)
 
 
