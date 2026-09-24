@@ -1,3 +1,13 @@
+## [5.2.17](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.16...pdf-codec%405.2.17) (2026-09-24)
+
+### Code Refactoring
+
+* **pdf-codec:** let the real-nibble chain's final branch be an else ([8252fe7](https://github.com/ExaDev/documents.js/commit/8252fe76775e2a50fb0a3994873d98f5553b83fd)), references [#1306](https://github.com/ExaDev/documents.js/issues/1306)
+
+### Tests
+
+* **pdf-codec:** close cff.ts's mutation gap from 63 to 98 ([7e324b8](https://github.com/ExaDev/documents.js/commit/7e324b887386d739861a87c1b034908210ab89c2)), references [#1306](https://github.com/ExaDev/documents.js/issues/1306)
+
 ## [5.2.16](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.15...pdf-codec%405.2.16) (2026-09-24)
 
 ### Tests
