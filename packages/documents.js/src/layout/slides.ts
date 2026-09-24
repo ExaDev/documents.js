@@ -72,7 +72,7 @@ export interface ShapeFormulaContext {
 }
 
 interface ShapePlacement {
-  place(point: Point): Point;
+  place: (point: Point) => Point;
   readonly layoutRotationDeg: number | undefined;
 }
 

@@ -25,18 +25,18 @@ import type {
 import type { TableInit } from "./table";
 
 export interface DocxBody {
-  insertParagraphAt(index: number, init?: ParagraphInit): DocxParagraph;
-  appendParagraph(init?: ParagraphInit): DocxParagraph;
-  appendTable(init: TableInit): DocxTable;
-  appendPageBreak(): void;
+  insertParagraphAt: (index: number, init?: ParagraphInit) => DocxParagraph;
+  appendParagraph: (init?: ParagraphInit) => DocxParagraph;
+  appendTable: (init: TableInit) => DocxTable;
+  appendPageBreak: () => void;
   // A bookmark's two halves as body-level siblings bracketing whatever is appended between the two calls — the one construct shape that is expressible append-only, since WordprocessingML allows w:bookmarkStart/w:bookmarkEnd directly inside w:body around whole blocks. The id is the caller's to keep unique document-wide and to pair across the two halves; the name travels on the start half alone, exactly as a reader pairs them back.
-  appendBookmarkStart(id: number, name: string): void;
-  appendBookmarkEnd(id: number): void;
+  appendBookmarkStart: (id: number, name: string) => void;
+  appendBookmarkEnd: (id: number) => void;
   // A content-control (SDT) region: every append between openContentControlRegion and closeRegion lands inside the control's own w:sdtContent rather than as a body sibling — the block-flow spelling of an SDT, which Word itself writes as w:sdt > w:sdtPr + w:sdtContent around the content it governs. The descriptor drives w:sdtPr (w:id minted per document, w:tag/w:alias/w:lock, and the one type element each controlType maps to — the exact inverse of ooxml.js's own reader, so a written control reads back as the same descriptor). Regions nest to arbitrary depth; the one field with no spelling here is columnCount-style geometry an SDT does not carry.
-  openContentControlRegion(descriptor: ContentControlDescriptor): void;
+  openContentControlRegion: (descriptor: ContentControlDescriptor) => void;
   // Opens a tracked-change region (w:ins/w:del/w:moveFrom/w:moveTo wrapping the blocks appended until the matching closeRegion). Answers false for a change kind with no block-level element (formatChange), which the caller treats as a refusal.
-  openProvenanceRegion(descriptor: ProvenanceDescriptor): boolean;
-  closeRegion(): void;
+  openProvenanceRegion: (descriptor: ProvenanceDescriptor) => boolean;
+  closeRegion: () => void;
 }
 
 function findDocumentRoot(pkg: Package, documentPartPath: string): XmlElement {

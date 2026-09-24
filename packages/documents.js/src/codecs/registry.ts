@@ -29,8 +29,8 @@ import {
 
 // The layout half of a registry entry, stated here as a plain structural type: document-schema.js's LayoutCodec port retired with the LayoutDocument demotion (the item family moved to pdf-codec at schema 4.0.0, and the schema no longer knows the type a layout codec would carry), so the registry names the two-function shape itself over pdf-codec's own LayoutDocument — the same shape the retired port gave it, one owner over.
 export interface LayoutEntryCodec {
-  read(bytes: Uint8Array, options?: DocumentCodecOptions): LayoutDocument;
-  write(layout: LayoutDocument, options?: DocumentCodecOptions): Uint8Array;
+  read: (bytes: Uint8Array, options?: DocumentCodecOptions) => LayoutDocument;
+  write: (layout: LayoutDocument, options?: DocumentCodecOptions) => Uint8Array;
 }
 
 // Every DocumentFormat's own capability, expressed as data rather than as three independent switch statements re-deriving the same "given a format, which read/build function do I call" dispatch. A format's `content` entry wraps the identical readXContent/buildXPackage pair every ergonomic conversion in this package already uses for it (via decodeDocumentPackage/encodeDocumentPackage for the raw-package half); a format's `layout` entry wraps a LayoutDocument codec (pdf only, so far).

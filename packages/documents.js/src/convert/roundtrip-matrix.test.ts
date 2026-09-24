@@ -766,14 +766,14 @@ describe.each(
         { signal: new AbortController().signal, ...options },
       );
     const result = await run()
-      .catch((error: unknown) => {
+      .catch(async (error: unknown) => {
         if (!(error instanceof CsvSheetNotSpecifiedError)) {
           throw error;
         }
         expect(error.availableSheets.length).toBeGreaterThan(1);
         return run({ sheet: error.availableSheets[0]! });
       })
-      .catch((error: unknown) => {
+      .catch(async (error: unknown) => {
         if (!(error instanceof SvgMultiPageNotSpecifiedError)) {
           throw error;
         }

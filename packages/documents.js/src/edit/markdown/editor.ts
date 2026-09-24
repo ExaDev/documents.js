@@ -24,11 +24,11 @@ import type { TableInit } from "./table";
 import { buildTable, MarkdownTable } from "./table";
 
 export interface MarkdownBody {
-  paragraphs(): MarkdownParagraph[];
-  appendParagraph(init?: ParagraphInit): MarkdownParagraph;
-  tables(): MarkdownTable[];
-  appendTable(init: TableInit): MarkdownTable;
-  startList(init: MarkdownListInit): MarkdownList;
+  paragraphs: () => MarkdownParagraph[];
+  appendParagraph: (init?: ParagraphInit) => MarkdownParagraph;
+  tables: () => MarkdownTable[];
+  appendTable: (init: TableInit) => MarkdownTable;
+  startList: (init: MarkdownListInit) => MarkdownList;
 }
 
 class MarkdownBodyImpl implements MarkdownBody {

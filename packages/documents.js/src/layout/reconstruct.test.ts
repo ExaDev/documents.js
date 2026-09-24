@@ -2296,7 +2296,9 @@ describe("reconstructSpreadsheet: heuristic cell re-typing", () => {
     );
     const inferences: CellTypeInference[] = [];
     const doc = reconstructSpreadsheet(docFrom([page(300, 300, items)]), {
-      onCellTypeInference: (inference) => inferences.push(inference),
+      onCellTypeInference: (inference) => {
+        inferences.push(inference);
+      },
     });
     const [sheet] = sheets(doc);
     return { cells: sheet!.cells, inferences };

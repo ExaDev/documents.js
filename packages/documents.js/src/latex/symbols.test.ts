@@ -152,8 +152,11 @@ describe("extractSymbolDefinitionsFromProse", () => {
       "Consider a line. Where R is the resistance per unit length, the loss grows.",
     ]);
     const diagnostics: LatexDiagnostic[] = [];
-    const entries = extractSymbolDefinitionsFromProse(document, (diagnostic) =>
-      diagnostics.push(diagnostic),
+    const entries = extractSymbolDefinitionsFromProse(
+      document,
+      (diagnostic) => {
+        diagnostics.push(diagnostic);
+      },
     );
     expect(entries).toEqual([
       {
@@ -222,7 +225,9 @@ describe("extractSymbolDefinitionsFromProse", () => {
       wordprocessing([
         "where R is the resistance per unit length. where R is something else entirely.",
       ]),
-      (diagnostic) => diagnostics.push(diagnostic),
+      (diagnostic) => {
+        diagnostics.push(diagnostic);
+      },
     );
     expect(entries).toHaveLength(1);
     expect(diagnostics).toHaveLength(1);
