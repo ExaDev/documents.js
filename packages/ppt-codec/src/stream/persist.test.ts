@@ -17,12 +17,14 @@ import {
 } from "./persist";
 
 // Built from [MS-PPT] 2.3.3's own field table: lastSlideIdRef, version, minorVersion, majorVersion, offsetLastEdit, offsetPersistDirectory, docPersistIdRef, persistIdSeed, lastView, unused — 28 bytes (0x1C) — plus an optional 4-byte encryptSessionPersistIdRef that makes recLen 0x20 instead. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/3ffb3fab-95de-4873-98aa-d508fbbac981
-function userEditAtom(options: {
-  offsetLastEdit?: number;
-  offsetPersistDirectory?: number;
-  docPersistIdRef?: number;
-  encryptSessionPersistIdRef?: number;
-}): Uint8Array<ArrayBuffer> {
+function userEditAtom(
+  options: Readonly<{
+    offsetLastEdit?: number;
+    offsetPersistDirectory?: number;
+    docPersistIdRef?: number;
+    encryptSessionPersistIdRef?: number;
+  }>,
+): Uint8Array<ArrayBuffer> {
   const {
     offsetLastEdit = 0,
     offsetPersistDirectory = 0,
