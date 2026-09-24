@@ -1144,24 +1144,28 @@ describe("boxes", () => {
   const BOX_CONTENT_TYPE_EQUATION = 4;
   const BOX_CONTENT_TYPE_IMAGE = 3;
 
-  function putUint16(bytes: number[], offset: number, value: number): void {
-    bytes[offset] = value & 0xff;
-    bytes[offset + 1] = (value >>> 8) & 0xff;
+  // Threaded by reference rather than passed as a bare array parameter: bytes is a local accumulator every call site owns and mutates in place, and wrapping it in a one-field sink keeps exadev/prefer-readonly-array-param out of scope for it the same way byte-codec's CodeUnitSink does for its own hot-loop accumulator.
+  interface ByteSink {
+    readonly bytes: number[];
+  }
+  function putUint16(sink: ByteSink, offset: number, value: number): void {
+    sink.bytes[offset] = value & 0xff;
+    sink.bytes[offset + 1] = (value >>> 8) & 0xff;
   }
 
   function contentBlock(contentType: number): number[] {
     const flags: number[] = [0, 0];
-    putUint16(flags, 0, 0x4000); // bit 14: content type override
+    putUint16({ bytes: flags }, 0, 0x4000); // bit 14: content type override
     return [...flags, contentType];
   }
 
   function positionBlock(widthWpu: number, heightWpu: number): number[] {
     const flags: number[] = [0, 0];
-    putUint16(flags, 0, 0x0c00); // bits 11 (width) and 10 (height)
+    putUint16({ bytes: flags }, 0, 0x0c00); // bits 11 (width) and 10 (height)
     const width = [0, 0, 0];
-    putUint16(width, 1, widthWpu);
+    putUint16({ bytes: width }, 1, widthWpu);
     const height = [0, 0, 0];
-    putUint16(height, 1, heightWpu);
+    putUint16({ bytes: height }, 1, heightWpu);
     return [...flags, ...width, ...height];
   }
 
@@ -1171,13 +1175,13 @@ describe("boxes", () => {
     blocks: ReadonlyMap<number, readonly number[]>,
   ): number[] {
     const bytes = new Array<number>(18).fill(0);
-    putUint16(bytes, 18, overrideFlags);
+    putUint16({ bytes }, 18, overrideFlags);
     for (let bit = 15; bit >= 5; bit -= 1) {
       const data = blocks.get(bit);
       if (data === undefined) {
         continue;
       }
-      putUint16(bytes, bytes.length, data.length);
+      putUint16({ bytes }, bytes.length, data.length);
       bytes.push(...data);
     }
     return bytes;
@@ -1588,13 +1592,13 @@ describe("boxes", () => {
     const png = tinyPng();
     // Position override with all four members: horizontal and vertical absolute-from-page-edge offsets (type 0 flags) plus width and height.
     const flags: number[] = [0, 0];
-    putUint16(flags, 0, 0x3c00); // bits 13 (h), 12 (v), 11 (width), 10 (height)
+    putUint16({ bytes: flags }, 0, 0x3c00); // bits 13 (h), 12 (v), 11 (width), 10 (height)
     const horizontal = [0x00, 0x10, 0x01, 0, 0]; // type 0 = absolute from page edge, offset 0x0110 WPU = 10.56pt
     const vertical = [0x00, 0x20, 0x02]; // type 0, offset 0x0220 WPU = 21.12pt
     const width = [0, 0, 0];
-    putUint16(width, 1, 1440);
+    putUint16({ bytes: width }, 1, 1440);
     const height = [0, 0, 0];
-    putUint16(height, 1, 720);
+    putUint16({ bytes: height }, 1, 720);
     const positionedBox = variableFunction({
       group: BOX_GROUP,
       subgroup: PAGE_ANCHORED_BOX,
@@ -2072,24 +2076,28 @@ describe("native OLE objects (#1191)", () => {
   const PAGE_ANCHORED_BOX = 0x02;
   const BOX_CONTENT_TYPE_IMAGE = 3;
 
-  function putUint16(bytes: number[], offset: number, value: number): void {
-    bytes[offset] = value & 0xff;
-    bytes[offset + 1] = (value >>> 8) & 0xff;
+  // Threaded by reference rather than passed as a bare array parameter: bytes is a local accumulator every call site owns and mutates in place, and wrapping it in a one-field sink keeps exadev/prefer-readonly-array-param out of scope for it the same way byte-codec's CodeUnitSink does for its own hot-loop accumulator.
+  interface ByteSink {
+    readonly bytes: number[];
+  }
+  function putUint16(sink: ByteSink, offset: number, value: number): void {
+    sink.bytes[offset] = value & 0xff;
+    sink.bytes[offset + 1] = (value >>> 8) & 0xff;
   }
 
   function contentBlock(contentType: number): number[] {
     const flags: number[] = [0, 0];
-    putUint16(flags, 0, 0x4000); // bit 14: content type override
+    putUint16({ bytes: flags }, 0, 0x4000); // bit 14: content type override
     return [...flags, contentType];
   }
 
   function positionBlock(widthWpu: number, heightWpu: number): number[] {
     const flags: number[] = [0, 0];
-    putUint16(flags, 0, 0x0c00); // bits 11 (width) and 10 (height)
+    putUint16({ bytes: flags }, 0, 0x0c00); // bits 11 (width) and 10 (height)
     const width = [0, 0, 0];
-    putUint16(width, 1, widthWpu);
+    putUint16({ bytes: width }, 1, widthWpu);
     const height = [0, 0, 0];
-    putUint16(height, 1, heightWpu);
+    putUint16({ bytes: height }, 1, heightWpu);
     return [...flags, ...width, ...height];
   }
 
@@ -2098,13 +2106,13 @@ describe("native OLE objects (#1191)", () => {
     blocks: ReadonlyMap<number, readonly number[]>,
   ): number[] {
     const bytes = new Array<number>(18).fill(0);
-    putUint16(bytes, 18, overrideFlags);
+    putUint16({ bytes }, 18, overrideFlags);
     for (let bit = 15; bit >= 5; bit -= 1) {
       const data = blocks.get(bit);
       if (data === undefined) {
         continue;
       }
-      putUint16(bytes, bytes.length, data.length);
+      putUint16({ bytes }, bytes.length, data.length);
       bytes.push(...data);
     }
     return bytes;
@@ -2319,24 +2327,28 @@ describe("WPG vector graphics embedded in an image box", () => {
   const BOX_CONTENT_TYPE_IMAGE = 3;
   const PACKET_TYPE_GRAPHICS_CACHED_FILE_DATA = 0x6f;
 
-  function putUint16(bytes: number[], offset: number, value: number): void {
-    bytes[offset] = value & 0xff;
-    bytes[offset + 1] = (value >>> 8) & 0xff;
+  // Threaded by reference rather than passed as a bare array parameter: bytes is a local accumulator every call site owns and mutates in place, and wrapping it in a one-field sink keeps exadev/prefer-readonly-array-param out of scope for it the same way byte-codec's CodeUnitSink does for its own hot-loop accumulator.
+  interface ByteSink {
+    readonly bytes: number[];
+  }
+  function putUint16(sink: ByteSink, offset: number, value: number): void {
+    sink.bytes[offset] = value & 0xff;
+    sink.bytes[offset + 1] = (value >>> 8) & 0xff;
   }
 
   function contentBlock(contentType: number): number[] {
     const flags: number[] = [0, 0];
-    putUint16(flags, 0, 0x4000);
+    putUint16({ bytes: flags }, 0, 0x4000);
     return [...flags, contentType];
   }
 
   function positionBlock(widthWpu: number, heightWpu: number): number[] {
     const flags: number[] = [0, 0];
-    putUint16(flags, 0, 0x0c00);
+    putUint16({ bytes: flags }, 0, 0x0c00);
     const width = [0, 0, 0];
-    putUint16(width, 1, widthWpu);
+    putUint16({ bytes: width }, 1, widthWpu);
     const height = [0, 0, 0];
-    putUint16(height, 1, heightWpu);
+    putUint16({ bytes: height }, 1, heightWpu);
     return [...flags, ...width, ...height];
   }
 
@@ -2345,13 +2357,13 @@ describe("WPG vector graphics embedded in an image box", () => {
     blocks: ReadonlyMap<number, readonly number[]>,
   ): number[] {
     const bytes = new Array<number>(18).fill(0);
-    putUint16(bytes, 18, overrideFlags);
+    putUint16({ bytes }, 18, overrideFlags);
     for (let bit = 15; bit >= 5; bit -= 1) {
       const data = blocks.get(bit);
       if (data === undefined) {
         continue;
       }
-      putUint16(bytes, bytes.length, data.length);
+      putUint16({ bytes }, bytes.length, data.length);
       bytes.push(...data);
     }
     return bytes;

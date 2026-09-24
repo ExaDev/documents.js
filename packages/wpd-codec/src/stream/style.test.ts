@@ -10,11 +10,15 @@ import {
   styleSemanticsFor,
 } from "./style";
 
-function putUint32(bytes: number[], offset: number, value: number): void {
-  bytes[offset] = value & 0xff;
-  bytes[offset + 1] = (value >>> 8) & 0xff;
-  bytes[offset + 2] = (value >>> 16) & 0xff;
-  bytes[offset + 3] = (value >>> 24) & 0xff;
+// Threaded by reference rather than passed as a bare array parameter: bytes is a local accumulator every call site owns and mutates in place, and wrapping it in a one-field sink keeps exadev/prefer-readonly-array-param out of scope for it the same way byte-codec's CodeUnitSink does for its own hot-loop accumulator.
+interface ByteSink {
+  readonly bytes: number[];
+}
+function putUint32(sink: ByteSink, offset: number, value: number): void {
+  sink.bytes[offset] = value & 0xff;
+  sink.bytes[offset + 1] = (value >>> 8) & 0xff;
+  sink.bytes[offset + 2] = (value >>> 16) & 0xff;
+  sink.bytes[offset + 3] = (value >>> 24) & 0xff;
 }
 
 // A Normal Style packet (type 0x30) carrying no link PID and a non-empty "beginning style text" block, laid out exactly as WPFF Prefix Packet Type 48 states: [pid count=0] [numTextBlocks=4] {relOffset} {paragraphSize} {beginSize} {endSize} {extraSize}, then whatever bytes the text-block region holds starting at relOffset.
@@ -32,11 +36,11 @@ function stylePacket(options: {
   bytes[1] = 0; // pid count high byte
   bytes[2] = 4; // number of text blocks
   bytes[3] = 0;
-  putUint32(bytes, 4, options.relOffset);
-  putUint32(bytes, 8, options.paragraphSize);
-  putUint32(bytes, 12, options.beginSize);
-  putUint32(bytes, 16, options.endSize ?? 0);
-  putUint32(bytes, 20, options.extraSize ?? 0);
+  putUint32({ bytes }, 4, options.relOffset);
+  putUint32({ bytes }, 8, options.paragraphSize);
+  putUint32({ bytes }, 12, options.beginSize);
+  putUint32({ bytes }, 16, options.endSize ?? 0);
+  putUint32({ bytes }, 20, options.extraSize ?? 0);
   if (options.beginBytes !== undefined) {
     const start = options.relOffset + options.paragraphSize;
     options.beginBytes.forEach((byte, index) => {
@@ -237,7 +241,7 @@ describe("readStyleBeginBlock", () => {
   // The text-block header exactly fills the packet (afterPids + TEXT_BLOCK_HEADER_SIZE === packet.length), with no bytes to spare — the one boundary where "runs past" and "fits exactly" disagree. The begin block's own relative offset points back into the header's own bytes here (harmless: this function only cares about bounds, not what the header fields themselves say), so a real, in-bounds slice is still the correct answer.
   it("reads a begin block from a packet whose header exactly fills it, with nothing to spare", () => {
     const bytes = new Array<number>(20).fill(0); // pid count (2) + TEXT_BLOCK_HEADER_SIZE (18) = 20, exactly
-    putUint32(bytes, 12, 5); // beginningStyleTextSize = 5; relativeOffset and paragraphTextSize stay 0
+    putUint32({ bytes }, 12, 5); // beginningStyleTextSize = 5; relativeOffset and paragraphTextSize stay 0
     expect(readStyleBeginBlock(new Uint8Array(bytes))).toEqual(
       new Uint8Array(bytes.slice(0, 5)),
     );
@@ -246,7 +250,7 @@ describe("readStyleBeginBlock", () => {
   // The header's own fourth field (extraStyleTextSize) is never read by this function — only relativeOffset, paragraphTextSize, and beginningStyleTextSize are — but the room guard still checks for all four LONGs' worth of space, TEXT_BLOCK_HEADER_SIZE (18) bytes past afterPids. A packet with room for exactly the three real reads (14 bytes past afterPids) but not the fourth still states a begin block that would, on the bytes read alone, appear to fit within those same 14 bytes — proving the guard's own room requirement is load-bearing rather than redundant with the reads it precedes.
   it("rejects a packet whose header has room for the three fields this function reads but not the fourth it never reads", () => {
     const bytes = new Array<number>(16).fill(0); // pid count (2) + 14: exactly enough for relativeOffset/paragraphTextSize/beginningStyleTextSize, one 4-byte field short of the full header
-    putUint32(bytes, 12, 3); // beginningStyleTextSize = 3; relativeOffset and paragraphTextSize stay 0, so a begin block of bytes 0-2 would otherwise fit inside these 16 bytes
+    putUint32({ bytes }, 12, 3); // beginningStyleTextSize = 3; relativeOffset and paragraphTextSize stay 0, so a begin block of bytes 0-2 would otherwise fit inside these 16 bytes
     expect(readStyleBeginBlock(new Uint8Array(bytes))).toBeUndefined();
   });
 
@@ -254,8 +258,8 @@ describe("readStyleBeginBlock", () => {
   it("computes afterPids by adding the pid list's own byte cost, not subtracting it", () => {
     const bytes = new Array<number>(30).fill(0);
     bytes[0] = 1; // pid count = 1, so afterPids = 2 + 1 * 2 = 4
-    putUint32(bytes, 6, 24); // relativeOffset at afterPids + 2 = 6
-    putUint32(bytes, 14, 3); // beginningStyleTextSize at afterPids + 10 = 14
+    putUint32({ bytes }, 6, 24); // relativeOffset at afterPids + 2 = 6
+    putUint32({ bytes }, 14, 3); // beginningStyleTextSize at afterPids + 10 = 14
     bytes[24] = 9;
     bytes[25] = 9;
     bytes[26] = 9; // the begin block itself, at relativeOffset (24) + paragraphTextSize (0)

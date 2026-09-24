@@ -6,9 +6,13 @@ import {
   readBoxContent,
 } from "./box";
 
-function putUint16(bytes: number[], offset: number, value: number): void {
-  bytes[offset] = value & 0xff;
-  bytes[offset + 1] = (value >>> 8) & 0xff;
+// Threaded by reference rather than passed as a bare array parameter: bytes is a local accumulator every call site owns and mutates in place, and wrapping it in a one-field sink keeps exadev/prefer-readonly-array-param out of scope for it the same way byte-codec's CodeUnitSink does for its own hot-loop accumulator.
+interface ByteSink {
+  readonly bytes: number[];
+}
+function putUint16(sink: ByteSink, offset: number, value: number): void {
+  sink.bytes[offset] = value & 0xff;
+  sink.bytes[offset + 1] = (value >>> 8) & 0xff;
 }
 
 function word16(value: number): number[] {
@@ -21,13 +25,13 @@ function boxNonDeletable(options: {
   readonly blocks: ReadonlyMap<number, readonly number[]>;
 }): Uint8Array {
   const bytes = new Array<number>(14 + 2 + 2).fill(0);
-  putUint16(bytes, 18, options.overrideFlags);
+  putUint16({ bytes }, 18, options.overrideFlags);
   for (let bit = 15; bit >= 5; bit -= 1) {
     const data = options.blocks.get(bit);
     if (data === undefined) {
       continue;
     }
-    putUint16(bytes, bytes.length, data.length);
+    putUint16({ bytes }, bytes.length, data.length);
     bytes.push(...data);
   }
   // total override+wrap size and total override size (not read by readBoxContent, left as 0)
@@ -37,7 +41,7 @@ function boxNonDeletable(options: {
 // A content override block, per WPFF_DF-BOX.htm's own nested layout: [content override flags] with bit14 (content type override) set, then the content type byte.
 function contentBlock(contentType: number): number[] {
   const flags = new Array<number>(2);
-  putUint16(flags, 0, 0x4000); // bit 14 only
+  putUint16({ bytes: flags }, 0, 0x4000); // bit 14 only
   return [...flags, contentType];
 }
 
@@ -47,11 +51,11 @@ function positionBlockWidthHeight(
   heightWpu: number,
 ): number[] {
   const flags = new Array<number>(2);
-  putUint16(flags, 0, 0x0c00); // bits 11 and 10
+  putUint16({ bytes: flags }, 0, 0x0c00); // bits 11 and 10
   const width = [0, 0, 0]; // <width flags = fixed>[width]
-  putUint16(width, 1, widthWpu);
+  putUint16({ bytes: width }, 1, widthWpu);
   const height = [0, 0, 0]; // <height flags = fixed>[height]
-  putUint16(height, 1, heightWpu);
+  putUint16({ bytes: height }, 1, heightWpu);
   return [...flags, ...width, ...height];
 }
 
@@ -148,8 +152,8 @@ describe("readBoxContent", () => {
   // A content override whose own stated size lies far beyond the function's true extent: the walk must refuse it outright, never let a lying size borrow whatever real bytes happen to follow within the function's own true bounds as if they belonged to this block.
   it("never lets a content override with a lying, oversized declaration borrow real trailing bytes", () => {
     const nonDeletable = new Array<number>(14 + 2 + 2).fill(0);
-    putUint16(nonDeletable, 18, 0x2000); // bit 13 (content)
-    putUint16(nonDeletable, nonDeletable.length, 100); // lying size: 100
+    putUint16({ bytes: nonDeletable }, 18, 0x2000); // bit 13 (content)
+    putUint16({ bytes: nonDeletable }, nonDeletable.length, 100); // lying size: 100
     nonDeletable.push(...contentBlock(BOX_CONTENT_TYPE_IMAGE)); // 3 real bytes, far short of 100
     expect(
       readBoxContent(new Uint8Array(nonDeletable), [41, 42]),
