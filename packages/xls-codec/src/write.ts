@@ -44,6 +44,7 @@ import {
   type XfBorderEdge,
   type XfDecorationFields,
 } from "./biff/xf-colors";
+import { assertNeverContentCellValueKind } from "./content";
 import type { XlsContentDocument } from "./content";
 import { SUMMARY_INFORMATION_STREAM } from "./container";
 import { layoutMetadataToSummaryInformation } from "./metadata";
@@ -116,6 +117,7 @@ function defaultFormatIdForKind(
     case "empty":
       return GENERAL_FORMAT_ID;
   }
+  return assertNeverContentCellValueKind(kind);
 }
 
 /**

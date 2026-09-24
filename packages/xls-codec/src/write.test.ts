@@ -41,7 +41,11 @@ import * as writtenCellsModule from "./written-cells";
 import { PALETTE_ENTRY_COUNT } from "./biff/xf-colors";
 import { BiffWriteError } from "./biff/write-errors";
 import type { XlsContentDocument } from "./content";
-import { readXls, readXlsContent } from "./content";
+import {
+  assertNeverContentCellValueKind,
+  readXls,
+  readXlsContent,
+} from "./content";
 import { isXlsFile } from "./container";
 import {
   buildCellXfPlan,
@@ -123,6 +127,7 @@ function displayTextFor(value: ContentCellValue): string {
     case "empty":
       return "";
   }
+  return assertNeverContentCellValueKind(value);
 }
 
 function document(sheets: readonly ContentSheet[]): XlsContentDocument {
