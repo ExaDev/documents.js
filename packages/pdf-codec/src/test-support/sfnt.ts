@@ -33,7 +33,7 @@ export function buildSfnt(
 export interface CmapSubtableSpec {
   readonly platformId: number;
   readonly encodingId: number;
-  readonly format: 0 | 4 | 6;
+  readonly format: 0 | 4 | 6 | 12;
   readonly mappings: ReadonlyMap<number, number>;
 }
 
@@ -97,6 +97,27 @@ function buildFormat6(mappings: ReadonlyMap<number, number>): Uint8Array {
   return subtable;
 }
 
+// A format 12 segmented subtable (OpenType cmap, "Format 12: Segmented Coverage"): one group per
+// code, each covering the single code point it maps, which is the only shape this builder needs —
+// every test mapping is expressible as single-code groups.
+function buildFormat12(mappings: ReadonlyMap<number, number>): Uint8Array {
+  const groups: { startCode: number; glyphId: number }[] = [...mappings]
+    .sort((a, b) => a[0] - b[0])
+    .map(([code, glyphId]) => ({ startCode: code, glyphId }));
+  const subtable = new Uint8Array(16 + groups.length * 12);
+  const view = new DataView(subtable.buffer);
+  view.setUint16(0, 12);
+  view.setUint32(4, subtable.length);
+  view.setUint32(12, groups.length);
+  groups.forEach((group, index) => {
+    const at = 16 + index * 12;
+    view.setUint32(at, group.startCode);
+    view.setUint32(at + 4, group.startCode);
+    view.setUint32(at + 8, group.glyphId);
+  });
+  return subtable;
+}
+
 export function buildCmapTable(
   subtables: readonly CmapSubtableSpec[],
 ): Uint8Array<ArrayBuffer> {
@@ -107,7 +128,9 @@ export function buildCmapTable(
         ? buildFormat0(spec.mappings)
         : spec.format === 4
           ? buildFormat4(spec.mappings)
-          : buildFormat6(spec.mappings),
+          : spec.format === 12
+            ? buildFormat12(spec.mappings)
+            : buildFormat6(spec.mappings),
   }));
   const headerSize = 4 + subtables.length * 8;
   const total = encoded.reduce(

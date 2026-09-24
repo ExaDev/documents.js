@@ -355,27 +355,25 @@ function matchesAscii(
   return true;
 }
 
-const TYPE1_CLEARTEXT_TERMINATOR = "eexec"; // the keyword ending a Type 1 program's cleartext header, after which the rest is encrypted (Type 1 Font Format, chapter 7)
 const PFB_SEGMENT_MARKER = 0x80;
 const PFB_SEGMENT_HEADER_SIZE = 6;
-const POSTSCRIPT_MAGIC = "%!"; // every Type 1 program opens with this document-structuring comment
 
 // A Type 1 program's own /Encoding array, read out of the cleartext header: either the literal name StandardEncoding, or a run of `dup <code> /<name> put` assignments into a 256-element array (Type 1 Font Format, section 5.3). The encrypted portion after `eexec` holds only the charstrings, never the encoding, so no decryption is needed to read this.
 function type1Sources(
   bytes: Uint8Array<ArrayBuffer>,
 ): ProgramSources | undefined {
+  // Declared inside the function rather than at module scope so each is ordinary executable code
+  // a direct test of this reader distinguishes, rather than load-time constants no test observes.
+  const cleartextTerminator = "eexec"; // the keyword ending the cleartext header, after which the rest is encrypted (Type 1 Font Format, chapter 7)
+  const postScriptMagic = "%!"; // every Type 1 program opens with this document-structuring comment
   // A PFB-segmented program, if a producer embedded one rather than the bare PFA form a PDF /FontFile normally carries, opens with a six-byte binary segment header before the same ASCII text.
   const start = bytes[0] === PFB_SEGMENT_MARKER ? PFB_SEGMENT_HEADER_SIZE : 0;
-  if (!matchesAscii(bytes, start, POSTSCRIPT_MAGIC)) {
+  if (!matchesAscii(bytes, start, postScriptMagic)) {
     return undefined;
   }
   let cleartextEnd = bytes.length;
-  for (
-    let i = start;
-    i + TYPE1_CLEARTEXT_TERMINATOR.length <= bytes.length;
-    i++
-  ) {
-    if (matchesAscii(bytes, i, TYPE1_CLEARTEXT_TERMINATOR)) {
+  for (let i = start; i + cleartextTerminator.length <= bytes.length; i++) {
+    if (matchesAscii(bytes, i, cleartextTerminator)) {
       cleartextEnd = i;
       break;
     }
