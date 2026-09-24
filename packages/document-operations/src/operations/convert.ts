@@ -133,8 +133,9 @@ export const convertDocumentOperation = defineOperation({
         })),
         // Only wired under the flag: the local converter already records every substitution as a `font/substituted` Diagnostic in result.diagnostics below regardless of whether a callback is supplied, so an unconditional callback here would report the same event twice, once per channel.
         onFontSubstitution: wantsFontSubstitutionDiagnostics
-          ? (substitution: FontSubstitution) =>
-              fontSubstitutions.push(substitution)
+          ? (substitution: FontSubstitution) => {
+              fontSubstitutions.push(substitution);
+            }
           : undefined,
         // A caller with no filesystem context supplies any non-data: markdown image bytes explicitly as a destination -> base64 map; a destination absent from the map degrades to alt text, exactly as documents.js's MarkdownImageResolver port defines.
         images:
