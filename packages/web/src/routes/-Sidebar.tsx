@@ -1,4 +1,4 @@
-import { Anchor, NavLink, Stack, Tooltip } from "@mantine/core";
+import { Anchor, NavLink, Stack, Text, Tooltip } from "@mantine/core";
 import { Link } from "@tanstack/react-router";
 import {
   IconArrowsExchange,
@@ -15,19 +15,29 @@ import {
 } from "@tabler/icons-react";
 
 import { relativeTime } from "../shared/relativeTime";
-import { navLink, versionAnchor } from "./-Sidebar.css";
+import { groupHeading, navLink, versionAnchor } from "./-Sidebar.css";
 
-// Not a route — the '-' prefix keeps TanStack Router's file-based generator from treating this as one.
-const NAV_ITEMS = [
-  { to: "/convert", label: "Convert", icon: IconArrowsExchange },
-  { to: "/editors", label: "Editors", icon: IconEdit },
-  { to: "/metadata", label: "Metadata", icon: IconTags },
-  { to: "/inspect", label: "Inspect", icon: IconFileSearch },
-  { to: "/fonts", label: "Fonts", icon: IconTypography },
-  { to: "/recent", label: "Recent", icon: IconHistory },
-  { to: "/package", label: "Package / JSON", icon: IconJson },
-  { to: "/odb", label: ".odb", icon: IconDatabase },
-  { to: "/odm", label: ".odm", icon: IconBooks },
+// Not a route: the '-' prefix keeps TanStack Router's file-based generator from treating this as one.
+//
+// Grouped rather than one flat list, because the two groups behave differently. Everything under "Document" is a lens on the one currently-open document (each is a route nested in the '/_document' layout, which is what opens that document), so moving between them never asks for a file again. "Library" is the one place that picks which document that is. Before this split, a flat list of nine gave no hint that eight of them shared state and one did not.
+const NAV_GROUPS = [
+  {
+    label: "Document",
+    items: [
+      { to: "/convert", label: "Convert", icon: IconArrowsExchange },
+      { to: "/editors", label: "Editors", icon: IconEdit },
+      { to: "/metadata", label: "Metadata", icon: IconTags },
+      { to: "/inspect", label: "Inspect", icon: IconFileSearch },
+      { to: "/fonts", label: "Fonts", icon: IconTypography },
+      { to: "/package", label: "Package / JSON", icon: IconJson },
+      { to: "/odb", label: ".odb", icon: IconDatabase },
+      { to: "/odm", label: ".odm", icon: IconBooks },
+    ],
+  },
+  {
+    label: "Library",
+    items: [{ to: "/recent", label: "Recent", icon: IconHistory }],
+  },
 ] as const;
 
 export interface VersionInfo {
@@ -84,18 +94,33 @@ export function Sidebar() {
 
   return (
     <Stack h="100%" justify="space-between" gap={4}>
-      <Stack gap={4}>
-        {NAV_ITEMS.map((item) => (
-          <Link key={item.to} to={item.to} className={navLink}>
-            {({ isActive }) => (
-              <NavLink
-                component="div"
-                label={item.label}
-                leftSection={<item.icon size={18} />}
-                active={isActive}
-              />
-            )}
-          </Link>
+      <Stack gap="md">
+        {NAV_GROUPS.map((group) => (
+          <Stack key={group.label} gap={4}>
+            <Text
+              component="h2"
+              size="xs"
+              fw={600}
+              c="dimmed"
+              tt="uppercase"
+              px="xs"
+              className={groupHeading}
+            >
+              {group.label}
+            </Text>
+            {group.items.map((item) => (
+              <Link key={item.to} to={item.to} className={navLink}>
+                {({ isActive }) => (
+                  <NavLink
+                    component="div"
+                    label={item.label}
+                    leftSection={<item.icon size={18} />}
+                    active={isActive}
+                  />
+                )}
+              </Link>
+            ))}
+          </Stack>
         ))}
       </Stack>
       <Tooltip label={tooltipLabel} position="right">

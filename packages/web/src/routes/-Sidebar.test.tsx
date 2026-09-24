@@ -68,6 +68,29 @@ describe("Sidebar", () => {
     const html = mounted.container.innerHTML;
     expect(html).toContain("Convert");
     expect(html).toContain('href="/odm"');
+    expect(html).toContain('href="/editors"');
+    expect(html).toContain('href="/recent"');
+  });
+
+  it("separates the document tools from the library under real headings", () => {
+    const mounted = mountWithMantine(<Sidebar />);
+    unmount = mounted.unmount;
+    const headings = [...mounted.container.querySelectorAll("h2")].map(
+      (heading) => heading.textContent,
+    );
+    expect(headings).toEqual(["Document", "Library"]);
+  });
+
+  it("groups Recent apart from the tools that share the open document", () => {
+    const mounted = mountWithMantine(<Sidebar />);
+    unmount = mounted.unmount;
+    const groups = [...mounted.container.querySelectorAll("h2")].map(
+      (heading) => heading.parentElement?.textContent ?? "",
+    );
+    const [documentGroup, libraryGroup] = groups;
+    expect(documentGroup).toContain("Editors");
+    expect(documentGroup).not.toContain("Recent");
+    expect(libraryGroup).toContain("Recent");
   });
 
   it("marks the active nav item's NavLink active", () => {
