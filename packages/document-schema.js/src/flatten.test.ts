@@ -86,24 +86,26 @@ describe("flattenTree style resolution", () => {
   });
 
   it("fills gaps only — a property the node already carries survives whatever the entry says", () => {
+    const ownIndentPt = 99;
+    const entryIndentPt = 20;
     const pkg = wordprocessingPackage(
       [
         {
           node: { kind: "section", ...SECTION },
           style: "s1",
           children: [
-            paragraph("keeps its own", { indentLeftPt: 99 }),
+            paragraph("keeps its own", { indentLeftPt: ownIndentPt }),
             paragraph("takes the entry's"),
           ],
         },
       ],
-      { s1: { paragraph: { indentLeftPt: 20 } } },
+      { s1: { paragraph: { indentLeftPt: entryIndentPt } } },
     );
     expect(
       sectionBlocks(pkg).map((block) =>
         block.kind === "paragraph" ? block.indentLeftPt : undefined,
       ),
-    ).toEqual([99, 20]);
+    ).toEqual([ownIndentPt, entryIndentPt]);
   });
 
   it("applies a resolved entry's run half to every run of every paragraph it resolved for", () => {
