@@ -12,6 +12,9 @@ import {
   type TableGridPosition,
 } from "./table-grid";
 
+// Every table built below cares about grid structure (spans, row/column counts) never about an actual rendered width, so every column gets this one arbitrary placeholder width rather than a distinct, individually-meaningless number per call site.
+const PLACEHOLDER_WIDTH_PT = 10;
+
 function cell(
   text: string,
   spans: Readonly<{ colSpan?: number; rowSpan?: number }> = {},
@@ -53,8 +56,14 @@ describe("tableCellColumnSpan / tableCellRowSpan", () => {
   });
 
   it("reads a stated span verbatim", () => {
-    expect(tableCellColumnSpan(cell("a", { colSpan: 3 }))).toBe(3);
-    expect(tableCellRowSpan(cell("a", { rowSpan: 2 }))).toBe(2);
+    const statedColSpan = 3;
+    const statedRowSpan = 2;
+    expect(tableCellColumnSpan(cell("a", { colSpan: statedColSpan }))).toBe(
+      statedColSpan,
+    );
+    expect(tableCellRowSpan(cell("a", { rowSpan: statedRowSpan }))).toBe(
+      statedRowSpan,
+    );
   });
 
   it("reads each span independently of the other", () => {
@@ -68,20 +77,33 @@ describe("tableCellColumnSpan / tableCellRowSpan", () => {
 describe("tableGridColumnCount", () => {
   it("is the declared column count when the rows agree with it", () => {
     expect(
-      tableGridColumnCount(table([[cell("a"), cell("b")]], [100, 100])),
+      tableGridColumnCount(
+        table(
+          [[cell("a"), cell("b")]],
+          [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
+        ),
+      ),
     ).toBe(2);
   });
 
   it("is the declared column count when it exceeds every row's length", () => {
-    expect(tableGridColumnCount(table([[cell("a")]], [100, 100, 100]))).toBe(3);
+    const declaredColumnWidths = [
+      PLACEHOLDER_WIDTH_PT,
+      PLACEHOLDER_WIDTH_PT,
+      PLACEHOLDER_WIDTH_PT,
+    ];
+    expect(
+      tableGridColumnCount(table([[cell("a")]], declaredColumnWidths)),
+    ).toBe(declaredColumnWidths.length);
   });
 
   it("is the longest row's length when a row runs past the declared columns", () => {
+    const longestRow = [cell("b"), cell("c"), cell("d")];
     expect(
       tableGridColumnCount(
-        table([[cell("a")], [cell("b"), cell("c"), cell("d")]], [100]),
+        table([[cell("a")], longestRow], [PLACEHOLDER_WIDTH_PT]),
       ),
-    ).toBe(3);
+    ).toBe(longestRow.length);
   });
 
   it("is zero for a table declaring no columns and holding no rows", () => {
@@ -98,7 +120,7 @@ describe("walkTableGrid", () => {
             [cell("a"), cell("b")],
             [cell("c"), cell("d")],
           ],
-          [10, 10],
+          [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
         ),
       ),
     ).toEqual([
@@ -110,7 +132,10 @@ describe("walkTableGrid", () => {
   it("marks the positions a horizontal span covers, and stops at its last column", () => {
     expect(
       classifyGrid(
-        table([[cell("wide", { colSpan: 2 }), EMPTY, cell("c")]], [10, 10, 10]),
+        table(
+          [[cell("wide", { colSpan: 2 }), EMPTY, cell("c")]],
+          [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
+        ),
       ),
     ).toEqual([["anchor", "covered by 0,0", "anchor"]]);
   });
@@ -124,7 +149,7 @@ describe("walkTableGrid", () => {
             [EMPTY, cell("c")],
             [cell("d"), cell("e")],
           ],
-          [10, 10],
+          [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
         ),
       ),
     ).toEqual([
@@ -143,7 +168,7 @@ describe("walkTableGrid", () => {
             [EMPTY, EMPTY, cell("f")],
             [cell("g"), cell("h"), cell("i")],
           ],
-          [10, 10, 10],
+          [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
         ),
       ),
     ).toEqual([
@@ -161,7 +186,7 @@ describe("walkTableGrid", () => {
             [cell("a"), cell("tall", { rowSpan: 2 })],
             [cell("c"), EMPTY],
           ],
-          [10, 10],
+          [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
         ),
       ),
     ).toEqual([
@@ -176,7 +201,9 @@ describe("walkTableGrid", () => {
       blocks: [],
       background: { kind: "solid", color: { r: 1, g: 2, b: 3 } },
     };
-    const walked = walkTableGrid(table([[anchor, covered]], [10, 10]));
+    const walked = walkTableGrid(
+      table([[anchor, covered]], [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT]),
+    );
     expect(walked[0]?.[0]?.cell).toBe(anchor);
     expect(walked[0]?.[1]?.cell).toBe(covered);
   });
@@ -188,7 +215,7 @@ describe("walkTableGrid", () => {
           [cell("a"), cell("b")],
           [cell("c"), cell("d")],
         ],
-        [10, 10],
+        [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
       ),
     );
     expect(
@@ -204,6 +231,7 @@ describe("denseTableRows", () => {
   it("fills every position no cell was placed at with an empty cell", () => {
     const wide = cell("wide", { colSpan: 2 });
     const tail = cell("tail");
+    const columnCount = 3;
     const rows = denseTableRows(
       [
         {
@@ -213,7 +241,7 @@ describe("denseTableRows", () => {
           ],
         },
       ],
-      3,
+      columnCount,
     );
     expect(rows).toEqual([{ cells: [wide, { blocks: [] }, tail] }]);
   });
@@ -243,14 +271,19 @@ describe("denseTableRows", () => {
   });
 
   it("gives every row the same width when a later row is the widest", () => {
+    const widestColumnIndex = 3;
+    const widestRowWidth = widestColumnIndex + 1;
     const rows = denseTableRows(
       [
         { cells: [{ columnIndex: 0, cell: cell("a") }] },
-        { cells: [{ columnIndex: 3, cell: cell("b") }] },
+        { cells: [{ columnIndex: widestColumnIndex, cell: cell("b") }] },
       ],
       1,
     );
-    expect(rows.map((row) => row.cells.length)).toEqual([4, 4]);
+    expect(rows.map((row) => row.cells.length)).toEqual([
+      widestRowWidth,
+      widestRowWidth,
+    ]);
   });
 
   it("gives each row a distinct empty cell rather than one shared instance", () => {
@@ -259,18 +292,19 @@ describe("denseTableRows", () => {
   });
 
   it("carries the row's own properties through unchanged", () => {
+    const statedHeightPt = 24;
     const rows = denseTableRows(
       [
         {
           cells: [{ columnIndex: 0, cell: cell("a") }],
-          heightPt: 24,
+          heightPt: statedHeightPt,
           direction: "rtl",
           isHeader: true,
         },
       ],
       1,
     );
-    expect(rows[0]?.heightPt).toBe(24);
+    expect(rows[0]?.heightPt).toBe(statedHeightPt);
     expect(rows[0]?.direction).toBe("rtl");
     expect(rows[0]?.isHeader).toBe(true);
   });
@@ -288,7 +322,8 @@ describe("placeAnchorTableRows", () => {
   it("places anchors left to right, skipping the columns a horizontal span consumed", () => {
     const wide = cell("Region", { colSpan: 2 });
     const tail = cell("Revenue");
-    const rows = placeAnchorTableRows([{ cells: [wide, tail] }], 3);
+    const columnCount = 3;
+    const rows = placeAnchorTableRows([{ cells: [wide, tail] }], columnCount);
     expect(rows).toEqual([{ cells: [wide, { blocks: [] }, tail] }]);
   });
 
@@ -320,9 +355,10 @@ describe("placeAnchorTableRows", () => {
     const block = cell("block", { colSpan: 2, rowSpan: 2 });
     const beside = cell("beside");
     const below = cell("below");
+    const columnCount = 3;
     const rows = placeAnchorTableRows(
       [{ cells: [block, beside] }, { cells: [below] }],
-      3,
+      columnCount,
     );
     expect(rows).toEqual([
       { cells: [block, { blocks: [] }, beside] },
@@ -331,44 +367,63 @@ describe("placeAnchorTableRows", () => {
   });
 
   it("derives the width from the placement when the source declares no columns", () => {
+    // The wide cell's own colSpan (2) plus the one plain cell after it.
+    const derivedWidth = 3;
     const rows = placeAnchorTableRows(
       [{ cells: [cell("a", { colSpan: 2 }), cell("b")] }],
       0,
     );
-    expect(rows[0]?.cells.length).toBe(3);
+    expect(rows[0]?.cells.length).toBe(derivedWidth);
   });
 
   it("carries the row's own properties through unchanged", () => {
+    const statedHeightPt = 18;
     const rows = placeAnchorTableRows(
-      [{ cells: [cell("a")], heightPt: 18, direction: "ltr", isHeader: true }],
+      [
+        {
+          cells: [cell("a")],
+          heightPt: statedHeightPt,
+          direction: "ltr",
+          isHeader: true,
+        },
+      ],
       1,
     );
-    expect(rows[0]?.heightPt).toBe(18);
+    expect(rows[0]?.heightPt).toBe(statedHeightPt);
     expect(rows[0]?.direction).toBe("ltr");
     expect(rows[0]?.isHeader).toBe(true);
   });
 
   it("places a second anchor past a first one's own columns", () => {
-    const wide = cell("wide", { colSpan: 3 });
+    const wideColSpan = 3;
+    const wide = cell("wide", { colSpan: wideColSpan });
     const after = cell("after");
-    const rows = placeAnchorTableRows([{ cells: [wide, after] }], 4);
-    expect(rows[0]?.cells[3]).toBe(after);
+    const rows = placeAnchorTableRows(
+      [{ cells: [wide, after] }],
+      wideColSpan + 1,
+    );
+    expect(rows[0]?.cells[wideColSpan]).toBe(after);
   });
 
   it("agrees with walkTableGrid: every cell it places is classified as an anchor", () => {
+    const columnCount = 3;
     const rows = placeAnchorTableRows(
       [
         { cells: [cell("a", { colSpan: 2, rowSpan: 2 }), cell("b")] },
         { cells: [cell("c")] },
         { cells: [cell("d"), cell("e"), cell("f")] },
       ],
-      3,
+      columnCount,
     );
     expect(
       classifyGrid({
         kind: "table",
         rows,
-        columns: [{ widthPt: 10 }, { widthPt: 10 }, { widthPt: 10 }],
+        columns: [
+          { widthPt: PLACEHOLDER_WIDTH_PT },
+          { widthPt: PLACEHOLDER_WIDTH_PT },
+          { widthPt: PLACEHOLDER_WIDTH_PT },
+        ],
       }),
     ).toEqual([
       ["anchor", "covered by 0,0", "anchor"],
@@ -385,7 +440,7 @@ describe("findTableGridFault", () => {
         [cell("a"), cell("b")],
         [cell("c"), cell("d")],
       ],
-      [10, 10],
+      [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
     );
     expect(findTableGridFault(grid)).toBeUndefined();
   });
@@ -396,7 +451,7 @@ describe("findTableGridFault", () => {
         [cell("a", { colSpan: 2, rowSpan: 2 }), EMPTY, cell("b")],
         [EMPTY, EMPTY, cell("c")],
       ],
-      [10, 10, 10],
+      [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
     );
     expect(findTableGridFault(grid)).toBeUndefined();
   });
@@ -407,7 +462,7 @@ describe("findTableGridFault", () => {
   });
 
   it("does not consult columns", () => {
-    const grid = table([[cell("a"), cell("b")]], [10]);
+    const grid = table([[cell("a"), cell("b")]], [PLACEHOLDER_WIDTH_PT]);
     expect(findTableGridFault(grid)).toBeUndefined();
   });
 
@@ -417,7 +472,7 @@ describe("findTableGridFault", () => {
         [cell("a", { colSpan: 2, rowSpan: 2 }), { blocks: [], colSpan: 1 }],
         [{ blocks: [], rowSpan: 1 }, EMPTY],
       ],
-      [10, 10],
+      [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
     );
     expect(findTableGridFault(grid)).toBeUndefined();
   });
@@ -426,7 +481,7 @@ describe("findTableGridFault", () => {
     it("reports the first row shorter than the widest", () => {
       const grid = table(
         [[cell("a"), cell("b"), cell("c")], [cell("d")], [cell("e")]],
-        [10, 10, 10],
+        [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
       );
       expect(findTableGridFault(grid)).toEqual({
         kind: "raggedRow",
@@ -437,7 +492,10 @@ describe("findTableGridFault", () => {
     });
 
     it("reports a short row that comes before the widest one", () => {
-      const grid = table([[cell("a")], [cell("b"), cell("c")]], [10, 10]);
+      const grid = table(
+        [[cell("a")], [cell("b"), cell("c")]],
+        [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
+      );
       expect(findTableGridFault(grid)).toEqual({
         kind: "raggedRow",
         rowIndex: 0,
@@ -447,7 +505,7 @@ describe("findTableGridFault", () => {
     });
 
     it("reports a row with no entries at all", () => {
-      const grid = table([[cell("a")], []], [10]);
+      const grid = table([[cell("a")], []], [PLACEHOLDER_WIDTH_PT]);
       expect(findTableGridFault(grid)).toEqual({
         kind: "raggedRow",
         rowIndex: 1,
@@ -459,7 +517,7 @@ describe("findTableGridFault", () => {
     it("is reported ahead of a positional fault earlier in reading order", () => {
       const grid = table(
         [[cell("a", { colSpan: 2 }), cell("covered content")], [cell("b")]],
-        [10, 10],
+        [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
       );
       expect(findTableGridFault(grid)?.kind).toBe("raggedRow");
     });
@@ -469,7 +527,7 @@ describe("findTableGridFault", () => {
     it("reports a position covered along its own row, with its anchor", () => {
       const grid = table(
         [[cell("a", { colSpan: 2 }), cell("extra"), cell("b")]],
-        [10, 10, 10],
+        [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
       );
       expect(findTableGridFault(grid)).toEqual({
         kind: "coveredContent",
@@ -486,7 +544,7 @@ describe("findTableGridFault", () => {
           [cell("a"), cell("b", { rowSpan: 2 })],
           [cell("c"), cell("extra")],
         ],
-        [10, 10],
+        [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
       );
       expect(findTableGridFault(grid)).toEqual({
         kind: "coveredContent",
@@ -503,7 +561,7 @@ describe("findTableGridFault", () => {
           [cell("a", { colSpan: 2, rowSpan: 2 }), EMPTY],
           [EMPTY, cell("extra")],
         ],
-        [10, 10],
+        [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
       );
       expect(findTableGridFault(grid)).toEqual({
         kind: "coveredContent",
@@ -515,7 +573,10 @@ describe("findTableGridFault", () => {
     });
 
     it("does not treat an unmerged cell's own blocks as a fault", () => {
-      const grid = table([[cell("a"), cell("b")]], [10, 10]);
+      const grid = table(
+        [[cell("a"), cell("b")]],
+        [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
+      );
       expect(findTableGridFault(grid)).toBeUndefined();
     });
   });
@@ -524,7 +585,7 @@ describe("findTableGridFault", () => {
     it("reports a second anchor starting inside another's footprint along a row", () => {
       const grid = table(
         [[cell("a", { colSpan: 2 }), { blocks: [], colSpan: 2 }, EMPTY]],
-        [10, 10, 10],
+        [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
       );
       expect(findTableGridFault(grid)).toEqual({
         kind: "coveredSpan",
@@ -538,7 +599,7 @@ describe("findTableGridFault", () => {
     it("reports a second anchor starting inside another's footprint down a column", () => {
       const grid = table(
         [[cell("a", { rowSpan: 2 })], [{ blocks: [], rowSpan: 2 }], [EMPTY]],
-        [10],
+        [PLACEHOLDER_WIDTH_PT],
       );
       expect(findTableGridFault(grid)).toEqual({
         kind: "coveredSpan",
@@ -555,7 +616,7 @@ describe("findTableGridFault", () => {
           [cell("a", { colSpan: 2 }), { blocks: [], rowSpan: 2 }],
           [EMPTY, EMPTY],
         ],
-        [10, 10],
+        [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
       );
       expect(findTableGridFault(grid)?.kind).toBe("coveredSpan");
     });
@@ -563,7 +624,7 @@ describe("findTableGridFault", () => {
     it("reports content ahead of a span on the same covered position", () => {
       const grid = table(
         [[cell("a", { colSpan: 2 }), cell("extra", { colSpan: 2 })]],
-        [10, 10],
+        [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
       );
       expect(findTableGridFault(grid)?.kind).toBe("coveredContent");
     });
@@ -573,7 +634,7 @@ describe("findTableGridFault", () => {
     it("accepts a colSpan that ends exactly at the last column", () => {
       const grid = table(
         [[cell("a"), cell("b", { colSpan: 2 }), EMPTY]],
-        [10, 10, 10],
+        [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
       );
       expect(findTableGridFault(grid)).toBeUndefined();
     });
@@ -581,7 +642,7 @@ describe("findTableGridFault", () => {
     it("reports a colSpan reaching one column past the last", () => {
       const grid = table(
         [[cell("a"), cell("b", { colSpan: 3 }), EMPTY]],
-        [10, 10, 10],
+        [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
       );
       expect(findTableGridFault(grid)).toEqual({
         kind: "anchorOverrunsColumns",
@@ -591,12 +652,18 @@ describe("findTableGridFault", () => {
     });
 
     it("accepts a rowSpan that ends exactly at the last row", () => {
-      const grid = table([[cell("a", { rowSpan: 2 })], [EMPTY]], [10]);
+      const grid = table(
+        [[cell("a", { rowSpan: 2 })], [EMPTY]],
+        [PLACEHOLDER_WIDTH_PT],
+      );
       expect(findTableGridFault(grid)).toBeUndefined();
     });
 
     it("reports a rowSpan reaching one row past the last", () => {
-      const grid = table([[cell("a")], [cell("b", { rowSpan: 2 })]], [10]);
+      const grid = table(
+        [[cell("a")], [cell("b", { rowSpan: 2 })]],
+        [PLACEHOLDER_WIDTH_PT],
+      );
       expect(findTableGridFault(grid)).toEqual({
         kind: "anchorOverrunsRows",
         rowIndex: 1,
@@ -607,7 +674,7 @@ describe("findTableGridFault", () => {
     it("reports the column overrun when the same anchor overruns both", () => {
       const grid = table(
         [[cell("a", { colSpan: 2, rowSpan: 2 })], [EMPTY]],
-        [10],
+        [PLACEHOLDER_WIDTH_PT],
       );
       expect(findTableGridFault(grid)?.kind).toBe("anchorOverrunsColumns");
     });
@@ -619,7 +686,7 @@ describe("findTableGridFault", () => {
           [cell("c"), EMPTY],
           [cell("d", { colSpan: 3 }), EMPTY],
         ],
-        [10, 10],
+        [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
       );
       expect(findTableGridFault(grid)).toEqual({
         kind: "anchorOverrunsRows",
@@ -636,7 +703,7 @@ describe("findTableGridFault", () => {
           [cell("a"), cell("b", { rowSpan: 2 })],
           [cell("c", { colSpan: 2 }), EMPTY],
         ],
-        [10, 10],
+        [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
       );
       expect(findTableGridFault(grid)).toEqual({
         kind: "overlappingAnchors",
@@ -653,7 +720,7 @@ describe("findTableGridFault", () => {
           [cell("a"), cell("b"), cell("c", { rowSpan: 2 })],
           [cell("d", { colSpan: 3 }), EMPTY, EMPTY],
         ],
-        [10, 10, 10],
+        [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
       );
       expect(findTableGridFault(grid)).toEqual({
         kind: "overlappingAnchors",
@@ -671,7 +738,7 @@ describe("findTableGridFault", () => {
           [cell("c", { colSpan: 2, rowSpan: 2 }), EMPTY],
           [EMPTY, EMPTY],
         ],
-        [10, 10],
+        [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
       );
       expect(findTableGridFault(grid)?.kind).toBe("overlappingAnchors");
     });
@@ -683,7 +750,7 @@ describe("findTableGridFault", () => {
           [EMPTY, EMPTY],
           [cell("c", { colSpan: 2 }), EMPTY],
         ],
-        [10, 10],
+        [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
       );
       expect(findTableGridFault(grid)).toBeUndefined();
     });
@@ -694,13 +761,16 @@ describe("findTableGridFault", () => {
           [cell("a"), cell("b"), cell("c", { rowSpan: 2 })],
           [cell("d", { colSpan: 2 }), EMPTY, EMPTY],
         ],
-        [10, 10, 10],
+        [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
       );
       expect(findTableGridFault(grid)).toBeUndefined();
     });
 
     it("accepts a block-less covered entry with no span of its own", () => {
-      const grid = table([[cell("a", { colSpan: 2 }), EMPTY]], [10, 10]);
+      const grid = table(
+        [[cell("a", { colSpan: 2 }), EMPTY]],
+        [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
+      );
       expect(findTableGridFault(grid)).toBeUndefined();
     });
   });
