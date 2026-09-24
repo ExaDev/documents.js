@@ -27,9 +27,10 @@ describe("SourceFormatSchema", () => {
   });
 
   it("rejects an unknown format — the vocabulary is closed, not a free string", () => {
+    const arbitraryNumber = 7;
     expect(SourceFormatSchema.safeParse("ooxml").success).toBe(false);
     expect(SourceFormatSchema.safeParse("").success).toBe(false);
-    expect(SourceFormatSchema.safeParse(7).success).toBe(false);
+    expect(SourceFormatSchema.safeParse(arbitraryNumber).success).toBe(false);
   });
 });
 

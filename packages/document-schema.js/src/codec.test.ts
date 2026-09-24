@@ -29,6 +29,10 @@ function wordprocessingDocument(): ContentDocument {
 
 describe("ContentCodec", () => {
   it("accepts a real implementation carrying both read and write", () => {
+    const placeholderWrittenBytes = Uint8Array.from(
+      { length: 3 },
+      (_, index) => index + 1,
+    );
     const codec: ContentCodec = {
       read: (bytes) => {
         expect(bytes).toBeInstanceOf(Uint8Array);
@@ -36,13 +40,13 @@ describe("ContentCodec", () => {
       },
       write: (content) => {
         expect(content.kind).toBe("wordprocessing");
-        return new Uint8Array([1, 2, 3]);
+        return placeholderWrittenBytes;
       },
     };
 
     const content = codec.read(new Uint8Array([0]));
     expect(content).toEqual(wordprocessingDocument());
-    expect(codec.write?.(content)).toEqual(new Uint8Array([1, 2, 3]));
+    expect(codec.write?.(content)).toEqual(placeholderWrittenBytes);
   });
 
   it("accepts a real implementation that omits write entirely, proving it is genuinely optional", () => {

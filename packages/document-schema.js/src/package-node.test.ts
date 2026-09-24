@@ -464,15 +464,16 @@ describe("validating a deeply nested tree stays linear in its size", () => {
   }
 
   it("accepts a thirty-deep construct chain, and rejects the same chain with an illegal leaf at the bottom", () => {
+    const chainDepth = 30;
     expect(
       SectionConstructGroupSchema.safeParse(
-        nestConstructs(30, { kind: "paragraph", runs: [run("Leaf")] }),
+        nestConstructs(chainDepth, { kind: "paragraph", runs: [run("Leaf")] }),
       ).success,
     ).toBe(true);
     // A style ref on a bare leaf: legal on a group wrapper, never on a leaf, and only discoverable at the deepest level.
     expect(
       SectionConstructGroupSchema.safeParse(
-        nestConstructs(30, {
+        nestConstructs(chainDepth, {
           kind: "paragraph",
           runs: [run("Leaf")],
           style: "s1",
@@ -894,8 +895,9 @@ describe("every group guard rejects a wrapper VALUE that isn't itself a plain re
   });
 
   it("rejects a primitive", () => {
+    const arbitraryNumber = 42;
     expect(SectionGroupSchema.safeParse("a string").success).toBe(false);
-    expect(SectionGroupSchema.safeParse(42).success).toBe(false);
+    expect(SectionGroupSchema.safeParse(arbitraryNumber).success).toBe(false);
     expect(isTreeGroup("a string")).toBe(false);
   });
 });
