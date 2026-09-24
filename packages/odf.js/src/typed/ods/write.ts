@@ -58,6 +58,7 @@ import { DEFAULT_COLUMN_WIDTH_PT, DEFAULT_ROW_HEIGHT_PT } from "./read";
 import { synthesiseContentValidationCondition } from "./data-validation";
 import { writeEmbeddedObject } from "../draw/embedded-write";
 import {
+  assertNeverConditionalFormatType,
   calextDateForTimePeriod,
   calextTypeForCfvoType,
   formatTargetRangeList,
@@ -121,6 +122,13 @@ function unsupportedCellValueKind(kind: string): Error {
   );
 }
 
+// Reached only if ContentCellValue ever gains a variant a switch over its own kind does not match: every current member is covered wherever this is called, so `value` narrows to `never` at each real call site, and adding an uncovered kind makes that narrowing fail and those calls stop compiling. That is the real safety net. Shared between this module's own writeCellValueAttributes and canonicalCellValue, both of which switch over the identical ContentCellValue['kind'] union, rather than each keeping a byte-identical copy. Exported so write.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real kind is already handled by a case in both.
+export function assertNeverContentCellValueKind(value: never): never {
+  throw new Error(
+    `writeCellValueAttributes: unhandled ContentCellValue kind ${JSON.stringify(value)}`,
+  );
+}
+
 function writeCellValueAttributes(
   value: ContentCellValue,
 ): Record<string, string> {
@@ -171,6 +179,7 @@ function writeCellValueAttributes(
     case "error":
       throw unsupportedCellValueKind(value.kind);
   }
+  return assertNeverContentCellValueKind(value);
 }
 
 // --- a cell's own rendered text: ContentSheetCell.runs/displayText -> one text:p per readCellText's own multi-paragraph join --------
@@ -1006,9 +1015,9 @@ function writeRowCells(
       (images !== undefined && images.length > 0) ||
       (objects !== undefined && objects.length > 0)
     ) {
-      const attributes: Record<string, string> = {};
+      let attributes: Record<string, string> = {};
       if (cell !== undefined) {
-        Object.assign(attributes, writeCellValueAttributes(cell.value));
+        attributes = { ...attributes, ...writeCellValueAttributes(cell.value) };
         if (cell.formula !== undefined) {
           attributes["table:formula"] = encodeXmlText(cell.formula);
         }
@@ -1290,6 +1299,7 @@ export function canonicalCellValue(value: ContentCellValue): ContentCellValue {
     case "error":
       throw unsupportedCellValueKind(value.kind);
   }
+  return assertNeverContentCellValueKind(value);
 }
 
 // One cell's canonical form, or undefined when readOdsContent's own trailing-empty-cell skip drops it entirely: a cell carrying no formula, no office:value-type-bearing value (kind 'empty'), and no rendered text is never materialised by the reader at all, regardless of what colSpan/background/borders it stated — readTable's own skip test (`!hasValueType && formula === undefined && displayText.length === 0`) runs before any of those attributes are even considered. This is a real, forced normalisation, not a writer choice: any of those facts on such a cell is lost on the round trip because ODF's own trailing-empty-cell compression convention has nowhere else to put them.
@@ -1690,6 +1700,7 @@ export function canonicalConditionalFormats(
             : {}),
         };
     }
+    return assertNeverConditionalFormatType(format);
   });
 }
 
@@ -1749,7 +1760,7 @@ export function writeOdsContent(
   const version = options.version ?? DEFAULT_ODF_VERSION;
   const spreadsheetElement = el("office:spreadsheet");
   const pkg = createOdfPackage(
-    options.template ? ODF_MEDIA_TYPES.ots : ODF_MEDIA_TYPES.ods,
+    options.template === true ? ODF_MEDIA_TYPES.ots : ODF_MEDIA_TYPES.ods,
     spreadsheetElement,
     version,
   );

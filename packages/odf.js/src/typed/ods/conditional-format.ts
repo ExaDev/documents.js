@@ -239,6 +239,13 @@ const COMPARISON_OPERATOR_BY_MODE: ReadonlyMap<
 ]);
 
 // decodeXmlText on every attribute value read here, not just this one: this package parses with processEntities:false (xml/parse.ts), so an attribute value is stored exactly as the source XML spelled it — a real LibreOffice-produced calcext:value of ">3" is confirmed (typed/ods/fixtures/conditional-format.ods's own content.xml) to serialise as calcext:value="&gt;3", literally, on disk. Reading it via a bare attrValue() would hand ">3"'s own comparison-operator prefix match a literal "&gt;3" instead, silently failing to match any of this mini-language's own prefixes and quarantining a real, well-formed rule as unpromotable residue.
+// Reached only if ConditionMode ever gains a member readCondition's own switch does not match: every current member is covered there, so `value` narrows to `never` at the real call site, and adding an uncovered mode makes that narrowing fail and this call stop compiling. That is the real safety net. Exported so conditional-format.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real ConditionMode is already handled by a case in readCondition.
+export function assertNeverConditionMode(value: never): never {
+  throw new Error(
+    `readCondition: unhandled ConditionMode ${JSON.stringify(value)}`,
+  );
+}
+
 function readCondition(
   conditionEl: XmlElement,
   ranges: readonly ContentSheetRange[],
@@ -365,6 +372,7 @@ function readCondition(
       // ECMA-376's own 'expression' cfRule type has no closed-form structure to model without a general formula engine, and ContentSheetConditionalFormatSchema deliberately excludes it (see that schema's own top comment) — calcext:condition's own formula-is is the identical concept, so it is left unpromoted here for exactly the same reason.
       return undefined;
   }
+  return assertNeverConditionMode(parsed.mode);
 }
 
 function readCfvoValue(
@@ -654,7 +662,14 @@ export function formatTargetRangeList(
     .join(" ");
 }
 
-/** The calcext:condition @value for one closed-form rule, the exact inverse of parseConditionValue above for every type that grammar can state. Returns undefined for the two schema members that grammar has no spelling for at all — containsBlanks/notContainsBlanks — whose caller refuses the rule by name rather than emitting a rule that would read back as something else. */
+// Reached only if ContentSheetConditionalFormat's own type ever gains a member a switch over it does not match: every current member is covered wherever this is called, so `value` narrows to `never` at each real call site, and adding an uncovered type makes that narrowing fail and those calls stop compiling. That is the real safety net. Shared with write.ts's own canonicalConditionalFormats, which switches over the identical union, rather than each keeping a byte-identical copy. Exported so conditional-format.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real type is already handled by a case in both.
+export function assertNeverConditionalFormatType(value: never): never {
+  throw new Error(
+    `synthesiseConditionValue: unhandled ContentSheetConditionalFormat type ${JSON.stringify(value)}`,
+  );
+}
+
+/** The `calcext:condition` `@value` for one closed-form rule, the exact inverse of parseConditionValue above for every type that grammar can state. Returns undefined for the two schema members that grammar has no spelling for at all — containsBlanks/notContainsBlanks — whose caller refuses the rule by name rather than emitting a rule that would read back as something else. */
 export function synthesiseConditionValue(
   format: ContentSheetConditionalFormat,
 ): string | undefined {
@@ -682,18 +697,19 @@ export function synthesiseConditionValue(
     case "notContainsErrors":
       return "is-no-error";
     case "top10": {
-      const keyword = format.bottom
-        ? format.percent
-          ? "bottom-percent"
-          : "bottom-elements"
-        : format.percent
-          ? "top-percent"
-          : "top-elements";
+      const keyword =
+        format.bottom === true
+          ? format.percent === true
+            ? "bottom-percent"
+            : "bottom-elements"
+          : format.percent === true
+            ? "top-percent"
+            : "top-elements";
       return `${keyword}(${String(format.rank)})`;
     }
     case "aboveAverage": {
       const direction = format.aboveAverage === false ? "below" : "above";
-      const qualifier = format.equalAverage ? "-equal-" : "-";
+      const qualifier = format.equalAverage === true ? "-equal-" : "-";
       return `${direction}${qualifier}average`;
     }
     case "beginsWith":
@@ -713,6 +729,7 @@ export function synthesiseConditionValue(
     case "timePeriod":
       return undefined;
   }
+  return assertNeverConditionalFormatType(format);
 }
 
 /** The calcext:date value for a timePeriod rule: the inverse of TIME_PERIOD_BY_CALCEXT_DATE, as an explicit closed map rather than string munging — the two spellings differ only case/hyphen-wise, but a regex that has to know "last7Days" gains a hyphen on both sides of the 7 while "thisWeek" gains one only at the W is exactly the kind of half-right cleverness an explicit table cannot be. */

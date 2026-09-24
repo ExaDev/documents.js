@@ -77,6 +77,13 @@ interface ParsedToken {
 }
 
 // One token of the condition mini-language starting at `start`: an identifier, matched against CONDITION_INFOS, then whatever that identifier's own kind requires immediately after it (a comparison operator and one trailing expression, an empty ()) pair, or one/two parenthesised expressions). Returns undefined on anything this reader cannot make sense of — a genuinely malformed or producer-extended condition degrades to no validation type/operator rather than a wrong one, mirroring readCellValue's own "an honest 'we don't have one' beats a fabricated value" convention elsewhere in this reader.
+// Reached only if ConditionKind ever gains a member parseToken's own switch does not match: every current member is covered there, so `value` narrows to `never` at the real call site, and adding an uncovered kind makes that narrowing fail and this call stop compiling. That is the real safety net. Exported so data-validation.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real ConditionKind is already handled by a case in parseToken.
+export function assertNeverConditionKind(value: never): never {
+  throw new Error(
+    `parseToken: unhandled ConditionKind ${JSON.stringify(value)}`,
+  );
+}
+
 function parseToken(text: string, start: number): ParsedToken | undefined {
   // Skips leading whitespace before matching — real ODF condition strings have a literal space either side of the 'and' keyword (lclSkipWhitespace's own call sites in XMLConverter.cxx), and this parser's own primary/secondary calls resume exactly where the previous token's endIndex left off, which is never itself past that space. No separate `searchStart < text.length` bound: `text[searchStart]` for an out-of-range index is `undefined`, which is never `=== " "`, so the character check alone already stops the loop at the end of the string.
   let searchStart = start;
@@ -174,6 +181,7 @@ function parseToken(text: string, start: number): ParsedToken | undefined {
       };
     }
   }
+  return assertNeverConditionKind(info.kind);
 }
 
 interface ParsedCondition {
@@ -341,7 +349,7 @@ export function readContentValidationDefinitions(
   return definitions;
 }
 
-/** Joins a sheet's own collected (validation name -> referencing cell ranges) map against the document-wide definitions, into the ContentSheetDataValidation[] a rule referenced by at least one of this sheet's own cells produces. A name with no matching definition (a malformed or not-yet-written producer file) contributes nothing — the cells that referenced it simply carry no validation, rather than a fabricated one. */
+/** Joins a sheet's own collected (validation name to referencing cell ranges) map against the document-wide definitions, into the ContentSheetDataValidation[] a rule referenced by at least one of this sheet's own cells produces. A name with no matching definition (a malformed or not-yet-written producer file) contributes nothing — the cells that referenced it simply carry no validation, rather than a fabricated one. */
 export function resolveSheetDataValidations(
   refsByName: ReadonlyMap<string, ContentSheetRange[]>,
   definitions: ReadonlyMap<string, ParsedContentValidation>,
