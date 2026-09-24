@@ -20,15 +20,21 @@ describe("canonicalise", () => {
   });
 
   it("maps over arrays in order without sorting elements", () => {
-    const input = [{ b: 1, a: 2 }, 3, "text"];
-    expect(canonicalise(input)).toStrictEqual([{ a: 2, b: 1 }, 3, "text"]);
+    const thirdElement = 3;
+    const input = [{ b: 1, a: 2 }, thirdElement, "text"];
+    expect(canonicalise(input)).toStrictEqual([
+      { a: 2, b: 1 },
+      thirdElement,
+      "text",
+    ]);
   });
 
   it("does not treat an array as a record — array elements are mapped, never treated as object keys", () => {
-    const input = [1, 2, 3];
+    const thirdElement = 3;
+    const input = [1, 2, thirdElement];
     const result = canonicalise(input);
     expect(Array.isArray(result)).toBe(true);
-    expect(result).toStrictEqual([1, 2, 3]);
+    expect(result).toStrictEqual([1, 2, thirdElement]);
   });
 
   it("returns null as-is rather than as an empty sorted object", () => {
@@ -36,7 +42,8 @@ describe("canonicalise", () => {
   });
 
   it("returns primitives unchanged", () => {
-    expect(canonicalise(42)).toBe(42);
+    const arbitraryNumber = 42;
+    expect(canonicalise(arbitraryNumber)).toBe(arbitraryNumber);
     expect(canonicalise("hello")).toBe("hello");
     expect(canonicalise(true)).toBe(true);
     expect(canonicalise(undefined)).toBeUndefined();
@@ -66,7 +73,8 @@ describe("canonicalKey", () => {
   });
 
   it("round-trips through JSON.stringify of the canonicalised value", () => {
-    const value = { z: 1, a: [3, 2, 1] };
+    const firstElement = 3;
+    const value = { z: 1, a: [firstElement, 2, 1] };
     expect(canonicalKey(value)).toBe(JSON.stringify(canonicalise(value)));
   });
 });
