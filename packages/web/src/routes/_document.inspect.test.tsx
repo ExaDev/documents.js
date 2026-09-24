@@ -146,6 +146,33 @@ describe("InspectPage", () => {
     mounted.unmount();
   });
 
+  it("inspects the auto-detected format only once, not again on the re-render a manual override triggers", async () => {
+    const client = createMockRpcClient();
+    vi.mocked(client.pdf.inspect).mockResolvedValue({
+      pageCount: 3,
+      itemKindCounts: {},
+      metadata: {},
+      layout: { formatVersion: 1, metadata: {}, pages: [], images: {} },
+    });
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountInspectPage();
+
+    act(() => {
+      openDocument(openedFile("report.pdf"));
+    });
+    await vi.waitFor(() => {
+      expect(client.pdf.inspect).toHaveBeenCalledTimes(1);
+    });
+
+    act(() => {
+      latestSelect?.onChange("pdf");
+    });
+    await vi.waitFor(() => {
+      expect(client.pdf.inspect).toHaveBeenCalledTimes(2);
+    });
+    mounted.unmount();
+  });
+
   it("converts a non-pdf source to pdf before inspecting it, carrying the conversion's own diagnostics through", async () => {
     const client = createMockRpcClient();
     vi.mocked(client.convert).mockResolvedValue({
