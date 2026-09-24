@@ -158,9 +158,9 @@ export function compoundFile(
     node.children.push({ name: leaf, children: [], stream: entry.bytes });
   }
 
-  // Directory entry IDs: the root is 0, then depth-first in insertion order — `created` claims its own id and is pushed to `records` BEFORE its children ever get a chance to recurse, which is what keeps the root at id 0 regardless of how deep the tree beneath it goes. Each child's own rightId/childId is filled in only once record() returns for it (with a real id already assigned to work with), and the sibling-linking and first-child lookup below read straight off the DirectoryRecord objects record() already produced — never a second lookup by StorageNode identity — so there is no absent-record case to guard: every node this function is ever asked about already has one.
+  // Directory entry IDs: the root is 0, then depth-first in insertion order — `created` claims its own id and is pushed to `records` BEFORE its children ever get a chance to recurse, which is what keeps the root at id 0 regardless of how deep the tree beneath it goes. Each child's own rightId/childId is filled in only once buildRecord() returns for it (with a real id already assigned to work with), and the sibling-linking and first-child lookup below read straight off the DirectoryRecord objects buildRecord() already produced — never a second lookup by StorageNode identity — so there is no absent-record case to guard: every node this function is ever asked about already has one.
   const records: DirectoryRecord[] = [];
-  const record = (node: StorageNode): DirectoryRecord => {
+  const buildRecord = (node: StorageNode): DirectoryRecord => {
     const created: DirectoryRecord = {
       node,
       id: records.length,
@@ -169,7 +169,7 @@ export function compoundFile(
       streamStart: 0,
     };
     records.push(created);
-    const childRecords = node.children.map((child) => record(child));
+    const childRecords = node.children.map((child) => buildRecord(child));
     childRecords.forEach((childRecord, index) => {
       const next = childRecords[index + 1];
       childRecord.rightId = next === undefined ? NOSTREAM : next.id;
@@ -178,7 +178,7 @@ export function compoundFile(
     created.childId = firstChild === undefined ? NOSTREAM : firstChild.id;
     return created;
   };
-  record(root);
+  buildRecord(root);
 
   // Narrowed through a type predicate rather than a boolean one, because `filter` with a boolean callback leaves the element type alone: the two partitions below would still carry `stream?: Uint8Array` even though the predicate is exactly what rules the absent case out, and every later read would need a fallback that can never be taken.
   const smallStreamRecords = records

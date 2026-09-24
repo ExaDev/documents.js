@@ -625,9 +625,13 @@ export function buildStsh(styles: readonly DocStyleSpec[]): Uint8Array {
     ...stshiBytes,
   ];
   // One LPUpxPapx/LPUpxChpx entry: a 2-byte cbUpx (the payload's own length, excluding padding) followed by the payload, followed by one zero pad byte if that length is odd — [MS-DOC] 2.9.140/2.9.138's own "padded to an even length, but the length in cbUpx MUST NOT include this padding".
-  const pushLpUpx = (out: number[], payload: readonly number[]): void => {
-    out.push(payload.length & 0xff, (payload.length >> 8) & 0xff, ...payload);
-    if (payload.length % 2 === 1) out.push(0);
+  const pushLpUpx = (target: number[], payload: readonly number[]): void => {
+    target.push(
+      payload.length & 0xff,
+      (payload.length >> 8) & 0xff,
+      ...payload,
+    );
+    if (payload.length % 2 === 1) target.push(0);
   };
 
   styles.forEach((style, istd) => {
