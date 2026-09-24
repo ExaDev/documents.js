@@ -6,6 +6,11 @@ import {
   rgbHexToColor,
 } from "./color";
 
+// Mirrors color.ts's own (private) HEX_BYTE_MAX: the divisor/multiplier between a 0..1 colour component and its 0..255 hex byte.
+const HEX_BYTE_MAX = 255;
+// The 0x80 byte "#ff0080"'s own green-then-blue digit pair decodes to, used across several fixtures below.
+const MID_BYTE_HEX = 0x80;
+
 describe("ColorSchema", () => {
   it("accepts a colour whose components are within 0..1", () => {
     expect(ColorSchema.safeParse({ r: 0, g: 0.5, b: 1 }).success).toBe(true);
@@ -28,7 +33,7 @@ describe("rgbHexToColor", () => {
     expect(rgbHexToColor("#ff0080")).toStrictEqual({
       r: 1,
       g: 0,
-      b: 128 / 255,
+      b: MID_BYTE_HEX / HEX_BYTE_MAX,
     });
   });
 
@@ -36,7 +41,7 @@ describe("rgbHexToColor", () => {
     expect(rgbHexToColor("ff0080")).toStrictEqual({
       r: 1,
       g: 0,
-      b: 128 / 255,
+      b: MID_BYTE_HEX / HEX_BYTE_MAX,
     });
   });
 
@@ -46,10 +51,11 @@ describe("rgbHexToColor", () => {
 
   it("reads each byte from its own two-digit slice, not the whole 6-digit string", () => {
     // A value that would produce a completely different result if slice(0,2)/(2,4)/(4,6) collapsed to parsing the whole "digits" string for every channel.
+    const blueByteHex = 0x03;
     const color = rgbHexToColor("010203");
-    expect(color.r).toBe(0x01 / 255);
-    expect(color.g).toBe(0x02 / 255);
-    expect(color.b).toBe(0x03 / 255);
+    expect(color.r).toBe(0x01 / HEX_BYTE_MAX);
+    expect(color.g).toBe(0x02 / HEX_BYTE_MAX);
+    expect(color.b).toBe(blueByteHex / HEX_BYTE_MAX);
   });
 
   it("divides each byte by 255, not multiplies", () => {
@@ -82,7 +88,9 @@ describe("rgbHexToColor", () => {
 
 describe("colorToRgbHex", () => {
   it("is the exact inverse of rgbHexToColor for a value that divides evenly", () => {
-    expect(colorToRgbHex({ r: 1, g: 0, b: 128 / 255 })).toBe("ff0080");
+    expect(colorToRgbHex({ r: 1, g: 0, b: MID_BYTE_HEX / HEX_BYTE_MAX })).toBe(
+      "ff0080",
+    );
   });
 
   it("round-trips through rgbHexToColor for black and white", () => {
@@ -96,7 +104,7 @@ describe("colorToRgbHex", () => {
 
   it("zero-pads a byte that hex-encodes to a single digit", () => {
     // 1/255 * 255 = 1, which toString(16) renders as the single character "1" — this only reads "01" back out if padStart actually pads with a leading zero.
-    expect(colorToRgbHex({ r: 1 / 255, g: 0, b: 0 })).toBe("010000");
+    expect(colorToRgbHex({ r: 1 / HEX_BYTE_MAX, g: 0, b: 0 })).toBe("010000");
   });
 
   it("produces a lowercase 6-digit string with no leading '#'", () => {
