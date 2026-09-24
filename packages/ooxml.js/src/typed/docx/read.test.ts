@@ -77,7 +77,7 @@ function rels(
     entries.map((e) =>
       el(
         "Relationship",
-        e.external
+        e.external === true
           ? { Id: e.id, Type: e.type, Target: e.target, TargetMode: "External" }
           : { Id: e.id, Type: e.type, Target: e.target },
       ),

@@ -55,7 +55,9 @@ function walk(nodes: readonly XmlNode[], visit: (node: XmlNode) => void): void {
 
 function allNodes(roots: readonly XmlNode[]): XmlNode[] {
   const out: XmlNode[] = [];
-  walk(roots, (n) => out.push(n));
+  walk(roots, (n) => {
+    out.push(n);
+  });
   return out;
 }
 
