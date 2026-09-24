@@ -13,16 +13,56 @@ import { writeEpubContent } from "./write";
 //
 // The image fixture is a bare IHDR-only PNG (fakePng1x1 below), not a real decodable image file: this package's own reader never walks past a PNG's IHDR chunk (see src/image/dimensions.ts), so a genuinely complete PNG with real pixel data and a valid IDAT/IEND buys this test nothing a hand-built header does not already prove.
 
-// A PNG carrying only what src/image/dimensions.ts reads: the 8-byte signature plus an IHDR chunk declaring 1x1 — this package's own reader never walks past IHDR (no full pixel decode, see that module's own top-of-file note), so a real IDAT/IEND is not needed for this round trip to exercise real dimension detection.
+// Mirrors dimensions.ts's own private layout constants (see image/dimensions.test.ts, which names these identically) so this fixture stays tied to the format's real structure rather than restating its offsets as independent literals.
+const PNG_SIG_HIGH_BIT_MARKER = 0x89;
+const PNG_SIG_P = 0x50;
+const PNG_SIG_N = 0x4e;
+const PNG_SIG_G = 0x47;
+const PNG_SIG_CR = 0x0d;
+const PNG_SIG_LF = 0x0a;
+const PNG_SIG_LINE_ENDING_DETECTOR = 0x1a;
+const PNG_SIG = [
+  PNG_SIG_HIGH_BIT_MARKER,
+  PNG_SIG_P,
+  PNG_SIG_N,
+  PNG_SIG_G,
+  PNG_SIG_CR,
+  PNG_SIG_LF,
+  PNG_SIG_LINE_ENDING_DETECTOR,
+  PNG_SIG_LF,
+];
+const IHDR_TAG_I = 0x49;
+const IHDR_TAG_H = 0x48;
+const IHDR_TAG_D = 0x44;
+const IHDR_TAG_R = 0x52;
+const IHDR_TAG_BYTES = [IHDR_TAG_I, IHDR_TAG_H, IHDR_TAG_D, IHDR_TAG_R];
+const UINT32_BYTES = 4;
+const PNG_CHUNK_TYPE_OFFSET = PNG_SIG.length + UINT32_BYTES; // 12
+const PNG_IHDR_WIDTH_OFFSET = PNG_CHUNK_TYPE_OFFSET + UINT32_BYTES; // 16
+const PNG_IHDR_HEIGHT_OFFSET = PNG_IHDR_WIDTH_OFFSET + UINT32_BYTES; // 20
+const PNG_HEADER_BYTES = PNG_IHDR_HEIGHT_OFFSET + UINT32_BYTES; // 24
+const IHDR_TRAILING_FIELD_BYTES = 5;
+const FAKE_PNG_TOTAL_BYTES =
+  PNG_HEADER_BYTES + IHDR_TRAILING_FIELD_BYTES + UINT32_BYTES; // 33
+const PNG_IHDR_CHUNK_DATA_BYTES =
+  UINT32_BYTES + UINT32_BYTES + IHDR_TRAILING_FIELD_BYTES; // 13
+const PNG_BIT_DEPTH_8 = 8;
+const PNG_COLOUR_TYPE_TRUECOLOR_ALPHA = 6;
+const FIXTURE_IMAGE_SIZE_PX = 1;
+
+// A PNG carrying only what src/image/dimensions.ts reads: the 8-byte signature plus an IHDR chunk declaring 1x1. This package's own reader never walks past IHDR (no full pixel decode, see that module's own top-of-file note), so a real IDAT/IEND is not needed for this round trip to exercise real dimension detection.
 function fakePng1x1(): Uint8Array<ArrayBuffer> {
-  const bytes = new Uint8Array(33);
-  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
+  const bytes = new Uint8Array(FAKE_PNG_TOTAL_BYTES);
+  bytes.set(PNG_SIG, 0);
   const view = new DataView(bytes.buffer);
-  view.setUint32(8, 13);
-  bytes.set([0x49, 0x48, 0x44, 0x52], 12);
-  view.setUint32(16, 1);
-  view.setUint32(20, 1);
-  bytes.set([8, 6, 0, 0, 0], 24);
+  view.setUint32(PNG_SIG.length, PNG_IHDR_CHUNK_DATA_BYTES);
+  bytes.set(IHDR_TAG_BYTES, PNG_CHUNK_TYPE_OFFSET);
+  view.setUint32(PNG_IHDR_WIDTH_OFFSET, FIXTURE_IMAGE_SIZE_PX);
+  view.setUint32(PNG_IHDR_HEIGHT_OFFSET, FIXTURE_IMAGE_SIZE_PX);
+  bytes.set(
+    [PNG_BIT_DEPTH_8, PNG_COLOUR_TYPE_TRUECOLOR_ALPHA, 0, 0, 0],
+    PNG_HEADER_BYTES,
+  );
   return bytes;
 }
 
