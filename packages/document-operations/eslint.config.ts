@@ -8,7 +8,6 @@ export default packageLintConfig({
     "@typescript-eslint/method-signature-style",
     "@typescript-eslint/promise-function-async",
     "@typescript-eslint/strict-void-return",
-    "tsdoc/syntax",
   ],
   // One program covering src and the config files alike, so there is no second tsconfig to route anything to.
   projects: ["./tsconfig.json"],
