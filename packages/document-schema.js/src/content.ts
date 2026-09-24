@@ -192,9 +192,12 @@ export const ContentParagraphSchema = z.object({
 });
 export type ContentParagraph = z.infer<typeof ContentParagraphSchema>;
 
-// Clamps an arbitrary heading level to the 1-6 range every consumer whose own heading vocabulary tops out at six shares — HTML/Markdown's h1-h6, docx's built-in Heading1-Heading6 style set. Exported so a writer targeting one of those (markdown-codec's own private clamp-to-6 logic on write is the motivating case) can share this exact clamp instead of reimplementing it. Deliberately simple: rounds a fractional level to the nearest integer first (a level is conceptually a whole step of depth; a producer should never genuinely hand this a fraction, but rounding rather than truncating avoids silently favouring shallower headings if one ever does), then clamps into [1, 6].
+// The deepest heading level every consumer whose own heading vocabulary tops out at six shares: HTML/Markdown's h1-h6, docx's built-in Heading1-Heading6 style set.
+const MAX_HEADING_LEVEL = 6;
+
+// Clamps an arbitrary heading level to the 1-MAX_HEADING_LEVEL range. Exported so a writer targeting one of those (markdown-codec's own private clamp-to-6 logic on write is the motivating case) can share this exact clamp instead of reimplementing it. Deliberately simple: rounds a fractional level to the nearest integer first (a level is conceptually a whole step of depth; a producer should never genuinely hand this a fraction, but rounding rather than truncating avoids silently favouring shallower headings if one ever does), then clamps into [1, MAX_HEADING_LEVEL].
 export function clampHeadingLevel(level: number): number {
-  return Math.min(6, Math.max(1, Math.round(level)));
+  return Math.min(MAX_HEADING_LEVEL, Math.max(1, Math.round(level)));
 }
 
 // Where a floating image's position is measured FROM, on one axis — the union of every real origin docx's wp:positionH/wp:positionV (ECMA-376 Part 1 20.4.2.7/20.4.2.8, ST_RelFromH/ST_RelFromV) and ODF's own draw:frame anchoring (text:anchor-type="page"/"paragraph"/"frame", the anchor point svg:x/svg:y is itself measured from) between them use. docx's own two axes don't share one flat enum in ECMA-376 — ST_RelFromH has leftMargin/rightMargin/insideMargin/outsideMargin/column/character, ST_RelFromV has topMargin/bottomMargin/insideMargin/outsideMargin/paragraph/line — but nothing here is axis-specific in what it MEANS (leftMargin is still "the page's own left margin" on whichever axis it appears), so one shared enum covers both rather than forcing two near-identical ones a reader would otherwise have to keep in sync by hand.
@@ -1058,6 +1061,9 @@ export type ContentSheetConditionalFormatValue = z.infer<
   typeof ContentSheetConditionalFormatValueSchema
 >;
 
+const MIN_COLOR_SCALE_STOPS = 2;
+const MAX_COLOR_SCALE_STOPS = 3;
+
 const conditionalFormatCommonFields = {
   ranges: z.array(ContentSheetRangeSchema),
   priority: z.number().int().optional(),
@@ -1140,6 +1146,7 @@ export const ContentSheetConditionalFormatSchema = z.discriminatedUnion(
     z.object({
       type: z.literal("colorScale"),
       ...conditionalFormatCommonFields,
+      // Excel's own colorScale conditional format supports a two-colour or a three-colour scale; there is no four-colour variant.
       stops: z
         .array(
           z.object({
@@ -1147,8 +1154,8 @@ export const ContentSheetConditionalFormatSchema = z.discriminatedUnion(
             color: ColorSchema,
           }),
         )
-        .min(2)
-        .max(3),
+        .min(MIN_COLOR_SCALE_STOPS)
+        .max(MAX_COLOR_SCALE_STOPS),
     }),
     z.object({
       type: z.literal("dataBar"),

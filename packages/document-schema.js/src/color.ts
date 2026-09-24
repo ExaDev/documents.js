@@ -14,6 +14,17 @@ export const COLOR_BLACK: Color = { r: 0, g: 0, b: 0 };
 
 const HEX_DIGITS_PATTERN = /^[0-9a-fA-F]{6}$/;
 const HEX_BYTE_MAX = 255;
+const HEX_RADIX = 16;
+const HEX_DIGITS_PER_BYTE = 2;
+
+// The Nth two-hex-digit byte (00-ff) within a hex-digit string, zero-indexed: channel 0 is r, 1 is g, 2 is b.
+function hexByteAt(digits: string, channel: number): number {
+  const start = channel * HEX_DIGITS_PER_BYTE;
+  return Number.parseInt(
+    digits.slice(start, start + HEX_DIGITS_PER_BYTE),
+    HEX_RADIX,
+  );
+}
 
 // Parses a 6-digit hex colour (OOXML's w:color/@w:val, a:srgbClr/@val; ODF's fo:color), with or without a leading '#', into a Color. Throws on malformed input rather than substituting a default — callers are expected to have already validated the attribute is present. Strips a leading '#' by its own literal position rather than a regex capture group, so there is no capture-group result to separately check for absence — `digits` is validated as a plain string, never indexed out of a match array.
 export function rgbHexToColor(hex: string): Color {
@@ -21,15 +32,15 @@ export function rgbHexToColor(hex: string): Color {
   if (!HEX_DIGITS_PATTERN.test(digits)) {
     throw new Error(`not a 6-digit hex colour: ${hex}`);
   }
-  const r = Number.parseInt(digits.slice(0, 2), 16);
-  const g = Number.parseInt(digits.slice(2, 4), 16);
-  const b = Number.parseInt(digits.slice(4, 6), 16);
+  const r = hexByteAt(digits, 0);
+  const g = hexByteAt(digits, 1);
+  const b = hexByteAt(digits, 2);
   return { r: r / HEX_BYTE_MAX, g: g / HEX_BYTE_MAX, b: b / HEX_BYTE_MAX };
 }
 
 function toHexByte(component: number): string {
   const byte = Math.round(component * HEX_BYTE_MAX);
-  return byte.toString(16).padStart(2, "0");
+  return byte.toString(HEX_RADIX).padStart(HEX_DIGITS_PER_BYTE, "0");
 }
 
 // The exact inverse of rgbHexToColor, rounding each component to the nearest byte; always returns a lowercase 6-digit hex string with no leading '#'.
