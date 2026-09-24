@@ -789,7 +789,7 @@ interface TextContainerLike {
 
 // A container's text is replaced rather than appended: documents.js gives a table cell or list item `paragraphs()`/`appendParagraph()` and a read-only `text`, so the first paragraph's first run carries the new value and any further runs in it are removed. Generalised from a docx/odt-table-cell-only helper so SET_LIST_ITEM_TEXT can reuse the identical template against an OdtListItem.
 function setTextContainerText(
-  container: TextContainerLike,
+  container: Readonly<TextContainerLike>,
   text: string,
 ): void {
   const existing = container.paragraphs();

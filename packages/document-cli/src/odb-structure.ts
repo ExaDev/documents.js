@@ -219,7 +219,10 @@ export function describeOdbReport(report: OdbReport): string {
   return `${report.name} [${report.href}] — ${source}, ${groupCount} group${groupCount === 1 ? "" : "s"}, ${elementCount} element${elementCount === 1 ? "" : "s"}`;
 }
 
-function reportElementLine(element: OdbReportElement, depth: number): string {
+function reportElementLine(
+  element: Readonly<OdbReportElement>,
+  depth: number,
+): string {
   const parts: string[] = [element.tag];
   if (element.name !== undefined) {
     parts.push(quoted(element.name));

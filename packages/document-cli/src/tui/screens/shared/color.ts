@@ -9,7 +9,7 @@ function toHexByte(component: number): string {
     .padStart(2, "0");
 }
 
-export function layoutColorToHex(color: LayoutColor): string {
+export function layoutColorToHex(color: Readonly<LayoutColor>): string {
   return `#${toHexByte(color.r)}${toHexByte(color.g)}${toHexByte(color.b)}`;
 }
 
