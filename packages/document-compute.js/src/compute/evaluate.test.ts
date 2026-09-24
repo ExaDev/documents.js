@@ -236,11 +236,11 @@ describe("evaluate: app — arithmetic over bound symbols", () => {
   });
 
   it("rejects an Interval base or exponent to math:pow, naming which position rejected it", () => {
-    const bindings: FormulaBindings = { phi: interval(1, 2, {}) };
+    const intervalBindings: FormulaBindings = { phi: interval(1, 2, {}) };
 
     let baseCaught: unknown;
     try {
-      evaluate(app("math:pow", [sym("phi"), num("2")]), bindings);
+      evaluate(app("math:pow", [sym("phi"), num("2")]), intervalBindings);
     } catch (error) {
       baseCaught = error;
     }
@@ -252,7 +252,7 @@ describe("evaluate: app — arithmetic over bound symbols", () => {
 
     let exponentCaught: unknown;
     try {
-      evaluate(app("math:pow", [num("2"), sym("phi")]), bindings);
+      evaluate(app("math:pow", [num("2"), sym("phi")]), intervalBindings);
     } catch (error) {
       exponentCaught = error;
     }
