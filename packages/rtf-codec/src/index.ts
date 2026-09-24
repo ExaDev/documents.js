@@ -3,12 +3,12 @@
 // src/tokenize.ts, src/group.ts, src/header.ts and src/codepage.ts are deliberately NOT re-exported: each is a stage of the pipeline rather than a thing a caller reaches for, and exposing a token stream or a half-resolved header table would invite a consumer to build on an internal shape instead of on ContentDocument. Every module is still individually importable through package.json's "./*" export for a consumer that genuinely wants one, exactly as document-schema.js's own per-module exports work.
 
 // The primary read/write pair, over document-schema.js's tree-form DocumentTree — what a caller reaching for "read an RTF file" or "write one" should use. The *Content pair below is the same conversion one level down, over the flat ContentDocument the reader itself builds; see src/read.ts's own top-of-file comment for why both exist and which to reach for.
-export type { ReadRtfResult } from "./read";
+export type { ReadRtfResult } from "./read-state";
 export { readRtf } from "./read";
 export { writeRtf } from "./write";
 export { rtfCodec } from "./codec";
 
-export type { ReadRtfContentResult } from "./read";
+export type { ReadRtfContentResult } from "./read-state";
 export { readRtfContent } from "./read";
 export { writeRtfContent } from "./write";
 export { rtfContentCodec, RtfBytesSchema } from "./codec";
