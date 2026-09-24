@@ -1,3 +1,13 @@
+## [5.2.15](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.14...pdf-codec%405.2.15) (2026-09-24)
+
+### Code Refactoring
+
+* **pdf-codec:** drop cff-bounds guards that duplicate what their callees already check ([986f17a](https://github.com/ExaDev/documents.js/commit/986f17aa827cc68be37549213957a9c8ed9a4e4b)), references [#1306](https://github.com/ExaDev/documents.js/issues/1306)
+
+### Tests
+
+* **pdf-codec:** close cff-bounds.ts's mutation gap from 83 to 93 ([cd1f5dc](https://github.com/ExaDev/documents.js/commit/cd1f5dc2bef90ad512f79f4f434995af9f6516e2)), references [#1306](https://github.com/ExaDev/documents.js/issues/1306)
+
 ## [5.2.14](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.13...pdf-codec%405.2.14) (2026-09-23)
 
 ### Code Refactoring

@@ -1,3 +1,14 @@
+## [14.4.8](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.7...documents.js%4014.4.8) (2026-09-24)
+
+### Tests
+
+* **documents.js:** pin the test-support ods fixtures' decoded and raw ground truth ([6fd4956](https://github.com/ExaDev/documents.js/commit/6fd49566ba899ce435c312da8ece4dc59e004f56))
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.2.15
+
 ## [14.4.7](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.6...documents.js%4014.4.7) (2026-09-24)
 
 ### Code Refactoring
