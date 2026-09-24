@@ -1,3 +1,32 @@
+## [2.14.6](https://github.com/ExaDev/documents.js/compare/web%402.14.5...web%402.14.6) (2026-09-24)
+
+### Bug Fixes
+
+* **web:** drop FontsPage's dead reset call and replace its test with a real one ([2cd9090](https://github.com/ExaDev/documents.js/commit/2cd90902beddbf6c8e008724169ffef9710a747f))
+* **web:** guard InspectionPanel's mount-once effect with a ref instead of a dependency array ([954ac43](https://github.com/ExaDev/documents.js/commit/954ac4353546fbe1984413f493fb993c6ad5b6bd))
+* **web:** guard MetadataPanel's mount-once effect with a ref instead of a dependency array ([348348b](https://github.com/ExaDev/documents.js/commit/348348b9a586af921c062d4dfb8420b709ba1f3f))
+* **web:** guard OdmPanel's mount-once effect with a ref, and cover a chapter's own rejection ([76f6293](https://github.com/ExaDev/documents.js/commit/76f62931a7d34559643a08946698d8360f75e2a6))
+* **web:** guard PackagePanel's mount-once effect with a ref instead of a dependency array ([f4d1105](https://github.com/ExaDev/documents.js/commit/f4d11057fc5e70eeb9070d9be224387d6a6fdeec))
+* **web:** memoise openDocument via a stable initial state, not an empty-deps useCallback ([9904dc4](https://github.com/ExaDev/documents.js/commit/9904dc44481efc773ec99e6e406e73ba93bd0c8f))
+
+### Tests
+
+* **web:** assert each recent-file action button's own aria-label text ([a59001a](https://github.com/ExaDev/documents.js/commit/a59001af6b72fc3ce2709db5ec534d4b3ab29199))
+* **web:** assert InspectionPanel's mount-once guard blocks a repeat auto-detect call ([f978cde](https://github.com/ExaDev/documents.js/commit/f978cde277813072186bebfe6b3fb22faa582219))
+* **web:** assert PackagePanel's mount-once guard actually blocks a repeat read ([b35c543](https://github.com/ExaDev/documents.js/commit/b35c543b893c53d5549b10e6e72db13127df4424))
+* **web:** assert the format Select's options are actually sorted and non-empty ([07c273c](https://github.com/ExaDev/documents.js/commit/07c273c6e989a2b86cfe5bad369e2dd44c3161c5))
+* **web:** assert the server response, not the optimistic value, after a paragraph edit commits ([71da923](https://github.com/ExaDev/documents.js/commit/71da923f61a5d901ec2bc3ce889b82c7934cac07))
+* **web:** cover Editors' paragraph editing, save, and error paths ([67e9e10](https://github.com/ExaDev/documents.js/commit/67e9e106645f98f4e6ae63ace39123fec8821235))
+* **web:** cover FontsPage's reset call before a second document's extraction resolves ([991c3aa](https://github.com/ExaDev/documents.js/commit/991c3aab4d6ae6014e596b9dcbe09b29bd0a5f62))
+* **web:** cover the fonts, metadata, recent-files and harness gaps ([4e305db](https://github.com/ExaDev/documents.js/commit/4e305db8d1371f6c346fffba1980ad968e003b53))
+* **web:** cover the To select's disabled state and both source-change re-fetch effects ([4bd2a2d](https://github.com/ExaDev/documents.js/commit/4bd2a2dd8f208cadad2834dd9bb8fd020075f998))
+
+
+### Dependencies
+
+- Updated markdown-codec to 11.1.8
+- Updated documents.js to 14.4.31
+
 ## [2.14.5](https://github.com/ExaDev/documents.js/compare/web%402.14.4...web%402.14.5) (2026-09-24)
 
 

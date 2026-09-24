@@ -1,3 +1,9 @@
+## [2.2.14](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.2.13...ppt-codec%402.2.14) (2026-09-24)
+
+### Code Refactoring
+
+* **ppt-codec:** fix the void-returning sinks and the remaining rule debt ([d07948c](https://github.com/ExaDev/documents.js/commit/d07948cc63a9b0db629dcc4687d359c85489fd6f))
+
 ## [2.2.13](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.2.12...ppt-codec%402.2.13) (2026-09-24)
 
 
