@@ -538,19 +538,21 @@ describe("throw-tier error classes carry their own precise code, message, and fi
 
   it("MarkdownInputTooLargeError: lowerMarkdown enforces maxInputBytes against the input's own UTF-8 byte length, not its character count", () => {
     // "é" is two UTF-8 bytes but one UTF-16 code unit — a maxInputBytes check keyed on .length rather than TextEncoder byte length would let this through at limit 5.
+    const maxInputBytes = 5;
+    const actualBytes = 6; // "aaéé": two ASCII bytes plus two 2-byte UTF-8 "é" characters
     const source = "aaéé";
     const error = captureThrown(() => {
-      lowerMarkdown(source, { maxInputBytes: 5 });
+      lowerMarkdown(source, { maxInputBytes });
     });
     expect(error).toBeInstanceOf(MarkdownInputTooLargeError);
     expect(error).toBeInstanceOf(MarkdownParseError);
     const typed = error as MarkdownInputTooLargeError;
     expect(typed.name).toBe("MarkdownInputTooLargeError");
     expect(typed.code).toBe("md/input-too-large");
-    expect(typed.maxInputBytes).toBe(5);
-    expect(typed.actualBytes).toBe(6);
+    expect(typed.maxInputBytes).toBe(maxInputBytes);
+    expect(typed.actualBytes).toBe(actualBytes);
     expect(typed.message).toBe(
-      "input is 6 bytes, exceeding the configured maximum of 5 bytes",
+      `input is ${String(actualBytes)} bytes, exceeding the configured maximum of ${String(maxInputBytes)} bytes`,
     );
   });
 

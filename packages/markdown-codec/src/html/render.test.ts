@@ -20,7 +20,8 @@ describe("escapeHref", () => {
 
   it("pads a single hex digit's percent escape to two digits", () => {
     // U+0007 (BEL) is ASCII, not alphanumeric, not in the safe-punctuation set — its own byte value is 7, whose hex digit "7" needs a leading zero. Built via fromCharCode rather than a literal escape so the source never carries a raw, invisible control byte.
-    expect(escapeHref(String.fromCharCode(7))).toBe("%07");
+    const bellCharCode = 7;
+    expect(escapeHref(String.fromCharCode(bellCharCode))).toBe("%07");
   });
 
   it("leaves a two-hex-digit byte unpadded", () => {

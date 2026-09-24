@@ -14,6 +14,8 @@ export type DelimiterChar = "*" | "_" | "~";
 
 // GFM's strikethrough extension recognises a run of exactly one or two tildes as a delimiter; a run of three or more is literal text. (cmark-gfm's own strikethrough extension applies the same bound.)
 const MAX_STRIKETHROUGH_RUN = 2;
+// spec 0.31.2 emphasis rules 9/10's own "rule of three" divisor, see isRuleOfThreeBlocked's own comment below.
+const RULE_OF_THREE_MODULUS = 3;
 
 export interface Delimiter {
   readonly char: DelimiterChar;
@@ -117,15 +119,15 @@ export class DelimiterStack {
 //
 // Exported for direct testing: the string's own exact shape (which literal marks the canOpen branch, `% 3` rather than any other reduction) has no effect processEmphasis's own black-box behaviour can distinguish — every reachable pair of distinct signatures is already provably distinct by char or by the raw fields isRuleOfThreeBlocked reads regardless of the exact spelling used to encode them here, so the only way to pin the concrete encoding this comment documents is to assert this function's own return value.
 export function closerSignature(closer: Delimiter): string {
-  return `${closer.char}${closer.canOpen ? "1" : "0"}${String(closer.origCount % 3)}`;
+  return `${closer.char}${closer.canOpen ? "1" : "0"}${String(closer.origCount % RULE_OF_THREE_MODULUS)}`;
 }
 
-// spec 0.31.2, emphasis rules 9 and 10 — the "rule of three": if one of the delimiters can both open and close, a match is forbidden when the sum of the two run lengths is a multiple of three, unless both lengths are themselves multiples of three. Expressed here in the equivalent form cmark uses, testing the closer's own length against 3 rather than both.
+// spec 0.31.2, emphasis rules 9 and 10 — the "rule of three": if one of the delimiters can both open and close, a match is forbidden when the sum of the two run lengths is a multiple of three, unless both lengths are themselves multiples of three. Expressed here in the equivalent form cmark uses, testing the closer's own length against RULE_OF_THREE_MODULUS rather than both.
 function isRuleOfThreeBlocked(opener: Delimiter, closer: Delimiter): boolean {
   return (
     (closer.canOpen || opener.canClose) &&
-    closer.origCount % 3 !== 0 &&
-    (opener.origCount + closer.origCount) % 3 === 0
+    closer.origCount % RULE_OF_THREE_MODULUS !== 0 &&
+    (opener.origCount + closer.origCount) % RULE_OF_THREE_MODULUS === 0
   );
 }
 
