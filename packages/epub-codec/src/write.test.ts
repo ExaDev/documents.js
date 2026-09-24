@@ -1,3 +1,4 @@
+import { assertNeverImageFormat, assertNeverImageFormat2 } from "./write";
 import type {
   ContentDocument,
   ContentSection,
@@ -297,5 +298,21 @@ describe("writeEpubContent: the written nav document's own toc hrefs match the s
     ]);
     const tree = readEpub(writeEpubContent(document));
     expect(tree.source?.nav).toBeUndefined();
+  });
+});
+
+describe("assertNeverImageFormat", () => {
+  it("throws naming the unhandled image format, proving the switch's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverImageFormat("bogus" as never);
+    }).toThrow('epub-codec: unhandled image format "bogus"');
+  });
+});
+
+describe("assertNeverImageFormat2", () => {
+  it("throws naming the unhandled image format, proving the switch's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverImageFormat2("bogus" as never);
+    }).toThrow('epub-codec: unhandled image format "bogus"');
   });
 });

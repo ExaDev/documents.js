@@ -32,6 +32,7 @@ function partToBytes(part: Part): Uint8Array<ArrayBuffer> {
     case "binary":
       return base64ToBytes(part.base64);
   }
+  return assertNeverPart(part);
 }
 
 // The same per-part decode serializePackage uses, exposed as a plain entries Record rather than zip bytes — src/read.ts's own readEpubInternal is the one caller, reconstituting the exact Record<string, Uint8Array> shape unzipPackage used to hand it (mimetype/container.xml/OPF/XHTML content) so its own existing entries[path]-keyed reading logic needs no further change once bytes flow through decodePackage first. This does mean an XML part already parsed once by parsePackage is serialised back to a string here and re-parsed again by whichever of src/opf, src/nav, or src/xhtml reads it next — a real, deliberate cost accepted to keep this refactor's blast radius to "decodePackage first, encodePackage last" rather than threading EpubPackage's own parsed XmlNode[] through every one of those modules' own string-based entry points.
@@ -43,4 +44,9 @@ export function packageToEntries(
     entries[path] = partToBytes(part);
   }
   return entries;
+}
+
+// Reached only if the union behind `part` ever gains a member partToBytes's own switch does not match: every current member has a case there, so `part` narrows to `never` at the call, and adding an uncovered member makes that narrowing fail and the call stop compiling. Exists so the switch's own exhaustiveness, proven by the type checker rather than by a catch-all default that would silently emit nothing for a genuinely new member, still gives consistent-return an explicit statement to see past the switch. Exported so a test can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable.
+export function assertNeverPart(value: never): never {
+  throw new Error(`epub-codec: unhandled part ${JSON.stringify(value)}`);
 }

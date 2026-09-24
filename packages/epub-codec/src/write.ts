@@ -115,6 +115,7 @@ function imageExtension(format: ContentImageBlock["format"]): string {
     case "gif":
       return "gif";
   }
+  return assertNeverImageFormat(format);
 }
 
 function imageMediaType(format: ContentImageBlock["format"]): string {
@@ -128,6 +129,7 @@ function imageMediaType(format: ContentImageBlock["format"]): string {
     case "gif":
       return "image/gif";
   }
+  return assertNeverImageFormat2(format);
 }
 
 export function writeEpubContent(
@@ -262,4 +264,18 @@ export function writeEpub(
     throw new EpubPackageFlattenError(error);
   }
   return writeEpubContent(flat, options);
+}
+
+// Reached only if the union behind `format` ever gains a member imageExtension's own switch does not match: every current member has a case there, so `format` narrows to `never` at the call, and adding an uncovered member makes that narrowing fail and the call stop compiling. Exists so the switch's own exhaustiveness, proven by the type checker rather than by a catch-all default that would silently emit nothing for a genuinely new member, still gives consistent-return an explicit statement to see past the switch. Exported so a test can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable.
+export function assertNeverImageFormat(value: never): never {
+  throw new Error(
+    `epub-codec: unhandled image format ${JSON.stringify(value)}`,
+  );
+}
+
+// Reached only if the union behind `format` ever gains a member imageMediaType's own switch does not match: every current member has a case there, so `format` narrows to `never` at the call, and adding an uncovered member makes that narrowing fail and the call stop compiling. Exists so the switch's own exhaustiveness, proven by the type checker rather than by a catch-all default that would silently emit nothing for a genuinely new member, still gives consistent-return an explicit statement to see past the switch. Exported so a test can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable.
+export function assertNeverImageFormat2(value: never): never {
+  throw new Error(
+    `epub-codec: unhandled image format ${JSON.stringify(value)}`,
+  );
 }

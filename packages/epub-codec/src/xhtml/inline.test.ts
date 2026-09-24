@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { EpubDiagnostic } from "../diagnostics";
+import type { EpubDiagnostic, EpubDiagnosticSink } from "../diagnostics";
 import type { XhtmlReadContext } from "./context";
 import { buildInlineRuns } from "./inline";
 import { readXhtmlBody } from "./read";
@@ -186,7 +186,7 @@ describe("appendAnchor: an href resolving to no target", () => {
   });
 
   it("fires no LINK_TARGET_EXTERNAL_ONLY diagnostic for a genuine external URI (a real scheme present)", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     read(body('<p><a href="https://example.com">site</a></p>'), sink);
     expect(sink).not.toHaveBeenCalledWith(
       expect.objectContaining({ code: "epub/link-target-external-only" }),
@@ -194,7 +194,7 @@ describe("appendAnchor: an href resolving to no target", () => {
   });
 
   it("fires no LINK_TARGET_EXTERNAL_ONLY diagnostic for an unresolved same-document fragment", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body('<p><a href="#nonexistent-fragment">ghost link</a></p>'),
       sink,

@@ -161,8 +161,9 @@ describe("parseOpf", () => {
 
   it("reports dc:publisher/dc:contributor/dc:rights as unmapped metadata fields", () => {
     const codes: string[] = [];
-    const sink: EpubDiagnosticSink = (diagnostic) =>
+    const sink: EpubDiagnosticSink = (diagnostic) => {
       codes.push(diagnostic.code);
+    };
     parseOpf(
       `<package xmlns="http://www.idpf.org/2007/opf">
         <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -189,7 +190,9 @@ describe("parseOpf", () => {
         <manifest/>
         <spine/>
       </package>`,
-      (d) => diagnostics.push(d),
+      (d) => {
+        diagnostics.push(d);
+      },
     );
     expect(diagnostics).toContainEqual({
       code: "epub/metadata-field-unmapped",

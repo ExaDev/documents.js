@@ -34,7 +34,9 @@ describe("reportInertElementSkip", () => {
     const diagnostics: EpubDiagnostic[] = [];
     reportInertElementSkip(
       "noscript",
-      fakeContext((d) => diagnostics.push(d)),
+      fakeContext((d) => {
+        diagnostics.push(d);
+      }),
     );
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0]).toMatchObject({
@@ -47,7 +49,9 @@ describe("reportInertElementSkip", () => {
 
   it("reports nothing for script, template, or style — only noscript's loss is worth naming", () => {
     const diagnostics: EpubDiagnostic[] = [];
-    const context = fakeContext((d) => diagnostics.push(d));
+    const context = fakeContext((d) => {
+      diagnostics.push(d);
+    });
     reportInertElementSkip("script", context);
     reportInertElementSkip("template", context);
     reportInertElementSkip("style", context);
