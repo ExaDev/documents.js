@@ -1,4 +1,4 @@
-import { Alert, Container, Paper, Select, Stack, Title } from "@mantine/core";
+import { Alert, Paper, Select, Stack } from "@mantine/core";
 import { createFileRoute } from "@tanstack/react-router";
 import { DocumentFormatSchema } from "documents.js";
 import type { DocumentFormat } from "documents.js";
@@ -12,6 +12,7 @@ import type { OpenedFile } from "../ports/fileAccess";
 import { DiagnosticsPanel } from "../ui/DiagnosticsPanel";
 import { InspectPanel } from "../ui/InspectPanel";
 import { notifyError } from "../ui/notify";
+import { ToolPage } from "../ui/ToolPage";
 
 export const Route = createFileRoute("/_document/inspect")({
   component: InspectPage,
@@ -21,24 +22,20 @@ function InspectPage() {
   const { document } = useOpenDocument();
 
   return (
-    <Container size="sm" py="xl">
-      <Stack gap="lg">
-        <Title order={2}>Inspect</Title>
-
-        {document === undefined ? (
-          <NoDocumentOpen>
-            Open a document above to inspect its structure.
-          </NoDocumentOpen>
-        ) : (
-          // Keyed by the document's own open sequence: a fresh open remounts this panel from scratch, resetting any manual format override without calling its setter directly inside an effect (react-hooks/set-state-in-effect).
-          <InspectionPanel
-            key={document.id}
-            file={document.file}
-            detectedFormat={document.format}
-          />
-        )}
-      </Stack>
-    </Container>
+    <ToolPage title="Inspect">
+      {document === undefined ? (
+        <NoDocumentOpen>
+          Open a document above to inspect its structure.
+        </NoDocumentOpen>
+      ) : (
+        // Keyed by the document's own open sequence: a fresh open remounts this panel from scratch, resetting any manual format override without calling its setter directly inside an effect (react-hooks/set-state-in-effect).
+        <InspectionPanel
+          key={document.id}
+          file={document.file}
+          detectedFormat={document.format}
+        />
+      )}
+    </ToolPage>
   );
 }
 

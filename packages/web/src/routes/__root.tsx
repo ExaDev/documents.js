@@ -107,7 +107,7 @@ function RootLayout() {
             </Tooltip>
           </Group>
         </AppShell.Header>
-        <AppShell.Navbar p="xs">
+        <AppShell.Navbar p="sm">
           <Sidebar />
         </AppShell.Navbar>
         <AppShell.Main>
