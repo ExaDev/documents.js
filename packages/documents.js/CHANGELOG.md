@@ -1,3 +1,18 @@
+## [14.4.34](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.33...documents.js%4014.4.34) (2026-09-24)
+
+### Tests
+
+* **documents.js:** close sheets.ts mutation gaps in print range, scale, spill and header arithmetic ([5c7e363](https://github.com/ExaDev/documents.js/commit/5c7e363976d1f36604fc87d797c8ffc6675baa2b))
+
+
+### Dependencies
+
+- Updated epub-codec to 5.1.11
+- Updated ooxml.js to 12.2.24
+- Updated ppt-codec to 2.2.16
+- Updated rtf-codec to 8.1.17
+- Updated wpd-codec to 5.1.17
+
 ## [14.4.33](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.32...documents.js%4014.4.33) (2026-09-24)
 
 ### Code Refactoring

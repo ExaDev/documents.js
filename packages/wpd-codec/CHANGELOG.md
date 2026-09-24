@@ -1,3 +1,21 @@
+## [5.1.17](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.1.16...wpd-codec%405.1.17) (2026-09-24)
+
+### Bug Fixes
+
+* **wpd-codec:** enable max-lines ([c80967d](https://github.com/ExaDev/documents.js/commit/c80967d88e66da8d089d854e767606a257501b5b))
+
+### Code Refactoring
+
+* **wpd-codec:** split character-sets.ts's fourteen data tables by character-set number ([76dcf39](https://github.com/ExaDev/documents.js/commit/76dcf39d36712a4225347a4f045b6da5cf066667))
+* **wpd-codec:** split read.ts's token-fold engine into per-group modules ([8ab262c](https://github.com/ExaDev/documents.js/commit/8ab262c26da5ad91869799cae7077ce626d858a6))
+* **wpd-codec:** split wpg.ts's primitive-record readers into their own module ([50cfed8](https://github.com/ExaDev/documents.js/commit/50cfed8087c973840b377f43a1ea1fcb10daf18c))
+
+### Tests
+
+* **wpd-codec:** split read-structure.test.ts's tables and gap tests out ([bf66d5e](https://github.com/ExaDev/documents.js/commit/bf66d5eecfacf48bd68befc45863c55f650f8a43))
+* **wpd-codec:** split read.test.ts's readWpdContent body and its four describes ([23e4eec](https://github.com/ExaDev/documents.js/commit/23e4eecb5ecdd56b732e94fd303064c0e6631ba6))
+* **wpd-codec:** split wpg.test.ts's fixture readers and split its record framing ([bb26395](https://github.com/ExaDev/documents.js/commit/bb26395682302622d6ee889a5ab1867efb13c49b))
+
 ## [5.1.16](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.1.15...wpd-codec%405.1.16) (2026-09-24)
 
 

@@ -1,3 +1,48 @@
+## [8.1.17](https://github.com/ExaDev/documents.js/compare/rtf-codec%408.1.16...rtf-codec%408.1.17) (2026-09-24)
+
+### Bug Fixes
+
+* **rtf-codec:** enable max-lines ([bc07b28](https://github.com/ExaDev/documents.js/commit/bc07b285e09be7068161f022ed866bed44323461))
+* **rtf-codec:** import three list/bookmark helpers from read-state, not read ([8368132](https://github.com/ExaDev/documents.js/commit/836813294406efb9d12d978558ae2262b201f84d))
+
+### Code Refactoring
+
+* **rtf-codec:** split the DBCS code page tables into one file per code page ([6618419](https://github.com/ExaDev/documents.js/commit/6618419424a477e64bc960751016569dcfbc3ca3))
+* **rtf-codec:** split the RTF reader into one module per stage of its own state machine ([ada1ffd](https://github.com/ExaDev/documents.js/commit/ada1ffd29208cbf909b076541b347bc94c03baa8))
+* **rtf-codec:** split the RTF writer into one module per writing concern ([5dbbf49](https://github.com/ExaDev/documents.js/commit/5dbbf49938166bb731c760cc0d32f8a87d1f3061))
+
+### Documentation
+
+* **rtf-codec:** point stale read.ts/read.test.ts comment references at the split files ([3dc4522](https://github.com/ExaDev/documents.js/commit/3dc452221cba1e08bcac8027ff8e852db22056a5))
+
+### Tests
+
+* **rtf-codec:** extract read.test.ts's shared fixture helpers ([e920edd](https://github.com/ExaDev/documents.js/commit/e920edd06cc365111faa3e550f12ea2c08ce905a))
+* **rtf-codec:** extract shared wordprocessing and round-trip fixtures for the writer test suite ([d38e01a](https://github.com/ExaDev/documents.js/commit/d38e01a682b2b70233f02b56498e51932d92a31d))
+* **rtf-codec:** split bookmark and residue round-trip tests out of write.test.ts ([aa52aa8](https://github.com/ExaDev/documents.js/commit/aa52aa815575c3b2f7cb5624ed981a9059578d33))
+* **rtf-codec:** split checkbox form-field writer tests out of write.test.ts ([a8f8cfc](https://github.com/ExaDev/documents.js/commit/a8f8cfc719dd44b758c905e362f62bfdb0ac3081))
+* **rtf-codec:** split construct-boundary diagnostic tests out of write.test.ts ([47593d7](https://github.com/ExaDev/documents.js/commit/47593d75241d052a96e0b4247db6f7a3280b3b64))
+* **rtf-codec:** split contentControl round-trip tests out of write.test.ts ([e9a7974](https://github.com/ExaDev/documents.js/commit/e9a797408cf8dfeb21101b33fa01ba271327000b))
+* **rtf-codec:** split core-property round-trip tests out of write.test.ts ([2c5357c](https://github.com/ExaDev/documents.js/commit/2c5357c7d01e1500044c28f60e295bc36102b808))
+* **rtf-codec:** split dropDown form-field writer tests out of write.test.ts ([c5c6ef7](https://github.com/ExaDev/documents.js/commit/c5c6ef76b5ff2d8186a8aa300779f35b92876b94))
+* **rtf-codec:** split form-field extent and unsupported-control tests out of write.test.ts ([4bd1547](https://github.com/ExaDev/documents.js/commit/4bd1547045d92a11c20ae8dfbe81eeddbec9b988))
+* **rtf-codec:** split image and embedded-object writer tests out of write.test.ts ([9b6e419](https://github.com/ExaDev/documents.js/commit/9b6e419b51e62dc27fca49f13312a7859c5e379e))
+* **rtf-codec:** split paragraph, run, and hyperlink writer tests out of write.test.ts ([f072049](https://github.com/ExaDev/documents.js/commit/f0720496fe238b5e38254853d936b726dbbadac9))
+* **rtf-codec:** split plainText and shared form-field payload tests out of write.test.ts ([185b9ba](https://github.com/ExaDev/documents.js/commit/185b9bad4eb7a4c44c24fc14dfda96adbf39e95a))
+* **rtf-codec:** split provenance and revision round-trip tests out of write.test.ts ([7fb2587](https://github.com/ExaDev/documents.js/commit/7fb2587259fa78996e6faf2674bfd233d80b1f0d))
+* **rtf-codec:** split read.test.ts's character and paragraph describes into their own file ([6a00fa4](https://github.com/ExaDev/documents.js/commit/6a00fa4026880ba1d12918c83b237795cd585c6f))
+* **rtf-codec:** split read.test.ts's construct and bookmark describes into their own file ([8d43800](https://github.com/ExaDev/documents.js/commit/8d438004d95be70585bf0284a9f4065c9b86479b))
+* **rtf-codec:** split read.test.ts's control-word dispatch describes, removing the original ([d8b6f64](https://github.com/ExaDev/documents.js/commit/d8b6f64c6aa32a74aaa3d83b6a35f25794ab7eb1))
+* **rtf-codec:** split read.test.ts's document-structure describes into their own file ([784ebdb](https://github.com/ExaDev/documents.js/commit/784ebdb8c3364c70d51ed943c5664970f7e7d6ac))
+* **rtf-codec:** split read.test.ts's embedded-object describes into their own file ([cf72a4b](https://github.com/ExaDev/documents.js/commit/cf72a4bf1fbbb7acbd9b98a77d0be54be939e05b))
+* **rtf-codec:** split read.test.ts's form-field describes into their own file ([77347ee](https://github.com/ExaDev/documents.js/commit/77347eefbfb7ad96eb6e2a4f0123bd07477debe7))
+* **rtf-codec:** split read.test.ts's picture describes into their own file ([2a37b37](https://github.com/ExaDev/documents.js/commit/2a37b37421ae1f6ef1822e7e23485ddf27e29fdd))
+* **rtf-codec:** split read.test.ts's table describes into their own file ([f01a0f5](https://github.com/ExaDev/documents.js/commit/f01a0f50cf8a6203370e3d567172d221d68d78a9))
+* **rtf-codec:** split section and media round-trip tests out of write.test.ts ([b8729f0](https://github.com/ExaDev/documents.js/commit/b8729f06baa961a40b5ca75b5ef46d15c74edb4e))
+* **rtf-codec:** split table writer tests out of write.test.ts ([3956363](https://github.com/ExaDev/documents.js/commit/3956363242473da1b4f11cb64ac2fbc004c46417))
+* **rtf-codec:** split table-cell merge and grid-rule round-trip tests out of write.test.ts ([38429a6](https://github.com/ExaDev/documents.js/commit/38429a67bd649a79e17c37d363ee7867e6b0acde))
+* **rtf-codec:** trim write.test.ts to its output-shape, escaping, and header-table cases ([028cfba](https://github.com/ExaDev/documents.js/commit/028cfbaec7403e3663c334fa3c46139298d5c542))
+
 ## [8.1.16](https://github.com/ExaDev/documents.js/compare/rtf-codec%408.1.15...rtf-codec%408.1.16) (2026-09-24)
 
 

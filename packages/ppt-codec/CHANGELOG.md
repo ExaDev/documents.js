@@ -1,3 +1,10 @@
+## [2.2.16](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.2.15...ppt-codec%402.2.16) (2026-09-24)
+
+### Code Refactoring
+
+* **ppt-codec:** split the drawing-write suite at its table boundary ([468ae5a](https://github.com/ExaDev/documents.js/commit/468ae5a0147eb58cdb540680139c2d9175d2b07e))
+* **ppt-codec:** split the two remaining oversized suites and enforce max-lines ([8372429](https://github.com/ExaDev/documents.js/commit/83724292bdccfa8c21968f5ae34471b8234b5e05))
+
 ## [2.2.15](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.2.14...ppt-codec%402.2.15) (2026-09-24)
 
 

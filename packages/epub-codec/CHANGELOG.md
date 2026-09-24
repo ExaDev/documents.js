@@ -1,3 +1,9 @@
+## [5.1.11](https://github.com/ExaDev/documents.js/compare/epub-codec%405.1.10...epub-codec%405.1.11) (2026-09-24)
+
+### Code Refactoring
+
+* **epub-codec:** empty the eslint-config rule debt list ([3b74dd8](https://github.com/ExaDev/documents.js/commit/3b74dd8f0e718a712fa8ee6fc021e798c1794f27))
+
 ## [5.1.10](https://github.com/ExaDev/documents.js/compare/epub-codec%405.1.9...epub-codec%405.1.10) (2026-09-24)
 
 

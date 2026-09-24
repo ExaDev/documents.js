@@ -1,3 +1,16 @@
+## [2.16.0](https://github.com/ExaDev/documents.js/compare/web%402.15.0...web%402.16.0) (2026-09-24)
+
+### Features
+
+* **web:** expose Recent Files as a real list, and share its layout utilities ([882e047](https://github.com/ExaDev/documents.js/commit/882e047eb6146dfdce6724f4965fd86611256e17))
+* **web:** let the open-document bar close the current document, not just replace it ([11b3687](https://github.com/ExaDev/documents.js/commit/11b368772391b9b1044fa500e33d7dec9666f020))
+
+
+### Dependencies
+
+- Updated ooxml.js to 12.2.24
+- Updated documents.js to 14.4.34
+
 ## [2.15.0](https://github.com/ExaDev/documents.js/compare/web%402.14.7...web%402.15.0) (2026-09-24)
 
 ### Features

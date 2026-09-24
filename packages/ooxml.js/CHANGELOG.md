@@ -1,3 +1,18 @@
+## [12.2.24](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.23...ooxml.js%4012.2.24) (2026-09-24)
+
+### Bug Fixes
+
+* **ooxml.js:** fix docx/pptx rule debt: hoisting, exhaustiveness, booleans, tsdoc ([4a22d35](https://github.com/ExaDev/documents.js/commit/4a22d35e170edb6297365bea80a784b8810846f6))
+* **ooxml.js:** fix xlsx rule debt: shadowing, Object.assign, exhaustiveness, booleans ([68b0039](https://github.com/ExaDev/documents.js/commit/68b00396ac21abe978605587db821b4c190dcaf9))
+* **ooxml.js:** return through a never-typed guard on partToBytes's switch ([1f09dae](https://github.com/ExaDev/documents.js/commit/1f09dae62f1cdd0c5f1ff4f6f60f37efe44ccb10))
+* **ooxml.js:** return through a never-typed guard on readNestedDocument's switch ([c3277b9](https://github.com/ExaDev/documents.js/commit/c3277b911e8bf6fba38933e238b1ebd294312519))
+* **ooxml.js:** return through never-typed guards on the XmlNode/CompactXmlNode switches ([3b38992](https://github.com/ExaDev/documents.js/commit/3b38992be46d0c3306b5f7862ab44025b7db4853))
+
+### Miscellaneous Chores
+
+* **ooxml.js:** clear eight of the nine eslint-config 2.12.1 rule debt entries ([f6de506](https://github.com/ExaDev/documents.js/commit/f6de506fdf5a2527514999af01bbf926f440003a))
+* **ooxml.js:** drop switch-exhaustiveness-check from the rule debt list ([38b53ca](https://github.com/ExaDev/documents.js/commit/38b53caa93c32c533ffba8f36b96ac3eb3604fad))
+
 ## [12.2.23](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.22...ooxml.js%4012.2.23) (2026-09-24)
 
 
