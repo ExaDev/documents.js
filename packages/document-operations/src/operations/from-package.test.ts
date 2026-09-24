@@ -16,7 +16,7 @@ import { fromPackageOperation } from "./from-package";
 const INVALID_UTF8_LEAD_BYTE_1 = 0xff;
 const INVALID_UTF8_LEAD_BYTE_2 = 0xfe;
 
-/** The ASCII codes for '{' and '}', appended after the invalid lead bytes so the fixture also looks, at a glance, like it might open a JSON object. */
+/** The ASCII codes for `{` and `}`, appended after the invalid lead bytes so the fixture also looks, at a glance, like it might open a JSON object. */
 const ASCII_OPEN_BRACE = 0x7b;
 const ASCII_CLOSE_BRACE = 0x7d;
 
