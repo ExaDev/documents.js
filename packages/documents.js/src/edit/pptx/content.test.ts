@@ -917,7 +917,9 @@ describe("buildPptxPackage: a table row's own isHeader has no DrawingML spelling
     };
     const contexts: { readonly sourcePath?: string }[] = [];
     buildPptxPackage(documentOf(table), {
-      onDiagnostic: (_diagnostic, context) => contexts.push(context),
+      onDiagnostic: (_diagnostic, context) => {
+        contexts.push(context);
+      },
     });
     expect(contexts).toEqual([{ sourcePath: "slides/slide1.xml#/shapes/0" }]);
   });
@@ -930,7 +932,9 @@ describe("buildPptxPackage: a table row's own isHeader has no DrawingML spelling
     };
     const contexts: { readonly sourcePath?: string }[] = [];
     buildPptxPackage(documentOf(table), {
-      onDiagnostic: (_diagnostic, context) => contexts.push(context),
+      onDiagnostic: (_diagnostic, context) => {
+        contexts.push(context);
+      },
     });
     expect(contexts).toEqual([{ sourcePath: undefined }]);
   });
@@ -946,7 +950,9 @@ describe("buildPptxPackage: a table row's own isHeader has no DrawingML spelling
     };
     const diagnostics: PptxWriteDiagnostic[] = [];
     buildPptxPackage(documentOf(table), {
-      onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+      onDiagnostic: (diagnostic) => {
+        diagnostics.push(diagnostic);
+      },
     });
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0]).toEqual({
@@ -999,7 +1005,9 @@ describe("buildPptxPackage: a table row's own isHeader has no DrawingML spelling
     };
     const diagnostics: PptxWriteDiagnostic[] = [];
     buildPptxPackage(documentOf(table), {
-      onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+      onDiagnostic: (diagnostic) => {
+        diagnostics.push(diagnostic);
+      },
     });
     expect(diagnostics.map((d) => d.message)).toEqual([
       expect.stringContaining("table row 0 is a header row"),
@@ -1015,7 +1023,9 @@ describe("buildPptxPackage: a table row's own isHeader has no DrawingML spelling
     };
     const diagnostics: PptxWriteDiagnostic[] = [];
     buildPptxPackage(documentOf(table), {
-      onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+      onDiagnostic: (diagnostic) => {
+        diagnostics.push(diagnostic);
+      },
     });
     expect(diagnostics).toEqual([]);
   });
@@ -1028,7 +1038,9 @@ describe("buildPptxPackage: a table row's own isHeader has no DrawingML spelling
     };
     const diagnostics: PptxWriteDiagnostic[] = [];
     buildPptxPackage(documentOf(table), {
-      onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+      onDiagnostic: (diagnostic) => {
+        diagnostics.push(diagnostic);
+      },
     });
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0]).toEqual({
@@ -1078,7 +1090,9 @@ describe("buildPptxPackage: a table row's own isHeader has no DrawingML spelling
     };
     const diagnostics: PptxWriteDiagnostic[] = [];
     buildPptxPackage(documentOf(table), {
-      onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+      onDiagnostic: (diagnostic) => {
+        diagnostics.push(diagnostic);
+      },
     });
     expect(diagnostics.map((d) => d.message)).toEqual([
       expect.stringContaining("table column 0 is a header column"),
@@ -1094,7 +1108,9 @@ describe("buildPptxPackage: a table row's own isHeader has no DrawingML spelling
     };
     const diagnostics: PptxWriteDiagnostic[] = [];
     buildPptxPackage(documentOf(table), {
-      onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+      onDiagnostic: (diagnostic) => {
+        diagnostics.push(diagnostic);
+      },
     });
     expect(diagnostics).toEqual([]);
   });

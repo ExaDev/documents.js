@@ -23,7 +23,9 @@ describe("MarkdownList.appendItem", () => {
 
     const diagnosticCodes: string[] = [];
     const output = editor.toMarkdownText({
-      sink: (diagnostic) => diagnosticCodes.push(diagnostic.code),
+      sink: (diagnostic) => {
+        diagnosticCodes.push(diagnostic.code);
+      },
     });
     expect(output).toBe("- Item");
     expect(diagnosticCodes).toContain(

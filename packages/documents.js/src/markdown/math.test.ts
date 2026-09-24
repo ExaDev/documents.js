@@ -162,7 +162,9 @@ describe("readMarkdownContent math lowering", () => {
   it("a context-starved construct degrades to unparsed inside the formula and surfaces its diagnostic through the sink", () => {
     const diagnostics: LatexDiagnostic[] = [];
     const content = readMarkdownContent("$$\n2x\n$$\n", undefined, {
-      onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+      onDiagnostic: (diagnostic) => {
+        diagnostics.push(diagnostic);
+      },
     });
     if (content.kind !== "wordprocessing") {
       throw new Error("expected a wordprocessing ContentDocument");

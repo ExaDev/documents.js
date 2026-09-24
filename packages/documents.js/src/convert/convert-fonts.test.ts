@@ -129,7 +129,9 @@ describe("X -> PDF: caller-supplied faces", () => {
   it("reports a vendored substitution once through onFontSubstitution", () => {
     const substitutions: FontSubstitution[] = [];
     docxToPdf(minimalDocxBytes(), {
-      onFontSubstitution: (substitution) => substitutions.push(substitution),
+      onFontSubstitution: (substitution) => {
+        substitutions.push(substitution);
+      },
     });
     expect(substitutions).toEqual([
       {
@@ -145,7 +147,9 @@ describe("X -> PDF: caller-supplied faces", () => {
   it("reports nothing for a document whose every family resolves without substitution", () => {
     const substitutions: FontSubstitution[] = [];
     docxToPdf(standardFontDocxBytes(), {
-      onFontSubstitution: (substitution) => substitutions.push(substitution),
+      onFontSubstitution: (substitution) => {
+        substitutions.push(substitution);
+      },
     });
     expect(substitutions).toEqual([]);
   });
