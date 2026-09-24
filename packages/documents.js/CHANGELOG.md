@@ -1,3 +1,14 @@
+## [14.4.10](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.9...documents.js%4014.4.10) (2026-09-24)
+
+### Tests
+
+* **documents.js:** pin svg path.ts's arc geometry and scanner boundaries ([49dd0e1](https://github.com/ExaDev/documents.js/commit/49dd0e13c3ecf4094c96c3d472d1d71676870244))
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.2.17
+
 ## [14.4.9](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.8...documents.js%4014.4.9) (2026-09-24)
 
 
