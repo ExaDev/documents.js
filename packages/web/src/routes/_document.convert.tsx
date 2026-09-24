@@ -2,14 +2,12 @@ import {
   Alert,
   Box,
   Button,
-  Container,
   Group,
   Paper,
   Select,
   Spoiler,
   Stack,
   Text,
-  Title,
 } from "@mantine/core";
 import {
   createFileRoute,
@@ -42,6 +40,7 @@ import { SheetPreview } from "../ui/SheetPreview";
 import { SlidesPreview } from "../ui/SlidesPreview";
 import { FormulaPreview } from "../ui/FormulaPreview";
 import { WordProcessingPreview } from "../ui/WordProcessingPreview";
+import { ToolPage } from "../ui/ToolPage";
 
 // Layout route: convert.index.tsx and convert.$source.$target.tsx become its children (per TanStack Router's file-based nesting convention) and exist only to register typed path params in the route tree — ConvertPanel below owns all the real state and UI directly, so it never remounts when the selected pair changes. That's what fixes "picking a new pair feels like leaving the page": convert.index.tsx and convert.$source.$target.tsx both render nothing, so switching pairs is a params change within one mounted ConvertPanel instance, not a route transition through two sibling routes.
 export const Route = createFileRoute("/_document/convert")({
@@ -97,27 +96,18 @@ function ConvertLayout() {
   const { document } = useOpenDocument();
 
   return (
-    <Container fluid px="xl" py="xl">
-      <Stack gap="lg">
-        {document === undefined ? (
-          <Box maw={600}>
-            <Stack gap="lg">
-              <Title order={2}>Convert a document</Title>
-              <NoDocumentOpen>
-                Open a document above to convert it.
-              </NoDocumentOpen>
-            </Stack>
-          </Box>
-        ) : (
-          // Keyed by the document's own open sequence: a fresh open remounts this panel from scratch, resetting source/target/the previous conversion without the effect-ordering hazard a manual "did the document change" comparison would carry — a setState call from one effect during a commit is not visible to a sibling effect in that same commit, which previously let the pdf-bytes-inspection effect below fire once against a still-stale `source` before the reset had actually taken hold.
-          <ConvertPanel
-            key={document.id}
-            file={document.file}
-            detectedFormat={document.format}
-          />
-        )}
-      </Stack>
-    </Container>
+    <ToolPage title="Convert a document" width="canvas">
+      {document === undefined ? (
+        <NoDocumentOpen>Open a document above to convert it.</NoDocumentOpen>
+      ) : (
+        // Keyed by the document's own open sequence: a fresh open remounts this panel from scratch, resetting source/target/the previous conversion without the effect-ordering hazard a manual "did the document change" comparison would carry — a setState call from one effect during a commit is not visible to a sibling effect in that same commit, which previously let the pdf-bytes-inspection effect below fire once against a still-stale `source` before the reset had actually taken hold.
+        <ConvertPanel
+          key={document.id}
+          file={document.file}
+          detectedFormat={document.format}
+        />
+      )}
+    </ToolPage>
   );
 }
 
@@ -270,8 +260,6 @@ function ConvertPanel({
     <>
       <Box maw={600}>
         <Stack gap="lg">
-          <Title order={2}>Convert a document</Title>
-
           <Paper withBorder p="md">
             <Stack gap="sm">
               {detectedFormat === undefined && (
