@@ -52,23 +52,23 @@ async function connect(): Promise<ConnectedPair> {
   return { client, close: async () => client.close() };
 }
 
-// Recursively collects every run's own text out of a ContentBlock — a top-level paragraph, or (a report band's own shape) a single-row table whose cells each carry a paragraph.
-function collectBlockText(block: ContentBlock, texts: string[]): void {
+// Recursively collects every run's own text out of a ContentBlock — a top-level paragraph, or (a report band's own shape) a single-row table whose cells each carry a paragraph. Returns the collected texts rather than appending into a caller-owned accumulator, so the recursion needs no mutable parameter at all.
+function collectBlockText(block: ContentBlock): readonly string[] {
   if (block.kind === "paragraph") {
-    for (const run of block.runs) {
-      texts.push(run.text);
-    }
-    return;
+    return block.runs.map((run) => run.text);
   }
   if (block.kind === "table") {
+    const texts: string[] = [];
     for (const row of block.rows) {
       for (const cell of row.cells) {
         for (const cellBlock of cell.blocks) {
-          collectBlockText(cellBlock, texts);
+          texts.push(...collectBlockText(cellBlock));
         }
       }
     }
+    return texts;
   }
+  return [];
 }
 
 // Every run of text across a wordprocessing ContentDocument's sections, space-joined — used to assert the rendered report's real band content (region names, quarter/region/grand totals) survived into real docx/odt bytes, not just that the file is non-empty.
@@ -81,7 +81,7 @@ function wordprocessingText(document: ContentDocument): string {
   const texts: string[] = [];
   for (const section of document.sections) {
     for (const block of section.blocks) {
-      collectBlockText(block, texts);
+      texts.push(...collectBlockText(block));
     }
   }
   return texts.join(" ");
