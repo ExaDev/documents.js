@@ -1,3 +1,9 @@
+## [1.2.8](https://github.com/ExaDev/documents.js/compare/excel-number-format%401.2.7...excel-number-format%401.2.8) (2026-09-24)
+
+### Miscellaneous Chores
+
+* **lint:** enable max-lines in four already-compliant packages ([13edc4e](https://github.com/ExaDev/documents.js/commit/13edc4ecee421af67eb835c4e55ad453bfac443a))
+
 ## [1.2.7](https://github.com/ExaDev/documents.js/compare/excel-number-format%401.2.6...excel-number-format%401.2.7) (2026-09-23)
 
 ### Bug Fixes

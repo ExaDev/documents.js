@@ -1,3 +1,15 @@
+## [1.4.89](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.88...document-rest%401.4.89) (2026-09-24)
+
+### Miscellaneous Chores
+
+* **lint:** enable max-lines in four already-compliant packages ([13edc4e](https://github.com/ExaDev/documents.js/commit/13edc4ecee421af67eb835c4e55ad453bfac443a))
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.24
+- Updated document-operations to 1.1.86
+
 ## [1.4.88](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.87...document-rest%401.4.88) (2026-09-24)
 
 
