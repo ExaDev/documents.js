@@ -976,7 +976,7 @@ function applyCharacterGroup(
       return;
     case CHARACTER_TABLE_COLUMN: {
       const table = state.table;
-      if (!table?.definingColumns) {
+      if (table?.definingColumns !== true) {
         return;
       }
       const widthPt = readTableColumnWidthPt(token.nonDeletable);
