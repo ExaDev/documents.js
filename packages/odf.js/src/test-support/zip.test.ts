@@ -7,11 +7,13 @@ import {
 } from "./zip";
 
 // Builds a single synthetic local file header (signature 0x04034b50) plus a body of `compressedSize` zero bytes, with an arbitrary filename and extra-field length, entirely by hand rather than through fflate — fflate's own zipSync never emits a non-empty extra field, so exercising the `extraLength` term in localFileHeaderNames's offset arithmetic needs bytes built directly.
-function buildLocalFileHeader(options: {
-  filename: string;
-  extraLength: number;
-  compressedSize: number;
-}): Uint8Array {
+function buildLocalFileHeader(
+  options: Readonly<{
+    filename: string;
+    extraLength: number;
+    compressedSize: number;
+  }>,
+): Uint8Array {
   const nameBytes = new TextEncoder().encode(options.filename);
   const total =
     30 + nameBytes.length + options.extraLength + options.compressedSize;
@@ -26,7 +28,7 @@ function buildLocalFileHeader(options: {
   return bytes;
 }
 
-function concatBytes(chunks: Uint8Array[]): Uint8Array {
+function concatBytes(chunks: readonly Uint8Array[]): Uint8Array {
   const total = chunks.reduce((sum, c) => sum + c.length, 0);
   const out = new Uint8Array(total);
   let offset = 0;

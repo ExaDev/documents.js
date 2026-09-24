@@ -25,7 +25,7 @@ export interface OdbWriteOptions {
   readonly version?: string;
 }
 
-function writeConnection(connection: OdbConnectionInfo): XmlElement {
+function writeConnection(connection: Readonly<OdbConnectionInfo>): XmlElement {
   if (connection.url === undefined) {
     throw new Error(
       `writeOdb: a${connection.type === "embedded" ? "n embedded" : "n external"} connection carries no url — there is no connection reference to write into db:connection-resource`,
@@ -41,7 +41,7 @@ function writeConnection(connection: OdbConnectionInfo): XmlElement {
   ]);
 }
 
-function writeComponent(component: OdbComponentInfo): XmlElement {
+function writeComponent(component: Readonly<OdbComponentInfo>): XmlElement {
   const attributes: Record<string, string> = {
     "db:name": encodeXmlText(component.name),
     "xlink:href": encodeXmlText(component.href),
@@ -53,7 +53,7 @@ function writeComponent(component: OdbComponentInfo): XmlElement {
   return el("db:component", attributes);
 }
 
-function writeQuery(query: OdbQueryInfo): XmlElement {
+function writeQuery(query: Readonly<OdbQueryInfo>): XmlElement {
   const attributes: Record<string, string> = {
     "db:name": encodeXmlText(query.name),
     "db:command": encodeXmlText(query.command),

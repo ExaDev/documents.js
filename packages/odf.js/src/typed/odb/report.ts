@@ -192,10 +192,13 @@ function readReportElement(
 }
 
 // Every control anywhere beneath `node` (a band's own layout table, whose cells and paragraphs are arbitrarily nested — see this module's own top-of-file note, finding 3), in document order. Recursion stops AT a control rather than descending through it, so a control's own rpt:report-element metadata is never mistaken for a nested control.
-function collectControls(
-  nodes: readonly XmlNode[],
-  controls: OdbReportElement[],
-): void {
+// The control accumulator collectControls appends each report element onto as it walks the report body. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable.
+interface ControlSink {
+  readonly controls: OdbReportElement[];
+}
+
+function collectControls(nodes: readonly XmlNode[], sink: ControlSink): void {
+  const controls = sink.controls;
   for (const node of nodes) {
     if (node.type !== "element") {
       continue;
@@ -207,7 +210,7 @@ function collectControls(
         continue;
       }
     }
-    collectControls(node.children, controls);
+    collectControls(node.children, sink);
   }
 }
 
@@ -216,7 +219,7 @@ function readBand(
   kind: OdbReportBand["kind"],
 ): OdbReportBand {
   const elements: OdbReportElement[] = [];
-  collectControls(element.children, elements);
+  collectControls(element.children, { controls: elements });
   const band: OdbReportBand = { kind, elements };
   const table = findChildElement(element.children, "table:table");
   const name =

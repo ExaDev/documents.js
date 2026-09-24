@@ -52,7 +52,7 @@ export type OdfResidueFormat =
 
 export function odfResidue(
   format: OdfResidueFormat,
-  ...elements: XmlElement[]
+  ...elements: readonly XmlElement[]
 ): SourceResidue {
   return { format, xml: buildXml(elements) };
 }
@@ -88,16 +88,22 @@ export const ODF_UNMAPPED_SHAPE_TAGS: ReadonlySet<string> = new Set([
 ]);
 
 // Collects the unmapped shape kinds and vendor-extension elements from a shape container the page walkers themselves walk — a draw:page's own children, recursing into draw:g exactly as the walkers do and no further (a draw:frame's own content is read content, not a sibling shape). This mirrors the walkers' own recursion boundary deliberately, so precisely the elements the walkers contribute nothing for are the elements collected here: no more (a frame's inner shapes belong to the frame's read) and no less (a connector inside a nested group is still collected).
+// The residue accumulator collectOdfUnmappedShapeResidue appends every unmapped shape element onto as it walks a page, recursing through draw:g groups. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable.
+export interface ShapeResidueSink {
+  readonly elements: XmlElement[];
+}
+
 export function collectOdfUnmappedShapeResidue(
   children: readonly XmlNode[],
-  out: XmlElement[],
+  sink: ShapeResidueSink,
 ): void {
+  const out = sink.elements;
   for (const node of children) {
     if (node.type !== "element") {
       continue;
     }
     if (node.tag === "draw:g") {
-      collectOdfUnmappedShapeResidue(node.children, out);
+      collectOdfUnmappedShapeResidue(node.children, sink);
     } else if (
       ODF_UNMAPPED_SHAPE_TAGS.has(node.tag) ||
       isOdfExtensionElement(node)
@@ -126,7 +132,7 @@ export function addOdfPackageResidue(
   out: Record<string, SourceResidue>,
   key: string,
   format: OdfResidueFormat,
-  ...elements: XmlElement[]
+  ...elements: readonly XmlElement[]
 ): void {
   if (elements.length === 0) {
     return;
@@ -1114,7 +1120,7 @@ export interface OdfDivisionWriteContext {
 // The inverse of odfDivisionDescriptor: wraps `children` (the construct's own extent, already written) in the text:section element the descriptor's structural fields state — name, protected, the column-count style, and the external-chapter link. Per this writer's own residue policy, the descriptor's own quarantined residue (text:section-source's text:filter-name) is never re-emitted; only the structural facts document-schema.js's DivisionDescriptor actually names are written.
 export function writeOdfDivision(
   descriptor: DivisionDescriptor,
-  children: XmlNode[],
+  children: readonly XmlNode[],
   context: OdfDivisionWriteContext,
 ): XmlElement {
   const attributes: Record<string, string> = {};
@@ -1174,7 +1180,7 @@ export function odfIndexWrapperTag(
 // The inverse of odfIndexControlDescriptor: the wrapper element (odfIndexWrapperTag above) carrying text:name, a BARE *-source child, and wrapping `children` (the control's own cached extent) in a text:index-body — exactly the shape isOdfIndexWrapper/odfIndexControlDescriptor read back. The *-source child is written empty rather than omitted: the ODF schema requires every real index wrapper to carry one (it states the index's own build rules — outline levels, sort keys, entry formatting), so an instance with no *-source child at all would not merely be missing decoration, it would be incomplete ODF a real consumer may refuse to open. Its own CONTENT (the build rules themselves) is still never re-emitted, per this writer's residue policy — only a bare, attribute-less instance of the required element, which is what keeps this wrapper valid AND keeps a second write of the same document able to recover the identical tag again (odfIndexWrapperTag reads the bare child back exactly as it would a fuller one).
 export function writeOdfIndexWrapper(
   descriptor: ContentControlDescriptor,
-  children: XmlNode[],
+  children: readonly XmlNode[],
 ): XmlElement {
   const tag = odfIndexWrapperTag(descriptor);
   const attributes: Record<string, string> = {};

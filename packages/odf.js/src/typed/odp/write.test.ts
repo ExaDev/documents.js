@@ -43,12 +43,12 @@ function shape(
   };
 }
 
-function slide(shapes: ContentShape[], notes = ""): ContentSlide {
-  return { size: SLIDE_SIZE_WIDESCREEN, shapes, notes };
+function slide(shapes: readonly ContentShape[], notes = ""): ContentSlide {
+  return { size: SLIDE_SIZE_WIDESCREEN, shapes: [...shapes], notes };
 }
 
-function documentOf(slides: ContentSlide[]): ContentDocument {
-  return { kind: "presentation", metadata: {}, slides };
+function documentOf(slides: readonly ContentSlide[]): ContentDocument {
+  return { kind: "presentation", metadata: {}, slides: [...slides] };
 }
 
 function partRoot(pkg: Package, path: string): XmlElement {

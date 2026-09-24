@@ -66,11 +66,13 @@ type WordprocessingDocument = Extract<
   { kind: "wordprocessing" }
 >;
 
-function documentOf(blocks: ContentBlock[]): WordprocessingDocument {
+function documentOf(blocks: readonly ContentBlock[]): WordprocessingDocument {
   return {
     kind: "wordprocessing",
     metadata: {},
-    sections: [{ pageSize: PAGE_SIZE_A4, margins: MARGINS, blocks }],
+    sections: [
+      { pageSize: PAGE_SIZE_A4, margins: MARGINS, blocks: [...blocks] },
+    ],
   };
 }
 
@@ -501,12 +503,12 @@ type SpreadsheetDocument = Extract<ContentDocument, { kind: "spreadsheet" }>;
 
 function sheetOf(
   name: string,
-  cells: ContentSheetCell[],
+  cells: readonly ContentSheetCell[],
   overrides: Partial<ContentSheet> = {},
 ): ContentSheet {
   return {
     name,
-    cells,
+    cells: [...cells],
     columns: [],
     rows: [],
     images: [],
@@ -515,8 +517,8 @@ function sheetOf(
   };
 }
 
-function sheetDocumentOf(sheets: ContentSheet[]): SpreadsheetDocument {
-  return { kind: "spreadsheet", metadata: {}, sheets };
+function sheetDocumentOf(sheets: readonly ContentSheet[]): SpreadsheetDocument {
+  return { kind: "spreadsheet", metadata: {}, sheets: [...sheets] };
 }
 
 function sheetRoundTrip(document: ContentDocument): SpreadsheetDocument {
@@ -1049,12 +1051,14 @@ function shapeOf(
   };
 }
 
-function slideOf(shapes: ContentShape[], notes = ""): ContentSlide {
-  return { size: SLIDE_SIZE_WIDESCREEN, shapes, notes };
+function slideOf(shapes: readonly ContentShape[], notes = ""): ContentSlide {
+  return { size: SLIDE_SIZE_WIDESCREEN, shapes: [...shapes], notes };
 }
 
-function presentationDocumentOf(slides: ContentSlide[]): PresentationDocument {
-  return { kind: "presentation", metadata: {}, slides };
+function presentationDocumentOf(
+  slides: readonly ContentSlide[],
+): PresentationDocument {
+  return { kind: "presentation", metadata: {}, slides: [...slides] };
 }
 
 function presentationRoundTrip(
@@ -1309,15 +1313,15 @@ function drawShapeOf(
 }
 
 function drawPageOf(
-  vectors: ContentVector[],
-  shapes: ContentShape[] = [],
+  vectors: readonly ContentVector[],
+  shapes: readonly ContentShape[] = [],
   size = SXD_PAGE_SIZE_LANDSCAPE,
 ): ContentDrawPage {
-  return { size, shapes, vectors };
+  return { size, shapes: [...shapes], vectors: [...vectors] };
 }
 
-function drawingDocumentOf(pages: ContentDrawPage[]): DrawingDocument {
-  return { kind: "drawing", metadata: {}, pages };
+function drawingDocumentOf(pages: readonly ContentDrawPage[]): DrawingDocument {
+  return { kind: "drawing", metadata: {}, pages: [...pages] };
 }
 
 function drawingRoundTrip(document: ContentDocument): DrawingDocument {

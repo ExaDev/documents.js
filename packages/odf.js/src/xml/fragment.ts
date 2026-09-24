@@ -5,13 +5,13 @@ import type { Attribute, XmlElement, XmlNode, XmlText } from "../model/node";
 // Attribute values must already be XML-encoded (see entities.ts's encodeXmlText) — el() does not encode them, since this package's own model stores every string raw (processEntities:false) and never encodes on write.
 export function el(
   tag: string,
-  attrs: Record<string, string> = {},
-  children: XmlNode[] = [],
+  attrs: Readonly<Record<string, string>> = {},
+  children: readonly XmlNode[] = [],
 ): XmlElement {
   const attributes: Attribute[] = Object.entries(attrs).map(
     ([name, value]) => ({ name, value }),
   );
-  return { type: "element", tag, attributes, children };
+  return { type: "element", tag, attributes, children: [...children] };
 }
 
 // value must already be XML-encoded — see the note on el() above.

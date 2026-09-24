@@ -28,15 +28,15 @@ const BLUE = rgbHexToColor("#0033ff");
 const PAGE_SIZE_LANDSCAPE = { widthPt: 720, heightPt: 540 };
 
 function page(
-  vectors: ContentVector[],
-  shapes: ContentShape[] = [],
+  vectors: readonly ContentVector[],
+  shapes: readonly ContentShape[] = [],
   size = PAGE_SIZE_LANDSCAPE,
 ): ContentDrawPage {
-  return { size, shapes, vectors };
+  return { size, shapes: [...shapes], vectors: [...vectors] };
 }
 
-function documentOf(pages: ContentDrawPage[]): ContentDocument {
-  return { kind: "drawing", metadata: {}, pages };
+function documentOf(pages: readonly ContentDrawPage[]): ContentDocument {
+  return { kind: "drawing", metadata: {}, pages: [...pages] };
 }
 
 function shape(

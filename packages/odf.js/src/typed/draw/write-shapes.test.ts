@@ -20,7 +20,7 @@ import {
 // This module had no direct unit tests at all — every function here was only exercised indirectly through typed/odp/write.test.ts and typed/odg/write.test.ts's own whole-document round-trip suites, which (see typed/shared/canonicalise.ts's own top-of-file note) cannot observe a mutation that changes what gets WRITTEN in a way the reader's own inverse tolerates.
 
 function freshListState(): ListPlanState {
-  return { next: 1 };
+  return { cursor: { next: 1 } };
 }
 
 function writeState(): {
@@ -183,9 +183,9 @@ describe("planShapeContent", () => {
       ],
       listState,
     );
-    expect(listState.openNumId).toBeDefined();
+    expect(listState.cursor.openNumId).toBeDefined();
     planShapeContent([paragraphBlock("b")], listState);
-    expect(listState.openNumId).toBeUndefined();
+    expect(listState.cursor.openNumId).toBeUndefined();
   });
 
   it("canonicalises list membership onto a fresh numId for a new shape's first paragraph, even when its incoming numId string happens to match a still-open run from before this call", () => {

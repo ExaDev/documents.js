@@ -219,7 +219,9 @@ describe("parseContentValidationCondition", () => {
   });
 });
 
-function contentValidationsElement(...validations: ReturnType<typeof el>[]) {
+function contentValidationsElement(
+  ...validations: readonly ReturnType<typeof el>[]
+) {
   return el("office:spreadsheet", {}, [
     el("table:content-validations", {}, validations),
   ]);

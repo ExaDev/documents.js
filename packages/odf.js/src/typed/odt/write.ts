@@ -243,7 +243,7 @@ function emptyAnchorParagraph(pageBreakBefore: boolean): ContentParagraph {
 function planSection(
   section: ContentSection,
   needsLeadingParagraph: boolean,
-  listState: ListPlanState,
+  listState: Readonly<ListPlanState>,
   definitions: Readonly<Record<string, DefinitionEntry>> | undefined,
   changeIds: ReadonlyMap<ProvenanceDescriptor, string> | undefined,
 ): PlannedSection {
@@ -359,7 +359,7 @@ function planDocument(
       "writeOdt: a wordprocessing document with no sections has no page geometry to write — an .odt always carries at least one page style, and inventing one would report back a section the document never had",
     );
   }
-  const listState: ListPlanState = { next: 1 };
+  const listState: ListPlanState = { cursor: { next: 1 } };
   return sections.map((section, index) =>
     planSection(section, index > 0, listState, definitions, changeIds),
   );
@@ -469,8 +469,8 @@ interface OdtWriteState {
 
 function pageLayoutElement(
   name: string,
-  pageSize: PageSize,
-  margins: Margins,
+  pageSize: Readonly<PageSize>,
+  margins: Readonly<Margins>,
 ): XmlElement {
   return el("style:page-layout", { "style:name": encodeXmlText(name) }, [
     el("style:page-layout-properties", {
@@ -601,14 +601,20 @@ interface OpenOdtConstruct {
 }
 
 // Writes one planned section's blocks into office:text's own child list (or, once a division/index wrapper is open, into that wrapper's own accumulating children instead — see the construct stack below). The paragraph elements are built first and the list grouping is layered over them, because a paragraph does not know it is in a list — ODF membership is the containers around it (see typed/shared/list.ts), so grouping is this walk's job rather than the paragraph writer's.
+// The child list a section's blocks are written into: office:text's own children, or an open division/index wrapper's. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable.
+interface NodeSink {
+  readonly nodes: XmlNode[];
+}
+
 function writeSectionBlocks(
   section: PlannedSection,
   parentStyleName: string | undefined,
   state: OdtWriteState,
-  out: XmlNode[],
+  sink: NodeSink,
   definitions: Readonly<Record<string, DefinitionEntry>> | undefined,
   changeIds: ReadonlyMap<ProvenanceDescriptor, string> | undefined,
 ): void {
+  const out = sink.nodes;
   // The paragraph the next image anchors into: an image is a draw:frame inside a paragraph, and planSection has already guaranteed one exists before any image.
   let anchorParagraph: XmlElement | undefined;
   // The list run currently open. Its text:list element is pushed into the current output array as soon as the run starts, so document order is settled immediately, and its contents are filled in when the run closes — the nesting structure of a list is a fact about the whole run (a level-2 item lives inside the item before it), which no per-paragraph append could decide on its own. A construct boundary always closes it first (see the constructStart/constructEnd branches below), matching how a table already does.
@@ -942,7 +948,7 @@ export function writeOdtContent(
       section,
       index === 0 ? undefined : `MP${index + 1}Start`,
       state,
-      textElement.children,
+      { nodes: textElement.children },
       definitions,
       changeIds,
     );

@@ -16,7 +16,7 @@ import {
 // Grammar verified against a real LibreOffice-generated .odp: a presentation's own draw:frame-wrapped table uses table:table/table:table-column/table:table-row/table:table-cell/table:covered-table-cell, column width via table:table-column's own table:style-name -> a style:family="table-column" style:style's style:table-column-properties/@style:column-width, row height the analogous table:family="table-row"/style:table-row-properties/@style:row-height — and, notably, a real saved table frame carries an EXTRA sibling draw:image (an .svm fallback preview) alongside table:table, which shapes.ts's own readDrawFrameContent (not this module) is responsible for not mistaking for the frame's real content.
 
 function contentPackage(
-  automaticStyleChildren: XmlElement[] = [],
+  automaticStyleChildren: readonly XmlElement[] = [],
 ): Package["parts"][string] {
   return {
     kind: "xml",
@@ -62,7 +62,7 @@ function cellStyle(name: string, backgroundHex: string): XmlElement {
 
 function cellBorderStyle(
   name: string,
-  cellPropertyAttrs: Record<string, string>,
+  cellPropertyAttrs: Readonly<Record<string, string>>,
 ): XmlElement {
   return el(
     "style:style",
@@ -73,7 +73,7 @@ function cellBorderStyle(
 
 function cell(
   text: string,
-  extraAttrs: Record<string, string> = {},
+  extraAttrs: Readonly<Record<string, string>> = {},
 ): XmlElement {
   return el("table:table-cell", extraAttrs, [el("text:p", {}, [txt(text)])]);
 }
@@ -456,7 +456,7 @@ describe("readOdfTable: repeat-count edge cases (readRepeatCount)", () => {
 });
 
 describe("readCellStyleDecoration", () => {
-  function cellPropsStyle(attrs: Record<string, string>): XmlElement {
+  function cellPropsStyle(attrs: Readonly<Record<string, string>>): XmlElement {
     return el("style:table-cell-properties", attrs);
   }
 

@@ -62,7 +62,7 @@ export interface OdpWriteOptions {
 
 function canonicalSlide(
   slide: ContentSlide,
-  listState: ListPlanState,
+  listState: Readonly<ListPlanState>,
   definitions: Readonly<Record<string, DefinitionEntry>> | undefined,
   changeIds: ReadonlyMap<ProvenanceDescriptor, string> | undefined,
 ): ContentSlide {
@@ -84,7 +84,7 @@ export function normaliseOdpContent(
       `normaliseOdpContent: expected a 'presentation' document, got '${document.kind}'`,
     );
   }
-  const listState: ListPlanState = { next: 1 };
+  const listState: ListPlanState = { cursor: { next: 1 } };
   return {
     kind: "presentation",
     metadata: canonicalMetadata(document.metadata),
@@ -97,7 +97,10 @@ export function normaliseOdpContent(
 // --- the writer -----------------------------------------------------------------------------------------------------
 
 // One slide's own style:page-layout, mirroring typed/odt/write.ts's own pageLayoutElement minus margins — ContentSlide carries no margins concept at all (a presentation's own shapes are positioned absolutely, never flowed inside a margin box the way an odt paragraph is).
-function slidePageLayoutElement(name: string, pageSize: PageSize): XmlElement {
+function slidePageLayoutElement(
+  name: string,
+  pageSize: Readonly<PageSize>,
+): XmlElement {
   return el("style:page-layout", { "style:name": encodeXmlText(name) }, [
     el("style:page-layout-properties", {
       "fo:page-width": formatOdfLength(pageSize.widthPt),
@@ -116,19 +119,24 @@ const NOTES_FRAME_BOX: Box = { xPt: 42, yPt: 320, widthPt: 500, heightPt: 260 };
 // THE ONE THING THAT MAKES THIS ELEMENT WORK AT ALL, and the reason it once appeared not to: presentation:notes and its frame's presentation:class are the only presentation:-prefixed names any writer in this package emits, and package-io/scaffold.ts's ODF_DOCUMENT_PREFIXES did not declare that prefix. The part was therefore not namespace-well-formed XML (`xmllint --noout content.xml`: "Namespace prefix presentation on notes is not defined"), and real LibreOffice, rather than rejecting the file, imported it with the notes element unrecognised and RE-HOMED its text onto the slide's own visible shape list — so every slide's speaker notes rendered on the slide itself and its notes page came back empty. That looked exactly like an AutoLayout placeholder-binding heuristic refusing to bind a minimal notes frame, and was recorded here as one; it was a missing xmlns declaration. With the prefix declared, `soffice --headless --convert-to fodp` puts the notes back inside presentation:notes where they were written, the slide carries only its own shapes again, and `--convert-to pdf` renders no notes text on the slide page.
 //
 // The lesson is structural, not about this one prefix: nothing between a writer and the emitted bytes checks that a qualified name's prefix is bound, so this failure mode is silent by construction and round-trips perfectly through this package's own prefix-string-matching reader. package-io/namespace-declarations.test.ts now audits every prefix every writer emits against what its part's root declares, which is what catches the next one.
-interface NotesPageLayoutState {
+// The minted notes page-layout name, cached so the layout element is emitted once. Nested inside its own holder rather than sitting directly on NotesPageLayoutState: the name is genuinely assigned on first mint, which a flat Readonly<NotesPageLayoutState> parameter could not express.
+interface NotesPageLayoutName {
   name: string | undefined;
+}
+
+interface NotesPageLayoutState {
+  readonly minted: NotesPageLayoutName;
 }
 
 function notesPageLayoutName(
   state: NotesPageLayoutState,
   stylesAutomaticStyles: XmlElement,
 ): string {
-  if (state.name !== undefined) {
-    return state.name;
+  if (state.minted.name !== undefined) {
+    return state.minted.name;
   }
   const name = "PM0";
-  state.name = name;
+  state.minted.name = name;
   stylesAutomaticStyles.children.push(
     el("style:page-layout", { "style:name": name }, [
       el("style:page-layout-properties", {
@@ -270,8 +278,10 @@ export function writeOdpContent(
     { definitions: options.definitions, changeIds },
   );
   // One counter across the WHOLE presentation, matching readOdpContent's own listIdState threading (typed/odp/read.ts) — two lists on different slides must mint different identities exactly as two lists in different sections of one odt body do.
-  const listState: ListPlanState = { next: 1 };
-  const notesPageLayout: NotesPageLayoutState = { name: undefined };
+  const listState: ListPlanState = { cursor: { next: 1 } };
+  const notesPageLayout: NotesPageLayoutState = {
+    minted: { name: undefined },
+  };
 
   document.slides.forEach((slide, index) => {
     const masterPageName = `MP${index + 1}`;

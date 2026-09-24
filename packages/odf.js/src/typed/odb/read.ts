@@ -151,10 +151,16 @@ function readConnectionInfo(
 }
 
 // Walks db:queries' own db:query/db:query-collection children (recursively, since a query can sit inside an arbitrarily nested named group — per the OASIS schema's own db-queries define), collecting each db:query's own db:name, db:command, and (when present) db:escape-processing — see this module's own top-of-file note on why db:command is read now. db:command is entity-decoded (xml/entities.ts's decodeXmlText) before being returned, the same "projected plain-text content" treatment every other typed reader in this package already gives a real XML text value — odf.js's own lossless model keeps entities raw for round-trip fidelity (processEntities:false), and OdbQueryInfo.command is exactly the boundary where that raw encoding needs to be undone (real SQL like `SELECT * FROM "Customers"` is stored in content.xml as `&quot;Customers&quot;`). A query missing either its name or its command (malformed — both are mandatory per the schema) is skipped rather than returned half-populated, matching this reader's general "malformed-but-salvageable degrades, never fabricates" posture. A db:query-collection's own db:name (a folder-like grouping) is never itself collected as a query definition.
+// The query accumulator collectQueryDefinitions appends each db:query onto as it walks db:query-collection groups. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable.
+interface QueryDefinitionSink {
+  readonly definitions: OdbQueryInfo[];
+}
+
 function collectQueryDefinitions(
   container: XmlElement,
-  definitions: OdbQueryInfo[],
+  sink: QueryDefinitionSink,
 ): void {
+  const definitions = sink.definitions;
   for (const child of container.children) {
     if (child.type !== "element") {
       continue;
@@ -177,7 +183,7 @@ function collectQueryDefinitions(
             },
       );
     } else if (child.tag === "db:query-collection") {
-      collectQueryDefinitions(child, definitions);
+      collectQueryDefinitions(child, sink);
     }
   }
 }
@@ -227,16 +233,19 @@ function collectTableNames(databaseElement: XmlElement): string[] {
 }
 
 // db:forms / db:reports -> OdbComponentInfo[], walking db:component-collection groups recursively and collecting only their db:component leaves (never a collection's own db:name, matching collectQueryDefinitions' treatment of db:query-collection above). A db:component missing either db:name or xlink:href — both mandatory per the OASIS schema — is skipped rather than returned half-populated, the same "malformed-but-salvageable degrades, never fabricates" posture this reader applies to a db:query missing its command. The href is entity-decoded like every other projected string value here; a trailing "/" (never emitted by real LibreOffice output, which writes a bare "forms/Obj11") is trimmed so a caller always sees one canonical path shape.
-function collectComponents(
-  container: XmlElement,
-  components: OdbComponentInfo[],
-): void {
+// The component accumulator collectComponents appends each db:component leaf onto as it walks db:component-collection groups. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable.
+interface ComponentSink {
+  readonly components: OdbComponentInfo[];
+}
+
+function collectComponents(container: XmlElement, sink: ComponentSink): void {
+  const components = sink.components;
   for (const child of container.children) {
     if (child.type !== "element") {
       continue;
     }
     if (child.tag === "db:component-collection") {
-      collectComponents(child, components);
+      collectComponents(child, sink);
       continue;
     }
     if (child.tag !== "db:component") {
@@ -276,7 +285,7 @@ function readComponents(
     return [];
   }
   const components: OdbComponentInfo[] = [];
-  collectComponents(container, components);
+  collectComponents(container, { components });
   return components;
 }
 
@@ -327,7 +336,7 @@ export function readOdbInventory(pkg: Package): OdbInventory {
     "db:queries",
   );
   if (queriesElement !== undefined) {
-    collectQueryDefinitions(queriesElement, queries);
+    collectQueryDefinitions(queriesElement, { definitions: queries });
   }
 
   const tables = collectTableNames(databaseElement);

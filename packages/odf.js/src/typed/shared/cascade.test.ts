@@ -11,7 +11,7 @@ import {
 } from "./cascade";
 
 function contentPackage(
-  automaticStyleChildren: XmlNode[] = [],
+  automaticStyleChildren: readonly XmlNode[] = [],
 ): Package["parts"][string] {
   return {
     kind: "xml",
@@ -24,8 +24,8 @@ function contentPackage(
 }
 
 function stylesPackage(
-  officeStylesChildren: XmlElement[] = [],
-  automaticStyleChildren: XmlElement[] = [],
+  officeStylesChildren: readonly XmlElement[] = [],
+  automaticStyleChildren: readonly XmlElement[] = [],
 ): Package["parts"][string] {
   const children: XmlElement[] = [
     el("office:styles", {}, officeStylesChildren),
@@ -39,8 +39,8 @@ function stylesPackage(
 function styleStyle(
   name: string,
   family: string,
-  extra: Record<string, string>,
-  children: XmlElement[] = [],
+  extra: Readonly<Record<string, string>>,
+  children: readonly XmlElement[] = [],
 ): XmlElement {
   return el(
     "style:style",
@@ -49,11 +49,11 @@ function styleStyle(
   );
 }
 
-function textProps(attrs: Record<string, string>): XmlElement {
+function textProps(attrs: Readonly<Record<string, string>>): XmlElement {
   return el("style:text-properties", attrs);
 }
 
-function paragraphProps(attrs: Record<string, string>): XmlElement {
+function paragraphProps(attrs: Readonly<Record<string, string>>): XmlElement {
   return el("style:paragraph-properties", attrs);
 }
 
@@ -74,7 +74,7 @@ describe("findNamedStylePartElement", () => {
   function drawResource(
     tag: string,
     name: string,
-    extra: Record<string, string> = {},
+    extra: Readonly<Record<string, string>> = {},
   ): XmlElement {
     return el(tag, { "draw:name": name, ...extra });
   }

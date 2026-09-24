@@ -48,12 +48,12 @@ const DEFAULT_PRINT_SETTINGS = {
 };
 
 function sheetOf(
-  cells: ContentSheetCell[],
+  cells: readonly ContentSheetCell[],
   overrides: Partial<ContentSheet> = {},
 ): ContentSheet {
   return {
     name: "Sheet1",
-    cells,
+    cells: [...cells],
     columns: [],
     rows: [],
     images: [],
@@ -62,8 +62,8 @@ function sheetOf(
   };
 }
 
-function documentOf(sheets: ContentSheet[]): ContentDocument {
-  return { kind: "spreadsheet", metadata: {}, sheets };
+function documentOf(sheets: readonly ContentSheet[]): ContentDocument {
+  return { kind: "spreadsheet", metadata: {}, sheets: [...sheets] };
 }
 
 function partRoot(pkg: Package, path: string): XmlElement {

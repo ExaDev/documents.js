@@ -33,7 +33,7 @@ function readPage(page: XmlElement, pkg: Package): ContentDrawPage {
   const { shapes, vectors } = readDrawPageContent(page.children, pkg);
   // The page's own residue: the unmapped shape kinds and vendor-extension elements, collected over the same draw:g-only recursion boundary readDrawPageContent itself walks.
   const unmapped: XmlElement[] = [];
-  collectOdfUnmappedShapeResidue(page.children, unmapped);
+  collectOdfUnmappedShapeResidue(page.children, { elements: unmapped });
   const source =
     unmapped.length > 0 ? odfResidue("odg", ...unmapped) : undefined;
   return { size, shapes, vectors, ...(source !== undefined ? { source } : {}) };

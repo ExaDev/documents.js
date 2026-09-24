@@ -26,11 +26,11 @@ import { writeOdtContent } from "./write";
 
 const MARGINS = { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 };
 
-function section(blocks: ContentBlock[]): ContentSection {
-  return { pageSize: PAGE_SIZE_A4, margins: MARGINS, blocks };
+function section(blocks: readonly ContentBlock[]): ContentSection {
+  return { pageSize: PAGE_SIZE_A4, margins: MARGINS, blocks: [...blocks] };
 }
 
-function documentOf(blocks: ContentBlock[]): ContentDocument {
+function documentOf(blocks: readonly ContentBlock[]): ContentDocument {
   return {
     kind: "wordprocessing",
     metadata: {},

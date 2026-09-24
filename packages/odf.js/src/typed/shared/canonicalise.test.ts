@@ -287,7 +287,7 @@ describe("canonicalParagraph", () => {
 });
 
 function freshListState(): ListPlanState {
-  return { next: 1 };
+  return { cursor: { next: 1 } };
 }
 
 describe("canonicalCell", () => {

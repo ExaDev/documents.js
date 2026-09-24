@@ -402,12 +402,14 @@ function betweenClause(
 }
 
 /** The table:condition attribute value for one rule, "of:"-prefixed the way every real producer spells the OpenFormula namespace. Returns undefined when the rule carries no condition this grammar can state at all — a custom rule with no formula, a list with no list body, or a textLength rule with no comparison — in which case the writer emits no table:condition attribute, exactly the shape whose absence the read side itself degrades to a bare custom rule. An operator whose operand is missing degrades the same way rather than emitting a clause the read side would reject: the same partial-parse tolerance readContentValidation already shows in the other direction. */
-export function synthesiseContentValidationCondition(rule: {
-  type: ContentSheetDataValidationType;
-  operator?: SheetRuleOperator;
-  formula1?: string;
-  formula2?: string;
-}): string | undefined {
+export function synthesiseContentValidationCondition(
+  rule: Readonly<{
+    type: ContentSheetDataValidationType;
+    operator?: SheetRuleOperator;
+    formula1?: string;
+    formula2?: string;
+  }>,
+): string | undefined {
   switch (rule.type) {
     case "list":
       return rule.formula1 === undefined

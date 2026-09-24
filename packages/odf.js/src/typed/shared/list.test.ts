@@ -20,7 +20,9 @@ import {
   type ListPlanState,
 } from "./list";
 
-function packageWithAutomaticStyles(...listStyles: XmlElement[]): Package {
+function packageWithAutomaticStyles(
+  ...listStyles: readonly XmlElement[]
+): Package {
   return {
     parts: {
       "content.xml": {
@@ -130,10 +132,10 @@ describe("resolveOdfListKind", () => {
 
 describe("mintOdfListNumId", () => {
   it("mints an unprefixed numId when the list carries no resolvable style", () => {
-    const state: OdfListIdState = { next: 1 };
+    const state: OdfListIdState = { counter: { next: 1 } };
     const numId = mintOdfListNumId({ parts: {} }, el("text:list"), state);
     expect(numId).toBe("list1");
-    expect(state.next).toBe(2);
+    expect(state.counter.next).toBe(2);
   });
 
   it("mints an ordered:-prefixed numId when the list's style resolves to ordered", () => {
@@ -141,21 +143,21 @@ describe("mintOdfListNumId", () => {
       el("text:list-level-style-number", { "text:level": "1" }),
     ]);
     const pkg = packageWithAutomaticStyles(style);
-    const state: OdfListIdState = { next: 3 };
+    const state: OdfListIdState = { counter: { next: 3 } };
     const numId = mintOdfListNumId(
       pkg,
       el("text:list", { "text:style-name": "L1" }),
       state,
     );
     expect(numId).toBe("ordered:list3");
-    expect(state.next).toBe(4);
+    expect(state.counter.next).toBe(4);
   });
 
   it("advances the counter by exactly one per call, regardless of resolution", () => {
-    const state: OdfListIdState = { next: 1 };
+    const state: OdfListIdState = { counter: { next: 1 } };
     mintOdfListNumId({ parts: {} }, el("text:list"), state);
     mintOdfListNumId({ parts: {} }, el("text:list"), state);
-    expect(state.next).toBe(3);
+    expect(state.counter.next).toBe(3);
   });
 });
 
@@ -301,26 +303,24 @@ describe("canonicalNumId", () => {
 });
 
 function freshListState(): ListPlanState {
-  return { next: 1 };
+  return { cursor: { next: 1 } };
 }
 
 describe("planListMembership / closeListPlan", () => {
   it("undefined membership closes the run and returns undefined", () => {
     const state: ListPlanState = {
-      next: 5,
-      openNumId: "x",
-      openCanonicalNumId: "list4",
+      cursor: { next: 5, openNumId: "x", openCanonicalNumId: "list4" },
     };
     expect(planListMembership(undefined, state)).toBeUndefined();
-    expect(state.openNumId).toBeUndefined();
-    expect(state.openCanonicalNumId).toBeUndefined();
+    expect(state.cursor.openNumId).toBeUndefined();
+    expect(state.cursor.openCanonicalNumId).toBeUndefined();
   });
 
   it("a fresh incoming numId mints a fresh canonical numId and advances the counter", () => {
     const state = freshListState();
     const result = planListMembership({ numId: "src-a", level: 0 }, state);
     expect(result).toBe("list1");
-    expect(state.next).toBe(2);
+    expect(state.cursor.next).toBe(2);
   });
 
   it("consecutive paragraphs sharing one incoming numId extend the same run", () => {
@@ -328,7 +328,7 @@ describe("planListMembership / closeListPlan", () => {
     const first = planListMembership({ numId: "src-a", level: 0 }, state);
     const second = planListMembership({ numId: "src-a", level: 1 }, state);
     expect(second).toBe(first);
-    expect(state.next).toBe(2);
+    expect(state.cursor.next).toBe(2);
   });
 
   it("a changed incoming numId mints a new canonical numId", () => {
@@ -336,14 +336,14 @@ describe("planListMembership / closeListPlan", () => {
     const first = planListMembership({ numId: "src-a", level: 0 }, state);
     const second = planListMembership({ numId: "src-b", level: 0 }, state);
     expect(second).not.toBe(first);
-    expect(state.next).toBe(3);
+    expect(state.cursor.next).toBe(3);
   });
 
   it("a membership carrying no incoming numId still opens a real run of its own, keyed on the sentinel", () => {
     const state = freshListState();
     const first = planListMembership({ level: 0 }, state);
     expect(first).toBeDefined();
-    expect(state.openNumId).toBe(NO_NUM_ID_KEY);
+    expect(state.cursor.openNumId).toBe(NO_NUM_ID_KEY);
     // Two consecutive bare-numId paragraphs still extend the same run.
     const second = planListMembership({ level: 1 }, state);
     expect(second).toBe(first);
@@ -351,13 +351,11 @@ describe("planListMembership / closeListPlan", () => {
 
   it("closeListPlan clears both openNumId and openCanonicalNumId", () => {
     const state: ListPlanState = {
-      next: 1,
-      openNumId: "x",
-      openCanonicalNumId: "list0",
+      cursor: { next: 1, openNumId: "x", openCanonicalNumId: "list0" },
     };
     closeListPlan(state);
-    expect(state.openNumId).toBeUndefined();
-    expect(state.openCanonicalNumId).toBeUndefined();
+    expect(state.cursor.openNumId).toBeUndefined();
+    expect(state.cursor.openCanonicalNumId).toBeUndefined();
   });
 
   it("after closeListPlan, the same incoming numId mints a genuinely new run rather than extending the old one", () => {

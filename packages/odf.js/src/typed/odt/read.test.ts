@@ -313,7 +313,7 @@ describe("readOdtContent: master pages after the first, and header/footer conten
   function masterPage(
     name: string,
     pageLayoutName: string,
-    children: XmlElement[] = [],
+    children: readonly XmlElement[] = [],
   ): XmlElement {
     return el(
       "style:master-page",
@@ -336,9 +336,9 @@ describe("readOdtContent: master pages after the first, and header/footer conten
   }
 
   function packageWith(
-    textChildren: XmlElement[],
-    automaticStyles: XmlElement[] = [],
-    landscapeChildren: XmlElement[] = [],
+    textChildren: readonly XmlElement[],
+    automaticStyles: readonly XmlElement[] = [],
+    landscapeChildren: readonly XmlElement[] = [],
   ): Package {
     return {
       parts: {

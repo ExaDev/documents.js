@@ -184,8 +184,8 @@ describe("readOdbReport: form-and-report.odb (real LibreOffice Report Builder ou
 
 describe("readOdbReport: synthetic report shapes", () => {
   function reportPackage(
-    reportChildren: ReturnType<typeof el>[],
-    reportAttrs: Record<string, string> = {},
+    reportChildren: readonly ReturnType<typeof el>[],
+    reportAttrs: Readonly<Record<string, string>> = {},
   ): Package {
     return {
       parts: {

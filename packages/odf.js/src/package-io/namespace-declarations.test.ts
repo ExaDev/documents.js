@@ -57,11 +57,16 @@ interface PrefixUse {
   readonly where: string;
 }
 
+interface PrefixUseSink {
+  readonly uses: PrefixUse[];
+}
+
 function collectPrefixUses(
   nodes: readonly XmlNode[],
   path: string,
-  out: PrefixUse[],
+  sink: PrefixUseSink,
 ): void {
+  const out = sink.uses;
   for (const node of nodes) {
     if (node.type !== "element") {
       continue;
@@ -80,7 +85,7 @@ function collectPrefixUses(
         });
       }
     }
-    collectPrefixUses(node.children, here, out);
+    collectPrefixUses(node.children, here, sink);
   }
 }
 
@@ -97,7 +102,7 @@ function undeclaredPrefixUses(pkg: Package): string[] {
     }
     const declared = declaredPrefixes(root);
     const uses: PrefixUse[] = [];
-    collectPrefixUses(part.nodes, partPath, uses);
+    collectPrefixUses(part.nodes, partPath, { uses });
     for (const use of uses) {
       if (!declared.has(use.prefix)) {
         failures.push(`${use.where} uses undeclared prefix "${use.prefix}:"`);
