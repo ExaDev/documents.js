@@ -45,30 +45,61 @@ export function canonicalise(value: unknown): unknown {
   return value;
 }
 
+const HEX_RADIX = 16;
+const HEX_DIGITS_PER_BYTE = 2;
+
 function sha256Hex(bytes: Uint8Array): string {
   const digest = sha256(bytes);
   let hex = "";
-  for (const byte of digest) hex += byte.toString(16).padStart(2, "0");
+  for (const byte of digest)
+    hex += byte.toString(HEX_RADIX).padStart(HEX_DIGITS_PER_BYTE, "0");
   return hex;
 }
 
-// SHA-256, FIPS 180-4. Hand-rolled over Uint8Array/DataView with 32-bit integer arithmetic only — no Node crypto, no async SubtleCrypto — so the hash helper stays a synchronous, Worker-isomorphic plain function. Test vectors for the empty string and 'abc' are pinned in hash.test.ts against the specification's own published digests.
-const K = [
-  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
-  0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
-  0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786,
-  0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147,
-  0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
-  0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
-  0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a,
-  0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
-  0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
-] as const;
+// SHA-256, FIPS 180-4. Hand-rolled over Uint8Array/DataView with 32-bit integer arithmetic only: no Node crypto, no async SubtleCrypto, so the hash helper stays a synchronous, Worker-isomorphic plain function. Test vectors for the empty string and 'abc' are pinned in hash.test.ts against the specification's own published digests.
+const WORD_BITS = 32;
+const BITS_PER_BYTE = 8;
+const BYTES_PER_WORD = WORD_BITS / BITS_PER_BYTE; // 4: a 32-bit word is 4 bytes.
+const UINT32_MODULUS = 2 ** WORD_BITS;
+const SHA256_ROUNDS = 64; // FIPS 180-4's own round count, and the message schedule's own word count.
+const DIGEST_WORDS = 8; // h0..h7.
+
+function isPrime(candidate: number): boolean {
+  for (let divisor = 2; divisor * divisor <= candidate; divisor++) {
+    if (candidate % divisor === 0) return false;
+  }
+  return true;
+}
+
+// The first `count` primes, starting at 2. Trial division is more than fast enough here: this only ever runs at module load to seed K and H_INIT below, over the first 64 primes (the largest is 311).
+function firstPrimes(count: number): number[] {
+  const primes: number[] = [];
+  let candidate = 2;
+  while (primes.length < count) {
+    if (isPrime(candidate)) primes.push(candidate);
+    candidate += 1;
+  }
+  return primes;
+}
+
+// The first 32 bits of a positive real number's own fractional part, as an unsigned 32-bit integer.
+function fractionalBits(value: number): number {
+  const fraction = value - Math.floor(value);
+  return Math.floor(fraction * UINT32_MODULUS) >>> 0;
+}
+
+// FIPS 180-4 section 4.2.2's own 64 round constants: the first 32 bits of the fractional part of the cube root of each of the first 64 primes. Derived here from that definition, rather than transcribed as a literal table, so the values are provably what the specification defines rather than a copy that could silently diverge from it; verified byte-for-byte against the specification's own published table before this derivation replaced it, and cross-checked indirectly on every run by hash.test.ts's pinned digests for the empty string and 'abc'.
+const K = firstPrimes(SHA256_ROUNDS).map((prime) =>
+  fractionalBits(Math.cbrt(prime)),
+);
+
+// FIPS 180-4 section 5.3.3's own published initial hash values: the first 32 bits of the fractional part of the square root of each of the first 8 primes. Same derivation reasoning as K above.
+const H_INIT = firstPrimes(DIGEST_WORDS).map((prime) =>
+  fractionalBits(Math.sqrt(prime)),
+);
 
 function rotr(x: number, n: number): number {
-  return ((x >>> n) | (x << (32 - n))) >>> 0;
+  return ((x >>> n) | (x << (WORD_BITS - n))) >>> 0;
 }
 
 // Writes the SHA-256 length suffix — the message's own bit length as a big-endian 64-bit integer — at `offset` in `view`. Split out from sha256 below so the arithmetic (only observable once a message exceeds 2^32 bits, ~512 MiB, an input size no unit test can afford to allocate and hash) is exercisable directly against an arbitrary `bitLength` number rather than requiring an actual multi-hundred-megabyte byte array to reach it. Exported for exactly that test.
@@ -77,8 +108,8 @@ export function writeBitLength(
   offset: number,
   bitLength: number,
 ): void {
-  view.setUint32(offset, Math.floor(bitLength / 4294967296));
-  view.setUint32(offset + 4, bitLength >>> 0);
+  view.setUint32(offset, Math.floor(bitLength / UINT32_MODULUS));
+  view.setUint32(offset + BYTES_PER_WORD, bitLength >>> 0);
 }
 
 // Bounds-checked in place of a bare `w[i] = value`: Uint32Array silently drops an out-of-range write and returns `undefined` (not a throw) for an out-of-range read, so a loop bound weakened by one (i <= 64 instead of i < 64) would otherwise write to index 64 — one past `w`'s own 64-element length — with no observable effect at all, since nothing ever reads that index back. Throwing here is what turns that boundary into a genuine, catchable failure instead of a silently-absorbed no-op. Split out from sha256 below, the same reason writeBitLength above is: no legitimate call through sha256's own correctly-bounded loop can ever reach the throw, so it needs a direct unit test calling this function itself with an out-of-range index. Exported for exactly that test.
@@ -95,32 +126,75 @@ export function writeScheduleWord(
   w[i] = value;
 }
 
+const BLOCK_SIZE_LOG2 = 6; // 64-byte (512-bit) blocks, kept as its own power-of-two exponent for the round-up bit trick below.
+const BLOCK_SIZE_BYTES = 1 << BLOCK_SIZE_LOG2;
+const WORDS_PER_BLOCK = BLOCK_SIZE_BYTES / BYTES_PER_WORD; // 16
+const LENGTH_SUFFIX_BYTES = 2 * BYTES_PER_WORD; // 8: the appended 64-bit big-endian bit-length.
+const PADDING_MARKER_BYTE = 0x80;
+const DIGEST_BYTES = DIGEST_WORDS * BYTES_PER_WORD; // 32
+
+// Rotation/shift amounts for FIPS 180-4 section 4.1.2's four named functions. Sigma0/Sigma1 (capital) operate on the compression loop's `a`/`e`; sigma0/sigma1 (small) operate on the message schedule's `w15`/`w2`.
+const SIGMA0_ROTR_A = 2;
+const SIGMA0_ROTR_B = 13;
+const SIGMA0_ROTR_C = 22;
+const SIGMA1_ROTR_A = 6;
+const SIGMA1_ROTR_B = 11;
+const SIGMA1_ROTR_C = 25;
+const SMALL_SIGMA0_ROTR_A = 7;
+const SMALL_SIGMA0_ROTR_B = 18;
+const SMALL_SIGMA0_SHR = 3;
+const SMALL_SIGMA1_ROTR_A = 17;
+const SMALL_SIGMA1_ROTR_B = 19;
+const SMALL_SIGMA1_SHR = 10;
+
+// FIPS 180-4 section 6.2.2 step 1's own message-schedule recurrence: Wt = sigma1(W[t-2]) + W[t-7] + sigma0(W[t-15]) + W[t-16].
+const SCHEDULE_LOOKBACK_16 = 16;
+const SCHEDULE_LOOKBACK_15 = 15;
+const SCHEDULE_LOOKBACK_7 = 7;
+
 export function sha256(bytes: Uint8Array): Uint8Array {
-  const bitLength = bytes.length * 8;
-  // Pad to a multiple of 512 bits: append 0x80, zeros, then the original bit length as a big-endian 64-bit integer. Every practical input is far below 2^53 bits, so the high 32 bits are Math.floor(bitLength / 2^32) and the low 32 are bitLength >>> 0.
-  const paddedLength = (((bytes.length + 8) >> 6) + 1) << 6;
+  const bitLength = bytes.length * BITS_PER_BYTE;
+  // Pad to a multiple of 512 bits: append the 0x80 marker byte, zeros, then the original bit length as a big-endian 64-bit integer. Every practical input is far below 2^53 bits, so the high 32 bits are Math.floor(bitLength / 2^32) and the low 32 are bitLength >>> 0.
+  const paddedLength =
+    (((bytes.length + LENGTH_SUFFIX_BYTES) >> BLOCK_SIZE_LOG2) + 1) <<
+    BLOCK_SIZE_LOG2;
   const padded = new Uint8Array(paddedLength);
   padded.set(bytes);
-  padded[bytes.length] = 0x80;
+  padded[bytes.length] = PADDING_MARKER_BYTE;
   const view = new DataView(padded.buffer);
-  writeBitLength(view, paddedLength - 8, bitLength);
-  let h0 = 0x6a09e667;
-  let h1 = 0xbb67ae85;
-  let h2 = 0x3c6ef372;
-  let h3 = 0xa54ff53a;
-  let h4 = 0x510e527f;
-  let h5 = 0x9b05688c;
-  let h6 = 0x1f83d9ab;
-  let h7 = 0x5be0cd19;
-  const w = new Uint32Array(64);
-  for (let offset = 0; offset < paddedLength; offset += 64) {
-    for (let i = 0; i < 16; i++) w[i] = view.getUint32(offset + i * 4);
-    for (let i = 16; i < 64; i++) {
-      const w15 = w[i - 15]!;
+  writeBitLength(view, paddedLength - LENGTH_SUFFIX_BYTES, bitLength);
+  let h0 = H_INIT[0]!;
+  let h1 = H_INIT[1]!;
+  let h2 = H_INIT[2]!;
+  let h3 = H_INIT[3]!;
+  let h4 = H_INIT[4]!;
+  let h5 = H_INIT[5]!;
+  let h6 = H_INIT[6]!;
+  let h7 = H_INIT[7]!;
+  const w = new Uint32Array(K.length);
+  for (let offset = 0; offset < paddedLength; offset += BLOCK_SIZE_BYTES) {
+    for (let i = 0; i < WORDS_PER_BLOCK; i++)
+      w[i] = view.getUint32(offset + i * BYTES_PER_WORD);
+    for (let i = WORDS_PER_BLOCK; i < K.length; i++) {
+      const w15 = w[i - SCHEDULE_LOOKBACK_15]!;
       const w2 = w[i - 2]!;
-      const s0 = rotr(w15, 7) ^ rotr(w15, 18) ^ (w15 >>> 3);
-      const s1 = rotr(w2, 17) ^ rotr(w2, 19) ^ (w2 >>> 10);
-      writeScheduleWord(w, i, (w[i - 16]! + s0 + w[i - 7]! + s1) >>> 0);
+      const s0 =
+        rotr(w15, SMALL_SIGMA0_ROTR_A) ^
+        rotr(w15, SMALL_SIGMA0_ROTR_B) ^
+        (w15 >>> SMALL_SIGMA0_SHR);
+      const s1 =
+        rotr(w2, SMALL_SIGMA1_ROTR_A) ^
+        rotr(w2, SMALL_SIGMA1_ROTR_B) ^
+        (w2 >>> SMALL_SIGMA1_SHR);
+      writeScheduleWord(
+        w,
+        i,
+        (w[i - SCHEDULE_LOOKBACK_16]! +
+          s0 +
+          w[i - SCHEDULE_LOOKBACK_7]! +
+          s1) >>>
+          0,
+      );
     }
     let a = h0;
     let b = h1;
@@ -130,11 +204,17 @@ export function sha256(bytes: Uint8Array): Uint8Array {
     let f = h5;
     let g = h6;
     let h = h7;
-    for (let i = 0; i < 64; i++) {
-      const s1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+    for (let i = 0; i < K.length; i++) {
+      const s1 =
+        rotr(e, SIGMA1_ROTR_A) ^
+        rotr(e, SIGMA1_ROTR_B) ^
+        rotr(e, SIGMA1_ROTR_C);
       const ch = (e & f) ^ (~e & g);
       const temp1 = (h + s1 + ch + K[i]! + w[i]!) >>> 0;
-      const s0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+      const s0 =
+        rotr(a, SIGMA0_ROTR_A) ^
+        rotr(a, SIGMA0_ROTR_B) ^
+        rotr(a, SIGMA0_ROTR_C);
       const maj = (a & b) ^ (a & c) ^ (b & c);
       const temp2 = (s0 + maj) >>> 0;
       h = g;
@@ -155,15 +235,11 @@ export function sha256(bytes: Uint8Array): Uint8Array {
     h6 = (h6 + g) >>> 0;
     h7 = (h7 + h) >>> 0;
   }
-  const digest = new Uint8Array(32);
+  const digest = new Uint8Array(DIGEST_BYTES);
   const out = new DataView(digest.buffer);
-  out.setUint32(0, h0);
-  out.setUint32(4, h1);
-  out.setUint32(8, h2);
-  out.setUint32(12, h3);
-  out.setUint32(16, h4);
-  out.setUint32(20, h5);
-  out.setUint32(24, h6);
-  out.setUint32(28, h7);
+  const words = [h0, h1, h2, h3, h4, h5, h6, h7];
+  for (const [index, word] of words.entries()) {
+    out.setUint32(index * BYTES_PER_WORD, word);
+  }
   return digest;
 }
