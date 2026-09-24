@@ -171,6 +171,10 @@ export interface RegionSignals {
   readonly hasHeaderLikeRow: boolean;
 }
 
+// The header-row heuristic's own pair of thresholds, see computeSignals' own comment below for what each half of the pair rules out on its own.
+const HEADER_ROW_TEXT_FRACTION_MIN = 0.8;
+const HEADER_ROW_NUMERIC_OTHER_ROW_MIN = 0.5;
+
 // Computes the statistics classifyRegion's heuristics read. Each is a plain, cheap-to-explain measurement over the region's own cells — no external corpus, no learned weights, just the signals a human skimming the sheet would themselves reach for.
 export function computeSignals(
   cells: readonly ContentSheetCell[],
@@ -256,9 +260,6 @@ const SIGNAL_THRESHOLD = 0.35;
 const MIXED_MARGIN = 0.15;
 // A cell whose average string length reaches this many characters is treated as fully "sentence-like" for the prose signal (a short label like a header cell contributes far less prose evidence than a genuine sentence of commentary); chosen as a rough sentence-fragment length, not a corpus-fitted constant.
 const PROSE_LENGTH_NORM = 40;
-// The header-row heuristic's own pair of thresholds, see computeSignals' own comment above for what each half of the pair rules out on its own.
-const HEADER_ROW_TEXT_FRACTION_MIN = 0.8;
-const HEADER_ROW_NUMERIC_OTHER_ROW_MIN = 0.5;
 // classifyRegion's own hand-tuned scoring weights, one group per candidate classification.
 const TABLE_ROW_REGULARITY_WEIGHT = 0.5;
 const TABLE_HEADER_ROW_WEIGHT = 0.3;
