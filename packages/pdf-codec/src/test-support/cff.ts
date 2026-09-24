@@ -90,7 +90,7 @@ export const ROS_OPERANDS_AND_OPERATOR = [
 ];
 
 // A DICT operand always written in the 5-byte 32-bit integer form (spec Table 3, operand 29), so an offset operand occupies the same space whatever its value — which is what lets the builder below lay a whole font out in one pass rather than iterating until the Top DICT's own size stops changing.
-function dictInt32(value: number): number[] {
+export function dictInt32(value: number): number[] {
   return [
     29,
     (value >>> 24) & 0xff,
@@ -245,11 +245,17 @@ export function cffFontWithCharstrings(options: {
   readonly charStrings: readonly (readonly number[])[];
   readonly globalSubrs?: readonly (readonly number[])[];
   readonly localSubrs?: readonly (readonly number[])[]; // presence alone (even []) adds a Private DICT with a Subrs operator
+  // Overrides the four header bytes every other fixture uses. Downstream offsets are laid out from this array's own length, so a fixture claiming a different hdrSize still places its INDEXes consistently with what it claims.
+  readonly header?: readonly number[];
+  // Replaces the default Private DICT bytes (a lone Subrs operator) while keeping the Top DICT's own Private operands pointing at whatever is supplied, for fixtures that need a malformed or Subrs-less Private DICT rather than none at all.
+  readonly privateDict?: readonly number[];
 }): Uint8Array<ArrayBuffer> {
+  const header = options.header ?? CFF_HEADER;
   const nameIndex = cffIndex([[...new TextEncoder().encode(options.name)]]);
   const stringIndex = cffIndex([]);
   const globalSubrIndex = cffIndex(options.globalSubrs ?? []);
-  const hasPrivate = options.localSubrs !== undefined;
+  const hasPrivate =
+    options.localSubrs !== undefined || options.privateDict !== undefined;
 
   // Every Top DICT operand below is the fixed-width 5-byte 32-bit form (dictInt32), so the Top DICT's own byte length — and therefore topDictIndexSize — depends only on which operators are present, never on the offset values those operators end up carrying. That is what lets every downstream offset be computed in one pass instead of iterating until a size stops changing.
   const topDictEntrySize = hasPrivate
@@ -260,14 +266,17 @@ export function cffFontWithCharstrings(options: {
   ]).length;
 
   const afterGlobalSubrs =
-    CFF_HEADER.length +
+    header.length +
     nameIndex.length +
     topDictIndexSize +
     stringIndex.length +
     globalSubrIndex.length;
 
   // A Private DICT holding only a Subrs operator (19), whose own offset is relative to the Private DICT's own start (spec Table 23) — fixed at the Private DICT's own byte length, since the Local Subrs INDEX immediately follows it. The Private DICT itself starts right where the Global Subr INDEX ends.
-  const privateDictBytes = [...dictInt32(6), 19];
+  const privateDictBytes =
+    options.privateDict === undefined
+      ? [...dictInt32(6), 19]
+      : [...options.privateDict];
   // Narrowed directly on options.localSubrs itself, not on the separately-computed hasPrivate boolean above — hasPrivate is already defined as this exact check, so a `?? []` fallback here could never actually fire; checking the real value lets TypeScript rule that branch out entirely instead of leaving an always-unreachable default in the code.
   const localSubrIndex =
     options.localSubrs === undefined ? [] : cffIndex(options.localSubrs);
@@ -290,7 +299,7 @@ export function cffFontWithCharstrings(options: {
   const charStringsIndex = cffIndex(options.charStrings);
 
   return new Uint8Array([
-    ...CFF_HEADER,
+    ...header,
     ...nameIndex,
     ...cffIndex([topDict]),
     ...stringIndex,
