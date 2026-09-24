@@ -3155,10 +3155,12 @@ describe("buildPageMarginsElement/ptToInches: writes the genuine points-to-inche
 });
 
 describe("buildPageSetupElement: paperSize vs paperWidth/paperHeight, orientation, and scale/fitToWidth/fitToHeight defaults", () => {
-  function pageSetupOf(pageSize: {
-    widthPt: number;
-    heightPt: number;
-  }): XmlElement {
+  function pageSetupOf(
+    pageSize: Readonly<{
+      widthPt: number;
+      heightPt: number;
+    }>,
+  ): XmlElement {
     const pkg = buildXlsxPackageFromContent({
       kind: "spreadsheet",
       metadata: {},
@@ -3580,8 +3582,8 @@ describe("buildXlsxPackageFromContent: [Content_Types].xml carries no chart/tabl
 });
 
 describe("buildXlsxPackageFromContent: workbook, relationship, and shared-string part exactness", () => {
-  function documentOfSheets(sheets: ContentSheet[]): ContentDocument {
-    return { kind: "spreadsheet", metadata: {}, sheets };
+  function documentOfSheets(sheets: readonly ContentSheet[]): ContentDocument {
+    return { kind: "spreadsheet", metadata: {}, sheets: [...sheets] };
   }
 
   it("numbers each sheet element, its worksheet relationship, and its worksheet part sequentially", () => {
@@ -4012,11 +4014,11 @@ describe("buildXlsxPackageFromContent: styles part scaffolding counts and exact 
 });
 
 describe("buildXlsxPackageFromContent: the names array and the derived print names reconcile by name and scope", () => {
-  function workbookWithNames(names: ContentDefinedName[]): Package {
+  function workbookWithNames(names: readonly ContentDefinedName[]): Package {
     return buildXlsxPackageFromContent({
       kind: "spreadsheet",
       metadata: {},
-      names,
+      names: [...names],
       sheets: [
         {
           name: "Printed",

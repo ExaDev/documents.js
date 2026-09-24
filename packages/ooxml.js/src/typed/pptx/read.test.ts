@@ -96,7 +96,12 @@ const CHART_REL =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart";
 
 function rels(
-  entries: { id: string; type: string; target: string; external?: boolean }[],
+  entries: readonly {
+    id: string;
+    type: string;
+    target: string;
+    external?: boolean;
+  }[],
 ): XmlElement {
   return el(
     "Relationships",
@@ -887,7 +892,7 @@ function solidFillEl(hex: string): XmlElement {
 
 function textCell(
   text: string,
-  attrs: Record<string, string> = {},
+  attrs: Readonly<Record<string, string>> = {},
 ): XmlElement {
   return el("a:tc", attrs, [
     el("a:txBody", {}, [
@@ -898,7 +903,7 @@ function textCell(
 
 // A covered a:tc: hMerge/vMerge state which side of the region it lies on, and its own a:tcPr (when given) carries the decoration. The a:txBody is the empty one PowerPoint itself writes for a covered position.
 function coveredCell(
-  attrs: Record<string, string>,
+  attrs: Readonly<Record<string, string>>,
   tcPrChildren: readonly XmlElement[] | undefined,
 ): XmlElement {
   return el("a:tc", attrs, [
@@ -1710,10 +1715,12 @@ describe("readPptxContent: internal slide-jump links (a:hlinkClick to a slide)",
   });
 
   // readInternalSlideJump's own condition needs BOTH a non-External targetMode and a slide-typed relationship — neither alone is sufficient. A run resolving to a relationship of the slide type but marked External (unusual, but distinct from the ordinary "no TargetMode at all" internal spelling every other fixture here uses) must still read as no jump, exactly like the ordinary external-hyperlink case, proving the targetMode check pulls its own weight rather than being implied by the type check beside it.
-  function edgeCaseJumpPackage(rel: {
-    type: string;
-    external?: boolean;
-  }): Package {
+  function edgeCaseJumpPackage(
+    rel: Readonly<{
+      type: string;
+      external?: boolean;
+    }>,
+  ): Package {
     const shape = el("p:sp", {}, [
       el("p:nvSpPr", {}, [
         el("p:cNvPr", { id: "2", name: "Edge" }),
@@ -1892,12 +1899,12 @@ describe("readPptxContent: chart graphic frames", () => {
 
 // A SmartArt graphic frame's dgm:relIds carries four relationship ids; only r:dm (the data model — the semantic graph of nodes and text) is read. The tree below: doc -> [Strategy (node 1, srcOrd 0), Cost (node 2, srcOrd 1), textless (node 4, srcOrd 2), Assistant (asst 5, srcOrd 3)], with Strategy -> [Quality/Details (node 3), a parTrans point whose text must not surface]. cxnLst order is deliberately scrambled against srcOrd to prove the sort, and a presOf edge to node 2 must not duplicate its text (readDiagramText in src/typed/pptx/diagram.ts).
 function smartArtFixturePackage(): Package {
-  const para = (...runs: XmlElement[]) => el("a:p", {}, runs);
+  const para = (...runs: readonly XmlElement[]) => el("a:p", {}, runs);
   const r = (text: string) => el("a:r", {}, [el("a:t", {}, [txt(text)])]);
   const textPt = (
     modelId: string,
     type: string | undefined,
-    paragraphs: XmlElement[],
+    paragraphs: readonly XmlElement[],
   ): XmlElement =>
     el("dgm:pt", type === undefined ? { modelId } : { modelId, type }, [
       el("dgm:t", {}, [el("a:bodyPr"), el("a:lstStyle"), ...paragraphs]),
@@ -2508,7 +2515,9 @@ describe("readPptxContent: paragraph outline levels", () => {
 });
 
 // A single-slide deck with no layout/master/theme at all — readSlide tolerates a slide whose own relationships name no slideLayout, simply resolving no cascade/geometry inheritance, so these minimal packages isolate one shape's own paragraph/run/table-cell properties without needing the full cascade chain buildFixturePackage sets up.
-function minimalSlidePackage(shapes: ReturnType<typeof el>[]): Package {
+function minimalSlidePackage(
+  shapes: readonly ReturnType<typeof el>[],
+): Package {
   const slide = el("p:sld", {}, [
     el("p:cSld", {}, [el("p:spTree", {}, shapes)]),
   ]);
@@ -2536,7 +2545,7 @@ function minimalSlidePackage(shapes: ReturnType<typeof el>[]): Package {
 }
 
 function firstShapeParagraph(
-  shapes: ReturnType<typeof el>[],
+  shapes: readonly ReturnType<typeof el>[],
 ): ContentParagraph {
   const doc = readPptxContent(minimalSlidePackage(shapes));
   return asParagraph(doc.slides[0]?.shapes[0]?.blocks[0]);
@@ -2629,7 +2638,7 @@ describe("readPptxContent: paragraph alignment, every token distinctly", () => {
 });
 
 describe("readPptxContent: run underline/strikethrough exact val tokens", () => {
-  function runProps(rPrAttrs: Record<string, string>) {
+  function runProps(rPrAttrs: Readonly<Record<string, string>>) {
     const para = firstShapeParagraph([
       textShape(
         el("a:p", {}, [
@@ -2785,9 +2794,9 @@ describe("readPptxContent: a:br within a paragraph", () => {
 
 // A standalone table graphicFrame, built without buildFixturePackage's own layout/master chain, so a single cell's border/fill/rotation behaviour can be isolated the same way minimalSlidePackage isolates a paragraph's own properties elsewhere in this file.
 function minimalTableGraphicFrame(
-  gridCols: ReturnType<typeof el>[],
-  rows: ReturnType<typeof el>[],
-  xfrmAttrs: Record<string, string> = {},
+  gridCols: readonly ReturnType<typeof el>[],
+  rows: readonly ReturnType<typeof el>[],
+  xfrmAttrs: Readonly<Record<string, string>> = {},
 ): ReturnType<typeof el> {
   return el("p:graphicFrame", {}, [
     el("p:nvGraphicFramePr", {}, [el("p:cNvPr", { id: "2", name: "Table 1" })]),
@@ -2818,7 +2827,7 @@ function readOnlyTableCell(frame: ReturnType<typeof el>): ContentTableCell {
 
 describe("readPptxContent: a table cell's borders object carries only the edges that actually resolved", () => {
   function cellFrame(
-    tcPrChildren: ReturnType<typeof el>[],
+    tcPrChildren: readonly ReturnType<typeof el>[],
   ): ReturnType<typeof el> {
     const cell = el("a:tc", {}, [
       el("a:tcPr", {}, tcPrChildren),
@@ -2861,7 +2870,7 @@ describe("readPptxContent: a table cell's borders object carries only the edges 
 
 describe("readPptxContent: a:pattFill's own foreground/background colours are included only when they resolve", () => {
   function patternCell(
-    pattFillChildren: ReturnType<typeof el>[],
+    pattFillChildren: readonly ReturnType<typeof el>[],
   ): ContentTableCell {
     return readOnlyTableCell(
       minimalTableGraphicFrame(
@@ -3015,7 +3024,7 @@ describe("readPptxContent: a table column with no @w at all", () => {
 
 describe("readPptxContent: a graphic frame's own rotation, composed the same way a shape's is", () => {
   function tableFrameWith(
-    xfrmAttrs: Record<string, string>,
+    xfrmAttrs: Readonly<Record<string, string>>,
   ): ReturnType<typeof el> {
     return minimalTableGraphicFrame(
       [el("a:gridCol", { w: "914400" })],
@@ -3105,7 +3114,7 @@ function notesPrecedenceFixturePackage(): Package {
     id: string,
     name: string,
     ph: Record<string, string> | undefined,
-    runs: ReturnType<typeof el>[],
+    runs: readonly ReturnType<typeof el>[],
   ) =>
     el("p:sp", {}, [
       el("p:nvSpPr", {}, [

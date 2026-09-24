@@ -67,7 +67,7 @@ function approximatelyEquals(a: number, b: number): boolean {
 }
 
 export function pageSizeToPaperSizeCode(
-  pageSize: PageSize,
+  pageSize: Readonly<PageSize>,
 ): string | undefined {
   if (
     approximatelyEquals(pageSize.widthPt, PAGE_SIZE_LETTER.widthPt) &&

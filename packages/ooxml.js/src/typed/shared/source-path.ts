@@ -4,7 +4,7 @@ import type { ContentBlock } from "document-schema.js";
 //
 // The two construct-boundary markers are skipped rather than pathed: a marker is a boundary, not content, so document-schema.js gives it no sourcePath field at all (see ContentConstructStartSchema's own rationale). Their positions still count towards the indices of the blocks around them, since the path names a block's real position in the array it lives in.
 export function assignSourcePaths(
-  blocks: ContentBlock[],
+  blocks: readonly ContentBlock[],
   prefix: string,
 ): void {
   blocks.forEach((block, blockIndex) => {

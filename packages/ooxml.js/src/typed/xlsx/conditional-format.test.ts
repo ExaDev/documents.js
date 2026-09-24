@@ -16,7 +16,7 @@ function hasOwn(obj: object, key: string): boolean {
 function worksheetWithRule(
   sqref: string,
   cfRule: ReturnType<typeof el>,
-  dxfs: ReturnType<typeof el>[] = [],
+  dxfs: readonly ReturnType<typeof el>[] = [],
 ): {
   formats: ContentSheetConditionalFormat[];
   residueElements: ReturnType<typeof el>[];
@@ -197,7 +197,7 @@ describe("readCfvo: exact type-token membership", () => {
   });
 });
 
-function colorScaleFormats(cfvoAndColor: ReturnType<typeof el>[]) {
+function colorScaleFormats(cfvoAndColor: readonly ReturnType<typeof el>[]) {
   return worksheetWithRule(
     "A1:B2",
     el("cfRule", { type: "colorScale", priority: "1" }, [

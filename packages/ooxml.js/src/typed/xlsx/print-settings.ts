@@ -33,7 +33,7 @@ const DEFAULT_FIT_TO_PAGES = 1;
 
 // pageSetup@orientation ("portrait" | "landscape" | "default", ECMA-376's own default being "default" i.e. printer-decided, treated here as portrait) tells a reader whether the paper size it just resolved (via paperSize code or explicit paperWidth/paperHeight, both of which are defined in the paper's own PORTRAIT dimensions) needs its width/height swapped to reflect the sheet's actual printed orientation — confirmed necessary for round-trip consistency with this module's own write side, which derives pageSetup@orientation the opposite direction (from whether widthPt > heightPt) in typed/xlsx/build.ts.
 function applyOrientation(
-  pageSize: PageSize,
+  pageSize: Readonly<PageSize>,
   pageSetup: XmlElement | undefined,
 ): PageSize {
   const orientation =

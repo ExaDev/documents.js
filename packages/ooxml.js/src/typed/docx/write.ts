@@ -718,12 +718,12 @@ interface InternalLinkExtent {
 //
 // No wrap-overlap bookkeeping is needed for the internal-link wraps themselves, and an earlier version that tracked wrapped index ranges was removed: nesting is already impossible by construction here. A link crossing or contained in an earlier link's wrap has its start or end run sitting inside that wrap's w:hyperlink element, so `first`/`last` never both resolve and the guard below skips it; a link CONTAINING an earlier one cannot be processed after it, because the sort order (ascending start, then longer extent first at a shared start) always reaches the containing extent first. Index-range overlap tracking in addition to that could only ever fire on links whose slices are genuinely disjoint (adjacent links, whose stale pre-wrap indices still intersect), losing a descriptor the writer could have written.
 function wrapInternalLinks(
-  elements: XmlElement[],
+  elements: readonly XmlElement[],
   positions: RunPositions,
   links: readonly InternalLinkExtent[],
 ): XmlElement[] {
   // No links-length early return: the loop below handles an empty list identically (zero iterations, out still the input array), so the guard would only be a second spelling of the same fact.
-  let out = elements;
+  let out: readonly XmlElement[] = elements;
   for (const link of [...links].sort(
     (a, b) => a.startRun - b.startRun || b.endRun - a.endRun,
   )) {
@@ -756,7 +756,7 @@ function wrapInternalLinks(
       ...out.slice(last + 1),
     ];
   }
-  return out;
+  return [...out];
 }
 
 // readDocxContent lifts a paragraph's own images out into sibling blocks after it, so the inverse puts each one back into the run it came out of: the paragraph's trailing empty-text runs, in order, are exactly the runs a drawing-only run reads back as. An image with no such run left takes a fresh one.
@@ -1334,7 +1334,10 @@ function insertAfterProperties(
   paragraph.children.splice(offset, 0, ...runs);
 }
 
-function buildFieldNodes(instruction: string, content: XmlNode[]): XmlNode[] {
+function buildFieldNodes(
+  instruction: string,
+  content: readonly XmlNode[],
+): XmlNode[] {
   const first = findParagraph(content, false);
   const last = findParagraph(content, true);
   if (first === undefined || last === undefined) {
@@ -1346,13 +1349,13 @@ function buildFieldNodes(instruction: string, content: XmlNode[]): XmlNode[] {
   }
   insertAfterProperties(first, fieldOpeningRuns(instruction));
   last.children.push(fieldCharRun("end"));
-  return content;
+  return [...content];
 }
 
 // `provenance` is the ambient tracked change, if any, this construct sits inside — a bookmark, content control, or field nested inside a tracked-change range does not interrupt that change, since it wraps at a different level (block-sibling markers, or an element around the extent) that coexists with the change wrapping the paragraphs' own marks and runs underneath. Every branch but the provenance one itself threads the ambient value straight through to whatever paragraphs its own content eventually reaches; the provenance branch replaces it with its own descriptor for its own extent, the ordinary nesting rule for two constructs of the same kind.
 function buildConstructNodes(
   descriptor: ConstructDescriptor,
-  children: FlowItem[],
+  children: readonly FlowItem[],
   state: WriteState,
   deleted: boolean,
   provenance: ProvenanceDescriptor | undefined,
@@ -1794,11 +1797,17 @@ function buildSectionProperties(
 }
 
 // A mid-document section break rides on the last paragraph of the section it closes — the shape readSections reads it back from, which keeps that paragraph as content rather than adding one. That paragraph is not necessarily nodes' own last element: a bookmark closing the section trails a childless w:bookmarkEnd marker, and a content control closing it wraps its content in w:sdt, so findParagraph (searching from the end, the same way buildFieldNodes locates a field's own paragraphs) descends through whatever construct wrapper sits last to find the real one. Only the final section's w:sectPr is a direct child of w:body; a section with no paragraph anywhere in its flow gets an empty one to carry the break.
+// The body node list attachSectionBreak appends a fresh sectPr-carrying paragraph onto when the section's own content ends without a paragraph to hang the break on. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable.
+interface NodeSink {
+  readonly nodes: XmlNode[];
+}
+
 function attachSectionBreak(
-  nodes: XmlNode[],
+  sink: NodeSink,
   section: ContentSection,
   headerFooterReferences: readonly XmlElement[],
 ): void {
+  const nodes = sink.nodes;
   const properties = buildSectionProperties(section, headerFooterReferences);
   const target = findParagraph(nodes, true);
   if (target === undefined) {
@@ -1830,7 +1839,7 @@ function buildDocumentPart(
       bodyChildren.push(...nodes, buildSectionProperties(section, references));
       return;
     }
-    attachSectionBreak(nodes, section, references);
+    attachSectionBreak({ nodes }, section, references);
     bodyChildren.push(...nodes);
   });
   const root = el(

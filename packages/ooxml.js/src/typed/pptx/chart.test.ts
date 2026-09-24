@@ -9,15 +9,15 @@ function cPt(idx: string, value: string) {
   return el("c:pt", { idx }, [el("c:v", {}, [txt(value)])]);
 }
 
-function numCache(...pts: ReturnType<typeof cPt>[]) {
+function numCache(...pts: readonly ReturnType<typeof cPt>[]) {
   return el("c:numCache", {}, pts);
 }
 
-function ser(...children: ReturnType<typeof el>[]) {
+function ser(...children: readonly ReturnType<typeof el>[]) {
   return el("c:ser", {}, children);
 }
 
-function chartRootWith(...ser_: ReturnType<typeof el>[]) {
+function chartRootWith(...ser_: readonly ReturnType<typeof el>[]) {
   return el("c:chartSpace", {}, [
     el("c:chart", {}, [el("c:plotArea", {}, ser_)]),
   ]);

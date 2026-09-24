@@ -114,7 +114,7 @@ describe("hasCoreProperties", () => {
 });
 
 describe("patchCoreProperties", () => {
-  function packageWithCore(children: XmlElement[]): Package {
+  function packageWithCore(children: readonly XmlElement[]): Package {
     return packageWith(el("cp:coreProperties", {}, children), undefined);
   }
 

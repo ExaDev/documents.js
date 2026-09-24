@@ -438,7 +438,7 @@ export function composeGroupTransform(
 // Maps a child's local (chOff/chExt-relative) frame into the group's parent coordinate space — position AND, when the group carries a non-zero composite rotation or mirror (this group's own a:xfrm/@rot/@flipH/@flipV composed with its own ancestors, see composeGroupTransform), rotates/mirrors the mapped box's CENTRE about the group's own centre. Width/height are only ever scaled, never rotated: exactly like ContentShape.frame/rotationDeg elsewhere in this codebase, the returned Box is the shape's own UNROTATED extents, with orientation carried separately by whichever caller combines this group's own composite with the shape's local rotation (composeShapeRotationDeg, in src/typed/pptx/read.ts).
 export function applyGroupTransform(
   group: GroupChildTransform,
-  childFrame: Box,
+  childFrame: Readonly<Box>,
 ): Box {
   const scaleX =
     group.childExtWidthPt === 0 ? 1 : group.extWidthPt / group.childExtWidthPt;

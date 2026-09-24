@@ -439,12 +439,18 @@ interface LiftedElement {
 }
 
 // Collects every w:drawing and w:object found anywhere inside a paragraph's own content (nested inside w:r, w:hyperlink, w:ins, w:fldSimple), in document order. Deleted subtrees (w:del, w:moveFrom) are excluded unless the caller is carrying deletions — mirroring readParagraphRuns' own tracked-changes handling, since a deleted drawing's own w:r sits inside w:del alongside w:delText runs, and a drawing lifted out of a deletion the reader is not carrying would appear as live content. A w:object is pushed at its own position and then recursed into (with itself as the nesting owner), so a w:drawing nested inside it is still collected as an image in its own right, exactly as it was before embedded-object recovery existed.
+// The lifted-element accumulator collectLiftedElements appends each w:drawing/w:object onto as it walks a run's children. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable.
+interface LiftedElementSink {
+  readonly elements: LiftedElement[];
+}
+
 function collectLiftedElements(
   nodes: readonly XmlNode[],
   carryDeletions: boolean,
   owner: XmlElement | undefined,
-  out: LiftedElement[],
+  sink: LiftedElementSink,
 ): void {
+  const out = sink.elements;
   for (const node of nodes) {
     if (node.type !== "element") {
       continue;
@@ -460,10 +466,10 @@ function collectLiftedElements(
       if (node.tag === "w:drawing") {
         continue;
       }
-      collectLiftedElements(node.children, carryDeletions, node, out);
+      collectLiftedElements(node.children, carryDeletions, node, sink);
       continue;
     }
-    collectLiftedElements(node.children, carryDeletions, owner, out);
+    collectLiftedElements(node.children, carryDeletions, owner, sink);
   }
 }
 
@@ -509,7 +515,9 @@ function readParagraphLiftedBlocks(
   positions: ReadonlyMap<XmlElement, LiftedPosition>,
 ): ContentBlock[] {
   const lifted: LiftedElement[] = [];
-  collectLiftedElements(paragraph.children, carryDeletions, undefined, lifted);
+  collectLiftedElements(paragraph.children, carryDeletions, undefined, {
+    elements: lifted,
+  });
   const blocks: ContentBlock[] = [];
   for (const entry of lifted) {
     const block =
@@ -1781,8 +1789,8 @@ function readSections(
   ];
 
   function sliceSection(
-    pageSize: PageSize,
-    margins: Margins,
+    pageSize: Readonly<PageSize>,
+    margins: Readonly<Margins>,
     breakType: ContentSection["breakType"],
     from: number,
     to: number,

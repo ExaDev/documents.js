@@ -6,9 +6,14 @@ import {
 } from "./rule-residue";
 
 function elementWith(
-  attributes: { name: string; value: string }[],
+  attributes: readonly { name: string; value: string }[],
 ): XmlElement {
-  return { type: "element", tag: "cfRule", attributes, children: [] };
+  return {
+    type: "element",
+    tag: "cfRule",
+    attributes: [...attributes],
+    children: [],
+  };
 }
 
 describe("captureResidualAttributes", () => {

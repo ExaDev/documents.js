@@ -8,7 +8,7 @@ function lvlEl(
   ilvl: string,
   format: string,
   text: string,
-  options: { start?: string; restart?: string } = {},
+  options: Readonly<{ start?: string; restart?: string }> = {},
 ): XmlElement {
   const children = [
     el("w:numFmt", { "w:val": format }),
@@ -23,7 +23,7 @@ function lvlEl(
   return el("w:lvl", { "w:ilvl": ilvl }, children);
 }
 
-function packageWithNumbering(numberingNodes: XmlElement[]): Package {
+function packageWithNumbering(numberingNodes: readonly XmlElement[]): Package {
   return {
     parts: {
       "word/numbering.xml": {

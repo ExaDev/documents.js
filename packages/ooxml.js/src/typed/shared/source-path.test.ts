@@ -8,7 +8,7 @@ import type {
 } from "document-schema.js";
 import { assignSourcePaths } from "./source-path";
 
-function paragraph(...texts: string[]): ContentParagraph {
+function paragraph(...texts: readonly string[]): ContentParagraph {
   return { kind: "paragraph", runs: texts.map((text) => ({ text })) };
 }
 

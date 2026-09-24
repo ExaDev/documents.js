@@ -159,7 +159,10 @@ export function readNumberingDefinitions(pkg: Package): NumberingDefinitions {
 }
 
 // readNumberingDefinitions's inverse: one w:abstractNum per numId (rather than reconstructing whichever original numId->abstractNumId sharing a producer may have written, which NumberingDefinitions does not retain) with a w:num pointing straight at it, so every numId a paragraph's own ContentListMembership references resolves to exactly the level table it read from. CT_Lvl's own child sequence puts w:start before w:numFmt before w:lvlRestart before w:lvlText; w:start is always written explicitly (even at the default of 1), since NumberingLevel carries no flag for "was this the default" and the reader treats an explicit '1' identically to an absent element either way.
-function buildNumberingLevel(ilvl: string, level: NumberingLevel): XmlElement {
+function buildNumberingLevel(
+  ilvl: string,
+  level: Readonly<NumberingLevel>,
+): XmlElement {
   const children: XmlElement[] = [
     el("w:start", { "w:val": String(level.startAt) }),
     el("w:numFmt", { "w:val": encodeXmlText(level.format) }),

@@ -46,7 +46,7 @@ function drawingElement(
   containerTag: "wp:inline" | "wp:anchor",
   rId: string,
   altText: string,
-  extent: { cx: string; cy: string } = { cx: "914400", cy: "457200" },
+  extent: Readonly<{ cx: string; cy: string }> = { cx: "914400", cy: "457200" },
 ): XmlElement {
   return el("w:drawing", {}, [
     el(containerTag, {}, [
@@ -64,7 +64,12 @@ function drawingElement(
 }
 
 function rels(
-  entries: { id: string; type: string; target: string; external?: boolean }[],
+  entries: readonly {
+    id: string;
+    type: string;
+    target: string;
+    external?: boolean;
+  }[],
 ): XmlElement {
   return el(
     "Relationships",
@@ -1423,8 +1428,8 @@ describe("readDocxContent: lifted-image anchors (anchorRunIndex/anchorOffset)", 
 
 // An inline OLE object's real-world spelling: a w:r carries a w:object whose w:dxaOrig/w:dyaOrig (twips) size it, whose v:shape > v:imagedata names the raster preview picture rendered in its place (a VML spelling this reader has no path for, so the preview contributes no image block), and whose o:OLEObject names the payload part through its own relationship. The payload relationship is parameterised so a test can point rIdOle at whatever part shape it needs (the ZIP-payload case targets the default embeddings/oleObject1.xlsx; the classic-OLE case retargets to a .bin; the linked case goes external) — the fixture itself ships no embeddings part, so each test adds exactly the payload bytes it wants. extraRuns splices additional runs after the object run inside the same paragraph.
 function oleObjectFixturePackage(
-  oleRel: { target: string; external?: boolean },
-  extraRuns: XmlElement[] = [],
+  oleRel: Readonly<{ target: string; external?: boolean }>,
+  extraRuns: readonly XmlElement[] = [],
   dxaOrig = "1920",
 ): Package {
   const objectRun = el("w:r", {}, [
@@ -1633,21 +1638,30 @@ describe("readDocxContent: embedded OLE objects", () => {
 });
 
 // Every element with the given tag anywhere in the node forest — the write-side assertions below need to reach a w:object nested inside w:body > w:p > w:r, far below the part root.
-function findAllElements(
+interface ElementSink {
+  readonly found: XmlElement[];
+}
+
+function findAllElements(nodes: readonly XmlNode[], tag: string): XmlElement[] {
+  const sink: ElementSink = { found: [] };
+  collectElements(nodes, tag, sink);
+  return sink.found;
+}
+
+function collectElements(
   nodes: readonly XmlNode[],
   tag: string,
-  out: XmlElement[] = [],
-): XmlElement[] {
+  sink: ElementSink,
+): void {
   for (const node of nodes) {
     if (node.type !== "element") {
       continue;
     }
     if (node.tag === tag) {
-      out.push(node);
+      sink.found.push(node);
     }
-    findAllElements(node.children, tag, out);
+    collectElements(node.children, tag, sink);
   }
-  return out;
 }
 
 describe("embedded OLE objects: write-side round trip", () => {
@@ -3223,7 +3237,7 @@ describe("readDocxContent: table span and row-height edge cases", () => {
     ).toBeUndefined();
   });
 
-  function headerFlagsOf(rows: XmlElement[]): (boolean | undefined)[] {
+  function headerFlagsOf(rows: readonly XmlElement[]): (boolean | undefined)[] {
     const table = el("w:tbl", {}, [
       el("w:tblGrid", {}, [el("w:gridCol", { "w:w": "1440" })]),
       ...rows,
@@ -3233,7 +3247,7 @@ describe("readDocxContent: table span and row-height edge cases", () => {
     ).rows.map((row) => row.isHeader);
   }
 
-  function rowWithTrPr(children: XmlElement[]): XmlElement {
+  function rowWithTrPr(children: readonly XmlElement[]): XmlElement {
     return el("w:tr", {}, [
       el("w:trPr", {}, children),
       el("w:tc", {}, [el("w:p", {}, [textRun("a")])]),
@@ -3275,7 +3289,7 @@ describe("readDocxContent: table span and row-height edge cases", () => {
 });
 
 describe("readDocxContent: block-level bookmarks, duplicate ids, and out-of-order halves", () => {
-  function flowDoc(children: XmlElement[]) {
+  function flowDoc(children: readonly XmlElement[]) {
     const body = el("w:body", {}, [
       ...children,
       el("w:sectPr", {}, [el("w:pgSz", { "w:w": "12240", "w:h": "15840" })]),
@@ -4056,7 +4070,9 @@ describe("readDocxContent: complex-field instruction accumulation", () => {
 
 describe("readDocxContent: discovery-order tie-breaks between constructs sharing one extent range", () => {
   // Several constructs can bracket the identical block range (two bookmarks around one paragraph, a bookmark around a content control, a content control around a tracked paragraph). Their emission order at the shared boundary is the source's own discovery order, carried by the walk's order counter — these tests pin that order exactly, because a marker pair emitted in the wrong order decodes to the wrong nesting.
-  function flowDoc(children: XmlElement[]): ReturnType<typeof readDocxContent> {
+  function flowDoc(
+    children: readonly XmlElement[],
+  ): ReturnType<typeof readDocxContent> {
     const body = el("w:body", {}, [
       ...children,
       el("w:sectPr", {}, [el("w:pgSz", { "w:w": "12240", "w:h": "15840" })]),
@@ -4782,7 +4798,9 @@ describe("readDocxContent: flow-level tracked-change carry and stray body childr
     "w:date": "2024-01-01T00:00:00Z",
   };
 
-  function flowDoc(children: XmlElement[]): ReturnType<typeof readDocxContent> {
+  function flowDoc(
+    children: readonly XmlElement[],
+  ): ReturnType<typeof readDocxContent> {
     const body = el("w:body", {}, [
       ...children,
       el("w:sectPr", {}, [el("w:pgSz", { "w:w": "12240", "w:h": "15840" })]),

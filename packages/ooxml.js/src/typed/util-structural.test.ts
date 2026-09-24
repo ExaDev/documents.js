@@ -116,7 +116,7 @@ describe("rootElement", () => {
 });
 
 describe("resolveRelationships", () => {
-  function pkgWithRels(relsXml: ReturnType<typeof el>[]): Package {
+  function pkgWithRels(relsXml: readonly ReturnType<typeof el>[]): Package {
     return {
       parts: {
         "word/_rels/document.xml.rels": {

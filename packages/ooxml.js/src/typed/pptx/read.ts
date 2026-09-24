@@ -496,7 +496,7 @@ function readBlipImage(
   parent: XmlElement,
   slideRels: ReadonlyMap<string, Relationship>,
   pkg: Package,
-  frame: Box,
+  frame: Readonly<Box>,
 ): ContentImageBlock | undefined {
   const blip = elementsWithTag([parent], "a:blip")[0];
   const rId = blip === undefined ? undefined : attr(blip, "r:embed");
@@ -802,7 +802,7 @@ function readOleEmbeddedObject(
   graphicData: XmlElement,
   slideRels: ReadonlyMap<string, Relationship>,
   pkg: Package,
-  frame: Box,
+  frame: Readonly<Box>,
 ): ContentEmbeddedObjectBlock | undefined {
   const oleObj = elementsWithTag([graphicData], "p:oleObj")[0];
   const rId = oleObj === undefined ? undefined : attr(oleObj, "r:id");
@@ -944,14 +944,20 @@ function readGraphicFrameShape(
 }
 
 // Flattens the shape tree, including nested p:grpSp groups, into ContentSlide's flat shapes list — ContentShape has no representation for a nested group, so group resolution (composing each level's chOff/chExt transform into an absolute frame) happens here rather than being deferred to a later stage. p:cxnSp (connector lines) are skipped: decorative, no text content, general vector-path recovery is out of scope.
+// The flat shape list walkShapeTreeChildren appends each resolved shape onto as it flattens a p:spTree, nested p:grpSp groups included. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable.
+interface ShapeSink {
+  readonly shapes: ContentShape[];
+}
+
 function walkShapeTreeChildren(
   children: readonly XmlNode[],
   parentTransform: GroupChildTransform | undefined,
   context: SlideInheritanceContext,
   slideRels: ReadonlyMap<string, Relationship>,
   pkg: Package,
-  out: ContentShape[],
+  sink: ShapeSink,
 ): void {
+  const out = sink.shapes;
   for (const node of children) {
     if (node.type !== "element") {
       continue;
@@ -1000,7 +1006,7 @@ function walkShapeTreeChildren(
         context,
         slideRels,
         pkg,
-        out,
+        sink,
       );
     }
   }
@@ -1041,7 +1047,7 @@ function readNotes(pkg: Package, slidePath: string): string {
 function readSlide(
   pkg: Package,
   slidePath: string,
-  size: PageSize,
+  size: Readonly<PageSize>,
 ): ContentSlide {
   const slideRoot = rootElement(pkg.parts[slidePath]);
   const context = resolveSlideInheritance(pkg, slidePath);
@@ -1054,14 +1060,9 @@ function readSlide(
     cSld === undefined ? undefined : childrenWithTag(cSld, "p:spTree")[0];
   const shapes: ContentShape[] = [];
   if (spTree !== undefined) {
-    walkShapeTreeChildren(
-      spTree.children,
-      undefined,
-      context,
-      slideRels,
-      pkg,
+    walkShapeTreeChildren(spTree.children, undefined, context, slideRels, pkg, {
       shapes,
-    );
+    });
   }
   return {
     size,

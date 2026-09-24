@@ -24,7 +24,7 @@ export function parseSqref(sqref: string | undefined): ContentSheetRange[] {
 }
 
 // The write-side inverse of one range: bare cell form ("A1") for a genuinely zero-width range, "A1:B2" for a real span — matching a real producer's own sqref spelling (the same real-producer-colorscale.xlsx fixture writes the lone cell of its two-range sqref bare, not as "A1:A1").
-export function formatSqrefRange(range: ContentSheetRange): string {
+export function formatSqrefRange(range: Readonly<ContentSheetRange>): string {
   if (
     range.startRow === range.endRow &&
     range.startColumn === range.endColumn

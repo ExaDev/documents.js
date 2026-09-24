@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { el, txt } from "../../xml/fragment";
 import { readDiagramResidue, readDiagramText } from "./diagram";
 
-function txBody(...paragraphs: ReturnType<typeof el>[]) {
+function txBody(...paragraphs: readonly ReturnType<typeof el>[]) {
   return el("dgm:t", {}, paragraphs);
 }
 
@@ -25,7 +25,7 @@ function pt(
 function cxn(
   srcId: string,
   destId: string,
-  opts: { type?: string; srcOrd?: string } = {},
+  opts: Readonly<{ type?: string; srcOrd?: string }> = {},
 ) {
   const attrs: Record<string, string> = { srcId, destId };
   if (opts.type !== undefined) {
@@ -38,8 +38,8 @@ function cxn(
 }
 
 function dataModel(
-  points: ReturnType<typeof pt>[],
-  cxns: ReturnType<typeof cxn>[] = [],
+  points: readonly ReturnType<typeof pt>[],
+  cxns: readonly ReturnType<typeof cxn>[] = [],
 ) {
   return el("dgm:dataModel", {}, [
     el("dgm:ptLst", {}, points),

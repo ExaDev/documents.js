@@ -60,7 +60,9 @@ const CT_SLIDE =
 const REL_OFFICE_DOCUMENT = `${REL_NS}/officeDocument`;
 const REL_SLIDE = `${REL_NS}/slide`;
 
-function contentTypes(overrides: { part: string; type: string }[]): XmlElement {
+function contentTypes(
+  overrides: readonly { part: string; type: string }[],
+): XmlElement {
   return el("Types", { xmlns: CONTENT_TYPES_NS }, [
     el("Default", {
       Extension: "rels",
@@ -74,7 +76,7 @@ function contentTypes(overrides: { part: string; type: string }[]): XmlElement {
 }
 
 function relationships(
-  entries: { id: string; type: string; target: string }[],
+  entries: readonly { id: string; type: string; target: string }[],
 ): XmlElement {
   return el(
     "Relationships",
@@ -506,7 +508,7 @@ describe("buildDocxPackage: DocumentTree -> docx bytes", () => {
 
 // --- pptx ---------------------------------------------------------------------------------------------------------
 
-function pptxShape(name: string, paragraphs: string[]): XmlElement {
+function pptxShape(name: string, paragraphs: readonly string[]): XmlElement {
   return el("p:sp", {}, [
     el("p:nvSpPr", {}, [el("p:cNvPr", { id: "2", name }), el("p:nvPr", {})]),
     el("p:spPr", {}, [
