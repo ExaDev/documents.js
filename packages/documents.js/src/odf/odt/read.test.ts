@@ -615,6 +615,22 @@ describe("readOdtContent: vector placement", () => {
     expect(paragraphText(blocks[0])).toContain("Label");
   });
 
+  it("keeps a paragraph that mixes a vector primitive with another element of its own", () => {
+    // A text:span beside the rect is content the paragraph owns: only whitespace and the vector-tagged elements themselves may surround them, so the paragraph (with its text) stays and the drawing block follows it.
+    const { blocks } = readOdt(
+      "<text:p>Before</text:p>" +
+        `<text:p><text:span>note</text:span>${RECT_XML}</text:p>` +
+        "<text:p>After</text:p>",
+    );
+    expect(blockKinds(blocks)).toEqual([
+      "paragraph",
+      "paragraph",
+      "embeddedObject",
+      "paragraph",
+    ]);
+    expect(paragraphText(blocks[1])).toContain("note");
+  });
+
   it("groups every vector of one paragraph into a single drawing block, in document order", () => {
     // "All vectors within one container become one drawing block" is the write side's own convention: two primitives, one placement, one block.
     const { blocks } = readOdt(
@@ -1009,8 +1025,9 @@ describe("readOdtContent: the multi-section defensive guard", () => {
     const content = readOdtContent(
       decodePackage(
         odtBytes(
-          "<text:p>First</text:p>" +
-            `<text:p text:style-name="LandscapePara">${inlineFormulaFrame("Object 1")}</text:p>`,
+          `<text:p>${inlineFormulaFrame("Object 1")}</text:p>` +
+            "<text:p>First</text:p>" +
+            '<text:p text:style-name="LandscapePara">Second</text:p>',
           {
             objects: [["Object 1", "<math:mn>7</math:mn>"]],
             extraXmlPart: ["styles.xml", STYLES_XML],
@@ -1026,8 +1043,12 @@ describe("readOdtContent: the multi-section defensive guard", () => {
     expect(content.sections).toHaveLength(2);
     expect(content.sections[1]?.pageSize.widthPt).toBeCloseTo(841.8898, 3);
     expect(content.sections[1]?.pageSize.heightPt).toBeCloseTo(595.2756, 3);
-    for (const section of content.sections) {
-      expect(blockKinds(section.blocks)).toEqual(["paragraph"]);
-    }
+    // The formula-only paragraph is section 0's FIRST block: with the guard intact nothing is detected, so it stays an ordinary (empty) paragraph and no embeddedObject block appears anywhere. Placing the formula inside section 0's own block range is what makes this observable: a splice that (wrongly) ran against section 0 would replace this very paragraph.
+    expect(blockKinds(content.sections[0]!.blocks)).toEqual([
+      "paragraph",
+      "paragraph",
+    ]);
+    expect(paragraphText(content.sections[0]!.blocks[0])).toBe("");
+    expect(blockKinds(content.sections[1]!.blocks)).toEqual(["paragraph"]);
   });
 });
