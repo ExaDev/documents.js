@@ -1,3 +1,10 @@
+## [5.2.18](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.17...pdf-codec%405.2.18) (2026-09-24)
+
+### Tests
+
+* **pdf-codec:** close builtin-encoding.ts's mutation gap from 67 to 96 ([6cd9783](https://github.com/ExaDev/documents.js/commit/6cd978300cf5ce7616c3e006546c28e93a21fdaa))
+* **pdf-codec:** close xref.ts's mutation gap from 65 to 92 ([da18e23](https://github.com/ExaDev/documents.js/commit/da18e236e45aa48e69b1a5202edbc36d60042731)), references [#1306](https://github.com/ExaDev/documents.js/issues/1306)
+
 ## [5.2.17](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.16...pdf-codec%405.2.17) (2026-09-24)
 
 ### Code Refactoring
