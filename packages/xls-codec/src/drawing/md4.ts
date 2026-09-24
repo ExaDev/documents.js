@@ -71,7 +71,7 @@ function padMessage(message: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
 
 /** RFC 1320 A.3's register rotation, restated once: after an operation updates the frame's first register, the frame rotates right so the next operation's target is first again — exactly the ABCD/DABC/CDAB/BCDA cycling the printed schedule shows. */
 function rotateRegisters(
-  frame: [number, number, number, number],
+  frame: readonly [number, number, number, number],
   updated: number,
 ): [number, number, number, number] {
   return [frame[3], updated, frame[1], frame[2]];

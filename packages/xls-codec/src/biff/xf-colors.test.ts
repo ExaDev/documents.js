@@ -345,7 +345,7 @@ describe("applyTint", () => {
 
   // An independent reference implementation of the identical, standard sRGB<->HSL conversion (W3C CSS Color Module Level 3's own algorithm, https://www.w3.org/TR/css-color-3/#hsl-color) plus the tint formula the source's own top comment cites — so the colours below (none of them a pure primary, unlike red/grey above, both of which happen to compute an exact 0.5 lightness that never exercises the s formula's own l > 0.5 branch or any hue branch but max === r) can be checked against a real computed expectation rather than only a directional bound.
   function referenceTint(
-    color: { r: number; g: number; b: number },
+    color: Readonly<{ r: number; g: number; b: number }>,
     tint: number,
   ): { r: number; g: number; b: number } {
     const { r, g, b } = color;
