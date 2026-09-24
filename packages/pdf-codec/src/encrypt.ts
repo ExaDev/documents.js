@@ -86,9 +86,11 @@ function bytesEqual(
   b: Uint8Array<ArrayBuffer>,
   length: number,
 ): boolean {
-  if (a.length < length || b.length < length) {
-    return false;
-  }
+  // No separate length guard: reading past a shorter typed array's end yields
+  // undefined, which never equals the other side's byte, so this comparison
+  // already rejects a too-short input the way a bounds check would. Both call
+  // sites compare against a freshly computed, exactly-sized hash (32 bytes),
+  // so an index can never run past both arrays at once.
   for (let i = 0; i < length; i++) {
     if (a[i] !== b[i]) {
       return false;
@@ -112,15 +114,12 @@ export function permissionsBytes(p: number): Uint8Array<ArrayBuffer> {
 export function padOrTruncatePassword(
   password: Uint8Array<ArrayBuffer>,
 ): Uint8Array<ArrayBuffer> {
-  if (password.length >= PASSWORD_PADDING.length) {
-    return password.subarray(0, PASSWORD_PADDING.length);
-  }
-  const padded = new Uint8Array(PASSWORD_PADDING.length);
-  padded.set(password);
-  padded.set(
-    PASSWORD_PADDING.subarray(0, PASSWORD_PADDING.length - password.length),
-    password.length,
-  );
+  // Start from the full padding string and overwrite its beginning with the
+  // password's own first 32 bytes: a shorter password keeps the padding as its
+  // tail, a longer one is truncated by the overwrite itself, and an empty one
+  // is the padding unchanged. One copy, no length branch to get wrong.
+  const padded = new Uint8Array(PASSWORD_PADDING);
+  padded.set(password.subarray(0, PASSWORD_PADDING.length));
   return padded;
 }
 
@@ -219,12 +218,14 @@ export function hardenedHash(
   if (revision === 5) {
     return k;
   }
-  let e = new Uint8Array([0]);
+  // Algorithm 2.B runs at least R6_MINIMUM_ROUNDS rounds before the last-byte
+  // termination test can even be read (the round counter short-circuits the ||
+  // until then), so the loop is entered unconditionally and e is assigned
+  // before the test first reads it. The do-while states that shape directly
+  // rather than initialising e to a placeholder the first test never looks at.
+  let e: Uint8Array<ArrayBuffer>;
   let round = 0;
-  while (
-    round < R6_MINIMUM_ROUNDS ||
-    e[e.length - 1]! > round - R6_TERMINATION_MARGIN
-  ) {
+  do {
     const roundInput = concatBytes([password, k, userData]);
     const k1 = new Uint8Array(roundInput.length * R6_ROUND_REPEATS);
     for (let i = 0; i < R6_ROUND_REPEATS; i++) {
@@ -243,7 +244,10 @@ export function hardenedHash(
     const selector = sum % 3;
     k = selector === 0 ? sha256(e) : selector === 1 ? sha384(e) : sha512(e);
     round++;
-  }
+  } while (
+    round < R6_MINIMUM_ROUNDS ||
+    e[e.length - 1]! > round - R6_TERMINATION_MARGIN
+  );
   return k.subarray(0, AESV3_KEY_BYTES);
 }
 
@@ -472,11 +476,12 @@ function decryptAes(
   }
   const plain = aesCbcDecrypt(key, data.subarray(0, AES_BLOCK_BYTES), body);
   const padLength = plain[plain.length - 1] ?? 0;
-  if (
-    padLength < 1 ||
-    padLength > AES_BLOCK_BYTES ||
-    padLength > plain.length
-  ) {
+  // No separate padLength > plain.length clause: plain is a whole number of
+  // AES blocks (aesCbcDecrypt drops a trailing partial block), so it is either
+  // empty (padLength reads as 0 and the < 1 test already catches that) or at
+  // least 16 bytes long, which a pad byte bounded by AES_BLOCK_BYTES can never
+  // exceed.
+  if (padLength < 1 || padLength > AES_BLOCK_BYTES) {
     sink({
       code: "pdf/decrypt-bad-padding",
       severity: "warning",
