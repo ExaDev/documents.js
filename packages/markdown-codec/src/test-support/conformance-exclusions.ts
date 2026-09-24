@@ -20,101 +20,124 @@ const EMPHASIS_TORTURE =
 const MATH_DELIMITER_DIVERGENCE =
   'a source-level \\( directly followed (eventually) by a literal \\) is now read as inline math (ExaDev/markdown-codec#53), a deliberate divergence from cmark\'s own reading of two independently backslash-escaped parentheses — src/inline/inline.ts\'s own new \\( recognition in parseBackslash cannot distinguish "the author escaped two literal parens" from "the author wrote inline math", because CommonMark\'s grammar gives \\( no third reading to disambiguate against; real Pandoc/GFM math-extension implementations accept the identical trade-off';
 
-export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
-  // Backslash escapes
-  [12, MATH_DELIMITER_DIVERGENCE],
-  // Entity and numeric character references
-  [
-    39,
-    "a numeric character reference decoding to a literal newline (&#10;) is indistinguishable, once lowered, from a genuine hard line break — both are just a literal '\\n' character inside ContentRun.text, so escapeMarkdownText's own hard-break spelling fires on it too",
-  ],
-  [
-    40,
-    "a numeric character reference decoding to a literal tab (&#9;) at the very start of a paragraph re-renders as literal leading whitespace, which a reparse reads as 4-column indented-code-block indentation instead of paragraph content — there is no way to backslash-escape a literal space/tab character under CommonMark's own escape grammar",
-  ],
-  // Thematic breaks
-  [
-    61,
-    'a list item\'s own body, once rendered as "<bulletMarker> <renderedBody>", can itself read as a higher-precedence thematic break on reparse when the body is itself a HorizontalRule-styled paragraph using the SAME character as the configured bullet marker (here, "- ---")',
-  ],
-  // Indented code blocks
-  [109, MARKER_TYPE_CONFLICT],
-  // Fenced code blocks
-  [146, INFO_STRING],
-  // Link reference definitions
-  [196, LINK_TITLE],
-  // List items
-  [296, MARKER_TYPE_CONFLICT],
-  [299, MARKER_TYPE_CONFLICT],
-  // Lists
-  [326, NESTED_LIST_LOOSENESS_SHARED],
-  // Emphasis and strong emphasis
-  [369, EMPHASIS_TORTURE],
-  [373, EMPHASIS_TORTURE],
-  [389, EMPHASIS_TORTURE],
-  [404, EMPHASIS_TORTURE],
-  [407, EMPHASIS_TORTURE],
-  [408, EMPHASIS_TORTURE],
-  [409, EMPHASIS_TORTURE],
-  [416, EMPHASIS_TORTURE],
-  [417, EMPHASIS_TORTURE],
-  [418, EMPHASIS_TORTURE],
-  [419, EMPHASIS_TORTURE],
-  [422, EMPHASIS_TORTURE],
-  [425, EMPHASIS_TORTURE],
-  [426, EMPHASIS_TORTURE],
-  [427, EMPHASIS_TORTURE],
-  [432, EMPHASIS_TORTURE],
-  [433, EMPHASIS_TORTURE],
-  [461, EMPHASIS_TORTURE],
-  [463, EMPHASIS_TORTURE],
-  [464, EMPHASIS_TORTURE],
-  [465, EMPHASIS_TORTURE],
-  [466, EMPHASIS_TORTURE],
-  [467, EMPHASIS_TORTURE],
-  [468, EMPHASIS_TORTURE],
-  // Links
-  [
-    517,
-    "a nested, unresolved image inside a link overwrites the OUTER link's own hyperlink with the inner image's own destination — ContentRun.hyperlink is a single flat field with no way to represent two nested hyperlinks at once",
-  ],
-  [
-    519,
-    "a link containing bracketed text that looks like (but is not) a nested link is a bracket-matching edge case this package's own inline phase resolves differently in nested-emphasis contexts than cmark's reference reading",
-  ],
-  [
-    520,
-    "an image whose alt text contains bracket-nested link-like text is flattened to plain alt text (image alt text is always plain per CommonMark's own rule), losing the specific nested-bracket text cmark's own alt-text-flattening happens to preserve literally",
-  ],
-  [
-    531,
-    "a nested, unresolved image inside a link overwrites the OUTER link's own hyperlink with the inner image's own destination — ContentRun.hyperlink is a single flat field with no way to represent two nested hyperlinks at once",
-  ],
-  [
-    533,
-    "a link containing bracketed text that looks like (but is not) a nested link is a bracket-matching edge case this package's own inline phase resolves differently in nested-emphasis contexts than cmark's reference reading",
-  ],
-  // Images
-  [572, IMAGE_SRC_UNPRESERVABLE],
-  [573, IMAGE_SRC_UNPRESERVABLE],
-  [574, IMAGE_SRC_UNPRESERVABLE],
-  [575, IMAGE_SRC_UNPRESERVABLE],
-  [576, IMAGE_SRC_UNPRESERVABLE],
-  [577, IMAGE_SRC_UNPRESERVABLE],
-  [578, IMAGE_SRC_UNPRESERVABLE],
-  [579, IMAGE_SRC_UNPRESERVABLE],
-  [580, IMAGE_SRC_UNPRESERVABLE],
-  [581, IMAGE_SRC_UNPRESERVABLE],
-  [582, IMAGE_SRC_UNPRESERVABLE],
-  [583, IMAGE_SRC_UNPRESERVABLE],
-  [584, IMAGE_SRC_UNPRESERVABLE],
-  [585, IMAGE_SRC_UNPRESERVABLE],
-  [586, IMAGE_SRC_UNPRESERVABLE],
-  [587, IMAGE_SRC_UNPRESERVABLE],
-  [588, IMAGE_SRC_UNPRESERVABLE],
-  [589, IMAGE_SRC_UNPRESERVABLE],
-  [591, IMAGE_SRC_UNPRESERVABLE],
-]);
+// A spec example number paired with why this package's own round-trip diverges from it. Kept as an object rather than a [number, string] tuple so each example's own number is an object-literal property value, not a bare positional literal: the number IS the meaningful identifier here, a foreign key into the CommonMark spec corpus, not an incidental constant that needs a name of its own.
+interface ConformanceExclusion {
+  readonly example: number;
+  readonly reason: string;
+}
+
+function toExclusionMap(
+  entries: readonly ConformanceExclusion[],
+): ReadonlyMap<number, string> {
+  return new Map(
+    entries.map((entry): [number, string] => [entry.example, entry.reason]),
+  );
+}
+
+export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> =
+  toExclusionMap([
+    // Backslash escapes
+    { example: 12, reason: MATH_DELIMITER_DIVERGENCE },
+    // Entity and numeric character references
+    {
+      example: 39,
+      reason:
+        "a numeric character reference decoding to a literal newline (&#10;) is indistinguishable, once lowered, from a genuine hard line break — both are just a literal '\n' character inside ContentRun.text, so escapeMarkdownText's own hard-break spelling fires on it too",
+    },
+    {
+      example: 40,
+      reason:
+        "a numeric character reference decoding to a literal tab (&#9;) at the very start of a paragraph re-renders as literal leading whitespace, which a reparse reads as 4-column indented-code-block indentation instead of paragraph content — there is no way to backslash-escape a literal space/tab character under CommonMark's own escape grammar",
+    },
+    // Thematic breaks
+    {
+      example: 61,
+      reason:
+        'a list item\'s own body, once rendered as "<bulletMarker> <renderedBody>", can itself read as a higher-precedence thematic break on reparse when the body is itself a HorizontalRule-styled paragraph using the SAME character as the configured bullet marker (here, "- ---")',
+    },
+    // Indented code blocks
+    { example: 109, reason: MARKER_TYPE_CONFLICT },
+    // Fenced code blocks
+    { example: 146, reason: INFO_STRING },
+    // Link reference definitions
+    { example: 196, reason: LINK_TITLE },
+    // List items
+    { example: 296, reason: MARKER_TYPE_CONFLICT },
+    { example: 299, reason: MARKER_TYPE_CONFLICT },
+    // Lists
+    { example: 326, reason: NESTED_LIST_LOOSENESS_SHARED },
+    // Emphasis and strong emphasis
+    { example: 369, reason: EMPHASIS_TORTURE },
+    { example: 373, reason: EMPHASIS_TORTURE },
+    { example: 389, reason: EMPHASIS_TORTURE },
+    { example: 404, reason: EMPHASIS_TORTURE },
+    { example: 407, reason: EMPHASIS_TORTURE },
+    { example: 408, reason: EMPHASIS_TORTURE },
+    { example: 409, reason: EMPHASIS_TORTURE },
+    { example: 416, reason: EMPHASIS_TORTURE },
+    { example: 417, reason: EMPHASIS_TORTURE },
+    { example: 418, reason: EMPHASIS_TORTURE },
+    { example: 419, reason: EMPHASIS_TORTURE },
+    { example: 422, reason: EMPHASIS_TORTURE },
+    { example: 425, reason: EMPHASIS_TORTURE },
+    { example: 426, reason: EMPHASIS_TORTURE },
+    { example: 427, reason: EMPHASIS_TORTURE },
+    { example: 432, reason: EMPHASIS_TORTURE },
+    { example: 433, reason: EMPHASIS_TORTURE },
+    { example: 461, reason: EMPHASIS_TORTURE },
+    { example: 463, reason: EMPHASIS_TORTURE },
+    { example: 464, reason: EMPHASIS_TORTURE },
+    { example: 465, reason: EMPHASIS_TORTURE },
+    { example: 466, reason: EMPHASIS_TORTURE },
+    { example: 467, reason: EMPHASIS_TORTURE },
+    { example: 468, reason: EMPHASIS_TORTURE },
+    // Links
+    {
+      example: 517,
+      reason:
+        "a nested, unresolved image inside a link overwrites the OUTER link's own hyperlink with the inner image's own destination — ContentRun.hyperlink is a single flat field with no way to represent two nested hyperlinks at once",
+    },
+    {
+      example: 519,
+      reason:
+        "a link containing bracketed text that looks like (but is not) a nested link is a bracket-matching edge case this package's own inline phase resolves differently in nested-emphasis contexts than cmark's reference reading",
+    },
+    {
+      example: 520,
+      reason:
+        "an image whose alt text contains bracket-nested link-like text is flattened to plain alt text (image alt text is always plain per CommonMark's own rule), losing the specific nested-bracket text cmark's own alt-text-flattening happens to preserve literally",
+    },
+    {
+      example: 531,
+      reason:
+        "a nested, unresolved image inside a link overwrites the OUTER link's own hyperlink with the inner image's own destination — ContentRun.hyperlink is a single flat field with no way to represent two nested hyperlinks at once",
+    },
+    {
+      example: 533,
+      reason:
+        "a link containing bracketed text that looks like (but is not) a nested link is a bracket-matching edge case this package's own inline phase resolves differently in nested-emphasis contexts than cmark's reference reading",
+    },
+    // Images
+    { example: 572, reason: IMAGE_SRC_UNPRESERVABLE },
+    { example: 573, reason: IMAGE_SRC_UNPRESERVABLE },
+    { example: 574, reason: IMAGE_SRC_UNPRESERVABLE },
+    { example: 575, reason: IMAGE_SRC_UNPRESERVABLE },
+    { example: 576, reason: IMAGE_SRC_UNPRESERVABLE },
+    { example: 577, reason: IMAGE_SRC_UNPRESERVABLE },
+    { example: 578, reason: IMAGE_SRC_UNPRESERVABLE },
+    { example: 579, reason: IMAGE_SRC_UNPRESERVABLE },
+    { example: 580, reason: IMAGE_SRC_UNPRESERVABLE },
+    { example: 581, reason: IMAGE_SRC_UNPRESERVABLE },
+    { example: 582, reason: IMAGE_SRC_UNPRESERVABLE },
+    { example: 583, reason: IMAGE_SRC_UNPRESERVABLE },
+    { example: 584, reason: IMAGE_SRC_UNPRESERVABLE },
+    { example: 585, reason: IMAGE_SRC_UNPRESERVABLE },
+    { example: 586, reason: IMAGE_SRC_UNPRESERVABLE },
+    { example: 587, reason: IMAGE_SRC_UNPRESERVABLE },
+    { example: 588, reason: IMAGE_SRC_UNPRESERVABLE },
+    { example: 589, reason: IMAGE_SRC_UNPRESERVABLE },
+    { example: 591, reason: IMAGE_SRC_UNPRESERVABLE },
+  ]);
 
 // The identical shrink-only exclusion list for src/gfm-conformance.test.ts's own read -> write -> reparse -> render measurement of the GFM extension corpus (assets/gfm/spec.txt) — see COMMONMARK_EXCLUSIONS above for the shared rationale and reason constants. Keyed by the same per-file example numbering loadGfmExtensionExamples produces (unique across all four extension tags, since the source file numbers every example it contains, tagged or not).
-export const GFM_EXCLUSIONS: ReadonlyMap<number, string> = new Map([]);
+export const GFM_EXCLUSIONS: ReadonlyMap<number, string> = toExclusionMap([]);
