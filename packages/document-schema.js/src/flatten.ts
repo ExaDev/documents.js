@@ -77,6 +77,13 @@ function applyEntry(
   };
 }
 
+// Reached only if DocumentTree's kind ever gains a variant flattenTree's own switch does not match: every current member is covered by a case there, so `value` narrows to `never` at every real call site, and adding an uncovered kind makes that narrowing fail and this call stop compiling. That is the real safety net. Exists so the switch's own exhaustiveness (proven by the type checker, not by a catch-all default that would silently swallow a genuinely new kind) still gives consistent-return an explicit statement to see past the switch. Shared with factor-styles.ts's mint, which switches over the identical DocumentTree['kind'] union for the identical reason, rather than each keeping its own byte-identical copy. Exported so flatten.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable through flattenTree or mint, since every real DocumentTree kind is already handled by a case in both.
+export function assertNeverDocumentTreeKind(value: never): never {
+  throw new Error(
+    `flattenTree: unhandled DocumentTree kind ${JSON.stringify(value)}`,
+  );
+}
+
 // The exact inverse of decompose: a pre-order walk over the tree reconstituting sections, slides, sheets, and pages in document order, re-emitting every group-represented paragraph as an ordinary block (a heading or list group's anchor paragraph IS the block; it was never copied, only wrapped) and every construct group as the constructStart/constructEnd marker pair that delimited it, with every style ref resolved away into materialised direct properties. Leaf nodes pass through as the same objects. The result is schema-valid against ContentDocumentSchema and structurally identical to the source document the tree was assembled from — the bijection law flattenTree(assembleTree(c)) reproduces c exactly, pinned in bijection.test.ts.
 export function flattenTree(pkg: DocumentTree): ContentDocument {
   const styles = pkg.styles;
@@ -171,6 +178,7 @@ export function flattenTree(pkg: DocumentTree): ContentDocument {
       return { kind: "formula", ...envelope, formula: first };
     }
   }
+  return assertNeverDocumentTreeKind(pkg);
 }
 
 // Strips a container descriptor's tree-only `kind` tag, keeping every other field by spread rather than by naming them: decompose rest-spreads each flat container's fields into its descriptor (minus the arrays that became children), so a container field added by a future schema release rides the descriptor, and flatten must hand it back without this package ever naming it. Copy-then-delete rather than destructuring the tag out, because the repo's lint bans unused bindings outright and a destructured-away tag would be exactly that.

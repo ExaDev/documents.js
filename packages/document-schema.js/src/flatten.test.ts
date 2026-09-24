@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ContentParagraph, ContentSection } from "./content";
 import { decomposeSection } from "./decompose";
-import { flattenTree } from "./flatten";
+import { assertNeverDocumentTreeKind, flattenTree } from "./flatten";
 import type { StylesTable } from "./definitions";
 import type { DocumentTree } from "./package";
 import type {
@@ -416,5 +416,20 @@ describe("flattenTree's narrow group-kind guards only ever matter for a tree tha
     ]);
     // Real code: isHeadingGroup/isListGroup both false, isConstructGroup's own node.kind !== 'paragraph' check is also false (this node's kind IS 'paragraph'), so this group falls through every named branch and is pushed as the group object itself — not wrapped as a construct, which is what a mutated isConstructGroup (unconditionally true past its node/children guard) would do instead.
     expect(sectionBlocks(pkg)).toEqual([illegalGroup]);
+  });
+});
+
+describe("assertNeverDocumentTreeKind", () => {
+  it("throws naming the unhandled kind, proving flattenTree's and mint's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverDocumentTreeKind({ kind: "bogus" } as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'flattenTree: unhandled DocumentTree kind {"kind":"bogus"}',
+    );
   });
 });

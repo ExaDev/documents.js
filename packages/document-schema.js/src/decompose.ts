@@ -59,6 +59,13 @@ export class ConstructMarkerImbalanceError extends Error {
   }
 }
 
+// Reached only if ContentDocument's kind ever gains a variant decompose's own switch does not match: every current member is covered by a case there, so `value` narrows to `never` at every real call site, and adding an uncovered kind makes that narrowing fail and this call stop compiling. That is the real safety net. Exists so the switch's own exhaustiveness (proven by the type checker, not by a catch-all default that would silently swallow a genuinely new kind) still gives consistent-return an explicit statement to see past the switch. Shared with factor-styles.ts's assembleTree, which switches over the identical ContentDocument['kind'] union for the identical reason, rather than each keeping its own byte-identical copy. Exported so decompose.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable through decompose or assembleTree, since every real ContentDocument kind is already handled by a case in both.
+export function assertNeverContentDocumentKind(value: never): never {
+  throw new Error(
+    `decompose: unhandled ContentDocument kind ${JSON.stringify(value)}`,
+  );
+}
+
 // What decompose returns and every tree arm's children hold: the per-kind roots the schema's DocumentTree union states (section groups for wordprocessing, slide groups for presentation, sheet groups for spreadsheet, draw-page groups for drawing, the single ContentFormula leaf for formula). Spelled as the explicit union rather than the indexed access DocumentTree['children'] so tooling that resolves types one hop at a time (this repo's ESLint typed rules) sees named imports instead of an index into the zod-inferred union.
 export type TreeChildren =
   | SectionGroupNode[]
@@ -81,6 +88,7 @@ export function decompose(content: ContentDocument): TreeChildren {
     case "formula":
       return [content.formula];
   }
+  return assertNeverContentDocumentKind(content);
 }
 
 // Section groups are mandatory, one per ContentSection: the descriptor keeps the section's own page geometry (which no rendered-pages array can hold), and the section's blocks become the group's children, grouped by the wordprocessing stack semantics — but per section, because each section is its own container and the heading/list stacks reset at its boundary rather than flowing across sections the way a table-of-contents view deliberately does. Rest-destructuring lifts exactly `blocks` out, so a ContentSection field added by a future schema release rides the descriptor without this package being touched.

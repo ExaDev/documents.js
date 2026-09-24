@@ -6,6 +6,7 @@ import type {
   ContentVector,
 } from "./content";
 import {
+  assertNeverContentDocumentKind,
   decomposeDrawPage,
   decomposeSection,
   decomposeSheet,
@@ -17,7 +18,7 @@ import type {
   StyleRunProperties,
   StylesTable,
 } from "./definitions";
-import { flattenTree } from "./flatten";
+import { assertNeverDocumentTreeKind, flattenTree } from "./flatten";
 import type { PageSize } from "./geometry";
 import type { DocumentTree } from "./package";
 import type {
@@ -140,6 +141,7 @@ export function assembleTree(
         children: [content.formula],
       });
   }
+  return assertNeverContentDocumentKind(content);
 }
 
 // Re-factors an already-assembled package. The input is flattened first (materialising its refs), so this both re-mints a minted package to the identical table (law iii) and factors any hand-built or round-tripped tree a caller hands in. `pages`, `fonts`, `definitions`, and the package-level `source` residue table ride the input through: none has a spelling on the flat ContentDocument, so the flatten step cannot carry them and the reassembled tree would otherwise drop them silently. Minting never reads `fonts`, `definitions`, or `source` — all three are per-document caller data, not style content the pass has any business rewriting (and rewriting residue would breach the channel's own opacity contract, src/source.ts).
@@ -479,6 +481,7 @@ export function mint(pkg: DocumentTree): DocumentTree {
     case "formula":
       return { ...pkg, styles };
   }
+  return assertNeverDocumentTreeKind(pkg);
 }
 
 // The strip records of every minted wrapper on the current rebuild chain, outermost first (each rebuild level appends its own record before walking its children). A node's strip is the LAST record naming it — the chain is outermost-first, so the last is the innermost, and branch-scoped factoring gives each chain at most one minter per node anyway, which is what makes the per-position rule exact: an aliased node is stripped by its own branch's record and never by a sibling's.

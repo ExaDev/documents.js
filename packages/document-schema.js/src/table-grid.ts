@@ -263,6 +263,13 @@ export function findTableGridFault(
   return undefined;
 }
 
+// Reached only if TableGridFault's kind ever gains a variant describeTableGridFault's own switch does not match: every current member is covered by a case there, so `value` narrows to `never` at the real call site, and adding an uncovered kind makes that narrowing fail and this call stop compiling. That is the real safety net. Exists so the switch's own exhaustiveness (proven by the type checker, not by a catch-all default that would silently swallow a genuinely new kind) still gives consistent-return an explicit statement to see past the switch. Exported so table-grid.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real TableGridFault kind is already handled by a case in describeTableGridFault.
+export function assertNeverTableGridFaultKind(value: never): never {
+  throw new Error(
+    `describeTableGridFault: unhandled TableGridFault kind ${JSON.stringify(value)}`,
+  );
+}
+
 /**
  * One sentence stating a fault in words, for a writer that refuses or reports a table the grid rule does not admit: it names the fault by its position and, where the fault involves a second region, by that region's anchor. Indices are 0-based, matching every index in the descriptor. The sentence carries no entry point or format of its own, so each caller prefixes whatever names its own operation.
  */
@@ -281,6 +288,7 @@ export function describeTableGridFault(fault: TableGridFault): string {
     case "overlappingAnchors":
       return `the merged region anchored at row ${String(fault.rowIndex)}, column ${String(fault.columnIndex)} overlaps the region anchored at row ${String(fault.earlierAnchorRowIndex)}, column ${String(fault.earlierAnchorColumnIndex)}, but a grid position belongs to one region only`;
   }
+  return assertNeverTableGridFaultKind(fault);
 }
 
 /** A cell together with the grid column it starts at, for a reader whose source format states that column directly. */
