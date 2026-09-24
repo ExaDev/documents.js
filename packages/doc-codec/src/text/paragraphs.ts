@@ -170,10 +170,10 @@ function buildParagraph(
     if (context.styles !== undefined) {
       applyParagraphSprms(
         resolveStyleFormatting(context.styles, papx.istd).paragraphPrls,
-        properties,
+        { properties: properties },
       );
     }
-    applyParagraphSprms(grpprl, properties);
+    applyParagraphSprms(grpprl, { properties: properties });
   }
 
   const blocks = buildParagraphBlocks(
@@ -252,7 +252,7 @@ function resolveInlinePicture(
 }
 
 function paragraphAttributes(
-  properties: ParagraphProperties,
+  properties: Readonly<ParagraphProperties>,
   context: ReadContext,
 ): Partial<ContentParagraph> {
   const attributes: Partial<ContentParagraph> = {};

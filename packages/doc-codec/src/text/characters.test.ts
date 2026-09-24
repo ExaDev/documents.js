@@ -10,7 +10,7 @@ function pcdBytes(fc: number, compressed: boolean): number[] {
   return Array.from(bytes);
 }
 
-function clx(cps: number[], pcds: number[][]): Uint8Array {
+function clx(cps: readonly number[], pcds: readonly number[][]): Uint8Array {
   const plc: number[] = [];
   for (const cp of cps) {
     plc.push(

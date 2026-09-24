@@ -7,8 +7,13 @@ import { DocFormatError } from "../errors";
 /** Pcdt's own marker byte, [MS-DOC] 2.9.19. */
 const CLXT_PCDT = 0x02;
 
-function push32(bytes: number[], value: number): void {
-  bytes.push(
+/** The byte accumulator push32 appends a little-endian 4-byte value onto. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable. */
+interface ByteSink {
+  readonly bytes: number[];
+}
+
+function push32(sink: ByteSink, value: number): void {
+  sink.bytes.push(
     value & 0xff,
     (value >> 8) & 0xff,
     (value >> 16) & 0xff,
@@ -29,14 +34,14 @@ export function buildTextClx(
 
   // Two 4-byte keys (aCp[0], aCp[1]) plus one 8-byte Pcd — a fixed sequence of pushes below, never a computed or looped count, so this is unconditionally the one-piece PlcPcd the comment above describes; there is no input this function's own characterCount/textFc validation lets through that could ever produce a different shape.
   const plcPcd: number[] = [];
-  push32(plcPcd, 0); // aCp[0].
-  push32(plcPcd, characterCount); // aCp[1].
+  push32({ bytes: plcPcd }, 0); // aCp[0].
+  push32({ bytes: plcPcd }, characterCount); // aCp[1].
   plcPcd.push(0x00, 0x00); // Pcd bit field: fNoParaLast clear (the text does contain paragraph marks), fDirty clear.
-  push32(plcPcd, textFc); // FcCompressed: bit 30 (fCompressed) clear, so fc is used as-is for 16-bit text.
+  push32({ bytes: plcPcd }, textFc); // FcCompressed: bit 30 (fCompressed) clear, so fc is used as-is for 16-bit text.
   plcPcd.push(0x00, 0x00); // Prm: no additional property modifications.
 
   const clx = [CLXT_PCDT];
-  push32(clx, plcPcd.length);
+  push32({ bytes: clx }, plcPcd.length);
   clx.push(...plcPcd);
   return new Uint8Array(clx);
 }

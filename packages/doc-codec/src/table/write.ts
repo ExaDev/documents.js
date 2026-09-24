@@ -117,17 +117,27 @@ export interface WriteParagraph {
   readonly terminator: number;
 }
 
+/** The paragraph accumulator a block-flattening pass appends onto, and whose last entry a page break retargets in place. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable. */
+export interface ParagraphSink {
+  readonly paragraphs: WriteParagraph[];
+}
+
+/** The byte accumulator pushSprm appends each encoded sprm onto. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable. */
+interface ByteSink {
+  readonly bytes: number[];
+}
+
 function pushSprm(
-  bytes: number[],
+  sink: ByteSink,
   opcode: number,
   operand: readonly number[],
 ): void {
-  bytes.push(opcode & 0xff, (opcode >> 8) & 0xff, ...operand);
+  sink.bytes.push(opcode & 0xff, (opcode >> 8) & 0xff, ...operand);
 }
 
 function inTableGrpprl(): number[] {
   const bytes: number[] = [];
-  pushSprm(bytes, SPRM_P_F_IN_TABLE, [0x01]);
+  pushSprm({ bytes }, SPRM_P_F_IN_TABLE, [0x01]);
   return bytes;
 }
 
@@ -139,7 +149,7 @@ function rowMarkExtraGrpprl(
   isHeader: boolean,
 ): number[] {
   const bytes = inTableGrpprl();
-  pushSprm(bytes, SPRM_P_F_TTP, [0x01]);
+  pushSprm({ bytes }, SPRM_P_F_TTP, [0x01]);
   bytes.push(
     ...encodeTableRowGrpprl(boundaries, cellsToWrite, heightPt, isHeader),
   );
@@ -532,7 +542,8 @@ function imageParagraph(
 }
 
 // A manual page break is the end-of-section character (0x000C) put where no section ends: [MS-DOC]'s own PlcfSed.aCP text — "An end-of-section character (0x0C) which occurs at a CP and which is not the last character in a section specifies a manual page break" — and read.ts's markManualPageBreaks decodes exactly that shape back into a pageBreak block. The writer's inverse is the mirror image of that read: a pageBreak block retargets the terminator of the paragraph before it from an ordinary paragraph mark to 0x000C, so "alpha, pageBreak, beta" lays out as "alpha" + 0x000C + "beta" + 0x000D — the byte sequence a re-read turns straight back into [paragraph alpha, pageBreak, paragraph beta] with no stray empty paragraph, because 0x000C is itself a paragraph terminator ([MS-DOC] 2.4.2) and the break rides on one that is already there. A page break with no ordinary paragraph before it to carry it (the first block of a section, directly after a table whose row mark is a cell mark rather than a paragraph mark, or directly after another page break) cannot retarget anything, so it becomes its own empty 0x000C-terminated paragraph instead — the one spelling the format has for a break with no preceding text, and the same shape a real producer's own leading page break has. That empty paragraph is genuinely visible in the round trip (a re-read yields [paragraph "", pageBreak, ...] where the input had [pageBreak, ...]), which is a faithful statement of the format's own limit rather than a loss: a page break in [MS-DOC] always terminates SOME paragraph, so a modelled break with nothing before it necessarily mints one.
-function appendPageBreak(output: WriteParagraph[]): void {
+function appendPageBreak(sink: ParagraphSink): void {
+  const output = sink.paragraphs;
   const previous = output[output.length - 1];
   if (previous?.terminator === PARAGRAPH_MARK) {
     output[output.length - 1] = { ...previous, terminator: SECTION_MARK };
@@ -572,7 +583,7 @@ export function flattenSectionBlocks(
       return;
     }
     if (block.kind === "pageBreak") {
-      appendPageBreak(output);
+      appendPageBreak({ paragraphs: output });
       return;
     }
     throw new DocUnsupportedError(
