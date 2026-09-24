@@ -1,3 +1,9 @@
+## [12.2.15](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.14...ooxml.js%4012.2.15) (2026-09-24)
+
+### Bug Fixes
+
+* **ooxml.js:** raise the mutation break threshold to 98 and record the current survivor state ([7376b96](https://github.com/ExaDev/documents.js/commit/7376b96d4e504faf9dcae43af7d557771dfabfea))
+
 ## [12.2.14](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.13...ooxml.js%4012.2.14) (2026-09-24)
 
 ### Tests

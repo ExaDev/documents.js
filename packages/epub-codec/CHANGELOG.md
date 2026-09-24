@@ -1,3 +1,9 @@
+## [5.1.6](https://github.com/ExaDev/documents.js/compare/epub-codec%405.1.5...epub-codec%405.1.6) (2026-09-24)
+
+### Bug Fixes
+
+* **epub-codec:** clear the last preferReadonlyParams exceptions ([ee42766](https://github.com/ExaDev/documents.js/commit/ee4276667467bdb31c42613040eb1715cf48dbee))
+
 ## [5.1.5](https://github.com/ExaDev/documents.js/compare/epub-codec%405.1.4...epub-codec%405.1.5) (2026-09-24)
 
 
