@@ -245,7 +245,7 @@ describe("OdbPage", () => {
     act(() => {
       openDocument(openedFile("archive.odb"));
     });
-    // The new mutate() dispatch is triggered from inside an effect (reacting to the shared document changing), one render cycle removed from this act() call itself, rather than synchronously in the same event-handler tick the pre-refactor version called mutate() from -- waitFor settles that extra cycle instead of asserting on it immediately.
+    // The new mutate() dispatch is triggered from inside an effect (reacting to the shared document changing), one render cycle removed from this act() call itself, rather than synchronously in the same event-handler tick the pre-refactor version called mutate() from. waitFor settles that extra cycle instead of asserting on it immediately.
     await vi.waitFor(() => {
       expect(mounted.container.textContent).not.toContain("could not be read");
     });
