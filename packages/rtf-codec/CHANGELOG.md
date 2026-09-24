@@ -1,3 +1,9 @@
+## [8.1.18](https://github.com/ExaDev/documents.js/compare/rtf-codec%408.1.17...rtf-codec%408.1.18) (2026-09-24)
+
+### Code Refactoring
+
+* empty the switch-exhaustiveness debt across four packages ([491fac9](https://github.com/ExaDev/documents.js/commit/491fac91880bf370d33f9dae0a5e21b2b07d2250))
+
 ## [8.1.17](https://github.com/ExaDev/documents.js/compare/rtf-codec%408.1.16...rtf-codec%408.1.17) (2026-09-24)
 
 ### Bug Fixes

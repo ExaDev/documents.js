@@ -1,3 +1,21 @@
+## [11.1.10](https://github.com/ExaDev/documents.js/compare/odf.js%4011.1.9...odf.js%4011.1.10) (2026-09-24)
+
+### Bug Fixes
+
+* **odf.js:** compare three nullable booleans against true instead of coercing ([b17c25b](https://github.com/ExaDev/documents.js/commit/b17c25be346a6f51278e8ce99bce0056e6645f51))
+* **odf.js:** convert OdfTableWriteContext's shorthand methods to function properties ([82162e7](https://github.com/ExaDev/documents.js/commit/82162e7625bbca97fd5b5118d7cf0092edf0302b))
+* **odf.js:** fix ods rule debt: exhaustiveness, booleans, Object.assign, tsdoc ([f8e1ff6](https://github.com/ExaDev/documents.js/commit/f8e1ff6c35ea2e9d5f1dcc881ff2faea88c6da61))
+* **odf.js:** rename five sets of locals that shadowed an outer binding ([0ece168](https://github.com/ExaDev/documents.js/commit/0ece16899de23a5a2091bed744cb5bdec69ec0b8))
+* **odf.js:** return through a never-typed guard on normaliseOdtContent's block switch ([8b3e0e3](https://github.com/ExaDev/documents.js/commit/8b3e0e3afcf4cce5e72a13c64d894356aacb5e3d))
+* **odf.js:** return through a never-typed guard on partToBytes's switch ([bc751c0](https://github.com/ExaDev/documents.js/commit/bc751c0b5edfa4dfc0a337e863ec77eaf4b9109e))
+* **odf.js:** return through a never-typed guard on toOrderedNode's switch ([a588918](https://github.com/ExaDev/documents.js/commit/a5889186ea747063f83a523f6e4e2f54ef2ac409))
+* **odf.js:** return through never-typed guards on four typed/shared exhaustive switches ([b5b4a7d](https://github.com/ExaDev/documents.js/commit/b5b4a7d2fb0e5e9e649d51e2435b3fd0af96d511))
+* **odf.js:** share one never-typed guard between the two embedded-object dispatch switches ([f279967](https://github.com/ExaDev/documents.js/commit/f2799677c3d7616ea8264fcc6491ed3630c3f75d))
+
+### Miscellaneous Chores
+
+* **odf.js:** clear the eslint-config 2.12.1 rule debt list ([3efa457](https://github.com/ExaDev/documents.js/commit/3efa457896dc994033bf284458676f74b1b72b2b))
+
 ## [11.1.9](https://github.com/ExaDev/documents.js/compare/odf.js%4011.1.8...odf.js%4011.1.9) (2026-09-24)
 
 
