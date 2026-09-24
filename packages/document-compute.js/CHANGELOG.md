@@ -1,3 +1,16 @@
+## [1.6.30](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.6.29...document-compute.js%401.6.30) (2026-09-24)
+
+### Bug Fixes
+
+* **document-compute.js:** clear the last preferReadonlyParams exceptions ([f283410](https://github.com/ExaDev/documents.js/commit/f283410ef6cb9b0cdbcf678615580449f8216448))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.1
+- Updated markdown-codec to 11.1.5
+- Updated documents.js to 14.4.21
+
 ## [1.6.29](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.6.28...document-compute.js%401.6.29) (2026-09-24)
 
 

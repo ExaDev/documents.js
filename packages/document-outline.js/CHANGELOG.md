@@ -1,3 +1,15 @@
+## [3.10.17](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.10.16...document-outline.js%403.10.17) (2026-09-24)
+
+### Bug Fixes
+
+* **document-outline.js:** clear the last preferReadonlyParams exceptions ([7a81a83](https://github.com/ExaDev/documents.js/commit/7a81a83415af78d448eedc5a3e2ba3be6b6cef62))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.1
+- Updated pdf-codec to 5.2.23
+
 ## [3.10.16](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.10.15...document-outline.js%403.10.16) (2026-09-24)
 
 

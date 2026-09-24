@@ -1,3 +1,15 @@
+## [6.1.10](https://github.com/ExaDev/documents.js/compare/doc-codec%406.1.9...doc-codec%406.1.10) (2026-09-24)
+
+### Bug Fixes
+
+* **doc-codec:** clear the last preferReadonlyParams exceptions ([dfa2e29](https://github.com/ExaDev/documents.js/commit/dfa2e293af545a6d2fa27de497be9ab281019ba9))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.1
+- Updated archive-codec to 1.11.18
+
 ## [6.1.9](https://github.com/ExaDev/documents.js/compare/doc-codec%406.1.8...doc-codec%406.1.9) (2026-09-24)
 
 ### Bug Fixes

@@ -1,3 +1,15 @@
+## [12.2.14](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.13...ooxml.js%4012.2.14) (2026-09-24)
+
+### Tests
+
+* **ooxml.js:** resolve root relationship targets via an absent base path ([ffb6e33](https://github.com/ExaDev/documents.js/commit/ffb6e3312f2c5f1f316e937bceb9a47e914950cb))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.15.1
+- Updated archive-codec to 1.11.18
+
 ## [12.2.13](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.12...ooxml.js%4012.2.13) (2026-09-24)
 
 ### Tests

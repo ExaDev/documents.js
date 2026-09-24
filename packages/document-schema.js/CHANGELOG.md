@@ -1,3 +1,9 @@
+## [7.15.1](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.15.0...document-schema.js%407.15.1) (2026-09-24)
+
+### Bug Fixes
+
+* **document-schema.js:** clear the last preferReadonlyParams exceptions ([be48a66](https://github.com/ExaDev/documents.js/commit/be48a663c1f7a336324b62f3ac7283c3e99694cf))
+
 ## [7.15.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.14.1...document-schema.js%407.15.0) (2026-09-22)
 
 ### Features
