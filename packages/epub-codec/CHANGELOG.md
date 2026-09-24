@@ -1,3 +1,16 @@
+## [5.1.9](https://github.com/ExaDev/documents.js/compare/epub-codec%405.1.8...epub-codec%405.1.9) (2026-09-24)
+
+### Bug Fixes
+
+* **epub-codec:** name every byte-format constant in image/dimensions.ts and its tests ([1123484](https://github.com/ExaDev/documents.js/commit/112348447dee3d7b5e624622bfefdf4f30d9823d)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **epub-codec:** name every magic number in test-support/zip.ts and its test ([654d80b](https://github.com/ExaDev/documents.js/commit/654d80b2054bb358207049ec65b241cb2fef5060)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **epub-codec:** name every magic number in xhtml/read.test.ts ([fb6e08d](https://github.com/ExaDev/documents.js/commit/fb6e08da4a11cf63dda3311c1c1cd2f989b4820b)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **epub-codec:** name magic numbers in epub3-fixture.ts and roundtrip.test.ts ([1e84ef8](https://github.com/ExaDev/documents.js/commit/1e84ef8d552208eb85a196287c3d3e88e18048bb)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **epub-codec:** name magic numbers in package-io/read.ts and its test ([4ce687d](https://github.com/ExaDev/documents.js/commit/4ce687dc75e972539cc5a70d9fd74099e5db2762)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **epub-codec:** name magic numbers in package-round-trip.test.ts and write.test.ts ([391a159](https://github.com/ExaDev/documents.js/commit/391a15937123dc096383d2d0ba18763cec8c729c)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **epub-codec:** name magic numbers in zip.ts and its test ([d995726](https://github.com/ExaDev/documents.js/commit/d995726558cf6b153494808bdc3362af0ee58bca)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **epub-codec:** name the last magic numbers, completing the burn-down ([5b87b5a](https://github.com/ExaDev/documents.js/commit/5b87b5a016550689fd8d4a5378fed8452b90d0c3)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+
 ## [5.1.8](https://github.com/ExaDev/documents.js/compare/epub-codec%405.1.7...epub-codec%405.1.8) (2026-09-24)
 
 

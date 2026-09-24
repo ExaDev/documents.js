@@ -1,3 +1,9 @@
+## [8.1.15](https://github.com/ExaDev/documents.js/compare/rtf-codec%408.1.14...rtf-codec%408.1.15) (2026-09-24)
+
+### Code Refactoring
+
+* **rtf-codec:** give the diagnostic sinks void bodies and unshadow the ascii helper ([e5cd9cb](https://github.com/ExaDev/documents.js/commit/e5cd9cb444b92bbe8d72eb4f9a927134c240a8c2))
+
 ## [8.1.14](https://github.com/ExaDev/documents.js/compare/rtf-codec%408.1.13...rtf-codec%408.1.14) (2026-09-24)
 
 
