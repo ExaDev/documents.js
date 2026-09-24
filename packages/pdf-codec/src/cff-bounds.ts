@@ -40,7 +40,6 @@ const CS_OPERAND_SMALL_LAST = 246;
 const CS_OPERAND_MEDIUM_FIRST = 247;
 const CS_OPERAND_MEDIUM_LAST = 250;
 const CS_OPERAND_NEGATIVE_MEDIUM_FIRST = 251;
-const CS_OPERAND_NEGATIVE_MEDIUM_LAST = 254;
 const CS_OPERAND_SMALL_BIAS = 139;
 const CS_OPERAND_MEDIUM_BIAS = 108;
 const CS_OPERAND_MEDIUM_FIRST_BYTE_BIAS = 247;
@@ -73,8 +72,6 @@ const OP_HHCURVETO = 27;
 const OP_CALLGSUBR = 29;
 const OP_VHCURVETO = 30;
 const OP_HVCURVETO = 31;
-// Every operator is 0..31 (with 28 the one operand encoding inside that range); anything above is operand data.
-const CHARSTRING_OPERATOR_LIMIT = 31;
 
 const ESC_HFLEX = 34;
 const ESC_FLEX = 35;
@@ -310,10 +307,8 @@ function readOperand(
       endOffset: offset + 2,
     };
   }
-  if (
-    b0 >= CS_OPERAND_NEGATIVE_MEDIUM_FIRST &&
-    b0 <= CS_OPERAND_NEGATIVE_MEDIUM_LAST
-  ) {
+  // No upper bound on this range: the only byte above it (255) already returned as the fixed-point form, so this test's own lower bound alone decides.
+  if (b0 >= CS_OPERAND_NEGATIVE_MEDIUM_FIRST) {
     if (!hasBytes(code, offset + 1, 1)) {
       return undefined;
     }
@@ -356,9 +351,7 @@ function execute(
       i = operand.endOffset;
       continue;
     }
-    if (b0 > CHARSTRING_OPERATOR_LIMIT) {
-      return false; // an operand byte whose own value ran off the end of the charstring: readOperand declined it, and it is not an operator either
-    }
+    // An operand byte whose own value ran off the end of the charstring (readOperand declined it, and it is not an operator either) needs no case of its own here: every such byte is above the operator range and lands in the switch's default below, which refuses it identically.
     i += 1;
 
     switch (b0) {
@@ -586,9 +579,7 @@ function execute(
         return stack.length < ENDCHAR_SEAC_ARG_COUNT;
       }
       case OP_ESCAPE: {
-        if (i >= code.length) {
-          return false;
-        }
+        // An escape as the charstring's last byte needs no bounds check of its own: the byte read past the end is undefined, which matches none of executeEscaped's operators, so its own fall-through refuses the charstring identically.
         const b1 = code[i]!;
         i += 1;
         if (!executeEscaped(b1, state)) {
@@ -716,16 +707,13 @@ function readPrivateSubrs(
   bytes: Uint8Array<ArrayBuffer>,
   privateOperands: readonly number[] | undefined,
 ): CffIndex | undefined {
-  if (privateOperands === undefined || privateOperands.length < 2) {
+  if (privateOperands === undefined) {
     return undefined;
   }
+  // No separate operand-count or integer checks ahead of the bounds check: an absent operand reads as undefined, and hasBytes itself refuses a non-integer or negative size or offset, so the one check below already declines a Private operator carrying too few operands or a size the format never allows.
   const size = privateOperands[0]!;
   const offset = privateOperands[1]!;
-  if (
-    !Number.isInteger(size) ||
-    !Number.isInteger(offset) ||
-    !hasBytes(bytes, offset, size)
-  ) {
+  if (!hasBytes(bytes, offset, size)) {
     return undefined;
   }
   const privateDict = parseCffDict(bytes.subarray(offset, offset + size));
