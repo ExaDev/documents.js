@@ -313,6 +313,11 @@ export function packageLintConfig(
           "error",
           { allowNumber: true },
         ],
+        // Deviation from the default, which treats a `default` clause as covering nothing and still demands every union member be named. This workspace deliberately uses `default:` for the structurally-uninteresting remainder of a discriminated union — containsSymbol in document-compute.js is the clearest case, where the three symbol-free leaves carry nothing to recurse into and naming them individually would add three string-literal case labels a mutation can flip to an identical no-op, since no consumer can distinguish the case returning `false` from the case simply not matching. The rule's own option exists for exactly that style, and it narrows nothing: a switch with no `default` is still checked for missing cases, so a genuine gap is still reported.
+        "@typescript-eslint/switch-exhaustiveness-check": [
+          "error",
+          { considerDefaultExhaustiveForUnions: true },
+        ],
         "@typescript-eslint/no-non-null-assertion": nonNullAssertion,
         "exadev/prefer-readonly-array-param": preferReadonlyParams,
         "exadev/prefer-readonly-object-param": preferReadonlyParams,

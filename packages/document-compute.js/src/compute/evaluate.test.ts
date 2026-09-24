@@ -6,7 +6,12 @@ import type {
   MathUnparsed,
   SymbolTable,
 } from "document-schema.js";
-import { evaluate, evaluateQuantity, isInterval } from "./evaluate";
+import {
+  assertNever,
+  evaluate,
+  evaluateQuantity,
+  isInterval,
+} from "./evaluate";
 import { interval } from "./interval";
 import { quantity } from "./quantity";
 import {
@@ -640,5 +645,13 @@ describe("evaluateQuantity", () => {
     expect((caught as UnsupportedExpressionError).message).toBe(
       "evaluateQuantity: this position requires a plain Quantity, not an Interval.",
     );
+  });
+});
+
+describe("assertNever", () => {
+  it("throws naming the unhandled node, proving evaluate's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNever({ kind: "bogus" } as never);
+    }).toThrow('unhandled expression node {"kind":"bogus"}');
   });
 });

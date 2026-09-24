@@ -139,6 +139,15 @@ export function evaluate(
         `this node is source LaTeX ("${expression.latex}") document-schema.js's lowering could not represent structurally, so there is nothing to evaluate`,
       );
   }
+  return assertNever(expression);
+}
+
+// Reached only if MathExpression ever gains a variant evaluate's own switch does not match: every current member has a case there, so `expression` narrows to `never` at that call, and adding an uncovered variant makes the narrowing fail and this call stop compiling — the real safety net. Exists so the switch's own exhaustiveness, proven by the type checker rather than by a catch-all default that would silently swallow a genuinely new variant, still gives consistent-return an explicit statement to see past the switch. Exported so evaluate.test.ts can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable through evaluate.
+export function assertNever(expression: never): never {
+  throw new UnsupportedExpressionError(
+    "evaluate",
+    `unhandled expression node ${JSON.stringify(expression)}`,
+  );
 }
 
 // evaluate() for a caller that can only work with a point value: same walk, same errors, but an Interval result is reported as an UnsupportedExpressionError instead of widening the return type. An Interval only ever enters an evaluation by being bound to a symbol, so a caller whose bindings are all Quantity gets a Quantity back — but that is a fact about the bindings it passes, not something the type system can check for it, which is exactly why the narrowing belongs here as one shared, exercised check rather than being restated at each such call site (the worked-example harness is the one in this package).
