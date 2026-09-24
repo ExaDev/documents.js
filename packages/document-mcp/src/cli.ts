@@ -7,7 +7,10 @@ import { createServer } from "./server";
 const DEFAULT_HTTP_PORT = 3000;
 
 // Reads a `--name value` or `--name=value` flag from argv, whichever form the caller used. Returns undefined when the flag is absent at all, distinct from a flag present with no value (an empty string), so a caller can tell "not given" from "given empty" rather than the two collapsing into one absent case. Exported for direct unit testing rather than only through main()'s own argv handling.
-export function readFlag(args: string[], name: string): string | undefined {
+export function readFlag(
+  args: readonly string[],
+  name: string,
+): string | undefined {
   const prefix = `--${name}=`;
   for (const [index, arg] of args.entries()) {
     if (arg.startsWith(prefix)) {

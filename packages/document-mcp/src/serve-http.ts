@@ -24,14 +24,14 @@ interface RoutableRequest {
 interface RoutableResponse {
   writeHead: (
     statusCode: number,
-    headers: Record<string, string>,
+    headers: Readonly<Record<string, string>>,
   ) => { end: (chunk: string) => void };
 }
 
 // Routes one HTTP request to onMcpRequest for MCP_HTTP_PATH, or 404s any other path — extracted from serveHttp's own listener callback so this routing decision is directly unit-testable. onMcpRequest takes no arguments because the real caller already closes over whichever req/res it is routing.
 export function routeHttpRequest(
   req: RoutableRequest,
-  res: RoutableResponse,
+  res: Readonly<RoutableResponse>,
   onMcpRequest: () => void,
 ): void {
   // req.url is `string | undefined` only because IncomingMessage is shared with the client-request side of node:http, where a request line genuinely may not have been parsed yet; a request a server callback receives always carries its own request-line path already parsed.
