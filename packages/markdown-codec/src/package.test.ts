@@ -316,11 +316,12 @@ describe("writeMarkdown: DocumentTree -> markdown text", () => {
       },
     });
 
+    const droppedTableCount = 5;
     expect(
       seen.filter(
         (code) => code === MarkdownDiagnosticCodes.PACKAGE_TABLE_DROPPED,
       ),
-    ).toHaveLength(5);
+    ).toHaveLength(droppedTableCount);
   });
 
   it("reports nothing extra, and renders identically, for a package that carries none of those tables", () => {
@@ -711,8 +712,17 @@ describe("markdownCodec: bytes <-> DocumentTree", () => {
   });
 
   it("rejects bytes that are not well-formed UTF-8", () => {
+    // 0xF5-0xFF can never appear in valid UTF-8: no lead byte encodes a codepoint that high.
+    const invalidLeadByteOne = 0xff;
+    const invalidLeadByteTwo = 0xfe;
+    const invalidLeadByteThree = 0xfd;
+    const invalidUtf8Bytes = [
+      invalidLeadByteOne,
+      invalidLeadByteTwo,
+      invalidLeadByteThree,
+    ];
     expect(() =>
-      z.decode(markdownCodec, new Uint8Array([0xff, 0xfe, 0xfd])),
+      z.decode(markdownCodec, new Uint8Array(invalidUtf8Bytes)),
     ).toThrow();
   });
 
