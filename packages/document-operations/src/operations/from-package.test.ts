@@ -28,7 +28,9 @@ const INVALID_UTF8_JSON_LOOKALIKE_BYTES = [
   ASCII_CLOSE_BRACE,
 ];
 
-async function captureRejection(promise: Promise<unknown>): Promise<unknown> {
+async function captureRejection(
+  promise: Readonly<Promise<unknown>>,
+): Promise<unknown> {
   try {
     await promise;
   } catch (error) {

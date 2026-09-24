@@ -50,7 +50,7 @@ export type ResolvedDocumentOutput =
  */
 export async function resolveDocumentOutput(
   bytes: Uint8Array<ArrayBuffer>,
-  output: DocumentOutput,
+  output: Readonly<DocumentOutput>,
 ): Promise<ResolvedDocumentOutput> {
   if (output.outputPath !== undefined) {
     await writeFile(output.outputPath, bytes);
