@@ -165,6 +165,13 @@ export function readEmbeddedPayloadPart(
 }
 
 // The wordprocessing and presentation arms rebuild the ContentDocument envelope the same way readDocx/readPptx (typed/document-tree.ts) do: readDocxContent/readPptxContent return their own per-format shapes whose extras (comments, footnotes, header/footer parts, numbering on DocxDocument) have no ContentDocument spelling and so do not ride the embedded document. The spreadsheet arm needs no wrap — readXlsxContent already returns a full ContentDocument.
+// Reached only if EmbeddedOoxmlKind ever gains a member readNestedDocument's own switch does not match: every current member is covered there, so `value` narrows to `never` at the real call site, and adding an uncovered kind makes that narrowing fail and this call stop compiling. That is the real safety net. Exported so embedded.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real EmbeddedOoxmlKind is already handled by a case in readNestedDocument.
+export function assertNeverEmbeddedOoxmlKind(value: never): never {
+  throw new Error(
+    `readNestedDocument: unhandled EmbeddedOoxmlKind ${JSON.stringify(value)}`,
+  );
+}
+
 function readNestedDocument(
   objectKind: EmbeddedOoxmlKind,
   nested: Package,
@@ -181,4 +188,5 @@ function readNestedDocument(
     case "spreadsheet":
       return readXlsxContent(nested);
   }
+  return assertNeverEmbeddedOoxmlKind(objectKind);
 }

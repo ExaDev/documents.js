@@ -12,6 +12,7 @@ import {
   minimalXlsxBytes,
 } from "../test-support/embedded";
 import {
+  assertNeverEmbeddedOoxmlKind,
   detectFlavour,
   hasDocxBody,
   readEmbeddedOoxmlPayload,
@@ -299,5 +300,20 @@ describe("detectFlavour", () => {
       "word/document2.xml": new TextEncoder().encode("<w:document/>"),
     });
     expect(detectFlavour(nested)).toBeUndefined();
+  });
+});
+
+describe("assertNeverEmbeddedOoxmlKind", () => {
+  it("throws naming the unhandled kind, proving readNestedDocument's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverEmbeddedOoxmlKind("bogus" as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'readNestedDocument: unhandled EmbeddedOoxmlKind "bogus"',
+    );
   });
 });
