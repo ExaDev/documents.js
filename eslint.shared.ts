@@ -321,7 +321,20 @@ export function packageLintConfig(
         "@typescript-eslint/no-non-null-assertion": nonNullAssertion,
         "exadev/prefer-readonly-array-param": preferReadonlyParams,
         "exadev/prefer-readonly-object-param": preferReadonlyParams,
-        "@typescript-eslint/no-magic-numbers": magicNumbers,
+        // Deviation from @exadev/eslint-config's own options for this rule, which is why every one of them is restated here: flat config REPLACES a same-key rule rather than merging it, so passing an options object drops the base's `ignore`/`ignoreArrayIndexes`/`ignoreEnums`/`ignoreReadonlyClassProperties`/`ignoreDefaultValues` unless they are repeated. If the base config changes its own defaults, this block has to follow; it is a copy, not an extension.
+        //
+        // `ignoreNumericLiteralTypes` is the addition. A numeric literal type union IS the name: `type BlockHeadingLevel = 1 | 2 | 3 | 4 | 5 | 6` states a bounded domain the type checker then enforces, and there is no way to name an individual member of such a union the way a runtime value gets a const. Without this, the only ways to satisfy the rule are to widen the type to `number`, which throws away real safety for values that genuinely are bounded, or to derive the union from an `as const` array, which the rule flags identically (confirmed empirically). markdown-codec's HtmlBlockType is the clearest case: its numbering deliberately mirrors the CommonMark spec's own, so a local renaming would defeat the reason it is numbered at all. The option gates only literals in TYPE position, so every runtime magic number stays reported.
+        "@typescript-eslint/no-magic-numbers": [
+          magicNumbers,
+          {
+            ignore: [-1, 0, 1, 2],
+            ignoreArrayIndexes: true,
+            ignoreEnums: true,
+            ignoreReadonlyClassProperties: true,
+            ignoreDefaultValues: true,
+            ignoreNumericLiteralTypes: true,
+          },
+        ],
         "max-lines": maxLines,
         ...Object.fromEntries(newRuleDebt.map((rule) => [rule, "off"])),
         // Deviation from strictTypeChecked, which reports every string spread. Spreading a string is how you iterate it by code point — `[...text]` splits on code points where `text.split('')` splits on UTF-16 code units and so tears every astral character in half. This workspace parses real-world documents full of them (emoji, CJK extensions, mathematical alphanumerics), and the sites reporting here are named `codePoints` precisely because that is what they are computing.
