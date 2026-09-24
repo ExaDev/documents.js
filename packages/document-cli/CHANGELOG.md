@@ -1,3 +1,14 @@
+## [5.12.39](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.38...document-cli%405.12.39) (2026-09-24)
+
+### Tests
+
+* **document-cli:** cover pdf page-items' preview, select, delete and add-item flows ([8f4762e](https://github.com/ExaDev/documents.js/commit/8f4762e4545fe7143ba4f037bbd7687a8067b3bf))
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.29
+
 ## [5.12.38](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.37...document-cli%405.12.38) (2026-09-24)
 
 

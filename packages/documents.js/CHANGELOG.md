@@ -1,3 +1,9 @@
+## [14.4.29](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.28...documents.js%4014.4.29) (2026-09-24)
+
+### Bug Fixes
+
+* **documents.js:** convert latex/symbols.ts's static tables to functions ([8f27791](https://github.com/ExaDev/documents.js/commit/8f2779166e00af407ecf8966010c002ad833b381))
+
 ## [14.4.28](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.27...documents.js%4014.4.28) (2026-09-24)
 
 
