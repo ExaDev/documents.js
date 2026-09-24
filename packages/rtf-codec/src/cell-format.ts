@@ -296,6 +296,16 @@ export function borderControlWords(
   border: ContentBorder,
   colorIndex: number | undefined,
 ): string {
+  // One <brdrk> keyword per ContentStrokeStyle member, chosen as the plainest spelling of each: the read table above collapses about thirty keywords onto four members, so the write direction picks the canonical one rather than trying to recover which variant the source used.
+  const BORDER_STYLE_CONTROL_WORDS: Readonly<
+    Record<ContentStrokeStyle, string>
+  > = {
+    solid: "brdrs",
+    dashed: "brdrdash",
+    dotted: "brdrdot",
+    double: "brdrdb",
+  };
+
   const sideWord = CELL_BORDER_SIDE_WORDS[side];
   const style = BORDER_STYLE_CONTROL_WORDS[border.style ?? "solid"];
   const width = Math.max(1, pointsToTwips(border.widthPt));
@@ -304,15 +314,6 @@ export function borderControlWords(
     (colorIndex === undefined ? "" : `\\brdrcf${String(colorIndex)}`)
   );
 }
-
-// One <brdrk> keyword per ContentStrokeStyle member, chosen as the plainest spelling of each: the read table above collapses about thirty keywords onto four members, so the write direction picks the canonical one rather than trying to recover which variant the source used.
-const BORDER_STYLE_CONTROL_WORDS: Readonly<Record<ContentStrokeStyle, string>> =
-  {
-    solid: "brdrs",
-    dashed: "brdrdash",
-    dotted: "brdrdot",
-    double: "brdrdb",
-  };
 
 /** The inverse of PERCENT_STEPS, keyed by patternType. */
 const PERCENT_TYPE_TO_VALUE: ReadonlyMap<ContentCellPatternType, number> =

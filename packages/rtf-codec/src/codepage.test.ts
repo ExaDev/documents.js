@@ -138,9 +138,9 @@ describe("decodeCodepageBytes: general behaviour", () => {
   });
 
   it("decodes through the platform's own UTF-8 decoder for \\ansicpg65001", () => {
-    const bytes = new TextEncoder().encode("café €");
+    const utf8Bytes = new TextEncoder().encode("café €");
     expect(
-      decodeCodepageBytes(bytes, UTF8_CODEPAGE, NOOP_RTF_DIAGNOSTIC_SINK),
+      decodeCodepageBytes(utf8Bytes, UTF8_CODEPAGE, NOOP_RTF_DIAGNOSTIC_SINK),
     ).toBe("café €");
   });
 

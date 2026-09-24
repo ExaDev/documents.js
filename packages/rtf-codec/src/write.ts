@@ -120,6 +120,9 @@ const UNKNOWN_REVISION_AUTHOR = "Unknown";
 
 const DEFAULT_FONT_NAME = "Times New Roman";
 
+// The order <celldef> states its four sides in.
+const CELL_BORDER_ORDER = ["top", "left", "bottom", "right"] as const;
+
 function collectTables(document: ContentDocument): DocumentTables {
   const fonts = new Map<string, number>([[DEFAULT_FONT_NAME, 0]]);
   const colors = new Map<string, number>();
@@ -466,9 +469,6 @@ function revisionsCovering(
         descriptor.kind === "provenance",
     );
 }
-
-// The order <celldef> states its four sides in.
-const CELL_BORDER_ORDER = ["top", "left", "bottom", "right"] as const;
 
 // The merge control words a grid position states in its <celldef>. RTF writes one cell slot per grid column, so every position of a merged region has a slot: the anchor opens the region along each axis it spans (\clmgf across columns, \clvmgf down rows), a position the region reaches along its own row continues it horizontally (\clmrg), and a position it reaches from an earlier row continues it vertically (\clvmrg).
 function mergeControlWords(position: TableGridPosition): string {

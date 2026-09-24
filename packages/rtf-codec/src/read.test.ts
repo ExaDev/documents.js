@@ -26,7 +26,7 @@ import {
   verticalMergeRowSpan,
 } from "./read";
 import { bookmarkAnchorDescriptor } from "./constructs";
-import { bytes, text } from "./test-support/bytes";
+import { asciiText, bytes } from "./test-support/bytes";
 
 // Stands in for a hostile producer who writes the identical spec-conformant ObjectHeader/NativeDataSize/NativeData/Presentation envelope writeEmbeddedObjectData produces, but wraps an arbitrary JSON payload inside NativeData's own Package stream instead of a genuine ContentEmbeddedObject — writeEmbeddedObjectData itself always rebuilds its payload object field-by-field from a real ContentEmbeddedObject, so it cannot be used to smuggle an extra key the way a raw \objdata forged by hand can. Reuses a real envelope's own ObjectHeader and Presentation bytes verbatim (both fixed, independent of the JSON payload) and only replaces NativeData, so the forged bytes are byte-identical to a real \objdata this codec produced except for the one field under test.
 function forgeEmbeddedObjectData(payload: unknown): Uint8Array<ArrayBuffer> {
@@ -1283,7 +1283,7 @@ describe("embedded objects", () => {
       frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 },
     });
     const object = blocksOf(
-      `${HEADER}\\pard{\\object\\objemb{\\*\\objdata\\bin${String(raw.length)} ${text(raw)}}}\\par}`,
+      `${HEADER}\\pard{\\object\\objemb{\\*\\objdata\\bin${String(raw.length)} ${asciiText(raw)}}}\\par}`,
     ).find(
       (block): block is ContentEmbeddedObjectBlock =>
         block.kind === "embeddedObject",
@@ -3725,7 +3725,7 @@ describe("picture derivation", () => {
       "0d0a2db40000000049454e44ae426082";
     const raw = hexToBytes(PNG_HEX);
     const image = blocksOf(
-      `${HEADER}\\pard{\\pict\\pngblip\\picwgoal720\\pichgoal720\\bin${String(raw.length)} ${text(raw)}}\\par}`,
+      `${HEADER}\\pard{\\pict\\pngblip\\picwgoal720\\pichgoal720\\bin${String(raw.length)} ${asciiText(raw)}}\\par}`,
     ).find((block): block is ContentImageBlock => block.kind === "image");
     expect(image?.base64.startsWith("iVBORw0KGgo")).toBe(true);
   });

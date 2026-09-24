@@ -12,7 +12,7 @@ import {
   RtfWriteError,
 } from "./diagnostics";
 import { readRtfContent } from "./read";
-import { text } from "./test-support/bytes";
+import { asciiText } from "./test-support/bytes";
 import { expectBalancedBraces } from "./test-support/brace-balance";
 import { writeRtfContent } from "./write";
 
@@ -33,7 +33,7 @@ function wordprocessing(
 }
 
 function write(document: ContentDocument): string {
-  return text(writeRtfContent(document));
+  return asciiText(writeRtfContent(document));
 }
 
 describe("output shape", () => {
@@ -429,11 +429,12 @@ describe("body constructs", () => {
         },
       ]),
       {
-        sink: (diagnostic) =>
+        sink: (diagnostic) => {
           diagnostics.push({
             code: diagnostic.code,
             message: diagnostic.message,
-          }),
+          });
+        },
       },
     );
     expect(diagnostics).toEqual([
@@ -443,7 +444,7 @@ describe("body constructs", () => {
           "a list membership carries no numId this writer minted a list for; the paragraph keeps its indentation but no list marker",
       },
     ]);
-    expect(text(out)).not.toContain("\\ls");
+    expect(asciiText(out)).not.toContain("\\ls");
   });
 
   it("writes verticalAlign as the \\super/\\sub on-spellings", () => {
@@ -612,7 +613,7 @@ describe("body constructs", () => {
   // The identical reachability path as the plainText \ffdeftext handling above (documents.js's own PDF AcroForm-to-contentControl reconstruction), but for a checkbox: pdf-codec's own valueFields spreads the widget's /V export-value name (e.g. 'Yes') onto `value` alongside the boolean `checked` it derives from that same /V. RTF's \ffres/\ffdefres are a bare 0/1/25 state with no room for a named export value at all — unlike plainText's `value` (which the writer CAN mint, into \ffdeftext) or a dropDown's `value` (which sometimes matches a real \ffl entry), a checkbox's `value` has no RTF spelling whatsoever, so this is unconditional data loss whenever it is present. This regression-guards against the sibling gap this writer once had: silently dropping it with no diagnostic, from the same reachability path its plainText \ffdeftext fix was specifically written to address.
   it("reports a checkbox's on-state value through the diagnostic sink, rather than dropping it silently", () => {
     const diagnostics: { code: string; message: string }[] = [];
-    const out = text(
+    const out = asciiText(
       writeRtfContent(
         wordprocessing([
           {
@@ -633,11 +634,12 @@ describe("body constructs", () => {
           },
         ]),
         {
-          sink: (diagnostic) =>
+          sink: (diagnostic) => {
             diagnostics.push({
               code: diagnostic.code,
               message: diagnostic.message,
-            }),
+            });
+          },
         },
       ),
     );
@@ -656,7 +658,7 @@ describe("body constructs", () => {
 
   it("writes no diagnostic for a checkbox with no recorded value, only `checked`", () => {
     const codes: string[] = [];
-    const out = text(
+    const out = asciiText(
       writeRtfContent(
         wordprocessing([
           {
@@ -675,7 +677,11 @@ describe("body constructs", () => {
             ],
           },
         ]),
-        { sink: (diagnostic) => codes.push(diagnostic.code) },
+        {
+          sink: (diagnostic) => {
+            codes.push(diagnostic.code);
+          },
+        },
       ),
     );
     expect(codes).not.toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
@@ -685,7 +691,7 @@ describe("body constructs", () => {
   // An empty string carries no distinguishable on-state export name to preserve, so it is treated the same as no recorded value at all — matching this function's one consistent empty-string rule across every value-shaped field (`alias`, `tag`, a plainText `value`, and now this), rather than firing the diagnostic sink for a value with nothing in it.
   it("writes no diagnostic for a checkbox whose value is an empty string, treating it the same as no recorded value", () => {
     const codes: string[] = [];
-    const out = text(
+    const out = asciiText(
       writeRtfContent(
         wordprocessing([
           {
@@ -705,7 +711,11 @@ describe("body constructs", () => {
             ],
           },
         ]),
-        { sink: (diagnostic) => codes.push(diagnostic.code) },
+        {
+          sink: (diagnostic) => {
+            codes.push(diagnostic.code);
+          },
+        },
       ),
     );
     expect(out).toContain("\\ffres1");
@@ -717,7 +727,7 @@ describe("body constructs", () => {
   // The identical silent-drop shape a checkbox's own dropped `value` had, but for a field the checkbox controlType has no concept of at all: `options` is the dropDown/comboBox choice list.
   it("reports a checkbox's options list through the diagnostic sink, rather than dropping it silently", () => {
     const diagnostics: { code: string; message: string }[] = [];
-    const out = text(
+    const out = asciiText(
       writeRtfContent(
         wordprocessing([
           {
@@ -738,11 +748,12 @@ describe("body constructs", () => {
           },
         ]),
         {
-          sink: (diagnostic) =>
+          sink: (diagnostic) => {
             diagnostics.push({
               code: diagnostic.code,
               message: diagnostic.message,
-            }),
+            });
+          },
         },
       ),
     );
@@ -779,7 +790,11 @@ describe("body constructs", () => {
           ],
         },
       ]),
-      { sink: (diagnostic) => codes.push(diagnostic.code) },
+      {
+        sink: (diagnostic) => {
+          codes.push(diagnostic.code);
+        },
+      },
     );
     expect(codes).not.toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
   });
@@ -787,7 +802,7 @@ describe("body constructs", () => {
   // A plainText field carrying `checked`/`options` — fields that name concepts a text field simply does not have — is the same sibling gap in a third shape.
   it("reports a plainText field's checked state and options list through the diagnostic sink, rather than dropping either silently", () => {
     const diagnostics: { code: string; message: string }[] = [];
-    const out = text(
+    const out = asciiText(
       writeRtfContent(
         wordprocessing([
           {
@@ -808,11 +823,12 @@ describe("body constructs", () => {
           },
         ]),
         {
-          sink: (diagnostic) =>
+          sink: (diagnostic) => {
             diagnostics.push({
               code: diagnostic.code,
               message: diagnostic.message,
-            }),
+            });
+          },
         },
       ),
     );
@@ -854,7 +870,11 @@ describe("body constructs", () => {
           ],
         },
       ]),
-      { sink: (diagnostic) => codes.push(diagnostic.code) },
+      {
+        sink: (diagnostic) => {
+          codes.push(diagnostic.code);
+        },
+      },
     );
     expect(
       codes.filter(
@@ -866,7 +886,7 @@ describe("body constructs", () => {
   // The identical sibling gap in a fourth shape: `checked` is the checkbox/radio boolean, and a dropDown has no concept of it either — the checkbox branch reports a stray `options`, the plainText branch reports a stray `checked` and `options`, and this closes the one remaining combination this function's own sink-reporting rule covers.
   it("reports a dropDown field's checked state through the diagnostic sink, rather than dropping it silently", () => {
     const diagnostics: { code: string; message: string }[] = [];
-    const out = text(
+    const out = asciiText(
       writeRtfContent(
         wordprocessing([
           {
@@ -887,11 +907,12 @@ describe("body constructs", () => {
           },
         ]),
         {
-          sink: (diagnostic) =>
+          sink: (diagnostic) => {
             diagnostics.push({
               code: diagnostic.code,
               message: diagnostic.message,
-            }),
+            });
+          },
         },
       ),
     );
@@ -908,7 +929,7 @@ describe("body constructs", () => {
 
   it("writes no diagnostic for a dropDown with no recorded `checked`", () => {
     const codes: string[] = [];
-    const out = text(
+    const out = asciiText(
       writeRtfContent(
         wordprocessing([
           {
@@ -927,7 +948,11 @@ describe("body constructs", () => {
             ],
           },
         ]),
-        { sink: (diagnostic) => codes.push(diagnostic.code) },
+        {
+          sink: (diagnostic) => {
+            codes.push(diagnostic.code);
+          },
+        },
       ),
     );
     expect(codes).not.toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
@@ -1073,7 +1098,7 @@ describe("body constructs", () => {
   // An empty string that matches none of `options` (as here, where the list is ["Hello", "Guten Tag"]) is treated as "no selection was ever recorded" rather than as a genuine mismatch to report — firing the unmatched-value diagnostic for it would be indistinguishable from a real mismatch like "Bonjour" above, which is a materially different fact to report. This is decided by `indexOf` returning -1, exactly like any other non-matching value, NOT by a blanket "empty string means no value" rule: see the sibling test directly below, where `options` genuinely contains the empty string and value:'' is therefore a real, matched selection.
   it("mints neither \\ffres nor \\ffdefres, and reports no diagnostic, for a dropDown whose value is an empty string that matches none of its options", () => {
     const codes: string[] = [];
-    const out = text(
+    const out = asciiText(
       writeRtfContent(
         wordprocessing([
           {
@@ -1093,7 +1118,11 @@ describe("body constructs", () => {
             ],
           },
         ]),
-        { sink: (diagnostic) => codes.push(diagnostic.code) },
+        {
+          sink: (diagnostic) => {
+            codes.push(diagnostic.code);
+          },
+        },
       ),
     );
     expect(out).toContain("\\ffhaslistbox1");
@@ -1106,7 +1135,7 @@ describe("body constructs", () => {
   // The regression this guards: an earlier version of this writer folded `descriptor.value.length === 0` into the same branch as `descriptor.value === undefined`, which discarded this selection entirely — neither \ffres nor \ffdefres, with no diagnostic — even though the empty string names a real, indexable option here (index 0). This codec's own reader can produce exactly this descriptor shape from real RTF bytes (a genuine PHPRtfLite-style dropdown whose current selection is a blank list entry), so a read-then-write round trip of a document this package itself emits must not silently lose the selection.
   it("mints \\ffdefres0\\ffres0 for a dropDown whose value is an empty string that matches a real empty-string option", () => {
     const codes: string[] = [];
-    const out = text(
+    const out = asciiText(
       writeRtfContent(
         wordprocessing([
           {
@@ -1126,7 +1155,11 @@ describe("body constructs", () => {
             ],
           },
         ]),
-        { sink: (diagnostic) => codes.push(diagnostic.code) },
+        {
+          sink: (diagnostic) => {
+            codes.push(diagnostic.code);
+          },
+        },
       ),
     );
     expect(out).toContain("\\ffdefres0\\ffres0");
@@ -1155,7 +1188,11 @@ describe("body constructs", () => {
           ],
         },
       ]),
-      { sink: (diagnostic) => codes.push(diagnostic.code) },
+      {
+        sink: (diagnostic) => {
+          codes.push(diagnostic.code);
+        },
+      },
     );
     expect(codes).toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
   });
@@ -1164,7 +1201,7 @@ describe("body constructs", () => {
   it("reports a dropDown's value through the diagnostic sink when no options list exists at all to match it against", () => {
     // allOptions is undefined here, so truncatedAway (allOptions?.includes(...) ?? false) can only ever be false — this is the one shape that pins the ?? fallback's own value, distinct from every other dropDown test, where allOptions is always defined.
     const diagnostics: { code: string; message: string }[] = [];
-    const out = text(
+    const out = asciiText(
       writeRtfContent(
         wordprocessing([
           {
@@ -1184,11 +1221,12 @@ describe("body constructs", () => {
           },
         ]),
         {
-          sink: (diagnostic) =>
+          sink: (diagnostic) => {
             diagnostics.push({
               code: diagnostic.code,
               message: diagnostic.message,
-            }),
+            });
+          },
         },
       ),
     );
@@ -1211,7 +1249,7 @@ describe("body constructs", () => {
       { length: 30 },
       (_, index) => `Option ${String(index)}`,
     );
-    const out = text(
+    const out = asciiText(
       writeRtfContent(
         wordprocessing([
           {
@@ -1231,11 +1269,12 @@ describe("body constructs", () => {
           },
         ]),
         {
-          sink: (diagnostic) =>
+          sink: (diagnostic) => {
             diagnostics.push({
               code: diagnostic.code,
               message: diagnostic.message,
-            }),
+            });
+          },
         },
       ),
     );
@@ -1259,7 +1298,7 @@ describe("body constructs", () => {
       { length: 25 },
       (_, index) => `Option ${String(index)}`,
     );
-    const out = text(
+    const out = asciiText(
       writeRtfContent(
         wordprocessing([
           {
@@ -1279,11 +1318,12 @@ describe("body constructs", () => {
           },
         ]),
         {
-          sink: (diagnostic) =>
+          sink: (diagnostic) => {
             diagnostics.push({
               code: diagnostic.code,
               message: diagnostic.message,
-            }),
+            });
+          },
         },
       ),
     );
@@ -1298,7 +1338,7 @@ describe("body constructs", () => {
       { length: 30 },
       (_, index) => `Option ${String(index)}`,
     );
-    const out = text(
+    const out = asciiText(
       writeRtfContent(
         wordprocessing([
           {
@@ -1349,7 +1389,7 @@ describe("body constructs", () => {
       { length: 30 },
       (_, index) => `Option ${String(index)}`,
     );
-    const out = text(
+    const out = asciiText(
       writeRtfContent(
         wordprocessing([
           {
@@ -1475,7 +1515,7 @@ describe("body constructs", () => {
   // `value` names the field's CURRENT scalar value and \ffdeftext names its DEFAULT/reset text — a genuinely different fact this codec's own reader never restores back onto `value` (see "writes a plainText contentControl's value into \ffdeftext but does not read it back as `value`" in the "round trip through this package's own reader" describe block below), so writing `value` into \ffdeftext is reported through the diagnostic sink for consistency with every other cross-field mis-slot this function reports, even though the string itself is written rather than dropped.
   it("reports a plainText contentControl's value through the diagnostic sink when it is written into \\ffdeftext", () => {
     const diagnostics: { code: string; message: string }[] = [];
-    const out = text(
+    const out = asciiText(
       writeRtfContent(
         wordprocessing([
           {
@@ -1496,11 +1536,12 @@ describe("body constructs", () => {
           },
         ]),
         {
-          sink: (diagnostic) =>
+          sink: (diagnostic) => {
             diagnostics.push({
               code: diagnostic.code,
               message: diagnostic.message,
-            }),
+            });
+          },
         },
       ),
     );
@@ -1542,7 +1583,7 @@ describe("body constructs", () => {
   // An empty string carries no distinguishable default text to preserve, so it is treated the same as no recorded value at all — matching this function's own existing convention for an empty `alias`/`tag` (see "writes no \ffownhelp/\ffhelptext at all when a contentControl has no alias" above), rather than minting an empty {\*\ffdeftext} destination and firing the diagnostic sink for a value with nothing in it.
   it("writes no \\ffdeftext at all for a plainText contentControl whose value is an empty string, treating it the same as no recorded value", () => {
     const diagnostics: { code: string }[] = [];
-    const out = text(
+    const out = asciiText(
       writeRtfContent(
         wordprocessing([
           {
@@ -1562,7 +1603,11 @@ describe("body constructs", () => {
             ],
           },
         ]),
-        { sink: (diagnostic) => diagnostics.push({ code: diagnostic.code }) },
+        {
+          sink: (diagnostic) => {
+            diagnostics.push({ code: diagnostic.code });
+          },
+        },
       ),
     );
     expect(out).not.toContain("\\ffdeftext");
@@ -1798,7 +1843,7 @@ describe("body constructs", () => {
   // Unlike a 'content'/'both' lock, a 'container' lock writes NOTHING for \ffprot at all — it leaves the field's own value editable, so there is no "other half" of \ffprot still written the way there is for 'both'; the whole lock is dropped, reported through one diagnostic naming that. Asserting the message's actual text, not just its code, is deliberate: a message-content regression (e.g. the 'container'/'both' branches accidentally swapping their wording, or degrading to one generic sentence describing both) would pass a code-only assertion silently, exactly the kind of accuracy bug this construct's own comment history has repeatedly had.
   it("writes no \\ffprot at all for a 'container'-locked contentControl, and reports the whole lock as dropped, naming why", () => {
     const diagnostics: { code: string; message: string }[] = [];
-    const out = text(
+    const out = asciiText(
       writeRtfContent(
         wordprocessing([
           {
@@ -1818,11 +1863,12 @@ describe("body constructs", () => {
           },
         ]),
         {
-          sink: (diagnostic) =>
+          sink: (diagnostic) => {
             diagnostics.push({
               code: diagnostic.code,
               message: diagnostic.message,
-            }),
+            });
+          },
         },
       ),
     );
@@ -1839,7 +1885,7 @@ describe("body constructs", () => {
 
   it("writes the explicit \\ffprot1 for a 'both'-locked contentControl and still reports the removal-protection half as dropped, naming why", () => {
     const diagnostics: { code: string; message: string }[] = [];
-    const out = text(
+    const out = asciiText(
       writeRtfContent(
         wordprocessing([
           {
@@ -1859,11 +1905,12 @@ describe("body constructs", () => {
           },
         ]),
         {
-          sink: (diagnostic) =>
+          sink: (diagnostic) => {
             diagnostics.push({
               code: diagnostic.code,
               message: diagnostic.message,
-            }),
+            });
+          },
         },
       ),
     );
@@ -1880,7 +1927,7 @@ describe("body constructs", () => {
 
   it("reports a contentControl controlType RTF's own form-field vocabulary does not cover, rather than minting nothing silently — and mints no unbalanced braces for it", () => {
     const diagnostics: { code: string; message: string }[] = [];
-    const out = text(
+    const out = asciiText(
       writeRtfContent(
         wordprocessing([
           {
@@ -1899,11 +1946,12 @@ describe("body constructs", () => {
           },
         ]),
         {
-          sink: (diagnostic) =>
+          sink: (diagnostic) => {
             diagnostics.push({
               code: diagnostic.code,
               message: diagnostic.message,
-            }),
+            });
+          },
         },
       ),
     );
@@ -2069,11 +2117,12 @@ describe("body constructs", () => {
         },
       ]),
       {
-        sink: (diagnostic) =>
+        sink: (diagnostic) => {
           diagnostics.push({
             code: diagnostic.code,
             message: diagnostic.message,
-          }),
+          });
+        },
       },
     );
     expect(diagnostics).toEqual([
@@ -2329,11 +2378,12 @@ describe("body constructs", () => {
         },
       ]),
       {
-        sink: (diagnostic) =>
+        sink: (diagnostic) => {
           diagnostics.push({
             code: diagnostic.code,
             message: diagnostic.message,
-          }),
+          });
+        },
       },
     );
     expect(diagnostics).toEqual([
@@ -2531,7 +2581,7 @@ describe("body constructs", () => {
   // writeCellBlocks writes a cell's own content as \intbl <pict>/<obj>/paragraph groups — image and embeddedObject blocks borrow the identical \pard\plain\intbl shell a paragraph gets (see the "round trip" describe block below for both), since read.ts's own reader already proves that shape round-trips. A table or pageBreak block placed directly in a cell has no such shell to borrow — a nested table needs its own \itapN row grammar this writer does not build, and a mid-row \page would \pard-reset the row's own \intbl state — so those two kinds are still dropped rather than embedded, reported through CONSTRUCT_UNREPRESENTED rather than filtered out with no diagnostic at all.
   it("reports rather than silently dropping a page break placed directly in a table cell", () => {
     const diagnostics: { code: string; message: string }[] = [];
-    const out = text(
+    const out = asciiText(
       writeRtfContent(
         wordprocessing([
           {
@@ -2549,11 +2599,12 @@ describe("body constructs", () => {
           },
         ]),
         {
-          sink: (diagnostic) =>
+          sink: (diagnostic) => {
             diagnostics.push({
               code: diagnostic.code,
               message: diagnostic.message,
-            }),
+            });
+          },
         },
       ),
     );
@@ -2640,7 +2691,7 @@ describe("body constructs", () => {
   it("reports rather than mislabelling an svg or gif image, RTF's \\pict destination having no picture-type keyword for either", () => {
     for (const format of ["svg", "gif"] as const) {
       const diagnostics: { code: string; message: string }[] = [];
-      const out = text(
+      const out = asciiText(
         writeRtfContent(
           wordprocessing([
             {
@@ -2652,11 +2703,12 @@ describe("body constructs", () => {
             },
           ]),
           {
-            sink: (diagnostic) =>
+            sink: (diagnostic) => {
               diagnostics.push({
                 code: diagnostic.code,
                 message: diagnostic.message,
-              }),
+              });
+            },
           },
         ),
       );
@@ -2672,7 +2724,7 @@ describe("body constructs", () => {
 
   it("reports rather than writing an empty \\pict destination for an image whose base64 payload does not decode to anything", () => {
     const diagnostics: { code: string; message: string }[] = [];
-    const out = text(
+    const out = asciiText(
       writeRtfContent(
         wordprocessing([
           {
@@ -2684,11 +2736,12 @@ describe("body constructs", () => {
           },
         ]),
         {
-          sink: (diagnostic) =>
+          sink: (diagnostic) => {
             diagnostics.push({
               code: diagnostic.code,
               message: diagnostic.message,
-            }),
+            });
+          },
         },
       ),
     );
@@ -2705,7 +2758,7 @@ describe("body constructs", () => {
   it("reports the same empty-payload gap for a genuinely empty base64 string, distinct from one that fails to decode at all", () => {
     // base64ToBytes("") returns a real, defined, zero-length Uint8Array rather than undefined — the one reachable way bytes.length === 0 fires on its own, separate from the bytes === undefined branch the malformed-string case above already covers.
     const diagnostics: { code: string; message: string }[] = [];
-    const out = text(
+    const out = asciiText(
       writeRtfContent(
         wordprocessing([
           {
@@ -2717,11 +2770,12 @@ describe("body constructs", () => {
           },
         ]),
         {
-          sink: (diagnostic) =>
+          sink: (diagnostic) => {
             diagnostics.push({
               code: diagnostic.code,
               message: diagnostic.message,
-            }),
+            });
+          },
         },
       ),
     );
@@ -2772,11 +2826,12 @@ describe("body constructs", () => {
         { kind: "constructEnd" },
       ]),
       {
-        sink: (diagnostic) =>
+        sink: (diagnostic) => {
           diagnostics.push({
             code: diagnostic.code,
             message: diagnostic.message,
-          }),
+          });
+        },
       },
     );
     expect(diagnostics).toEqual([
@@ -2800,11 +2855,12 @@ describe("body constructs", () => {
         { kind: "constructEnd" },
       ]),
       {
-        sink: (diagnostic) =>
+        sink: (diagnostic) => {
           diagnostics.push({
             code: diagnostic.code,
             message: diagnostic.message,
-          }),
+          });
+        },
       },
     );
     expect(diagnostics).toEqual([
@@ -2828,11 +2884,12 @@ describe("body constructs", () => {
         { kind: "constructEnd" },
       ]),
       {
-        sink: (diagnostic) =>
+        sink: (diagnostic) => {
           diagnostics.push({
             code: diagnostic.code,
             message: diagnostic.message,
-          }),
+          });
+        },
       },
     );
     expect(diagnostics).toEqual([
@@ -2859,11 +2916,12 @@ describe("body constructs", () => {
         { kind: "constructEnd" },
       ]),
       {
-        sink: (diagnostic) =>
+        sink: (diagnostic) => {
           diagnostics.push({
             code: diagnostic.code,
             message: diagnostic.message,
-          }),
+          });
+        },
       },
     );
     expect(diagnostics).toEqual([
@@ -2887,11 +2945,12 @@ describe("body constructs", () => {
         { kind: "constructEnd" },
       ]),
       {
-        sink: (diagnostic) =>
+        sink: (diagnostic) => {
           diagnostics.push({
             code: diagnostic.code,
             message: diagnostic.message,
-          }),
+          });
+        },
       },
     );
     expect(diagnostics).toEqual([
@@ -3437,11 +3496,12 @@ describe("round trip through this package's own reader", () => {
         { kind: "constructEnd" },
       ]),
       {
-        sink: (diagnostic) =>
+        sink: (diagnostic) => {
           diagnostics.push({
             code: diagnostic.code,
             message: diagnostic.message,
-          }),
+          });
+        },
       },
     );
     expect(diagnostics).toEqual([
@@ -3572,7 +3632,7 @@ describe("round trip through this package's own reader", () => {
       descriptorOf(firstPassDocument),
     );
     // The bytes themselves are the strongest form of this assertion: a true fixed point produces byte-identical RTF on the second pass, not merely an equal descriptor.
-    expect(text(secondPassBytes)).toBe(text(firstPassBytes));
+    expect(asciiText(secondPassBytes)).toBe(asciiText(firstPassBytes));
   });
 
   it("round-trips a dropDown contentControl's selected value back onto the same options", () => {
@@ -3837,7 +3897,7 @@ describe("round trip through this package's own reader", () => {
   it("still writes a real {\\*\\bkmkstart ...} for a bookmark alongside an unrelated construct, rather than misreading the bookmark as a contentControl extent", () => {
     // isContentControlExtent gates selectNestableFormFields' own input — a bookmark wrongly let through would be handed to formFieldOpenGroup, which has no controlType field to read on an AnchorDescriptor at all, and would report it as an unrepresentable contentControl construct: checking for zero diagnostics is what actually proves the bookmark was excluded, since formFieldOpenGroup degrades a misrouted extent to a diagnostic rather than a crash.
     const diagnostics: unknown[] = [];
-    const out = text(
+    const out = asciiText(
       writeRtfContent(
         wordprocessing([
           {
@@ -3856,7 +3916,11 @@ describe("round trip through this package's own reader", () => {
             ],
           },
         ]),
-        { sink: (diagnostic) => diagnostics.push(diagnostic) },
+        {
+          sink: (diagnostic) => {
+            diagnostics.push(diagnostic);
+          },
+        },
       ),
     );
     expect(diagnostics).toEqual([]);
@@ -4352,9 +4416,11 @@ describe("round trip through this package's own reader", () => {
       },
     ]);
     const codes: string[] = [];
-    const out = text(
+    const out = asciiText(
       writeRtfContent(document, {
-        sink: (diagnostic) => codes.push(diagnostic.code),
+        sink: (diagnostic) => {
+          codes.push(diagnostic.code);
+        },
       }),
     );
     expect(codes).not.toContain(RtfDiagnosticCodes.CONSTRUCT_UNREPRESENTED);

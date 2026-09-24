@@ -3,15 +3,7 @@ import { packageLintConfig } from "../../eslint.shared.ts";
 export default packageLintConfig({
   tsconfigRootDir: import.meta.dirname,
   // Off: 781 sites across every package are debt from this same @exadev/eslint-config 2.1.2->2.12.1 bump (see PackageLintOptions.newRuleDebt in eslint.shared.ts), not something this bump's own PR fixes. This package's own measured subset:
-  newRuleDebt: [
-    "@typescript-eslint/no-shadow",
-    "@typescript-eslint/no-use-before-define",
-    "@typescript-eslint/prefer-readonly",
-    "@typescript-eslint/strict-void-return",
-    "@typescript-eslint/switch-exhaustiveness-check",
-    "exadev/no-mutable-union-array-param",
-    "exadev/no-object-assign",
-  ],
+  newRuleDebt: ["@typescript-eslint/switch-exhaustiveness-check"],
   isomorphic: true,
   // Passed to the shared config rather than declared here, because flat config replaces a same-key rule instead of merging it: a second no-restricted-imports over runtime src would silently drop the Worker-isomorphism Node-builtin ban while still reporting these.
   //
