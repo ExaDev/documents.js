@@ -1,3 +1,9 @@
+## [5.2.16](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.15...pdf-codec%405.2.16) (2026-09-24)
+
+### Tests
+
+* **pdf-codec:** close write.ts's mutation gap from 85.8 to 98.3 ([a6969e9](https://github.com/ExaDev/documents.js/commit/a6969e9ed5c7d916968dcb62c4b9b6593e973518))
+
 ## [5.2.15](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.14...pdf-codec%405.2.15) (2026-09-24)
 
 ### Code Refactoring

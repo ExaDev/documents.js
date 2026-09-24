@@ -465,13 +465,13 @@ importers:
         specifier: 15.0.0
         version: 15.0.0
       document-outline.js:
-        specifier: 3.10.9
+        specifier: 3.10.10
         version: link:../document-outline.js
       document-schema.js:
         specifier: 7.15.0
         version: link:../document-schema.js
       documents.js:
-        specifier: 14.4.8
+        specifier: 14.4.9
         version: link:../documents.js
       ink:
         specifier: 7.1.1
@@ -566,7 +566,7 @@ importers:
         specifier: 26.2.0
         version: 26.2.0
       documents.js:
-        specifier: 14.4.8
+        specifier: 14.4.9
         version: link:../documents.js
       eslint:
         specifier: 10.8.1
@@ -602,10 +602,10 @@ importers:
         specifier: 2.0.0
         version: 2.0.0
       document-operations:
-        specifier: 1.1.69
+        specifier: 1.1.70
         version: link:../document-operations
       documents.js:
-        specifier: 14.4.8
+        specifier: 14.4.9
         version: link:../documents.js
       zod:
         specifier: 4.4.3
@@ -672,16 +672,16 @@ importers:
   packages/document-operations:
     dependencies:
       document-compute.js:
-        specifier: 1.6.17
+        specifier: 1.6.18
         version: link:../document-compute.js
       document-outline.js:
-        specifier: 3.10.9
+        specifier: 3.10.10
         version: link:../document-outline.js
       document-schema.js:
         specifier: 7.15.0
         version: link:../document-schema.js
       documents.js:
-        specifier: 14.4.8
+        specifier: 14.4.9
         version: link:../documents.js
       zod:
         specifier: 4.4.3
@@ -742,7 +742,7 @@ importers:
         specifier: 7.15.0
         version: link:../document-schema.js
       pdf-codec:
-        specifier: 5.2.15
+        specifier: 5.2.16
         version: link:../pdf-codec
       zod:
         specifier: 4.4.3
@@ -797,10 +797,10 @@ importers:
   packages/document-rest:
     dependencies:
       document-operations:
-        specifier: 1.1.69
+        specifier: 1.1.70
         version: link:../document-operations
       documents.js:
-        specifier: 14.4.8
+        specifier: 14.4.9
         version: link:../documents.js
       zod:
         specifier: 4.4.3
@@ -928,7 +928,7 @@ importers:
         specifier: 12.2.8
         version: link:../ooxml.js
       pdf-codec:
-        specifier: 5.2.15
+        specifier: 5.2.16
         version: link:../pdf-codec
       ppt-codec:
         specifier: 2.2.3
@@ -1387,7 +1387,7 @@ importers:
         specifier: 1.10.1
         version: link:../byte-codec
       pdf-codec:
-        specifier: 5.2.15
+        specifier: 5.2.16
         version: link:../pdf-codec
     devDependencies:
       '@arethetypeswrong/cli':
@@ -1606,7 +1606,7 @@ importers:
         specifier: 7.15.0
         version: link:../document-schema.js
       documents.js:
-        specifier: 14.4.8
+        specifier: 14.4.9
         version: link:../documents.js
       markdown-codec:
         specifier: 11.1.3
