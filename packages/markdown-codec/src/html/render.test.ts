@@ -1,3 +1,4 @@
+import { assertNeverInlineNode } from "./render";
 // Direct unit tests for this module's own conformance-oracle rendering, isolated from the parser — src/conformance.test.ts and src/gfm-conformance.test.ts only exercise renderDocumentToHtml through whatever the real CommonMark/GFM corpora happen to contain, which never reaches several of this renderer's own branches: math (a Pandoc/GFM extension outside both corpora), footnote definitions/references (a GitHub extension outside both), an apostrophe or a single-hex-digit byte in an href, and a table column with no alignment. Building MarkdownBlockNode/MarkdownDocumentNode trees by hand here reaches those directly.
 
 import { describe, expect, it } from "vitest";
@@ -330,5 +331,13 @@ describe("renderDocumentToHtml: a code block's own info-string-to-language-class
         },
       ]),
     ).toBe('<pre><code class="language-js">x</code></pre>\n');
+  });
+});
+
+describe("assertNeverInlineNode", () => {
+  it("throws naming the unhandled inline node, proving renderInline's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverInlineNode({ type: "bogus" } as never);
+    }).toThrow('markdown-codec: unhandled inline node {"type":"bogus"}');
   });
 });

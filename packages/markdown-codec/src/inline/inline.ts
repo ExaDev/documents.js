@@ -660,6 +660,7 @@ function toAstNode(node: InlineNode): MarkdownInlineNode | undefined {
     case "container":
       return undefined;
   }
+  return assertNeverInlineKind(node.kind);
 }
 
 // Parses one block's raw inline content. `references` is the document-global link-reference-definition table the block phase built, and `footnotes` the document-global set of footnote labels it collected alongside — see this module's own top-of-file note on why neither can be discovered here. Both are forward-visible for the identical reason: a `[^1]` in the first paragraph resolves against a `[^1]:` definition on the last line.
@@ -680,4 +681,11 @@ export function parseInlines(
     applyGfmAutolinks(root);
   }
   return toChildAstNodes(root);
+}
+
+// Reached only if InlineNodeKind ever gains a member toAstNode's own switch does not match: every current member has a case there, so `node.kind` narrows to `never` at the call, and adding an uncovered member makes that narrowing fail and the call stop compiling. Exists so the switch's exhaustiveness, proven by the type checker rather than by a catch-all default that would silently drop a genuinely new member, still gives consistent-return an explicit statement to see past the switch. Exported so the tests can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable.
+export function assertNeverInlineKind(kind: never): never {
+  throw new Error(
+    `markdown-codec: unhandled inline kind ${JSON.stringify(kind)}`,
+  );
 }

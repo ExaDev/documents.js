@@ -1,3 +1,4 @@
+import { assertNeverBlockKind } from "./block";
 // AST-level tests for the block phase. The conformance suites (src/conformance.test.ts, src/gfm-conformance.test.ts) compare rendered HTML and are therefore blind to everything the AST records for the write side's benefit but HTML discards — which bullet character a list was written with, which of `.`/`)` an ordered list used, whether a heading was written ATX or setext, whether a code block was fenced. Those are exactly what this file pins.
 //
 // It also covers the precedence decisions this phase had to make, where "the corpus passes" is not on its own evidence that the right rule produced the right answer.
@@ -789,5 +790,13 @@ describe("recover-tier diagnostics", () => {
     const collector = createDiagnosticCollector();
     parseMarkdown("[^a]: one", { sink: collector.sink });
     expect(collector.codes()).toEqual([]);
+  });
+});
+
+describe("assertNeverBlockKind", () => {
+  it("throws naming the unhandled block kind, proving continueBlock's and toAstBlock's shared exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverBlockKind("bogus" as never);
+    }).toThrow('markdown-codec: unhandled block kind "bogus"');
   });
 });

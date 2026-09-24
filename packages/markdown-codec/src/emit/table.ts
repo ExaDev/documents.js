@@ -45,6 +45,7 @@ function delimiterCell(alignment: MarkdownTableAlignment): string {
     case "none":
       return "---";
   }
+  return assertNeverAlignment(alignment);
 }
 
 // The write-side inverse of src/block/table.ts's own splitTableRow scanning: that reader treats `\|` as an escaped pipe ANYWHERE in a row's raw source text — deliberately not code-span aware, per its own top-of-file note, since GFM's own spec example escapes a pipe inside a code span too. A rendered cell's own text can contain a pipe two different ways: already backslash-escaped by ordinary text escaping (escapeMarkdownText, src/emit/inline.ts, which escapes '|' as ASCII punctuation), or entirely unescaped inside a code span's own literal (renderCodeSpan never escapes its content at all). This scans the same way the reader does — an already-escaped `\|` pair is left untouched, a bare `|` gets escaped — so it never double-escapes the first case while still fixing the second.
@@ -164,4 +165,11 @@ export function emitTable(
       `| ${row.cells.map((cell) => renderCellText(cell, context)).join(" | ")} |`,
   );
   return [headerLine, delimiterLine, ...bodyLines].join("\n");
+}
+
+// Reached only if MarkdownTableAlignment ever gains a member delimiterCell's own switch does not match: every current member has a case there, so `alignment` narrows to `never` at the call, and adding an uncovered member makes that narrowing fail and the call stop compiling. Exists so the switch's exhaustiveness, proven by the type checker rather than by a catch-all default that would silently drop a genuinely new member, still gives consistent-return an explicit statement to see past the switch. Exported so the tests can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable.
+export function assertNeverAlignment(alignment: never): never {
+  throw new Error(
+    `markdown-codec: unhandled table alignment ${JSON.stringify(alignment)}`,
+  );
 }
