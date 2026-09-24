@@ -262,4 +262,43 @@ describe("extractSymbolDefinitionsFromProse", () => {
     };
     expect(extractSymbolDefinitionsFromProse(formula)).toEqual([]);
   });
+
+  it("joins a paragraph's runs with no separator, even when it takes more than one run to state a definition", () => {
+    const document: ContentDocument = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 595, heightPt: 842 },
+          margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 },
+          blocks: [
+            {
+              kind: "paragraph",
+              runs: [
+                { text: "where " },
+                { text: "R" },
+                { text: " is the resistance" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const entries = extractSymbolDefinitionsFromProse(document);
+    expect(entries.map((entry) => entry.glyph)).toEqual(["R"]);
+    expect(entries[0]?.definitionSource).toBe("where R is the resistance");
+  });
+
+  it("splits sentences at '.', '!' and '?' alike, across a run of more than one separating space, trimming it off each one", () => {
+    const document = wordprocessing([
+      "where a is one thing.  where b is another! where c is a third?",
+    ]);
+    const entries = extractSymbolDefinitionsFromProse(document);
+    expect(entries.map((entry) => entry.glyph)).toEqual(["a", "b", "c"]);
+    expect(entries.map((entry) => entry.definitionSource)).toEqual([
+      "where a is one thing.",
+      "where b is another!",
+      "where c is a third?",
+    ]);
+  });
 });
