@@ -60,28 +60,34 @@ function isHtmlEntityTable(
 
 describe("assets/commonmark", () => {
   it("spec.txt is the real CommonMark specification prose", () => {
+    // The real spec prose runs to well over 150,000 characters; a truncated or placeholder fixture would fall far short.
+    const minSpecLength = 150_000;
     const text = readFileSync(`${ASSETS_ROOT}/commonmark/spec.txt`, "utf8");
-    expect(text.length).toBeGreaterThan(150_000);
+    expect(text.length).toBeGreaterThan(minSpecLength);
     expect(text).toContain("# Introduction");
     expect(text).toContain("CommonMark");
   });
 
   it("spec.json is the real conformance example corpus", () => {
+    const minExampleCount = 600;
+    const minSectionCount = 20;
     const parsed: unknown = JSON.parse(
       readFileSync(`${ASSETS_ROOT}/commonmark/spec.json`, "utf8"),
     );
     if (!isCommonMarkExampleArray(parsed))
       throw new Error("spec.json did not parse as CommonMarkExample[]");
-    expect(parsed.length).toBeGreaterThan(600);
+    expect(parsed.length).toBeGreaterThan(minExampleCount);
     const sections = new Set(parsed.map((example) => example.section));
-    expect(sections.size).toBeGreaterThan(20);
+    expect(sections.size).toBeGreaterThan(minSectionCount);
   });
 });
 
 describe("assets/gfm", () => {
   it("spec.txt is the real GFM specification, extending CommonMark in place", () => {
+    // Same real-prose-length floor as the CommonMark spec.txt check above.
+    const minSpecLength = 150_000;
     const text = readFileSync(`${ASSETS_ROOT}/gfm/spec.txt`, "utf8");
-    expect(text.length).toBeGreaterThan(150_000);
+    expect(text.length).toBeGreaterThan(minSpecLength);
     expect(text).toContain("GitHub Flavored Markdown");
     expect(text).toContain("CC-BY-SA 4.0");
   });
@@ -89,6 +95,8 @@ describe("assets/gfm", () => {
 
 describe("assets/html-entities", () => {
   it("entities.json is the real WHATWG named character reference table", () => {
+    // The real WHATWG table names well over 2,000 entities; a truncated or placeholder fixture would fall far short.
+    const minEntityCount = 2000;
     const parsed: unknown = JSON.parse(
       readFileSync(`${ASSETS_ROOT}/html-entities/entities.json`, "utf8"),
     );
@@ -97,7 +105,7 @@ describe("assets/html-entities", () => {
         "entities.json did not parse as a named-character-reference table",
       );
     const names = Object.keys(parsed);
-    expect(names.length).toBeGreaterThan(2000);
+    expect(names.length).toBeGreaterThan(minEntityCount);
     const amp = parsed["&amp;"];
     expect(amp?.characters).toBe("&");
   });

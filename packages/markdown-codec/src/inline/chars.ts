@@ -28,12 +28,15 @@ export function isUnicodePunctuation(char: string): boolean {
 }
 
 // spec 0.31.2: "An ASCII control character is a character between U+0000-1F (both including) or U+007F."
+const ASCII_CONTROL_MAX = 0x1f;
+const ASCII_DELETE = 0x7f;
+
 export function isAsciiControl(char: string): boolean {
   const code = char.codePointAt(0);
   if (code === undefined) {
     return false;
   }
-  return code <= 0x1f || code === 0x7f;
+  return code <= ASCII_CONTROL_MAX || code === ASCII_DELETE;
 }
 
 // Whether any ASCII control character or space appears in `text` — the exclusion an absolute URI inside an autolink is defined by (spec 0.31.2: "zero or more characters other than ASCII control characters, space, `<`, and `>`"). Written as a scan rather than a regex character range deliberately: a `[\x00-\x20]` class is a literal control character embedded in a pattern, which is both unreadable and exactly what eslint's own no-control-regex rule exists to catch.
@@ -47,15 +50,21 @@ export function isMarkdownSpace(char: string): boolean {
 }
 
 // The full code point ending at `index` (exclusive), as a string — surrogate-pair aware, so an astral punctuation or symbol character adjacent to a delimiter run is classified as the single character it really is rather than as its lone low surrogate (which is in neither `\p{P}` nor `\p{S}` and would silently flip a flanking decision). Returns '\n' at the start of the string, per the flanking rules' own "the beginning and the end of the line count as Unicode whitespace".
+// UTF-16 surrogate-pair boundaries: a low surrogate's own code unit range, and a high surrogate's own code unit range.
+const LOW_SURROGATE_START = 0xdc00;
+const LOW_SURROGATE_END = 0xdfff;
+const HIGH_SURROGATE_START = 0xd800;
+const HIGH_SURROGATE_END = 0xdbff;
+
 export function codePointBefore(text: string, index: number): string {
   if (index <= 0) {
     return "\n";
   }
   // No separate "index >= 2" guard: index <= 0 has already returned above, leaving index === 1 as the only remaining case a missing guard could affect, and text.charCodeAt(-2) there is always NaN, which already fails the high-surrogate check below on its own — an explicit index guard would only ever exclude a case that already excludes itself.
   const low = text.charCodeAt(index - 1);
-  if (low >= 0xdc00 && low <= 0xdfff) {
+  if (low >= LOW_SURROGATE_START && low <= LOW_SURROGATE_END) {
     const high = text.charCodeAt(index - 2);
-    if (high >= 0xd800 && high <= 0xdbff) {
+    if (high >= HIGH_SURROGATE_START && high <= HIGH_SURROGATE_END) {
       return text.slice(index - 2, index);
     }
   }
